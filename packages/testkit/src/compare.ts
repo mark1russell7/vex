@@ -13,6 +13,7 @@ const plain = (u: unknown): unknown => {
   }
   if (Array.isArray(u)) return u.map(plain);
   if (typeof u === "object" && u !== null && "code" in u && "kind" in u && "message" in u) return { code: (u as { code: unknown }).code };
+  // Stryker disable next-line ConditionalExpression: a primitive has a prototype that is not plain, so it gives itself either way
   if (typeof u === "object" && u !== null) {
     const proto: unknown = Object.getPrototypeOf(u);
     if (proto === Object.prototype || proto === null) {

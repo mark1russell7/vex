@@ -7,7 +7,7 @@ import { Vec2 } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { fromCore, fromReference } from "./compare.ts";
-import { checkLaws, lawProperties, structuralEqual } from "./laws.ts";
+import { assertLaws, checkLaws, lawProperties, structuralEqual } from "./laws.ts";
 
 const num = (u: unknown): u is number => typeof u === "number";
 
@@ -35,9 +35,12 @@ describe("the comparable form of an outcome", () => {
       },
     };
     const bare = Object.assign(Object.create(null) as object, { c: 5 });
-    expect(fromCore(ok(v))).toEqual({ ok: true, value: v });
-    expect(fromCore(ok(withGetter))).toEqual({ ok: true, value: { a: [new Vec2(3, 4)], b: "<accessor>" } });
-    expect(fromCore(ok(bare))).toEqual({ ok: true, value: { c: 5 } });
+    // toStrictEqual checks the class: a class value stays, and a record becomes a plain record.
+    expect(fromCore(ok(v))).toStrictEqual({ ok: true, value: v });
+    expect(fromCore(ok(withGetter))).toStrictEqual({ ok: true, value: { a: [new Vec2(3, 4)], b: "<accessor>" } });
+    const plainBare = fromCore(ok(bare));
+    expect(plainBare.ok && Object.getPrototypeOf(plainBare.value)).toBe(Object.prototype);
+    expect(plainBare).toStrictEqual({ ok: true, value: { c: 5 } });
     expect(fromCore(ok(null))).toEqual({ ok: true, value: null });
     // An error value inside a value gives only its code.
     expect(fromCore(ok({ e: vexError("unknown-op", "x") }))).toEqual({ ok: true, value: { e: { code: "#NAME?" } } });
@@ -95,6 +98,18 @@ describe("the law checker", () => {
       ["False.minus identity", false],
     ]);
     expect(results.every((r) => r.message?.includes("Counterexample"))).toBe(true);
+  });
+
+  it("assertLaws lists each failed law with its message, separated by an empty line", () => {
+    const Two = defineDomain({ name: "Two", is: num, ops: { minus: { fn: (a: number, b: number): number => a - b, laws: ["commutative", "associative"] } } });
+    let message = "";
+    try {
+      assertLaws(Two, { arb: fc.integer({ min: 1, max: 9 }), numRuns: 20 });
+    } catch (e) {
+      message = e instanceof Error ? e.message : "";
+    }
+    expect(message.startsWith("Two.minus commutative: Property failed")).toBe(true);
+    expect(message).toContain("\n\nTwo.minus associative: Property failed");
   });
 
   it("runs each property the given number of times", () => {

@@ -70,6 +70,12 @@ describe("the builder model at fixed cases", () => {
     expect(results(at({ t: "parent" }), tree)).toEqual(["#REF!", 1, 1]);
   });
 
+  it("a record argument of root.rec reads its fields at the focus", () => {
+    // from("missing") is an error, so ifError gives the record of the fallback.
+    const c: BuilderChain = { head: { t: "from", path: "missing" }, steps: [{ t: "ifError", fallback: { k: "rec", a: { k: "field", path: "n" }, b: { k: "lit", value: 2 } } }] };
+    expect(results(c, three)).toEqual([{ a: 1, b: 2 }, { a: 2, b: 2 }, { a: 4, b: 2 }]);
+  });
+
   it("a chain argument evaluates at the origin", () => {
     const c: BuilderChain = { head: fromN, steps: [{ t: "op", op: "add", args: [{ k: "chain", chain: { head: fromN, steps: [] } }] }] };
     expect(results(c, three)).toEqual([2, 4, 8]);
@@ -87,5 +93,7 @@ describe("the runner and the text of a chain", () => {
     expect(text({ op: "reduce", with: "add", strict: false })).toBe('root.from("n").others((e0) => e0).reduce("add")');
     expect(text({ op: "sum", strict: true })).toBe('root.from("n").others((e0) => e0).sum({ strict: true })');
     expect(text({ op: "count", strict: false })).toBe('root.from("n").others((e0) => e0).count()');
+    // A reduce without an op name gives the empty name.
+    expect(text({ op: "reduce", strict: false })).toBe('root.from("n").others((e0) => e0).reduce("")');
   });
 });

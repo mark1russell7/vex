@@ -68,6 +68,8 @@ export interface ModelOptions {
   readonly reductions: readonly Reduction["op"][];
   /** The maximum nesting of bodies and chain arguments. */
   readonly depth: number;
+  /** `false` leaves out the calls `with`. The default is `true`. Without free functions, the generator makes no `call`. */
+  readonly binds?: boolean;
 }
 
 const VAR = "x";
@@ -101,9 +103,9 @@ function arbSteps(o: ModelOptions, depth: number, vars: boolean): fc.Arbitrary<r
     fc.constantFrom(...o.paths).map((path): Step => ({ t: "from", path })),
     arbMoveCall(o).map((m): Step => ({ t: "move", m })),
     fc.tuple(fc.constantFrom(...o.ops), args).map(([op, a]): Step => ({ t: "op", op, args: a })),
-    fc.tuple(fc.constantFrom(...o.fns), args).map(([name, a]): Step => ({ t: "call", name, args: a })),
     arbArg(o, depth, vars).map((fallback): Step => ({ t: "ifError", fallback })),
   ];
+  if (o.fns.length > 0) simple.push(fc.tuple(fc.constantFrom(...o.fns), args).map(([name, a]): Step => ({ t: "call", name, args: a })));
   const axisNames = fc.constantFrom<AxisName>("others", "each", "neighbors4", "neighbors8", "children", "ancestors", "descendants", "siblings");
   const nested: fc.Arbitrary<Step>[] =
     depth <= 0
@@ -113,7 +115,7 @@ function arbSteps(o: ModelOptions, depth: number, vars: boolean): fc.Arbitrary<r
             ([axis, body, where, reduce]): Step => (where === undefined ? { t: "axis", axis, body, reduce } : { t: "axis", axis, body, where, reduce }),
           ),
           fc.tuple(arbSteps(o, depth - 1, vars), arbSteps(o, depth - 1, vars)).map(([a, b]): Step => ({ t: "fork", a, b })),
-          fc.tuple(arbArg(o, depth - 1, vars), arbSteps(o, depth - 1, true)).map(([bind, body]): Step => ({ t: "with", bind, body })),
+          ...(o.binds === false ? [] : [fc.tuple(arbArg(o, depth - 1, vars), arbSteps(o, depth - 1, true)).map(([bind, body]): Step => ({ t: "with", bind, body }))]),
         ];
   const last: fc.Arbitrary<Step | undefined> =
     depth <= 0
@@ -341,4 +343,77 @@ export function modelChain(c: BuilderChain): Expr {
   }
 
   return chain(c, {});
+}
+
+// ---------------------------------------------------------------- the text of a chain
+
+const value = (u: number | boolean | string): string => JSON.stringify(u);
+const opts = (r: Reduction): string => (r.strict ? "{ strict: true }" : "");
+
+/**
+ * This function gives the TypeScript text of a chain, with `root` as the root, for example
+ * `root.from("p")._.add("q").others((e0) => e0).sum()`. The Lab reads this text.
+ */
+export function chainText(c: BuilderChain): string {
+  let fresh = 0;
+  const param = (): string => `e${fresh++}`;
+  const arg = (a: Arg): string => {
+    switch (a.k) {
+      case "field":
+        return value(a.path);
+      case "lit":
+        return value(a.value);
+      case "of":
+        return `root.of(${value(a.key)}, ${value(a.path)})`;
+      case "chain":
+        return chainText1(a.chain);
+      case "var":
+        return `vars.${a.name}`;
+    }
+  };
+  const steps = (list: readonly Step[]): string =>
+    list
+      .map((s): string => {
+        switch (s.t) {
+          case "from":
+            return `.from(${value(s.path)})`;
+          case "move": {
+            const m = s.m;
+            return m.t === "to" ? `.to(${value(m.key)})` : m.t === "index" ? `.index(${m.i})` : m.t === "offset" ? `.offset(${m.d.join(", ")})` : `.${m.t}()`;
+          }
+          case "op":
+            return `._.${s.op}(${s.args.map(arg).join(", ")})`;
+          case "call":
+            return `.call(${[value(s.name), ...s.args.map(arg)].join(", ")})`;
+          case "ifError":
+            return `.ifError(${arg(s.fallback)})`;
+          case "fork": {
+            const a = param();
+            const b = param();
+            return `.fork({ a: (${a}) => ${a}${steps(s.a)}, b: (${b}) => ${b}${steps(s.b)} })`;
+          }
+          case "with": {
+            const p = param();
+            return `.with({ x: ${arg(s.bind)} }, (${p}, vars) => ${p}${steps(s.body)})`;
+          }
+          case "axis": {
+            const [name, ...pre] = AXIS_MEMBER[s.axis];
+            const p = param();
+            const body = `(${p}) => ${p}${steps(s.body)}`;
+            const where = s.where === undefined ? "" : (() => {
+              const w = param();
+              return `, { where: (${w}) => ${w}${steps(s.where)} }`;
+            })();
+            const r = s.reduce;
+            const reduce = r === undefined ? "" : r.op === "reduce" ? `.reduce(${[value(r.with ?? ""), ...(r.strict ? [opts(r)] : [])].join(", ")})` : `.${r.op}(${opts(r)})`;
+            return `.${name}(${[...pre.map(String), body].join(", ")}${where})${reduce}`;
+          }
+        }
+      })
+      .join("");
+  function chainText1(c1: BuilderChain): string {
+    const h = c1.head;
+    return `${h.t === "from" ? `root.from(${value(h.path)})` : `root.start(${value(h.value)})`}${steps(c1.steps)}`;
+  }
+  return chainText1(c);
 }

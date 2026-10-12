@@ -35,6 +35,8 @@ function marked(pieces: readonly FormulaPiece[], error: FormulaError | undefined
       if (text !== "") out.push({ piece: { kind: p.kind, text }, bad: i === 1 });
     }
   }
+  // An error at the end of the text, for example a missing operand, marks one space after the text.
+  if (start === length) out.push({ piece: { kind: "plain", text: " " }, bad: true });
   return out;
 }
 

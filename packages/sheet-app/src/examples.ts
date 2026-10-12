@@ -23,7 +23,7 @@ const budgetCols: readonly Column[] = [
   { id: "c1", name: "Item", kind: "value", type: "text" },
   { id: "c2", name: "Cost", kind: "value", type: "number" },
   { id: "c3", name: "Total", kind: "formula", formula: "= IFERROR(Cost, 0) + SUM(children.Total)" },
-  { id: "c4", name: "Share", kind: "formula", formula: "= Total / SUM(all.Cost)" },
+  { id: "c4", name: "Share", kind: "formula", formula: "= Total / SUM(all, IFERROR(Cost, 0))" },
 ];
 
 const gradeCols: readonly Column[] = [

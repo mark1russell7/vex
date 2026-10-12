@@ -80,7 +80,8 @@
   background: var(--color-accent);
   color: var(--color-surface);
 }
-.vs-btn-primary:hover:not(:disabled) {
+.vs-btn-primary:hover:not(:disabled),
+.vs-btn[aria-pressed="true"]:hover:not(:disabled) {
   background: var(--color-accent-strong);
 }
 .vs-btn-danger {

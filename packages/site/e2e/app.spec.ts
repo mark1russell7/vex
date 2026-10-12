@@ -88,3 +88,43 @@ test("a share link opens the same sheet in a new browser", async ({ page, browse
   await expect(other.getByRole("textbox", { name: "The title of the sheet" })).toHaveValue("Shared budget");
   await other.close();
 });
+
+test("a formula changes the column as you type, marks an error, and shows its Vex chain", async ({ page }) => {
+  await open(page);
+  const total = cell(page, 2, "Total");
+  await expect(total).toHaveText("1,200");
+  await total.click();
+  const editor = page.getByRole("textbox", { name: "The formula of the column Total" });
+  await editor.fill("= Cost * 2");
+  // The draft changes the results before the edit ends.
+  await expect(total).toHaveText("2,400");
+  await editor.fill("= Cost *");
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.locator(".vs-syn-bad")).toHaveCount(1);
+  await editor.fill("= IFERROR(Cost, 0) * 3");
+  await editor.press("Enter");
+  await expect(total).toHaveText("3,600");
+  await page.getByRole("button", { name: "Vex", exact: true }).click();
+  await expect(page.getByLabel("The formula as a Vex chain")).toContainText('ifError');
+  // Undo gives the old formula back.
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(total).toHaveText("1,200");
+});
+
+test("two formula columns that read each other give #CYCLE!, and completion offers the functions", async ({ page }) => {
+  await open(page);
+  await cell(page, 1, "Share").click();
+  const share = page.getByRole("textbox", { name: "The formula of the column Share" });
+  await share.fill("= Total");
+  await share.press("Enter");
+  await cell(page, 1, "Total").click();
+  const total = page.getByRole("textbox", { name: "The formula of the column Total" });
+  await total.fill("= Share + 1");
+  await total.press("Enter");
+  await expect(cell(page, 1, "Total")).toHaveText("#CYCLE!");
+  await expect(cell(page, 1, "Share")).toHaveText("#CYCLE!");
+  // Completion: a word at the caret offers the functions and the columns that start with it.
+  await total.fill("= SU");
+  await page.getByRole("button", { name: /^SUM/ }).click();
+  await expect(total).toHaveValue(/= SUM\(/);
+});

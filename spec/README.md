@@ -50,7 +50,7 @@ An expression is plain JSON data. It has one of these kinds.
 | `let` | `bind`, `body` | the body, with names bound to the values of the bindings |
 | `var` | `name` | the value of a bound name |
 | `rec` | `fields` | a record of the values of the fields |
-| `each` | `axis`, `body` | a list: the body at each target of the axis |
+| `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address |
 | `ext` | `kind`, `data` | the value of an extension handler |
 
 - **[IR.JSON]** An expression whose literals are JSON data gives the same expression after `serialize` and `parse`. A literal that is a domain value needs `encode` and `decode` in its domain.
@@ -105,6 +105,8 @@ An expression is plain JSON data. It has one of these kinds.
 - **[AXIS.WHERE]** The axis `where(axis, test)` keeps the targets of `axis` where `test` gives `true`. A test that fails, or that does not give a boolean, gives an error item for that target.
 - **[AXIS.OTHERS-UNION]** The targets of `others` and the focus are the targets of `all`.
 - **[AXIS.OTHER-TWICE]** In a pair, the address `[other, other]` points to the focus.
+- **[AXIS.ADDRESS]** An axis with an address finds its targets from the key where the address points, not from the focus. A failed address gives `#REF!`. Inside the body, the focus is the target, and the origin does not change.
+- **[AXIS.ADDRESS-EXTEND]** Let `k` be the key of the address. For a body that does not read the origin, the axis gives the same list as the axis at origin `k`.
 - **[AXIS.EXTEND]** For an expression that does not read the origin, the item at key `k` of `each(all, e)` equals `e` evaluated at origin `k`. This is the law of a comonad: extract after extend gives the program.
 
 ### 5.5 Lists
@@ -124,7 +126,7 @@ An expression is plain JSON data. It has one of these kinds.
 
 - **[TRACE.EVENTS]** `explain` records one event for each node evaluation, in the order that the nodes finish. A reference event records its reads.
 - **[TRACE.AXIS]** Inside an axis, the focus of each event is the target.
-- **[DEPS.READS]** `deps` gives each reference of an expression, with its address and the axes around it.
+- **[DEPS.READS]** `deps` gives each reference of an expression, with its address, the axes around it and the address of each axis.
 
 ## 7. Domains
 
@@ -134,6 +136,7 @@ An expression is plain JSON data. It has one of these kinds.
 ## 8. The builder
 
 - **[BUILD.IMMUTABLE]** A builder call gives a new chain. An earlier chain does not change.
+- **[BUILD.AXIS.ADDRESS]** The moves before an axis are the address of the axis. Thus `parent().children(f)` evaluates `f` at each child of the parent.
 - **[BUILD.CALL]** `call(name, ...args)` applies a free function of `withOptions`: the expression is `app(name, value, ...args)`. A domain op with the same name for the value comes first at run time.
 - **[TYPE.FROM]** `from(p)` accepts only the fields of the record type, and the chain value has the type of the field.
 - **[TYPE.OPS]** `._` has only the ops of the domain of the current value, with the parameter types of each op.

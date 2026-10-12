@@ -352,4 +352,22 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     const flat = vex(Num).over(space.record({ A, B }));
     expect(error(flat.start(0).children((c) => c.from("weight")).count().result("A"))).toMatchObject({ code: "#REF!", kind: "no-tree" });
   });
+
+  it("BUILD.AXIS.ADDRESS V-043: the moves before an axis are its address, so parent().children() gives the children of the parent", () => {
+    // V-043: the builder dropped the moves before an axis. parent().children() gave the children of the origin.
+    const team = org.start(0).parent().children((c) => c.from("name")).values();
+    expect(optionalValue(team.at("dev1"))).toEqual(["Cy", "Di"]);
+    expect(optionalValue(team.at("cto"))).toEqual(["Bo", "Ed"]);
+    expect(error(team.result("ceo")).code).toBe("#REF!");
+    // Inside the axis the focus is the target, and the origin stays: each teammate compares with the origin.
+    const richer = org.start(0).parent().children((c) => c.from("salary")._.gt(c.origin().from("salary"))).values();
+    expect(optionalValue(richer.at("dev1"))).toEqual([false, true]);
+    // An address with two moves, and an address with an absolute key.
+    expect(optionalValue(org.start(0).parent().parent().children((c) => c.from("name")).values().at("dev2"))).toEqual(["Bo", "Ed"]);
+    expect(optionalValue(org.start(0).to("cfo").siblings((s) => s.from("name")).values().at("dev1"))).toEqual(["Bo"]);
+    // The others axis leaves out the key of the address, not the origin.
+    const rows = vex(Num).over(space.array([{ v: 1 }, { v: 2 }, { v: 4 }]));
+    expect(optionalValue(rows.start(0).offset(-1).others((o) => o.from("v")).sum().at("1"))).toBe(6);
+    expect(error(rows.start(0).offset(-1).others((o) => o.from("v")).sum().result("0")).code).toBe("#REF!");
+  });
 });

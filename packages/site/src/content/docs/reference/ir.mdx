@@ -23,7 +23,7 @@ The chain `others(...)` binds the current value to a fresh name (`$0`), and the 
 | `let` | `bind`, `body` | the body, with names bound to the values of the bindings |
 | `var` | `name` | the value of a bound name |
 | `rec` | `fields` | a record of the values of the fields |
-| `each` | `axis`, `body` | a list: the body at each target of the axis |
+| `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address `at` |
 | `ext` | `kind`, `data` | the value that the extension handler of `kind` gives |
 
 The first three kinds have the same shape as the expressions of the `render` project. Thus a `render` expression is also a Vex expression.
@@ -64,4 +64,4 @@ A program can go to a file, a database, a worker or another process. The JSON Sc
 
 `compile(expr, options)` changes the tree into a tree of functions, once. The program then evaluates at each origin of each space without a new walk of the tree. `evaluate` uses `compile` too, so the two cannot give different results.
 
-`deps(expr)` gives each field read of a program, with its address and the axes around it. A host can use the reads to evaluate a program again only when a field that it reads changes. Refer to [the Lab](../../lab/) to change a program as JSON.
+`deps(expr)` gives each field read of a program, with its address, the axes around it and the address of each axis. A host can use the reads to evaluate a program again only when a field that it reads changes. Refer to [the Lab](../../lab/) to change a program as JSON.

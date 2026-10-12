@@ -527,7 +527,8 @@ class ChainImpl {
     const inTarget = new ChainImpl({ ...start.#s, addr: [] });
     const inner = body(inTarget);
     const axis: Axis = opts?.where === undefined ? a : { t: "where", axis: a, test: opts.where(inTarget).program };
-    return new ListChainImpl({ ...this.#s, expr: let_({ [name]: this.#s.expr }, each(axis, inner.program)) });
+    // The moves before the axis are its address: parent().children(f) gives f at each child of the parent.
+    return new ListChainImpl({ ...this.#s, expr: let_({ [name]: this.#s.expr }, each(axis, inner.program, this.#s.addr)) });
   }
   others(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
     return this.#axis({ t: "others" }, body, opts);

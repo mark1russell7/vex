@@ -54,7 +54,7 @@ withHalf.from("weight").call("half").at("A"); // : Optional<number>
 |---|---|
 | `._.op(...args)` | Applies an op of the domain of the current value. The types list only the declared ops, with their parameter types. |
 | `from(field)` | Starts a new value: the field at the current address |
-| `to(key)`, `index(i)`, `offset(...d)` | Moves the address of the later field references |
+| `to(key)`, `index(i)`, `offset(...d)` | Moves the address of the later field references and axes |
 | `other()` | Moves to the other key of a pair. The types offer it only for a space with two keys. |
 | `origin()` | Moves back to the origin |
 | `parent()` | Moves to the parent of the focus, in a tree space |
@@ -68,6 +68,14 @@ withHalf.from("weight").call("half").at("A"); // : Optional<number>
 | `call(name, ...args)` | Applies a free function of `withOptions` to the current value. The types accept only the functions whose first parameter accepts the value. |
 | `at(key)`, `value(key)`, `result(key)`, `explain(key)`, `all()` | Evaluates the chain |
 | `program` | The expression of the chain |
+
+The moves before an axis are the address of the axis. For example, `parent().children(body)` evaluates `body` at each child of the parent:
+
+```ts doctest
+const org = vex(NumDomain).over(space.tree({ ceo: { pay: 300 }, cto: { pay: 200 }, cfo: { pay: 190 } }, { cto: "ceo", cfo: "ceo" }));
+
+org.start(0).parent().children((c) => c.from("pay")).sum().at("cto"); // => some(390)
+```
 
 An axis gives a list chain. A list chain has the reductions `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `values`, `first` and `reduce(op)`. Each reduction takes `{ strict: true }`. By default, a reduction skips error items.
 

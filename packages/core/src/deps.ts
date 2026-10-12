@@ -8,6 +8,8 @@ export interface Dependency {
   readonly path: readonly string[];
   /** The axes around the read, from the outside to the inside. Inside an axis, the focus is the target. */
   readonly axes: readonly Axis["t"][];
+  /** The address of each axis in `axes`, in the same order. The empty address is the focus. */
+  readonly axisAt: readonly Addr[];
 }
 
 /**
@@ -16,18 +18,19 @@ export interface Dependency {
  */
 export function deps(e: Expr): readonly Dependency[] {
   const out: Dependency[] = [];
-  const walk = (x: Expr, axes: readonly Axis["t"][]): void => {
+  const walk = (x: Expr, axes: readonly Axis["t"][], axisAt: readonly Addr[]): void => {
     if (x.tag === "ref") {
-      out.push({ at: x.at ?? [], path: x.path, axes });
+      out.push({ at: x.at ?? [], path: x.path, axes, axisAt });
       return;
     }
     if (x.tag === "each") {
       const inner = [...axes, x.axis.t];
-      children(x).forEach((c) => walk(c, inner));
+      const innerAt = [...axisAt, x.at ?? []];
+      children(x).forEach((c) => walk(c, inner, innerAt));
       return;
     }
-    children(x).forEach((c) => walk(c, axes));
+    children(x).forEach((c) => walk(c, axes, axisAt));
   };
-  walk(e, []);
+  walk(e, [], []);
   return out;
 }

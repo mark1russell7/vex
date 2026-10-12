@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { compile, evaluate, explain, type EvalOptions } from "./evaluate.ts";
-import { app, axes, each, ext, key, let_, lit, other, ref, rec, v, type Expr } from "./ir.ts";
+import { app, axes, each, ext, key, let_, lit, origin as toOrigin, other, parent, ref, rec, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { isVexList } from "./list.ts";
 import { fail, ok } from "./result.ts";
@@ -284,12 +284,36 @@ describe("folds: explain, deps, JSON", () => {
     expect(t.events.filter((e) => e.tag === "ref").map((e) => e.focus)).toEqual(["B", "C", "D"]);
   });
 
-  it("DEPS.READS: deps gives each static read with its address and axes", () => {
+  it("DEPS.READS: deps gives each static read with its address, its axes and the address of each axis", () => {
     const e = let_({ base: ref("position") }, each(axes.others, app("subtract", v("base"), ref("position", [key("B")]))));
     expect(deps(e)).toEqual([
-      { at: [], path: ["position"], axes: [] },
-      { at: [{ t: "key", key: "B" }], path: ["position"], axes: ["others"] },
+      { at: [], path: ["position"], axes: [], axisAt: [] },
+      { at: [{ t: "key", key: "B" }], path: ["position"], axes: ["others"], axisAt: [[]] },
     ]);
+    const nested = each(axes.children, each(axes.all, ref("w")), [parent]);
+    expect(deps(nested)).toEqual([{ at: [], path: ["w"], axes: ["children", "all"], axisAt: [[{ t: "parent" }], []] }]);
+  });
+
+  it("AXIS.ADDRESS: an axis with an address finds its targets from the key of the address, and the origin stays", () => {
+    const t = space.tree({ r: { w: 1 }, a: { w: 2 }, b: { w: 3 }, c: { w: 4 } }, { a: "r", b: "r", c: "a" });
+    const names = (e: Expr, origin: string): unknown => {
+      const r = evaluate(e, { space: t, origin, domains: [] });
+      return r.ok && isVexList(r.value) ? r.value.items.map((i) => i.key) : r;
+    };
+    expect(names(each(axes.children, ref("w"), [parent]), "c")).toEqual(["c"]);
+    expect(names(each(axes.children, ref("w"), [parent]), "b")).toEqual(["a", "b"]);
+    expect(names(each(axes.others, ref("w"), [key("a")]), "r")).toEqual(["r", "b", "c"]);
+    // The empty address is the focus, and each() leaves it out of the expression.
+    expect(each(axes.children, ref("w"), [])).toEqual(each(axes.children, ref("w")));
+    // A failed address gives #REF! with the path of the axis.
+    const failed = evaluate(each(axes.children, ref("w"), [parent]), { space: t, origin: "r", domains: [] });
+    expect(failed.ok ? null : { code: failed.error.code, path: failed.error.path }).toEqual({ code: "#REF!", path: [] });
+    // Inside the body, the origin is still the origin of the evaluation.
+    const atOrigin = evaluate(each(axes.children, ref("w", [toOrigin]), [parent]), { space: t, origin: "b", domains: [] });
+    expect(atOrigin.ok && isVexList(atOrigin.value) ? atOrigin.value.items.map((i) => (i.result.ok ? i.result.value : null)) : null).toEqual([3, 3]);
+    // The trace names the address of the axis.
+    const trace = explain(each(axes.children, ref("w"), [parent, key("r")]), { space: t, origin: "c", domains: [] });
+    expect(trace.events.at(-1)?.label).toBe("each children from parent.key(r)");
   });
 
   it("IR.JSON: an expression round-trips, and domain literals need encode", () => {

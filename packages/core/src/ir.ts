@@ -35,7 +35,7 @@ export type Expr =
   | { readonly tag: "let"; readonly bind: Readonly<Record<string, Expr>>; readonly body: Expr }
   | { readonly tag: "var"; readonly name: string }
   | { readonly tag: "rec"; readonly fields: Readonly<Record<string, Expr>> }
-  | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr }
+  | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr; readonly at?: Addr }
   | { readonly tag: "ext"; readonly kind: string; readonly data: unknown };
 
 /** The tag of an expression kind. */
@@ -71,8 +71,13 @@ export const v = (name: string): ExprOf<"var"> => ({ tag: "var", name });
 /** This function makes a record from field expressions. */
 export const rec = (fields: Readonly<Record<string, Expr>>): ExprOf<"rec"> => ({ tag: "rec", fields });
 
-/** This function evaluates `body` once for each target of `axis`. The result is a list. */
-export const each = (axis: Axis, body: Expr): ExprOf<"each"> => ({ tag: "each", axis, body });
+/**
+ * This function evaluates `body` once for each target of `axis`. The result is a list. With `at`, the axis finds its
+ * targets from the key of that address, not from the focus.
+ */
+export function each(axis: Axis, body: Expr, at?: Addr): ExprOf<"each"> {
+  return at === undefined || at.length === 0 ? { tag: "each", axis, body } : { tag: "each", axis, body, at };
+}
 
 /** This function makes an expression of an extension kind. */
 export const ext = (kind: string, data: unknown): ExprOf<"ext"> => ({ tag: "ext", kind, data });
@@ -180,7 +185,7 @@ export function isExpr(u: unknown): u is Expr {
     case "rec":
       return isExprRecord(u["fields"]);
     case "each":
-      return isAxis(u["axis"]) && isExpr(u["body"]);
+      return isAxis(u["axis"]) && isExpr(u["body"]) && (u["at"] === undefined || (Array.isArray(u["at"]) && u["at"].every(isMove)));
     case "ext":
       return typeof u["kind"] === "string" && "data" in u;
     default:

@@ -119,7 +119,10 @@ function run(e: Expr, c: Ctx): RefOutcome {
       return val(Object.fromEntries(names.map((n, i) => [n, vs[i]])));
     }
     case "each": {
-      const t = targets(e.axis, c);
+      // An axis with an address finds its targets from the key of the address.
+      const from = resolveAddr(c.space, { origin: c.origin, focus: c.focus }, e.at);
+      if (!from.ok) return err(from.error.code);
+      const t = targets(e.axis, { ...c, focus: from.value });
       if (!t.ok) return err(t.code);
       return val({
         kind: "vex.list",

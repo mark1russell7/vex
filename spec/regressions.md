@@ -1,6 +1,6 @@
 # Regressions
 
-Each defect of the audits ([`docs/archive/2026-07/BUGS.md`](../docs/archive/2026-07/BUGS.md)) has a row. A row with the status `test` has a test that names the ID. A row with the status `resolved` names the change that removed the defect. The test `spec-coverage.test.ts` checks each `test` row.
+Each defect of the audits ([`docs/archive/2026-07/BUGS.md`](../docs/archive/2026-07/BUGS.md)) has a row. A defect that the work finds later gets the next ID. A row with the status `test` has a test that names the ID. A row with the status `resolved` names the change that removed the defect. The test `spec-coverage.test.ts` checks each `test` row.
 
 | ID | Status | Evidence |
 |---|---|---|
@@ -46,3 +46,4 @@ Each defect of the audits ([`docs/archive/2026-07/BUGS.md`](../docs/archive/2026
 | V-040 | test | `origin()` goes back to the start |
 | V-041 | test | A chain is not a thenable |
 | V-042 | test | The others axis evaluates the base at the origin and the body at each target |
+| V-043 | test | The moves before an axis are its address. Before the fix, `parent().children()` gave the children of the origin. |

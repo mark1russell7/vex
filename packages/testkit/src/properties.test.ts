@@ -1,8 +1,8 @@
-import { app, axisTargets, cell, compile, each, evaluate, explain, lit, parse, ref, resolveAddr, serialize, SheetRun, space, vex, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axisTargets, cell, compile, each, evaluate, explain, lit, parse, ref, resolveAddr, serialize, SheetRun, space, vex, type Axis, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { arbExpr, arbOrigin, arbSpace, arbTreeInput, PATHS } from "./arbitraries.ts";
+import { arbExpr, arbMove, arbOrigin, arbSpace, arbTreeInput, PATHS } from "./arbitraries.ts";
 import { fromCore, fromReference } from "./compare.ts";
 import { structuralEqual } from "./laws.ts";
 import { referenceEvaluate } from "./reference.ts";
@@ -104,6 +104,23 @@ describe("properties of the axes", () => {
         if (!all.ok) return;
         const items = (all.value as { items: readonly { key: string; result: ReturnType<typeof run> }[] }).items;
         for (const item of items) expect(fromCore(item.result)).toEqual(fromCore(run(e, s, item.key)));
+      }),
+    );
+  });
+
+  it("P12 AXIS.ADDRESS-EXTEND: an axis with an address equals the axis at the key of the address", () => {
+    const axisArb = fc.constantFrom<Axis>({ t: "all" }, { t: "others" }, { t: "other" }, { t: "neighbors", n: 4 }, { t: "children" }, { t: "ancestors" }, { t: "siblings" });
+    fc.assert(
+      fc.property(program, axisArb, fc.array(arbMove, { minLength: 1, maxLength: 2 }), ([s, e, o], axis, at) => {
+        // The law holds for bodies that do not read the origin, because inside an axis the origin stays. An origin
+        // outside the space fails before the axis (EVAL.TOTAL), so the law starts at a key of the space.
+        fc.pre(!JSON.stringify(e).includes('"t":"origin"') && s.keys.includes(o));
+        const moved = resolveAddr(s, { origin: o, focus: o }, at);
+        const withAddress = run(each(axis, e, at), s, o);
+        // A failed address gives #REF!. Otherwise the list equals the axis at the key of the address.
+        const expected = moved.ok ? fromCore(run(each(axis, e), s, moved.value)) : { ok: false, code: "#REF!" };
+        expect(fromCore(withAddress)).toEqual(expected);
+        expect(fromCore(withAddress)).toEqual(fromReference(referenceEvaluate(each(axis, e, at), { space: s, origin: o, domains: DOMAINS })));
       }),
     );
   });

@@ -154,7 +154,7 @@
       }
     },
     "each": {
-      "description": "A list: the body at each target of the axis.",
+      "description": "A list: the body at each target of the axis. With the address 'at', the axis finds its targets from the key of the address, not from the focus.",
       "type": "object",
       "required": [
         "tag",
@@ -170,6 +170,12 @@
         },
         "body": {
           "$ref": "#/$defs/expr"
+        },
+        "at": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/move"
+          }
         }
       }
     },

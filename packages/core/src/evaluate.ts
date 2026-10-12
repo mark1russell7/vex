@@ -1,6 +1,6 @@
 import { liftsAt, resolveOp, type AnyDomain, type ParamKind, type ResolvedOp } from "./domain.ts";
 import { formatError, vexError, type ErrorKind, type VexError } from "./errors.ts";
-import { children, type Axis, type Expr, type ExprOf } from "./ir.ts";
+import { children, type Axis, type Expr, type ExprOf, type Move } from "./ir.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { axisTargets, resolveAddr, type Position, type Space } from "./space.ts";
@@ -289,10 +289,18 @@ class Compiler {
 
   #each(e: ExprOf<"each">, info: Info): Node {
     const { path } = info;
+    const at = e.at ?? [];
     const targets = this.#targets(e.axis, path, { next: 1 });
     const body = this.node(e.body, [...path, 0]);
     return (f, c) => {
-      const ts = targets(f, c);
+      // An axis with an address finds its targets from the key of the address. The origin does not change.
+      let from = f;
+      if (at.length > 0) {
+        const where = resolveAddr(c.space, f.pos, at);
+        if (!where.ok) return this.#emit(c, info, f, fail({ ...where.error, path }));
+        from = { pos: { origin: f.pos.origin, focus: where.value }, env: f.env };
+      }
+      const ts = targets(from, c);
       if (!ts.ok) return this.#emit(c, info, f, ts);
       const items: ListItem[] = ts.value.map(({ key, test }) => {
         if (test !== undefined && !test.ok) return { key, result: test };
@@ -587,9 +595,25 @@ export function labelOf(e: Expr): string {
     case "rec":
       return `{ ${Object.keys(e.fields).join(", ")} }`;
     case "each":
-      return `each ${e.axis.t}`;
+      return e.at === undefined ? `each ${e.axis.t}` : `each ${e.axis.t} from ${e.at.map(moveText).join(".")}`;
     case "ext":
       return e.kind;
+  }
+}
+
+/** This function gives a short text for a move, for the label of an axis with an address. */
+function moveText(m: Move): string {
+  switch (m.t) {
+    case "key":
+      return `key(${m.key})`;
+    case "index":
+      return `index(${m.i})`;
+    case "offset":
+      return `offset(${m.d.join(", ")})`;
+    case "other":
+    case "origin":
+    case "parent":
+      return m.t;
   }
 }
 

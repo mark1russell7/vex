@@ -134,7 +134,9 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
         body,
       })),
       fc.tuple(tie("expr"), tie("expr")).map(([x, y]): Expr => ({ tag: "rec", fields: { x, y } })),
-      fc.tuple(tie("axis"), tie("expr")).map(([axis, body]): Expr => ({ tag: "each", axis, body })),
+      fc.tuple(tie("axis"), tie("expr"), fc.option(fc.array(arbMove, { maxLength: 2 }), { nil: undefined })).map(([axis, body, at]): Expr =>
+        at === undefined || at.length === 0 ? { tag: "each", axis, body } : { tag: "each", axis, body, at },
+      ),
     ),
     axis: fc.oneof(
       { depthSize: "small", maxDepth: 2 },

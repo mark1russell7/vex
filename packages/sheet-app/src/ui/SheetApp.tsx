@@ -56,8 +56,13 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     setNote(message);
   };
 
-  // A share link in the address opens its document once, when the app starts.
+  // A share link or an example link in the address opens its document once, when the app starts.
   useEffect(() => {
+    const example = EXAMPLES.find((x) => x.id === /#example=([\w-]+)/.exec(window.location.hash)?.[1]);
+    if (example !== undefined) {
+      load(example.doc, `Opened the example "${example.title}".`);
+      return;
+    }
     const m = /#sheet=([\w-]+)/.exec(window.location.hash);
     if (m?.[1] === undefined) return;
     void decodeShare(m[1]).then((d) => {

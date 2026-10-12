@@ -23,8 +23,13 @@ const CALLS: readonly (readonly [string, number, number])[] = [
   ["RANK", 1, 1],
 ];
 
-/** A random step of navigation: `this.`, `parent.` or `row(n).`. */
-export const arbNav: fc.Arbitrary<Nav> = fc.oneof(fc.constant<Nav>({ t: "this" }), fc.constant<Nav>({ t: "parent" }), fc.integer({ min: -2, max: 2 }).map((n): Nav => ({ t: "row", n })));
+/** A random step of navigation: `this.`, `parent.`, `row(n).` or `row("key").`. A key can be absent from the table. */
+export const arbNav: fc.Arbitrary<Nav> = fc.oneof(
+  fc.constant<Nav>({ t: "this" }),
+  fc.constant<Nav>({ t: "parent" }),
+  fc.integer({ min: -2, max: 2 }).map((n): Nav => ({ t: "row", n })),
+  fc.constantFrom("r0", "r3", "r9").map((name): Nav => ({ t: "key", name, span: { start: 0, end: 0 } })),
+);
 
 /** A random syntax tree that reads the columns `names`. The spans of the nodes are empty. */
 export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
@@ -62,7 +67,8 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
     ),
   })).ast;
 
-const navText = (ns: readonly Nav[]): string => ns.map((n) => (n.t === "row" ? `row(${n.n}).` : `${n.t}.`)).join("");
+const navText = (ns: readonly Nav[]): string =>
+  ns.map((n) => (n.t === "row" ? `row(${n.n}).` : n.t === "key" ? `row("${n.name.replaceAll('"', '""')}").` : `${n.t}.`)).join("");
 
 /** This function gives the text of a syntax tree. Each operator has parentheses, so the text has the structure of the tree. */
 export function printAst(a: Ast): string {

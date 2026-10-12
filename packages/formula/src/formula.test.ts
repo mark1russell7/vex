@@ -1,4 +1,4 @@
-import { app, cell, lit, offset, origin, parent, ref, SheetRun, space, type Expr, type Result } from "@mark1russell7/vex";
+import { app, cell, key, lit, offset, origin, parent, ref, SheetRun, space, type Expr, type Result } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { BUILT_IN_NAMES, compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, MAX_LENGTH, OP_NAMES, type FormulaContext } from "./index.ts";
@@ -108,6 +108,23 @@ describe("names and navigation", () => {
     expect(column("IFERROR(row(-1).f, 0) + cost", ["fruit", "tools", "extra", "apple", "pear", "saw"])).toEqual([1, 5, "#VALUE!", 2, 7, 3]);
     expect(column("parent.name", ["apple", "saw", "fruit"])).toEqual(["fruit", "tools", "#REF!"]);
   });
+
+  it("FORMULA.NAV.NAME: row(\"name\") moves to the one row with the name, and a name of no row or of two rows is an error", () => {
+    // Without names in the context, the name is the key of the row.
+    expect(compile('row("pear").cost')).toEqual(ref(["cost"], [key("pear")]));
+    expect(compile('row("a""b").parent.cost')).toEqual(ref(["cost"], [key('a"b'), parent]));
+    expect(column('row("pear").cost * qty')).toEqual([5, 15, 5, 10, 5]);
+    expect(column('row("nope").cost', ["apple"])).toEqual(["#REF!"]);
+    expect(column('SUM(row("fruit").children.cost)', ["saw"])).toEqual([7]);
+    // With names in the context, the compiler finds the key of the name.
+    const rowNames = new Map([["Pear", ["pear"]], ["Twin", ["apple", "saw"]], ["Empty", []]]);
+    const ctx: FormulaContext = { valueColumns: VALUES, formulaColumns: ["total"], rowNames };
+    const r = compileFormula('row("Pear").total + 1', ctx);
+    expect(r.ok && r.expr).toEqual(app("add", cell("total", [key("pear")]), lit(1)));
+    expect(error('row("Nope").cost', ctx)).toEqual({ message: 'no row has the name "Nope"', span: { start: 4, end: 10 } });
+    expect(error('row("Empty").cost', ctx).message).toBe('no row has the name "Empty"');
+    expect(error('row("Twin").cost', ctx).message).toBe('2 rows have the name "Twin". Give the row a name that no other row has');
+  });
 });
 
 describe("operators", () => {
@@ -142,6 +159,14 @@ describe("operators", () => {
     expect(column("VEC(cost, qty) + pos", ["apple"])).toEqual([new Vec2(3, 4)]);
     expect(column('VEC("a", 1)', ["apple"])).toEqual(["#VALUE!"]);
     expect(error("VEC(1)").message).toMatch(/VEC needs 2 arguments, not 1/);
+  });
+
+  it("FORMULA.VEC: X(v) and Y(v) give the components of a vector", () => {
+    expect(compile("X(pos)")).toEqual(app("dot", ref(["pos"]), lit(new Vec2(1, 0))));
+    expect(column("X(pos) + Y(size) * 10", ["apple", "tools"])).toEqual([11, 25]);
+    expect(column("y(VEC(cost, -qty))", ["apple"])).toEqual([-3]);
+    expect(error("Y()").message).toMatch(/Y needs 1 argument, not 0/);
+    expect(column("X(cost)", ["apple"])).toEqual(["#NAME?"]);
   });
 
   it("FORMULA.COMPARE: = < <= > >= and <> give booleans", () => {

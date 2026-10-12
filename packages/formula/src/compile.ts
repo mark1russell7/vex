@@ -3,7 +3,7 @@
  * A value column is a field of the row records, so a read of it is a `ref`. A formula column is a column of a
  * sheet, so a read of it is a cell reference. Thus a cycle of formula columns gives `#CYCLE!`.
  */
-import { app, axes, cell, each, lit, offset, origin, parent, ref, type Axis, type Expr, type Move } from "@mark1russell7/vex";
+import { app, axes, cell, each, key, lit, offset, origin, parent, ref, type Axis, type Expr, type Move } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { BUILT_IN_NAMES, OP_NAMES } from "./functions.ts";
 import { AGGREGATES, FormulaSyntaxError, parseFormula, type Ast, type AxisName, type BinaryOp, type Nav, type Span } from "./syntax.ts";
@@ -14,6 +14,8 @@ export interface FormulaContext {
   readonly valueColumns: readonly string[];
   /** The other formula columns. A read of a formula column is a cell reference. */
   readonly formulaColumns: readonly string[];
+  /** The keys of the rows with each name, for `row("name")`. Without this map, the name is the key of the row. */
+  readonly rowNames?: ReadonlyMap<string, readonly string[]>;
 }
 
 /** An error of a formula: a message, and the span of the text that has the problem. */
@@ -35,8 +37,6 @@ interface Scope {
   readonly inAggregate: boolean;
 }
 
-const navMove = (n: Nav): Move => (n.t === "this" ? origin : n.t === "parent" ? parent : offset(n.n));
-
 /** This function compiles a syntax tree. A problem gives a result with an error. */
 export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
   const reads: string[] = [];
@@ -51,6 +51,28 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
     if (found === undefined) throw new FormulaSyntaxError(`the column "${name}" does not exist`, span);
     if (!reads.includes(found)) reads.push(found);
     return { name: found, formula: !ctx.valueColumns.includes(found) };
+  };
+
+  // The name of a row must find exactly one row, so a formula does not read a row that the author did not mean.
+  const rowKey = (name: string, span: Span): string => {
+    if (ctx.rowNames === undefined) return name;
+    const keys = ctx.rowNames.get(name) ?? [];
+    if (keys.length === 0) throw new FormulaSyntaxError(`no row has the name "${name}"`, span);
+    const [only] = keys;
+    if (keys.length > 1 || only === undefined) throw new FormulaSyntaxError(`${keys.length} rows have the name "${name}". Give the row a name that no other row has`, span);
+    return only;
+  };
+  const navMove = (n: Nav): Move => {
+    switch (n.t) {
+      case "this":
+        return origin;
+      case "parent":
+        return parent;
+      case "row":
+        return offset(n.n);
+      case "key":
+        return key(rowKey(n.name, n.span));
+    }
   };
 
   const go = (a: Ast, s: Scope): Expr => {
@@ -118,6 +140,13 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
         arity(2, 2);
         const [x, y] = args();
         return app("add", app("scale", lit(new Vec2(1, 0)), x ?? lit(0)), app("scale", lit(new Vec2(0, 1)), y ?? lit(0)));
+      }
+      case "X":
+      case "Y": {
+        // X(v) and Y(v) are dot products with the unit vectors, so they use only the ops of Vec2.
+        arity(1, 1);
+        const [v] = args();
+        return app("dot", v ?? lit(0), lit(name === "X" ? new Vec2(1, 0) : new Vec2(0, 1)));
       }
       case "RANK": {
         arity(1, 1);

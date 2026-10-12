@@ -128,3 +128,23 @@ test("two formula columns that read each other give #CYCLE!, and completion offe
   await page.getByRole("button", { name: /^SUM/ }).click();
   await expect(total).toHaveValue(/= SUM\(/);
 });
+
+test("an example link opens the example, and a formula that reads a row by its name follows the name", async ({ page }) => {
+  await page.goto("./app/#example=layout");
+  await expect(page.getByRole("treegrid")).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toContainText("6 rows · 6 columns");
+  const at = (row: number, column: string) =>
+    page.getByRole("treegrid").getByRole("row").nth(row).getByRole("gridcell").nth(["Box", "Own", "Width", "X", "Right", "Share of page"].indexOf(column));
+  // The Image box starts after the Text box and a gap: 4 + 5 + 1.
+  await expect(at(5, "X")).toHaveText("10");
+  await expect(at(3, "Share of page")).toHaveText("0.588235");
+  // The formula reads row("Page"). After a change of the name, no row has that name, and the column gives #VALUE!.
+  const page0 = at(1, "Box");
+  await page0.dblclick();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("Screen");
+  await page.keyboard.press("Enter");
+  await expect(at(3, "Share of page")).toHaveText("#VALUE!");
+  await at(3, "Share of page").click();
+  await expect(page.getByRole("complementary", { name: "The inspector" })).toContainText('no row has the name "Page"');
+});

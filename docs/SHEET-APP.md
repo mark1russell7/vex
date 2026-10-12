@@ -75,3 +75,5 @@ The owner made these decisions on 2026-10-11:
 - `row(-1)` is the move `offset(-1)`. In a tree space it goes to the previous sibling (spec `NAV.OFFSET.TREE`). Thus a running total works in a flat table and in each group.
 - A value column is a field of the records. A formula column is a column of `root.sheet()`, so a cycle gives `#CYCLE!`.
 - The formula language has its own spec, `spec/formula.md`, with requirement IDs and tests.
+- A row has a name: the text of its first column, when that column is a text column. `row("name").` reads the row with that name (spec `FORMULA.NAV.NAME`). A name of no row, or of two rows, is an error. Thus a formula does not read a row that the author did not mean.
+- The link `#example=<id>` opens an example. The gallery page of the spreadsheets uses it.

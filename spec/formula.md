@@ -19,14 +19,15 @@ A table is a tree space. Each row is a record, and a row without a parent is a r
 - **[FORMULA.NAME]** A name is a word, or a text in square brackets: `cost` or `[Unit price]`. Brackets also make a name of a word of the language, for example `[children]`. The compiler looks for a column with the same name, and then for a column with the same name in small letters. A name with a dot is an error, and a name of no column is an error with its span.
 - **[FORMULA.NAME.VALUE]** A name of a value column reads the field at the focus: `ref(name)`.
 - **[FORMULA.NAME.FORMULA]** A name of a formula column reads the cell at the focus: the cell reference `cell(name)`. Thus a cycle of formula columns gives `#CYCLE!`, and the other cells stay correct.
-- **[FORMULA.NAV]** `this.`, `parent.` and `row(n).` before a name are moves of the address of the read. They are `origin`, `parent` and `offset(n)`, and they apply in sequence. In a tree space, `row(-1)` is the previous sibling (spec `NAV.OFFSET.TREE`). `n` must be a whole number.
+- **[FORMULA.NAV]** `this.`, `parent.`, `row(n).` and `row("name").` before a name are moves of the address of the read. They are `origin`, `parent`, `offset(n)` and `key(k)`, and they apply in sequence. In a tree space, `row(-1)` is the previous sibling (spec `NAV.OFFSET.TREE`). `n` must be a whole number.
+- **[FORMULA.NAV.NAME]** `row("name").` moves to the row with the name `name`. The context gives the keys of the rows of each name. A name of no row, or of two or more rows, is an error with its span. Without the names in the context, the name is the key of the row. The sheet app gives each row the text of its first column as its name, when that column is a text column.
 
 ## 4. Operators
 
 - **[FORMULA.OPERATOR]** The operators `+`, `-`, `*`, `/`, `^` and `&` apply ops of the domain of the value on the left. The ops are `add`, `subtract`, `multiply`, `divide`, `pow` and `concat`. A minus sign before a value applies `negate`. A minus sign before a number gives a negative number.
 - **[FORMULA.COMPARE]** The comparisons `=`, `<`, `<=`, `>` and `>=` apply `eq`, `lt`, `lte`, `gt` and `gte`. `a <> b` is `not(eq(a, b))`.
 - **[FORMULA.CONCAT]** `&` joins the text of the two values, as in a spreadsheet. A number on the left side gives its text too, so `1 & "a"` gives `"1a"`.
-- **[FORMULA.VEC]** `VEC(x, y)` gives the vector with the components `x` and `y`. The two values must be numbers.
+- **[FORMULA.VEC]** `VEC(x, y)` gives the vector with the components `x` and `y`. The two values must be numbers. `X(v)` and `Y(v)` give the components of the vector `v`.
 - **[FORMULA.NESTING]** A formula can nest parentheses, function calls and signs up to 200 levels deep. A deeper formula gives an error with its position.
 - **[FORMULA.PRECEDENCE]** The order of the operators is the order of a spreadsheet. A minus sign before a value comes first, then `^`, then `*` and `/`, then `+` and `-`, then `&`, and last the comparisons. Each operator with two values is left-associative, also `^`. Parentheses change the order.
 

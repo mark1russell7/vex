@@ -12,6 +12,8 @@ import { parseValue } from "./values.ts";
 export interface FormulaContext {
   readonly valueColumns: readonly string[];
   readonly formulaColumns: readonly string[];
+  /** The keys of the rows with each name, for `row("name")`. */
+  readonly rowNames?: ReadonlyMap<string, readonly string[]>;
 }
 
 /** A problem of a formula, with its position in the text. */
@@ -63,6 +65,21 @@ export interface Evaluation {
   readonly errors: number;
 }
 
+/**
+ * This function gives the keys of the rows with each name. The name of a row is the text of its first column, when
+ * that column is a text column. An empty text is not a name.
+ */
+export function rowNamesOf(doc: SheetDoc): ReadonlyMap<string, readonly string[]> {
+  const names = new Map<string, string[]>();
+  const first = doc.columns[0];
+  if (first?.kind !== "value" || first.type !== "text") return names;
+  for (const r of doc.rows) {
+    const name = (r.cells[first.id] ?? "").trim();
+    if (name !== "") names.set(name, [...(names.get(name) ?? []), r.id]);
+  }
+  return names;
+}
+
 /** This function evaluates each cell of a document. */
 export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
   const valueCols = doc.columns.filter((c): c is Extract<Column, { kind: "value" }> => c.kind === "value");
@@ -80,7 +97,7 @@ export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
   }
   const parents: Record<string, string | null> = Object.fromEntries(doc.rows.map((r) => [r.id, r.parent]));
   const sp = space.tree(records, parents);
-  const ctx: FormulaContext = { valueColumns: valueCols.map((c) => c.name), formulaColumns: formulaCols.map((c) => c.name) };
+  const ctx: FormulaContext = { valueColumns: valueCols.map((c) => c.name), formulaColumns: formulaCols.map((c) => c.name), rowNames: rowNamesOf(doc) };
   const compiled = new Map<string, CompileResult>(formulaCols.map((c) => [c.id, compiler.compile(c.formula, ctx)]));
   const programs = new Map<string, Expr>();
   for (const c of formulaCols) {

@@ -1,6 +1,6 @@
 ---
 title: Spreadsheets
-description: Four spreadsheet programs in Vex formulas, a loan, a bill of materials, a grade book and invoice checks. Tests compare each program with plain TypeScript.
+description: "Spreadsheet programs in Vex formulas: four pilots that tests compare with plain TypeScript, and seven sheets where formulas read other formulas."
 ---
 
 These four programs come from real spreadsheets. Each program is a set of formula columns of [the sheet app](../../app/). The package `@vex/pilots` gives each program three times: with the typed builder, with the formula language, and in plain TypeScript. Property tests compare the three on random inputs.
@@ -85,8 +85,26 @@ cells("line2", "lineTotal"); // => { ok: false, error: { code: "#N/A", ... } }
 cells("A", "totalOk"); // => { ok: false, error: { code: "#N/A", ... } }
 ```
 
+## Formulas that read formulas
+
+In the sheet app, a formula column can read other formula columns at other rows, and those columns can read more columns. The reads can go up the tree, down the tree and across to the row before. Vex finds the order of the evaluation, so the order of the columns has no effect. Only a real cycle gives `#CYCLE!`.
+
+The menu of the app has these seven sheets. Each link opens one of them.
+
+| Sheet | How the formulas read each other |
+|---|---|
+| [A page layout](../../app/#example=layout) | `Width` adds the widths of the children. `X` reads the `X` and the `Width` of the box before, or the `X` of the parent. Thus the widths go up, and the positions go down and across. |
+| [Rabbits and foxes](../../app/#example=prey) | `Rabbits` reads `row(-1).Foxes`, and `Foxes` reads `row(-1).Rabbits`. The two columns read each other, but each read goes to the row before. Thus the sheet has no cycle. |
+| [A project plan](../../app/#example=plan) | A task starts at the end of the task before it. A phase starts with its parent and ends at `MAX(children.Finish)`. |
+| [A thrown ball](../../app/#example=ball) | The velocity and the position step together as vectors. `Y(Position)` gives the height, and the last row shows the ball below the ground. |
+| [Test scores](../../app/#example=scores) | A z-score has an aggregate inside an aggregate: `SQRT(AVERAGE(all, (Score - AVERAGE(all.Score)) ^ 2))`. |
+| [An org chart](../../app/#example=org) | The headcount and the cost go up the tree. The level goes down the tree: `IFERROR(parent.Level, 0) + 1`. |
+| [A recipe that scales](../../app/#example=recipe) | The scale goes down the tree from the number of servings. The cost goes up the tree from the ingredients. |
+
+Four of the sheets read a row by its name, for example `row("Launch").Start`. The name of a row is the text of its first column. If you change the name, the formula gives `#VALUE!` with the reason. It does not read a different row.
+
 ## What the pilots found
 
-- `SheetRun` gave a wrong balance at the end of a long recurrence, without an error. A read warms the column in key order at this time.
-- The typed builder has no member for the form `if`. The formula language has `IF`, but a builder program uses `ifError` with a value that fails on purpose.
+- `SheetRun` gave a wrong balance at the end of a long recurrence, without an error. Version 0.5.0 removed the cause: a sheet does not depend on the call stack.
+- The typed builder had no member for the form `if`. A builder program used `ifError` with a value that fails on purpose. Version 0.4.0 added `if()` to the chain.
 - A text as the left value of `*` gives `#NAME?`, because the text domain has no op `multiply`. A spreadsheet gives `#VALUE!`.

@@ -112,8 +112,12 @@ export function tokenize(src: string): readonly Token[] {
   return out;
 }
 
-/** A step of navigation before a column name: `this.`, `parent.` or `row(n).`. */
-export type Nav = { readonly t: "this" } | { readonly t: "parent" } | { readonly t: "row"; readonly n: number };
+/** A step of navigation before a column name: `this.`, `parent.`, `row(n).` or `row("name").`. */
+export type Nav =
+  | { readonly t: "this" }
+  | { readonly t: "parent" }
+  | { readonly t: "row"; readonly n: number }
+  | { readonly t: "key"; readonly name: string; readonly span: Span };
 
 /** The axes of an aggregate. */
 export const AXES = ["children", "descendants", "ancestors", "siblings", "others", "all"] as const;
@@ -168,7 +172,7 @@ export function parseFormula(src: string): Ast {
   };
   const describe = (t: Token): string => (t.t === "end" ? "the end of the formula" : `"${src.slice(t.span.start, t.span.end)}"`);
 
-  // The navigation steps before a name or an axis: this., parent. and row(n).
+  // The navigation steps before a name or an axis: this., parent., row(n). and row("name").
   const navLength = (from: number): number => {
     let j = from;
     for (;;) {
@@ -179,6 +183,10 @@ export function parseFormula(src: string): Ast {
       }
       if (isWord(t, "row") && isPunct(toks[j + 1], "(")) {
         let k = j + 2;
+        if (toks[k]?.t === "str" && isPunct(toks[k + 1], ")") && isPunct(toks[k + 2], ".")) {
+          j = k + 3;
+          continue;
+        }
         const sign = toks[k];
         if (sign?.t === "op" && (sign.v === "-" || sign.v === "+")) k++;
         if (toks[k]?.t === "num" && isPunct(toks[k + 1], ")") && isPunct(toks[k + 2], ".")) {
@@ -198,13 +206,18 @@ export function parseFormula(src: string): Ast {
       else if (isWord(t, "parent")) out.push({ t: "parent" });
       else {
         next(); // "("
-        const signTok = peek();
-        const sign = signTok.t === "op" && signTok.v === "-" ? -1 : 1;
-        if (signTok.t === "op") next();
-        const n = next();
-        const v = n.t === "num" ? n.v : Number.NaN;
-        if (!Number.isInteger(v)) throw new FormulaSyntaxError("the row offset must be a whole number", n.span);
-        out.push({ t: "row", n: sign * v });
+        const arg = peek();
+        if (arg.t === "str") {
+          next();
+          out.push({ t: "key", name: arg.v, span: arg.span });
+        } else {
+          const sign = arg.t === "op" && arg.v === "-" ? -1 : 1;
+          if (arg.t === "op") next();
+          const n = next();
+          const v = n.t === "num" ? n.v : Number.NaN;
+          if (!Number.isInteger(v)) throw new FormulaSyntaxError("the row offset must be a whole number", n.span);
+          out.push({ t: "row", n: sign * v });
+        }
         next(); // ")"
       }
       next(); // "."

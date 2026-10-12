@@ -1,5 +1,6 @@
 /**
- * The example sheets. Each example shows one strength of Vex: roll-ups in a tree, ranks, a running total, and vectors.
+ * The example sheets. Each example shows one strength of Vex: roll-ups in a tree, ranks, a running total or vectors.
+ * In the later examples, formulas read other formula columns in each direction of the tree.
  */
 import type { Column, Row, SheetDoc } from "./doc.ts";
 
@@ -47,6 +48,75 @@ const shapeCols: readonly Column[] = [
   { id: "c3", name: "Size", kind: "value", type: "vec2" },
   { id: "c4", name: "Far corner", kind: "formula", formula: "= Position + Size" },
   { id: "c5", name: "Area", kind: "formula", formula: "= AREA(Size)" },
+];
+
+// Widths go up the tree, and positions go down and across: a layout pass with a gap of 1 between children.
+const layoutCols: readonly Column[] = [
+  { id: "c1", name: "Box", kind: "value", type: "text" },
+  { id: "c2", name: "Own", kind: "value", type: "number" },
+  { id: "c3", name: "Width", kind: "formula", formula: "= IF(COUNT(children) = 0, Own, SUM(children.Width) + COUNT(children) - 1)" },
+  { id: "c4", name: "X", kind: "formula", formula: "= IFERROR(row(-1).X + row(-1).Width + 1, IFERROR(parent.X, 0))" },
+  { id: "c5", name: "Right", kind: "formula", formula: "= X + Width" },
+  { id: "c6", name: "Share of page", kind: "formula", formula: '= Width / row("Page").Width' },
+];
+
+// Two columns that read each other one row up. Each read goes to an earlier row, so the sheet has no cycle.
+const preyCols: readonly Column[] = [
+  { id: "c1", name: "Week", kind: "value", type: "number" },
+  { id: "c2", name: "Rabbits", kind: "formula", formula: "= IFERROR(row(-1).Rabbits * (1.1 - 0.002 * row(-1).Foxes), 100)" },
+  { id: "c3", name: "Foxes", kind: "formula", formula: "= IFERROR(row(-1).Foxes * (0.9 + 0.001 * row(-1).Rabbits), 20)" },
+  { id: "c4", name: "Rabbits per fox", kind: "formula", formula: "= Rabbits / Foxes" },
+];
+
+// A task starts when the task before it ends. A phase starts with its parent and ends with its last task.
+const planCols: readonly Column[] = [
+  { id: "c1", name: "Task", kind: "value", type: "text" },
+  { id: "c2", name: "Days", kind: "value", type: "number" },
+  { id: "c3", name: "Start", kind: "formula", formula: "= IFERROR(row(-1).Finish, IFERROR(parent.Start, 0))" },
+  { id: "c4", name: "Finish", kind: "formula", formula: "= IF(COUNT(children) = 0, Start + Days, MAX(children.Finish))" },
+  { id: "c5", name: "Days to launch", kind: "formula", formula: '= row("Launch").Start - Finish' },
+];
+
+// The velocity and the position step together. The time step comes from the column Time.
+const ballCols: readonly Column[] = [
+  { id: "c1", name: "Time", kind: "value", type: "number" },
+  { id: "c2", name: "Velocity", kind: "formula", formula: "= IFERROR(row(-1).Velocity + VEC(0, -9.8 * (Time - row(-1).Time)), VEC(4, 12))" },
+  { id: "c3", name: "Position", kind: "formula", formula: "= IFERROR(row(-1).Position + SCALE(row(-1).Velocity, Time - row(-1).Time), VEC(0, 0))" },
+  { id: "c4", name: "Height", kind: "formula", formula: "= Y(Position)" },
+  { id: "c5", name: "In the air", kind: "formula", formula: "= Height >= 0" },
+];
+
+// A z-score has an aggregate inside an aggregate: the mean of the squares of the distances from the mean.
+const scoreCols: readonly Column[] = [
+  { id: "c1", name: "Student", kind: "value", type: "text" },
+  { id: "c2", name: "Score", kind: "value", type: "number" },
+  { id: "c3", name: "Z-score", kind: "formula", formula: "= (Score - AVERAGE(all.Score)) / SQRT(AVERAGE(all, (Score - AVERAGE(all.Score)) ^ 2))" },
+  { id: "c4", name: "Versus Ada", kind: "formula", formula: '= Score - row("Ada").Score' },
+  { id: "c5", name: "Top half", kind: "formula", formula: "= RANK(Score) <= COUNT(all) / 2" },
+];
+
+// Totals go up the tree, and the level goes down it.
+const orgCols: readonly Column[] = [
+  { id: "c1", name: "Person", kind: "value", type: "text" },
+  { id: "c2", name: "Role", kind: "value", type: "text" },
+  { id: "c3", name: "Salary", kind: "value", type: "number" },
+  { id: "c4", name: "Headcount", kind: "formula", formula: "= 1 + SUM(children.Headcount)" },
+  { id: "c5", name: "Team cost", kind: "formula", formula: "= Salary + SUM(children.[Team cost])" },
+  { id: "c6", name: "Level", kind: "formula", formula: "= IFERROR(parent.Level, 0) + 1" },
+  { id: "c7", name: "Share", kind: "formula", formula: '= [Team cost] / row("Ada").[Team cost]' },
+];
+
+// The scale goes down the tree from the servings, and the cost goes up. The base recipe serves 4.
+const recipeCols: readonly Column[] = [
+  { id: "c1", name: "Item", kind: "value", type: "text" },
+  { id: "c2", name: "Serves", kind: "value", type: "number" },
+  { id: "c3", name: "Amount", kind: "value", type: "number" },
+  { id: "c4", name: "Unit", kind: "value", type: "text" },
+  { id: "c5", name: "Price", kind: "value", type: "number" },
+  { id: "c6", name: "Scale", kind: "formula", formula: "= IF(COUNT(ancestors) = 0, Serves / 4, parent.Scale)" },
+  { id: "c7", name: "Buy", kind: "formula", formula: '= IF(COUNT(children) = 0, ROUND(Amount * Scale) & " " & Unit, "")' },
+  { id: "c8", name: "Cost", kind: "formula", formula: "= IF(COUNT(children) = 0, Amount * Scale * Price, SUM(children.Cost))" },
+  { id: "c9", name: "Per serving", kind: "formula", formula: '= Cost / row("Pancakes").Serves' },
 ];
 
 /** The example sheets. */
@@ -108,6 +178,114 @@ export const EXAMPLES: readonly Example[] = [
         ["r1", null, "Header", "(0, 0)", "(12, 2)"],
         ["r2", null, "Sidebar", "(0, 2)", "(3, 8)"],
         ["r3", null, "Content", "(3, 2)", "(9, 8)"],
+      ]),
+    },
+  },
+  {
+    id: "layout",
+    title: "A page layout",
+    doc: {
+      version: 1,
+      title: "Layout",
+      columns: layoutCols,
+      rows: rows(["c1", "c2"], [
+        ["r1", null, "Page"],
+        ["r2", "r1", "Nav", "3"],
+        ["r3", "r1", "Main"],
+        ["r4", "r3", "Text", "5"],
+        ["r5", "r3", "Image", "4"],
+        ["r6", "r1", "Aside", "2"],
+      ]),
+    },
+  },
+  {
+    id: "prey",
+    title: "Rabbits and foxes",
+    doc: {
+      version: 1,
+      title: "Rabbits and foxes",
+      columns: preyCols,
+      rows: rows(["c1"], Array.from({ length: 30 }, (_, i) => [`r${i + 1}`, null, String(i)])),
+    },
+  },
+  {
+    id: "plan",
+    title: "A project plan",
+    doc: {
+      version: 1,
+      title: "Project plan",
+      columns: planCols,
+      rows: rows(["c1", "c2"], [
+        ["r1", null, "Design"],
+        ["r2", "r1", "Sketch", "3"],
+        ["r3", "r1", "Review", "2"],
+        ["r4", null, "Build"],
+        ["r5", "r4", "Code", "10"],
+        ["r6", "r4", "Test", "4"],
+        ["r7", null, "Launch", "0"],
+      ]),
+    },
+  },
+  {
+    id: "ball",
+    title: "A thrown ball",
+    doc: {
+      version: 1,
+      title: "Thrown ball",
+      columns: ballCols,
+      rows: rows(["c1"], Array.from({ length: 12 }, (_, i) => [`r${i + 1}`, null, String(i / 4)])),
+    },
+  },
+  {
+    id: "scores",
+    title: "Test scores",
+    doc: {
+      version: 1,
+      title: "Test scores",
+      columns: scoreCols,
+      rows: rows(["c1", "c2"], [
+        ["r1", null, "Ada", "94"],
+        ["r2", null, "Bo", "81"],
+        ["r3", null, "Cy", "77"],
+        ["r4", null, "Di", "88"],
+        ["r5", null, "Ed", "91"],
+        ["r6", null, "Flo", "69"],
+      ]),
+    },
+  },
+  {
+    id: "org",
+    title: "An org chart",
+    doc: {
+      version: 1,
+      title: "Org chart",
+      columns: orgCols,
+      rows: rows(["c1", "c2", "c3"], [
+        ["r1", null, "Ada", "CEO", "200"],
+        ["r2", "r1", "Ben", "CTO", "150"],
+        ["r3", "r2", "Cleo", "Engineer", "120"],
+        ["r4", "r2", "Dev", "Engineer", "110"],
+        ["r5", "r1", "Eve", "CFO", "140"],
+        ["r6", "r5", "Finn", "Accountant", "90"],
+      ]),
+    },
+  },
+  {
+    id: "recipe",
+    title: "A recipe that scales",
+    doc: {
+      version: 1,
+      title: "Recipe",
+      columns: recipeCols,
+      rows: rows(["c1", "c2", "c3", "c4", "c5"], [
+        ["r1", null, "Pancakes", "6"],
+        ["r2", "r1", "Batter"],
+        ["r3", "r2", "Flour", null, "200", "g", "0.002"],
+        ["r4", "r2", "Milk", null, "300", "ml", "0.0012"],
+        ["r5", "r2", "Eggs", null, "2", "pcs", "0.25"],
+        ["r6", "r1", "Topping"],
+        ["r7", "r6", "Syrup", null, "60", "ml", "0.02"],
+        ["r8", "r6", "Berries", null, "100", "g", "0.015"],
       ]),
     },
   },

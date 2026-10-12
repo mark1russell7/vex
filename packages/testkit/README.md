@@ -30,7 +30,8 @@ failed; // => []
 | `checkLaws(domain, { arb, eq, numRuns })` | Tests each declared law, and gives one result for each law |
 | `assertLaws(domain, options)` | Throws an error that lists each failed law |
 | `arbSpace`, `arbExpr`, `arbOrigin`, `arbTreeInput` | Arbitraries for random spaces and programs |
-| `referenceEvaluate` | A short reference interpreter, for differential tests |
+| `referenceEvaluate` | A short reference interpreter, for differential tests. The option `fns` gives the free functions. |
+| `arbChain`, `runChain`, `modelChain` | The builder model test: random sequences of builder calls, the run of a sequence on the builder, and the expected expression of a sequence |
 
 ## License
 

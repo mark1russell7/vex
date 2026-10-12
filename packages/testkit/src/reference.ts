@@ -20,6 +20,7 @@ interface Ctx {
   readonly focus: string;
   readonly env: ReadonlyMap<string, RefOutcome>;
   readonly domains: readonly AnyDomain[];
+  readonly fns: Readonly<Record<string, (...a: readonly unknown[]) => unknown>>;
 }
 
 const safeIs = (d: AnyDomain, x: unknown): boolean => {
@@ -258,6 +259,15 @@ function callOp(op: string, vs: readonly unknown[], c: Ctx): RefOutcome {
       return err("#CALC!");
     }
   }
+  // A free function applies when no domain of the value has the op (spec BUILD.CALL).
+  const fn = Object.hasOwn(c.fns, op) ? c.fns[op] : undefined;
+  if (fn !== undefined) {
+    try {
+      return checkOut(fn(...vs), c.domains);
+    } catch {
+      return err("#CALC!");
+    }
+  }
   return accepted || vs.length === 0 ? err("#NAME?") : err("#VALUE!");
 }
 
@@ -273,11 +283,19 @@ function app(e: Extract<Expr, { tag: "app" }>, c: Ctx): RefOutcome {
   return callOp(e.op, vs, c);
 }
 
-/** This function evaluates an expression with the reference semantics. */
-export function referenceEvaluate(e: Expr, opts: { readonly space: Space; readonly origin: string; readonly domains?: readonly AnyDomain[] }): RefOutcome {
+/** This function evaluates an expression with the reference semantics. `fns` are the free functions of `withOptions`. */
+export function referenceEvaluate(
+  e: Expr,
+  opts: {
+    readonly space: Space;
+    readonly origin: string;
+    readonly domains?: readonly AnyDomain[];
+    readonly fns?: Readonly<Record<string, (...a: readonly unknown[]) => unknown>>;
+  },
+): RefOutcome {
   if (!opts.space.has(opts.origin)) return err("#REF!");
   try {
-    return run(e, { space: opts.space, origin: opts.origin, focus: opts.origin, env: new Map(), domains: opts.domains ?? [] });
+    return run(e, { space: opts.space, origin: opts.origin, focus: opts.origin, env: new Map(), domains: opts.domains ?? [], fns: opts.fns ?? {} });
   } catch {
     return err("#CALC!");
   }

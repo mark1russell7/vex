@@ -366,6 +366,17 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     expect(optionalValue(org.start(0).children((c) => c.from("name")).errors().at("dev1"))).toEqual([]);
   });
 
+  it("BUILD.LIST.READ: a list chain gives its list, an Optional of it and its trace at an origin", () => {
+    const team = org.start(0).children((c) => c.from("salary"));
+    const r = team.result("cto");
+    expect(r.ok && r.value.items.map((i) => [i.key, i.result.ok ? i.result.value : null])).toEqual([["dev1", 100], ["dev2", 110]]);
+    const none = team.at("dev1");
+    expect(none.tag === "some" && none.value.items).toEqual([]);
+    expect(team.explain("cto").events.at(-1)?.label).toBe("let $0");
+    // In a space that is not a tree, the list is an error value.
+    expect(error(vex(Num).over(space.record({ A, B })).start(0).children((c) => c.from("weight")).result("A")).kind).toBe("no-tree");
+  });
+
   it("BUILD.AXIS.ADDRESS V-043: the moves before an axis are its address, so parent().children() gives the children of the parent", () => {
     // V-043: the builder dropped the moves before an axis. parent().children() gave the children of the origin.
     const team = org.start(0).parent().children((c) => c.from("name")).values();

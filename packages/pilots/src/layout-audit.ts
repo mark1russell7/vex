@@ -4,7 +4,7 @@
  * This module gives the same checks and the same radial placement as Vex formulas over a tree space. It also gives a
  * reference in plain TypeScript. The tests compare the two on random layouts.
  */
-import { evaluate, isVexList, space, vex, type Result, type Space, type Trace } from "@mark1russell7/vex";
+import { space, vex, type Result, type Space, type Trace } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 
 /** A box of a layout. `parent` is the id of the parent box. `radial` tells if the box places its children on a ring. */
@@ -181,9 +181,9 @@ export function overlapsVex(boxes: readonly LayoutBox[]): [string, string][] {
   });
   const pairs: [string, string][] = [];
   boxes.forEach((b, i) => {
-    // The list has the keys of its items. The builder has no keys() reduction, so the host evaluates the program.
-    const r = evaluate(overlapping.program, { space: flat, origin: b.id, domains: [Vec2Domain, NumDomain, BoolDomain] });
-    if (!r.ok || !isVexList(r.value)) return;
+    // The list has the key of each item (BUILD.LIST.READ).
+    const r = overlapping.result(b.id);
+    if (!r.ok) return;
     for (const item of r.value.items) if (boxes.findIndex((x) => x.id === item.key) > i) pairs.push([b.id, item.key]);
   });
   return pairs;

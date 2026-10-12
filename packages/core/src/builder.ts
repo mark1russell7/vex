@@ -10,6 +10,7 @@ import { cell as cellRef, SheetRun } from "./sheet.ts";
 import { toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
+import type { VexList } from "./list.ts";
 import { traversal, type Traversal } from "./traversal.ts";
 
 // ---------------------------------------------------------------- argument tokens
@@ -272,6 +273,12 @@ export interface ListChain<Ctx extends ChainContext, U> {
   errors(): ChainOf<Ctx, readonly VexError[]>;
   first(opts?: ListOpts): ChainOf<Ctx, U>;
   reduce(op: OpNames<DomainFor<Ctx["domains"], U>>, opts?: ListOpts): ChainOf<Ctx, U>;
+  /** The list at the origin `k`: one item for each target of the axis, with its key and its result. */
+  result(k: Ctx["keys"]): Result<VexList<U>>;
+  /** The list at the origin `k`, as an `Optional`. */
+  at(k: Ctx["keys"]): Optional<VexList<U>>;
+  /** The trace of the evaluation of the list at the origin `k`. */
+  explain(k: Ctx["keys"]): Trace;
 }
 
 /** The options of a list reduction. */
@@ -443,16 +450,7 @@ class ChainImpl {
   }
 
   #opts(k: string): EvalOptions {
-    const { env } = this.#s;
-    return {
-      space: env.space,
-      origin: k,
-      domains: env.domains,
-      // Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same
-      ...(env.options.fns === undefined ? {} : { fns: env.options.fns }),
-      // Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same
-      ...(env.options.extensions === undefined ? {} : { extensions: env.options.extensions }),
-    };
+    return evalOptions(this.#s, k);
   }
 
   result(k: string): Result<unknown> {
@@ -564,6 +562,20 @@ class ChainImpl {
   }
 }
 
+/** This function gives the options of an evaluation of a chain or a list chain at the origin `k`. */
+function evalOptions(s: State, k: string): EvalOptions {
+  const { env } = s;
+  return {
+    space: env.space,
+    origin: k,
+    domains: env.domains,
+    // Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same
+    ...(env.options.fns === undefined ? {} : { fns: env.options.fns }),
+    // Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same
+    ...(env.options.extensions === undefined ? {} : { extensions: env.options.extensions }),
+  };
+}
+
 class ListChainImpl {
   readonly kind = "vex.list-chain" as const;
   readonly #s: State;
@@ -615,6 +627,15 @@ class ListChainImpl {
   }
   reduce(op: string, opts?: ListOpts): ChainImpl {
     return this.#op("reduce", [lit(op)], opts);
+  }
+  result(k: string): Result<unknown> {
+    return evaluate(this.#s.expr, evalOptions(this.#s, k));
+  }
+  at(k: string): Optional<unknown> {
+    return toOptional(this.result(k));
+  }
+  explain(k: string): Trace {
+    return explain(this.#s.expr, evalOptions(this.#s, k));
   }
 }
 

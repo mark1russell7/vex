@@ -186,7 +186,8 @@ export type NumRecordOps = {
 const isNumRecord = (u: unknown): u is NumRecord => {
   if (typeof u !== "object" || u === null || Array.isArray(u)) return false;
   const proto: unknown = Object.getPrototypeOf(u);
-  return (proto === Object.prototype || proto === null) && Object.values(u).every((v) => typeof v === "number" && Number.isFinite(v));
+  // Number.isFinite gives false for each value that is not a number.
+  return (proto === Object.prototype || proto === null) && Object.values(u).every((v) => Number.isFinite(v));
 };
 
 /** The domain of plain number records. Its op `toNDVector` builds a vector from fields, for example from `rec()`. */

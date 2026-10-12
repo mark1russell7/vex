@@ -21,8 +21,7 @@ export type TextOps = {
  * This function gives the text of a value for `concat`. A text stays. A plain record gives its JSON text. Another
  * value, for example a number or a `Vec2`, gives its own text.
  */
-const textOf = (u: unknown): string =>
-  typeof u === "string" ? u : typeof u === "object" && u !== null && Object.getPrototypeOf(u) === Object.prototype ? JSON.stringify(u) : String(u);
+const textOf = (u: unknown): string => (typeof u === "object" && u !== null && Object.getPrototypeOf(u) === Object.prototype ? JSON.stringify(u) : String(u));
 
 /** The domain of texts. */
 export const TextDomain: Domain<"Text", string, TextOps> = defineDomain<"Text", string, TextOps>({

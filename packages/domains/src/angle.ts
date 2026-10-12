@@ -28,6 +28,7 @@ export class Angle {
   /** The same angle in the range from -π (included) to π (not included). */
   normalize(): Angle {
     const twoPi = Math.PI * 2;
+    // Stryker disable next-line ArithmeticOperator: x + π and x - π differ by 2π, so the result after mod 2π is the same
     return new Angle((((this.radians + Math.PI) % twoPi) + twoPi) % twoPi - Math.PI);
   }
   /** The vector with this angle and the length `length`. The result is a `Vec2`, so a chain continues in that domain. */

@@ -1,0 +1,143 @@
+Num (fromScalar -, valid yes, encode -, methods -)
+  add(number) | no lift | laws [commutative, associative] | identity 0 | fn
+  subtract(number) | no lift | no laws | no identity | fn
+  multiply(number) | no lift | laws [commutative, associative] | identity 1 | fn
+  divide(number) | no lift | no laws | no identity | fn
+  mod(number) | no lift | no laws | no identity | fn
+  pow(number) | no lift | no laws | no identity | fn
+  min(number) | no lift | laws [commutative, associative, idempotent] | no identity | fn
+  max(number) | no lift | laws [commutative, associative, idempotent] | no identity | fn
+  clamp(number, number) | no lift | no laws | no identity | fn
+  abs(?) | no lift | no laws | no identity | fn
+  negate(?) | no lift | no laws | no identity | fn
+  sqrt(?) | no lift | no laws | no identity | fn
+  floor(?) | no lift | no laws | no identity | fn
+  ceil(?) | no lift | no laws | no identity | fn
+  round(?) | no lift | no laws | no identity | fn
+  gt(number) | no lift | no laws | no identity | fn
+  gte(number) | no lift | no laws | no identity | fn
+  lt(number) | no lift | no laws | no identity | fn
+  lte(number) | no lift | no laws | no identity | fn
+  eq(number) | no lift | laws [commutative] | no identity | fn
+
+Bool (fromScalar -, valid -, encode -, methods -)
+  and(boolean) | no lift | laws [commutative, associative, idempotent] | identity true | fn
+  or(boolean) | no lift | laws [commutative, associative, idempotent] | identity false | fn
+  xor(boolean) | no lift | laws [commutative, associative] | identity false | fn
+  not(?) | no lift | no laws | no identity | fn
+  eq(boolean) | no lift | laws [commutative] | no identity | fn
+
+Text (fromScalar -, valid -, encode -, methods -)
+  concat(any) | no lift | no laws | no identity | fn
+  length(?) | no lift | no laws | no identity | fn
+  upper(?) | no lift | no laws | no identity | fn
+  lower(?) | no lift | no laws | no identity | fn
+  trim(?) | no lift | no laws | no identity | fn
+  contains(string) | no lift | no laws | no identity | fn
+  eq(string) | no lift | laws [commutative] | no identity | fn
+
+Vec2 (fromScalar (2, 2), valid yes, encode yes, methods -)
+  add(domain) | lift true | laws [commutative, associative] | identity (0, 0) | method
+  subtract(domain) | lift true | no laws | no identity | method
+  multiply(domain) | lift true | laws [commutative, associative] | identity (1, 1) | method
+  divide(domain) | lift true | no laws | no identity | method
+  min(domain) | lift true | laws [commutative, associative, idempotent] | no identity | method
+  max(domain) | lift true | laws [commutative, associative, idempotent] | no identity | method
+  scale(number) | no lift | no laws | no identity | method
+  negate(?) | no lift | no laws | no identity | method
+  halve(?) | no lift | no laws | no identity | method
+  abs(?) | no lift | no laws | no identity | method
+  round(?) | no lift | no laws | no identity | method
+  floor(?) | no lift | no laws | no identity | method
+  ceil(?) | no lift | no laws | no identity | method
+  clamp(number, number) | no lift | no laws | no identity | method
+  swap(?) | no lift | no laws | no identity | method
+  rotate(number) | no lift | no laws | no identity | method
+  normalize(?) | no lift | no laws | no identity | method
+  lerp(domain, number) | no lift | no laws | no identity | method
+  length(?) | no lift | no laws | no identity | method
+  lengthSq(?) | no lift | no laws | no identity | method
+  distance(domain) | no lift | no laws | no identity | method
+  dot(domain) | no lift | laws [commutative] | no identity | method
+  cross(domain) | no lift | no laws | no identity | method
+  angle(?) | no lift | no laws | no identity | method
+  area(?) | no lift | no laws | no identity | method
+  sum(?) | no lift | no laws | no identity | method
+  minComponent(?) | no lift | no laws | no identity | method
+  maxComponent(?) | no lift | no laws | no identity | method
+  equals(domain) | no lift | laws [commutative] | no identity | method
+  anyNonPositive(?) | no lift | no laws | no identity | method
+  allPositive(?) | no lift | no laws | no identity | method
+  anyNegative(?) | no lift | no laws | no identity | method
+  allNonNegative(?) | no lift | no laws | no identity | method
+  anyZero(?) | no lift | no laws | no identity | method
+  allZero(?) | no lift | no laws | no identity | method
+  anyLessThan(number) | no lift | no laws | no identity | method
+  allLessThan(number) | no lift | no laws | no identity | method
+  anyGreaterThan(number) | no lift | no laws | no identity | method
+  allGreaterThan(number) | no lift | no laws | no identity | method
+
+Color (fromScalar rgba(2, 2, 2, 1), valid yes, encode yes, methods -)
+  add(domain) | no lift | laws [commutative, associative] | identity rgba(0, 0, 0, 0) | method
+  multiply(number) | no lift | no laws | no identity | method
+  clamp(number, number) | no lift | no laws | no identity | method
+  mix(domain, number) | no lift | no laws | no identity | method
+  luminance(?) | no lift | no laws | no identity | method
+  equals(domain) | no lift | laws [commutative] | no identity | method
+
+Angle (fromScalar 2 rad, valid yes, encode yes, methods -)
+  add(domain) | lift true | laws [commutative, associative] | identity 0 rad | method
+  subtract(domain) | lift true | no laws | no identity | method
+  scale(number) | no lift | no laws | no identity | method
+  normalize(?) | no lift | no laws | no identity | method
+  toVec2(number) | no lift | no laws | no identity | method
+  sin(?) | no lift | no laws | no identity | method
+  cos(?) | no lift | no laws | no identity | method
+  degrees(?) | no lift | no laws | no identity | method
+
+NDVector (fromScalar -, valid yes, encode yes, methods -)
+  add(domain) | no lift | laws [commutative, associative] | identity NDVector({}) | method
+  subtract(domain) | no lift | no laws | no identity | method
+  multiply(domain) | no lift | laws [commutative, associative] | no identity | method
+  mergePreferNonZero(domain) | no lift | laws [associative, idempotent] | no identity | method
+  scale(number) | no lift | no laws | no identity | method
+  clamp(number, number) | no lift | no laws | no identity | method
+  dot(domain) | no lift | laws [commutative] | no identity | method
+  length(?) | no lift | no laws | no identity | method
+  norm1(?) | no lift | no laws | no identity | method
+  normInf(?) | no lift | no laws | no identity | method
+  equals(domain) | no lift | laws [commutative] | no identity | method
+  pick(?) | no lift | no laws | no identity | method
+  withKeys(?) | no lift | no laws | no identity | method
+  get(string) | no lift | no laws | no identity | method
+  set(string, number) | no lift | no laws | no identity | method
+
+NDVector(lifted) (fromScalar NDVector({"scalar":2}), valid yes, encode -, methods -)
+  add(domain) | lift true | laws [commutative, associative] | identity NDVector({}) | method
+  subtract(domain) | lift true | no laws | no identity | method
+  multiply(domain) | lift true | laws [commutative, associative] | no identity | method
+  mergePreferNonZero(domain) | no lift | laws [associative, idempotent] | no identity | method
+  scale(number) | no lift | no laws | no identity | method
+  clamp(number, number) | no lift | no laws | no identity | method
+  dot(domain) | lift true | laws [commutative] | no identity | method
+  length(?) | no lift | no laws | no identity | method
+  norm1(?) | no lift | no laws | no identity | method
+  normInf(?) | no lift | no laws | no identity | method
+  equals(domain) | no lift | laws [commutative] | no identity | method
+  pick(?) | no lift | no laws | no identity | method
+  withKeys(?) | no lift | no laws | no identity | method
+  get(string) | no lift | no laws | no identity | method
+  set(string, number) | no lift | no laws | no identity | method
+
+NumRecord (fromScalar -, valid -, encode -, methods -)
+  toNDVector(?) | no lift | no laws | no identity | fn
+
+Fn (fromScalar -, valid -, encode -, methods -)
+  invoke(?) | no lift | no laws | no identity | method
+
+Maybe (fromScalar -, valid -, encode -, methods -)
+  isTop(?) | no lift | no laws | no identity | method
+  isBottom(?) | no lift | no laws | no identity | method
+  map(?) | no lift | no laws | no identity | method
+  chain(?) | no lift | no laws | no identity | method
+  valueOr(?) | no lift | no laws | no identity | method

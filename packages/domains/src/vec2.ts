@@ -184,6 +184,7 @@ export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Ve
   show: (v: Vec2): string => v.toString(),
   encode: (v: Vec2): readonly [number, number] => [v.x, v.y],
   decode: (u: unknown): Vec2 => {
+    // Stryker disable next-line ArrayDeclaration: a list with a text gives NaN components, like the empty list
     const [x, y] = Array.isArray(u) ? (u as readonly unknown[]) : [];
     return new Vec2(typeof x === "number" ? x : Number.NaN, typeof y === "number" ? y : Number.NaN);
   },

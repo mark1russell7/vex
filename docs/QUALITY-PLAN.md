@@ -101,6 +101,7 @@ A use case is a real program from a real domain. Each use case gives three thing
 | The mutation lane runs only on `@mark1russell7/vex` | The review of the tests | Run it on the domains and the test kit |
 | The browser tests run only in Chromium | The review of the tests | Add Firefox and WebKit |
 | A graph that is not a tree has no space | The schedule use case | A `graph` space with the axes `in` and `out`, after a spec decision |
+| A JSON literal with the key `$vex` reads back as a domain value, so the round trip changes the literal | The five-paths test (P13) | An escape of the key `$vex` in the JSON format, after a decision. An `it.fails` test keeps the defect visible. |
 
 ## 7. The process for each defect
 

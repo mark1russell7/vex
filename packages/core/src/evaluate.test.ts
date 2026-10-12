@@ -326,6 +326,29 @@ describe("folds: explain, deps, JSON", () => {
     expect(error(parse("not json")).code).toBe("#VALUE!");
   });
 
+  it("IR.JSON V-044: a domain value with toJSON round-trips as a domain value, not as its toJSON form", () => {
+    // V-044: JSON.stringify applies toJSON before the replacer, so serialize wrote { x, y } and parse gave a plain object.
+    class Tagged {
+      constructor(readonly x: number) {}
+      toJSON(): unknown {
+        return { x: this.x };
+      }
+    }
+    const TaggedDomain = defineDomain({ name: "Tagged", is: (u: unknown): u is Tagged => u instanceof Tagged, encode: (t: Tagged) => t.x, decode: (u: unknown) => new Tagged(Number(u)), ops: {} });
+    const text = value(serialize(lit(new Tagged(3)), [TaggedDomain]));
+    expect(JSON.parse(text)).toEqual({ tag: "lit", value: { $vex: "domain", domain: "Tagged", value: 3 } });
+    const back = value(parse(text, [TaggedDomain]));
+    expect(back.tag === "lit" && back.value instanceof Tagged ? back.value.x : null).toBe(3);
+  });
+
+  // An open defect, recorded in docs/QUALITY-PLAN.md §6: the fix needs a decision on the JSON format. The test
+  // fails at this time, so it.fails passes. After the fix, change it.fails to it.
+  it.fails("IR.JSON: a JSON literal with the key $vex round-trips as JSON data, not as a domain value", () => {
+    const plain = lit({ $vex: "domain", domain: "Pt", value: [1, 2] });
+    const back = value(parse(value(serialize(plain, [PtDomain])), [PtDomain]));
+    expect(back).toEqual(plain);
+  });
+
   it("IR.JSON: a literal without a JSON form, and a domain literal without a decoder, give #VALUE!", () => {
     expect(error(serialize(lit(() => 1))).code).toBe("#VALUE!");
     const throwing = {

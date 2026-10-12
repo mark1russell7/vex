@@ -57,6 +57,24 @@ describe("properties of the interpreter", () => {
     );
   });
 
+  it("P13 EVAL.COMPILE IR.JSON: evaluate, compile, explain, the reference and a JSON round trip give one result", () => {
+    fc.assert(
+      fc.property(program, ([s, e, k]) => {
+        const expected = fromCore(run(e, s, k));
+        // A program with a number that is not finite has no JSON form, so that path gives the expected result.
+        const text = serialize(e, DOMAINS);
+        const back = text.ok ? parse(text.value, DOMAINS) : undefined;
+        const json = back === undefined ? expected : back.ok ? fromCore(run(back.value, s, k)) : { ok: false, code: "no parse" };
+        expect({
+          compile: fromCore(compile(e, { domains: DOMAINS }).run({ space: s, origin: k })),
+          explain: fromCore(explain(e, { space: s, origin: k, domains: DOMAINS }).result),
+          reference: fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS })),
+          json,
+        }).toEqual({ compile: expected, explain: expected, reference: expected, json: expected });
+      }),
+    );
+  });
+
   it("P6 IR.JSON: an expression with JSON literals round-trips through JSON", () => {
     fc.assert(
       fc.property(arbExpr(OPTS), (e) => {
@@ -64,7 +82,10 @@ describe("properties of the interpreter", () => {
         // Only a number that is not finite has no JSON form.
         const nonFinite = JSON.stringify(e, (_k, v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? "NONFINITE" : v)).includes("NONFINITE");
         const back = text.ok ? parse(text.value, DOMAINS) : undefined;
-        const roundTrip = text.ok && back?.ok === true && structuralEqual(JSON.parse(JSON.stringify(back.value)), JSON.parse(text.value));
+        // serialize after parse gives the same text. A comparison with JSON.stringify applies toJSON to a domain value,
+        // so it compares the toJSON form with itself, and it did not find V-044.
+        const again = text.ok && back?.ok === true ? serialize(back.value, DOMAINS) : undefined;
+        const roundTrip = text.ok && again?.ok === true && structuralEqual(JSON.parse(again.value), JSON.parse(text.value));
         expect(text.ok ? roundTrip : nonFinite).toBe(true);
       }),
     );

@@ -47,3 +47,4 @@ Each defect of the audits ([`docs/archive/2026-07/BUGS.md`](../docs/archive/2026
 | V-041 | test | A chain is not a thenable |
 | V-042 | test | The others axis evaluates the base at the origin and the body at each target |
 | V-043 | test | The moves before an axis are its address. Before the fix, `parent().children()` gave the children of the origin. |
+| V-044 | test | A domain value with `toJSON` round-trips through `serialize` and `parse`. Before the fix, `serialize` wrote the `toJSON` form, and `parse` gave a plain object. |

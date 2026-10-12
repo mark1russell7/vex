@@ -511,19 +511,29 @@ class Compiler {
         return ok(!b.value.some((x) => x));
       }
       case "reduce":
-        return this.#reduce(rest[0], okValues, f, path);
+        return this.#reduce(rest[0], okValues, f, path, optsArg);
     }
   }
 
-  /** This method folds the values with a domain op, from the left. An empty list gives the identity of the op. */
-  #reduce(opName: unknown, values: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
+  /**
+   * This method folds the values with a domain op, from the left. An empty list gives the identity of the op, if one
+   * domain has an identity for the op (LIST.EMPTY). The option `domain` names that domain when more domains have one.
+   */
+  #reduce(opName: unknown, values: readonly unknown[], f: Frame, path: readonly number[], opts: unknown): Result<unknown> {
     if (typeof opName !== "string") return this.#err("kind-mismatch", `"reduce" needs an op name, but got a ${describeType(opName)}`, f, path, { op: "reduce" });
     if (values.length === 0) {
-      for (const d of this.#domains) {
-        const id = (d.ops[opName] as { identity?: () => unknown } | undefined)?.identity;
-        if (id !== undefined && Object.hasOwn(d.ops, opName)) return this.#invoke(id, opName, f, path);
+      const named = (opts as { domain?: unknown } | null | undefined)?.domain;
+      const candidates = this.#domains.filter((d) => Object.hasOwn(d.ops, opName) && (d.ops[opName] as { identity?: () => unknown }).identity !== undefined && (named === undefined || d.name === named));
+      if (named !== undefined && !this.#domains.some((d) => d.name === named)) {
+        return this.#err("unknown-op", `"reduce" names the domain ${JSON.stringify(named)}, but the program has no such domain`, f, path, { op: opName });
       }
-      return this.#err("empty", `"reduce" with "${opName}" has no values and the op has no identity`, f, path, { op: opName });
+      const [only, second] = candidates;
+      if (only === undefined) return this.#err("empty", `"reduce" with "${opName}" has no values and the op has no identity`, f, path, { op: opName });
+      if (second !== undefined) {
+        const names = candidates.map((d) => d.name).join(", ");
+        return this.#err("empty", `"reduce" with "${opName}" has no values, and more domains have an identity for it (${names}). Name one with { domain }`, f, path, { op: opName });
+      }
+      return this.#invoke((only.ops[opName] as { identity: () => unknown }).identity, opName, f, path);
     }
     let acc: unknown = values[0];
     for (let i = 1; i < values.length; i++) {

@@ -213,8 +213,11 @@ function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[],
       const name = rest[0];
       if (typeof name !== "string") return err("#VALUE!");
       if (vs.length === 0) {
-        const d = c.domains.find((dom) => Object.hasOwn(dom.ops, name) && (dom.ops[name] as { identity?: unknown }).identity !== undefined);
-        const id = d === undefined ? undefined : (d.ops[name] as { identity: () => unknown }).identity;
+        // LIST.EMPTY: the identity of the one domain with an identity for the op, or of the domain that the option names.
+        const named = typeof o === "object" && o !== null ? (o as { domain?: unknown }).domain : undefined;
+        if (named !== undefined && !c.domains.some((dom) => dom.name === named)) return err("#NAME?");
+        const ds = c.domains.filter((dom) => Object.hasOwn(dom.ops, name) && (dom.ops[name] as { identity?: unknown }).identity !== undefined && (named === undefined || dom.name === named));
+        const id = ds.length === 1 ? (ds[0]?.ops[name] as { identity: () => unknown } | undefined)?.identity : undefined;
         return id === undefined ? err("#N/A") : val(id());
       }
       let acc: unknown = vs[0];

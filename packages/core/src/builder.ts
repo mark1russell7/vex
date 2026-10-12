@@ -277,7 +277,7 @@ export interface ListChain<Ctx extends ChainContext, U> {
   /** The error of each item that failed, in the order of the axis. */
   errors(): ChainOf<Ctx, readonly VexError[]>;
   first(opts?: ListOpts): ChainOf<Ctx, U>;
-  reduce(op: OpNames<DomainFor<Ctx["domains"], U>>, opts?: ListOpts): ChainOf<Ctx, U>;
+  reduce(op: OpNames<DomainFor<Ctx["domains"], U>>, opts?: ReduceOpts<Ctx>): ChainOf<Ctx, U>;
   /** The list at the origin `k`: one item for each target of the axis, with its key and its result. */
   result(k: Ctx["keys"]): Result<VexList<U>>;
   /** The list at the origin `k`, as an `Optional`. */
@@ -290,6 +290,11 @@ export interface ListChain<Ctx extends ChainContext, U> {
 export interface ListOpts {
   /** With `true`, an error item makes the result that error. The default skips error items. */
   readonly strict?: boolean;
+}
+
+/** The options of `reduce`. `domain` names the domain whose identity an empty list gives (LIST.EMPTY). */
+export interface ReduceOpts<Ctx extends ChainContext> extends ListOpts {
+  readonly domain?: Ctx["domains"][number]["name"];
 }
 
 /** The root of the builder for one space. */
@@ -593,8 +598,9 @@ class ListChainImpl {
   get program(): Expr {
     return this.#s.expr;
   }
-  #op(op: string, extra: readonly Expr[], opts?: ListOpts): ChainImpl {
-    const args = opts?.strict === true ? [...extra, lit({ strict: true })] : extra;
+  #op(op: string, extra: readonly Expr[], opts?: ListOpts & { readonly domain?: string }): ChainImpl {
+    const options = { ...(opts?.strict === true ? { strict: true } : {}), ...(opts?.domain === undefined ? {} : { domain: opts.domain }) };
+    const args = Object.keys(options).length > 0 ? [...extra, lit(options)] : extra;
     return new ChainImpl({ ...this.#s, expr: app(op, this.#s.expr, ...args) });
   }
   count(opts?: ListOpts): ChainImpl {
@@ -633,7 +639,7 @@ class ListChainImpl {
   first(opts?: ListOpts): ChainImpl {
     return this.#op("first", [], opts);
   }
-  reduce(op: string, opts?: ListOpts): ChainImpl {
+  reduce(op: string, opts?: ListOpts & { readonly domain?: string }): ChainImpl {
     return this.#op("reduce", [lit(op)], opts);
   }
   result(k: string): Result<unknown> {

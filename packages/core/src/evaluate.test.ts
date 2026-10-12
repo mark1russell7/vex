@@ -202,6 +202,23 @@ describe("axes (AXIS.*) and list ops (LIST.*)", () => {
     expect(error(evaluate(app("reduce", others, lit("subtract")), at(one, "A"))).kind).toBe("empty");
   });
 
+  it("LIST.REDUCE.EMPTY V-049: an empty reduce needs one domain with an identity, or the option domain", () => {
+    const one = space.record({ A });
+    const others = each(axes.others, ref("position"));
+    const two = defineDomain({ name: "Two", is: (u: unknown): u is number => typeof u === "number", ops: { add: { fn: (a: number, b: number) => a + b, identity: () => 0 } } });
+    const opts = (domains: NonNullable<Parameters<typeof evaluate>[1]["domains"]>): Parameters<typeof evaluate>[1] => ({ space: one, origin: "A", domains });
+    // One domain with an identity: the identity.
+    expect(value(evaluate(app("reduce", others, lit("add")), opts([PtDomain])))).toEqual(new Pt(0, 0));
+    // Two domains with an identity: #N/A with the names, and the option domain names one.
+    const unclear = error(evaluate(app("reduce", others, lit("add")), opts([two, PtDomain])));
+    expect([unclear.code, unclear.message]).toEqual(["#N/A", '"reduce" with "add" has no values, and more domains have an identity for it (Two, Pt). Name one with { domain }']);
+    expect(value(evaluate(app("reduce", others, lit("add"), lit({ domain: "Pt" })), opts([two, PtDomain])))).toEqual(new Pt(0, 0));
+    expect(value(evaluate(app("reduce", others, lit("add"), lit({ domain: "Two" })), opts([two, PtDomain])))).toBe(0);
+    // A name that is not a domain of the program gives #NAME?. A domain without the identity gives #N/A.
+    expect(error(evaluate(app("reduce", others, lit("add"), lit({ domain: "Nope" })), opts([two, PtDomain]))).code).toBe("#NAME?");
+    expect(error(evaluate(app("reduce", others, lit("subtract"), lit({ domain: "Pt" })), opts([two, PtDomain]))).code).toBe("#N/A");
+  });
+
   it("LIST.KINDS: sum needs numbers and any needs booleans", () => {
     expect(error(evaluate(app("sum", each(axes.all, ref("name"))), at(four, "A"))).kind).toBe("kind-mismatch");
     expect(value(evaluate(app("any", each(axes.all, app("anyNonPositive", ref("position")))), at(four, "A")))).toBe(true);

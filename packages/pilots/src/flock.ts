@@ -33,12 +33,12 @@ export function steerVex(birds: Readonly<Record<string, Bird>>, o: FlockOptions)
   const separate = root
     .start(0)
     .others((e) => e.origin().from("position")._.subtract(e.from("position")), { where: (e) => e.from("position")._.distance(e.origin().from("position"))._.lt(o.separation) })
-    .reduce("add");
+    .reduce("add", { domain: "Vec2" });
   const meanOf = (field: "position" | "velocity") =>
     root
       .start(0)
       .others((e) => e.from(field), { where: (e) => e.from("position")._.distance(e.origin().from("position"))._.lt(o.radius) })
-      .reduce("add")
+      .reduce("add", { domain: "Vec2" })
       ._.divide(count);
   // With no near birds, the mean divides by 0 and gives #NUM!. Then the rule gives the zero vector.
   const align = meanOf("velocity")._.subtract("velocity").ifError(Vec2.zero);

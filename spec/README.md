@@ -115,7 +115,8 @@ An expression is plain JSON data. It has one of these kinds.
 ### 5.5 Lists
 
 - **[LIST.LENIENT]** A list op skips error items by default. With `{ strict: true }`, the first error item is the result.
-- **[LIST.EMPTY]** `min`, `max`, `mean` and `first` of an empty list give `#N/A`. `sum` gives 0 and `count` gives 0. `reduce` gives the identity of the op, or `#N/A` if the op has no identity.
+- **[LIST.EMPTY]** `min`, `max`, `mean` and `first` of an empty list give `#N/A`. `sum` gives 0 and `count` gives 0. For `reduce`, refer to LIST.REDUCE.EMPTY.
+- **[LIST.REDUCE.EMPTY]** An empty `reduce` gives the identity of the op, if exactly one domain has an identity for the op. If more domains have one, it gives `#N/A`, and the option `domain` names the domain to use. An unknown domain name gives `#NAME?`.
 - **[LIST.KINDS]** `sum`, `mean`, `min` and `max` need numbers. `any`, `all` and `none` need booleans. A value of another kind gives `#VALUE!`.
 - **[LIST.REDUCE]** `reduce` folds the values from the left with a domain op. For an associative op, any order of reduction gives the same value.
 

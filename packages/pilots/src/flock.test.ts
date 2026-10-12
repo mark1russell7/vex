@@ -37,13 +37,16 @@ describe("the flock pilot", () => {
     );
   });
 
-  // V-NEXT-empty-reduce: an empty reduce takes the identity of the first domain with the op, not of the values.
-  // With NumDomain first, the empty sum of vectors is the number 0, so the typed chain gets a value of another type.
-  // The fix needs a decision about the semantics of LIST.EMPTY, so this test is it.fails until that decision.
-  it.fails("V-NEXT-empty-reduce: the empty sum of a list of vectors is a vector, whatever the order of the domains", () => {
+  // V-049: an empty reduce took the identity of the first domain with the op, not of the values. With NumDomain
+  // first, the empty sum of vectors was the number 0, a value of another type than the chain.
+  it("LIST.EMPTY V-049: an empty reduce gives #N/A when two domains have an identity, and { domain } names one", () => {
     const root = vex(NumDomain, Vec2Domain).over(space.record({ A: { p: new Vec2(1, 2) } }));
-    const sum = root.start(0).others((e) => e.from("p")).reduce("add");
-    // The static type of the chain is Vec2. The value is the number 0.
-    expect(sum.result("A")).toEqual({ ok: true, value: Vec2.zero });
+    const sum = root.start(0).others((e) => e.from("p"));
+    const unclear = sum.reduce("add").result("A");
+    expect(unclear.ok ? unclear.value : [unclear.error.code, unclear.error.message]).toEqual(["#N/A", '"reduce" with "add" has no values, and more domains have an identity for it (Num, Vec2). Name one with { domain }']);
+    expect(sum.reduce("add", { domain: "Vec2" }).result("A")).toEqual({ ok: true, value: Vec2.zero });
+    expect(sum.reduce("add", { domain: "Num" }).result("A")).toEqual({ ok: true, value: 0 });
+    // With one domain that has an identity, the empty list needs no option.
+    expect(vex(Vec2Domain).over(space.record({ A: { p: new Vec2(1, 2) } })).start(0).others((e) => e.from("p")).reduce("add").result("A")).toEqual({ ok: true, value: Vec2.zero });
   });
 });

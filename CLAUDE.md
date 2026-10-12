@@ -15,6 +15,8 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 
 `docs/REVIEW.md` is the plan of record. Read it before a change to the architecture. Its §6 is the target design, and its §11 is the roadmap.
 
+`docs/QUALITY-PLAN.md` is the plan for the tests. Read it before you add a test tool. Each new defect follows its §7.
+
 ## Packages
 
 - Make a new package with `pnpm package add <name> --preset=ts`. Do not write `package.json` or `tsconfig.json` by hand.

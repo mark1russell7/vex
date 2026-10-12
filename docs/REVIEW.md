@@ -886,6 +886,8 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Site done: the home page has a live hero, a showcase of the interactive pages, and a sample for your code. The README shows a recording of the hero.
 - Site done: the Lab reads typed chains with a safe reader, in four spaces. The editor highlights the code and marks the position of an error.
 - Owner items: the Renovate app, Google Search Console, and the social preview image of the repository (`packages/site/public/og.png`).
+- V-043 fixed: the moves before an axis are its address. The Jqy audit found the defect, and the pilot `layout-audit` keeps the checks.
+- The plan to zero defects is in [`QUALITY-PLAN.md`](./QUALITY-PLAN.md). The proposal of the sheet app is in [`SHEET-APP.md`](./SHEET-APP.md).
 
 ---
 

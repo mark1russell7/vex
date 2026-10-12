@@ -6,3 +6,4 @@ export * from "./arbitraries.ts";
 export * from "./laws.ts";
 export * from "./reference.ts";
 export * from "./compare.ts";
+export * from "./builder-model.ts";

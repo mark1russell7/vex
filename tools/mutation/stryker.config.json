@@ -3,7 +3,15 @@
   "testRunner": "vitest",
   "vitest": { "configFile": "vitest.config.ts" },
   "plugins": ["@stryker-mutator/vitest-runner"],
-  "mutate": ["work/core/**/*.ts", "!work/core/**/*.test.ts", "!work/core/test-support.ts", "!work/core/index.ts"],
+  "mutate": [
+    "work/core/**/*.ts",
+    "work/domains/**/*.ts",
+    "work/testkit/**/*.ts",
+    "!work/**/*.test.ts",
+    "!work/core/test-support.ts",
+    "!work/*/index.ts",
+    "!work/testkit/fc-setup.ts"
+  ],
   "coverageAnalysis": "perTest",
   "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": { "fileName": "../../reports/mutation/index.html" },

@@ -353,6 +353,19 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     expect(error(flat.start(0).children((c) => c.from("weight")).count().result("A"))).toMatchObject({ code: "#REF!", kind: "no-tree" });
   });
 
+  it("BUILD.LIST.KEYS: keys() gives the keys of the items with a value, and errors() gives the errors of the failed items", () => {
+    // The grandparent of cto and cfo does not exist, so their items fail with #REF!.
+    const grand = org.start(0).descendants((d) => d.parent().parent().from("name"));
+    expectTypeOf(grand.keys().at("ceo")).toEqualTypeOf<Optional<readonly ("ceo" | "cto" | "dev1" | "dev2" | "cfo")[]>>();
+    expect(optionalValue(grand.keys().at("ceo"))).toEqual(["dev1", "dev2"]);
+    expect(optionalValue(grand.values().at("ceo"))).toEqual(["Ada", "Ada"]);
+    const errs = grand.errors().result("ceo");
+    expect(errs.ok ? errs.value.map((e) => e.code) : null).toEqual(["#REF!", "#REF!"]);
+    // With { strict: true }, the first failed item is the result of keys().
+    expect(error(grand.keys({ strict: true }).result("ceo")).code).toBe("#REF!");
+    expect(optionalValue(org.start(0).children((c) => c.from("name")).errors().at("dev1"))).toEqual([]);
+  });
+
   it("BUILD.AXIS.ADDRESS V-043: the moves before an axis are its address, so parent().children() gives the children of the parent", () => {
     // V-043: the builder dropped the moves before an axis. parent().children() gave the children of the origin.
     const team = org.start(0).parent().children((c) => c.from("name")).values();

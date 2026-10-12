@@ -98,9 +98,10 @@ A use case is a real program from a real domain. Each use case gives three thing
 |---|---|---|
 | A list chain has no `keys()` and no `errors()`, but the IR has both list ops | The Jqy pilot | Add both to the builder |
 | `Vec2` has no `reflect` and no `aspectRatio`. No domain has 3D vectors or transforms. | The Jqy demo | Add the ops, and a `Transform` domain with a use case |
-| The mutation lane runs only on `@mark1russell7/vex` | The review of the tests | Run it on the domains and the test kit |
+| The mutation lane has the gate of 95 % only on `@mark1russell7/vex` | The review of the tests | The lane mutates the domains and the test kit, and prints their scores. A full local run stopped at 43 % for lack of memory, with many survivors. Run the nightly lane, handle the survivors, and add the two packages to `GATED` in `tools/mutation/scores.mjs`. |
 | The browser tests run only in Chromium | The review of the tests | Add Firefox and WebKit |
 | A graph that is not a tree has no space | The schedule use case | A `graph` space with the axes `in` and `out`, after a spec decision |
+| A JSON literal with the key `$vex` reads back as a domain value, so the round trip changes the literal | The five-paths test (P13) | An escape of the key `$vex` in the JSON format, after a decision. An `it.fails` test keeps the defect visible. |
 
 ## 7. The process for each defect
 

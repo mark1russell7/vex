@@ -3,6 +3,7 @@
  * evaluate anything until a caller asks for a value.
  */
 import type { AnyDomain, Domain, OpSpec } from "./domain.ts";
+import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
 import { app, each, ext, index as indexMove, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Addr, type Axis, type Expr, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun } from "./sheet.ts";
@@ -259,6 +260,10 @@ export interface ListChain<Ctx extends ChainContext, U> {
   all(this: ListChain<Ctx, boolean>, opts?: ListOpts): ChainOf<Ctx, boolean>;
   none(this: ListChain<Ctx, boolean>, opts?: ListOpts): ChainOf<Ctx, boolean>;
   values(opts?: ListOpts): ChainOf<Ctx, readonly U[]>;
+  /** The keys of the items with a value, in the order of the axis. */
+  keys(opts?: ListOpts): ChainOf<Ctx, readonly Ctx["keys"][]>;
+  /** The error of each item that failed, in the order of the axis. */
+  errors(): ChainOf<Ctx, readonly VexError[]>;
   first(opts?: ListOpts): ChainOf<Ctx, U>;
   reduce(op: OpNames<DomainFor<Ctx["domains"], U>>, opts?: ListOpts): ChainOf<Ctx, U>;
 }
@@ -592,6 +597,12 @@ class ListChainImpl {
   }
   values(opts?: ListOpts): ChainImpl {
     return this.#op("values", [], opts);
+  }
+  keys(opts?: ListOpts): ChainImpl {
+    return this.#op("keys", [], opts);
+  }
+  errors(): ChainImpl {
+    return this.#op("errors", []);
   }
   first(opts?: ListOpts): ChainImpl {
     return this.#op("first", [], opts);

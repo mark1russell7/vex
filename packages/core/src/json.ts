@@ -32,10 +32,12 @@ export function serialize(e: Expr, domains: readonly AnyDomain[] = []): Result<s
     // JSON.stringify gives each replacer call an object as this.
     const holder = this as Record<string, unknown>;
     if (k !== "value" || holder["tag"] !== "lit") return value;
-    if (isPlainJson(value)) return value;
-    const d = domains.find((dom) => dom.encode !== undefined && dom.is(value));
+    // JSON.stringify applies toJSON before the replacer. The holder has the value before toJSON (V-044).
+    const original = holder[k];
+    if (isPlainJson(original)) return value;
+    const d = domains.find((dom) => dom.encode !== undefined && dom.is(original));
     if (d?.encode !== undefined) {
-      const encoded: EncodedValue = { $vex: "domain", domain: d.name, value: d.encode(value) };
+      const encoded: EncodedValue = { $vex: "domain", domain: d.name, value: d.encode(original) };
       return encoded;
     }
     failure.push({ message: `a literal value is not JSON data and no domain encodes it` });

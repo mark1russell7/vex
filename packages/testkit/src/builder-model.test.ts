@@ -46,7 +46,16 @@ describe("the text of a chain", () => {
         { t: "move", m: { t: "offset", d: [1, -1] } },
         { t: "move", m: { t: "parent" } },
         { t: "op", op: "add", args: [{ k: "field", path: "p" }, { k: "lit", value: -2 }, { k: "of", key: "B", path: "q" }, { k: "chain", chain: sub }] },
-        { t: "call", name: "twice", args: [{ k: "lit", value: true }] },
+        {
+          t: "call",
+          name: "twice",
+          args: [
+            { k: "lit", value: true },
+            { k: "rootLit", value: "p" },
+            { k: "rootField", path: "q" },
+            { k: "rec", a: { k: "field", path: "n" }, b: { k: "lit", value: 1 } },
+          ],
+        },
         { t: "ifError", fallback: { k: "lit", value: 0 } },
         { t: "fork", a: [{ t: "from", path: "p" }], b: [] },
         { t: "with", bind: { k: "field", path: "n" }, body: [{ t: "op", op: "scale", args: [{ k: "var", name: "x" }] }] },
@@ -58,7 +67,8 @@ describe("the text of a chain", () => {
     };
     expect(chainText(chain)).toBe(
       'root.start("p").from("nested.x").to("A").index(-1).offset(1, -1).parent()' +
-        '._.add("p", -2, root.of("B", "q"), root.from("q")).call("twice", true).ifError(0)' +
+        '._.add("p", -2, root.of("B", "q"), root.from("q"))' +
+        '.call("twice", true, root.lit("p"), root.field("q"), root.rec({ a: "n", b: 1 })).ifError(0)' +
         '.fork({ a: (e0) => e0.from("p"), b: (e1) => e1 }).with({ x: "n" }, (e2, vars) => e2._.scale(vars.x))' +
         '.neighbors(4, (e3) => e3, { where: (e4) => e4._.not() }).reduce("add", { strict: true })' +
         ".children((e5) => e5).count({ strict: true }).each((e6) => e6).errors().others((e7) => e7.other())",

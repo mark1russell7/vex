@@ -13,7 +13,13 @@ export type Arg =
   | { readonly k: "lit"; readonly value: number | boolean }
   | { readonly k: "of"; readonly key: string; readonly path: string }
   | { readonly k: "chain"; readonly chain: BuilderChain }
-  | { readonly k: "var"; readonly name: string };
+  | { readonly k: "var"; readonly name: string }
+  /** `root.lit(value)`: a literal. A string is a string, not a field. */
+  | { readonly k: "rootLit"; readonly value: number | boolean | string }
+  /** `root.field(path)`: the field at the focus. It does not read at the address of the chain. */
+  | { readonly k: "rootField"; readonly path: string }
+  /** `root.rec({ a, b })`: a record. A bare string in it reads at the focus. */
+  | { readonly k: "rec"; readonly a: Arg; readonly b: Arg };
 
 /** A move of the builder. */
 export type MoveCall =
@@ -93,10 +99,16 @@ function arbArg(o: ModelOptions, depth: number, vars: boolean): fc.Arbitrary<Arg
     fc.constantFrom(...o.paths).map((path): Arg => ({ k: "field", path })),
     fc.oneof(fc.integer({ min: -3, max: 3 }), fc.boolean()).map((value): Arg => ({ k: "lit", value })),
     fc.tuple(fc.constantFrom(...o.keys, "Z"), fc.constantFrom(...o.paths)).map(([key, path]): Arg => ({ k: "of", key, path })),
+    fc.oneof(fc.integer({ min: -3, max: 3 }), fc.boolean(), fc.constantFrom(...o.paths)).map((value): Arg => ({ k: "rootLit", value })),
+    fc.constantFrom(...o.paths).map((path): Arg => ({ k: "rootField", path })),
   ];
   if (vars) leaves.push(fc.constant<Arg>({ k: "var", name: VAR }));
   if (depth <= 0) return fc.oneof(...leaves);
-  return fc.oneof(...leaves, arbChain(o, depth - 1, vars).map((chain): Arg => ({ k: "chain", chain })));
+  return fc.oneof(
+    ...leaves,
+    arbChain(o, depth - 1, vars).map((chain): Arg => ({ k: "chain", chain })),
+    fc.tuple(arbArg(o, depth - 1, vars), arbArg(o, depth - 1, vars)).map(([a, b]): Arg => ({ k: "rec", a, b })),
+  );
 }
 
 /** The calls of a chain. Only the last call can be an axis without a reduction, because a list chain has no other calls. */
@@ -155,6 +167,9 @@ export interface DynRoot {
   from(p: string): DynChain;
   start(v: unknown): DynChain;
   of(k: string, p: string): unknown;
+  lit(v: unknown): unknown;
+  field(p: string): unknown;
+  rec(fields: Readonly<Record<string, unknown>>): unknown;
 }
 
 type Member = (...a: readonly unknown[]) => DynChain;
@@ -176,6 +191,12 @@ function runArg(a: Arg, root: DynRoot, vars: Readonly<Record<string, unknown>>):
       return runChain(a.chain, root, vars);
     case "var":
       return vars[a.name];
+    case "rootLit":
+      return root.lit(a.value);
+    case "rootField":
+      return root.field(a.path);
+    case "rec":
+      return root.rec({ a: runArg(a.a, root, vars), b: runArg(a.b, root, vars) });
   }
 }
 
@@ -280,6 +301,14 @@ export function modelChain(c: BuilderChain): Expr {
         return chain(a.chain, vars);
       case "var":
         return v(vars[a.name] ?? a.name);
+      case "rootLit":
+        return lit(a.value);
+      case "rootField":
+        // root.field(path) reads at the focus: it has no address.
+        return ref(toPath(a.path));
+      case "rec":
+        // A record of root.rec has the fields as arguments with the empty address.
+        return rec({ a: arg(a.a, [], vars), b: arg(a.b, [], vars) });
     }
   };
 
@@ -372,6 +401,12 @@ export function chainText(c: BuilderChain): string {
         return chainText1(a.chain);
       case "var":
         return `vars.${a.name}`;
+      case "rootLit":
+        return `root.lit(${value(a.value)})`;
+      case "rootField":
+        return `root.field(${value(a.path)})`;
+      case "rec":
+        return `root.rec({ a: ${arg(a.a)}, b: ${arg(a.b)} })`;
     }
   };
   const steps = (list: readonly Step[]): string =>

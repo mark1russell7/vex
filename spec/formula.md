@@ -25,6 +25,8 @@ A table is a tree space. Each row is a record, and a row without a parent is a r
 
 - **[FORMULA.OPERATOR]** The operators `+`, `-`, `*`, `/`, `^` and `&` apply ops of the domain of the value on the left. The ops are `add`, `subtract`, `multiply`, `divide`, `pow` and `concat`. A minus sign before a value applies `negate`. A minus sign before a number gives a negative number.
 - **[FORMULA.COMPARE]** The comparisons `=`, `<`, `<=`, `>` and `>=` apply `eq`, `lt`, `lte`, `gt` and `gte`. `a <> b` is `not(eq(a, b))`.
+- **[FORMULA.CONCAT]** `&` joins the text of the two values, as in a spreadsheet. A number on the left side gives its text too, so `1 & "a"` gives `"1a"`.
+- **[FORMULA.VEC]** `VEC(x, y)` gives the vector with the components `x` and `y`. The two values must be numbers.
 - **[FORMULA.PRECEDENCE]** The order of the operators is the order of a spreadsheet. A minus sign before a value comes first, then `^`, then `*` and `/`, then `+` and `-`, then `&`, and last the comparisons. Each operator with two values is left-associative, also `^`. Parentheses change the order.
 
 ## 5. Functions

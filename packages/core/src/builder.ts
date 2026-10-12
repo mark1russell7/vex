@@ -191,6 +191,11 @@ export interface ChainBase<Ctx extends ChainContext, T> {
   /** This method uses `fallback` when the chain gives an error. */
   ifError<U>(fallback: ArgInput<U, Ctx, false> | T): ChainOf<Ctx, T | U>;
   /**
+   * This method gives `then` when the boolean value is true, and `otherwise` when it is false (the form `if`). Only
+   * the selected branch evaluates.
+   */
+  if<U, V>(this: ChainBase<Ctx, boolean>, then: ArgInput<U, Ctx, false>, otherwise: ArgInput<V, Ctx, false>): ChainOf<Ctx, U | V>;
+  /**
    * This method applies the free function `name` of `withOptions`. The function gets the current value as its first
    * argument, then `args`. The types accept only the functions whose first parameter accepts the current value.
    */
@@ -499,6 +504,9 @@ class ChainImpl {
 
   call(name: string, ...args: readonly unknown[]): ChainImpl {
     return new ChainImpl({ ...this.#s, expr: app(name, this.#s.expr, ...args.map((a) => toExpr(a, this.#s.addr))) });
+  }
+  if(then: unknown, otherwise: unknown): ChainImpl {
+    return new ChainImpl({ ...this.#s, expr: app("if", this.#s.expr, toExpr(then, this.#s.addr), toExpr(otherwise, this.#s.addr)) });
   }
   ifError(fallback: unknown): ChainImpl {
     return new ChainImpl({ ...this.#s, expr: app("ifError", this.#s.expr, toExpr(fallback, this.#s.addr)) });

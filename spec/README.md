@@ -141,6 +141,7 @@ An expression is plain JSON data. It has one of these kinds.
 - **[BUILD.IMMUTABLE]** A builder call gives a new chain. An earlier chain does not change.
 - **[BUILD.AXIS.ADDRESS]** The moves before an axis are the address of the axis. Thus `parent().children(f)` evaluates `f` at each child of the parent.
 - **[BUILD.LIST.KEYS]** A list chain has `keys()` and `errors()`. `keys()` gives the keys of the items with a value, in the order of the axis. `errors()` gives the error of each item that failed.
+- **[BUILD.IF]** `if(then, otherwise)` on a boolean chain gives the form `if`: the expression is `app("if", value, then, otherwise)`.
 - **[BUILD.LIST.READ]** A list chain gives its list at an origin with `result`, `at` and `explain`, like a chain. Each item has the key of its target and its result.
 - **[BUILD.CALL]** `call(name, ...args)` applies a free function of `withOptions`: the expression is `app(name, value, ...args)`. A domain op with the same name for the value comes first at run time.
 - **[TYPE.FROM]** `from(p)` accepts only the fields of the record type, and the chain value has the type of the field.

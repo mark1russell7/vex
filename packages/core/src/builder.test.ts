@@ -366,6 +366,17 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     expect(optionalValue(org.start(0).children((c) => c.from("name")).errors().at("dev1"))).toEqual([]);
   });
 
+  it("BUILD.IF FORM.IF: if() gives the selected branch of a boolean chain, and evaluates only that branch", () => {
+    const pay = org.from("salary")._.gt(150).if(org.from("name"), org.lit("junior"));
+    expect(pay.all().values()).toEqual(["Ada", "Bo", "junior", "junior", "Ed"]);
+    // The branch that the condition does not select does not evaluate, so its error does not matter.
+    const safe = org.from("salary")._.gt(0).if(1, org.start(0).parent().from("name"));
+    expect(optionalValue(safe.at("ceo"))).toBe(1);
+    // The types offer if() only on a boolean chain. At run time, a condition that is not a boolean gives #VALUE!.
+    // @ts-expect-error -- the value of the chain is a text, not a boolean
+    expect(error(org.from("name").if(1, 2).result("ceo")).code).toBe("#VALUE!");
+  });
+
   it("BUILD.LIST.READ: a list chain gives its list, an Optional of it and its trace at an origin", () => {
     const team = org.start(0).children((c) => c.from("salary"));
     const r = team.result("cto");

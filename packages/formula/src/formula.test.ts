@@ -122,6 +122,20 @@ describe("operators", () => {
     expect(column("cost / 0", ["apple"])).toEqual(["#NUM!"]);
   });
 
+  it("FORMULA.CONCAT: & joins the text of both values, also with a number on the left", () => {
+    expect(compile('1 & "a"')).toEqual(app("concat", app("concat", lit(""), lit(1)), lit("a")));
+    expect(column('qty & "x"', ["apple"])).toEqual(["3x"]);
+    expect(column('1 & "a" & 2', ["apple"])).toEqual(["1a2"]);
+    expect(column('name & cost', ["apple"])).toEqual(["apple2"]);
+  });
+
+  it("FORMULA.VEC: VEC(x, y) gives a vector, and a value that is not a number gives an error", () => {
+    expect(column("VEC(1, 2)", ["apple"])).toEqual([new Vec2(1, 2)]);
+    expect(column("VEC(cost, qty) + pos", ["apple"])).toEqual([new Vec2(3, 4)]);
+    expect(column('VEC("a", 1)', ["apple"])).toEqual(["#VALUE!"]);
+    expect(error("VEC(1)").message).toMatch(/VEC needs 2 arguments, not 1/);
+  });
+
   it("FORMULA.COMPARE: = < <= > >= and <> give booleans", () => {
     expect(compile("cost <> 2")).toEqual(app("not", app("eq", ref(["cost"]), lit(2))));
     expect(column("cost > 2")).toEqual([false, false, true, true, true]);

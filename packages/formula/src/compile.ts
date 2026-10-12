@@ -4,6 +4,7 @@
  * sheet, so a read of it is a cell reference. Thus a cycle of formula columns gives `#CYCLE!`.
  */
 import { app, axes, cell, each, lit, offset, origin, parent, ref, type Axis, type Expr, type Move } from "@mark1russell7/vex";
+import { Vec2 } from "@mark1russell7/vex-domains";
 import { BUILT_IN_NAMES, OP_NAMES } from "./functions.ts";
 import { AGGREGATES, FormulaSyntaxError, parseFormula, type Ast, type AxisName, type BinaryOp, type Nav, type Span } from "./syntax.ts";
 
@@ -70,7 +71,10 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       case "binary": {
         const l = go(a.left, s);
         const r = go(a.right, s);
-        return a.op === "<>" ? app("not", app("eq", l, r)) : app(BINARY[a.op], l, r);
+        if (a.op === "<>") return app("not", app("eq", l, r));
+        // `&` joins the text of both values, as in a spreadsheet: the empty text takes the left value as text first.
+        if (a.op === "&") return app("concat", app("concat", lit(""), l), r);
+        return app(BINARY[a.op], l, r);
       }
       case "agg": {
         const inner: Scope = { base: [], inAggregate: true };
@@ -109,6 +113,12 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       case "NOT":
         arity(1, 1);
         return app("not", ...args());
+      case "VEC": {
+        // VEC(x, y) is (1, 0) * x + (0, 1) * y, so it uses only the ops of Vec2.
+        arity(2, 2);
+        const [x, y] = args();
+        return app("add", app("scale", lit(new Vec2(1, 0)), x ?? lit(0)), app("scale", lit(new Vec2(0, 1)), y ?? lit(0)));
+      }
       case "RANK": {
         arity(1, 1);
         if (s.inAggregate) throw new FormulaSyntaxError("RANK is not valid inside an aggregate", a.fnSpan);

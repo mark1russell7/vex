@@ -44,7 +44,7 @@ describe("the Vex view of a formula", () => {
     expect(chain("COUNT(parent.children WHERE cost > this.cost)")).toBe(
       'root.start(0).parent().children((c) => root.start(true), { where: (c) => root.from("cost")._.gt(root.start(0).origin().from("cost")) }).count({ strict: true })',
     );
-    expect(chain('IF(cost > 1e-7, name & "!", "say ""hi""")')).toBe('root.from("cost")._.gt(1e-7)._.if(root.from("name")._.concat(root.lit("!")), root.lit("say \\"hi\\""))');
+    expect(chain('IF(cost > 1e-7, name & "!", "say ""hi""")')).toBe('root.from("cost")._.gt(1e-7)._.if(root.start(root.lit(""))._.concat(root.from("name"))._.concat(root.lit("!")), root.lit("say \\"hi\\""))');
     // String(-0) is "0". The chain keeps the sign of -0.
     expect(chain("-0")).toBe("root.start(-0)");
     expect(chain("RANK(qty)")).toBe('root.start(0).others((c) => root.start(true), { where: (c) => root.from("qty")._.gt(root.start(0).origin().from("qty")) }).count({ strict: true })._.add(1)');

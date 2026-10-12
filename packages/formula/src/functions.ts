@@ -30,6 +30,7 @@ const BUILT_INS: readonly FunctionInfo[] = [
   { name: "ANY", signature: "ANY(axis.column) or ANY(axis [WHERE test], test)", summary: "TRUE when the test is TRUE at a row of the axis." },
   { name: "ALL", signature: "ALL(axis.column) or ALL(axis [WHERE test], test)", summary: "TRUE when the test is TRUE at each row of the axis." },
   { name: "RANK", signature: "RANK(value)", summary: "1 plus the number of other rows with a larger value. The row with the largest value has the rank 1." },
+  { name: "VEC", signature: "VEC(x, y)", summary: "The vector with the components x and y." },
 ];
 
 /** The names of the built-in functions, in capital letters. */

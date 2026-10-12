@@ -1,0 +1,90 @@
+---
+title: Spreadsheets
+description: Four spreadsheet programs in Vex formulas, a loan, a bill of materials, a grade book and invoice checks. Tests compare each program with plain TypeScript.
+---
+
+These four programs come from real spreadsheets. Each program is a set of formula columns of [the sheet app](../../app/). The package `@vex/pilots` gives each program three times: with the typed builder, with the formula language, and in plain TypeScript. Property tests compare the three on random inputs.
+
+The examples on this page use `runFormulas` of `@vex/pilots`. It compiles the formulas with `@vex/formula`, and it evaluates the cells with a `SheetRun`. A cell gives a value, or an error value with a reason.
+
+## A loan schedule
+
+The opening balance of a month is the closing balance of the month before. `row(-1)` reads the row above. At the first row, `row(-1)` gives `#REF!`, and `IFERROR` gives the principal.
+
+```ts doctest
+import { runFormulas } from "@vex/pilots";
+
+const months = space.array([{ payment: 260, extra: 0 }, { payment: 260, extra: 0 }, { payment: 260, extra: 0 }]);
+const cells = runFormulas(months, ["payment", "extra"], {
+  opening: "= IFERROR(row(-1).closing, 1000)",
+  interest: "= opening * 0.01",
+  closing: "= opening + interest - payment - extra",
+});
+
+cells("0", "closing"); // => { ok: true, value: 750 }
+cells("1", "closing"); // => { ok: true, value: 497.5 }
+```
+
+A schedule of 600 months found a defect in `SheetRun`. A first read at the last month went deep into the call stack, and the overflow became an error value. `IFERROR` then gave the principal, so the balance was wrong and no cell showed an error. At this time, a read warms the column in key order (rule `SHEET.RECURRENCE`).
+
+## A bill of materials
+
+A product is a tree of parts. A part has a quantity in its parent and a unit cost. `SUM(children, qty * rolled)` evaluates `qty * rolled` at each child. Each part reads its own column `rolled` at its children, so the cost rolls up the tree.
+
+```ts doctest
+import { runFormulas } from "@vex/pilots";
+
+const parts = space.tree(
+  { bike: { qty: 1, cost: 100 }, wheel: { qty: 2, cost: 20 }, spoke: { qty: 32, cost: 0.25 }, tube: { qty: 1, cost: 5 }, seat: { qty: 1, cost: 15 } },
+  { wheel: "bike", spoke: "wheel", tube: "wheel", seat: "bike" },
+);
+const cells = runFormulas(parts, ["qty", "cost"], {
+  rolled: "= cost + SUM(children, qty * rolled)",
+  need: "= IF(COUNT(ancestors) = 0, 1, qty * parent.need)",
+});
+
+cells("bike", "rolled"); // => { ok: true, value: 181 }
+cells("spoke", "need"); // => { ok: true, value: 64 }
+```
+
+## A grade book
+
+A class is a root, and its students are its children. `parent.children` is the class of a student. In a `WHERE` test, `score` reads at each sibling, and `this.score` reads at the student of the formula.
+
+```ts doctest
+import { runFormulas } from "@vex/pilots";
+
+const school = space.tree({ maths: {}, ada: { score: 94 }, bo: { score: 81 }, cy: { score: 81 } }, { ada: "maths", bo: "maths", cy: "maths" });
+const cells = runFormulas(school, ["score"], {
+  mean: "= AVERAGE(parent.children.score)",
+  rank: "= 1 + COUNT(siblings WHERE score > this.score)",
+});
+
+cells("ada", "mean"); // => { ok: true, value: 256 / 3 }
+cells("bo", "rank"); // => { ok: true, value: 2 }
+```
+
+## Invoice checks
+
+An invoice is a root, and its lines are its children. A line without a price gives an error value with a reason. `SUM` is strict, like a spreadsheet. Thus the check of the invoice is an error value too, not a wrong `TRUE` or `FALSE`.
+
+```ts doctest
+import { runFormulas } from "@vex/pilots";
+
+const invoice = space.tree({ A: { total: 54, discount: 0.1 }, line1: { qty: 2, price: 10 }, line2: { qty: 4 } }, { line1: "A", line2: "A" });
+const cells = runFormulas(invoice, ["qty", "price", "total", "discount"], {
+  lineTotal: "= qty * price",
+  linesSum: "= SUM(children.lineTotal)",
+  totalOk: "= ABS(total - linesSum * (1 - discount)) <= 0.005",
+});
+
+cells("line1", "lineTotal"); // => { ok: true, value: 20 }
+cells("line2", "lineTotal"); // => { ok: false, error: { code: "#N/A", ... } }
+cells("A", "totalOk"); // => { ok: false, error: { code: "#N/A", ... } }
+```
+
+## What the pilots found
+
+- `SheetRun` gave a wrong balance at the end of a long recurrence, without an error. A read warms the column in key order at this time.
+- The typed builder has no member for the form `if`. The formula language has `IF`, but a builder program uses `ifError` with a value that fails on purpose.
+- A text as the left value of `*` gives `#NAME?`, because the text domain has no op `multiply`. A spreadsheet gives `#VALUE!`.

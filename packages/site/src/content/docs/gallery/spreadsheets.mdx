@@ -25,7 +25,9 @@ cells("0", "closing"); // => { ok: true, value: 750 }
 cells("1", "closing"); // => { ok: true, value: 497.5 }
 ```
 
-A schedule of 600 months found a defect in `SheetRun`. A first read at the last month went deep into the call stack, and the overflow became an error value. `IFERROR` then gave the principal, so the balance was wrong and no cell showed an error. At this time, a read warms the column in key order (rule `SHEET.RECURRENCE`).
+A schedule of 600 months found a defect in `SheetRun`. A first read at the last month went deep into the call stack, and the overflow became an error value. `IFERROR` then gave the principal, so the balance was wrong and no cell showed an error. After the fix, a read warms the column in key order (rule `SHEET.RECURRENCE`).
+
+Version 0.5.0 then removed the cause. A sheet reads its cells from a work list, so a long chain does not fill the call stack (rule `SHEET.DEEP`). A full call stack in host code gives `#DEPTH!`, and `IFERROR` does not hide it.
 
 ## A bill of materials
 

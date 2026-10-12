@@ -1,5 +1,5 @@
 import type { AnyDomain } from "./domain.ts";
-import { vexError } from "./errors.ts";
+import { isStackOverflow, vexError } from "./errors.ts";
 import { isExpr, type Expr } from "./ir.ts";
 import { fail, ok, type Result } from "./result.ts";
 
@@ -171,6 +171,7 @@ export function serialize(e: Expr, domains: readonly AnyDomain[] = []): Result<s
     const tree = mapValues(e, (v) => encodeValue(v, domains));
     return tree.ok ? ok(JSON.stringify(tree.value)) : fail(tree.error);
   } catch (thrown) {
+    if (isStackOverflow(thrown)) return fail(vexError("depth", "the expression is too deep for the call stack of the engine", { thrown }));
     return fail(vexError("threw", "the expression has no JSON form", { thrown }));
   }
 }
@@ -184,7 +185,13 @@ export function parse(text: string, domains: readonly AnyDomain[] = []): Result<
   } catch (thrown) {
     return fail(vexError("bad-expression", "the text is not JSON", { thrown }));
   }
-  const tree = mapValues(raw, (v) => decodeValue(v, domains));
-  if (!tree.ok) return fail(tree.error);
-  return isExpr(tree.value) ? ok(tree.value) : fail(vexError("bad-expression", "the JSON is not a valid Vex expression"));
+  try {
+    const tree = mapValues(raw, (v) => decodeValue(v, domains));
+    if (!tree.ok) return fail(tree.error);
+    return isExpr(tree.value) ? ok(tree.value) : fail(vexError("bad-expression", "the JSON is not a valid Vex expression"));
+  } catch (thrown) {
+    // A JSON text nested deeper than the call stack, or a decoder of a domain that throws.
+    if (isStackOverflow(thrown)) return fail(vexError("depth", "the JSON is too deep for the call stack of the engine", { thrown }));
+    return fail(vexError("threw", "a decoder of a domain threw an exception", { thrown }));
+  }
 }

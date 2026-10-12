@@ -109,6 +109,9 @@ export interface ChainProgram {
   readonly result: Node;
 }
 
+/** The greatest nesting of a program in the Lab: parentheses, lists, objects, arguments and arrow functions. */
+export const MAX_DEPTH = 100;
+
 /** This function reads a program. It throws a `ChainError` with the position of the first problem. */
 export function parseChain(src: string): ChainProgram {
   if (src.length > 6000) throw new ChainError("the program is too long for the Lab", { start: 6000, end: src.length });
@@ -227,7 +230,17 @@ export function parseChain(src: string): ChainProgram {
     }
   };
 
+  // The reader uses recursion, so a limit on the nesting keeps the call stack small in each browser.
+  let depth = 0;
   const expression = (): Node => {
+    if (++depth > MAX_DEPTH) throw new ChainError(`the program is nested more than ${MAX_DEPTH} levels deep`, peek().span);
+    try {
+      return expressionAt();
+    } finally {
+      depth--;
+    }
+  };
+  const expressionAt = (): Node => {
     let e = primary();
     for (;;) {
       if (isOp(".")) {

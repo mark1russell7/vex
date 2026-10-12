@@ -1,7 +1,7 @@
 import { evaluate, isVexList, space, vex, type Expr } from "@mark1russell7/vex";
 import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
-import { ChainError, parseChain, programOf, runChain, tokenize } from "./chain-parser.ts";
+import { ChainError, MAX_DEPTH, parseChain, programOf, runChain, tokenize } from "./chain-parser.ts";
 
 const boxes = space.record({
   A: { position: new Vec2(0, 0), size: new Vec2(2, 2), weight: 2 },
@@ -90,6 +90,15 @@ corner._.scale(2)`;
     expect(fails(`root.start(1).at("A")`).message).toMatch(/not a member/);
     expect(() => tokenize("a".repeat(10))).not.toThrow();
     expect(fails("root." + "x".repeat(7000)).message).toMatch(/too long/);
+  });
+
+  it("gives an error for a program nested deeper than the limit, not a full call stack", () => {
+    // The program itself and the argument of start are two levels, so 98 parentheses make 100 levels.
+    expect(valueAt(`root.start(${"(".repeat(MAX_DEPTH - 2)}1${")".repeat(MAX_DEPTH - 2)})`, "A")).toBe(1);
+    const deep = fails(`root.start(${"(".repeat(MAX_DEPTH - 1)}1${")".repeat(MAX_DEPTH - 1)})`);
+    expect(deep.message).toBe(`the program is nested more than ${MAX_DEPTH} levels deep`);
+    expect(deep.span.start).toBe(10 + MAX_DEPTH);
+    expect(fails(`root.start(${"[".repeat(2900)}`).message).toMatch(/nested more than/);
   });
 });
 

@@ -62,6 +62,8 @@ An expression is plain JSON data. It has one of these kinds.
 
 - **[EVAL.TOTAL]** The interpreter does not throw. It gives a value or an error value. A value is not `undefined`.
 - **[EVAL.PURE]** An evaluation does not change any state. Two evaluations of the same expression at the same key give the same result.
+- **[EVAL.NESTING]** `compile` and `evaluate` accept an expression nested up to 500 levels deep. A deeper expression gives `#VALUE!` before the evaluation. `isExpr` and `deps` use a stack, not recursion, so they accept an expression of any depth.
+- **[EVAL.DEPTH]** An evaluation in the limit of EVAL.NESTING does not fill the call stack of the engine. If host code fills the call stack, for example an extension or an op, the error is `#DEPTH!`. `ifError`, a reduction that skips errors and `#ARGS` do not hide `#DEPTH!`, because the engine failed, not the data.
 - **[EVAL.ORIGIN]** An origin that is not a key of the space gives `#REF!`.
 - **[EVAL.LOCATION]** An error value has the path of the node that made it, and the origin and the focus of the evaluation at that node. An extension handler can give an error without an origin. Then the interpreter adds the path, the origin and the focus of the extension node.
 - **[EVAL.COMPILE]** `compile(e, options)` gives a program. Its `run` and `explain` give the same results and the same traces as `evaluate` and `explain`. One program evaluates at each origin of each space, and one evaluation does not change a later evaluation.
@@ -84,7 +86,7 @@ An expression is plain JSON data. It has one of these kinds.
 - **[CALL.FREE]** A free function applies when no domain accepts the receiver.
 - **[CALL.PARAMS]** If an op declares the kinds of its parameters, an argument of the wrong kind gives `#VALUE!`.
 - **[CALL.LIFT]** If an op declares `liftScalar`, the interpreter changes each number argument into a domain value with `fromScalar`.
-- **[CALL.THROW]** An op that throws gives `#CALC!`. The error keeps the thrown value.
+- **[CALL.THROW]** An op that throws gives `#CALC!`. The error keeps the thrown value. A full call stack gives `#DEPTH!` (EVAL.DEPTH).
 - **[CALL.RESULT]** An op result that is `undefined` or `null` gives `#CALC!`. A number that is not finite, or a domain value that fails the `valid` check of its domain, gives `#NUM!`.
 - **[CALL.ARGS]** The interpreter evaluates all arguments. One failed argument gives its own error. Two or more failed arguments give `#ARGS`, with each error as a cause.
 - **[CALL.STRING-ARGS]** A string literal is a value. The builder makes a field reference only from a bare string.
@@ -163,6 +165,7 @@ A sheet has named columns of formulas over a space. A cell is one column at one 
 - **[SHEET.RECURRENCE]** A column can read itself at another key. A recurrence over the key order, for example a running total, gives the same result as a loop. The first key that a host reads does not change a result, also at the end of a long recurrence.
 - **[SHEET.DECLARE]** `declare<T>()` gives the types of columns before their formulas. A formula can read a declared column with its type, also the column itself or a later column. The formula of a declared column must give a value of the declared type. `declare` has no effect at run time.
 - **[SHEET.CYCLE]** Each cell on a cycle of cell references gives `#CYCLE!`. A cycle can contain one cell, or cells at different keys.
+- **[SHEET.DEEP]** A run evaluates a chain of cell references of any length. The length does not depend on the call stack of the engine, and the results are the results of a recursive search.
 - **[SHEET.ORDER]** The result of a cell does not depend on the order of the evaluations. `ifError` does not hide a cycle from the cells on that cycle.
 
 ## 10. Examples

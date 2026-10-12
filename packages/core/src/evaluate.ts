@@ -1,5 +1,5 @@
 import { liftsAt, resolveOp, type AnyDomain, type ParamKind, type ResolvedOp } from "./domain.ts";
-import { formatError, vexError, type ErrorKind, type VexError } from "./errors.ts";
+import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
 import { children, type Axis, type Expr, type ExprOf, type Move } from "./ir.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
 import { fail, ok, type Result } from "./result.ts";
@@ -75,8 +75,30 @@ export interface Program {
  * This function compiles an expression. The result gives the same results and the same traces as `evaluate`,
  * because `evaluate` uses it too.
  */
+/** The deepest nesting of an expression that `compile` accepts (EVAL.NESTING). */
+export const MAX_NESTING = 500;
+
+const DEPTH_MESSAGE = "the evaluation is too deep for the call stack of the engine";
+
+/** This function gives the number of nodes on the longest path from the root of `e`. It uses a stack, not recursion. */
+export function nestingOf(e: Expr): number {
+  let deepest = 0;
+  const todo: [Expr, number][] = [[e, 1]];
+  for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
+    const [x, d] = item;
+    if (d > deepest) deepest = d;
+    for (const child of children(x)) todo.push([child, d + 1]);
+  }
+  return deepest;
+}
+
 export function compile(expr: Expr, opts: CompileOptions = {}): Program {
-  const root = new Compiler(opts).node(expr, []);
+  // EVAL.NESTING: a program nested too deep gives an error before the compiler walks it with recursion.
+  const nesting = nestingOf(expr);
+  const root: Node =
+    nesting > MAX_NESTING
+      ? (f) => fail(vexError("bad-expression", `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}`, { path: [], origin: f.pos.origin, focus: f.pos.focus }))
+      : new Compiler(opts).node(expr, []);
   const run = (r: RunOptions): Result<unknown> => {
     const { space, origin } = r;
     if (!space.has(origin)) return fail(vexError("unknown-key", `the space has no key "${origin}"`, { origin, focus: origin }));
@@ -85,6 +107,7 @@ export function compile(expr: Expr, opts: CompileOptions = {}): Program {
       return root({ pos: { origin, focus: origin }, env }, { space, trace: r.trace });
     } catch (thrown) {
       // A defect in an extension handler or in a test of the interpreter itself. Totality still holds.
+      if (isStackOverflow(thrown)) return fail(vexError("depth", DEPTH_MESSAGE, { origin, focus: origin, thrown }));
       return fail(vexError("threw", "the evaluation threw an exception", { origin, focus: origin, thrown }));
     }
   };
@@ -236,8 +259,13 @@ class Compiler {
     try {
       return run();
     } catch (thrown) {
-      return this.#err("threw", `"${op}" threw an exception`, f, path, { op, thrown });
+      return this.#threw(thrown, `"${op}" threw an exception`, f, path, { op });
     }
+  }
+
+  /** This method gives the error of an exception: `#DEPTH!` for a full call stack, and `#CALC!` for each other exception. */
+  #threw(thrown: unknown, message: string, f: Frame, path: readonly number[], extra: Partial<VexError> = {}): Result<never> {
+    return isStackOverflow(thrown) ? this.#err("depth", DEPTH_MESSAGE, f, path, { ...extra, thrown }) : this.#err("threw", message, f, path, { ...extra, thrown });
   }
 
   #ref(e: ExprOf<"ref">, info: Info): Node {
@@ -264,7 +292,7 @@ class Compiler {
         try {
           value = Reflect.get(value, seg);
         } catch (thrown) {
-          return failed(this.#err("threw", `reading "${where}" at "${key}" threw an exception`, f, path, { thrown }));
+          return failed(this.#threw(thrown, `reading "${where}" at "${key}" threw an exception`, f, path));
         }
         if (value === undefined || value === null) return missing(where);
       }
@@ -284,6 +312,9 @@ class Compiler {
       else (errors ??= [first]).push(r.error);
     }
     if (first === undefined) return ok(values);
+    // A #DEPTH! argument is the result, so #ARGS does not wrap it, and ifError cannot hide it.
+    const depth = [first, ...(errors ?? [])].find(isDepthError);
+    if (depth !== undefined) return fail(depth);
     return errors === undefined ? fail(first) : this.#err("args", `${errors.length} ${what} failed`, f, path, { causes: errors });
   }
 
@@ -404,7 +435,8 @@ class Compiler {
       case "ifError":
         return (f, c) => {
           const first = arg(0, f, c);
-          return this.#emit(c, info, f, first.ok ? first : arg(1, f, c));
+          // EVAL.DEPTH: ifError does not hide #DEPTH!, because the engine, not the data, failed.
+          return this.#emit(c, info, f, first.ok || isDepthError(first.error) ? first : arg(1, f, c));
         };
     }
   }
@@ -435,7 +467,7 @@ class Compiler {
     try {
       return ok(run());
     } catch (thrown) {
-      return this.#err("threw", `"${op}" threw an exception`, f, path, { op, thrown });
+      return this.#threw(thrown, `"${op}" threw an exception`, f, path, { op });
     }
   }
 
@@ -452,7 +484,7 @@ class Compiler {
       try {
         valid = d.valid(value);
       } catch (thrown) {
-        return this.#err("threw", `the "valid" check of "${d.name}" threw an exception`, f, path, { ...extra, thrown });
+        return this.#threw(thrown, `the "valid" check of "${d.name}" threw an exception`, f, path, extra);
       }
       if (!valid) return this.#err("invalid-value", `"${op}" gave a value that is not a valid ${d.name}`, f, path, extra);
     }
@@ -461,6 +493,9 @@ class Compiler {
 
   #listOp(op: ListOp, list: VexList, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
     const optsArg = op === "reduce" ? rest[1] : rest[0];
+    // A reduction that skips error items does not skip #DEPTH! (EVAL.DEPTH).
+    const depth = list.items.find((it) => !it.result.ok && isDepthError(it.result.error))?.result;
+    if (depth !== undefined && !depth.ok) return fail(depth.error);
     const strict = (optsArg as ListOptions | null | undefined)?.strict === true;
     const firstError = list.items.find((it) => !it.result.ok)?.result;
     if (strict && firstError !== undefined && !firstError.ok) return fail(firstError.error);

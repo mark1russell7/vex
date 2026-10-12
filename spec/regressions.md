@@ -53,3 +53,4 @@ Each defect of the audits ([`docs/archive/2026-07/BUGS.md`](../docs/archive/2026
 | V-047 | test | The types of a lifted number parameter accepted only a number literal. After the fix, a number field, an argument or a chain of a number type-checks too. |
 | V-048 | test | A first read of a cell at the end of a long recurrence went deep into the call stack. The overflow became an error value, and `IFERROR` gave its fallback: a wrong number without an error. `SheetRun.cell` evaluates the column in key order. |
 | V-049 | test | An empty `reduce` took the identity of the first domain with the op, so an empty sum of vectors could be the number 0. When more domains have an identity, the result is `#N/A`, and the option `domain` names one. |
+| V-050 | test | A full call stack became `#CALC!`, so `ifError` gave its fallback, and a sheet showed a wrong number. A full call stack gives `#DEPTH!`, and `ifError` does not hide it. |

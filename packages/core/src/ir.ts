@@ -144,53 +144,76 @@ export function isMove(u: unknown): u is Move {
   }
 }
 
-/** This function tells if a value is a valid axis. */
+/** This function tells if a value is a valid axis. It checks the tests of `where` too. */
 export function isAxis(u: unknown): u is Axis {
-  if (!isObject(u)) return false;
-  switch (u["t"]) {
-    case "all":
-    case "others":
-    case "other":
-    case "children":
-    case "ancestors":
-    case "descendants":
-    case "siblings":
-      return true;
-    case "neighbors":
-      return u["n"] === 4 || u["n"] === 8;
-    case "where":
-      return isAxis(u["axis"]) && isExpr(u["test"]);
-    default:
-      return false;
-  }
+  return validTree([{ axis: true, u }]);
 }
-
-const isExprRecord = (u: unknown): u is Readonly<Record<string, Expr>> =>
-  isObject(u) && !Array.isArray(u) && Object.values(u).every((e) => isExpr(e));
 
 /** This function tells if a value is a valid expression. It checks the whole tree. */
 export function isExpr(u: unknown): u is Expr {
-  if (!isObject(u)) return false;
-  switch (u["tag"]) {
-    case "lit":
-      return "value" in u;
-    case "ref":
-      return isStringArray(u["path"]) && (u["at"] === undefined || (Array.isArray(u["at"]) && u["at"].every(isMove)));
-    case "app":
-      return typeof u["op"] === "string" && Array.isArray(u["args"]) && u["args"].every((a) => isExpr(a));
-    case "let":
-      return isExprRecord(u["bind"]) && isExpr(u["body"]);
-    case "var":
-      return typeof u["name"] === "string";
-    case "rec":
-      return isExprRecord(u["fields"]);
-    case "each":
-      return isAxis(u["axis"]) && isExpr(u["body"]) && (u["at"] === undefined || (Array.isArray(u["at"]) && u["at"].every(isMove)));
-    case "ext":
-      return typeof u["kind"] === "string" && "data" in u;
-    default:
-      return false;
+  return validTree([{ axis: false, u }]);
+}
+
+const isAddr = (u: unknown): boolean => u === undefined || (Array.isArray(u) && u.every(isMove));
+
+/**
+ * This function checks a tree of expressions and axes. It uses a stack, not recursion, so the input can be deep. For
+ * example, a deep JSON file from a stranger does not need a deep call stack (EVAL.NESTING).
+ */
+function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boolean {
+  const push = (axis: boolean, values: readonly unknown[]): void => {
+    for (const u of values) todo.push({ axis, u });
+  };
+  for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
+    const { u } = item;
+    if (!isObject(u)) return false;
+    if (item.axis) {
+      const t = u["t"];
+      if (t === "neighbors") {
+        if (u["n"] !== 4 && u["n"] !== 8) return false;
+      } else if (t === "where") {
+        push(true, [u["axis"]]);
+        push(false, [u["test"]]);
+      } else if (!["all", "others", "other", "children", "ancestors", "descendants", "siblings"].includes(t as string)) {
+        return false;
+      }
+      continue;
+    }
+    switch (u["tag"]) {
+      case "lit":
+        if (!("value" in u)) return false;
+        break;
+      case "ref":
+        if (!isStringArray(u["path"]) || !isAddr(u["at"])) return false;
+        break;
+      case "app":
+        if (typeof u["op"] !== "string" || !Array.isArray(u["args"])) return false;
+        push(false, u["args"]);
+        break;
+      case "let":
+        if (!isObject(u["bind"]) || Array.isArray(u["bind"])) return false;
+        push(false, [...Object.values(u["bind"]), u["body"]]);
+        break;
+      case "var":
+        if (typeof u["name"] !== "string") return false;
+        break;
+      case "rec":
+        if (!isObject(u["fields"]) || Array.isArray(u["fields"])) return false;
+        push(false, Object.values(u["fields"]));
+        break;
+      case "each":
+        if (!isAddr(u["at"])) return false;
+        push(true, [u["axis"]]);
+        push(false, [u["body"]]);
+        break;
+      case "ext":
+        if (typeof u["kind"] !== "string" || !("data" in u)) return false;
+        break;
+      default:
+        return false;
+    }
   }
+  return true;
 }
 
 /** This function gives the child expressions of an expression, in the order of their child index. */
@@ -212,6 +235,9 @@ export function children(e: Expr): readonly Expr[] {
   }
 }
 
+/** This function gives the tests of the `where` axes of an axis, from the inside out. It uses a loop, not recursion. */
 function whereTests(a: Axis): readonly Expr[] {
-  return a.t === "where" ? [...whereTests(a.axis), a.test] : [];
+  const out: Expr[] = [];
+  for (let x: Axis = a; x.t === "where"; x = x.axis) out.unshift(x.test);
+  return out;
 }

@@ -7,7 +7,7 @@
  * JSON form, `deps` and the traces work without a change.
  */
 import { vexError } from "./errors.ts";
-import { evaluate, explain, type EvalOptions, type ExtHandler } from "./evaluate.ts";
+import { evaluate, explain, nestingOf, type EvalOptions, type ExtHandler } from "./evaluate.ts";
 import { ext, isMove, type Addr, type Expr } from "./ir.ts";
 import { fail, type Result } from "./result.ts";
 import { resolveAddr } from "./space.ts";
@@ -38,15 +38,9 @@ export type SheetOptions = Omit<EvalOptions, "origin" | "trace">;
 const cycleError = (column: string, key: string): Result<never> =>
   fail(vexError("cycle", `the cell "${column}" at "${key}" is on a cycle of cell references`, { origin: key, focus: key }));
 
-/**
- * One run of a sheet. It keeps the result of each cell that it evaluated. The space does not change, so a cell has
- * one result in a run.
- *
- * The run is a depth-first search with the algorithm of Tarjan for strongly connected components. A cell finishes
- * when its component finishes. Each cell of a component with two or more cells, or with a reference to itself,
- * gives `#CYCLE!`. A read of a cell that is not finished gives `#CYCLE!` too. Thus the order of the evaluations
- * does not change a result, also when `ifError` catches the error of a cycle.
- */
+/** The id of a cell. */
+const idOf = (column: string, key: string): string => `${column}\u0000${key}`;
+
 /** The state of one cell in the search. */
 interface Visit {
   readonly id: string;
@@ -56,8 +50,33 @@ interface Visit {
   low: number;
   reread: boolean;
   result: Result<unknown>;
+  /** True when the last evaluation paused, because a cell that it reads is not finished. */
+  paused: boolean;
+  /** The cell that the evaluation waits for: a cell that the run started, or a cell that paused too. */
+  need: Visit | undefined;
 }
 
+/**
+ * The budget of the stack for the recursion of a run, in estimated frames. Each engine has more stack than this, so
+ * the recursion of a run cannot fill the stack (SHEET.DEEP).
+ */
+const STACK_BUDGET = 3000;
+
+/**
+ * One run of a sheet. It keeps the result of each cell that it evaluated. The space does not change, so a cell has
+ * one result in a run.
+ *
+ * The run is a depth-first search with the algorithm of Tarjan for strongly connected components. A cell finishes
+ * when its component finishes. Each cell of a component with two or more cells, or with a reference to itself,
+ * gives `#CYCLE!`. A read of a cell that is not finished gives `#CYCLE!` too. Thus the order of the evaluations
+ * does not change a result, also when `ifError` catches the error of a cycle.
+ *
+ * The search does not depend on the call stack of the engine (SHEET.DEEP). A read of a cell evaluates that cell
+ * with recursion while the stack of the run stays in a budget. When a read is over the budget, the run starts the
+ * cell, and the cell that reads it pauses. A paused evaluation reads no other cell and changes no state of the
+ * search. The run then evaluates the started cell from its own list, and it evaluates the paused cell again after
+ * that cell. A formula is pure (EVAL.PURE), so the second evaluation gives the result of one evaluation.
+ */
 export class SheetRun {
   readonly #columns: ReadonlyMap<string, Expr>;
   readonly #opts: SheetOptions;
@@ -72,11 +91,17 @@ export class SheetRun {
   readonly #stack: Visit[] = [];
   // The cell whose formula is in evaluation. At the top level, it is a placeholder that is not a cell.
   // Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields
-  #top: Visit = { id: "", column: "", key: "", index: -1, low: -1, reread: false, result: cycleError("", "") };
+  #top: Visit = { id: "", column: "", key: "", index: -1, low: -1, reread: false, result: cycleError("", ""), paused: false, need: undefined };
   #next = 0;
+  // The estimated frames of the stack that the evaluations in progress use, and the cost of a cell of each column.
+  #used = 0;
+  readonly #cost = new Map<string, number>();
+  readonly #budget: number;
 
-  constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions) {
+  /** `budget` is the budget of the stack in estimated frames. A test can make it small, so the run pauses often. */
+  constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, budget: number = STACK_BUDGET) {
     this.#columns = columns;
+    this.#budget = budget;
     this.#opts = { ...opts, extensions: { ...opts.extensions, [CELL_KIND]: this.#handler } };
   }
 
@@ -84,18 +109,18 @@ export class SheetRun {
     if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address", { path: ctx.path }));
     const where = resolveAddr(ctx.space, ctx.position, data.at);
     if (!where.ok) return fail({ ...where.error, path: ctx.path });
-    return this.cell(data.column, where.value);
+    return this.#read(data.column, where.value);
   };
 
   /**
    * This method gives the result of one cell: the column `column` at the key `key`. A read from a host first evaluates
-   * the column at the keys before `key`, in key order. Thus a recurrence over the keys reads finished cells, and a
-   * first read at the last key does not go deep into the call stack.
+   * the column at the keys before `key`, in key order. Thus a recurrence over the keys reads finished cells.
    */
   cell(column: string, key: string): Result<unknown> {
     // The placeholder at the top has the index -1. A read inside a formula has a cell at the top, so it does not warm.
-    if (this.#top.index < 0) this.#warmTo(column, key);
-    return this.#cell(column, key);
+    if (this.#top.index >= 0) return this.#read(column, key);
+    this.#warmTo(column, key);
+    return this.#drive(column, key);
   }
 
   /** This method evaluates the column `column` at each key before `key` that it did not evaluate before, in key order. */
@@ -105,16 +130,57 @@ export class SheetRun {
     this.#index ??= new Map(keys.map((k, i) => [k, i]));
     const end = this.#index.get(key) ?? 0;
     const start = this.#warmed.get(column) ?? 0;
-    for (let i = start; i < end; i++) this.#cell(column, keys[i] ?? key);
+    for (let i = start; i < end; i++) this.#drive(column, keys[i] ?? key);
     if (end > start) this.#warmed.set(column, end);
   }
 
-  /** This method evaluates one cell, without the warm-up of `cell`. */
-  #cell(column: string, key: string): Result<unknown> {
-    const id = `${column}\u0000${key}`;
+  /** This method gives the estimated frames of the stack that one evaluation of a cell of `column` uses. */
+  #costOf(column: string, program: Expr): number {
+    let cost = this.#cost.get(column);
+    if (cost === undefined) {
+      cost = 3 * nestingOf(program) + 16;
+      this.#cost.set(column, cost);
+    }
+    return cost;
+  }
+
+  /** This method puts a new cell on the stack of the search. */
+  #start(column: string, key: string): Visit {
+    const n = this.#next++;
+    const visit: Visit = { id: idOf(column, key), column, key, index: n, low: n, reread: false, result: cycleError(column, key), paused: false, need: undefined };
+    this.#visits.set(visit.id, visit);
+    this.#stack.push(visit);
+    return visit;
+  }
+
+  /** This method evaluates the formula of a cell once. When the evaluation pauses, the result of the cell does not change. */
+  #evaluate(visit: Visit, program: Expr): void {
+    const caller = this.#top;
+    const cost = this.#costOf(visit.column, program);
+    visit.paused = false;
+    visit.need = undefined;
+    this.#top = visit;
+    this.#used += cost;
+    const result = evaluate(program, { ...this.#opts, origin: visit.key });
+    this.#used -= cost;
+    this.#top = caller;
+    if (!visit.paused) visit.result = result;
+  }
+
+  /** This method ends a cell whose evaluation did not pause: it finishes its component, or it gives its low to the caller. */
+  #end(visit: Visit, caller: Visit | undefined): void {
+    if (visit.low === visit.index) this.#finish(visit);
+    else if (caller !== undefined) caller.low = Math.min(caller.low, visit.low);
+  }
+
+  /** This method reads a cell from the formula of the cell at the top. */
+  #read(column: string, key: string): Result<unknown> {
+    const id = idOf(column, key);
     const done = this.#done.get(id);
     if (done !== undefined) return done;
     const caller = this.#top;
+    // A paused evaluation reads no other cell, so it does not follow a path that its final evaluation does not follow.
+    if (caller.paused) return cycleError(column, key);
     const seen = this.#visits.get(id);
     if (seen !== undefined) {
       // A read of a cell that is not finished: the caller and this cell are on one cycle. The cell is on the
@@ -126,23 +192,50 @@ export class SheetRun {
     }
     const program = this.#columns.get(column);
     if (program === undefined) return fail(vexError("unbound", `the sheet has no column "${column}"`, { origin: key, focus: key }));
+    const visit = this.#start(column, key);
+    if (this.#used + this.#costOf(column, program) > this.#budget) {
+      // Over the budget: the caller pauses, and the run evaluates the new cell from its own list.
+      caller.paused = true;
+      caller.need = visit;
+      return cycleError(column, key);
+    }
+    this.#evaluate(visit, program);
+    if (visit.paused) {
+      caller.paused = true;
+      caller.need = visit;
+      return cycleError(column, key);
+    }
+    this.#end(visit, caller);
+    return this.#done.get(id) ?? cycleError(column, key);
+  }
 
-    const n = this.#next++;
-    const visit: Visit = { id, column, key, index: n, low: n, reread: false, result: cycleError(column, key) };
-    this.#visits.set(id, visit);
-    this.#stack.push(visit);
-    this.#top = visit;
-    visit.result = evaluate(program, { ...this.#opts, origin: key });
-    this.#top = caller;
-
-    if (visit.low === visit.index) this.#finish(visit);
-    else caller.low = Math.min(caller.low, visit.low);
+  /** This method evaluates a cell from the top level. The cells that pause go on a list, not on the call stack. */
+  #drive(column: string, key: string): Result<unknown> {
+    const id = idOf(column, key);
+    const done = this.#done.get(id);
+    if (done !== undefined) return done;
+    if (!this.#columns.has(column)) return fail(vexError("unbound", `the sheet has no column "${column}"`, { origin: key, focus: key }));
+    const work: Visit[] = [this.#start(column, key)];
+    for (let visit = work.at(-1); visit !== undefined; visit = work.at(-1)) {
+      const program = this.#columns.get(visit.column);
+      /* v8 ignore next -- @preserve: a visit exists only for a column with a program */
+      if (program === undefined) break;
+      this.#evaluate(visit, program);
+      if (visit.paused) {
+        // The cells that the evaluation waits for go on the list, the last one on the top.
+        for (let need = visit.need; need !== undefined; need = need.need) work.push(need);
+        continue;
+      }
+      work.pop();
+      this.#end(visit, work.at(-1));
+    }
     return this.#done.get(id) ?? cycleError(column, key);
   }
 
   /** This method takes the component of `root` from the stack, and sets the final result of each of its cells. */
   #finish(root: Visit): void {
-    const members = this.#stack.splice(this.#stack.indexOf(root));
+    // The root is near the top of the stack, so the search starts at the top: a deep chain needs no long scan.
+    const members = this.#stack.splice(this.#stack.lastIndexOf(root));
     // A component of two or more cells reads its root again, so root.reread alone decides. The length test is a guard.
     // Stryker disable next-line ConditionalExpression,LogicalOperator: members.length > 1 implies root.reread
     const cyclic = members.length > 1 || root.reread;
@@ -163,7 +256,7 @@ export class SheetRun {
 
   /**
    * This method evaluates the column `column` at each key before `key`, in key order. A recurrence over the keys,
-   * for example a running total, then reads finished cells and does not go deep into the call stack.
+   * for example a running total, then reads finished cells.
    */
   warm(column: string, key: string): void {
     this.#warmTo(column, key);

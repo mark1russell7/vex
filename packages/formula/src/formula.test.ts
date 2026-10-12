@@ -122,6 +122,14 @@ describe("operators", () => {
     expect(column("cost / 0", ["apple"])).toEqual(["#NUM!"]);
   });
 
+  it("FORMULA.NESTING: a formula nested deeper than the limit gives an error with its position, and the limit itself works", () => {
+    expect(column(`${"(".repeat(200)}2${")".repeat(200)}`, ["apple"])).toEqual([2]);
+    const deep = error(`${"(".repeat(201)}2${")".repeat(201)}`);
+    expect(deep.message).toBe("the formula is nested more than 200 levels deep");
+    expect(deep.span.start).toBeGreaterThan(0);
+    expect(error(`${"-".repeat(300)}1`).message).toBe("the formula is nested more than 200 levels deep");
+  });
+
   it("FORMULA.CONCAT: & joins the text of both values, also with a number on the left", () => {
     expect(compile('1 & "a"')).toEqual(app("concat", app("concat", lit(""), lit(1)), lit("a")));
     expect(column('qty & "x"', ["apple"])).toEqual(["3x"]);

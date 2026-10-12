@@ -131,10 +131,11 @@ A use case is a real program from a real domain. Each use case gives three thing
 | C | Done, except the screenshot comparison | The browser tests run in Chromium, Firefox and WebKit. The speed gate checks the ratio of Vex to hand-written loops. The screenshot comparison needs reference images from Linux, so it waits. |
 | D | Started | The weekly workflow runs one million runs of each property. The phase ends after four weeks without a new defect. |
 
-The defects that the plan found: V-043 (a move before an axis), V-044 (`toJSON` in `serialize`), V-045 (the key `$vex`), V-046 (`-0` in JSON), V-047 (the types of a lifted number) and V-048 (a deep recurrence in `SheetRun` gave a wrong number). The use cases also closed gaps. A list chain has `keys()`, `errors()`, `result`, `at` and `explain`, and a chain has `if()`. A tree has an offset. The domains have `TextDomain` and the WCAG ops of `ColorDomain`. The formula language has `&` for numbers and `VEC`.
+The defects that the plan found: V-043 (a move before an axis), V-044 (`toJSON` in `serialize`), V-045 (the key `$vex`), V-046 (`-0` in JSON), V-047 (the types of a lifted number) V-048 (a deep recurrence in `SheetRun` gave a wrong number), V-049 (an empty `reduce` of vectors gave the number 0) and V-050 (`ifError` hid a full call stack). The use cases also closed gaps. A list chain has `keys()`, `errors()`, `result`, `at` and `explain`, and a chain has `if()`. A tree has an offset. The domains have `TextDomain` and the WCAG ops of `ColorDomain`. The formula language has `&` for numbers and `VEC`.
 
-The decisions that are open:
+The decisions that the owner made:
 
-- An empty `reduce` takes the identity of the first domain that has the op. For a list of vectors, the result can be the number 0.
-- A stack overflow in a deep recursion that does not follow the key order is an error value, and `ifError` replaces it.
-- A graph that is not a tree has no space.
+- An empty `reduce` gives an error unless one domain has an identity for the op. `reduce(op, { domain })` names the domain (V-049, version 0.4.0).
+- Vex does not depend on the call stack. A sheet reads its cells from a work list, and an expression can nest 500 levels deep. A full call stack in host code gives `#DEPTH!`, and `ifError` does not hide it (V-050, version 0.5.0).
+
+The decision that is open: a graph that is not a tree has no space.

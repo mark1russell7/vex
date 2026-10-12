@@ -42,7 +42,7 @@ total.table().map((row) => row.cells.total); // => [ok(4), ok(5), ok(8)]
 
 The first row has no row above, so the read gives `#REF!`, and `ifError(0)` changes it to 0. `declare` gives the type of a column before its formula, so a column can read itself or a later column with that type. The formula of a declared column must give that type. Without `declare`, `cell<T>` gives the type.
 
-A sheet evaluates the earlier keys first. Thus a running total over thousands of rows reads finished cells, and does not go deep into the call stack.
+A sheet evaluates the earlier keys first. Thus a running total over thousands of rows reads finished cells. A sheet does not depend on the call stack of the engine: a chain of 100000 cells gives its value in each order (rule `SHEET.DEEP`).
 
 ## Cycles
 

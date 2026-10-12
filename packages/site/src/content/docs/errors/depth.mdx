@@ -1,0 +1,56 @@
+---
+title: "#DEPTH!: a full call stack"
+description: Code outside Vex filled the call stack of the engine. No fallback hides this code, because the result is not a real value.
+sidebar:
+  label: "#DEPTH!"
+  order: 9
+---
+
+`#DEPTH!` means that the call stack of the JavaScript engine became full during an evaluation. Vex catches the overflow and makes it an error value. Thus the evaluation stays total, and the host sees the problem.
+
+## Where the depth comes from
+
+Vex itself does not fill the call stack:
+
+- A sheet reads its cells from a work list, not with one recursive call for each cell. A chain of 100000 cells, or a tree 100000 levels deep, gives its value (rule `SHEET.DEEP`).
+- `isExpr`, `deps` and the JSON check of an expression use a loop with their own stack.
+- An expression can nest 500 levels deep (rule `EVAL.NESTING`). A deeper expression gives `#VALUE!` before the evaluation starts.
+
+Thus `#DEPTH!` comes from code outside Vex: an op, a free function or an extension handler that uses deep recursion. It also comes from a value too deep for `serialize`, for example an array in 200000 levels of arrays.
+
+```ts doctest
+import type { Expr } from "@mark1russell7/vex";
+
+let deep: Expr = lit(1);
+for (let i = 0; i < MAX_NESTING; i++) deep = app("add", deep, lit(1));
+const at = { space: space.record(boxes), origin: "A", domains: [NumDomain] };
+
+evaluate(deep, at); // => { ok: false, error: { code: "#VALUE!", ... } }
+```
+
+## Kinds
+
+| Kind | Cause |
+|---|---|
+| `depth` | The call stack of the engine became full in an op, a free function, an extension handler or `serialize`. A JSON text that is too deep for `parse` gives this kind too. |
+
+## Why ifError does not hide it
+
+`ifError` gives its fallback for each error, but not for `#DEPTH!`. A non-strict reduction, for example `sum`, skips the errors of its items, but not `#DEPTH!`. Two failed arguments give `#ARGS`, but an argument with `#DEPTH!` gives `#DEPTH!`.
+
+```ts doctest
+const forever = (n: number): number => forever(n + 1) + 1;
+const host = { space: space.record(boxes), origin: "A", domains: [NumDomain], extensions: { deep: () => ({ ok: true as const, value: forever(0) }) } };
+
+evaluate(app("ifError", ext("deep", null), lit(0)), host); // => { ok: false, error: { code: "#DEPTH!", ... } }
+```
+
+An overflow is not a property of the data. The same program on a different engine, or with more stack, gives a value. If `ifError` could hide it, the fallback becomes a wrong number that shows no error. A sheet once showed a wrong balance for this reason (defect V-050).
+
+## The fix
+
+- Change the recursion of the op or the handler to a loop with its own stack.
+- Make the data less deep, or give the engine more stack. In Node.js, the flag `--stack-size` sets the size.
+- Divide a deep expression into the columns of a sheet. A sheet reads a cell of another column with no limit on the depth.
+
+Refer to [error values](../../learn/errors/) for the other codes.

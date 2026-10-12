@@ -23,6 +23,9 @@ export class FormulaSyntaxError extends Error {
 /** The longest formula that the reader accepts, so a pasted text cannot block the page. */
 export const MAX_LENGTH = 10_000;
 
+/** The deepest nesting of a formula: parentheses, function calls and signs (FORMULA.NESTING). */
+export const MAX_NESTING = 200;
+
 export type Token =
   | { readonly t: "num"; readonly v: number; readonly span: Span }
   | { readonly t: "str"; readonly v: string; readonly span: Span }
@@ -307,17 +310,30 @@ export function parseFormula(src: string): Ast {
     }
   };
 
+  // The parser uses recursion, so a limit on the nesting keeps the call stack small in each engine (EVAL.NESTING).
+  let depth = 0;
+  const deeper = <T>(at: Span, f: () => T): T => {
+    if (++depth > MAX_NESTING) throw new FormulaSyntaxError(`the formula is nested more than ${MAX_NESTING} levels deep`, at);
+    try {
+      return f();
+    } finally {
+      depth--;
+    }
+  };
+
   const parseUnary = (): Ast => {
     const t = peek();
     if (t.t === "op" && (t.v === "-" || t.v === "+")) {
       next();
-      const arg = parseUnary();
+      // Each sign is one level: a chain of signs is a chain of recursive calls.
+      const arg = deeper(t.span, parseUnary);
       return t.v === "+" ? { ...arg, span: { start: t.span.start, end: arg.span.end } } : { k: "neg", arg, span: { start: t.span.start, end: arg.span.end } };
     }
     return parsePrimary();
   };
 
-  const parseExpr = (min: number): Ast => {
+  const parseExpr = (min: number): Ast => deeper(peek().span, () => parseExprAt(min));
+  const parseExprAt = (min: number): Ast => {
     let left = parseUnary();
     for (;;) {
       const t = peek();
@@ -334,7 +350,8 @@ export function parseFormula(src: string): Ast {
 
   if (peek().t === "op" && (peek() as { v: string }).v === "=") next();
   if (peek().t === "end") throw new FormulaSyntaxError("the formula is empty", peek().span);
-  const ast = parseExpr(0);
+  // The formula itself is not a level: each parenthesis, argument and sign in it is one level.
+  const ast = parseExprAt(0);
   const rest = peek();
   if (rest.t !== "end") throw new FormulaSyntaxError(`${describe(rest)} is not expected here`, rest.span);
   return ast;

@@ -18,19 +18,18 @@ export interface Dependency {
  */
 export function deps(e: Expr): readonly Dependency[] {
   const out: Dependency[] = [];
-  const walk = (x: Expr, axes: readonly Axis["t"][], axisAt: readonly Addr[]): void => {
+  // A stack, not recursion, so a deep expression needs no deep call stack. The children go on the stack in reverse
+  // order, so the reads come out in the order of a depth-first walk.
+  const todo: { readonly x: Expr; readonly axes: readonly Axis["t"][]; readonly axisAt: readonly Addr[] }[] = [{ x: e, axes: [], axisAt: [] }];
+  for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
+    const { x } = item;
     if (x.tag === "ref") {
-      out.push({ at: x.at ?? [], path: x.path, axes, axisAt });
-      return;
+      out.push({ at: x.at ?? [], path: x.path, axes: item.axes, axisAt: item.axisAt });
+      continue;
     }
-    if (x.tag === "each") {
-      const inner = [...axes, x.axis.t];
-      const innerAt = [...axisAt, x.at ?? []];
-      children(x).forEach((c) => walk(c, inner, innerAt));
-      return;
-    }
-    children(x).forEach((c) => walk(c, axes, axisAt));
-  };
-  walk(e, [], []);
+    const axes = x.tag === "each" ? [...item.axes, x.axis.t] : item.axes;
+    const axisAt = x.tag === "each" ? [...item.axisAt, x.at ?? []] : item.axisAt;
+    for (const child of children(x).toReversed()) todo.push({ x: child, axes, axisAt });
+  }
   return out;
 }

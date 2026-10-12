@@ -2,7 +2,7 @@
  * The error codes of Vex. The names come from the spreadsheet error values, because a Vex program is a
  * spreadsheet formula over records.
  */
-export type ErrorCode = "#REF!" | "#N/A" | "#VALUE!" | "#NAME?" | "#NUM!" | "#CALC!" | "#ARGS" | "#CYCLE!";
+export type ErrorCode = "#REF!" | "#N/A" | "#VALUE!" | "#NAME?" | "#NUM!" | "#CALC!" | "#ARGS" | "#CYCLE!" | "#DEPTH!";
 
 /** The cause of an error, in more detail than the code. */
 export type ErrorKind =
@@ -24,6 +24,7 @@ export type ErrorKind =
   | "undefined-result"
   | "args"
   | "cycle"
+  | "depth"
   | "bad-expression";
 
 const CODE_OF: Readonly<Record<ErrorKind, ErrorCode>> = {
@@ -46,9 +47,22 @@ const CODE_OF: Readonly<Record<ErrorKind, ErrorCode>> = {
   "undefined-result": "#CALC!",
   args: "#ARGS",
   cycle: "#CYCLE!",
+  depth: "#DEPTH!",
 };
 
-/** A Vex error. It is a value: a program can catch it with `ifError`. */
+/**
+ * This function tells if an exception is the report of the engine that the call stack is full. V8 and JavaScriptCore
+ * throw a `RangeError`. SpiderMonkey throws an `InternalError` ("too much recursion").
+ */
+export function isStackOverflow(thrown: unknown): boolean {
+  if (!(thrown instanceof Error)) return false;
+  return (thrown instanceof RangeError && /call stack/i.test(thrown.message)) || (thrown.name === "InternalError" && /recursion/i.test(thrown.message));
+}
+
+/** This function tells if an error is `#DEPTH!`. `ifError` and the reductions that skip errors do not hide it (EVAL.DEPTH). */
+export const isDepthError = (e: VexError): boolean => e.kind === "depth";
+
+/** A Vex error. It is a value: a program can catch it with `ifError`, except `#DEPTH!`. */
 export interface VexError {
   /** The spreadsheet-style code, for example `#REF!`. */
   readonly code: ErrorCode;

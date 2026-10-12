@@ -826,7 +826,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 
 ## 14. Execution record
 
-*Updated: 2026-10-09.* This section records what the work did, and where the work is different from the plan.
+*Updated: 2026-10-12.* This section records what the work did, and where the work is different from the plan.
 
 ### 14.1 Status of the phases
 
@@ -890,7 +890,8 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - The plan to zero defects is in [`QUALITY-PLAN.md`](./QUALITY-PLAN.md). The proposal of the sheet app is in [`SHEET-APP.md`](./SHEET-APP.md).
 - Phase A of the plan to zero defects is done. It added the builder model test and the property P13 (five paths give one result). It also added the Lab reader against the builder, and `keys()` and `errors()` on a list chain. With the fix of V-043 removed, the builder model test fails at once. It also found V-044: `serialize` lost the class of a domain value with `toJSON`.
 - The sheet app is live at `/vex/app/`. Its formula language is in `@vex/formula` (spec `spec/formula.md`), and the text values use the new `TextDomain`.
-- Open: the key `$vex` in a JSON literal needs an escape, and that is a decision about the format. The mutation scores of the domains and the test kit are also open. The local run needs more memory than this machine has, so the nightly run in CI gives the scores.
+- Done in 0.4.0: the key `$vex` in a JSON literal has an escape (IR.JSON.ESCAPE). The nightly run in CI gives the mutation scores of each package, and the gate is 95 %.
+- Done in 0.5.0: Vex does not depend on the call stack of the engine. A `SheetRun` reads its cells from a work list, so a chain of 100000 cells gives its value (SHEET.DEEP). A property test compares it with the recursive search of `ReferenceSheetRun`, with small stack budgets. An expression can nest 500 levels deep (EVAL.NESTING). A full call stack in host code gives `#DEPTH!`, and `ifError` does not hide it (EVAL.DEPTH, V-050).
 
 ---
 

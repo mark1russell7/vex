@@ -1,9 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
-import { offset, other } from "./ir.ts";
+import { app, lit, offset, other, ref } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import type { Result } from "./result.ts";
+import { cell, SheetRun } from "./sheet.ts";
 import { space } from "./space.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
 
@@ -69,6 +70,24 @@ describe("sheets (SHEET.*)", () => {
     const s = rows.sheet().column("total", (r) => r.from("v")._.plus(r.start(r.cell<number>("total", [offset(-1)])).ifError(0)));
     expect(s.table().slice(0, 4).map((row) => value(row.cells.total))).toEqual([1, 3, 6, 10]);
     expect(value(s.result("4999", "total"))).toBe((5000 * 5001) / 2);
+  });
+
+  it("SHEET.RECURRENCE V-NEXT-sheet-deep: a first read at the last key of a deep recurrence through two columns gives the result of a loop", () => {
+    // V-NEXT-sheet-deep: SheetRun.cell did not warm the column, so a first read at the last key went 2 levels deep
+    // for each key. The call stack overflowed, the overflow became an error value, and ifError gave the fallback:
+    // a wrong number without an error. The loan pilot found it.
+    const rows = space.array(Array.from({ length: 3000 }, () => ({ v: 1 })));
+    const columns = new Map([
+      ["opening", app("ifError", cell("closing", [offset(-1)]), lit(0))],
+      ["closing", app("plus", cell("opening"), ref("v"))],
+    ]);
+    const cold = new SheetRun(columns, { space: rows, domains: [Num] });
+    expect(value(cold.cell("closing", "2999"))).toBe(3000);
+    expect(value(cold.cell("opening", "1500"))).toBe(1500);
+    // A read in key order gives the same results.
+    const warm = new SheetRun(columns, { space: rows, domains: [Num] });
+    for (const k of rows.keys) warm.cell("closing", k);
+    expect(value(warm.cell("closing", "2999"))).toBe(3000);
   });
 
   it("SHEET.DECLARE: declare gives the type of a column before its formula, for a recurrence and a forward read", () => {

@@ -82,8 +82,11 @@ const arbMoveCall = (o: ModelOptions): fc.Arbitrary<MoveCall> =>
     fc.constantFrom<MoveCall>({ t: "other" }, { t: "origin" }, { t: "parent" }),
   );
 
+// errors() takes no options, because a strict list op fails on the first error item.
 const arbReduction = (o: ModelOptions): fc.Arbitrary<Reduction> =>
-  fc.tuple(fc.constantFrom(...o.reductions), fc.constantFrom(...o.reduceOps), fc.boolean()).map(([op, w, strict]): Reduction => (op === "reduce" ? { op, with: w, strict } : { op, strict }));
+  fc
+    .tuple(fc.constantFrom(...o.reductions), fc.constantFrom(...o.reduceOps), fc.boolean())
+    .map(([op, w, strict]): Reduction => (op === "reduce" ? { op, with: w, strict } : { op, strict: op !== "errors" && strict }));
 
 function arbArg(o: ModelOptions, depth: number, vars: boolean): fc.Arbitrary<Arg> {
   const leaves: fc.Arbitrary<Arg>[] = [

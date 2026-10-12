@@ -15,7 +15,7 @@ const options = (keys: readonly string[]): ModelOptions => ({
   ops: ["add", "subtract", "scale", "length", "dot", "distance", "halve", "maxComponent", "anyNonPositive", "multiply", "gt", "abs", "not", "nope"],
   fns: [],
   reduceOps: ["add", "max"],
-  reductions: ["count", "sum", "mean", "min", "max", "any", "all", "none", "values", "first", "reduce"],
+  reductions: ["count", "sum", "mean", "min", "max", "any", "all", "none", "values", "keys", "errors", "first", "reduce"],
   depth: 2,
   binds: false,
 });

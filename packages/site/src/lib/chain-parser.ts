@@ -275,7 +275,7 @@ const CHAIN_MEMBERS = new Set([
   "_", "from", "to", "index", "offset", "origin", "other", "parent", "ifError", "fork", "with",
   "others", "neighbors", "each", "children", "ancestors", "descendants", "siblings",
 ]);
-const LIST_MEMBERS = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "values", "first", "reduce"]);
+const LIST_MEMBERS = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "values", "keys", "errors", "first", "reduce"]);
 // An op name of the ops section can be any name, except the names of JavaScript objects.
 const FORBIDDEN = new Set([
   "constructor", "__proto__", "prototype", "call", "apply", "bind", "caller", "arguments", "toString", "valueOf",

@@ -77,7 +77,7 @@ const org = vex(NumDomain).over(space.tree({ ceo: { pay: 300 }, cto: { pay: 200 
 org.start(0).parent().children((c) => c.from("pay")).sum().at("cto"); // => some(390)
 ```
 
-An axis gives a list chain. A list chain has the reductions `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `values`, `first` and `reduce(op)`. Each reduction takes `{ strict: true }`. By default, a reduction skips error items.
+An axis gives a list chain. A list chain has the reductions `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `values`, `keys`, `first` and `reduce(op)`. Each reduction takes `{ strict: true }`. By default, a reduction skips error items. `keys()` gives the keys of the items with a value, and `errors()` gives the error of each item that failed.
 
 ### The traversal
 

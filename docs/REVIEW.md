@@ -888,9 +888,9 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Owner items: the Renovate app, Google Search Console, and the social preview image of the repository (`packages/site/public/og.png`).
 - V-043 fixed: the moves before an axis are its address. The Jqy audit found the defect, and the pilot `layout-audit` keeps the checks.
 - The plan to zero defects is in [`QUALITY-PLAN.md`](./QUALITY-PLAN.md). The proposal of the sheet app is in [`SHEET-APP.md`](./SHEET-APP.md).
-- Phase A of the plan to zero defects: the builder model test, the property P13 (five paths give one result), the Lab reader against the builder, and `keys()` and `errors()` on a list chain. With the fix of V-043 removed, the builder model test fails at once. It also found V-044: `serialize` lost the class of a domain value with `toJSON`.
+- Phase A of the plan to zero defects is done. It added the builder model test and the property P13 (five paths give one result). It also added the Lab reader against the builder, and `keys()` and `errors()` on a list chain. With the fix of V-043 removed, the builder model test fails at once. It also found V-044: `serialize` lost the class of a domain value with `toJSON`.
 - The sheet app is live at `/vex/app/`. Its formula language is in `@vex/formula` (spec `spec/formula.md`), and the text values use the new `TextDomain`.
-- Open: an escape for the key `$vex` in a JSON literal (a decision about the format), and the mutation scores of the domains and the test kit. The local run needs more memory than this machine has, so the nightly run in CI gives the scores.
+- Open: the key `$vex` in a JSON literal needs an escape, and that is a decision about the format. The mutation scores of the domains and the test kit are also open. The local run needs more memory than this machine has, so the nightly run in CI gives the scores.
 
 ---
 

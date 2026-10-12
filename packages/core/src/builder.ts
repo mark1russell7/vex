@@ -109,7 +109,13 @@ export type ArgInput<P, Ctx extends ChainContext, Lift extends boolean> =
   | KeysOfType<Ctx["record"], P>
   | Arg<P>
   | ChainOf<Ctx, P>
-  | (Lift extends true ? ([P] extends [DomainValue<DomainFor<Ctx["domains"], P>>] ? number : never) : never);
+  | (Lift extends true ? ([P] extends [DomainValue<DomainFor<Ctx["domains"], P>>] ? LiftedNumber<Ctx> : never) : never);
+
+/**
+ * A number argument for a domain parameter of an op with `liftScalar` (TYPE.LIFT): a number, a field with numbers, an
+ * argument or a chain. The interpreter lifts each of them with `fromScalar` (CALL.LIFT).
+ */
+type LiftedNumber<Ctx extends ChainContext> = number | KeysOfType<Ctx["record"], number> | Arg<number> | ChainOf<Ctx, number>;
 
 type MapArgs<P extends readonly unknown[], Ctx extends ChainContext, Lift extends boolean> = { [I in keyof P]: ArgInput<P[I], Ctx, Lift> };
 

@@ -7,9 +7,9 @@ import { Pt, PtDomain } from "./test-support.ts";
 const root = vex(PtDomain).over(space.record({ A: { position: new Pt(4, 6), weight: 2 }, B: { position: new Pt(0, 0), weight: 3 } }));
 
 describe("a lifted number argument (TYPE.LIFT, CALL.LIFT)", () => {
-  // V-NEXT-lift-chain: the types accepted a number literal for a lifted parameter, but not a number field, a number
+  // V-047: the types accepted a number literal for a lifted parameter, but not a number field, a number
   // argument or a chain of a number. The interpreter lifts each of them, so the types refused valid programs.
-  it("TYPE.LIFT CALL.LIFT V-NEXT-lift-chain: a field, an argument and a chain of a number lift like a number literal", () => {
+  it("TYPE.LIFT CALL.LIFT V-047: a field, an argument and a chain of a number lift like a number literal", () => {
     const byLiteral = root.from("position")._.add(2);
     const byField = root.from("position")._.add("weight");
     const byArg = root.from("position")._.add(root.of("A", "weight"));

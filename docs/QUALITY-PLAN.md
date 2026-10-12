@@ -119,3 +119,22 @@ A use case is a real program from a real domain. Each use case gives three thing
 | B | Eight use-case pilots of §5, each with a page or a doc example | Each pilot passes on one million runs |
 | C | Cross-browser tests, screenshot comparison, keyboard tests, a bench gate | The tests run in CI |
 | D | The long run: one million runs of each property each week, and use-case work | Four weeks without a new defect |
+
+## 9. The status
+
+*Updated: 2026-10-12.*
+
+| Phase | Status | Evidence |
+|---|---|---|
+| A | Done | The builder model test, the property P13 (five paths), the Lab reader against the builder, `keys()` and `errors()`. Mutation scores: the core 99 % on the changed files, the domains 100 %, the test kit 99 %. The gate checks each package at 95 %. |
+| B | Done | Eight use-case pilots in `@vex/pilots`: the loan, the bill of materials, the grade book, the invoice, heat diffusion, flocking, polygons and palette contrast. Each spreadsheet pilot runs three ways: the builder, the formula language and plain TypeScript. Two gallery pages show them with doc tests. |
+| C | Done, except the screenshot comparison | The browser tests run in Chromium, Firefox and WebKit. The speed gate checks the ratio of Vex to hand-written loops. The screenshot comparison needs reference images from Linux, so it waits. |
+| D | Started | The weekly workflow runs one million runs of each property. The phase ends after four weeks without a new defect. |
+
+The defects that the plan found: V-043 (a move before an axis), V-044 (`toJSON` in `serialize`), V-045 (the key `$vex`), V-046 (`-0` in JSON), V-047 (the types of a lifted number) and V-048 (a deep recurrence in `SheetRun` gave a wrong number). The use cases also closed gaps. A list chain has `keys()`, `errors()`, `result`, `at` and `explain`, and a chain has `if()`. A tree has an offset. The domains have `TextDomain` and the WCAG ops of `ColorDomain`. The formula language has `&` for numbers and `VEC`.
+
+The decisions that are open:
+
+- An empty `reduce` takes the identity of the first domain that has the op. For a list of vectors, the result can be the number 0.
+- A stack overflow in a deep recursion that does not follow the key order is an error value, and `ifError` replaces it.
+- A graph that is not a tree has no space.

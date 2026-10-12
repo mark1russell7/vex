@@ -62,6 +62,10 @@ export class SheetRun {
   readonly #columns: ReadonlyMap<string, Expr>;
   readonly #opts: SheetOptions;
   readonly #done = new Map<string, Result<unknown>>();
+  // For each column, the number of keys at the start of the key order that a warm-up evaluated.
+  readonly #warmed = new Map<string, number>();
+  // The position of each key in the key order, made at the first warm-up.
+  #index: ReadonlyMap<string, number> | undefined;
   // The cells on the stack of the search: started, but their component is not finished.
   readonly #visits = new Map<string, Visit>();
   // Stryker disable next-line ArrayDeclaration: the search never reads below the root of a component
@@ -83,8 +87,30 @@ export class SheetRun {
     return this.cell(data.column, where.value);
   };
 
-  /** This method gives the result of one cell: the column `column` at the key `key`. */
+  /**
+   * This method gives the result of one cell: the column `column` at the key `key`. A read from a host first evaluates
+   * the column at the keys before `key`, in key order. Thus a recurrence over the keys reads finished cells, and a
+   * first read at the last key does not go deep into the call stack.
+   */
   cell(column: string, key: string): Result<unknown> {
+    // The placeholder at the top has the index -1. A read inside a formula has a cell at the top, so it does not warm.
+    if (this.#top.index < 0) this.#warmTo(column, key);
+    return this.#cell(column, key);
+  }
+
+  /** This method evaluates the column `column` at each key before `key` that it did not evaluate before, in key order. */
+  #warmTo(column: string, key: string): void {
+    if (!this.#columns.has(column)) return;
+    const keys = this.#opts.space.keys;
+    this.#index ??= new Map(keys.map((k, i) => [k, i]));
+    const end = this.#index.get(key) ?? 0;
+    const start = this.#warmed.get(column) ?? 0;
+    for (let i = start; i < end; i++) this.#cell(column, keys[i] ?? key);
+    if (end > start) this.#warmed.set(column, end);
+  }
+
+  /** This method evaluates one cell, without the warm-up of `cell`. */
+  #cell(column: string, key: string): Result<unknown> {
     const id = `${column}\u0000${key}`;
     const done = this.#done.get(id);
     if (done !== undefined) return done;
@@ -140,9 +166,6 @@ export class SheetRun {
    * for example a running total, then reads finished cells and does not go deep into the call stack.
    */
   warm(column: string, key: string): void {
-    for (const k of this.#opts.space.keys) {
-      if (k === key) return;
-      this.cell(column, k);
-    }
+    this.#warmTo(column, key);
   }
 }

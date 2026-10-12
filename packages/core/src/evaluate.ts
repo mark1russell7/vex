@@ -295,6 +295,7 @@ class Compiler {
     return (f, c) => {
       // An axis with an address finds its targets from the key of the address. The origin does not change.
       let from = f;
+      // Stryker disable next-line ConditionalExpression,EqualityOperator: resolveAddr of [] gives the focus too
       if (at.length > 0) {
         const where = resolveAddr(c.space, f.pos, at);
         if (!where.ok) return this.#emit(c, info, f, fail({ ...where.error, path }));

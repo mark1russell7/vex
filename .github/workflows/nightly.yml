@@ -31,7 +31,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # The setup prints the seed. To repeat a failure, set FC_SEED to that seed.
-      - run: pnpm --filter @mark1russell7/vex-testkit --filter @vex/pilots run test
+      - run: pnpm --filter @mark1russell7/vex-testkit --filter @vex/pilots --filter @vex/formula --filter @vex/sheet-app --filter @vex/site run test
         env:
           FC_NUM_RUNS: "10000"
 
@@ -62,7 +62,7 @@ jobs:
           if-no-files-found: ignore
 
   bench:
-    name: speed (report only)
+    name: speed
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -78,6 +78,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: mkdir -p reports && pnpm --filter @mark1russell7/vex run bench | tee reports/bench.txt
+      # The gate fails when Vex is much slower than the hand-written loops (bench/gate.ts gives the limits).
+      - run: pnpm --filter @mark1russell7/vex run bench:gate | tee -a reports/bench.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bench-report

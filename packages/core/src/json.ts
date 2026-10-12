@@ -34,6 +34,7 @@ function encodeValue(u: unknown, domains: readonly AnyDomain[]): Result<unknown>
   if (u === null || typeof u === "string" || typeof u === "boolean") return ok(u);
   if (typeof u === "number") {
     if (Object.is(u, -0)) return ok({ $vex: "number", value: "-0" } satisfies Encoded);
+    // Stryker disable next-line EqualityOperator: here u is an infinity, so u > 0 and u >= 0 are the same test
     return Number.isFinite(u) ? ok(u) : ok({ $vex: "number", value: Number.isNaN(u) ? "NaN" : u > 0 ? "Infinity" : "-Infinity" } satisfies Encoded);
   }
   if (Array.isArray(u)) {
@@ -83,7 +84,7 @@ function decodeValue(u: unknown, domains: readonly AnyDomain[]): Result<unknown>
     }
     return ok(out);
   };
-  if (!Object.hasOwn(u, "$vex")) return fields(u);
+  // A record without the key $vex matches none of the forms below, so it stays data too.
   const kind = u["$vex"];
   if (kind === "escape" && isRecord(u["value"])) return fields(u["value"]);
   if (kind === "number" && typeof u["value"] === "string" && Object.hasOwn(NUMBERS, u["value"])) return ok(NUMBERS[u["value"]]);
@@ -102,7 +103,6 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
   if (!isRecord(u)) return ok(u);
   const out: Record<string, unknown> = { ...u };
   const child = (key: string): Result<unknown> | undefined => {
-    if (!Object.hasOwn(u, key)) return undefined;
     const r = mapValues(u[key], f);
     if (r.ok) out[key] = r.value;
     return r.ok ? undefined : r;

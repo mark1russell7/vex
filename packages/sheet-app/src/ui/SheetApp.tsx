@@ -44,6 +44,8 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const [view, setView] = useState<View>(PLAIN_VIEW);
   const [showVex, setShowVex] = useState(false);
   const [note, setNote] = useState("");
+  // On a narrow screen the inspector is closed at the start, so the grid has the space. A wide screen always shows it.
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
   const apply = useCallback((f: (d: SheetDoc) => SheetDoc): void => setHist((h) => commit(h, f(h.present))), []);
@@ -294,6 +296,9 @@ export function SheetApp(props: SheetAppProps): ReactElement {
         <div className="vs-left">
           <div className="vs-viewbar">
             <input className="vs-filter" type="search" placeholder="Filter rows" aria-label="Filter the rows" value={view.filter} onChange={(e) => setView((v) => ({ ...v, filter: e.target.value }))} />
+            <button type="button" className="vs-btn vs-inspector-toggle" aria-expanded={inspectorOpen} aria-controls="vs-inspector" onClick={() => setInspectorOpen((o) => !o)}>
+              Inspector
+            </button>
             {view.sort === undefined ? null : (
               <button type="button" className="vs-btn" onClick={() => setView((v) => ({ ...v, sort: undefined }))}>
                 Clear the sort
@@ -329,6 +334,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
           />
         </div>
         <Inspector
+          open={inspectorOpen}
           doc={shown}
           ev={ev}
           sel={here}

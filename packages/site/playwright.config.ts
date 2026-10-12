@@ -6,7 +6,12 @@ export default defineConfig({
   fullyParallel: true,
   reporter: process.env["CI"] === undefined ? "list" : [["list"], ["github"]],
   use: { baseURL: "http://127.0.0.1:4330/vex/" },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // Each test runs in the three engines of the browsers (docs/QUALITY-PLAN.md §4.4).
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+  ],
   webServer: {
     command: "pnpm exec astro preview --port 4330 --host 127.0.0.1",
     url: "http://127.0.0.1:4330/vex/",

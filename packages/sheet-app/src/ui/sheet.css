@@ -388,6 +388,20 @@
   background: transparent;
   font-family: var(--font-mono);
 }
+/* On a narrow screen the inspector shows only when the reader opens it. */
+.vs-inspector-toggle {
+  margin-inline-start: auto;
+}
+@media (max-width: 59.99rem) {
+  .vs-inspector[data-open="false"] {
+    display: none;
+  }
+}
+@media (min-width: 60rem) {
+  .vs-inspector-toggle {
+    display: none;
+  }
+}
 .vs-inspector {
   overflow: auto;
   border-top: 1px solid var(--color-rule);

@@ -64,7 +64,7 @@ jobs:
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
       # The smoke tests: each route renders without a console error, and the main widgets work
-      - run: pnpm --filter @vex/site exec playwright install --with-deps chromium
+      - run: pnpm --filter @vex/site exec playwright install --with-deps chromium firefox webkit
       - run: pnpm --filter @vex/site run test:e2e
         env:
           ASTRO_TELEMETRY_DISABLED: "1"

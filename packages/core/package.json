@@ -58,7 +58,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "vitest bench --run -c vitest.bench.config.ts --reporter=verbose",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "bench:gate": "node bench/gate.ts"
   },
   "devDependencies": {
     "@mark1russell7/cue": "github:mark1russell7/cue",

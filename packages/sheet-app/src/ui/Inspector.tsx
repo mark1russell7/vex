@@ -11,6 +11,8 @@ import type { CellRef } from "./Grid.tsx";
 
 /** The properties of the inspector. */
 export interface InspectorProps {
+  /** On a narrow screen, the inspector shows only when it is open. */
+  readonly open?: boolean;
   readonly doc: SheetDoc;
   readonly ev: Evaluation;
   readonly sel: CellRef;
@@ -90,7 +92,7 @@ export function Inspector(props: InspectorProps): ReactElement {
   const r = ev.cell(sel.row, sel.col);
   const trace = r?.ok === false || col?.kind === "formula" ? ev.explain(sel.row, sel.col) : undefined;
   return (
-    <aside className="vs-inspector" aria-label="The inspector">
+    <aside id="vs-inspector" className="vs-inspector" data-open={props.open === true} aria-label="The inspector">
       <section className="vs-panel" aria-label="The cell">
         <h2>
           {col?.name ?? "Cell"} <span className="vs-muted">· row {props.rowNumber}</span>

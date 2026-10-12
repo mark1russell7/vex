@@ -117,6 +117,8 @@ export class SheetRun {
   /** This method takes the component of `root` from the stack, and sets the final result of each of its cells. */
   #finish(root: Visit): void {
     const members = this.#stack.splice(this.#stack.indexOf(root));
+    // A component of two or more cells reads its root again, so root.reread alone decides. The length test is a guard.
+    // Stryker disable next-line ConditionalExpression,LogicalOperator: members.length > 1 implies root.reread
     const cyclic = members.length > 1 || root.reread;
     for (const m of members) {
       // Stryker disable next-line CallExpression: a finished cell is in #done, and cell() reads #done first

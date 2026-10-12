@@ -1,5 +1,6 @@
-// This script reads the report of Stryker and gives the mutation score of each package. Stryker has one
-// threshold for all files, so this script makes the threshold of 95 % apply to each package (docs/QUALITY-PLAN.md).
+// This script reads the report of Stryker and gives the mutation score of each package. Stryker has one threshold
+// for all files, so its own break is off, and this script applies the threshold of 95 % to each package
+// (docs/QUALITY-PLAN.md). A run that mutates only some packages (with --mutate) gets the gate for those packages.
 // The score counts the killed and the timed-out mutants, out of the mutants that a test covers or that survive.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -9,9 +10,8 @@ import { fileURLToPath } from "node:url";
 /** @typedef {{ detected: number, valid: number, survived: string[] }} Total */
 
 const BREAK = 95;
-// The packages with the gate. The lane also mutates the domains and the test kit, and prints their scores. They get
-// the gate after a full run gives their scores and the work handles their survivors (docs/QUALITY-PLAN.md §6).
-const GATED = new Set(["core"]);
+// The packages with the gate: the three published packages.
+const GATED = new Set(["core", "domains", "testkit"]);
 const report = /** @type {Report} */ (JSON.parse(readFileSync(fileURLToPath(new URL("../../reports/mutation/mutation.json", import.meta.url)), "utf8")));
 /** @type {Map<string, Total>} */
 const totals = new Map();
@@ -30,9 +30,12 @@ for (const [pkg, t] of totals) {
   const score = t.valid === 0 ? 100 : (100 * t.detected) / t.valid;
   const gated = GATED.has(pkg);
   console.info(`${pkg}: ${score.toFixed(2)} % (${t.detected} of ${t.valid}, ${t.survived.length} survived)${gated ? "" : ", no gate"}`);
-  if (gated && score < BREAK) failed = true;
+  if (gated && score < BREAK) {
+    failed = true;
+    for (const s of t.survived) console.info(`  survived: ${s}`);
+  }
 }
 if (failed) {
-  console.error(`A package with the gate is under ${BREAK} %.`);
+  console.error(`A package is under ${BREAK} %.`);
   process.exitCode = 1;
 }

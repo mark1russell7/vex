@@ -36,9 +36,14 @@ function lawProperty<Ts extends [unknown, ...unknown[]]>(name: string, property:
   return {
     name,
     check: (numRuns: number): LawResult => {
-      // fast-check gives a report message only for a failed run.
-      const message = fc.defaultReportMessage(fc.check(property, { numRuns }));
-      return message === undefined ? { name, ok: true } : { name, ok: false, message };
+      // fast-check gives a report message only for a failed run. The report does not give the error that the
+      // property threw, so the message adds it: for example the name of an op that the values do not have.
+      const details = fc.check(property, { numRuns });
+      const message = fc.defaultReportMessage(details);
+      if (message === undefined) return { name, ok: true };
+      // A failed run has an error. A property can also throw a value that is not an Error, for example a text.
+      const cause = details.errorInstance instanceof Error ? details.errorInstance.message : String(details.errorInstance);
+      return { name, ok: false, message: `${message}\nCause: ${cause}` };
     },
   };
 }

@@ -26,13 +26,15 @@ interface Ctx {
 const safeIs = (d: AnyDomain, x: unknown): boolean => {
   try {
     return d.is(x);
+    // Stryker disable next-line BlockStatement: an empty catch gives undefined, which also counts as false
   } catch {
     return false;
   }
 };
 
 function method(self: unknown, name: string): ((...a: unknown[]) => unknown) | undefined {
-  if (BAD_NAMES.has(name) || self === null || (typeof self !== "object" && typeof self !== "function")) return undefined;
+  // The loop stops at null, so a null receiver gives undefined too.
+  if (BAD_NAMES.has(name) || (typeof self !== "object" && typeof self !== "function")) return undefined;
   for (let o: object | null = self; o !== null && o !== Object.prototype && o !== Function.prototype; o = Object.getPrototypeOf(o) as object | null) {
     const d = Object.getOwnPropertyDescriptor(o, name);
     if (d !== undefined) return typeof d.value === "function" ? (d.value as (...a: unknown[]) => unknown) : undefined;
@@ -57,7 +59,9 @@ function checkOut(x: unknown, domains: readonly AnyDomain[]): RefOutcome {
 function all(xs: readonly Expr[], c: Ctx): RefOutcome {
   const rs = xs.map((x) => run(x, c));
   const bad = rs.filter((r): r is { ok: false; code: ErrorCode } => !r.ok);
+  // Stryker disable next-line ConditionalExpression: with one error, bad[0] is defined
   if (bad.length === 1 && bad[0] !== undefined) return bad[0];
+  // Stryker disable next-line EqualityOperator: one error returns on the line before
   if (bad.length > 1) return err("#ARGS");
   return val(rs.map((r) => (r.ok ? r.value : undefined)));
 }
@@ -97,7 +101,8 @@ function run(e: Expr, c: Ctx): RefOutcome {
       let x: unknown = c.space.get(at.value);
       if (x === undefined || x === null) return err("#N/A");
       for (const seg of e.path) {
-        if (seg === "" || BAD_NAMES.has(seg) || x === null || (typeof x !== "object" && typeof x !== "function")) return err("#N/A");
+        // x is not undefined and not null here: the checks before the loop and after each step give #N/A for them.
+        if (seg === "" || BAD_NAMES.has(seg) || (typeof x !== "object" && typeof x !== "function")) return err("#N/A");
         try {
           x = (x as Record<string, unknown>)[seg];
         } catch {
@@ -170,8 +175,10 @@ function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[],
   const strict = typeof o === "object" && o !== null && (o as { strict?: unknown }).strict === true;
   const firstBad = items.find((it) => !it.result.ok);
   // An item that is not ok has an error, so the fallback code is defensive.
+  // Stryker disable StringLiteral,OptionalChaining: the fallback is defensive
   /* v8 ignore next -- @preserve */
   if (strict && firstBad !== undefined) return err(firstBad.result.error?.code ?? "#CALC!");
+  // Stryker restore StringLiteral,OptionalChaining
   const vs = items.filter((it) => it.result.ok).map((it) => it.result.value);
   const nums: readonly number[] | undefined = vs.every((x): x is number => typeof x === "number") ? vs : undefined;
   const bools: readonly boolean[] | undefined = vs.every((x): x is boolean => typeof x === "boolean") ? vs : undefined;
@@ -187,8 +194,10 @@ function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[],
     case "first":
       return vs.length > 0 ? val(vs[0]) : err("#N/A");
     case "sum":
+      // Stryker disable next-line ArrayDeclaration: a sum needs no domain, and a list with a text accepts no value either
       return nums ? checkOut(nums.reduce((s, x) => s + x, 0), []) : err("#VALUE!");
     case "mean":
+      // Stryker disable next-line ArrayDeclaration: a mean needs no domain, and a list with a text accepts no value either
       return !nums ? err("#VALUE!") : nums.length === 0 ? err("#N/A") : checkOut(nums.reduce((s, x) => s + x, 0) / nums.length, []);
     case "min":
     case "max":
@@ -219,9 +228,11 @@ function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[],
       return val(acc);
     }
     // app() calls listOp only with a name of LIST_OPS, so this case is defensive.
+    // Stryker disable ConditionalExpression,StringLiteral: app() calls listOp only with a name of LIST_OPS
     /* v8 ignore next 2 -- @preserve */
     default:
       return err("#NAME?");
+    // Stryker restore ConditionalExpression,StringLiteral
   }
 }
 
@@ -295,6 +306,7 @@ export function referenceEvaluate(
 ): RefOutcome {
   if (!opts.space.has(opts.origin)) return err("#REF!");
   try {
+    // Stryker disable next-line ArrayDeclaration: a list with a text accepts no value, like the empty list
     return run(e, { space: opts.space, origin: opts.origin, focus: opts.origin, env: new Map(), domains: opts.domains ?? [], fns: opts.fns ?? {} });
   } catch {
     return err("#CALC!");

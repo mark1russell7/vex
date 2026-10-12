@@ -3,7 +3,8 @@ import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-doma
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { arbSpace } from "./arbitraries.ts";
-import { arbChain, chainText, modelChain, runChain, type BuilderChain, type DynRoot, type ModelOptions } from "./builder-model.ts";
+import { arbChain } from "./builder-model-arbitraries.ts";
+import { chainText, modelChain, runChain, type BuilderChain, type DynRoot, type ModelOptions } from "./builder-model.ts";
 import { fromCore, fromReference } from "./compare.ts";
 import { referenceEvaluate } from "./reference.ts";
 

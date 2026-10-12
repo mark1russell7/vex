@@ -51,3 +51,4 @@ Each defect of the audits ([`docs/archive/2026-07/BUGS.md`](../docs/archive/2026
 | V-045 | test | A literal record with the key `$vex` came back from JSON as a domain value. The escape form keeps it data. |
 | V-046 | test | A literal `-0` came back from JSON as `0`. The number form keeps it. |
 | V-047 | test | The types of a lifted number parameter accepted only a number literal. After the fix, a number field, an argument or a chain of a number type-checks too. |
+| V-048 | test | A first read of a cell at the end of a long recurrence went deep into the call stack. The overflow became an error value, and `IFERROR` gave its fallback: a wrong number without an error. `SheetRun.cell` evaluates the column in key order. |

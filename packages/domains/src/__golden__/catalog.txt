@@ -83,6 +83,8 @@ Color (fromScalar rgba(2, 2, 2, 1), valid yes, encode yes, methods -)
   clamp(number, number) | no lift | no laws | no identity | method
   mix(domain, number) | no lift | no laws | no identity | method
   luminance(?) | no lift | no laws | no identity | method
+  relativeLuminance(?) | no lift | no laws | no identity | method
+  contrast(domain) | no lift | laws [commutative] | no identity | method
   equals(domain) | no lift | laws [commutative] | no identity | method
 
 Angle (fromScalar 2 rad, valid yes, encode yes, methods -)

@@ -72,8 +72,8 @@ describe("sheets (SHEET.*)", () => {
     expect(value(s.result("4999", "total"))).toBe((5000 * 5001) / 2);
   });
 
-  it("SHEET.RECURRENCE V-NEXT-sheet-deep: a first read at the last key of a deep recurrence through two columns gives the result of a loop", () => {
-    // V-NEXT-sheet-deep: SheetRun.cell did not warm the column, so a first read at the last key went 2 levels deep
+  it("SHEET.RECURRENCE V-048: a first read at the last key of a deep recurrence through two columns gives the result of a loop", () => {
+    // V-048: SheetRun.cell did not warm the column, so a first read at the last key went 2 levels deep
     // for each key. The call stack overflowed, the overflow became an error value, and ifError gave the fallback:
     // a wrong number without an error. The loan pilot found it.
     const rows = space.array(Array.from({ length: 3000 }, () => ({ v: 1 })));

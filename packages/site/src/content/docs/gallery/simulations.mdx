@@ -1,0 +1,88 @@
+---
+title: Simulations and geometry
+description: Four use cases as Vex programs. Heat spreads on a grid, birds steer in a flock, a polygon gets its area, and a palette gets its contrast ratios.
+---
+
+Each program on this page is a pilot of the package `@vex/pilots`. The tests of a pilot compare the Vex program with a plain TypeScript version on random inputs. The code blocks on this page are tests too.
+
+## Heat on a grid
+
+In each step, heat flows between each cell and its four neighbors. The new value of a cell is `t + 0.25 * sum(neighbor - t)`. A cell at an edge has fewer neighbors, so no heat leaves the grid. The total heat stays the same, and no value goes above the largest value.
+
+The axis `neighbors(4)` gives the neighbors that exist. Inside the axis, `n.from("t")` reads the neighbor, and `n.origin().from("t")` reads the cell of the origin.
+
+```ts doctest
+const grid = vex(NumDomain).over(space.grid([[{ t: 0 }, { t: 0 }, { t: 0 }], [{ t: 0 }, { t: 100 }, { t: 0 }], [{ t: 0 }, { t: 0 }, { t: 0 }]]));
+const flow = grid.start(0).neighbors(4, (n) => n.from("t")._.subtract(n.origin().from("t"))).sum();
+const step = grid.from("t")._.add(flow._.multiply(0.25));
+
+step.at("1,1"); // => some(0)
+step.at("0,1"); // => some(25)
+step.at("0,0"); // => some(0)
+```
+
+The host compiles the step once with `compile`. Then it runs the step at each cell of each new grid.
+
+## A flock of birds
+
+Each bird looks at the other birds in a radius. Alignment steers the bird to the mean velocity of the birds that it sees. A list of vectors has no `mean()`, so the mean is the sum divided by the count. A bird that sees no other bird divides by 0, and `ifError` gives it the zero vector.
+
+```ts doctest
+const flock = vex(Vec2Domain, NumDomain, BoolDomain).over(
+  space.record({
+    A: { position: new Vec2(0, 0), velocity: new Vec2(1, 0) },
+    B: { position: new Vec2(2, 0), velocity: new Vec2(0, 1) },
+    C: { position: new Vec2(100, 100), velocity: new Vec2(0, 0) },
+  }),
+);
+const seen = flock.start(0).others((e) => e.from("velocity"), { where: (e) => e.from("position")._.distance(e.origin().from("position"))._.lt(5) });
+const align = seen.reduce("add")._.divide(seen.count())._.subtract("velocity").ifError(Vec2.zero);
+
+align.at("A"); // => some(new Vec2(-1, 1))
+align.at("C"); // => some(Vec2.zero)
+```
+
+The pilot adds separation and cohesion with the same pattern. Separation sums the vectors away from the birds that are too close. Cohesion steers to the mean position.
+
+## The area of a polygon
+
+The shoelace formula sums the cross product of each vertex and the next vertex. The vertices are an array space, so `offset(1)` goes to the next vertex. The last vertex has no next vertex, and `ifError` goes back to the first vertex with `index(0)`.
+
+```ts doctest
+const triangle = vex(Vec2Domain, NumDomain).over(space.array([{ p: new Vec2(0, 0) }, { p: new Vec2(4, 0) }, { p: new Vec2(0, 3) }]));
+const area = triangle
+  .start(0)
+  .each((v) => v.from("p")._.cross(v.offset(1).from("p").ifError(v.index(0).from("p"))))
+  .sum()
+  ._.multiply(0.5);
+const perimeter = triangle
+  .start(0)
+  .each((v) => v.from("p")._.distance(v.offset(1).from("p").ifError(v.index(0).from("p"))))
+  .sum();
+
+area.at("0"); // => some(6)
+perimeter.at("0"); // => some(12)
+```
+
+The area has a sign. Clockwise vertices give a negative area. The tests of the pilot check that the area stays the same when the first vertex changes. They also check that the sign changes when the order of the vertices reverses.
+
+## The contrast of a palette
+
+WCAG 2.1 gives a contrast ratio for two colors, from 1 to 21. Normal text passes the level AA at 4.5 or more. The ops `relativeLuminance` and `contrast` of `ColorDomain` follow WCAG 2.1. The reduction `keys()` gives the names of the colors that pass with each color.
+
+```ts doctest
+const palette = vex(ColorDomain, NumDomain, BoolDomain).over(
+  space.record({
+    white: { color: new Color(255, 255, 255) },
+    gray: { color: new Color(0x76, 0x76, 0x76) },
+    light: { color: new Color(0x77, 0x77, 0x77) },
+    black: { color: new Color(0, 0, 0) },
+  }),
+);
+const passing = palette.start(0).others((e) => e, { where: (e) => e.from("color")._.contrast(e.origin().from("color"))._.gte(4.5) }).keys();
+
+passing.at("white"); // => some(["gray", "black"])
+palette.from("color")._.relativeLuminance().at("white"); // => some(1)
+```
+
+The gray `#767676` passes on white with 4.54:1. The gray `#777777` fails with 4.48:1.

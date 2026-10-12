@@ -44,6 +44,9 @@ class Thing {
   explode(): never {
     throw new Error("explode");
   }
+  nul(): null {
+    return null;
+  }
 }
 
 const AllMethods = defineDomain({ name: "Thing", is: (u: unknown): u is Thing => u instanceof Thing, ops: {}, methods: "all" });
@@ -63,6 +66,23 @@ const Fussy = defineDomain({
   },
   ops: { add: {} },
 });
+// Methods-all domains of primitives and of functions: a primitive has no methods, and a function stops at
+// Function.prototype, so the inherited members are not ops.
+const AllNumbers = defineDomain({ name: "AllNumbers", is: (u: unknown): u is number => typeof u === "number", ops: {}, methods: "all" });
+const AllFns = defineDomain({ name: "AllFns", is: (u: unknown): u is () => number => typeof u === "function", ops: {}, methods: "all" });
+// Two domains with the op "join": the first has no identity, the second has one. A reduce of nothing takes the second.
+const JoinNoId = defineDomain({ name: "JoinNoId", is: (u: unknown): u is string => typeof u === "string", ops: { join: { fn: (a: string, b: string): string => a + b } } });
+const JoinId = defineDomain({ name: "JoinId", is: (u: unknown): u is number => typeof u === "number", ops: { join: { fn: (a: number, b: number): number => a + b, identity: (): number => 0 } } });
+// A domain with a fn op, for values that it does not accept: the op does not apply.
+const Strings = defineDomain({ name: "Strings", is: (u: unknown): u is string => typeof u === "string", ops: { double: { fn: (a: string): string => a + a } } });
+// Lifting: a list of flags lifts only the marked arguments, false lifts none, and a domain without fromScalar lifts none.
+const lift = (liftScalar: boolean | readonly boolean[], from: boolean): AnyDomain =>
+  defineDomain({
+    name: "Lift",
+    is: (u: unknown): u is Vec2 => u instanceof Vec2,
+    ...(from ? { fromScalar: (n: number): Vec2 => Vec2.scalar(n) } : {}),
+    ops: { mix: { fn: (a: Vec2, b: unknown, c: unknown): unknown => (b instanceof Vec2 ? a.add(b) : c instanceof Vec2 ? c : 0), liftScalar, params: ["any", "any"] } },
+  });
 const Nan = defineDomain({ name: "Nan", is: (u: unknown): u is number => typeof u === "number", ops: { nan: { fn: (): number => Number.NaN } } });
 const Throws = defineDomain({
   name: "Throws",
@@ -79,7 +99,7 @@ const throwing = {
 };
 
 const s = space.record({
-  A: { p: new Vec2(1, 2), q: new Vec2(3, 4), n: 2, b: true, name: "a", deep: { x: 1 }, bad: throwing, t: new Thing(3) },
+  A: { p: new Vec2(1, 2), q: new Vec2(3, 4), n: 2, b: true, name: "a", deep: { x: 1 }, bad: throwing, t: new Thing(3), f: (): number => 1, z: null },
   B: { p: new Vec2(5, 6), q: new Vec2(0, 0), n: 3, b: false, name: "b", deep: { x: null }, t: new Thing(4) },
   C: { p: new Vec2(7, 8), n: 5, b: true, name: "c", deep: 7 },
   N: null,
@@ -112,6 +132,11 @@ const CASES: readonly Case[] = [
   { name: "a path through a number", expr: ref("deep.x"), origin: "C" },
   { name: "a prototype name in a path", expr: ref("deep.__proto__") },
   { name: "a getter that throws", expr: ref("bad.boom") },
+  { name: "an empty segment in a path", expr: ref(["deep", ""]) },
+  { name: "the constructor of a value in a path", expr: ref("t.constructor") },
+  { name: "the prototype of a function in a path", expr: ref("f.prototype") },
+  { name: "a null field", expr: ref("z") },
+  { name: "a path through a number at the end", expr: ref("n.x") },
   { name: "a key move", expr: ref("p", [key("B")]) },
   { name: "an unknown key", expr: ref("p", [key("Z")]) },
   { name: "other outside a pair", expr: ref("p", [other]) },
@@ -140,6 +165,8 @@ const CASES: readonly Case[] = [
   { name: "and without arguments", expr: app("and") },
   { name: "and that stops", expr: app("and", lit(false), ref("mass")) },
   { name: "and of true values", expr: app("and", lit(true), lit(true)) },
+  { name: "and with a false second value", expr: app("and", lit(true), lit(false), ref("mass")) },
+  { name: "or with a true second value", expr: app("or", lit(false), lit(true), ref("mass")) },
   { name: "or that stops", expr: app("or", lit(true), ref("mass")) },
   { name: "or of false values", expr: app("or", lit(false), lit(false)) },
   { name: "or with a number", expr: app("or", lit(false), ref("n")) },
@@ -179,6 +206,10 @@ const CASES: readonly Case[] = [
   { name: "none", expr: app("none", bs) },
   { name: "any of numbers", expr: app("any", ns) },
   { name: "a strict sum with an error item", expr: app("sum", ns, lit({ strict: true })) },
+  { name: "a sum with strict false and an error item", expr: app("sum", ns, lit({ strict: false })) },
+  { name: "a sum with a null option and an error item", expr: app("sum", ns, lit(null)) },
+  { name: "a sum with a text option and an error item", expr: app("sum", ns, lit("strict")) },
+  { name: "reduce with strict in the second option", expr: app("reduce", ns, lit("add"), lit({ strict: true })) },
   { name: "a strict sum without an error item", expr: app("sum", each(axes.where(axes.all, ref("b")), ref("n")), lit({ strict: true })) },
   { name: "reduce with add", expr: app("reduce", ps, lit("add")) },
   { name: "reduce with a number as the op", expr: app("reduce", ps, lit(1)) },
@@ -187,6 +218,9 @@ const CASES: readonly Case[] = [
   { name: "reduce with an op that the values do not have", expr: app("reduce", each(axes.where(axes.all, lit(true)), ref("name")), lit("add")) },
   { name: "reduce with a strict option", expr: app("reduce", ps, lit("add"), lit({ strict: true })) },
   { name: "a list op that is not a list op", expr: app("shuffle", ns) },
+  { name: "reduce of nothing takes the identity of the domain that has one", expr: app("reduce", nothing, lit("join")), domains: [JoinNoId, JoinId] },
+  { name: "reduce of nothing with an op that only a later domain has", expr: app("reduce", nothing, lit("join")), domains: [NumDomain, JoinId] },
+  { name: "reduce with an op of another domain than the value", expr: app("reduce", ns, lit("double")), domains: [Strings, NumDomain] },
   // Op calls
   { name: "an op of a domain", expr: app("add", ref("p"), ref("q")) },
   { name: "a lifted number", expr: app("add", ref("p"), lit(1)) },
@@ -208,6 +242,21 @@ const CASES: readonly Case[] = [
   { name: "a domain whose is test throws", expr: app("add", ref("p"), ref("q")), domains: [Throws, Vec2Domain] },
   { name: "an argument that no domain accepts", expr: app("add", lit(new Vec2(1, 1)), lit(throwing)) },
   { name: "a method that throws", expr: app("explode", ref("t")), domains: [AllMethods] },
+  { name: "a method that gives null", expr: app("nul", ref("t")), domains: [AllMethods] },
+  { name: "the name constructor in a methods-all domain", expr: app("constructor", ref("t")), domains: [AllMethods] },
+  { name: "the name prototype in a methods-all domain", expr: app("prototype", ref("t")), domains: [AllMethods] },
+  { name: "the name __proto__ in a methods-all domain", expr: app("__proto__", ref("t")), domains: [AllMethods] },
+  { name: "a member of Object.prototype in a methods-all domain", expr: app("hasOwnProperty", ref("t"), lit("n")), domains: [AllMethods] },
+  { name: "a data field as a method name", expr: app("n", ref("t")), domains: [AllMethods] },
+  { name: "a method of a primitive in a methods-all domain", expr: app("toFixed", ref("n")), domains: [AllNumbers] },
+  { name: "a member of Function.prototype in a methods-all domain", expr: app("call", ref("f")), domains: [AllFns] },
+  { name: "a fn op of a domain that does not accept the value", expr: app("double", ref("n")), domains: [Strings] },
+  { name: "a constructor name as an op of a domain", expr: app("constructor", ref("name")), domains: [Strings] },
+  { name: "a lift of the marked argument only", expr: app("mix", ref("p"), lit(1), lit(2)), domains: [lift([true, false], true)] },
+  { name: "a lift of no argument with false", expr: app("mix", ref("p"), lit(1), lit(2)), domains: [lift(false, true)] },
+  { name: "a lift without fromScalar", expr: app("mix", ref("p"), lit(1), lit(2)), domains: [lift(true, false)] },
+  { name: "a lift of each argument with true", expr: app("mix", ref("p"), lit(1), lit(2)), domains: [lift(true, true)] },
+  { name: "a lift with a list that marks the second argument", expr: app("mix", ref("p"), lit(1), lit(2)), domains: [lift([false, true], true)] },
   { name: "reduce with a method of a methods-all domain", expr: app("reduce", each(axes.all, ref("t")), lit("twice")), domains: [AllMethods] },
   { name: "reduce with a name that is not a method", expr: app("reduce", each(axes.all, ref("t")), lit("nope")), domains: [AllMethods] },
   { name: "reduce with a method that throws", expr: app("reduce", each(axes.all, ref("t")), lit("explode")), domains: [AllMethods] },

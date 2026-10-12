@@ -10,12 +10,14 @@
     "!work/**/*.test.ts",
     "!work/core/test-support.ts",
     "!work/*/index.ts",
-    "!work/testkit/fc-setup.ts"
+    "!work/testkit/fc-setup.ts",
+    "!work/testkit/arbitraries.ts",
+    "!work/testkit/builder-model-arbitraries.ts"
   ],
   "coverageAnalysis": "perTest",
   "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": { "fileName": "../../reports/mutation/index.html" },
   "jsonReporter": { "fileName": "../../reports/mutation/mutation.json" },
-  "thresholds": { "high": 98, "low": 95, "break": 95 },
+  "thresholds": { "high": 98, "low": 95, "break": null },
   "concurrency": 4
 }

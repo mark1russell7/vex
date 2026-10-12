@@ -54,7 +54,9 @@ An expression is plain JSON data. It has one of these kinds.
 | `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address |
 | `ext` | `kind`, `data` | the value of an extension handler |
 
-- **[IR.JSON]** An expression whose literals are JSON data gives the same expression after `serialize` and `parse`. A literal that is a domain value needs `encode` and `decode` in its domain.
+- **[IR.JSON]** An expression gives the same expression after `serialize` and `parse`, if each literal is JSON data or a value of a domain. A domain value needs `encode` and `decode` in its domain. A domain value can be in a list or a record of a literal.
+- **[IR.JSON.NUMBER]** A literal number that JSON has no text for (`-0`, `NaN`, `Infinity` or `-Infinity`) gets the form `{ "$vex": "number", "value": text }`.
+- **[IR.JSON.ESCAPE]** A record of a literal with the key `$vex` gets the form `{ "$vex": "escape", "value": record }`. Thus `parse` does not read data as a domain value. A record with another form of `$vex` stays data.
 
 ## 5. Evaluation
 

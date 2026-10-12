@@ -341,12 +341,29 @@ describe("folds: explain, deps, JSON", () => {
     expect(back.tag === "lit" && back.value instanceof Tagged ? back.value.x : null).toBe(3);
   });
 
-  // An open defect, recorded in docs/QUALITY-PLAN.md §6: the fix needs a decision on the JSON format. The test
-  // fails at this time, so it.fails passes. After the fix, change it.fails to it.
-  it.fails("IR.JSON: a JSON literal with the key $vex round-trips as JSON data, not as a domain value", () => {
+  it("IR.JSON.ESCAPE V-045: a JSON literal with the key $vex round-trips as JSON data, not as a domain value", () => {
     const plain = lit({ $vex: "domain", domain: "Pt", value: [1, 2] });
     const back = value(parse(value(serialize(plain, [PtDomain])), [PtDomain]));
     expect(back).toEqual(plain);
+    // The escape works at each depth, and a domain value in a record or a list keeps its domain.
+    const deep = lit([{ a: { $vex: "number", value: "-0" } }, { b: new Pt(1, 2), $vex: "escape" }]);
+    const text = value(serialize(deep, [PtDomain]));
+    expect(text).toContain('"$vex":"escape"');
+    expect(value(parse(text, [PtDomain]))).toEqual(deep);
+    // A record with an unknown form of $vex stays data, so a file of an older version reads as before.
+    expect(value(parse('{"tag":"lit","value":{"$vex":"later","x":1}}'))).toEqual(lit({ $vex: "later", x: 1 }));
+  });
+
+  it("IR.JSON.NUMBER V-046: -0, NaN and the infinities round-trip, in a literal and in a list", () => {
+    // V-046: JSON.stringify writes -0 as 0, so a literal -0 came back as 0. Property P13 found it.
+    for (const n of [-0, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const back = value(parse(value(serialize(lit(n)))));
+      expect(back.tag === "lit" && Object.is(back.value, n)).toBe(true);
+    }
+    const list = value(parse(value(serialize(lit([0, -0, 1])))));
+    expect(list.tag === "lit" && Array.isArray(list.value) && list.value.map((x) => Object.is(x, -0))).toEqual([false, true, false]);
+    // Only the value of a literal gets the form. A number in an argument of an op is in a literal too.
+    expect(value(serialize(app("add", lit(-0), ref("x"))))).toBe('{"tag":"app","op":"add","args":[{"tag":"lit","value":{"$vex":"number","value":"-0"}},{"tag":"ref","path":["x"]}]}');
   });
 
   it("IR.JSON: a literal without a JSON form, and a domain literal without a decoder, give #VALUE!", () => {

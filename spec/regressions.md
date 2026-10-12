@@ -48,3 +48,5 @@ Each defect of the audits ([`docs/archive/2026-07/BUGS.md`](../docs/archive/2026
 | V-042 | test | The others axis evaluates the base at the origin and the body at each target |
 | V-043 | test | The moves before an axis are its address. Before the fix, `parent().children()` gave the children of the origin. |
 | V-044 | test | A domain value with `toJSON` round-trips through `serialize` and `parse`. Before the fix, `serialize` wrote the `toJSON` form, and `parse` gave a plain object. |
+| V-045 | test | A literal record with the key `$vex` came back from JSON as a domain value. The escape form keeps it data. |
+| V-046 | test | A literal `-0` came back from JSON as `0`. The number form keeps it. |

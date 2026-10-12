@@ -197,7 +197,7 @@ test("pointing at a box of the hero shows the list that the program gives at tha
 test("the showcase links to each interactive page", async ({ page, request }) => {
   await page.goto("./");
   const links = page.locator(".vx-showcase a");
-  await expect(links).toHaveCount(6);
+  await expect(links).toHaveCount(8);
   for (const href of await links.evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href))) {
     expect((await request.get(href)).status(), href).toBe(200);
   }

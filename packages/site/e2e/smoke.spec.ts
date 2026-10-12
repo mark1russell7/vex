@@ -219,3 +219,23 @@ test("the Lab survives an unfinished chain, and marks the position of the error"
   await expect(page.locator(".vx-lab-shadow .vx-syn-root")).toHaveText("root");
   expect(errors).toEqual([]);
 });
+
+test("the layout audit finds the three findings of Jqy, and a move of a box changes the findings", async ({ page }) => {
+  await page.goto("./gallery/audit/");
+  const audit = page.getByRole("region", { name: "The layout audit" });
+  await hydrated(audit);
+  await expect(audit.getByRole("status")).toHaveText("3 findings");
+  const checks = audit.getByRole("table", { name: "The checks at the selected box" });
+  await expect(checks.getByRole("row", { name: /Outside the parent/ })).toContainText("fails");
+  // Each child of api goes to its ring, but the ring is too small for the children, so the findings stay.
+  await audit.getByRole("button", { name: "Place on the rings" }).click();
+  await expect(audit.getByRole("status")).toHaveText("3 findings");
+  // Move "web" 60 px down: it leaves its parent and its ring.
+  const web = audit.getByRole("button", { name: /^web/ });
+  await web.focus();
+  for (let i = 0; i < 6; i++) await web.press("Shift+ArrowDown");
+  await expect(audit.getByRole("status")).toHaveText("5 findings");
+  await expect(checks.getByRole("row", { name: /Off the ring/ })).toContainText("fails");
+  await audit.getByRole("button", { name: "Reset" }).click();
+  await expect(audit.getByRole("status")).toHaveText("3 findings");
+});

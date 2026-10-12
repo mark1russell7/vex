@@ -66,7 +66,7 @@ export default defineConfig({
         { label: "Spec", items: ["spec", "spec/regressions"] },
         { label: "Why none?", items: [{ autogenerate: { directory: "errors" } }] },
         { label: "Reference", items: ["reference/api", "reference/domains", "reference/ir"] },
-        { label: "Gallery", items: ["gallery/layout", "gallery/grid", "gallery/life", "gallery/laws"] },
+        { label: "Gallery", items: ["gallery/layout", "gallery/audit", "gallery/grid", "gallery/life", "gallery/laws"] },
         { label: "Ideas", items: ["ideas/comonad", "ideas/lineage", "about"] },
       ],
     }),

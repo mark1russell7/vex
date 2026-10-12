@@ -527,3 +527,17 @@ header.header {
   font-variant-ligatures: none;
   letter-spacing: normal;
 }
+
+/* The panel of the layout audit: the checks, and the formula of one check. */
+.vx-audit-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4, 1rem);
+  border-top: 1px solid var(--color-rule);
+}
+@media (min-width: 48rem) {
+  .vx-audit-panel {
+    grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}

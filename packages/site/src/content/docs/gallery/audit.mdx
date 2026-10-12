@@ -1,0 +1,25 @@
+---
+title: Layout audits
+description: The checks of the Jqy layout engine as Vex formulas over a tree space. Drag a box, and each check evaluates again at each box.
+tableOfContents: false
+---
+
+import AuditLab from "../../../components/AuditLab.tsx";
+
+[Jqy](https://github.com/mark1russell7/Jqy) is a layout engine for nested boxes. A parent box puts its children in a grid or on a ring. After each layout, an audit checks each child against its parent. The child must be square, and it must fit. It must stay inside the inner edge of the parent, and on the ring of a radial parent.
+
+Each check is one Vex formula over a tree space. The move `parent()` reads the parent, and `parent().children(...)` reads each child of the parent. Vex evaluates each formula at each box. A root has no parent, so a check that reads the parent gives `#REF!` at the root, not a false finding.
+
+<AuditLab client:visible />
+
+Drag a box, or select it and use the arrow keys. A box moves with the boxes in it. Select a check in the table to see its formula and its steps.
+
+## What the audit finds
+
+The boxes are the output of Jqy for the spacing 16. The three children of `api` are on their ring, but each one ends 2 px after the inner edge of `api`. The steps of "Off the ring" show the cause. The ring that fits has the radius 4, but the smallest ring of the tuning has the radius 8. Select "Place on the rings": the children stay outside, because the cause is the tuning, not the placement.
+
+## The pilot
+
+The package `@vex/pilots` has these formulas. Its tests compare them with a reference in plain TypeScript on random layouts. The two give the same findings, the same places on the rings and the same overlapping pairs.
+
+This audit also found a defect in Vex. A move before an axis had no effect, so `parent().children(...)` gave the children of the origin. After the fix, the moves before an axis are its address (rule `AXIS.ADDRESS`, regression `V-043`).

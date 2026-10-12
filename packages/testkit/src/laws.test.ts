@@ -1,5 +1,5 @@
 import { defineDomain, type OpTable } from "@mark1russell7/vex";
-import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, NDVector, NDVectorDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
+import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { assertLaws, checkLaws, structuralEqual } from "./laws.ts";
@@ -24,6 +24,7 @@ describe("P4 DOMAIN.LAWS: each declared law of each domain holds", () => {
   it("Num and Bool", () => {
     expect(checkLaws(NumDomain, { arb: small }).filter((r) => !r.ok)).toEqual([]);
     expect(checkLaws(BoolDomain, { arb: fc.boolean() }).filter((r) => !r.ok)).toEqual([]);
+    expect(checkLaws(TextDomain, { arb: fc.string({ maxLength: 6 }) }).filter((r) => !r.ok)).toEqual([]);
   });
 });
 

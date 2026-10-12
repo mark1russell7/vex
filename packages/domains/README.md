@@ -18,6 +18,7 @@ npm install @mark1russell7/vex @mark1russell7/vex-domains
 | `NDVectorDomain` | `NDVector`: a vector with named components | `add`, `subtract`, `scale`, `dot` |
 | `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt` |
 | `BoolDomain` | booleans | `and`, `or`, `xor`, `not` |
+| `TextDomain` | texts | `concat`, `length`, `upper`, `lower`, `trim`, `contains` |
 | `ColorDomain` | `Color`: an RGB color | `mix`, `add`, `multiply`, `luminance` |
 | `AngleDomain` | `Angle`: an angle | `add`, `normalize`, `sin`, `cos`, `degrees` |
 | `FnDomain`, `MaybeDomain` | Two example domains: function wrappers and `Maybe` | `invoke`, `map`, `chain`, `valueOr` |

@@ -53,7 +53,11 @@ export function tokenize(src: string): readonly Token[] {
       continue;
     }
     if (/\d/.test(c) || (c === "." && /\d/.test(src[i + 1] ?? ""))) {
-      while (i < src.length && /[\d.eE_]/.test(src[i] ?? "")) i++;
+      while (i < src.length && /[\d.eE_]/.test(src[i] ?? "")) {
+        // An exponent can have a sign, for example 1e-7.
+        if (/[eE]/.test(src[i] ?? "") && /[+-]/.test(src[i + 1] ?? "")) i++;
+        i++;
+      }
       const v = Number(src.slice(start, i).replaceAll("_", ""));
       if (!Number.isFinite(v)) throw new ChainError(`"${src.slice(start, i)}" is not a number`, { start, end: i });
       out.push({ t: "num", v, span: { start, end: i } });

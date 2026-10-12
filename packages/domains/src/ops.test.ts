@@ -9,6 +9,7 @@ import { Angle, AngleDomain } from "./angle.ts";
 import { Color, ColorDomain } from "./color.ts";
 import { LiftedNDVectorDomain, NDVector, NDVectorDomain, NumRecordDomain } from "./ndvector.ts";
 import { BoolDomain, NumDomain } from "./scalars.ts";
+import { TextDomain } from "./text.ts";
 import { Vec2, Vec2Domain } from "./vec2.ts";
 import { Fn, FnDomain, Maybe, MaybeDomain } from "./wrappers.ts";
 
@@ -179,6 +180,33 @@ describe("the ops of ColorDomain", () => {
     expect(ColorDomain.decode?.([1, 2, 3])).toEqual(new Color(1, 2, 3, 1));
     expect(ColorDomain.valid?.(ColorDomain.decode?.("x") as Color)).toBe(false);
     expect(ColorDomain.fromScalar?.(7)).toEqual(Color.gray(7));
+  });
+});
+
+describe("the ops of TextDomain", () => {
+  const rows: readonly Row[] = [
+    ["concat", ["!"], "Vex!"],
+    ["concat", [2], "Vex2"],
+    ["concat", [true], "Vextrue"],
+    ["concat", [{ a: 1 }], 'Vex{"a":1}'],
+    ["length", [], 3],
+    ["upper", [], "VEX"],
+    ["lower", [], "vex"],
+    ["contains", ["ex"], true],
+    ["eq", ["Vex"], true],
+    ["eq", ["vex"], false],
+  ];
+  it.each(rows)("Text %s %j", (op, args, expected) => {
+    expect(value(run([TextDomain], "Vex", op, ...args))).toEqual(expected);
+  });
+
+  it("concat gives the own text of a domain value, trim removes the spaces at the ends, and length counts UTF-16 units", () => {
+    expect(value(run([TextDomain], "at ", "concat", new Vec2(1, 2)))).toBe("at (1, 2)");
+    expect(value(run([TextDomain], "  a b  ", "trim"))).toBe("a b");
+    expect(value(run([TextDomain], "😀a", "length"))).toBe(3);
+    expect(value(run([TextDomain], "a", "contains", 1))).toMatch(/^#VALUE!/);
+    expect(TextDomain.show?.('say "hi"')).toBe('"say \\"hi\\""');
+    expect(TextDomain.is(1)).toBe(false);
   });
 });
 

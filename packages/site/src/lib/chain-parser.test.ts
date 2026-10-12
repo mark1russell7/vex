@@ -41,6 +41,12 @@ describe("the chain reader of the Lab", () => {
     expect(valueAt(`root.from("position").others(e => e._.distance("position")).min()`, "B")).toBe(5);
   });
 
+  it("reads a number with an exponent and a sign, like TypeScript", () => {
+    expect(valueAt(`root.start(1e-7)`, "A")).toBe(1e-7);
+    expect(valueAt(`root.start(2.5E+3)`, "A")).toBe(2500);
+    expect(valueAt(`root.start(1_000)`, "A")).toBe(1000);
+  });
+
   it("reads const lines, comments, numbers, booleans, objects and arrays", () => {
     const src = `// the far corner
 const corner = root.from("position")._.add("size");

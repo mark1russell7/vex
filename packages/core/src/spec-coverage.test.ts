@@ -1,7 +1,7 @@
 /**
- * The link between the specification and the tests. Each requirement ID of `spec/README.md` must have a test
- * that names it, and each ID that a test names must be in the specification. Each row with the status `test`
- * in `spec/regressions.md` must have a test that names the defect ID.
+ * The link between the specification and the tests. Each requirement ID of `spec/README.md` and of the formula
+ * language (`spec/formula.md`) must have a test that names it. Each ID that a test names must be in one of them.
+ * Each row with the status `test` in `spec/regressions.md` must have a test that names the defect ID.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -26,7 +26,7 @@ function files(dir: string, test: (f: string) => boolean): readonly string[] {
   return out;
 }
 
-const testFiles = ["core", "domains", "testkit", "site"]
+const testFiles = ["core", "domains", "testkit", "site", "formula"]
   .map((p) => join(repo, "packages", p))
   .filter((p) => {
     try {
@@ -43,7 +43,7 @@ const titles: readonly string[] = testFiles.flatMap((f) =>
 );
 
 const REQ = /\b[A-Z][A-Z0-9-]*(?:\.[A-Z0-9][A-Z0-9-]*)+\b/g;
-const specIds = new Set([...read("spec/README.md").matchAll(/\*\*\[([A-Z0-9.-]+)\]\*\*/g)].map((m) => m[1] ?? ""));
+const specIds = new Set(["spec/README.md", "spec/formula.md"].flatMap((p) => [...read(p).matchAll(/\*\*\[([A-Z0-9.-]+)\]\*\*/g)].map((m) => m[1] ?? "")));
 const testedIds = new Set(titles.flatMap((t) => t.match(REQ) ?? []));
 const testedDefects = new Set(titles.flatMap((t) => t.match(/\bV-\d{3}\b/g) ?? []));
 

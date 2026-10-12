@@ -32,7 +32,7 @@ export interface GridProps {
   readonly onEditCancel: () => void;
   readonly onToggle: (row: string) => void;
   readonly onSort: (col: string) => void;
-  readonly onAddColumn: () => void;
+  readonly onAddColumn: (kind: "value" | "formula") => void;
   readonly onKeyDown: (e: KeyboardEvent) => void;
 }
 
@@ -105,9 +105,14 @@ export function Grid(props: GridProps): ReactElement {
             </th>
             {doc.columns.map(header)}
             <th role="columnheader" scope="col" className="vs-addcol-cell">
-              <button type="button" className="vs-addcol" aria-label="Add a column" onClick={props.onAddColumn}>
-                +
-              </button>
+              <span className="vs-addcols">
+                <button type="button" className="vs-addcol" aria-label="Add a value column" title="Add a value column" onClick={() => props.onAddColumn("value")}>
+                  +
+                </button>
+                <button type="button" className="vs-addcol vs-addcol-f" aria-label="Add a formula column" title="Add a formula column" onClick={() => props.onAddColumn("formula")}>
+                  ƒ
+                </button>
+              </span>
             </th>
           </tr>
         </thead>

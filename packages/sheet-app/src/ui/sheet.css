@@ -315,6 +315,15 @@
   border: 1px dashed var(--color-rule-strong);
   border-radius: var(--radius, 6px);
 }
+.vs-addcols {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+.vs-addcol-f {
+  color: var(--color-accent);
+  font-style: italic;
+  font-weight: 700;
+}
 .vs-addcol-cell {
   width: 100%;
   border-right: 0 !important;

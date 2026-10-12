@@ -123,10 +123,15 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     }
     apply((d) => (action === "indent" ? indentRow(d, row) : action === "outdent" ? outdentRow(d, row) : moveRow(d, row, action === "up" ? -1 : 1)));
   };
-  const newColumn = (): void => {
-    const r = addColumn(doc, { name: "Column", kind: "value", type: "number" });
+  const newColumn = (kind: "value" | "formula"): void => {
+    const r = addColumn(doc, kind === "value" ? { name: "Column", kind, type: "number" } : { name: "Formula", kind, formula: "" });
     apply(() => r.doc);
     setSel({ row, col: r.id });
+    // A new formula column opens the formula bar, so the user writes the formula at once.
+    if (kind === "formula") {
+      setDraft({ col: r.id, text: "= " });
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".vs-bar .vs-editor-input")?.focus());
+    }
   };
 
   const onGridKey = (e: KeyboardEvent): void => {

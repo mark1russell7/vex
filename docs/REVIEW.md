@@ -916,7 +916,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 
 **Theory**
 
-- Ahman, Chapman, Uustalu, "When is a container a comonad?", LMCS 10(3:14), 2014: <https://lmcs.episciences.org/894/pdf>
+- Ahman, Chapman, Uustalu, "When is a container a comonad?", LMCS 10(3:14), 2014: <https://lmcs.episciences.org/894>
 - The Store comonad interface: <https://hackage-content.haskell.org/package/comonad-5.0.10/docs/Control-Comonad-Store-Class.html>
 - Piponi, cellular automata as comonads: <http://blog.sigfpe.com/2006/12/evaluating-cellular-automata-is.html>
 - Orchard, Bolingbroke, Mycroft, Ypnos (a comonadic grid language): <https://www.cs.kent.ac.uk/people/staff/dao7/publ/ypnos-damp10.pdf>

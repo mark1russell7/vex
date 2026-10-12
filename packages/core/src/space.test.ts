@@ -70,6 +70,20 @@ describe("moves (NAV.*)", () => {
     expect(error(applyMove(pair, at, offset(1))).kind).toBe("no-offset");
   });
 
+  it("NAV.OFFSET.TREE: in a tree space, an offset moves among the siblings in key order", () => {
+    const t = space.tree({ a: 1, a1: 2, a2: 3, a3: 4, b: 5 }, { a1: "a", a2: "a", a3: "a" });
+    const go = (k: string, d: number): string => {
+      const r = applyMove(t, { origin: k, focus: k }, offset(d));
+      return r.ok ? r.value : r.error.kind ?? r.error.code;
+    };
+    expect([go("a2", -1), go("a2", 1), go("a1", 2)]).toEqual(["a1", "a3", "a3"]);
+    // The roots are siblings. An offset past the first or the last sibling gives #REF!.
+    expect([go("a", 1), go("b", -1)]).toEqual(["b", "a"]);
+    expect([go("a1", -1), go("a3", 1), go("b", 1)]).toEqual(["out-of-bounds", "out-of-bounds", "out-of-bounds"]);
+    // An offset with two numbers is not valid in a tree.
+    expect(error(applyMove(t, { origin: "a", focus: "a" }, offset(1, 1))).kind).toBe("no-offset");
+  });
+
   it("NAV.SEQUENCE: moves apply in order, and a failed move fails the address", () => {
     expect(value(resolveAddr(pair, at, [other, other]))).toBe("A");
     expect(error(resolveAddr(three, at, [other, other])).kind).toBe("not-a-pair");

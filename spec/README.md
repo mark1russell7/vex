@@ -34,6 +34,7 @@ A move changes the key where a reference reads.
 - **[NAV.INDEX]** The move `index(i)` goes to the key at position `i` in the key order. A position outside the keys gives `#REF!`.
 - **[NAV.OTHER.PAIR]** The move `other` goes to the other key of a space with two keys. In a space with a different number of keys, it gives `#REF!`.
 - **[NAV.OFFSET]** The move `offset(d)` adds `d` to the position of the focus: one number in an array space, two numbers in a grid space. A position outside the space, or an offset in a record space, gives `#REF!`.
+- **[NAV.OFFSET.TREE]** In a tree space, the move `offset(d)` with one number goes to the sibling at distance `d` in key order. The roots are the siblings of a root. A position outside the siblings gives `#REF!`.
 - **[NAV.ORIGIN]** The move `origin` goes back to the origin of the evaluation.
 - **[NAV.PARENT]** The move `parent` goes to the parent of the focus in a tree space. A root gives `#REF!`, and a space that is not a tree gives `#REF!`.
 - **[NAV.SEQUENCE]** The moves of an address apply in order. If one move fails, the address fails. Vex does not simplify addresses, because a simplification could hide a failure.

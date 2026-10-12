@@ -1,6 +1,6 @@
 # The Vex sheet app: a proposal
 
-*Written: 2026-10-11. Status: a proposal. §8 lists the decisions of the owner.*
+*Written: 2026-10-11. Status: accepted. §8 gives the decisions of the owner.*
 
 ## 1. The idea
 
@@ -62,7 +62,16 @@ The app is also a use case of [the plan to zero defects](./QUALITY-PLAN.md). Its
 
 ## 8. Decisions of the owner
 
-1. The place: a package in this monorepo at `/vex/app/`, or a new repository.
-2. The formula language: option A, B or C of §6.
-3. The model: a table of records first, or a grid with A1 addresses first.
-4. The scope of the first version: the list of §3, or less.
+The owner made these decisions on 2026-10-11:
+
+1. The place: a package in this monorepo. The site serves the app at `/vex/app/`.
+2. The formula language: option C. A formula language like Excel compiles to the IR, and the app shows each formula as a Vex chain.
+3. The model: a table of records first.
+4. The scope of the first version: the full list of §3.
+
+## 9. Decisions of the design
+
+- A table is a tree space. A row without a parent is a root. A flat table has only roots.
+- `row(-1)` is the move `offset(-1)`. In a tree space it goes to the previous sibling (spec `NAV.OFFSET.TREE`). Thus a running total works in a flat table and in each group.
+- A value column is a field of the records. A formula column is a column of `root.sheet()`, so a cycle gives `#CYCLE!`.
+- The formula language has its own spec, `spec/formula.md`, with requirement IDs and tests.

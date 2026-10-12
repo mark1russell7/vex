@@ -119,6 +119,8 @@ space.grid([[a, b], [c, d]]); // keys "0,0", "0,1", "1,0" and "1,1"
 space.tree({ r: a, x: b, y: c }, { x: "r", y: "r" }); // keys "r", "x" and "y": x and y are the children of r
 ```
 
+In a tree space, `offset(d)` with one number moves among the siblings in key order. For example, `offset(-1)` goes to the previous sibling. The roots are the siblings of a root.
+
 A space copies its input. Nothing changes a space after it is made.
 
 ## Domains

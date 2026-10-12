@@ -225,6 +225,14 @@ export function applyMove(s: Space, at: Position, m: Move): Result<string> {
       return ok(at.focus === a ? (b ?? at.focus) : (a ?? at.focus));
     }
     case "offset": {
+      // In a tree space, an offset with one number moves among the siblings in key order. The roots are siblings.
+      if (s.parentOf !== undefined && s.childrenOf !== undefined && m.d.length === 1) {
+        const p = s.parentOf(at.focus);
+        const group = p === undefined ? s.keys.filter((k) => s.parentOf?.(k) === undefined) : s.childrenOf(p);
+        const i = group.indexOf(at.focus);
+        const k = i < 0 ? undefined : group[i + (m.d[0] ?? 0)];
+        return k === undefined ? refError("out-of-bounds", `the offset [${m.d.join(",")}] from "${at.focus}" is outside its siblings`) : ok(k);
+      }
       const c = s.coords(at.focus);
       if (c === undefined || c.length !== m.d.length) {
         return refError("no-offset", `an offset of length ${m.d.length} is not valid in a ${s.kind} space`);

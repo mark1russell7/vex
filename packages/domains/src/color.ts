@@ -1,5 +1,12 @@
 import { defineDomain, type Domain, type OpTable } from "@mark1russell7/vex";
 
+/** The linear value of an sRGB channel from 0 to 255, with the sRGB transfer function of WCAG 2.1. */
+function linear(channel: number): number {
+  const s = Math.min(1, Math.max(0, channel / 255));
+  // For integer channels, the sRGB threshold 0.04045 and the WCAG threshold 0.03928 give the same result.
+  return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+}
+
 /**
  * An immutable RGBA color. The channels have no fixed range: use `clamp` to limit them. `add` adds the color
  * channels and keeps the larger alpha, so `add` is commutative and associative.
@@ -46,6 +53,19 @@ export class Color {
   luminance(): number {
     return 0.2126 * this.r + 0.7152 * this.g + 0.0722 * this.b;
   }
+  /**
+   * The relative luminance of WCAG 2.1, from 0 (black) to 1 (white). Each channel from 0 to 255 becomes a linear
+   * value with the sRGB transfer function. A channel outside the range counts as the nearest end of the range.
+   */
+  relativeLuminance(): number {
+    return 0.2126 * linear(this.r) + 0.7152 * linear(this.g) + 0.0722 * linear(this.b);
+  }
+  /** The contrast ratio of WCAG 2.1 between this color and `o`: 1 for equal luminance, 21 for black and white. */
+  contrast(o: Color): number {
+    const a = this.relativeLuminance();
+    const b = o.relativeLuminance();
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  }
   equals(o: Color): boolean {
     return this.r === o.r && this.g === o.g && this.b === o.b && this.a === o.a;
   }
@@ -58,7 +78,7 @@ export class Color {
 }
 
 /** The ops of `ColorDomain`. */
-export type ColorOps = OpTable<Color, "add" | "multiply" | "clamp" | "mix" | "luminance" | "equals">;
+export type ColorOps = OpTable<Color, "add" | "multiply" | "clamp" | "mix" | "luminance" | "relativeLuminance" | "contrast" | "equals">;
 
 /** The domain of colors. */
 export const ColorDomain: Domain<"Color", Color, ColorOps> = defineDomain<"Color", Color, ColorOps>({
@@ -78,6 +98,8 @@ export const ColorDomain: Domain<"Color", Color, ColorOps> = defineDomain<"Color
     clamp: { params: ["number", "number"] },
     mix: { params: ["domain", "number"] },
     luminance: {},
+    relativeLuminance: {},
+    contrast: { laws: ["commutative"], params: ["domain"] },
     equals: { laws: ["commutative"], params: ["domain"] },
   },
 });

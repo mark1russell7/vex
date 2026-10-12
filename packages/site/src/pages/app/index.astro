@@ -1,0 +1,52 @@
+---
+/**
+ * The page of the Vex sheet app. The app takes the whole window, so this page does not use the layout of the docs.
+ */
+import "@fontsource-variable/atkinson-hyperlegible-next";
+import "@fontsource-variable/atkinson-hyperlegible-mono";
+import "../../styles/tokens.css";
+import "@vex/sheet-app/src/ui/sheet.css";
+import SheetAppPage from "../../components/SheetAppPage.tsx";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const site = "https://mark1russell7.github.io";
+const title = "Vex Sheet: a spreadsheet with typed formulas";
+const description = "A spreadsheet in the browser on the Vex engine: one formula for each column, typed columns, rows in a tree, and error values that explain themselves.";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={`${site}${base}app/`} />
+    <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={`${site}${base}app/`} />
+    <meta property="og:image" content={`${site}${base}og.png`} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#1f3fbf" />
+    <script is:inline>
+      // The app uses the theme that the reader chose on the docs.
+      try {
+        const t = localStorage.getItem("starlight-theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <style is:global>
+      html, body { margin: 0; background: var(--color-page); }
+      *, *::before, *::after { box-sizing: border-box; }
+    </style>
+  </head>
+  <body>
+    <SheetAppPage client:only="react" docsHref={base} />
+    <noscript>
+      <h1>{title}</h1>
+      <p>{description} The app needs JavaScript. Read about Vex at <a href={base}>the docs</a>.</p>
+    </noscript>
+  </body>
+</html>

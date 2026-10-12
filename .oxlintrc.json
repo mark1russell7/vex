@@ -41,6 +41,15 @@
           "expectTypeOf"
         ]
       }
+    ],
+    "import/no-unassigned-import": [
+      "error",
+      {
+        "allow": [
+          "**/*.css",
+          "@fontsource-variable/*"
+        ]
+      }
     ]
   },
   "ignorePatterns": [

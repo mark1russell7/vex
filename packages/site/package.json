@@ -39,6 +39,7 @@
     "@mark1russell7/vex-domains": "workspace:*",
     "@mark1russell7/vex-testkit": "workspace:*",
     "@vex/pilots": "workspace:*",
+    "@vex/sheet-app": "workspace:*",
     "astro": "^7.3.8",
     "fast-check": "^4.10.2",
     "motion": "^14.0.0",

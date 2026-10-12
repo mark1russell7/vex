@@ -1,0 +1,457 @@
+/*
+ * The styles of the sheet app. They use only the tokens of the family (tokens.css), so the app follows the light and
+ * the dark theme of the site.
+ */
+.vs-app {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm, 0.875rem);
+}
+/* The reset has no specificity, so each class of a control can set its own colors. */
+:where(.vs-app) :where(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+}
+.vs-muted {
+  color: var(--color-ink-muted);
+}
+
+/* ---------------------------------------------------------------- the bar at the top */
+.vs-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 0.5rem) var(--space-4, 1rem);
+  padding: var(--space-2, 0.5rem) var(--space-4, 1rem);
+  border-bottom: 1px solid var(--color-rule);
+  background: var(--color-surface);
+}
+.vs-brand {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+.vs-brand a {
+  color: var(--color-ink);
+  text-decoration: none;
+}
+.vs-brand span {
+  color: var(--color-accent);
+}
+.vs-title {
+  flex: 1 1 10rem;
+  min-width: 0;
+  padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+  border: 1px solid transparent;
+  border-radius: var(--radius, 6px);
+  background: transparent;
+  font-weight: 700;
+}
+.vs-title:hover,
+.vs-title:focus {
+  border-color: var(--color-control-border);
+}
+.vs-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 0.5rem);
+}
+.vs-btn {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.vs-btn:hover:not(:disabled) {
+  background: var(--color-surface-sunken);
+}
+.vs-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.vs-btn-primary,
+.vs-btn[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+.vs-btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+}
+.vs-btn-danger {
+  border-color: var(--color-mark);
+  color: var(--color-mark);
+}
+:is(.vs-btn, .vs-title, .vs-filter, .vs-bar-value, .vs-field input, .vs-field select, .vs-caret, .vs-colname, .vs-sort, .vs-addcol, .vs-chip):focus-visible,
+.vs-grid td:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------- the formula bar */
+.vs-bar {
+  display: grid;
+  grid-template-columns: minmax(6rem, 12rem) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-2, 0.5rem) var(--space-4, 1rem);
+  border-bottom: 1px solid var(--color-rule);
+  background: var(--color-surface);
+}
+.vs-address {
+  padding-top: 0.45rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vs-bar-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2, 0.5rem);
+  align-items: start;
+}
+.vs-bar-value {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface-sunken);
+  font-family: var(--font-mono);
+}
+.vs-formula {
+  min-width: 0;
+}
+.vs-editor-box {
+  display: grid;
+}
+.vs-editor-box > * {
+  grid-area: 1 / 1;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius, 6px);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  font-variant-ligatures: none;
+}
+.vs-editor-shadow {
+  background: var(--color-surface-sunken);
+  pointer-events: none;
+}
+.vs-editor-input {
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--color-ink);
+}
+.vs-editor-input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.vs-syn-name { color: var(--color-accent); font-weight: 600; }
+.vs-syn-function { color: light-dark(#7a2aa8, #d6a8ff); font-weight: 600; }
+.vs-syn-keyword { color: light-dark(#7a2aa8, #d6a8ff); }
+.vs-syn-number { color: light-dark(#9a4500, #ffbb7a); }
+.vs-syn-string { color: light-dark(#17692f, #8fdc9f); }
+.vs-syn-operator { color: var(--color-ink-secondary); }
+.vs-syn-punct { color: var(--color-ink-muted); }
+.vs-syn-error { color: var(--color-mark); }
+.vs-syn-bad {
+  text-decoration: underline wavy var(--color-mark);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+.vs-formula-error {
+  margin: var(--space-1, 0.25rem) 0 0;
+  color: var(--color-mark);
+}
+.vs-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1, 0.25rem);
+  margin-top: var(--space-1, 0.25rem);
+}
+.vs-chip {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: baseline;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--color-rule-strong);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+.vs-chip-hint {
+  color: var(--color-ink-muted);
+  font-size: 0.75em;
+}
+.vs-vex {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-accent-wash);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- the grid and the inspector */
+.vs-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+@media (min-width: 60rem) {
+  .vs-main {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+  }
+}
+.vs-left {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+}
+.vs-viewbar {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+  padding: var(--space-2, 0.5rem) var(--space-4, 1rem);
+}
+.vs-filter {
+  width: min(100%, 16rem);
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface);
+}
+.vs-grid-wrap {
+  overflow: auto;
+  min-height: 0;
+  border-top: 1px solid var(--color-rule);
+}
+.vs-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 100%;
+  background: var(--color-surface);
+}
+.vs-grid th,
+.vs-grid td {
+  height: 2.25rem;
+  padding: 0 0.65rem;
+  vertical-align: middle;
+  line-height: 1.2;
+  border-right: 1px solid var(--color-rule);
+  border-bottom: 1px solid var(--color-rule);
+  white-space: nowrap;
+  text-align: start;
+}
+.vs-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-surface-sunken);
+  font-weight: 700;
+}
+.vs-grid .vs-corner,
+.vs-grid .vs-rowhead {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  min-width: 4.5rem;
+  background: var(--color-surface-sunken);
+  color: var(--color-ink-muted);
+  font-weight: 400;
+}
+.vs-grid .vs-corner {
+  z-index: 3;
+}
+.vs-colhead {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.vs-colmark {
+  color: var(--color-ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}
+.vs-formula-col .vs-colmark {
+  color: var(--color-accent);
+  font-style: italic;
+  font-weight: 700;
+}
+.vs-colname,
+.vs-sort,
+.vs-caret,
+.vs-addcol {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.vs-colname {
+  font-weight: 700;
+}
+.vs-sort {
+  color: var(--color-ink-muted);
+  font-size: 0.75em;
+}
+.vs-addcol {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px dashed var(--color-rule-strong);
+  border-radius: var(--radius, 6px);
+}
+.vs-addcol-cell {
+  width: 100%;
+  border-right: 0 !important;
+}
+.vs-rowhead-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.vs-caret,
+.vs-caret-space {
+  display: inline-block;
+  width: 1rem;
+  text-align: center;
+}
+.vs-grid td {
+  min-width: 7rem;
+  cursor: cell;
+}
+.vs-grid td.vs-formula-col {
+  background: color-mix(in srgb, var(--color-accent-wash) 45%, var(--color-surface));
+}
+.vs-grid td.vs-num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.vs-grid td.vs-sel {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.vs-grid tr.vs-row-sel .vs-rowhead {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+.vs-grid td.vs-cell-error {
+  background: var(--color-mark-wash);
+}
+.vs-err {
+  color: var(--color-mark);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.vs-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+}
+.vs-swatch {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1px solid var(--color-rule-strong);
+  border-radius: 3px;
+}
+.vs-cell-input {
+  width: 100%;
+  min-width: 6rem;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-mono);
+}
+.vs-inspector {
+  overflow: auto;
+  border-top: 1px solid var(--color-rule);
+  background: var(--color-surface);
+}
+@media (min-width: 60rem) {
+  .vs-inspector {
+    border-top: 0;
+    border-inline-start: 1px solid var(--color-rule);
+  }
+}
+.vs-panel {
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border-bottom: 1px solid var(--color-rule);
+}
+.vs-panel h2 {
+  margin: 0 0 var(--space-2, 0.5rem);
+  font-size: 0.95rem;
+}
+.vs-value {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+.vs-why p {
+  margin: 0 0 var(--space-1, 0.25rem);
+}
+.vs-steps {
+  margin: var(--space-2, 0.5rem) 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.vs-step-error {
+  color: var(--color-mark);
+}
+.vs-step-label {
+  font-weight: 700;
+}
+.vs-field {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  margin-bottom: var(--space-2, 0.5rem);
+}
+.vs-field input,
+.vs-field select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface);
+}
+.vs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 0.5rem);
+}
+.vs-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2, 0.5rem) var(--space-4, 1rem);
+  padding: var(--space-1, 0.25rem) var(--space-4, 1rem);
+  border-top: 1px solid var(--color-rule);
+  background: var(--color-surface-sunken);
+  color: var(--color-ink-secondary);
+  font-size: 0.8rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs-app * {
+    scroll-behavior: auto !important;
+  }
+}

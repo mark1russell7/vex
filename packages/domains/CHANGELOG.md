@@ -1,5 +1,24 @@
 # @mark1russell7/vex-domains
 
+## 0.6.0
+
+### Minor Changes
+
+- 330f714: `DateDomain` and `LocalDate`: a day of the calendar, without a time and without a time zone. A date plus some days is a date, and a date minus a date is a count of days. The ops are `add`, `subtract`, `addMonths`, `endOfMonth`, `year`, `month`, `day`, `weekday` and the comparisons. The op `date` of `NumDomain` makes a date from a year, a month and a day, and a month or a day outside its range rolls over.
+  
+  The formula language has `DATE`, `YEAR`, `MONTH`, `DAY`, `WEEKDAY`, `EDATE` and `EOMONTH` (spec FORMULA.DATE). The sheet app has date columns, a CSV import finds them, and a chart can use a column of dates for its horizontal axis. The new example is a list of invoices.
+- 0c0d030: `NumDomain` has the ops `ln`, `exp` and `log10`. A result that is not finite, for example `ln(0)`, gives `#NUM!`.
+  
+  The formula language has the finance functions `PMT`, `FV`, `PV` and `NPER` of a spreadsheet, with its signs (spec FORMULA.FINANCE). Each function compiles to arithmetic, so the steps of a cell show the calculation. The tests compare each function with the examples of the documentation of Excel.
+
+### Patch Changes
+
+- Updated dependencies [a6111da]
+- Updated dependencies [ae7a253]
+- Updated dependencies [01b8d2a]
+- Updated dependencies [ac85b6d]
+  - @mark1russell7/vex@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes

@@ -1,5 +1,28 @@
 # @mark1russell7/vex-testkit
 
+## 0.6.0
+
+### Minor Changes
+
+- a6111da: A cell of a sheet can have its own formula (spec SHEET.CELL.FORMULA). That formula replaces the formula of its column at its key, and the other keys keep the formula of the column. `SheetRun` takes the formulas of cells in the option `cells`, and the builder has `sheet().cellFormula(k, column, formula)`. The formula of a cell must give a value of the type of its column. `ReferenceSheetRun` of the testkit takes the formulas of cells too.
+  
+  In the sheet app, the button **Own formula** gives the selected cell its own formula, and the grid marks that cell. The first month of the loan example has its own formulas, so its columns need no `IFERROR`.
+- ae7a253: `space.graph(records, edges)` makes a graph space: records by key, and the edges from each key (spec SPACE.GRAPH). A graph can have cycles. The axes `successors`, `predecessors` and `reachable` follow the edges (spec AXIS.GRAPH), and the builder has `.successors()`, `.predecessors()` and `.reachable()`. In a tree space, the edges go from a parent to its children, so the axes work there too. The arbitraries of the testkit make graph spaces, and the property P16 checks the axes against the edges.
+- 01b8d2a: The axis `table(name)` has each key of another table of the evaluation as a target (spec AXIS.TABLE). Its body and its test evaluate in the space of that table, and there the origin is the target, so a value of the first space goes in through a variable. The option `tables` of an evaluation gives the spaces by name, and the builder has `.table(name, body)`.
+  
+  A `SheetRun` can have more tables (spec SHEET.TABLES): the option `tables` gives each table with its space, its columns and the formulas of its cells, and the option `name` names the main table. `cell`, `warm` and `explain` take the name of a table. One search covers the cells of all the tables, so a cycle across tables gives `#CYCLE!`. The reference interpreter and `ReferenceSheetRun` of the testkit have the tables too, and the properties P8, P15 and the scheduler property compare them with the core.
+- ac85b6d: The axis `window(from, to)` has the keys at the offsets from `from` to `to` of the focus, in order (spec AXIS.WINDOW). In a tree space, the offsets go among the siblings. The builder has `.window(from, to, body)`, and the JSON Schema of the IR has the axis. The arbitraries and the builder model of the testkit make windows too, and the property P14 checks the targets.
+  
+  The formula language writes the axis as `rows(from, to)`, for example `AVERAGE(rows(-2, 0).Sales)` (spec FORMULA.AGGREGATE.WINDOW). The sheet app has a new example, monthly sales, with a moving average, a total for the year and the best month so far.
+
+### Patch Changes
+
+- Updated dependencies [a6111da]
+- Updated dependencies [ae7a253]
+- Updated dependencies [01b8d2a]
+- Updated dependencies [ac85b6d]
+  - @mark1russell7/vex@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes

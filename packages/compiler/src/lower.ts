@@ -29,9 +29,7 @@ import {
 } from "./loop.ts";
 
 /** The error of an expression that the compiler cannot lower. Then the program operates in tier 1. */
-export class Unsupported extends Error {
-  override readonly name = "Unsupported";
-}
+export class Unsupported extends Error {}
 
 /** A bound name: its value, and the flag that tells if its binding gave a value. Without a flag, it always does. */
 interface Bound {
@@ -90,15 +88,21 @@ class Lowerer {
   readonly constants: unknown[] = [];
   readonly #pool = new Map<unknown, number>();
 
-  /** This method gives the constant of a value. The same value has one constant. A map key does not tell 0 from -0, so -0 has its own. */
-  constant(value: unknown): LExpr {
+  /** This method gives the index of the constant of a value. The same value has one constant. A map key does not tell 0 from -0, so -0 has its own. */
+  index(value: unknown): number {
+    // Stryker disable next-line UnaryOperator: with +0 as the special key, 0 and -0 still get different constants
     const k = Object.is(value, -0) ? NEGATIVE_ZERO : value;
     let i = this.#pool.get(k);
     if (i === undefined) {
       i = this.constants.push(value) - 1;
       this.#pool.set(k, i);
     }
-    return constant(i);
+    return i;
+  }
+
+  /** This method gives the constant of a value. */
+  constant(value: unknown): LExpr {
+    return constant(this.index(value));
   }
 
   /** This method gives a new local with a value. */
@@ -196,8 +200,8 @@ class Lowerer {
       const label = this.labels++;
       const attempt = block({ t: "break", label });
       const value = this.expr(x, s, [...path, i], attempt);
-      if (!breaks(attempt.stmts, label)) {
-        b.stmts.push(...attempt.stmts);
+      // A binding without statements is a constant or a bound name, so it always has a value.
+      if (attempt.stmts.length === 0) {
         env.set(name, { value });
         return;
       }
@@ -226,7 +230,7 @@ class Lowerer {
       if (target !== undefined) return this.#fused(op, e, target, s, path, b);
     }
     const values = args.map((x, i) => this.expr(x, s, [...path, i], b));
-    return this.checked(b, call("op", this.constant(op), ...values), "an op");
+    return this.checked(b, { t: "op", name: this.index(op), args: values }, "an op");
   }
 
   /** The condition must be a boolean. Only the branch that the condition selects is evaluated. */
@@ -408,7 +412,7 @@ class Lowerer {
       over = call("keys", s.space);
       if (base.t === "others") skip = from;
     } else {
-      over = this.checked(b, call("targets", s.space, s.origin, from, this.constant(base)), "the targets of an axis");
+      over = this.checked(b, { t: "targets", axis: this.index(base), args: [s.space, s.origin, from] }, "the targets of an axis");
     }
     const label = this.labels++;
     const array_ = this.locals++;
@@ -428,26 +432,3 @@ class Lowerer {
 }
 
 const NEGATIVE_ZERO = Symbol("-0");
-
-/** This function tells if a statement of a list can end the block with the label `label`. */
-function breaks(stmts: readonly LStmt[], label: number): boolean {
-  const ends = (f: Fail): boolean => (f.t === "break" && f.label === label) || (f.t === "continue" && f.strict !== undefined && ends(f.strict.else));
-  return stmts.some((x) => {
-    switch (x.t) {
-      case "check":
-      case "fail":
-        return ends(x.fail);
-      case "if":
-        return breaks(x.yes, label) || breaks(x.no, label);
-      case "loop":
-      case "block":
-        return breaks(x.body, label);
-      case "let":
-      case "set":
-      case "push":
-      case "next":
-      case "return":
-        return false;
-    }
-  });
-}

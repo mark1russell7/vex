@@ -1,13 +1,14 @@
 "use strict";
 const F = R.F;
-const frozen_ = R.frozen;
 const has_ = R.has;
-const keys_ = R.keys;
 const opts_ = R.opts;
-const rec_ = R.rec;
-const result_ = R.result;
-const step_ = R.step;
 const table_ = R.table;
+const keys_ = R.keys;
+const result_ = R.result;
+const frozen_ = R.frozen;
+const step_ = R.step;
+const addr_ = R.addr;
+const rec_ = R.rec;
 const k0 = K[0];
 const k1 = K[1];
 const k2 = K[2];
@@ -18,10 +19,13 @@ const k6 = K[6];
 const k7 = K[7];
 const k8 = K[8];
 const k9 = K[9];
+const k10 = K[10];
+const k11 = K[11];
+const k12 = K[12];
 const a5 = R.axis(k5);
 const a8 = R.axis(k8);
 return function vex(l0, l1, l2, l3) {
-  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37, l38, l39, l40, l41, l42, l43;
+  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37, l38, l39, l40, l41, l42, l43, l44, l45, l46, l47, l48, l49, l50, l51, l52, l53, l54, l55, l56, l57, l58, l59, l60, l61, l62, l63, l64, l65, l66, l67, l68;
   try {
     if (!(has_(l0, l1))) return F; // the origin is a key of the space
     l4 = (opts_(k0) === true);
@@ -122,8 +126,53 @@ return function vex(l0, l1, l2, l3) {
     if (!((l36 !== 0))) return F; // a list that is not empty
     l42 = result_((l35 / l36));
     if (!((l42 !== F))) return F; // a finite mean
-    l43 = rec_(k9, [l13, l20, l21, (!l29), l42]);
-    return l43;
+    l44 = 0;
+    l45 = keys_(l0);
+    L5: for (l46 = 0; l46 < l45.length; l46++) {
+      l47 = l45[l46];
+      l48 = l0.get(l47);
+      if (!((l48 !== undefined && l48 !== null))) continue L5; // a record
+      if (!((typeof l48 === "object" || typeof l48 === "function"))) continue L5; // an object
+      l48 = l48[k3];
+      if (!((l48 !== undefined && l48 !== null))) continue L5; // a field
+      l44 = (l44 + 1);
+    }
+    l50 = 0;
+    l51 = keys_(l0);
+    L6: for (l52 = 0; l52 < l51.length; l52++) {
+      l53 = l51[l52];
+      l54 = (opts_(k9) === true);
+      l56 = 0;
+      l57 = keys_(l0);
+      L7: for (l58 = 0; l58 < l57.length; l58++) {
+        l59 = l57[l58];
+        l60 = l0.get(l59);
+        if (!((l60 !== undefined && l60 !== null))) { if (l54) continue L6; continue L7; } // a record
+        if (!((typeof l60 === "object" || typeof l60 === "function"))) { if (l54) continue L6; continue L7; } // an object
+        l60 = l60[k10];
+        if (!((l60 !== undefined && l60 !== null))) { if (l54) continue L6; continue L7; } // a field
+        l56 = (l56 + 1);
+      }
+      l50 = (l50 + 1);
+    }
+    l62 = 0;
+    l63 = addr_(l0, l1, l1, k11);
+    if (!((l63 !== F))) return F; // an address
+    l64 = keys_(l0);
+    L8: for (l65 = 0; l65 < l64.length; l65++) {
+      l66 = l64[l65];
+      if ((l66 === l63)) {
+        continue;
+      }
+      l67 = l0.get(l66);
+      if (!((l67 !== undefined && l67 !== null))) continue L8; // a record
+      if (!((typeof l67 === "object" || typeof l67 === "function"))) continue L8; // an object
+      l67 = l67[k3];
+      if (!((l67 !== undefined && l67 !== null))) continue L8; // a field
+      l62 = (l62 + 1);
+    }
+    l68 = rec_(k12, [l13, l20, l21, (!l29), l42, l44, l50, l62]);
+    return l68;
   } catch {
     return F;
   }

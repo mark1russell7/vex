@@ -250,6 +250,7 @@ The tests:
 - P17 compares `tiered` with `evaluate` on three generators: the whole grammar, the chains of the builder, and list ops over axes. Tier 2 gave approximately 97 %, 85 % and 90 % of the values. The gate of the share is 50 %.
 - The work put ten defects into the lowering, one at a time. P17 found each of them.
 - The unit tests alone cover each statement and each branch of the package. The golden files hold the source of five programs.
+- The mutation score is 100 % (997 mutants). Seven comments disable 30 equivalent mutants, each with its reason. Two tests count the reads of the host, so they find a cache that does not operate.
 
 The speed, measured by `bench/gate.ts` on one machine:
 

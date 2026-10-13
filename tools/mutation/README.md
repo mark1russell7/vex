@@ -8,6 +8,10 @@ Each package must have a mutation score of 95 % or more. Stryker has one thresho
 
 A run with `--mutate` mutates only some packages. Then `scores.mjs` applies the gate to those packages only.
 
+## Type checks
+
+Stryker adds `// @ts-nocheck` to each file of its sandbox by default. The lane turns this off (`disableTypeChecks: false`), because Vitest does no type check. Also, the golden source files of the compiler must stay as they are.
+
 ## The files that the lane does not mutate
 
 | File | Reason |

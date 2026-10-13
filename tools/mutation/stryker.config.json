@@ -16,6 +16,7 @@
     "!work/testkit/builder-model-arbitraries.ts"
   ],
   "coverageAnalysis": "perTest",
+  "disableTypeChecks": false,
   "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": { "fileName": "../../reports/mutation/index.html" },
   "jsonReporter": { "fileName": "../../reports/mutation/mutation.json" },

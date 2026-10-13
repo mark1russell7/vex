@@ -38,11 +38,14 @@ describe("COMPILE.SOURCE: the generated source", () => {
   });
 
   it("the forms: if, and, or, ifError, a binding and a record", async () => {
+    // A binding with statements gets a flag, and a binding without statements does not.
     const e = let_(
-      { a: ref("missing") },
+      { a: ref("missing"), c: lit(1), d: rec({ x: lit(2) }) },
       rec({
         x: app("if", app("and", ref("b"), app("or", ref("c"), lit(true))), ref("n"), lit(0)),
         y: app("ifError", v("a"), app("add", ref("n", [key("B")]), lit(1))),
+        z: app("add", v("c"), v("free")),
+        w: v("d"),
       }),
     );
     await expectGolden("forms", e);
@@ -55,6 +58,11 @@ describe("COMPILE.SOURCE: the generated source", () => {
       reduce: app("reduce", each(axes.children, ref("p")), lit("add")),
       none: app("none", each(axes.all, ref("b"))),
       mean: app("mean", each(axes.window(-1, 1), ref("n"))),
+      // An empty address is the focus.
+      empty: app("count", { tag: "each", axis: { t: "all" }, body: { tag: "ref", path: ["n"], at: [] }, at: [] }),
+      // The strict count inside an item skips that item of the outer count.
+      nested: app("count", each(axes.all, app("count", each(axes.all, ref("s")), lit({ strict: true })))),
+      from: app("count", each(axes.others, ref("n"), [key("B")])),
     });
     await expectGolden("lists", e);
   });

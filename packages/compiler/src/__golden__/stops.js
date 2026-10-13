@@ -1,10 +1,10 @@
 "use strict";
 const F = R.F;
-const ext_ = R.ext;
-const frozen_ = R.frozen;
 const has_ = R.has;
 const keys_ = R.keys;
 const list_ = R.list;
+const frozen_ = R.frozen;
+const ext_ = R.ext;
 const rec_ = R.rec;
 const k0 = K[0];
 const k1 = K[1];
@@ -18,7 +18,7 @@ return function vex(l0, l1, l2, l3) {
     l4 = [];
     l5 = [];
     l6 = keys_(l0);
-    for (l7 = 0; l7 < l6.length; l7++) {
+    L0: for (l7 = 0; l7 < l6.length; l7++) {
       l8 = l6[l7];
       l9 = l0.get(l8);
       if (!((l9 !== undefined && l9 !== null))) return F; // a record
@@ -31,7 +31,7 @@ return function vex(l0, l1, l2, l3) {
     l10 = list_(l4, l5);
     l12 = 0;
     l13 = keys_(l0);
-    for (l14 = 0; l14 < l13.length; l14++) {
+    L1: for (l14 = 0; l14 < l13.length; l14++) {
       l15 = l13[l14];
       l16 = l0.get(l15);
       if (!((l16 !== undefined && l16 !== null))) return F; // a record

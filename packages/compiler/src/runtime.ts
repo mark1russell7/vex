@@ -10,9 +10,10 @@
  */
 import {
   axisTargets,
+  findMethod,
   isListOp,
-  isStackOverflow,
   isOpName,
+  isStackOverflow,
   isVexList,
   liftsAt,
   matchesKind,
@@ -25,7 +26,6 @@ import {
   type ExtHandler,
   type FreeFn,
   type OpSpec,
-  type ParamKind,
   type Space,
 } from "@mark1russell7/vex";
 
@@ -46,14 +46,17 @@ export interface RuntimeOptions {
  */
 export type Site = (...values: never[]) => unknown;
 
+/** A base axis: an axis that is not `where`. */
+export type BaseAxis = Exclude<Axis, { readonly t: "where" }>;
+
 /** The functions of the runtime. The names are the names of `RuntimeFn` in the loop IR. */
 export interface Runtime {
   readonly F: Fallback;
   has(s: Space, key: string): boolean;
   addr(s: Space, origin: string, focus: string, at: Addr): unknown;
   /**
-   * This function gives the targets of a base axis at a focus, for one axis. A space does not change, so the targets
-   * of the costly axes stay in a cache for each space and focus.
+   * This function gives the function of the targets of one base axis. A space does not change, so the targets stay in
+   * a cache for each space and focus. Generated code gets it once, when it loads.
    */
   axis(axis: BaseAxis): (s: Space, origin: string, focus: string) => unknown;
   table(tables: Readonly<Record<string, Space>> | undefined, name: string): unknown;
@@ -70,10 +73,6 @@ export interface Runtime {
   var(vars: Readonly<Record<string, unknown>> | undefined, name: string): unknown;
 }
 
-type BaseAxis = Exclude<Axis, { readonly t: "where" }>;
-
-/** The axes whose targets cost more than a read of a map. Their targets stay in a cache. */
-const COSTLY: ReadonlySet<Axis["t"]> = new Set(["neighbors", "window", "ancestors", "descendants", "siblings", "reachable"]);
 type Method = (...args: unknown[]) => unknown;
 
 /**
@@ -87,23 +86,6 @@ interface Entry {
 }
 
 const NO_SPEC: OpSpec<unknown> = Object.freeze({});
-
-/**
- * This function finds a method as `findMethod` of the core does. It reads a descriptor only where the property exists.
- * Thus a method on a prototype costs one descriptor, not one for each object of the chain.
- */
-function findMethod(self: unknown, name: string): Method | undefined {
-  if (typeof self !== "object" && typeof self !== "function") return undefined;
-  let o: object | null = self;
-  while (o !== null && o !== Object.prototype && o !== Function.prototype) {
-    if (Object.hasOwn(o, name)) {
-      const value: unknown = Object.getOwnPropertyDescriptor(o, name)?.value;
-      return typeof value === "function" ? (value as Method) : undefined;
-    }
-    o = Object.getPrototypeOf(o) as object | null;
-  }
-  return undefined;
-}
 
 /** This function makes the runtime of one set of options. */
 export function createRuntime(options: RuntimeOptions): Runtime {
@@ -128,55 +110,33 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     return value;
   };
 
-  // The call of an op: the lift of numbers, the kinds of the parameters, the call, and the checks of the result.
-  // `values` holds the receiver and then the arguments.
-  const invoke = (e: Entry, method: Method | undefined, values: readonly unknown[]): unknown => {
+  // The call of an op, as `#call` of the interpreter: the lift of numbers, the kinds of the parameters, the call, and
+  // the checks of the result.
+  const invoke = (e: Entry, call: (args: readonly unknown[]) => unknown, rest: readonly unknown[]): unknown => {
     try {
-      return call(e, method, values);
+      const lift = e.spec.liftScalar;
+      const from = e.domain.fromScalar;
+      const args = lift && from !== undefined ? rest.map((a, i): unknown => (typeof a === "number" && liftsAt(lift, i) ? from(a) : a)) : rest;
+      const params = e.spec.params;
+      if (params !== undefined && !args.every((a, i) => matchesKind(params[i] ?? "any", a, e.domain))) return F;
+      return checked(call(args));
     } catch (thrown) {
       return threw(thrown);
     }
   };
-  const call = (e: Entry, method: Method | undefined, values: readonly unknown[]): unknown => {
-    const lift = e.spec.liftScalar;
-    const from = e.domain.fromScalar;
-    let args = values;
-    if (lift && from !== undefined) {
-      for (let i = 1; i < values.length; i++) {
-        const a = values[i];
-        if (typeof a === "number" && liftsAt(lift, i - 1)) {
-          if (args === values) args = [...values];
-          (args as unknown[])[i] = from(a);
-        }
-      }
-    }
-    const params = e.spec.params;
-    if (params !== undefined) {
-      for (let i = 1; i < args.length; i++) if (!matchesKind(params[i - 1] ?? "any", args[i], e.domain)) return F;
-    }
-    if (e.fn !== undefined) return checked(e.fn.apply(undefined, args as unknown[]));
-    const self = args[0];
-    switch (args.length) {
-      case 1:
-        return checked(method?.call(self));
-      case 2:
-        return checked(method?.call(self, args[1]));
-      default:
-        return checked(method?.apply(self, args.slice(1)));
-    }
-  };
 
   // The op of a name for a receiver: the first domain that accepts the receiver and has the op. `undefined` is no op.
-  // `seen` receives each method that the first entry finds.
+  // `seen` receives each method that the dispatch finds.
   const dispatch = (entries: readonly (Entry | undefined)[], name: string, values: readonly unknown[], seen?: (m: Method) => void): unknown => {
-    const self = values[0];
+    const [self, ...rest] = values;
     for (const e of entries) {
       if (e === undefined || !safeIs(e.domain, self)) continue;
-      if (e.fn !== undefined) return invoke(e, undefined, values);
+      const fn = e.fn;
+      if (fn !== undefined) return invoke(e, (args) => fn(self, ...args), rest);
       const method = findMethod(self, name);
       if (method === undefined) continue;
-      if (e === entries.find((x) => x !== undefined)) seen?.(method);
-      return invoke(e, method, values);
+      seen?.(method);
+      return invoke(e, (args) => method.apply(self, [...args]), rest);
     }
     return undefined;
   };
@@ -200,11 +160,6 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return r.ok ? r.value : F;
     },
     axis(axis) {
-      const targets = (s: Space, origin: string, focus: string): unknown => {
-        const r = axisTargets(s, { origin, focus }, axis);
-        return r.ok ? r.value : F;
-      };
-      if (!COSTLY.has(axis.t)) return targets;
       const cache = new WeakMap<Space, Map<string, unknown>>();
       return (s, origin, focus) => {
         let byFocus = cache.get(s);
@@ -212,12 +167,13 @@ export function createRuntime(options: RuntimeOptions): Runtime {
           byFocus = new Map();
           cache.set(s, byFocus);
         }
-        let r = byFocus.get(focus);
-        if (r === undefined) {
-          r = targets(s, origin, focus);
-          byFocus.set(focus, r);
+        let targets = byFocus.get(focus);
+        if (targets === undefined) {
+          const r = axisTargets(s, { origin, focus }, axis);
+          targets = r.ok ? r.value : F;
+          byFocus.set(focus, targets);
         }
-        return r;
+        return targets;
       };
     },
     table(tables, name) {
@@ -231,74 +187,89 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       const entries = entriesOf(name);
       const listOp = isListOp(name);
       const fn = fns !== undefined && Object.hasOwn(fns, name) ? fns[name] : undefined;
-      const first = entries.find((e) => e !== undefined);
       let method: Method | undefined;
       const seen = (m: Method): void => {
         method = m;
       };
       const generic = (values: readonly unknown[]): unknown => {
         // A list op on a list value is not an error, but tier 2 does not have it. The exception stops the program.
-        if (listOp && isVexList(values[0])) throw new Error(`tier 1 gives "${name}" on a list value`);
+        // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
+        if (listOp && isVexList(values[0])) throw new Error("tier 1 gives a list op on a list value");
         if (values.length > 0) {
           const r = dispatch(entries, name, values, seen);
           if (r !== undefined) return r;
         }
-        if (fn === undefined) return F;
         try {
-          return checked(fn.apply(undefined, values as unknown[]));
+          // Stryker disable next-line ConditionalExpression: a call of undefined throws, and the catch also gives F
+          return fn === undefined ? F : checked(fn(...values));
         } catch (thrown) {
           return threw(thrown);
         }
       };
       // The fast path of a method op of the first domain with the op. The method of the last receiver is the method of
       // this receiver when a read of the property gives the same function. (A read differs from findMethod only for an
-      // accessor that gives that function.)
-      if (first === undefined || first.fn !== undefined || arity < 1 || arity > 3) return arity <= 3 ? (...values: unknown[]) => generic(values) : generic;
+      // accessor that gives that function.) A list op name has no fast path, because its receiver can be a list.
+      const first = entries.find((e) => e !== undefined);
+      // An op with a function never fills `method`, so a fast path of it always takes the generic path.
+      // Stryker disable next-line ConditionalExpression: see the line above
+      if (first === undefined || first.fn !== undefined || listOp || arity < 1 || arity > 3) return arity <= 3 ? (...values: unknown[]) => generic(values) : generic;
       const { domain, spec } = first;
-      const lifts = (i: number): boolean => domain.fromScalar !== undefined && spec.liftScalar !== undefined && liftsAt(spec.liftScalar, i);
-      const param = (i: number): ParamKind => spec.params?.[i] ?? "any";
-      const fast = (self: unknown): self is object =>
-        method !== undefined && typeof self === "object" && self !== null && (self as Record<string, unknown>)[name] === method && !(listOp && isVexList(self)) && safeIs(domain, self);
-      const [lift0, lift1, param0, param1] = [lifts(0), lifts(1), param(0), param(1)];
-      switch (arity) {
-        case 1:
-          return (self: unknown) => {
-            if (!fast(self)) return generic([self]);
-            try {
-              return checked(method?.call(self));
-            } catch (thrown) {
-              return threw(thrown);
-            }
-          };
-        case 2:
-          return (self: unknown, a: unknown) => {
-            if (!fast(self) || (lift0 && typeof a === "number")) return generic([self, a]);
-            if (!matchesKind(param0, a, domain)) return F;
-            try {
-              return checked(method?.call(self, a));
-            } catch (thrown) {
-              return threw(thrown);
-            }
-          };
-        default:
-          return (self: unknown, a: unknown, b: unknown) => {
-            if (!fast(self) || (lift0 && typeof a === "number") || (lift1 && typeof b === "number")) return generic([self, a, b]);
-            if (!matchesKind(param0, a, domain) || !matchesKind(param1, b, domain)) return F;
-            try {
-              return checked(method?.call(self, a, b));
-            } catch (thrown) {
-              return threw(thrown);
-            }
-          };
+      const lift0 = domain.fromScalar !== undefined && liftsAt(spec.liftScalar, 0);
+      const lift1 = domain.fromScalar !== undefined && liftsAt(spec.liftScalar, 1);
+      const kind0 = spec.params?.[0] ?? "any";
+      const kind1 = spec.params?.[1] ?? "any";
+      const fast = (self: unknown): Method | undefined => {
+        const m = method;
+        // A function as the receiver goes to the generic path, which gives the same method.
+        // Stryker disable next-line ConditionalExpression: see the line above
+        return m !== undefined && typeof self === "object" && self !== null && (self as Record<string, unknown>)[name] === m && safeIs(domain, self) ? m : undefined;
+      };
+      // One function for each number of arguments, so a call makes no array. A number that the op lifts goes to the
+      // generic path.
+      if (arity === 1) {
+        return (self: unknown) => {
+          const m = fast(self);
+          if (m === undefined) return generic([self]);
+          try {
+            return checked(m.call(self));
+          } catch (thrown) {
+            return threw(thrown);
+          }
+        };
       }
+      if (arity === 2) {
+        return (self: unknown, a: unknown) => {
+          const m = fast(self);
+          if (m === undefined || (lift0 && typeof a === "number")) return generic([self, a]);
+          if (!matchesKind(kind0, a, domain)) return F;
+          try {
+            return checked(m.call(self, a));
+          } catch (thrown) {
+            return threw(thrown);
+          }
+        };
+      }
+      return (self: unknown, a: unknown, b: unknown) => {
+        const m = fast(self);
+        if (m === undefined || (lift0 && typeof a === "number") || (lift1 && typeof b === "number")) return generic([self, a, b]);
+        if (!matchesKind(kind0, a, domain) || !matchesKind(kind1, b, domain)) return F;
+        try {
+          return checked(m.call(self, a, b));
+        } catch (thrown) {
+          return threw(thrown);
+        }
+      };
     },
     // One step of `reduce`: the first domain that accepts the accumulator and has the op. No free function.
     step(name, acc, value) {
       let entries = stepEntries.get(name);
+      // A miss of the cache only reads the op tables again.
+      // Stryker disable ConditionalExpression,BlockStatement,CallExpression
       if (entries === undefined) {
         entries = entriesOf(name);
         stepEntries.set(name, entries);
       }
+      // Stryker restore ConditionalExpression,BlockStatement,CallExpression
       return dispatch(entries, name, [acc, value]) ?? F;
     },
     result(value) {
@@ -321,6 +292,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     frozen: (values) => Object.freeze([...values]),
     ext(kind, data, s, origin, focus, path) {
       const handler = Object.hasOwn(extensions, kind) ? extensions[kind] : undefined;
+      // Stryker disable next-line ConditionalExpression: a call of undefined throws, and the program gives F for it too
       if (handler === undefined) return F;
       const r = handler(data, { space: s, position: { origin, focus }, path });
       return r.ok ? r.value : F;

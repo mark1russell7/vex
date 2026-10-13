@@ -4,6 +4,7 @@ import {
   defineDomain,
   each,
   evaluate,
+  explain,
   ext,
   fail,
   key,
@@ -67,6 +68,21 @@ class Box {
   nothing(): undefined {
     return undefined;
   }
+  /** A method with optional arguments, for a site with fewer arguments than parameters. */
+  opt(o?: Box, k?: number): number {
+    return this.v + (o?.v ?? 0) * (k ?? 1);
+  }
+  /** A method with one declared parameter and a second argument of any kind. */
+  pair(o: Box, x: unknown): string {
+    return `${this.v + o.v}:${typeof x}`;
+  }
+  /** A method that is not an op of the domain. */
+  hidden(): number {
+    return 1;
+  }
+  nil(): null {
+    return null;
+  }
 }
 
 const BoxDomain = defineDomain({
@@ -88,7 +104,14 @@ const BoxDomain = defineDomain({
     boom: {},
     deep: {},
     nothing: {},
+    nil: {},
+    opt: { params: ["domain", "number"] },
+    pair: { params: ["domain"] },
+    // A declared op that the values do not have as a method. The free function of the same name gives the value.
+    ghost: {},
     twice: { fn: (b: Box) => new Box(b.v * 2) },
+    // A name that cannot be an op, also with a function.
+    constructor: { fn: () => 1 },
   },
 });
 
@@ -105,14 +128,27 @@ class Tag {
 }
 const TagDomain = defineDomain({ name: "Tag", is: (u: unknown): u is Tag => u instanceof Tag, methods: "all", ops: {} });
 
+/** A domain whose op lifts numbers, without `fromScalar`. Thus it lifts no number. */
+class Plain {
+  constructor(readonly value: number) {}
+  add1(x: unknown): unknown {
+    return typeof x === "number" ? this.value + x : "no";
+  }
+}
+const PlainDomain = defineDomain({ name: "Plain", is: (u: unknown): u is Plain => u instanceof Plain, ops: { add1: { liftScalar: true } } });
+
 /** A domain of texts with a declared method op. A text is not an object, so it has no methods. */
 const TextDomain = defineDomain({ name: "Text", is: (u: unknown): u is string => typeof u === "string", ops: { toUpperCase: {} } });
+
+/** The paths of the extension "log", in the order of the evaluation. */
+let log: string[] = [];
 
 const OPTIONS: CompileOptions = {
   domains: [BoxDomain, TagDomain, NumDomain, TextDomain],
   fns: {
     double: (x: unknown) => (typeof x === "number" ? x * 2 : x),
     zero: () => 0,
+    ghost: () => 7,
     throws: () => {
       throw new Error("fn");
     },
@@ -123,6 +159,13 @@ const OPTIONS: CompileOptions = {
     throws: () => {
       throw new Error("ext");
     },
+    // The path and the position of the node, and the keys of its space.
+    log: (_data, ctx) => {
+      log.push(`${ctx.path.join(".")} @${ctx.position.origin}/${ctx.position.focus} in ${ctx.space.keys.join("")}`);
+      return ok(true);
+    },
+    // The field "recv" of the record at the focus, also null or undefined.
+    recv: (_data, ctx) => ok((ctx.space.get(ctx.position.focus) as { readonly recv?: unknown } | undefined)?.recv),
   },
 };
 
@@ -145,14 +188,15 @@ const RUN: RunOptions = { space: S, origin: "A", tables: { T }, vars: { c: 5 } }
 const own = Object.assign(new Box(4), { get0: () => 99 });
 const methodOf = (name: string): unknown => Reflect.get(Box.prototype, name);
 const SITES = space.record({
-  A: { box: new Box(1), arg: new Box(1), k: 3 },
-  B: { box: new Box(2), arg: new Box(5), k: 3 },
-  C: { box: new Box(3), arg: 2, k: 1 },
+  A: { box: new Box(1), arg: new Box(1), k: 3, recv: new Box(1) },
+  B: { box: new Box(2), arg: new Box(5), k: 3, recv: new Box(2) },
+  C: { box: new Box(3), arg: 2, k: 1, recv: null },
   D: { box: new Box(4), arg: new Tag("d"), k: "x" },
-  E: { box: own, arg: new Box(1), k: 3 },
-  F: { box: { get0: methodOf("get0"), plus: methodOf("plus") }, arg: new Box(1), k: 3 },
+  E: { box: own, arg: new Box(1), k: 3, recv: 7 },
+  F: { box: { get0: methodOf("get0"), plus: methodOf("plus") }, arg: new Box(1), k: 3, recv: new Box(3) },
   G: { box: Object.assign(new Box(1), { kind: "vex.list", items: [] }), arg: new Box(1), k: 3 },
   H: { box: 7, arg: new Box(1), k: 3 },
+  K: { box: new Box(5), arg: new Box(2), k: "x" },
 });
 
 /**
@@ -162,8 +206,18 @@ const SITES = space.record({
 function expectSame(e: Expr, fast: boolean, run: RunOptions = RUN, options: CompileOptions = OPTIONS): void {
   const p = tiered(e, options);
   expect(fromCore(p.run(run))).toStrictEqual(fromCore(evaluate(e, { ...options, ...run })));
-  expect(p.tier === 2 && p.stats.fallbacks === 0).toBe(fast);
+  // Each program of these tests has generated code. Without a value from it, the one run has one fallback.
+  expect(p.tier).toBe(2);
+  expect(p).not.toHaveProperty("reason");
+  expect(p.stats).toEqual({ runs: 1, fallbacks: fast ? 0 : 1 });
 }
+
+/** This function gives an expression with `levels` levels. */
+const deep = (levels: number): Expr => {
+  let e: Expr = lit(1);
+  for (let i = 1; i < levels; i++) e = app("double", e);
+  return e;
+};
 
 const n = ref("n");
 const box = ref("box");
@@ -235,6 +289,39 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
   it.each(cases)("%s", (_title, e, fast) => expectSame(e, fast));
 
   it("a method op on a text, which has no methods", () => expectSame(app("toUpperCase", ref("s")), false));
+  it("a list op without arguments", () => expectSame(app("count"), false));
+  it("ifError and then a list op", () => expectSame(rec({ a: app("ifError", ref("missing"), lit(0)), b: app("count", all(n)) }), true));
+  it("a result that is not finite, without a domain of numbers", () => expectSame(app("values", all(app("bad", box))), true, RUN, { domains: [BoxDomain] }));
+  it("the check of the first domain that accepts the result", () => {
+    const Even = defineDomain({ name: "Even", is: (u: unknown): u is number => typeof u === "number", valid: (x: number) => x % 2 === 0, ops: {} });
+    expectSame(app("values", all(app("get0", box))), true, RUN, { domains: [BoxDomain, Even] });
+  });
+  it("a table inside an item, without the tables of the run", () => expectSame(app("count", all(app("count", each(axes.table("T"), n)))), true, { space: S, origin: "A" }));
+  it("an op name without arguments, with a domain that has the op", () =>
+    expectSame(app("get0"), true, RUN, { domains: [BoxDomain], fns: { get0: (...xs: readonly unknown[]) => xs.length } }));
+  it("an op without a value, in each item", () => expectSame(app("values", all(app("and"))), true));
+  it("a free function of a list", () => expectSame(app("double", all(n)), true));
+  it("AXIS.TABLE: the origin of an axis that is not a table stays the origin", () => expectSame(app("sum", all(ref("n", [{ t: "origin" }]))), true));
+  it("an inherited method is not a method", () => expectSame(app("toString", ref("tag")), false));
+  it("an inherited function is not a free function", () => expectSame(app("toString"), false));
+  it("the options null of a list op", () => expectSame(app("sum", all(n), lit(null)), true));
+  it("an inherited name is not a table", () => expectSame(app("count", all(app("count", each(axes.table("toString"), n)))), true));
+  it("a name without a binding, in each item, without the variables of the run", () => expectSame(app("count", all(v("zz"))), true, { space: S, origin: "A" }));
+  it("a free function without domains", () => expectSame(app("double", n), true, RUN, { fns: { double: (x: unknown) => x } }));
+  it("an op that lifts numbers, of a domain without fromScalar", () => {
+    const s1 = space.record({ A: { p: new Plain(1) }, B: { p: new Plain(2) } });
+    expectSame(app("values", all(app("add1", ref("p"), lit(2)))), true, { space: s1, origin: "A" }, { domains: [PlainDomain] });
+  });
+  it("a method of a function, and a method of Function.prototype", () => {
+    const FnsDomain = defineDomain({ name: "Fns", is: (u: unknown): u is () => number => typeof u === "function", methods: "all", ops: {} });
+    const s1 = space.record({ A: { f: Object.assign(() => 1, { twice: () => 2 }) } });
+    expectSame(app("twice", ref("f")), true, { space: s1, origin: "A" }, { domains: [FnsDomain] });
+    expectSame(app("bind", ref("f")), false, { space: s1, origin: "A" }, { domains: [FnsDomain] });
+  });
+  it("a domain that accepts each value does not take an op without arguments", () => {
+    const Everything = defineDomain({ name: "Everything", is: (u: unknown): u is unknown => u === u, ops: { zero: { fn: () => 1 } } });
+    expectSame(app("zero"), true, RUN, { domains: [Everything], fns: { zero: () => 0 } });
+  });
   it("an own property that is not a function is not a method", () => expectSame(app("get0", box), false, { space: space.record({ A: { box: Object.assign(new Box(1), { get0: 5 }) } }), origin: "A" }));
   it("a name that cannot be an op", () => expectSame(app("constructor", box), false));
   it("an argument after the declared parameters has any kind", () => expectSame(app("max", box, box, lit(1)), true));
@@ -277,11 +364,56 @@ describe("COMPILE.TIERED: the site of an op gives the result of the interpreter 
     ["a method that throws, without arguments", app("boom", box), true],
     ["a method that throws, with one argument", app("boom1", box, ref("arg")), true],
     ["a method that throws, with two arguments", app("boom2", box, ref("arg"), ref("k")), true],
+    ["a method without a value", app("nothing", box), true],
+    ["a method that gives null", app("nil", box), true],
+    ["a result that is not finite", app("bad", box), true],
+    ["fewer arguments than parameters, one", app("opt", box), true],
+    ["fewer arguments than parameters, two", app("opt", box, ref("arg")), true],
+    ["a second argument of any kind", app("pair", box, ref("arg"), ref("k")), true],
+    ["a receiver of each kind", app("get0", ext("recv", null)), true],
+    ["a method that is not an op", app("hidden", box), true],
+    ["a declared op without a method, and a free function", app("ghost", box), true],
+    ["a name that cannot be an op", app("constructor", box), true],
     ["a list op name", app("max", box, ref("arg")), false],
   ];
-  it.each(cases)("%s", (_title, op, fast) => {
-    expectSame(app("values", all(op)), fast, at);
-    expectSame(all(op), false, at);
+  it.each(cases)("%s", (_title, op, fast) => expectSame(app("values", all(op)), fast, at));
+
+  it("a site keeps the method of its last receiver, so it reads no descriptor for the next receivers", () => {
+    let reads = 0;
+    const counted = <T extends object>(x: T): T =>
+      new Proxy(x, {
+        getOwnPropertyDescriptor(target, name) {
+          reads++;
+          return Reflect.getOwnPropertyDescriptor(target, name);
+        },
+      });
+    const records = Object.fromEntries(
+      [1, 2, 3, 4].map((i) => [`K${i}`, { box: counted(new Box(i)), arg: counted(new Box(i)), k: 2, tag: counted(new Tag(`t${i}`)), p: counted(new Plain(i)) }]),
+    );
+    const s4 = space.record(records);
+    const options = { ...OPTIONS, domains: [BoxDomain, PlainDomain, TagDomain, NumDomain] };
+    // Each op has arguments that the fast path takes: an argument that is not a number, or a number at a parameter
+    // that does not lift. A number at the parameter of a domain fails in the fast path too.
+    const ops = [
+      app("get0", box),
+      app("plus", box, ref("arg")),
+      app("pair", box, ref("arg"), ref("k")),
+      app("pair", box, lit(2), ref("k")),
+      app("opt", box, lit(2)),
+      app("mix", box, ref("arg"), ref("k")),
+      app("span", box, ref("arg"), ref("arg")),
+      app("upper", ref("tag")),
+      app("add1", ref("p"), lit(2)),
+      app("add1", ref("p"), lit(2), lit(3)),
+    ];
+    for (const op of ops) {
+      const e = app("values", all(op));
+      const expected = evaluate(e, { ...options, space: s4, origin: "K1" });
+      reads = 0;
+      expect(tiered(e, options).run({ space: s4, origin: "K1" })).toEqual(expected);
+      // The first receiver has a descriptor read for its own properties. The next three use the method of the site.
+      expect(reads).toBe(1);
+    }
   });
 });
 
@@ -346,6 +478,60 @@ describe("COMPILE.TIERED: a list op over an axis is one loop with the result of 
     expectSame(let_({ a: app("sum", all(ref("s")), lit({ strict: true })) }, v("a")), false);
   });
 
+  it("the targets of an axis come from a cache for each space and focus", () => {
+    let calls = 0;
+    const counted = (s1: Space): Space => ({
+      kind: s1.kind,
+      keys: s1.keys,
+      has: (k: string): k is string => s1.has(k),
+      get: (k) => s1.get(k),
+      coords: (k) => s1.coords(k),
+      keyAt: (c) => s1.keyAt(c),
+      parentOf: (k) => s1.parentOf?.(k),
+      childrenOf: (k) => {
+        calls++;
+        return s1.childrenOf?.(k) ?? [];
+      },
+    });
+    const tree = space.tree({ R: { n: 1 }, X: { n: 2 }, Y: { n: 3 } }, { X: "R", Y: "R" });
+    const [one, two] = [counted(tree), counted(tree)];
+    const p = tiered(app("sum", each(axes.children, n)), OPTIONS);
+    const runs = [[one, "R", 1], [one, "R", 1], [one, "X", 2], [two, "R", 3]] as const;
+    for (const [s1, origin, after] of runs) {
+      expect(p.run({ space: s1, origin })).toEqual(evaluate(p.expr, { ...OPTIONS, space: tree, origin }));
+      expect(calls).toBe(after);
+    }
+  });
+
+  it("an extension gets the path, the position and the space of its node", () => {
+    const E = ext("log", null);
+    const e = rec({
+      root: E,
+      and: app("and", E, E),
+      if: app("if", E, E, lit(false)),
+      else: app("if", lit(false), lit(1), E),
+      let: let_({ x: E }, app("and", v("x"), E)),
+      ifError: app("ifError", E, lit(false)),
+      fallback: app("ifError", ref("missing"), E),
+      fused: app("count", let_({ y: E }, each(axes.where(axes.where(axes.all, E), E), app("and", v("y"), E))), E),
+      table: app("count", each(axes.where(axes.table("T"), E), E)),
+      list: each(axes.where(axes.others, E), E),
+      reduce: app("reduce", all(n), lit("add"), E),
+      args: app("double", E, E),
+    });
+    log = [];
+    const expected = evaluate(e, { ...OPTIONS, ...RUN });
+    const paths = log.toSorted();
+    log = [];
+    const p = tiered(e, OPTIONS);
+    expect(p.run(RUN)).toEqual(expected);
+    expect(p.stats.fallbacks).toBe(0);
+    expect(log.toSorted()).toEqual(paths);
+    log = [];
+    expect(tiered(E, OPTIONS).run(RUN)).toEqual(ok(true));
+    expect(log).toEqual([" @A/A in ABC"]);
+  });
+
   it("reduce keeps the dispatch of a name for the next run", () => {
     const p = tiered(app("reduce", all(n), v("op")), OPTIONS);
     for (const op of ["add", "add", "max"]) expect(p.run({ ...RUN, vars: { op } })).toEqual(evaluate(p.expr, { ...OPTIONS, ...RUN, vars: { op } }));
@@ -359,12 +545,12 @@ describe("COMPILE.FALLBACK: a program that tier 2 cannot give operates in tier 1
   });
 
   it("an expression nested deeper than the limit", () => {
-    let e: Expr = lit(1);
-    for (let i = 0; i < 600; i++) e = app("double", e);
-    const p = tiered(e, OPTIONS);
+    const p = tiered(deep(501), OPTIONS);
     expect(p.tier).toBe(1);
     expect(p.reason).toMatch(/nested/);
-    expectSame(e, false);
+    expect(p.run(RUN)).toEqual(evaluate(deep(501), { ...OPTIONS, ...RUN }));
+    // At the limit, the program has generated code.
+    expectSame(deep(500), true);
   });
 
   it("an expression that is not an expression of the IR", () => {
@@ -392,7 +578,7 @@ describe("COMPILE.TRACE: a trace comes from tier 1", () => {
     const sink = { events: [] };
     expect(p.run({ ...RUN, trace: sink })).toEqual(evaluate(e, { ...OPTIONS, ...RUN }));
     expect(sink.events.length).toBeGreaterThan(0);
-    expect(p.explain(RUN)).toEqual(tiered(e, OPTIONS).explain(RUN));
+    expect(p.explain(RUN)).toEqual(explain(e, { ...OPTIONS, ...RUN }));
     expect(p.stats).toEqual({ runs: 1, fallbacks: 0 });
   });
 });

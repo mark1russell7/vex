@@ -5,7 +5,7 @@
  * The source has no name and no literal of the program as text: it reads each one from `K`, by its index (§5). The
  * same program always gives the same source.
  */
-import { FIXED_LOCALS, type Fail, type LExpr, type LoopProgram, type LStmt, type RuntimeFn } from "./loop.ts";
+import { constant, FIXED_LOCALS, type Fail, type LExpr, type LoopProgram, type LStmt, type RuntimeFn } from "./loop.ts";
 
 const name = (n: number): string => `l${n}`;
 
@@ -22,31 +22,27 @@ export function printJs(p: LoopProgram): string {
       case "local":
         return name(x.n);
       case "num":
-        return String(x.v);
       case "bool":
         return String(x.v);
       case "fallback":
         return "F";
       case "array":
         return `[${x.items.map(expr).join(", ")}]`;
-      case "call": {
-        const [first, ...rest] = x.args;
-        // An op has one dispatch for each name, and the function gets it when it loads.
-        if (x.fn === "op" && first?.t === "const") {
-          const site = `s${first.i}_${rest.length}`;
-          sites.set(site, `R.site(${expr(first)}, ${rest.length})`);
-          const values = rest.map(expr).join(", ");
-          return rest.length <= 3 ? `${site}(${values})` : `${site}([${values}])`;
-        }
-        // An axis has one function of targets for each site, with its cache.
-        const axis = x.args[3];
-        if (x.fn === "targets" && axis?.t === "const") {
-          const site = `a${axis.i}`;
-          sites.set(site, `R.axis(${expr(axis)})`);
-          return `${site}(${x.args.slice(0, 3).map(expr).join(", ")})`;
-        }
+      case "call":
         used.add(x.fn);
         return `${x.fn}_(${x.args.map(expr).join(", ")})`;
+      case "op": {
+        // An op has one dispatch for each name and number of arguments, and the function gets it when it loads.
+        const site = `s${x.name}_${x.args.length}`;
+        sites.set(site, `R.site(${expr(constant(x.name))}, ${x.args.length})`);
+        const values = x.args.map(expr).join(", ");
+        return x.args.length <= 3 ? `${site}(${values})` : `${site}([${values}])`;
+      }
+      case "targets": {
+        // An axis has one function of targets for each site, with its cache.
+        const site = `a${x.axis}`;
+        sites.set(site, `R.axis(${expr(constant(x.axis))})`);
+        return `${site}(${x.args.map(expr).join(", ")})`;
       }
       case "prim": {
         const [a, b] = x.args.map(expr);
@@ -81,21 +77,6 @@ export function printJs(p: LoopProgram): string {
       }
     }
   };
-  // The labels that a failure names. A loop or a block without a failure that names it gets no label.
-  const labels = new Set<number>();
-  const named = (f: Fail): void => {
-    if (f.t !== "return") labels.add(f.label);
-    if (f.t === "continue" && f.strict !== undefined) named(f.strict.else);
-  };
-  const scan = (ss: readonly LStmt[]): void => {
-    for (const s of ss) {
-      if (s.t === "check" || s.t === "fail") named(s.fail);
-      else if (s.t === "if") scan([...s.yes, ...s.no]);
-      else if (s.t === "loop" || s.t === "block") scan(s.body);
-    }
-  };
-  scan(p.body);
-  const label = (n: number): string => (labels.has(n) ? `L${n}: ` : "");
   // The statement of a failure (docs/COMPILER.md §4.1).
   const action = (f: Fail): string => {
     switch (f.t) {
@@ -135,14 +116,14 @@ export function printJs(p: LoopProgram): string {
       case "loop": {
         const [a, i] = [name(s.array), name(s.index)];
         lines.push(`${indent}${a} = ${expr(s.over)};`);
-        lines.push(`${indent}${label(s.label)}for (${i} = 0; ${i} < ${a}.length; ${i}++) {`);
+        lines.push(`${indent}L${s.label}: for (${i} = 0; ${i} < ${a}.length; ${i}++) {`);
         lines.push(`${indent}  ${name(s.item)} = ${a}[${i}];`);
         stmts(s.body, `${indent}  `);
         lines.push(`${indent}}`);
         return;
       }
       case "block":
-        lines.push(`${indent}${label(s.label)}{`);
+        lines.push(`${indent}L${s.label}: {`);
         stmts(s.body, `${indent}  `);
         lines.push(`${indent}}`);
         return;
@@ -163,9 +144,10 @@ export function printJs(p: LoopProgram): string {
   const head = [
     `"use strict";`,
     `const F = R.F;`,
-    ...[...used].toSorted().map((fn) => `const ${fn}_ = R.${fn};`),
-    ...[...constants].toSorted((x, y) => x - y).map((i) => `const k${i} = K[${i}];`),
-    ...[...sites].toSorted(([x], [y]) => Number(x > y) - Number(x < y)).map(([site, init]) => `const ${site} = ${init};`),
+    // The order is the order of the first use, so the same program gives the same source.
+    ...[...used].map((fn) => `const ${fn}_ = R.${fn};`),
+    ...[...constants].map((i) => `const k${i} = K[${i}];`),
+    ...[...sites].map(([site, init]) => `const ${site} = ${init};`),
     `return function vex(${params.join(", ")}) {`,
     ...(locals.length > 0 ? [`  let ${locals.join(", ")};`] : []),
     `  try {`,

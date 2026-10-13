@@ -18,10 +18,8 @@ export const FIXED_LOCALS = 4;
 export type RuntimeFn =
   | "has" // has(space, key): boolean
   | "addr" // addr(space, origin, focus, address): the key of an address
-  | "targets" // targets(space, origin, focus, axis): the keys of a base axis. The axis is a constant.
   | "table" // table(tables, name): the space of a table
   | "keys" // keys(space): the keys of a space
-  | "op" // op(name, ...values): the dispatch of an op. The name is a constant.
   | "step" // step(name, acc, value): one step of reduce
   | "result" // result(value): the checks of the value of an op
   | "opts" // opts(value): the read of the option strict of a list op
@@ -59,7 +57,11 @@ export type LExpr =
   | { readonly t: "fallback" }
   | { readonly t: "array"; readonly items: readonly LExpr[] }
   | { readonly t: "prim"; readonly op: PrimOp; readonly args: readonly LExpr[] }
-  | { readonly t: "call"; readonly fn: RuntimeFn; readonly args: readonly LExpr[] };
+  | { readonly t: "call"; readonly fn: RuntimeFn; readonly args: readonly LExpr[] }
+  /** The dispatch of the op whose name is the constant `name`, with the values of its arguments, the receiver first. */
+  | { readonly t: "op"; readonly name: number; readonly args: readonly LExpr[] }
+  /** The targets of the base axis that is the constant `axis`, at the space, the origin and the focus of `args`. */
+  | { readonly t: "targets"; readonly axis: number; readonly args: readonly [LExpr, LExpr, LExpr] };
 
 /**
  * What a failed check does. The interpreter gives an error value at the node of the check, and the context of the node

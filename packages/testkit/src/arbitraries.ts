@@ -86,10 +86,10 @@ export interface GraphInput {
 export const arbGraphInput = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<GraphInput> =>
   fc.uniqueArray(fc.constantFrom("A", "B", "C", "D", "E", "F"), { minLength: 1, maxLength: 6 }).chain((keys) =>
     fc
-      .tuple(fc.tuple(...keys.map(() => arbRecord(domainValue))), fc.tuple(...keys.map(() => fc.array(fc.constantFrom(...keys), { maxLength: 4 }))))
-      .map(([recs, es]) => ({
-        records: Object.fromEntries(keys.map((k, i) => [k, recs[i]])),
-        edges: Object.fromEntries(keys.map((k, i) => [k, es[i] ?? []])),
+      .tuple(...keys.map((k) => fc.tuple(fc.constant(k), arbRecord(domainValue), fc.array(fc.constantFrom(...keys), { maxLength: 4 }))))
+      .map((nodes) => ({
+        records: Object.fromEntries(nodes.map(([k, rec]) => [k, rec])),
+        edges: Object.fromEntries(nodes.map(([k, , to]) => [k, to])),
       })),
   );
 

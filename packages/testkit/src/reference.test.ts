@@ -121,6 +121,7 @@ const s = space.record({
 });
 const row = space.array([{ v: 1 }, { v: 2 }]);
 const tree = space.tree({ top: { n: 1 }, leaf: { n: 2 } }, { leaf: "top" });
+const graph = space.graph({ a: { n: 1 }, b: { n: 2 }, c: { n: 4 } }, { a: ["b"], b: ["c", "a"], c: ["a"] });
 
 const D: readonly AnyDomain[] = [Vec2Domain, NumDomain, BoolDomain];
 const ps = each(axes.all, ref("p"));
@@ -135,6 +136,7 @@ interface Case {
   readonly origin?: string;
   readonly domains?: readonly AnyDomain[];
   readonly fns?: Readonly<Record<string, (...a: readonly unknown[]) => unknown>>;
+  readonly tables?: Readonly<Record<string, Space>>;
 }
 
 const noRecord = space.record({ U: undefined });
@@ -210,6 +212,12 @@ const CASES: readonly Case[] = [
   { name: "where with a failed test", expr: each(axes.where(axes.all, ref("mass")), ref("n")) },
   { name: "where in where", expr: each(axes.where(axes.where(axes.all, ref("mass")), lit(true)), ref("n")) },
   { name: "where that keeps some targets", expr: each(axes.where(axes.all, ref("b")), ref("n")) },
+  { name: "the axis table", expr: each(axes.table("T"), ref("n")), tables: { T: tree } },
+  { name: "the axis table without that table", expr: each(axes.table("nope"), ref("n")), tables: { T: tree } },
+  { name: "the axis table reads its target at the origin, also in where", expr: each(axes.where(axes.table("T"), ref("b", [{ t: "origin" }])), ref("n", [{ t: "origin" }])), tables: { T: s } },
+  { name: "reachable in a graph", expr: each(axes.reachable, ref("n")), space: graph, origin: "a" },
+  { name: "predecessors in a graph", expr: each(axes.predecessors, ref("n")), space: graph, origin: "a" },
+  { name: "successors outside a graph", expr: each(axes.successors, ref("n")) },
   // List ops
   { name: "count", expr: app("count", ns) },
   { name: "values", expr: app("values", ns) },
@@ -243,6 +251,8 @@ const CASES: readonly Case[] = [
   { name: "reduce with a number as the op", expr: app("reduce", ps, lit(1)) },
   { name: "reduce of nothing with an identity", expr: app("reduce", each(axes.where(axes.all, lit(false)), ref("p")), lit("add")) },
   { name: "reduce of nothing without an identity", expr: app("reduce", nothing, lit("subtract")) },
+  { name: "reduce of nothing with the domain in the option", expr: app("reduce", nothing, lit("add"), lit({ domain: "Vec2" })) },
+  { name: "reduce of nothing with a domain that is not there", expr: app("reduce", nothing, lit("add"), lit({ domain: "Nope" })) },
   { name: "reduce with an op that the values do not have", expr: app("reduce", each(axes.where(axes.all, lit(true)), ref("name")), lit("add")) },
   { name: "reduce with a strict option", expr: app("reduce", ps, lit("add"), lit({ strict: true })) },
   { name: "a list op that is not a list op", expr: app("shuffle", ns) },
@@ -311,7 +321,7 @@ const CASES: readonly Case[] = [
 
 describe("the reference interpreter against the core (EVAL.REFERENCE)", () => {
   it.each(CASES)("EVAL.REFERENCE: $name", (c) => {
-    const opts = { space: c.space ?? s, origin: c.origin ?? "A", domains: c.domains ?? D, ...(c.fns === undefined ? {} : { fns: c.fns }) };
+    const opts = { space: c.space ?? s, origin: c.origin ?? "A", domains: c.domains ?? D, ...(c.fns === undefined ? {} : { fns: c.fns }), ...(c.tables === undefined ? {} : { tables: c.tables }) };
     expect(fromReference(referenceEvaluate(c.expr, opts))).toEqual(fromCore(evaluate(c.expr, opts)));
   });
 

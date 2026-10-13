@@ -48,6 +48,7 @@ A function name has no difference between capital and small letters.
 - **[FORMULA.AGGREGATE.STRICT]** An error at one row of the axis makes the aggregate an error, like a spreadsheet. To skip the errors, use `IFERROR` in the value, for example `SUM(children, IFERROR(cost, 0))`.
 - **[FORMULA.AGGREGATE.WHERE]** `SUM(children WHERE cost > 10, cost)` keeps the rows of the axis where the test is `TRUE`. In the test and in the value, a name reads at the row of the axis, and `this.name` reads at the row of the formula.
 - **[FORMULA.AGGREGATE.ADDRESS]** Navigation before the axis is the address of the axis: `SUM(parent.children.cost)` sums the costs of the children of the parent.
+- **[FORMULA.AGGREGATE.WINDOW]** `rows(from, to)` as the axis of an aggregate is the axis `window(from, to)`. Its rows are at the offsets from `from` to `to` of the row, among its siblings. For example, `AVERAGE(rows(-2, 0).Sales)` is the mean of the sales of this row and of the two rows before it. The offsets must be whole numbers.
 - **[FORMULA.AGGREGATE.OP]** Without an axis, `MIN`, `MAX` and `SUM` are ops of the domains, for example `MIN(a, b)` of two numbers. `AVERAGE`, `COUNT`, `ANY` and `ALL` without an axis are errors.
 - **[FORMULA.RANK]** `RANK(value)` is 1 plus the number of other rows with a larger value. An error at another row makes the rank an error. `RANK` is not valid inside an aggregate.
 

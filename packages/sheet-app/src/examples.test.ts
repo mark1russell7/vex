@@ -115,6 +115,13 @@ describe("the examples with the formula language", () => {
     expect([text(empty, "r1", "c3"), text(empty, "r2", "c3")]).toEqual(["50", ""]);
   });
 
+  it("FORMULA.AGGREGATE.WINDOW: monthly sales: a moving average, a total for the year and the best month, from a window of rows", () => {
+    expect(column("sales", "Average of 3")).toEqual(["120", "127.5", "127.666667", "137.666667", "146.666667", "155.666667", "162.333333", "169", "176", "184.333333", "193.666667", "203.333333"]);
+    expect(column("sales", "Year to date")).toEqual(["120", "255", "383", "533", "695", "850", "1,020", "1,202", "1,378", "1,573", "1,783", "1,988"]);
+    expect(column("sales", "Best so far")).toEqual(["120", "135", "135", "150", "162", "162", "170", "182", "182", "195", "210", "210"]);
+    expect(column("sales", "Change")).toEqual(["0", "15", "-7", "22", "12", "-7", "15", "12", "-6", "19", "15", "-5"]);
+  });
+
   it("FORMULA.NAV.NAME: the name of a row is the text of the first column, when that column is a text column", () => {
     const ex = EXAMPLES.find((e) => e.id === "org");
     if (ex === undefined) throw new Error("org");

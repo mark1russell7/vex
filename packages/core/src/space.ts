@@ -335,5 +335,26 @@ export function axisTargets(s: Space, at: Position, a: Exclude<Axis, { readonly 
     case "descendants":
     case "siblings":
       return treeTargets(s, at, a.t);
+    case "window":
+      return windowTargets(s, at, a.from, a.to);
   }
+}
+
+/**
+ * This function gives the targets of the axis `window(from, to)`: the keys of the moves `offset(d)` for each `d`
+ * from `from` to `to`, in order. An offset outside the space has no target. The axis needs an array space or a tree
+ * space, where an offset has one number.
+ */
+function windowTargets(s: Space, at: Position, from: number, to: number): Result<readonly string[]> {
+  const tree = s.parentOf !== undefined && s.childrenOf !== undefined;
+  if (!tree && s.coords(at.focus)?.length !== 1) {
+    return fail(vexError("no-offset", `"window" needs an array space or a tree space, but this space is a ${s.kind}`, at));
+  }
+  // An offset larger than the number of keys has no target, so the loop stays in the size of the space.
+  const out: string[] = [];
+  for (let d = Math.max(from, -s.keys.length); d <= Math.min(to, s.keys.length); d++) {
+    const r = applyMove(s, at, { t: "offset", d: [d] });
+    if (r.ok) out.push(r.value);
+  }
+  return ok(out);
 }

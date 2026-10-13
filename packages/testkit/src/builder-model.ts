@@ -31,7 +31,7 @@ export type MoveCall =
   | { readonly t: "parent" };
 
 /** The axes of the builder. */
-export type AxisName = "others" | "each" | "neighbors4" | "neighbors8" | "children" | "ancestors" | "descendants" | "siblings";
+export type AxisName = "others" | "each" | "neighbors4" | "neighbors8" | "children" | "ancestors" | "descendants" | "siblings" | "window";
 
 /** A reduction of a list chain. */
 export interface Reduction {
@@ -139,6 +139,7 @@ const AXIS_MEMBER: Readonly<Record<AxisName, readonly [string, ...unknown[]]>> =
   ancestors: ["ancestors"],
   descendants: ["descendants"],
   siblings: ["siblings"],
+  window: ["window", -1, 1],
 };
 
 function runSteps(c: DynChain, steps: readonly Step[], root: DynRoot, vars: Readonly<Record<string, unknown>>): DynChain {
@@ -211,6 +212,7 @@ const AXES: Readonly<Record<AxisName, Axis>> = {
   ancestors: { t: "ancestors" },
   descendants: { t: "descendants" },
   siblings: { t: "siblings" },
+  window: { t: "window", from: -1, to: 1 },
 };
 
 /** The expected expression of a chain, after the rules of the spec and the API reference. */

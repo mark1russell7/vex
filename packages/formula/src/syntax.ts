@@ -123,6 +123,12 @@ export type Nav =
 export const AXES = ["children", "descendants", "ancestors", "siblings", "others", "all"] as const;
 export type AxisName = (typeof AXES)[number];
 
+/** The axis of an aggregate: a named axis, or `rows(from, to)`, the rows at the offsets from `from` to `to`. */
+export type AggAxis = AxisName | { readonly from: number; readonly to: number };
+
+/** This function gives the text of the axis of an aggregate, as a formula writes it. */
+export const axisText = (a: AggAxis): string => (typeof a === "string" ? a : `rows(${a.from}, ${a.to})`);
+
 /** The aggregates: a function of the values of an axis. */
 export const AGGREGATES = { SUM: "sum", AVERAGE: "mean", MIN: "min", MAX: "max", COUNT: "count", ANY: "any", ALL: "all" } as const;
 export type AggregateName = keyof typeof AGGREGATES;
@@ -143,7 +149,7 @@ export type Ast =
       readonly fn: AggregateName;
       readonly fnSpan: Span;
       readonly nav: readonly Nav[];
-      readonly axis: AxisName;
+      readonly axis: AggAxis;
       readonly where?: Ast;
       readonly body?: Ast;
       readonly span: Span;
@@ -234,10 +240,28 @@ export function parseFormula(src: string): Ast {
     throw new FormulaSyntaxError(`a column name is necessary after the navigation, not ${describe(t)}`, t.span);
   };
 
+  // A whole number with an optional sign, for an offset of rows(from, to).
+  const parseOffset = (): number => {
+    const sign = peek();
+    if (sign.t === "op" && (sign.v === "-" || sign.v === "+")) next();
+    const n = next();
+    const v = (sign.t === "op" && sign.v === "-" ? -1 : 1) * (n.t === "num" ? n.v : Number.NaN);
+    if (!Number.isSafeInteger(v)) throw new FormulaSyntaxError("the offsets of rows(from, to) must be whole numbers", n.span);
+    return v;
+  };
+
   const parseAggregate = (fn: AggregateName, fnTok: Token): Ast => {
     const nav = parseNav();
     const axisTok = next() as Extract<Token, { t: "id" }>;
-    const axis = axisTok.v.toLowerCase() as AxisName;
+    let axis: AggAxis = axisTok.v.toLowerCase() as AxisName;
+    if (isWord(axisTok, "rows")) {
+      next(); // "("
+      const from = parseOffset();
+      expect(",", `"," between the two offsets of rows(from, to)`);
+      const to = parseOffset();
+      expect(")", `")" after the offsets of rows(from, to)`);
+      axis = { from, to };
+    }
     let body: Ast | undefined;
     if (isPunct(peek(), ".")) {
       next();
@@ -270,9 +294,12 @@ export function parseFormula(src: string): Ast {
     next(); // the function name
     next(); // "("
     const upper = fnTok.v.toUpperCase();
-    // The axis "all" and the function ALL have one name. An axis name before "(" is a function, not an axis.
+    // The axis "all" and the function ALL have one name. An axis name before "(" is a function, not an axis. The
+    // axis rows(from, to) is the exception: it has its offsets in parentheses.
     const axisAt = i + navLength(i);
-    if (upper in AGGREGATES && isAxis(toks[axisAt]) && !isPunct(toks[axisAt + 1], "(")) return parseAggregate(upper as AggregateName, fnTok);
+    const named = isAxis(toks[axisAt]) && !isPunct(toks[axisAt + 1], "(");
+    const rows = isWord(toks[axisAt], "rows") && isPunct(toks[axisAt + 1], "(");
+    if (upper in AGGREGATES && (named || rows)) return parseAggregate(upper as AggregateName, fnTok);
     const args: Ast[] = [];
     if (!isPunct(peek(), ")")) {
       for (;;) {

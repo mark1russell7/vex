@@ -120,6 +120,16 @@ const recipeCols: readonly Column[] = [
   { id: "c9", name: "Per serving", kind: "formula", formula: '= Cost / row("Pancakes").Serves' },
 ];
 
+// A window of rows: each month reads the months before it with rows(from, to), not with a chain of row(-1) reads.
+const salesCols: readonly Column[] = [
+  { id: "c1", name: "Month", kind: "value", type: "text" },
+  { id: "c2", name: "Sales", kind: "value", type: "number" },
+  { id: "c3", name: "Average of 3", kind: "formula", formula: "= AVERAGE(rows(-2, 0).Sales)" },
+  { id: "c4", name: "Year to date", kind: "formula", formula: "= SUM(rows(-11, 0).Sales)" },
+  { id: "c5", name: "Best so far", kind: "formula", formula: "= MAX(rows(-11, 0).Sales)" },
+  { id: "c6", name: "Change", kind: "formula", formula: "= Sales - row(-1).Sales" },
+];
+
 /** The example sheets. */
 export const EXAMPLES: readonly Example[] = [
   {
@@ -275,6 +285,21 @@ export const EXAMPLES: readonly Example[] = [
         ["r5", "r1", "Eve", "CFO", "140"],
         ["r6", "r5", "Finn", "Accountant", "90"],
       ]),
+    },
+  },
+  {
+    id: "sales",
+    title: "Monthly sales",
+    doc: {
+      version: 1,
+      title: "Monthly sales",
+      columns: salesCols,
+      // The first month has no month before it, so its change has its own formula.
+      rows: rows(
+        ["c1", "c2"],
+        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => [`r${i + 1}`, null, m, String([120, 135, 128, 150, 162, 155, 170, 182, 176, 195, 210, 205][i])]),
+      ).map((r) => (r.id === "r1" ? { ...r, formulas: { c6: "= 0" } } : r)),
+      chart: { x: null, series: ["c2", "c3"] },
     },
   },
   {

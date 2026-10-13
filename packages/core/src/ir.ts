@@ -25,6 +25,7 @@ export type Axis =
   | { readonly t: "ancestors" }
   | { readonly t: "descendants" }
   | { readonly t: "siblings" }
+  | { readonly t: "window"; readonly from: number; readonly to: number }
   | { readonly t: "where"; readonly axis: Axis; readonly test: Expr };
 
 /** A Vex expression. */
@@ -115,6 +116,11 @@ export const axes = {
   descendants: Object.freeze({ t: "descendants" }) as Axis,
   /** The other children of the parent of the focus. For a root, the other roots. */
   siblings: Object.freeze({ t: "siblings" }) as Axis,
+  /**
+   * The keys at the offsets from `from` to `to` of the focus, in order: a window of rows. The offset 0 is the focus. In
+   * a tree space, the offsets go among the siblings. An offset outside the space has no target.
+   */
+  window: (from: number, to: number): Axis => ({ t: "window", from, to }),
   /** The targets of `axis` where `test` gives `true`. */
   where: (axis: Axis, test: Expr): Axis => ({ t: "where", axis, test }),
 } as const;
@@ -171,6 +177,8 @@ function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boo
       const t = u["t"];
       if (t === "neighbors") {
         if (u["n"] !== 4 && u["n"] !== 8) return false;
+      } else if (t === "window") {
+        if (!Number.isSafeInteger(u["from"]) || !Number.isSafeInteger(u["to"])) return false;
       } else if (t === "where") {
         push(true, [u["axis"]]);
         push(false, [u["test"]]);

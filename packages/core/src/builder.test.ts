@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
+import { axes, each, ref } from "./ir.ts";
 import { ok } from "./result.ts";
 import { isSome, type Optional, type Result } from "./result.ts";
 import { space } from "./space.ts";
@@ -351,6 +352,15 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     expect(optionalValue(rich.at("ceo"))).toEqual(["Bo", "Ed"]);
     const flat = vex(Num).over(space.record({ A, B }));
     expect(error(flat.start(0).children((c) => c.from("weight")).count().result("A"))).toMatchObject({ code: "#REF!", kind: "no-tree" });
+  });
+
+  it("AXIS.WINDOW: window(from, to, body) gives the targets at the offsets, and keys() gives their keys", () => {
+    const rows = vex(Num).over(space.array([{ weight: 1 }, { weight: 2 }, { weight: 4 }]));
+    const prev = rows.start(0).window(-1, 0, (c) => c.from("weight"));
+    expect(JSON.stringify(prev.program)).toContain(JSON.stringify(each(axes.window(-1, 0), ref("weight"))));
+    expect(optionalValue(prev.keys().at("1"))).toEqual(["0", "1"]);
+    expect(optionalValue(prev.values().at("0"))).toEqual([1]);
+    expect(optionalValue(rows.start(0).window(-1, 1, (c) => c.from("weight"), { where: (c) => c.from("weight")._.gt(1) }).values().at("1"))).toEqual([2, 4]);
   });
 
   it("BUILD.LIST.KEYS: keys() gives the keys of the items with a value, and errors() gives the errors of the failed items", () => {

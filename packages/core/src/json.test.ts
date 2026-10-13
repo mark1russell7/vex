@@ -23,6 +23,10 @@ const read = (json: string): unknown => {
   return e.tag === "lit" ? e.value : undefined;
 };
 
+
+/** This function gives an each node with the axis `axis` and a literal body. */
+const eachOf = (axis: unknown): unknown => ({ tag: "each", axis, body: lit(1) });
+
 describe("the JSON form at each position of the tree (IR.JSON)", () => {
   it("IR.JSON.NUMBER: a literal -0 at each position round-trips", () => {
     for (const [, at] of POSITIONS) {
@@ -85,6 +89,13 @@ describe("the edges of the address of an axis and of a tree offset", () => {
     expect(isExpr({ ...base, at: "parent" })).toBe(false);
     expect(isExpr({ ...base, at: [{ t: "bogus" }] })).toBe(false);
     expect(isExpr({ ...base, at: [{ t: "parent" }, { t: "bogus" }] })).toBe(false);
+  });
+
+  it("AXIS.WINDOW: isExpr accepts a window with two safe whole numbers, and JSON keeps it", () => {
+    expect(isExpr(eachOf({ t: "window", from: -2, to: 0 }))).toBe(true);
+    for (const bad of [{ t: "window", from: -2 }, { t: "window", from: 0.5, to: 1 }, { t: "window", from: 0, to: Infinity }, { t: "window", from: 0, to: 2 ** 53 }]) expect(isExpr(eachOf(bad))).toBe(false);
+    const e = each(axes.window(-2, 0), lit(1));
+    expect(value(parse(value(serialize(e)), []))).toEqual(e);
   });
 
   it("NAV.OFFSET.TREE: a space needs both parentOf and childrenOf for the tree offset, and an unknown focus has no siblings", () => {

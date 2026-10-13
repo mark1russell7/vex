@@ -101,6 +101,8 @@ function list(e: Extract<Expr, { tag: "each" }>): string {
     case "descendants":
     case "siblings":
       return `${head}.${axis.t}(${body}${where})`;
+    case "window":
+      return `${head}.window(${axis.from}, ${axis.to}, ${body}${where})`;
   }
 }
 

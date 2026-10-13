@@ -234,6 +234,24 @@ describe("axes (AXIS.*) and list ops (LIST.*)", () => {
     expect(value(evaluate(liveNeighbors, { space: g, origin: "1,0" }))).toBe(3);
     expect(value(evaluate(liveNeighbors, { space: g, origin: "1,1" }))).toBe(2);
   });
+
+  it("AXIS.WINDOW: a window of rows gives a moving sum, goes among the siblings in a tree, and needs an array or a tree", () => {
+    const rows = space.array([{ v: 1 }, { v: 2 }, { v: 4 }, { v: 8 }]);
+    const moving = app("sum", each(axes.window(-1, 0), ref("v")));
+    expect(["0", "1", "2", "3"].map((k) => value(evaluate(moving, { space: rows, origin: k })))).toEqual([1, 3, 6, 12]);
+    const count = (w: ReturnType<typeof axes.window>, k: string): unknown => value(evaluate(app("count", each(w, lit(1))), { space: rows, origin: k }));
+    // An offset outside the space has no target. A window with its start after its end has no target.
+    expect([count(axes.window(-5, 5), "0"), count(axes.window(1, -1), "1"), count(axes.window(1, 1), "3")]).toEqual([4, 0, 0]);
+    // A very large window loops over the keys of the space, not over its offsets.
+    expect(count(axes.window(-1e15, 1e15), "2")).toBe(4);
+    // In a tree space, the offsets go among the siblings. The roots are siblings.
+    const tree = space.tree({ a: { v: 1 }, b: { v: 2 }, c: { v: 4 }, d: { v: 8 } }, { a: null, b: "a", c: "a", d: null });
+    const around = app("sum", each(axes.window(-1, 1), ref("v")));
+    expect(["a", "b", "c", "d"].map((k) => value(evaluate(around, { space: tree, origin: k })))).toEqual([9, 6, 6, 9]);
+    // A record space and a grid have no offsets with one number.
+    expect(error(evaluate(moving, { space: space.record({ A: { v: 1 } }), origin: "A" }))).toMatchObject({ code: "#REF!", message: '"window" needs an array space or a tree space, but this space is a record' });
+    expect(error(evaluate(moving, { space: space.grid([[{ v: 1 }]]), origin: "0,0" })).code).toBe("#REF!");
+  });
 });
 
 describe("special forms (FORM.*)", () => {

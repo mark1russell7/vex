@@ -107,6 +107,7 @@ An expression is plain JSON data. It has one of these kinds.
 - **[AXIS.OTHER.PAIR]** The axis `other` has the other key of a pair as a target. Outside a pair, it gives `#REF!`.
 - **[AXIS.NEIGHBORS]** The axis `neighbors(4)` or `neighbors(8)` has the neighbor cells of the focus in a grid as targets. Outside a grid, it gives `#REF!`.
 - **[AXIS.TREE]** In a tree space, the axis `children` has the children of the focus as targets, in key order. `ancestors` has the parent first and the root last. `descendants` has each key under the focus, depth first, with each parent before its children. `siblings` has the other children of the parent, or the other roots for a root. In a space that is not a tree, each of these axes gives `#REF!`.
+- **[AXIS.WINDOW]** The axis `window(from, to)` has the targets of the moves `offset(d)` for each whole number `d` from `from` to `to`, in order. The offset 0 is the focus, and an offset outside the space has no target. In a tree space, the offsets go among the siblings. In a space where an offset with one number is not valid, the axis gives `#REF!`.
 - **[AXIS.WHERE]** The axis `where(axis, test)` keeps the targets of `axis` where `test` gives `true`. A test that fails, or that does not give a boolean, gives an error item for that target.
 - **[AXIS.OTHERS-UNION]** The targets of `others` and the focus are the targets of `all`.
 - **[AXIS.OTHER-TWICE]** In a pair, the address `[other, other]` points to the focus.

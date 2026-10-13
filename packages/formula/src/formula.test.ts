@@ -262,6 +262,19 @@ describe("aggregates", () => {
     expect(at("COUNT(all)", "fruit")).toBe(6);
   });
 
+  it("FORMULA.AGGREGATE.WINDOW: rows(from, to) is the window of rows at those offsets, among the siblings", () => {
+    // The roots are fruit, tools and extra. The children of fruit are apple and pear.
+    expect(column("SUM(rows(-1, 0).qty)")).toEqual([1, 3, 4, 3, 1]);
+    expect(column("AVERAGE(rows(-1, 1), qty)", ["pear", "tools"])).toEqual([2, 4 / 3]);
+    expect(column("COUNT(rows(-5, 5))", ["fruit", "saw"])).toEqual([3, 1]);
+    expect(column("COUNT(rows(-2, 0) WHERE active)", ["extra"])).toEqual([2]);
+    expect(column("SUM(parent.rows(0, 1).qty)", ["apple"])).toEqual([3]);
+    expect(JSON.stringify(compile("AVERAGE(rows(-2, +0).qty)"))).toContain('"axis":{"t":"window","from":-2,"to":0}');
+    expect(error("SUM(rows(-1.5, 0).qty)")).toEqual({ message: "the offsets of rows(from, to) must be whole numbers", span: { start: 10, end: 13 } });
+    expect(error("SUM(rows(-1).qty)").message).toBe('"," between the two offsets of rows(from, to) is necessary here');
+    expect(error("SUM(rows(-1, 0))").message).toBe("SUM needs a value: write SUM(rows(-1, 0).column) or SUM(rows(-1, 0), value)");
+  });
+
   it("FORMULA.AGGREGATE.WHERE: a test of the rows of the axis, and this. reads the row of the formula", () => {
     expect(at("SUM(children WHERE cost > 2, cost)", "fruit")).toBe(5);
     expect(at("COUNT(children WHERE active)", "fruit")).toBe(1);

@@ -6,7 +6,7 @@
 import { app, axes, cell, each, key, lit, offset, origin, parent, ref, type Axis, type Expr, type Move } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { BUILT_IN_NAMES, OP_NAMES } from "./functions.ts";
-import { AGGREGATES, FormulaSyntaxError, parseFormula, type Ast, type AxisName, type BinaryOp, type Nav, type Span } from "./syntax.ts";
+import { AGGREGATES, axisText, FormulaSyntaxError, parseFormula, type AggAxis, type Ast, type AxisName, type BinaryOp, type Nav, type Span } from "./syntax.ts";
 
 /** The columns that a formula can read. */
 export interface FormulaContext {
@@ -29,6 +29,9 @@ export type CompileResult = { readonly ok: true; readonly expr: Expr; readonly r
 
 const BINARY: Readonly<Record<Exclude<BinaryOp, "<>">, string>> = { "+": "add", "-": "subtract", "*": "multiply", "/": "divide", "^": "pow", "&": "concat", "=": "eq", "<": "lt", "<=": "lte", ">": "gt", ">=": "gte" };
 const AXIS: Readonly<Record<AxisName, Axis>> = { children: axes.children, descendants: axes.descendants, ancestors: axes.ancestors, siblings: axes.siblings, others: axes.others, all: axes.all };
+
+/** This function gives the Vex axis of the axis of an aggregate. `rows(from, to)` is the axis `window(from, to)`. */
+const axisOf = (a: AggAxis): Axis => (typeof a === "string" ? AXIS[a] : axes.window(a.from, a.to));
 const STRICT = lit({ strict: true });
 
 /** Where a part of a formula evaluates. `base` comes before each address. `inAggregate` is true in an aggregate. */
@@ -100,8 +103,9 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       }
       case "agg": {
         const inner: Scope = { base: [], inAggregate: true };
-        const axis = a.where === undefined ? AXIS[a.axis] : axes.where(AXIS[a.axis], go(a.where, inner));
-        if (a.body === undefined && a.fn !== "COUNT") throw new FormulaSyntaxError(`${a.fn} needs a value: write ${a.fn}(${a.axis}.column) or ${a.fn}(${a.axis}, value)`, a.span);
+        const axis = a.where === undefined ? axisOf(a.axis) : axes.where(axisOf(a.axis), go(a.where, inner));
+        const text = axisText(a.axis);
+        if (a.body === undefined && a.fn !== "COUNT") throw new FormulaSyntaxError(`${a.fn} needs a value: write ${a.fn}(${text}.column) or ${a.fn}(${text}, value)`, a.span);
         const body = a.body === undefined ? lit(true) : go(a.body, inner);
         return app(AGGREGATES[a.fn], each(axis, body, [...s.base, ...a.nav.map(navMove)]), STRICT);
       }

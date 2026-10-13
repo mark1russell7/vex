@@ -219,6 +219,14 @@ describe("properties of sheets", () => {
   });
 });
 
+/** This function gives the keys at the offsets from `from` to `to` of `k` in the list `group`. */
+function windowOf(group: readonly string[], k: string, from: number, to: number): string[] {
+  const out: string[] = [];
+  const i = group.indexOf(k);
+  for (let d = from; d <= to; d++) if (i + d >= 0 && i + d < group.length) out.push(group[i + d] ?? "");
+  return out;
+}
+
 describe("properties of tree spaces", () => {
   // The laws read only the parents of the input, not the tree space, so they check the space independently.
   it("P11 AXIS.TREE: children, ancestors, descendants and siblings follow from the parents", () => {
@@ -246,6 +254,31 @@ describe("properties of tree spaces", () => {
           expect(targets(k, "siblings")).toEqual(keys.filter((x) => x !== k && parentOf(x) === parentOf(k)));
           const up = resolveAddr(s, { origin: k, focus: k }, [{ t: "parent" }]);
           expect(up.ok ? up.value : null).toBe(parentOf(k));
+        }
+      }),
+    );
+  });
+
+  it("P14 AXIS.WINDOW: a window has the keys at its offsets in the list of the siblings, or in the list of the keys of an array", () => {
+    // The expected targets come from the parents and the key order only, so the check is independent of the space.
+    const offsets = fc.integer({ min: -4, max: 4 });
+    fc.assert(
+      fc.property(arbTreeInput(fc.constant(0)), offsets, offsets, (input, from, to) => {
+        const s = space.tree(input.records, input.parents);
+        const keys = Object.keys(input.records);
+        const parentOf = (k: string): string | null => input.parents[k] ?? null;
+        for (const k of keys) {
+          const r = axisTargets(s, { origin: k, focus: k }, { t: "window", from, to });
+          expect(r.ok ? r.value : ["<error>"]).toEqual(windowOf(keys.filter((x) => parentOf(x) === parentOf(k)), k, from, to));
+        }
+      }),
+    );
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 8 }), offsets, offsets, (n, from, to) => {
+        const s = space.array(Array.from({ length: n }, () => ({})));
+        for (const k of s.keys) {
+          const r = axisTargets(s, { origin: k, focus: k }, { t: "window", from, to });
+          expect(r.ok ? r.value : ["<error>"]).toEqual(windowOf(s.keys, k, from, to));
         }
       }),
     );

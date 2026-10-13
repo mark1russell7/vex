@@ -150,6 +150,8 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
         { t: "ancestors" },
         { t: "descendants" },
         { t: "siblings" },
+        { t: "window", from: -1, to: 0 },
+        { t: "window", from: -2, to: 2 },
       ),
       fc.tuple(tie("axis"), tie("expr")).map(([axis, test]): Axis => ({ t: "where", axis, test })),
     ),

@@ -340,6 +340,29 @@
         {
           "type": "object",
           "required": [
+            "t",
+            "from",
+            "to"
+          ],
+          "properties": {
+            "t": {
+              "const": "window"
+            },
+            "from": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "to": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
             "t"
           ],
           "properties": {

@@ -221,6 +221,11 @@ export interface ChainBase<Ctx extends ChainContext, T> {
   descendants<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The siblings axis of a tree space: the other children of the parent, or the other roots for a root. */
   siblings<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  /**
+   * The window axis of an array space or a tree space: the keys at the offsets from `from` to `to` of the focus, in
+   * order. The offset 0 is the focus. An offset outside the space has no target.
+   */
+  window<U>(from: number, to: number, body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
 }
 
 /** The options of an axis. */
@@ -583,6 +588,9 @@ class ChainImpl {
   }
   siblings(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
     return this.#axis({ t: "siblings" }, body, opts);
+  }
+  window(from: number, to: number, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+    return this.#axis({ t: "window", from, to }, body, opts);
   }
 }
 

@@ -5,7 +5,7 @@
  */
 import { space, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
-import { AGGREGATES, AXES, type AggregateName, type Ast, type BinaryOp, type Nav } from "./syntax.ts";
+import { AGGREGATES, AXES, axisText, type AggAxis, type AggregateName, type Ast, type BinaryOp, type Nav } from "./syntax.ts";
 
 const NO_SPAN = { start: 0, end: 0 } as const;
 const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/", "^", "&", "=", "<>", "<", "<=", ">", ">="];
@@ -49,7 +49,10 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
         .tuple(
           fc.constantFrom(...(Object.keys(AGGREGATES) as AggregateName[])),
           fc.array(arbNav, { maxLength: 1 }),
-          fc.constantFrom(...AXES),
+          fc.oneof(
+            fc.constantFrom<AggAxis>(...AXES),
+            fc.tuple(fc.integer({ min: -3, max: 3 }), fc.integer({ min: -3, max: 3 })).map(([from, to]): AggAxis => ({ from, to })),
+          ),
           fc.option(tie("ast"), { nil: undefined }),
           tie("ast"),
           fc.boolean(),
@@ -88,7 +91,7 @@ export function printAst(a: Ast): string {
     case "call":
       return `${a.fn}(${a.args.map(printAst).join(", ")})`;
     case "agg":
-      return `${a.fn}(${navText(a.nav)}${a.axis}${a.where === undefined ? "" : ` WHERE ${printAst(a.where)}`}${a.body === undefined ? "" : `, ${printAst(a.body)}`})`;
+      return `${a.fn}(${navText(a.nav)}${axisText(a.axis)}${a.where === undefined ? "" : ` WHERE ${printAst(a.where)}`}${a.body === undefined ? "" : `, ${printAst(a.body)}`})`;
   }
 }
 

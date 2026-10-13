@@ -290,7 +290,7 @@ export function parseChain(src: string): ChainProgram {
 const ROOT_MEMBERS = new Set(["from", "start", "of", "ofPath", "field", "lit", "rec", "ext"]);
 const CHAIN_MEMBERS = new Set([
   "_", "from", "to", "index", "offset", "origin", "other", "parent", "ifError", "fork", "with",
-  "others", "neighbors", "each", "children", "ancestors", "descendants", "siblings",
+  "others", "neighbors", "each", "children", "ancestors", "descendants", "siblings", "window",
 ]);
 const LIST_MEMBERS = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "values", "keys", "errors", "first", "reduce"]);
 // An op name of the ops section can be any name, except the names of JavaScript objects.

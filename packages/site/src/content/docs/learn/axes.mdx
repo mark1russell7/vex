@@ -22,6 +22,7 @@ Select an origin, an axis and a reduction below. The matrix shows the relation f
 | `others` | `.others(body)` | each key except the focus | not applicable |
 | `other` | `each(axes.other, body)` in the IR | the other key of a pair | `#REF!` if the space does not have two keys |
 | `neighbors` | `.neighbors(4, body)` or `.neighbors(8, body)` | the cells next to the focus in a grid | `#REF!` outside a grid |
+| `window` | `.window(from, to, body)` | the keys at the offsets from `from` to `to`, in an array or among siblings | `#REF!` outside an array or a tree |
 | `where` | the option `where` of an axis | the targets of the inner axis where the test gives `true` | an error item for a test that fails |
 
 Each axis method of the builder takes a body function and an optional `{ where }` test. The result is a list chain, with the reductions in the [last section](#reduce-the-list).
@@ -142,6 +143,19 @@ A root has no parent, so `parent()` at a root gives `#REF!`. In a space that is 
 Select a person to move the origin, and select an axis:
 
 <TreeExplorer client:visible />
+
+## Windows of rows
+
+The axis `window(from, to)` has the keys at the offsets from `from` to `to` of the focus, in order (rule `AXIS.WINDOW`). The offset 0 is the focus, and an offset outside the space has no target. In a tree space, the offsets go among the siblings. A moving sum of two rows reads the row before and the row itself:
+
+```ts doctest
+const sales = vex(NumDomain).over(space.array([{ v: 120 }, { v: 135 }, { v: 128 }]));
+const twoMonths = sales.start(0).window(-1, 0, (w) => w.from("v")).sum();
+
+twoMonths.all().values(); // => [120, 255, 263]
+```
+
+The formula language of the sheet app writes this axis as `rows(from, to)`, for example `AVERAGE(rows(-2, 0).Sales)`.
 
 ## The laws of the axes
 

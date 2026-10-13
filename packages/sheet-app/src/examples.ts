@@ -130,6 +130,18 @@ const salesCols: readonly Column[] = [
   { id: "c6", name: "Change", kind: "formula", formula: "= Sales - row(-1).Sales" },
 ];
 
+// Dates: a due date is a date plus some days, and a date minus a date is a count of days.
+const invoiceCols: readonly Column[] = [
+  { id: "c1", name: "Client", kind: "value", type: "text" },
+  { id: "c2", name: "Issued", kind: "value", type: "date" },
+  { id: "c3", name: "Terms", kind: "value", type: "number" },
+  { id: "c4", name: "Due", kind: "formula", formula: "= Issued + Terms" },
+  { id: "c5", name: "Pay by", kind: "formula", formula: "= IF(WEEKDAY(Due) = 1, Due + 1, IF(WEEKDAY(Due) = 7, Due + 2, Due))" },
+  { id: "c6", name: "Paid", kind: "value", type: "date" },
+  { id: "c7", name: "Days late", kind: "formula", formula: '= IFERROR(MAX(Paid - Due, 0), "")' },
+  { id: "c8", name: "Status", kind: "formula", formula: '= IFERROR(IF(Paid > Due, "late", "on time"), "open")' },
+];
+
 /** The example sheets. */
 export const EXAMPLES: readonly Example[] = [
   {
@@ -300,6 +312,22 @@ export const EXAMPLES: readonly Example[] = [
         ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => [`r${i + 1}`, null, m, String([120, 135, 128, 150, 162, 155, 170, 182, 176, 195, 210, 205][i])]),
       ).map((r) => (r.id === "r1" ? { ...r, formulas: { c6: "= 0" } } : r)),
       chart: { x: null, series: ["c2", "c3"] },
+    },
+  },
+  {
+    id: "invoices",
+    title: "Invoices with dates",
+    doc: {
+      version: 1,
+      title: "Invoices",
+      columns: invoiceCols,
+      rows: rows(["c1", "c2", "c3", "c6"], [
+        ["r1", null, "Acme", "2026-09-01", "30", "2026-09-28"],
+        ["r2", null, "Birch", "2026-09-05", "30", "2026-10-09"],
+        ["r3", null, "Cobalt", "2026-09-15", "14", "2026-09-29"],
+        ["r4", null, "Delta", "2026-10-01", "30"],
+        ["r5", null, "Ember", "2026-10-03", "45"],
+      ]),
     },
   },
   {

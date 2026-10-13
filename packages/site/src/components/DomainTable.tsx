@@ -3,10 +3,10 @@
  * cannot differ.
  */
 import type { AnyDomain, Law, ParamKind } from "@mark1russell7/vex";
-import { AngleDomain, BoolDomain, ColorDomain, FnDomain, LiftedNDVectorDomain, MaybeDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
+import { AngleDomain, BoolDomain, ColorDomain, DateDomain, FnDomain, LiftedNDVectorDomain, MaybeDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import type { ReactElement } from "react";
 
-const ALL: readonly AnyDomain[] = [Vec2Domain, NDVectorDomain, LiftedNDVectorDomain, NumRecordDomain, ColorDomain, AngleDomain, NumDomain, BoolDomain, TextDomain, FnDomain, MaybeDomain];
+const ALL: readonly AnyDomain[] = [Vec2Domain, NDVectorDomain, LiftedNDVectorDomain, NumRecordDomain, ColorDomain, AngleDomain, DateDomain, NumDomain, BoolDomain, TextDomain, FnDomain, MaybeDomain];
 
 interface OpRow {
   readonly fn?: unknown;

@@ -14,6 +14,7 @@ Num (fromScalar -, valid yes, encode -, methods -)
   ln(?) | no lift | no laws | no identity | fn
   exp(?) | no lift | no laws | no identity | fn
   log10(?) | no lift | no laws | no identity | fn
+  date(number, number) | no lift | no laws | no identity | fn
   floor(?) | no lift | no laws | no identity | fn
   ceil(?) | no lift | no laws | no identity | fn
   round(?) | no lift | no laws | no identity | fn
@@ -99,6 +100,21 @@ Angle (fromScalar 2 rad, valid yes, encode yes, methods -)
   sin(?) | no lift | no laws | no identity | method
   cos(?) | no lift | no laws | no identity | method
   degrees(?) | no lift | no laws | no identity | method
+
+Date (fromScalar -, valid yes, encode yes, methods -)
+  add(number) | no lift | no laws | no identity | method
+  subtract(any) | no lift | no laws | no identity | method
+  addMonths(number) | no lift | no laws | no identity | method
+  endOfMonth(number) | no lift | no laws | no identity | method
+  year(?) | no lift | no laws | no identity | method
+  month(?) | no lift | no laws | no identity | method
+  day(?) | no lift | no laws | no identity | method
+  weekday(?) | no lift | no laws | no identity | method
+  gt(domain) | no lift | no laws | no identity | method
+  gte(domain) | no lift | no laws | no identity | method
+  lt(domain) | no lift | no laws | no identity | method
+  lte(domain) | no lift | no laws | no identity | method
+  eq(domain) | no lift | laws [commutative] | no identity | method
 
 NDVector (fromScalar -, valid yes, encode yes, methods -)
   add(domain) | no lift | laws [commutative, associative] | identity NDVector({}) | method

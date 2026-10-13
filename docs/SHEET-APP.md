@@ -21,7 +21,7 @@ Vex is the semantics of a spreadsheet without the grid on the screen. The sheet 
 ## 3. The first version
 
 - A table with rows and columns. A column is a value column or a formula column.
-- Value columns of the kinds number, text, boolean, `Vec2` and color.
+- Value columns of the kinds number, text, boolean, `Vec2`, color and date.
 - A formula editor with highlighting, completion of the ops of the domain, and errors as you type.
 - A cell inspector: the value, the error and its reason, and the steps of the evaluation.
 - Tree rows: indent and outdent a row. Roll-ups with `children` and `descendants`.

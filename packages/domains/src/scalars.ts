@@ -1,4 +1,5 @@
 import { defineDomain, type Domain, type FnOp } from "@mark1russell7/vex";
+import { LocalDate } from "./date.ts";
 
 type NumFn1 = (a: number) => number;
 type NumFn2 = (a: number, b: number) => number;
@@ -22,6 +23,7 @@ export type NumOps = {
   readonly ln: FnOp<number, NumFn1>;
   readonly exp: FnOp<number, NumFn1>;
   readonly log10: FnOp<number, NumFn1>;
+  readonly date: FnOp<number, (year: number, month: number, day: number) => LocalDate>;
   readonly floor: FnOp<number, NumFn1>;
   readonly ceil: FnOp<number, NumFn1>;
   readonly round: FnOp<number, NumFn1>;
@@ -54,6 +56,8 @@ export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", numb
     ln: { fn: (a: number): number => Math.log(a) },
     exp: { fn: (a: number): number => Math.exp(a) },
     log10: { fn: (a: number): number => Math.log10(a) },
+    // The year is the receiver: date(year, month, day). The result is a LocalDate, so a chain continues in DateDomain.
+    date: { fn: (year: number, month: number, day: number): LocalDate => LocalDate.of(year, month, day), params: ["number", "number"] },
     floor: { fn: (a: number): number => Math.floor(a) },
     ceil: { fn: (a: number): number => Math.ceil(a) },
     round: { fn: (a: number): number => Math.round(a) },

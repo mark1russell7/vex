@@ -6,7 +6,7 @@
  * The chart uses the rows on the screen, in their order. Thus a sort or a filter changes the chart.
  */
 import type { Result } from "@mark1russell7/vex";
-import { Vec2 } from "@mark1russell7/vex-domains";
+import { LocalDate, Vec2 } from "@mark1russell7/vex-domains";
 import type { ChartSpec, SheetDoc } from "./doc.ts";
 import type { Evaluation } from "./engine.ts";
 import { formatValue } from "./values.ts";
@@ -51,6 +51,8 @@ export interface ChartData {
   readonly series: readonly ChartSeries[];
   /** The name of the horizontal axis. */
   readonly xName: string;
+  /** The value is true when the horizontal axis is a column of dates. Then a value of the axis is the count of days since 1970-01-01. */
+  readonly xDates: boolean;
   /** The range of the points on each axis. A chart without points has no range. */
   readonly x: Range | undefined;
   readonly y: Range | undefined;
@@ -66,6 +68,8 @@ export const LIMIT = 1e15;
 
 const inLimit = (n: number | undefined): n is number => n !== undefined && Number.isFinite(n) && Math.abs(n) <= LIMIT;
 const numberOf = (r: Result<unknown> | undefined): number | undefined => (r?.ok === true && typeof r.value === "number" ? r.value : undefined);
+/** The value of a cell on the horizontal axis: a number, or the days of a date since 1970-01-01. */
+const axisValueOf = (r: Result<unknown> | undefined): number | undefined => (r?.ok === true && r.value instanceof LocalDate ? r.value.days : numberOf(r));
 
 /** This function gives the kind of a column from its first value: a number gives a line, and a vector gives a path. */
 export function seriesKind(doc: SheetDoc, ev: Evaluation, column: string): SeriesKind | undefined {
@@ -86,6 +90,22 @@ export function chartColumns(doc: SheetDoc, ev: Evaluation): readonly ChartColum
   });
 }
 
+/** A column that the horizontal axis can use: a column of numbers or a column of dates. */
+export interface AxisColumn {
+  readonly id: string;
+  readonly name: string;
+  readonly dates: boolean;
+}
+
+/** This function gives the columns that the horizontal axis can use, in the order of the document. */
+export function axisColumns(doc: SheetDoc, ev: Evaluation): readonly AxisColumn[] {
+  return doc.columns.flatMap((c) => {
+    const first = doc.rows.map((r) => ev.cell(r.id, c.id)).find((r) => r?.ok === true);
+    const v = first?.ok === true ? first.value : undefined;
+    return typeof v === "number" || v instanceof LocalDate ? [{ id: c.id, name: c.name, dates: v instanceof LocalDate }] : [];
+  });
+}
+
 /** This function gives a first chart for a document: the first formula column that a chart can draw, over the rows. */
 export function defaultChart(doc: SheetDoc, ev: Evaluation): ChartSpec {
   const all = chartColumns(doc, ev);
@@ -98,7 +118,8 @@ export function defaultChart(doc: SheetDoc, ev: Evaluation): ChartSpec {
 export function chartData(doc: SheetDoc, ev: Evaluation, rows: readonly string[], spec: ChartSpec): ChartData {
   const byId = new Map(doc.columns.map((c) => [c.id, c]));
   const xCol = spec.x === null ? undefined : byId.get(spec.x);
-  const xs = rows.map((id, i) => (xCol === undefined ? i + 1 : numberOf(ev.cell(id, xCol.id))));
+  const xs = rows.map((id, i) => (xCol === undefined ? i + 1 : axisValueOf(ev.cell(id, xCol.id))));
+  const xDates = xCol !== undefined && axisColumns(doc, ev).some((c) => c.id === xCol.id && c.dates);
   const series = spec.series.flatMap((id): ChartSeries[] => {
     const col = byId.get(id);
     const kind = seriesKind(doc, ev, id);
@@ -126,6 +147,7 @@ export function chartData(doc: SheetDoc, ev: Evaluation, rows: readonly string[]
   return {
     series,
     xName: xCol?.name ?? ROW_AXIS,
+    xDates,
     x: range((p) => p.x),
     y: range((p) => p.y),
     sameScale: series.length > 0 && series.every((s) => s.kind === "path"),
@@ -260,8 +282,11 @@ export function describeChart(data: ChartData): string {
     .join(" ");
 }
 
+/** This function gives the text of a value of the horizontal axis: a number, or a date for an axis of dates. */
+export const xText = (x: number, dates: boolean): string => (dates ? new LocalDate(x).toString() : formatValue(x));
+
 /** This function gives the label of a point, for example "Rabbits, row 5: 125.3" or "Position, row 2: (1, 3)". */
-export function pointLabel(s: ChartSeries, p: ChartPoint, xName: string): string {
+export function pointLabel(s: ChartSeries, p: ChartPoint, xName: string, dates = false): string {
   if (s.kind === "path") return `${s.name}, row ${p.index + 1}: (${formatValue(p.x)}, ${formatValue(p.y)})`;
-  return xName === ROW_AXIS ? `${s.name}, row ${p.index + 1}: ${formatValue(p.y)}` : `${s.name} at ${xName} ${formatValue(p.x)}: ${formatValue(p.y)}`;
+  return xName === ROW_AXIS ? `${s.name}, row ${p.index + 1}: ${formatValue(p.y)}` : `${s.name} at ${xName} ${xText(p.x, dates)}: ${formatValue(p.y)}`;
 }

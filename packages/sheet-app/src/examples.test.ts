@@ -122,6 +122,14 @@ describe("the examples with the formula language", () => {
     expect(column("sales", "Change")).toEqual(["0", "15", "-7", "22", "12", "-7", "15", "12", "-6", "19", "15", "-5"]);
   });
 
+  it("FORMULA.DATE: invoices: a due date, a weekend that moves to Monday, the days late and the status", () => {
+    // The values come from the Date of JavaScript: 2026-10-31 is a Saturday, so the invoice is due on Monday 2026-11-02.
+    expect(column("invoices", "Due")).toEqual(["2026-10-01", "2026-10-05", "2026-09-29", "2026-10-31", "2026-11-17"]);
+    expect(column("invoices", "Pay by")).toEqual(["2026-10-01", "2026-10-05", "2026-09-29", "2026-11-02", "2026-11-17"]);
+    expect(column("invoices", "Days late")).toEqual(["0", "4", "0", "", ""]);
+    expect(column("invoices", "Status")).toEqual(["on time", "late", "on time", "open", "open"]);
+  });
+
   it("FORMULA.NAV.NAME: the name of a row is the text of the first column, when that column is a text column", () => {
     const ex = EXAMPLES.find((e) => e.id === "org");
     if (ex === undefined) throw new Error("org");

@@ -38,7 +38,7 @@ export interface GridProps {
 
 const cellId = (c: CellRef): string => `vs-cell-${c.row}-${c.col}`;
 
-const TYPE_MARK: Readonly<Record<string, string>> = { number: "#", text: "Aa", boolean: "✓", vec2: "→", color: "◐" };
+const TYPE_MARK: Readonly<Record<string, string>> = { number: "#", text: "Aa", boolean: "✓", vec2: "→", color: "◐", date: "▦" };
 
 /** The content of one cell. */
 function CellView(props: { readonly r: Result<unknown> | undefined }): ReactElement | null {

@@ -14,3 +14,19 @@ A domain tells Vex which values belong to it and which ops they have. The tables
 - **implementation**: `method` calls the method of the value with the same name. `fn` calls a function of the domain.
 
 <DomainTable />
+
+## Dates
+
+A `LocalDate` is a day of the calendar, without a time and without a time zone. It keeps the count of days since 1970-01-01. Thus a date plus a number is a later date, and a date minus a date is a count of days. The op `date` of `NumDomain` makes a date from a year, a month and a day. A month or a day outside its range rolls over, like `DATE` of a spreadsheet.
+
+```ts doctest
+import { DateDomain, LocalDate, NumDomain } from "@mark1russell7/vex-domains";
+
+const bills = vex(NumDomain, DateDomain).over(space.array([{ issued: LocalDate.of(2026, 9, 1), terms: 30 }]));
+const due = bills.from("issued")._.add("terms");
+
+due.at("0");                          // => some(LocalDate.of(2026, 10, 1))
+LocalDate.of(2026, 13, 1).toString(); // => "2027-01-01"
+```
+
+`addMonths` and `endOfMonth` move by months, like `EDATE` and `EOMONTH`. One month after 31 January is the last day of February.

@@ -231,3 +231,25 @@ test("a cell can have its own formula: the grid marks it, and the formula bar ed
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(balance(1)).toHaveText("9,190, own formula");
 });
+
+test("a column of dates: a due date follows the date of the invoice, and a weekend moves to Monday", async ({ page }) => {
+  await page.goto("./app/#example=invoices");
+  const at = (row: number, column: string) =>
+    page.getByRole("treegrid").getByRole("row").nth(row).getByRole("gridcell").nth(["Client", "Issued", "Terms", "Due", "Pay by", "Paid", "Days late", "Status"].indexOf(column));
+  await expect(at(4, "Due")).toHaveText("2026-10-31");
+  await expect(at(4, "Pay by")).toHaveText("2026-11-02");
+  // One more day of terms puts the due date on a Sunday, so the invoice is due on the Monday after it.
+  await at(4, "Terms").dblclick();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("31");
+  await page.keyboard.press("Enter");
+  await expect(at(4, "Due")).toHaveText("2026-11-01");
+  await expect(at(4, "Pay by")).toHaveText("2026-11-02");
+  // A day that does not exist is not a date. The cell gives #VALUE!, and the cell that reads it gives an error too.
+  await at(4, "Issued").dblclick();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("2026-02-30");
+  await page.keyboard.press("Enter");
+  await expect(at(4, "Issued")).toHaveText("#VALUE!");
+  await expect(at(4, "Due")).toHaveClass(/vs-cell-error/);
+});

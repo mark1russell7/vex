@@ -4,7 +4,7 @@
  * correct. The engine takes the compiler as an argument, so the app depends only on the contract of the compiler.
  */
 import { fail, ok, SheetRun, space, vexError, type AnyDomain, type Expr, type Result, type Trace } from "@mark1russell7/vex";
-import { AngleDomain, BoolDomain, ColorDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
+import { AngleDomain, BoolDomain, ColorDomain, DateDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import type { Column, SheetDoc } from "./doc.ts";
 import { parseValue } from "./values.ts";
 
@@ -51,7 +51,7 @@ export interface Compiler {
 }
 
 /** The domains of the app. */
-export const DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, ColorDomain, AngleDomain];
+export const DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, ColorDomain, AngleDomain, DateDomain];
 
 /** The evaluation of a document. */
 export interface Evaluation {
@@ -86,7 +86,7 @@ export function rowNamesOf(doc: SheetDoc): ReadonlyMap<string, readonly string[]
 export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
   const valueCols = doc.columns.filter((c): c is Extract<Column, { kind: "value" }> => c.kind === "value");
   const formulaCols = doc.columns.filter((c): c is Extract<Column, { kind: "formula" }> => c.kind === "formula");
-  // A cell whose text is not a value of its type keeps its text, so a formula that reads it gives #VALUE!.
+  // A cell whose text is not a value of its type keeps its text, so a formula that reads it gives an error value.
   const records: Record<string, Record<string, unknown>> = {};
   for (const r of doc.rows) {
     const rec: Record<string, unknown> = {};

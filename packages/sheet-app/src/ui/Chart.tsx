@@ -3,7 +3,7 @@
  * chooses the columns and the horizontal axis. A click on a point selects its row, and the selected row has a ring.
  */
 import { useEffect, useId, useMemo, useRef, useState, type ReactElement } from "react";
-import { chartColumns, chartData, chartTitle, describeChart, frameOf, pointLabel, toPixel, type ChartSeries, type Frame } from "../chart.ts";
+import { axisColumns, chartColumns, chartData, chartTitle, describeChart, frameOf, pointLabel, toPixel, xText, type ChartSeries, type Frame } from "../chart.ts";
 import type { ChartSpec, SheetDoc } from "../doc.ts";
 import type { Evaluation } from "../engine.ts";
 import { formatValue } from "../values.ts";
@@ -29,7 +29,15 @@ const colorOf = (i: number): string => `var(--vs-series-${(i % COLORS) + 1})`;
 const DOTS = 80;
 
 /** The lines, the dots and the ring of one series. */
-function SeriesView(props: { readonly s: ChartSeries; readonly color: string; readonly frame: Frame; readonly xName: string; readonly selected: string; readonly onSelectRow: (row: string) => void }): ReactElement {
+function SeriesView(props: {
+  readonly s: ChartSeries;
+  readonly color: string;
+  readonly frame: Frame;
+  readonly xName: string;
+  readonly xDates: boolean;
+  readonly selected: string;
+  readonly onSelectRow: (row: string) => void;
+}): ReactElement {
   const { s, frame } = props;
   const count = s.runs.reduce((n, r) => n + r.length, 0);
   return (
@@ -43,7 +51,7 @@ function SeriesView(props: { readonly s: ChartSeries; readonly color: string; re
         if (!on && count > DOTS) return null;
         return (
           <circle key={p.row} className={on ? "vs-dot vs-dot-sel" : "vs-dot"} cx={q.x} cy={q.y} r={on ? 5 : 3} onClick={() => props.onSelectRow(p.row)}>
-            <title>{pointLabel(s, p, props.xName)}</title>
+            <title>{pointLabel(s, p, props.xName, props.xDates)}</title>
           </circle>
         );
       })}
@@ -69,6 +77,7 @@ export function Chart(props: ChartProps): ReactElement {
   }, []);
 
   const columns = useMemo(() => chartColumns(doc, ev), [doc, ev]);
+  const across = useMemo(() => axisColumns(doc, ev), [doc, ev]);
   const data = useMemo(() => chartData(doc, ev, rows, spec), [doc, ev, rows, spec]);
   const height = Math.round(Math.min(260, Math.max(160, width * 0.36)));
   const frame = frameOf(data, width, height);
@@ -84,13 +93,11 @@ export function Chart(props: ChartProps): ReactElement {
             <span>Across</span>
             <select value={spec.x ?? ""} onChange={(e) => props.onChange({ ...spec, x: e.target.value === "" ? null : e.target.value })}>
               <option value="">Row number</option>
-              {columns
-                .filter((c) => c.kind === "line")
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              {across.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
           </label>
         )}
@@ -126,20 +133,21 @@ export function Chart(props: ChartProps): ReactElement {
                   </g>
                 );
               })}
-              {frame.x.ticks.map((t) => {
+              {/* An axis of dates has a tick only at a whole day. */}
+              {frame.x.ticks.filter((t) => !data.xDates || Number.isInteger(t)).map((t) => {
                 const x = toPixel(frame, { x: t, y: frame.y.min }).x;
                 return (
                   <g key={`x${t}`}>
                     <line x1={x} x2={x} y1={frame.top} y2={frame.bottom} className={t === 0 ? "vs-axis-zero" : undefined} />
                     <text x={x} y={frame.bottom + 16} textAnchor="middle">
-                      {formatValue(t)}
+                      {xText(t, data.xDates)}
                     </text>
                   </g>
                 );
               })}
             </g>
             {data.series.map((s, i) => (
-              <SeriesView key={s.column} s={s} color={colorOf(i)} frame={frame} xName={data.xName} selected={props.selected} onSelectRow={props.onSelectRow} />
+              <SeriesView key={s.column} s={s} color={colorOf(i)} frame={frame} xName={data.xName} xDates={data.xDates} selected={props.selected} onSelectRow={props.onSelectRow} />
             ))}
           </svg>
         )}

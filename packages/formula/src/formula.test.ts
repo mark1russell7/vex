@@ -221,8 +221,8 @@ describe("functions", () => {
     expect(error("ABS()").message).toBe("ABS needs 1 or more arguments, not 0");
   });
 
-  it("FORMULA.DOMAINS: Num, Bool, Text, Vec2, Color and Angle, in that order", () => {
-    expect(FORMULA_DOMAINS.map((d) => d.name)).toEqual(["Num", "Bool", "Text", "Vec2", "Color", "Angle"]);
+  it("FORMULA.DOMAINS: Num, Bool, Text, Vec2, Color, Angle and Date, in that order", () => {
+    expect(FORMULA_DOMAINS.map((d) => d.name)).toEqual(["Num", "Bool", "Text", "Vec2", "Color", "Angle", "Date"]);
   });
 
   it("FORMULA.FUNCTIONS: an entry for each built-in function and for each op of the standard domains", () => {
@@ -231,7 +231,7 @@ describe("functions", () => {
     for (const b of BUILT_IN_NAMES) expect(names).toContain(b);
     for (const op of OP_NAMES.values()) expect(names).toContain(op.toUpperCase());
     expect(FUNCTIONS.find((f) => f.name === "DISTANCE")).toEqual({ name: "DISTANCE", signature: "DISTANCE(vector, value)", summary: "The op `distance` of the domain Vec2." });
-    expect(FUNCTIONS.find((f) => f.name === "EQ")?.summary).toBe("The op `eq` of the domains Num, Bool, Text.");
+    expect(FUNCTIONS.find((f) => f.name === "EQ")?.summary).toBe("The op `eq` of the domains Num, Bool, Text, Date.");
     for (const f of FUNCTIONS) expect(f.signature.startsWith(`${f.name}(`)).toBe(true);
   });
 });
@@ -273,6 +273,18 @@ describe("aggregates", () => {
     expect(error("SUM(rows(-1.5, 0).qty)")).toEqual({ message: "the offsets of rows(from, to) must be whole numbers", span: { start: 10, end: 13 } });
     expect(error("SUM(rows(-1).qty)").message).toBe('"," between the two offsets of rows(from, to) is necessary here');
     expect(error("SUM(rows(-1, 0))").message).toBe("SUM needs a value: write SUM(rows(-1, 0).column) or SUM(rows(-1, 0), value)");
+  });
+
+  it("FORMULA.DATE: DATE makes a date, the parts of a date are numbers, and the arithmetic of dates counts days", () => {
+    // The days and the weekday come from the Date of JavaScript: 2026-10-13 is a Tuesday, and 2026-12-25 is 73 days later.
+    expect(String(value("DATE(2026, 10, 13)"))).toBe("2026-10-13");
+    expect([value("YEAR(DATE(2026, 10, 13))"), value("MONTH(DATE(2026, 10, 13))"), value("DAY(DATE(2026, 10, 13))"), value("WEEKDAY(DATE(2026, 10, 13))")]).toEqual([2026, 10, 13, 3]);
+    expect([value("DATE(2026, 12, 25) - DATE(2026, 10, 13)"), String(value("DATE(2026, 10, 13) + 30")), String(value("DATE(2026, 10, 13) - 13"))]).toEqual([73, "2026-11-12", "2026-09-30"]);
+    expect([String(value("DATE(2026, 13, 1)")), String(value("EDATE(DATE(2026, 1, 31), 1)")), String(value("EOMONTH(DATE(2026, 2, 10), 0)"))]).toEqual(["2027-01-01", "2026-02-28", "2026-02-28"]);
+    expect([value("DATE(2026, 10, 13) < DATE(2026, 10, 14)"), value("DATE(2026, 10, 13) = DATE(2026, 10, 13)")]).toEqual([true, true]);
+    expect([value("DATE(2026, 1.5, 1)"), value('YEAR("2026")')]).toEqual(["#NUM!", "#NAME?"]);
+    expect(error("DATE(2026, 10)").message).toBe("DATE needs 3 arguments, not 2");
+    expect(error("TODAY()").message).toBe('the function "TODAY" does not exist');
   });
 
   it("FORMULA.FINANCE: PMT, FV, PV and NPER give the values of the examples of a spreadsheet, with its signs", () => {

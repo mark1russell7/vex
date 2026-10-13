@@ -3,10 +3,10 @@
  * function name is an op of the standard domains, without a difference between capital and small letters.
  */
 import type { AnyDomain, ParamKind } from "@mark1russell7/vex";
-import { AngleDomain, BoolDomain, ColorDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
+import { AngleDomain, BoolDomain, ColorDomain, DateDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 
 /** The domains of the formula language. The app gives them to the evaluation of a sheet. */
-export const FORMULA_DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, ColorDomain, AngleDomain];
+export const FORMULA_DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, ColorDomain, AngleDomain, DateDomain];
 
 /** The description of one function, for completion and the docs. */
 export interface FunctionInfo {
@@ -33,6 +33,13 @@ const BUILT_INS: readonly FunctionInfo[] = [
   { name: "VEC", signature: "VEC(x, y)", summary: "The vector with the components x and y." },
   { name: "X", signature: "X(vector)", summary: "The x component of the vector." },
   { name: "Y", signature: "Y(vector)", summary: "The y component of the vector." },
+  { name: "DATE", signature: "DATE(year, month, day)", summary: "The date of the year, the month and the day. A month or a day outside its range rolls over." },
+  { name: "YEAR", signature: "YEAR(date)", summary: "The year of the date." },
+  { name: "MONTH", signature: "MONTH(date)", summary: "The month of the date, from 1 to 12." },
+  { name: "DAY", signature: "DAY(date)", summary: "The day of the month of the date, from 1 to 31." },
+  { name: "WEEKDAY", signature: "WEEKDAY(date)", summary: "The day of the week of the date, from 1 (Sunday) to 7 (Saturday)." },
+  { name: "EDATE", signature: "EDATE(date, months)", summary: "The same day some months later. When that month is shorter, its last day." },
+  { name: "EOMONTH", signature: "EOMONTH(date, months)", summary: "The last day of the month some months later. EOMONTH(date, 0) is the end of the month of the date." },
   { name: "PMT", signature: "PMT(rate, nper, pv, [fv], [type])", summary: "The payment of each period of a loan or a saving. Money that you pay is negative." },
   { name: "FV", signature: "FV(rate, nper, pmt, [pv], [type])", summary: "The value at the end of the periods, after the payments. Money that you pay is negative." },
   { name: "PV", signature: "PV(rate, nper, pmt, [fv], [type])", summary: "The value now of the payments of the periods. Money that you pay is negative." },

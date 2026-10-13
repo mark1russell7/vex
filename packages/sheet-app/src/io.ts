@@ -66,7 +66,7 @@ export function exportCsv(doc: SheetDoc, ev: Evaluation): string {
 /** This function guesses the type of a column from its texts: the first type that reads each text that is not empty. */
 function guessType(texts: readonly string[]): ValueType {
   const full = texts.filter((t) => t.trim() !== "");
-  const order: readonly ValueType[] = ["number", "boolean", "vec2", "color"];
+  const order: readonly ValueType[] = ["number", "boolean", "date", "vec2", "color"];
   return order.find((t) => full.length > 0 && full.every((s) => parseValue(t, s).kind === "ok")) ?? "text";
 }
 

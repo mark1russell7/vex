@@ -5,7 +5,7 @@
  */
 
 /** The type of a value column. */
-export type ValueType = "number" | "text" | "boolean" | "vec2" | "color";
+export type ValueType = "number" | "text" | "boolean" | "vec2" | "color" | "date";
 
 /** A column whose cells keep text that the user writes. */
 export interface ValueColumn {
@@ -60,7 +60,7 @@ export interface SheetDoc {
 }
 
 /** The value types, in the order of the menus. */
-export const VALUE_TYPES: readonly ValueType[] = ["number", "text", "boolean", "vec2", "color"];
+export const VALUE_TYPES: readonly ValueType[] = ["number", "text", "boolean", "vec2", "color", "date"];
 
 /** This function gives a new id with the prefix `prefix` that is not in `used`. */
 export function nextId(prefix: "r" | "c", used: Iterable<string>): string {

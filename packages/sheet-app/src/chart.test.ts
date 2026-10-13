@@ -1,7 +1,7 @@
 import { compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, toVexChain } from "@vex/formula";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { chartColumns, chartData, chartTitle, defaultChart, describeChart, frameOf, LIMIT, niceAxis, pointLabel, toPixel, type ChartData } from "./chart.ts";
+import { axisColumns, chartColumns, chartData, chartTitle, defaultChart, describeChart, frameOf, LIMIT, niceAxis, pointLabel, toPixel, xText, type ChartData } from "./chart.ts";
 import { deleteColumn, emptyDoc, isSheetDoc, setChart, type SheetDoc } from "./doc.ts";
 import { evaluateDoc, type Compiler } from "./engine.ts";
 import { EXAMPLES } from "./examples.ts";
@@ -29,7 +29,7 @@ function first(id: string): readonly string[] {
   return defaultChart(doc, ev).series;
 }
 
-const ofData = (x: [number, number], y: [number, number], sameScale: boolean): ChartData => ({ series: [], xName: "Row", x: { min: x[0], max: x[1] }, y: { min: y[0], max: y[1] }, sameScale });
+const ofData = (x: [number, number], y: [number, number], sameScale: boolean): ChartData => ({ series: [], xName: "Row", xDates: false, x: { min: x[0], max: x[1] }, y: { min: y[0], max: y[1] }, sameScale });
 
 describe("the chart", () => {
   it("draws a line for each column of numbers, across the column of the axis", () => {
@@ -92,6 +92,18 @@ describe("the chart", () => {
     expect(back.series[0]?.runs[0]?.[0]).toEqual({ x: 1, y: 91, row: "r5", index: 0 });
     const none = chartData(doc, ev, [], { x: null, series: ["c2"] });
     expect([none.x, frameOf(none, 600, 240), describeChart(none)]).toEqual([undefined, undefined, "Score: 0 points."]);
+  });
+
+  it("uses a column of dates for the horizontal axis, with the days since 1970-01-01 and the text of the dates", () => {
+    const { doc, ev, rows } = example("invoices");
+    expect(axisColumns(doc, ev).map((c) => `${c.name}${c.dates ? " (dates)" : ""}`)).toEqual(["Issued (dates)", "Terms", "Due (dates)", "Pay by (dates)", "Paid (dates)", "Days late"]);
+    const data = chartData(doc, ev, rows, { x: "c2", series: ["c3"] });
+    // 2026-09-01 is day 20697, from Date.parse of JavaScript.
+    expect([data.xDates, data.xName, data.series[0]?.runs[0]?.[0]?.x]).toEqual([true, "Issued", 20697]);
+    const s = data.series[0];
+    const p = s?.runs[0]?.[0];
+    expect(s === undefined || p === undefined ? "" : pointLabel(s, p, data.xName, data.xDates)).toBe("Terms at Issued 2026-09-01: 30");
+    expect([xText(20697, true), xText(20697, false), chartData(doc, ev, rows, { x: "c3", series: ["c3"] }).xDates]).toEqual(["2026-09-01", "20,697", false]);
   });
 
   it("starts with the first formula column that it can draw", () => {

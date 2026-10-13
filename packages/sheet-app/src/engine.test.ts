@@ -98,6 +98,8 @@ describe("values", () => {
     expect(parseValue("boolean", "Yes")).toEqual({ kind: "ok", value: true });
     expect(parseValue("vec2", "(3, -4)")).toEqual({ kind: "ok", value: new Vec2(3, -4) });
     expect(parseValue("vec2", "3")).toMatchObject({ kind: "bad" });
+    expect(formatValue((parseValue("date", " 2026-10-13 ") as { value: unknown }).value)).toBe("2026-10-13");
+    expect(parseValue("date", "2026-02-30")).toEqual({ kind: "bad", reason: '"2026-02-30" is not a date like 2026-10-13' });
     expect(formatValue((parseValue("color", "#36f") as { value: unknown }).value)).toBe("#3366ff");
     expect(parseValue("color", "blue").kind).toBe("bad");
     expect(parseValue("text", "  ")).toEqual({ kind: "empty" });
@@ -119,6 +121,8 @@ describe("import and export", () => {
     const back = importCsv(csv);
     expect(back.rows.map((r) => [r.id, r.parent])).toEqual(d.rows.map((r) => [r.id, r.parent]));
     expect(back.columns.find((c) => c.name === "Cost")).toMatchObject({ kind: "value", type: "number" });
+    // A column of texts in the form YYYY-MM-DD is a column of dates.
+    expect(importCsv("When,Note\n2026-10-13,a\n2026-10-14,b\n").columns.map((c) => (c.kind === "value" ? c.type : c.kind))).toEqual(["date", "text"]);
   });
 
   it("keeps a document through JSON and through a share link", async () => {

@@ -2,7 +2,7 @@
  * The values of the cells: the text of a value cell becomes a typed value, and a value becomes text for the screen.
  */
 import { isVexList } from "@mark1russell7/vex";
-import { Color, Vec2 } from "@mark1russell7/vex-domains";
+import { Color, LocalDate, Vec2 } from "@mark1russell7/vex-domains";
 import type { ValueType } from "./doc.ts";
 
 /** The result of reading the text of a cell: empty, a value, or a reason why the text is not a value of the type. */
@@ -34,6 +34,10 @@ export function parseValue(type: ValueType, text: string): Parsed {
       if (parts.length !== 2 || !parts.every((p) => NUMBER.test(p)) || x === undefined || y === undefined) return { kind: "bad", reason: `"${t}" is not a vector like (3, 4)` };
       return { kind: "ok", value: new Vec2(x, y) };
     }
+    case "date": {
+      const d = LocalDate.parse(t);
+      return d === undefined ? { kind: "bad", reason: `"${t}" is not a date like 2026-10-13` } : { kind: "ok", value: d };
+    }
     case "color": {
       const m = HEX.exec(t);
       if (m === null) return { kind: "bad", reason: `"${t}" is not a color like #3366ff` };
@@ -58,6 +62,7 @@ export function formatValue(u: unknown): string {
   if (typeof u === "string") return u;
   if (u instanceof Vec2) return `(${NUMBERS.format(u.x)}, ${NUMBERS.format(u.y)})`;
   if (u instanceof Color) return colorHex(u);
+  if (u instanceof LocalDate) return u.toString();
   if (isVexList(u)) return `list of ${u.items.length}`;
   if (Array.isArray(u)) return `[${u.map(formatValue).join(", ")}]`;
   try {

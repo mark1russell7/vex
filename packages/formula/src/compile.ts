@@ -198,6 +198,19 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
         const [vec] = args();
         return app("dot", vec ?? lit(0), lit(name === "X" ? new Vec2(1, 0) : new Vec2(0, 1)));
       }
+      case "DATE":
+        arity(3, 3);
+        return app("date", ...args());
+      case "YEAR":
+      case "MONTH":
+      case "DAY":
+      case "WEEKDAY":
+        arity(1, 1);
+        return app(name.toLowerCase(), ...args());
+      case "EDATE":
+      case "EOMONTH":
+        arity(2, 2);
+        return app(name === "EDATE" ? "addMonths" : "endOfMonth", ...args());
       case "PMT":
       case "FV":
       case "PV":

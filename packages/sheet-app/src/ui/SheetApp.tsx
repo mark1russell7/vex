@@ -1,13 +1,16 @@
 /**
- * The sheet app. It keeps the history of the document, the selection, the view and the draft of a formula. The draft
+ * The sheet app. It keeps the history of the book, the selection, the view and the draft of a formula. The draft
  * changes the results as you type, and the history gets the formula when the edit ends. The app takes the formula
  * compiler as a property, so it depends only on the contract of the compiler.
+ *
+ * A book has one or more tables, and the screen shows one of them. Each edit changes the table on the screen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
+import { activeOf, addTable, bookOf, removeTable, showTable, withActive, type Book } from "../book.ts";
 import { defaultChart } from "../chart.ts";
-import { addColumn, addRow, cellFormulaOf, cellTextOf, convertColumn, deleteColumn, deleteRow, emptyDoc, emptyGrid, freeLetter, indentRow, moveColumn, moveRow, outdentRow, setCellFormula, setCellText, setChart, updateColumn, type SheetDoc, type ValueType } from "../doc.ts";
-import { evaluateDoc, type Compiler } from "../engine.ts";
-import { EXAMPLES } from "../examples.ts";
+import { addColumn, addRow, cellFormulaOf, cellTextOf, convertColumn, deleteColumn, deleteRow, emptyDoc, freeLetter, indentRow, moveColumn, moveRow, outdentRow, setCellFormula, setCellText, setChart, updateColumn, type SheetDoc, type ValueType } from "../doc.ts";
+import { evaluateBook, type Compiler } from "../engine.ts";
+import { EXAMPLES, exampleBook } from "../examples.ts";
 import { commit, historyOf, redo, undo, type History } from "../history.ts";
 import { decodeShare, encodeShare, exportCsv, exportJson, importCsv, importJson, loadLocal, saveLocal } from "../io.ts";
 import { PLAIN_VIEW, visibleRows, type View } from "../view.ts";
@@ -45,8 +48,9 @@ function download(name: string, type: string, text: string): void {
 /** The sheet app. */
 export function SheetApp(props: SheetAppProps): ReactElement {
   const { compiler } = props;
-  const [hist, setHist] = useState<History>(() => historyOf(loadLocal() ?? EXAMPLES[0]?.doc ?? emptyDoc()));
-  const doc = hist.present;
+  const [hist, setHist] = useState<History>(() => historyOf(loadLocal() ?? (EXAMPLES[0] === undefined ? bookOf(emptyDoc()) : exampleBook(EXAMPLES[0]))));
+  const book = hist.present;
+  const doc = activeOf(book);
   const [sel, setSel] = useState<CellRef>(() => firstCell(doc));
   const [editing, setEditing] = useState<(CellRef & { readonly text: string }) | undefined>(undefined);
   // The draft of a formula: the formula of a column (`row` is `null`), or the own formula of one cell.
@@ -58,26 +62,44 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
-  const apply = useCallback((f: (d: SheetDoc) => SheetDoc): void => setHist((h) => commit(h, f(h.present))), []);
-  const load = (d: SheetDoc, message: string): void => {
-    setHist((h) => commit(h, d));
-    setSel(firstCell(d));
+  // An edit changes the table on the screen. A change of the tables of the book changes the book.
+  const apply = useCallback((f: (d: SheetDoc) => SheetDoc): void => setHist((h) => commit(h, withActive(h.present, f))), []);
+  const applyBook = (f: (b: Book) => Book): void => {
+    setHist((h) => commit(h, f(h.present)));
+    setSel({ row: "", col: "" });
+    setView(PLAIN_VIEW);
+    setDraft(undefined);
+    setEditing(undefined);
+  };
+  const load = (b: Book, message: string): void => {
+    setHist((h) => commit(h, b));
+    setSel(firstCell(activeOf(b)));
     setView(PLAIN_VIEW);
     setNote(message);
   };
+  // A tab shows another table. It is not a change of the document, so undo does not go back to the last table.
+  const showTab = (i: number): void => {
+    setHist((h) => ({ ...h, present: showTable(h.present, i) }));
+    setSel({ row: "", col: "" });
+    setView(PLAIN_VIEW);
+    setDraft(undefined);
+    setEditing(undefined);
+  };
 
-  // The document of the link in the address. The link stays in the address while the document is the one of the link.
-  const linked = useRef<SheetDoc | undefined>(undefined);
+  // The book of the link in the address. The link stays in the address while the book is the one of the link.
+  const linked = useRef<Book | undefined>(undefined);
 
   // The browser keeps the document, so a new visit opens it again. After a change, the link in the address names an
   // old document. Thus the app removes the link, and a reload opens the changed document. This effect comes before
   // the effect that reads the link, because React starts the effects in this order.
   useEffect(() => {
-    saveLocal(doc);
-    if (linked.current === undefined || linked.current === doc) return;
+    saveLocal(book);
+    if (linked.current === undefined || linked.current === book) return;
+    // A tab of the same book does not change the document.
+    if (linked.current.tables === book.tables) return;
     linked.current = undefined;
     if (LINK.test(window.location.hash)) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-  }, [doc]);
+  }, [book]);
 
   // An example link (`#example=<id>`) or a share link (`#sheet=<data>`) opens its document. The app reads the address
   // when it starts and each time the address changes, for example when a link opens in the same tab.
@@ -85,8 +107,8 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     const open = (): void => {
       const example = EXAMPLES.find((x) => x.id === /#example=([\w-]+)/.exec(window.location.hash)?.[1]);
       if (example !== undefined) {
-        linked.current = example.doc;
-        load(example.doc, `Opened the example "${example.title}".`);
+        linked.current = exampleBook(example);
+        load(exampleBook(example), `Opened the example "${example.title}".`);
         return;
       }
       const m = /#sheet=([\w-]+)/.exec(window.location.hash);
@@ -97,7 +119,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
           return;
         }
         linked.current = d;
-        load(d, `Opened "${d.title}" from the link.`);
+        load(d, `Opened "${activeOf(d).title}" from the link.`);
       });
     };
     open();
@@ -107,8 +129,9 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   }, []);
 
   // The draft formula changes the results at once. The history gets the formula when the edit ends.
-  const shown = useMemo(() => (draft === undefined ? doc : withDraft(doc, draft)), [doc, draft]);
-  const ev = useMemo(() => evaluateDoc(shown, compiler), [shown, compiler]);
+  const shownBook = useMemo(() => (draft === undefined ? book : withActive(book, (d) => withDraft(d, draft))), [book, draft]);
+  const shown = activeOf(shownBook);
+  const ev = useMemo(() => evaluateBook(shownBook, compiler), [shownBook, compiler]);
   // In a grid, the row numbers are the addresses of the cells, so a grid keeps the order of its rows: it has no sort.
   const grid = shown.mode === "grid";
   const rows = useMemo(() => visibleRows(shown, ev, grid ? { ...view, sort: undefined } : view), [shown, ev, view, grid]);
@@ -234,9 +257,9 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   };
 
   const share = async (): Promise<void> => {
-    const url = `${window.location.origin}${window.location.pathname}#sheet=${await encodeShare(doc)}`;
+    const url = `${window.location.origin}${window.location.pathname}#sheet=${await encodeShare(book)}`;
     window.history.replaceState(null, "", url);
-    linked.current = doc;
+    linked.current = book;
     try {
       await navigator.clipboard.writeText(url);
       setNote("The link is on the clipboard.");
@@ -250,7 +273,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
       const d = importJson(text);
       if (d === undefined) setNote(`"${f.name}" is not a valid sheet.`);
       else load(d, `Opened "${f.name}".`);
-    } else load(importCsv(text, f.name.replace(/\.[^.]*$/, "")), `Imported "${f.name}".`);
+    } else load(bookOf(importCsv(text, f.name.replace(/\.[^.]*$/, ""))), `Imported "${f.name}".`);
   };
 
   return (
@@ -261,7 +284,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
             Vex <span>Sheet</span>
           </a>
         </h1>
-        <input className="vs-title" aria-label="The title of the sheet" value={doc.title} onChange={(e) => apply((d) => ({ ...d, title: e.target.value }))} />
+        <input className="vs-title" aria-label="The name of the table" value={doc.title} onChange={(e) => apply((d) => ({ ...d, title: e.target.value }))} />
         <div className="vs-tools" role="toolbar" aria-label="The sheet">
           <select
             className="vs-btn"
@@ -272,8 +295,8 @@ export function SheetApp(props: SheetAppProps): ReactElement {
               if (ex === undefined) return;
               // The address names the example, so the user can copy a link to it.
               window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#example=${ex.id}`);
-              linked.current = ex.doc;
-              load(ex.doc, `Opened the example "${ex.title}".`);
+              linked.current = exampleBook(ex);
+              load(exampleBook(ex), `Opened the example "${ex.title}".`);
             }}
           >
             <option value="">Examples…</option>
@@ -283,11 +306,8 @@ export function SheetApp(props: SheetAppProps): ReactElement {
               </option>
             ))}
           </select>
-          <button type="button" className="vs-btn" onClick={() => load(emptyDoc(), "A new table.")}>
-            New table
-          </button>
-          <button type="button" className="vs-btn" onClick={() => load(emptyGrid(), "A new grid. A text that starts with = is a formula, for example =SUM(A1:A5).")}>
-            New grid
+          <button type="button" className="vs-btn" onClick={() => load(bookOf(emptyDoc()), "A new document with one table.")}>
+            New
           </button>
           <button type="button" className="vs-btn" disabled={hist.past.length === 0} onClick={() => setHist(undo)} aria-keyshortcuts="Control+Z">
             Undo
@@ -306,7 +326,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
           <button type="button" className="vs-btn" onClick={() => download(`${doc.title || "sheet"}.csv`, "text/csv", exportCsv(doc, ev))}>
             CSV
           </button>
-          <button type="button" className="vs-btn" onClick={() => download(`${doc.title || "sheet"}.json`, "application/json", exportJson(doc))}>
+          <button type="button" className="vs-btn" onClick={() => download(`${doc.title || "sheet"}.json`, "application/json", exportJson(book))}>
             JSON
           </button>
           <button type="button" className="vs-btn vs-btn-primary" onClick={() => void share()}>
@@ -445,6 +465,24 @@ export function SheetApp(props: SheetAppProps): ReactElement {
           onRow={rowAction}
         />
       </div>
+
+      <nav className="vs-tabs" aria-label="The tables of the document">
+        {book.tables.map((t, i) => (
+          <button key={i} type="button" className="vs-tab" aria-current={i === book.active ? "page" : undefined} onClick={() => showTab(i)}>
+            {t.mode === "grid" ? "▦ " : ""}
+            {t.title.trim() === "" ? `Table ${i + 1}` : t.title}
+          </button>
+        ))}
+        <button type="button" className="vs-btn" onClick={() => applyBook((b) => addTable(b, "table"))}>
+          + Table
+        </button>
+        <button type="button" className="vs-btn" onClick={() => applyBook((b) => addTable(b, "grid"))}>
+          + Grid
+        </button>
+        <button type="button" className="vs-btn vs-btn-danger" disabled={book.tables.length <= 1} onClick={() => applyBook((b) => removeTable(b, b.active))}>
+          Delete table
+        </button>
+      </nav>
 
       <footer className="vs-status">
         <span>

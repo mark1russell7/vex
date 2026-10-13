@@ -122,12 +122,16 @@ export function tokenize(src: string): readonly Token[] {
   return out;
 }
 
-/** A step of navigation before a column name: `this.`, `parent.`, `row(n).` or `row("name").`. */
+/**
+ * A step of navigation before a column name: `this.`, `parent.`, `row(n).`, `row("name").` or `table("name").`. A step
+ * `table("name").` moves to another table of the document.
+ */
 export type Nav =
   | { readonly t: "this" }
   | { readonly t: "parent" }
   | { readonly t: "row"; readonly n: number }
-  | { readonly t: "key"; readonly name: string; readonly span: Span };
+  | { readonly t: "key"; readonly name: string; readonly span: Span }
+  | { readonly t: "table"; readonly name: string; readonly span: Span };
 
 /** The axes of an aggregate. */
 export const AXES = ["children", "descendants", "ancestors", "siblings", "others", "all"] as const;
@@ -137,10 +141,18 @@ export type AxisName = (typeof AXES)[number];
  * The axis of an aggregate. It is a named axis, or `rows(from, to)` with the rows at the offsets from `from` to `to`.
  * In a grid, it can also be a range of cells, for example `B2:D4`.
  */
-export type AggAxis = AxisName | { readonly from: number; readonly to: number } | { readonly range: { readonly from: string; readonly to: string } };
+export type AggAxis =
+  | AxisName
+  | { readonly from: number; readonly to: number }
+  | { readonly range: { readonly from: string; readonly to: string } }
+  | { readonly table: string };
 
 /** This function gives the text of the axis of an aggregate, as a formula writes it. */
-export const axisText = (a: AggAxis): string => (typeof a === "string" ? a : "range" in a ? `${a.range.from}:${a.range.to}` : `rows(${a.from}, ${a.to})`);
+export const axisText = (a: AggAxis): string =>
+  typeof a === "string" ? a : "range" in a ? `${a.range.from}:${a.range.to}` : "table" in a ? `table(${quoteText(a.table)})` : `rows(${a.from}, ${a.to})`;
+
+/** This function gives a text in double quotes, with two quotes for each quote, as a formula writes it. */
+export const quoteText = (s: string): string => `"${s.replaceAll('"', '""')}"`;
 
 /** The aggregates: a function of the values of an axis. */
 export const AGGREGATES = { SUM: "sum", AVERAGE: "mean", MIN: "min", MAX: "max", COUNT: "count", ANY: "any", ALL: "all" } as const;
@@ -202,6 +214,10 @@ export function parseFormula(src: string): Ast {
         j += 2;
         continue;
       }
+      if (isWord(t, "table") && isPunct(toks[j + 1], "(") && toks[j + 2]?.t === "str" && isPunct(toks[j + 3], ")") && isPunct(toks[j + 4], ".")) {
+        j += 5;
+        continue;
+      }
       if (isWord(t, "row") && isPunct(toks[j + 1], "(")) {
         let k = j + 2;
         if (toks[k]?.t === "str" && isPunct(toks[k + 1], ")") && isPunct(toks[k + 2], ".")) {
@@ -225,7 +241,12 @@ export function parseFormula(src: string): Ast {
       const t = next();
       if (isWord(t, "this")) out.push({ t: "this" });
       else if (isWord(t, "parent")) out.push({ t: "parent" });
-      else {
+      else if (isWord(t, "table")) {
+        next(); // "("
+        const name = next() as Extract<Token, { t: "str" }>;
+        next(); // ")"
+        out.push({ t: "table", name: name.v, span: name.span });
+      } else {
         next(); // "("
         const arg = peek();
         if (arg.t === "str") {
@@ -266,10 +287,17 @@ export function parseFormula(src: string): Ast {
   };
 
   const parseAggregate = (fn: AggregateName, fnTok: Token): Ast => {
-    const nav = parseNav();
+    // The axis table("name") has no navigation before it: the rows of a table do not depend on the row of the formula.
+    const tableAxis = isWord(peek(), "table");
+    const nav = tableAxis ? [] : parseNav();
     const axisTok = next() as Extract<Token, { t: "id" }>;
     let axis: AggAxis = axisTok.v.toLowerCase() as AxisName;
-    if (isWord(axisTok, "rows")) {
+    if (tableAxis) {
+      next(); // "("
+      const name = next() as Extract<Token, { t: "str" }>;
+      next(); // ")"
+      axis = { table: name.v };
+    } else if (isWord(axisTok, "rows")) {
       next(); // "("
       const from = parseOffset();
       expect(",", `"," between the two offsets of rows(from, to)`);
@@ -314,7 +342,10 @@ export function parseFormula(src: string): Ast {
     const axisAt = i + navLength(i);
     const named = isAxis(toks[axisAt]) && !isPunct(toks[axisAt + 1], "(");
     const rows = isWord(toks[axisAt], "rows") && isPunct(toks[axisAt + 1], "(");
-    if (upper in AGGREGATES && (named || rows)) return parseAggregate(upper as AggregateName, fnTok);
+    // table("name") is the axis of the rows of another table, but table("name").row("row"). reads one row of it.
+    const table =
+      isWord(toks[i], "table") && isPunct(toks[i + 1], "(") && toks[i + 2]?.t === "str" && isPunct(toks[i + 3], ")") && !(isPunct(toks[i + 4], ".") && isWord(toks[i + 5], "row"));
+    if (upper in AGGREGATES && (named || rows || table)) return parseAggregate(upper as AggregateName, fnTok);
     // A range of a grid, for example SUM(B2:D4): two cell addresses with a colon.
     const [from, colon, to] = [toks[i], toks[i + 1], toks[i + 2]];
     if (upper in AGGREGATES && from?.t === "id" && isPunct(colon, ":") && to?.t === "id") {

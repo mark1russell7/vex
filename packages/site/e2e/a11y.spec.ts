@@ -19,7 +19,7 @@ for (const scheme of ["light", "dark"] as const) {
       });
     }
     // The chart and the mark of a cell with its own formula show only in some examples, so the check opens them too.
-    for (const example of ["prey", "ball", "loan", "grid"]) {
+    for (const example of ["prey", "ball", "loan", "grid", "orders"]) {
       test(`the example ${example} of the app has no WCAG 2.1 AA violation`, async ({ page }) => {
         await page.goto(`./app/#example=${example}`);
         await expect(page.getByRole("treegrid")).toBeVisible();

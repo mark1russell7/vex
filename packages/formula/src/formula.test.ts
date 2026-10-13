@@ -55,6 +55,33 @@ function grid(filled: Readonly<Record<string, string | number>>, formulas: Reado
   }));
 }
 
+// Two tables: orders, and the products that the orders read.
+const ORDERS = space.array([{ Item: "Pens", Qty: 3 }, { Item: "Ink", Qty: 2 }, { Item: "Pads", Qty: 1 }]);
+const PRODUCTS = space.tree({ p1: { Name: "Pens", Price: 1.5, Kind: "office" }, p2: { Name: "Ink", Price: 12, Kind: "office" }, p3: { Name: "Tea", Price: 4, Kind: "food" } }, {});
+const PRODUCTS_CTX = { valueColumns: ["Name", "Price", "Kind"], formulaColumns: ["Double"], rowNames: new Map([["Pens", ["p1"]], ["Ink", ["p2"]], ["Tea", ["p3"]]]), nameColumn: "Name" };
+const productsContext = (formulas: readonly string[] = []): FormulaContext => ({ valueColumns: ["Item", "Qty"], formulaColumns: formulas, tables: new Map([["Products", PRODUCTS_CTX]]) });
+
+/** This function compiles a formula with the context `c`, and throws for an error. */
+function compileIn(text: string, c: FormulaContext): Expr {
+  const r = compileFormula(text, c);
+  if (!r.ok) throw new Error(`${text}: ${r.error.message}`);
+  return r.expr;
+}
+
+/** The results of formulas of the orders, at each order. The products have the formula column Double = Price * 2. */
+function withProducts(formulas: Readonly<Record<string, string>>): Record<string, unknown[]> {
+  const names = Object.keys(formulas);
+  const ctx = productsContext(names);
+  const double = compileIn("Price * 2", { valueColumns: PRODUCTS_CTX.valueColumns, formulaColumns: ["Double"] });
+  const run = new SheetRun(new Map(names.map((n) => [n, compileIn(formulas[n] ?? "", ctx)])), {
+    space: ORDERS,
+    domains: FORMULA_DOMAINS,
+    name: "Orders",
+    tables: new Map([["Products", { space: PRODUCTS, columns: new Map([["Double", double]]) }]]),
+  });
+  return Object.fromEntries(names.map((n) => [n, ORDERS.keys.map((k) => show(run.cell(n, k)))]));
+}
+
 /** The results of the formula columns at each row, as values or error codes. */
 const table = (formulas: Readonly<Record<string, string>>): Record<string, Record<string, unknown>> => {
   const names = Object.keys(formulas);
@@ -383,6 +410,42 @@ describe("aggregates", () => {
     // In a table, A1 is a column name, as before.
     expect(compileFormula("A1 * 2", { valueColumns: ["A1"], formulaColumns: [] })).toMatchObject({ ok: true, expr: app("multiply", ref(["A1"]), lit(2)) });
     expect(compileFormula("=a1 + $B$2", ctx)).toMatchObject({ ok: true, reads: ["A"] });
+  });
+
+  it("FORMULA.TABLE.AXIS FORMULA.TABLE.ROW: a formula reads another table: an aggregate over its rows, and one row by its name", () => {
+    const results = withProducts({
+      all: 'SUM(table("Products").Price)',
+      office: 'COUNT(table("Products") WHERE Kind = "office")',
+      cost: 'SUM(table("Products") WHERE Name = this.Item, Price) * Qty',
+      ink: 'table("Products").row("Ink").Double',
+      doubles: 'SUM(table("Products").Double)',
+      nested: 'SUM(table("Products"), COUNT(table("Products") WHERE Price < this.Qty))',
+    });
+    // 1.5 + 12 + 4, two office products, the price of the item times the quantity (no product "Pads" gives 0), and 2 * 12.
+    expect(results).toEqual({
+      all: [17.5, 17.5, 17.5],
+      office: [2, 2, 2],
+      cost: [4.5, 24, 0],
+      ink: [24, 24, 24],
+      doubles: [35, 35, 35],
+      // The inner this.Qty reads the order, also inside the outer axis of the table: 3 products, each with the count of prices below the quantity.
+      nested: [3, 3, 0],
+    });
+  });
+
+  it("FORMULA.TABLE.ERRORS: a table, a column or a row that does not exist, and navigation in the wrong order, are errors", () => {
+    const ctx = productsContext();
+    expect(error('table("Nope").row("x").Price', ctx).message).toBe('the table "Nope" does not exist');
+    expect(error('SUM(table("Nope").Price)', ctx).message).toBe('the table "Nope" does not exist');
+    expect(error('table("Products").row("Gum").Price', ctx)).toEqual({ message: 'no row of the table "Products" has the name "Gum"', span: { start: 22, end: 27 } });
+    expect(error('table("Products").Price', ctx).message).toBe('after table("Products"), write row("name") and a column, for example table("Products").row("name").column');
+    expect(error('SUM(table("Products").Cost)', ctx).message).toBe('the table "Products" has no column "Cost"');
+    expect(error('parent.table("Products").Price', ctx).message).toBe('table("Products"). comes first, for example table("Products").row("name").column');
+    expect(error('SUM(table("Products"))', ctx).message).toBe('SUM needs a value: write SUM(table("Products").column) or SUM(table("Products"), value)');
+    const twin = new Map([["Products", { ...PRODUCTS_CTX, rowNames: new Map([["Ink", ["p2", "p3"]]]) }]]);
+    expect(error('table("Products").row("Ink").Price', { ...ctx, tables: twin }).message).toBe('2 rows of the table "Products" have the name "Ink". Give the row a name that no other row has');
+    const nameless = new Map([["Products", { valueColumns: ["Price"], formulaColumns: [] }]]);
+    expect(error('table("Products").row("Ink").Price', { ...ctx, tables: nameless }).message).toBe('the rows of the table "Products" have no names, because its first column is not a text column');
   });
 
   it("FORMULA.AGGREGATE.WHERE: a test of the rows of the axis, and this. reads the row of the formula", () => {

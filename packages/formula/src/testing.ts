@@ -5,7 +5,7 @@
  */
 import { space, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
-import { AGGREGATES, AXES, axisText, type AggAxis, type AggregateName, type Ast, type BinaryOp, type Nav } from "./syntax.ts";
+import { AGGREGATES, AXES, axisText, quoteText, type AggAxis, type AggregateName, type Ast, type BinaryOp, type Nav } from "./syntax.ts";
 
 const NO_SPAN = { start: 0, end: 0 } as const;
 const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/", "^", "&", "=", "<>", "<", "<=", ">", ">="];
@@ -31,11 +31,27 @@ const CALLS: readonly (readonly [string, number, number])[] = [
 ];
 
 /** A random step of navigation: `this.`, `parent.`, `row(n).` or `row("key").`. A key can be absent from the table. */
-export const arbNav: fc.Arbitrary<Nav> = fc.oneof(
+/** A step of navigation in a row of the table: this, parent, row(n) and row("name"). */
+const arbRowNav: fc.Arbitrary<Nav> = fc.oneof(
   fc.constant<Nav>({ t: "this" }),
   fc.constant<Nav>({ t: "parent" }),
   fc.integer({ min: -2, max: 2 }).map((n): Nav => ({ t: "row", n })),
   fc.constantFrom("r0", "r3", "r9").map((name): Nav => ({ t: "key", name, span: { start: 0, end: 0 } })),
+);
+
+/** A step of navigation before a name: a step in the table, or a step to another table. */
+export const arbNav: fc.Arbitrary<Nav> = fc.oneof(arbRowNav, fc.constantFrom("T", 'Sa"y').map((name): Nav => ({ t: "table", name, span: { start: 0, end: 0 } })));
+
+/**
+ * The navigation of a name: steps in the table, or a lookup in another table, `table("name").row("row").`. Only these
+ * shapes come from the parser, because `table("name").` alone is the axis of an aggregate there.
+ */
+const arbNameNav: fc.Arbitrary<readonly Nav[]> = fc.oneof(
+  fc.array(arbRowNav, { maxLength: 2 }),
+  fc.tuple(fc.constantFrom("T", 'Sa"y'), fc.constantFrom("r0", "Pens")).map(([t, row]): readonly Nav[] => [
+    { t: "table", name: t, span: { start: 0, end: 0 } },
+    { t: "key", name: row, span: { start: 0, end: 0 } },
+  ]),
 );
 
 /** A random syntax tree that reads the columns `names`. The spans of the nodes are empty. */
@@ -46,7 +62,7 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
       fc.oneof(fc.integer({ min: 0, max: 20 }), fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true })).map((v): Ast => ({ k: "num", v, span: NO_SPAN })),
       fc.string({ maxLength: 4 }).map((v): Ast => ({ k: "str", v, span: NO_SPAN })),
       fc.boolean().map((v): Ast => ({ k: "bool", v, span: NO_SPAN })),
-      fc.tuple(fc.array(arbNav, { maxLength: 2 }), fc.constantFrom(...names)).map(([nav, name]): Ast => ({ k: "name", nav, name, span: NO_SPAN })),
+      fc.tuple(arbNameNav, fc.constantFrom(...names)).map(([nav, name]): Ast => ({ k: "name", nav, name, span: NO_SPAN })),
       tie("ast").map((arg): Ast => ({ k: "neg", arg, span: NO_SPAN })),
       fc.tuple(fc.constantFrom(...BINARY), tie("ast"), tie("ast")).map(([op, left, right]): Ast => ({ k: "binary", op, left, right, span: NO_SPAN })),
       fc
@@ -55,10 +71,12 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
       fc
         .tuple(
           fc.constantFrom(...(Object.keys(AGGREGATES) as AggregateName[])),
-          fc.array(arbNav, { maxLength: 1 }),
+          // In an aggregate, table("name"). is the axis of the table, so the navigation before an axis has no such step.
+          fc.array(arbRowNav, { maxLength: 1 }),
           fc.oneof(
             fc.constantFrom<AggAxis>(...AXES),
             fc.tuple(fc.integer({ min: -3, max: 3 }), fc.integer({ min: -3, max: 3 })).map(([from, to]): AggAxis => ({ from, to })),
+            fc.constantFrom("T", "Other").map((table): AggAxis => ({ table })),
           ),
           fc.option(tie("ast"), { nil: undefined }),
           tie("ast"),
@@ -68,7 +86,8 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
           k: "agg",
           fn,
           fnSpan: NO_SPAN,
-          nav,
+          // The axis of a table has no navigation before it, as in the parser.
+          nav: typeof axis === "object" && "table" in axis ? [] : nav,
           axis,
           ...(where === undefined ? {} : { where }),
           ...(fn === "COUNT" && noBody ? {} : { body }),
@@ -78,7 +97,7 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
   })).ast;
 
 const navText = (ns: readonly Nav[]): string =>
-  ns.map((n) => (n.t === "row" ? `row(${n.n}).` : n.t === "key" ? `row("${n.name.replaceAll('"', '""')}").` : `${n.t}.`)).join("");
+  ns.map((n) => (n.t === "row" ? `row(${n.n}).` : n.t === "key" ? `row(${quoteText(n.name)}).` : n.t === "table" ? `table(${quoteText(n.name)}).` : `${n.t}.`)).join("");
 
 /** This function gives the text of a syntax tree. Each operator has parentheses, so the text has the structure of the tree. */
 export function printAst(a: Ast): string {

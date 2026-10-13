@@ -157,6 +157,23 @@ twoMonths.all().values(); // => [120, 255, 263]
 
 The formula language of the sheet app writes this axis as `rows(from, to)`, for example `AVERAGE(rows(-2, 0).Sales)`.
 
+## Other tables
+
+The axis `table(name)` has each key of another space of the evaluation, which the option `tables` gives by name (rule `AXIS.TABLE`). Its body reads that space, and there the origin is the target. A value of the first space goes in through a variable:
+
+```ts doctest
+import { app, axes, each, evaluate, let_, ref, space, v } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+const orders = space.array([{ product: 2, qty: 3 }]);
+const products = space.array([{ id: 1, price: 1.5 }, { id: 2, price: 12 }]);
+const price = let_({ $p: ref("product") }, app("sum", each(axes.where(axes.table("products"), app("eq", ref("id"), v("$p"))), ref("price"))));
+
+evaluate(price, { space: orders, origin: "0", domains: [NumDomain], tables: { products } }); // => ok(12)
+```
+
+A `SheetRun` with the option `tables` has more tables, and a cell reference reads the table of its space (rule `SHEET.TABLES`). The sheet app uses this for the tabs of a document.
+
 ## The laws of the axes
 
 Three laws of the spec connect the axes. `@mark1russell7/vex-testkit` checks each law with random programs and random spaces.

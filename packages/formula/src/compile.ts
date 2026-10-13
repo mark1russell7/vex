@@ -18,6 +18,18 @@ export interface FormulaContext {
   readonly rowNames?: ReadonlyMap<string, readonly string[]>;
   /** The cells of a grid, for the addresses like `B2` and the ranges like `B2:D4`. A table has no grid. */
   readonly grid?: GridContext;
+  /** The other tables of the document, by name, for `table("name")`. */
+  readonly tables?: ReadonlyMap<string, TableContext>;
+}
+
+/** The columns and the rows of another table of the document. */
+export interface TableContext {
+  readonly valueColumns: readonly string[];
+  readonly formulaColumns: readonly string[];
+  /** The keys of the rows with each name. */
+  readonly rowNames?: ReadonlyMap<string, readonly string[]>;
+  /** The value column with the names of the rows, for `table("name").row("row")`. */
+  readonly nameColumn?: string;
 }
 
 /** The kind of a cell of a grid that is not empty: a value of a kind, or a formula. */
@@ -95,7 +107,7 @@ function finance(name: "PMT" | "FV" | "PV" | "NPER", given: readonly Expr[]): Ex
 }
 
 /** This function gives the Vex axis of the axis of an aggregate. `rows(from, to)` is the axis `window(from, to)`. */
-const axisOf = (a: Exclude<AggAxis, { readonly range: unknown }>): Axis => (typeof a === "string" ? AXIS[a] : axes.window(a.from, a.to));
+const axisOf = (a: Exclude<AggAxis, { readonly range: unknown } | { readonly table: unknown }>): Axis => (typeof a === "string" ? AXIS[a] : axes.window(a.from, a.to));
 
 /** This function reads a cell address, for example "B12", as a column letter and a row number. */
 function parseAddress(text: string): { readonly letter: string; readonly row: number } {
@@ -115,6 +127,29 @@ const STRICT = lit({ strict: true });
 interface Scope {
   readonly base: readonly Move[];
   readonly inAggregate: boolean;
+  /**
+   * Inside the axis of another table: the name and the columns of that table. A read of the row of the formula
+   * (`this.name`) goes into `hoist`. The outermost axis of a table binds it in a let before the axis.
+   */
+  readonly table?: { readonly name: string; readonly cols: TableContext; readonly hoist: Map<string, { readonly name: string; readonly expr: Expr }> };
+}
+
+/** This function gives the column of the name `name` in the columns `cols`: the same name, or the same name in small letters. */
+function findColumn(cols: TableContext, name: string): { readonly name: string; readonly formula: boolean } | undefined {
+  const lower = name.toLowerCase();
+  const found =
+    cols.valueColumns.find((c) => c === name) ??
+    cols.formulaColumns.find((c) => c === name) ??
+    cols.valueColumns.find((c) => c.toLowerCase() === lower) ??
+    cols.formulaColumns.find((c) => c.toLowerCase() === lower);
+  return found === undefined ? undefined : { name: found, formula: !cols.valueColumns.includes(found) };
+}
+
+/** This function gives the column `name` of the other table `table`. A name of no column is an error with its span. */
+function columnOf(table: string, cols: TableContext, name: string, span: Span): { readonly name: string; readonly formula: boolean } {
+  const found = findColumn(cols, name);
+  if (found === undefined) throw new FormulaSyntaxError(`the table "${table}" has no column "${name}"`, span);
+  return found;
 }
 
 /** This function compiles a syntax tree. A problem gives a result with an error. */
@@ -122,15 +157,17 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
   const reads: string[] = [];
   const column = (name: string, span: Span): { readonly name: string; readonly formula: boolean } => {
     if (name.includes(".")) throw new FormulaSyntaxError(`a column name has no dot: "${name}"`, span);
-    const lower = name.toLowerCase();
-    const found =
-      ctx.valueColumns.find((c) => c === name) ??
-      ctx.formulaColumns.find((c) => c === name) ??
-      ctx.valueColumns.find((c) => c.toLowerCase() === lower) ??
-      ctx.formulaColumns.find((c) => c.toLowerCase() === lower);
+    const found = findColumn(ctx, name);
     if (found === undefined) throw new FormulaSyntaxError(`the column "${name}" does not exist`, span);
-    if (!reads.includes(found)) reads.push(found);
-    return { name: found, formula: !ctx.valueColumns.includes(found) };
+    if (!reads.includes(found.name)) reads.push(found.name);
+    return found;
+  };
+
+  // The context of another table. A name of no table is an error with its span.
+  const tableOf = (name: string, span: Span): TableContext => {
+    const t = ctx.tables?.get(name);
+    if (t === undefined) throw new FormulaSyntaxError(`the table "${name}" does not exist`, span);
+    return t;
   };
 
   // The name of a row must find exactly one row, so a formula does not read a row that the author did not mean.
@@ -152,7 +189,24 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
         return offset(n.n);
       case "key":
         return key(rowKey(n.name, n.span));
+      case "table":
+        throw new FormulaSyntaxError(`table("${n.name}"). comes first, for example table("${n.name}").row("name").column`, n.span);
     }
+  };
+
+  // A row of another table by its name: the first row whose name is the name. The compiler checks that exactly one
+  // row has the name, so the formula does not read a row that the author did not mean.
+  const lookup = (a: Extract<Ast, { k: "name" }>, first: Extract<Nav, { t: "table" }>): Expr => {
+    const [, second, ...more] = a.nav;
+    if (second?.t !== "key" || more.length > 0) throw new FormulaSyntaxError(`after table("${first.name}"), write row("name") and a column, for example table("${first.name}").row("name").column`, first.span);
+    const t = tableOf(first.name, first.span);
+    if (t.nameColumn === undefined) throw new FormulaSyntaxError(`the rows of the table "${first.name}" have no names, because its first column is not a text column`, first.span);
+    const keys = t.rowNames?.get(second.name) ?? [];
+    if (keys.length === 0) throw new FormulaSyntaxError(`no row of the table "${first.name}" has the name "${second.name}"`, second.span);
+    if (keys.length > 1) throw new FormulaSyntaxError(`${keys.length} rows of the table "${first.name}" have the name "${second.name}". Give the row a name that no other row has`, second.span);
+    const c = columnOf(first.name, t, a.name, a.span);
+    const test = app("ifError", app("eq", app("trim", ref([t.nameColumn])), lit(second.name)), lit(false));
+    return app("first", each(axes.where(axes.table(first.name), test), c.formula ? cell(c.name) : ref([c.name])), STRICT);
   };
 
   // An address of a grid reads the cell at that column and row. An empty cell reads as 0, as in a spreadsheet.
@@ -211,9 +265,31 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       case "bool":
         return lit(a.v);
       case "name": {
+        const head = a.nav[0];
+        if (head?.t === "table") return lookup(a, head);
+        const inTable = s.table;
+        if (inTable !== undefined) {
+          // In the axis of another table, `this.` reads the row of the formula: a variable that the axis binds before.
+          if (a.nav[0]?.t === "this") {
+            const own = column(a.name, a.span);
+            const at = [origin, ...a.nav.slice(1).map(navMove)];
+            const expr = own.formula ? cell(own.name, at) : ref([own.name], at);
+            const id = JSON.stringify(expr);
+            const known = inTable.hoist.get(id);
+            if (known !== undefined) return v(known.name);
+            const name = `$this${inTable.hoist.size}`;
+            inTable.hoist.set(id, { name, expr });
+            return v(name);
+          }
+          // Another name reads a column of that table. row(n). and parent. move in that table.
+          const c = columnOf(inTable.name, inTable.cols, a.name, a.span);
+          const at = a.nav.map((n) => (n.t === "key" ? key(n.name) : navMove(n)));
+          return c.formula ? cell(c.name, at) : ref([c.name], at);
+        }
         if (ctx.grid !== undefined && a.nav.length === 0 && ADDRESS.test(a.name)) return address(ctx.grid, a.name, a.span);
-        const c = column(a.name, a.span);
+        // The navigation comes before the name in the text, so its errors come first.
         const at = [...s.base, ...a.nav.map(navMove)];
+        const c = column(a.name, a.span);
         return c.formula ? cell(c.name, at) : ref([c.name], at);
       }
       case "neg":
@@ -228,7 +304,8 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       }
       case "agg": {
         if (typeof a.axis === "object" && "range" in a.axis) return range(a.fn, a.axis.range.from, a.axis.range.to, a.span);
-        const inner: Scope = { base: [], inAggregate: true };
+        if (typeof a.axis === "object" && "table" in a.axis) return overTable(a, a.axis.table, s);
+        const inner: Scope = { base: [], inAggregate: true, ...(s.table === undefined ? {} : { table: s.table }) };
         const axis = a.where === undefined ? axisOf(a.axis) : axes.where(axisOf(a.axis), go(a.where, inner));
         const text = axisText(a.axis);
         if (a.body === undefined && a.fn !== "COUNT") throw new FormulaSyntaxError(`${a.fn} needs a value: write ${a.fn}(${text}.column) or ${a.fn}(${text}, value)`, a.span);
@@ -238,6 +315,21 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       case "call":
         return call(a, s);
     }
+  };
+
+  // An aggregate over the rows of another table. The axis table moves the evaluation to that table, so a value of
+  // the row of the formula comes in through a variable. The outermost axis of a table binds each variable in a let.
+  const overTable = (a: Extract<Ast, { k: "agg" }>, name: string, s: Scope): Expr => {
+    const cols = tableOf(name, a.span);
+    const hoist = s.table?.hoist ?? new Map<string, { readonly name: string; readonly expr: Expr }>();
+    const inner: Scope = { base: [], inAggregate: true, table: { name, cols, hoist } };
+    const text = axisText(a.axis);
+    const axis = a.where === undefined ? axes.table(name) : axes.where(axes.table(name), go(a.where, inner));
+    if (a.body === undefined && a.fn !== "COUNT") throw new FormulaSyntaxError(`${a.fn} needs a value: write ${a.fn}(${text}.column) or ${a.fn}(${text}, value)`, a.span);
+    const body = a.body === undefined ? lit(true) : go(a.body, inner);
+    const agg = app(AGGREGATES[a.fn], each(axis, body), STRICT);
+    if (s.table !== undefined || hoist.size === 0) return agg;
+    return let_(Object.fromEntries([...hoist.values()].map((h) => [h.name, h.expr])), agg);
   };
 
   const call = (a: Extract<Ast, { k: "call" }>, s: Scope): Expr => {

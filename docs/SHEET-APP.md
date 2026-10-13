@@ -31,7 +31,6 @@ Vex is the semantics of a spreadsheet without the grid on the screen. The sheet 
 
 ## 4. Later versions
 
-- More than one table, with references between tables.
 - Collaboration in real time.
 - Domains as plug-ins.
 - A desktop app.
@@ -81,4 +80,7 @@ The owner made these decisions on 2026-10-11:
 - A grid is a document with the mode "grid". Its columns have the letters A, B, C, and each cell keeps its text as its own formula. A text that starts with "=" is a formula, and another text is a number, `TRUE` or `FALSE`, a date or a text.
 - In a grid, `B2` reads a cell, and an aggregate takes a range like `SUM(B2:D4)` (spec `FORMULA.GRID.*`). A range expands to the cells that it reads, so the cycles of a grid give `#CYCLE!` as in a table.
 - A grid adds and deletes rows only at the end, and it has no sort. A row in the middle moves the numbers of the rows after it. A formula keeps its text, so its addresses then read other cells.
+- A document is a book of tables, and the screen shows one table at a time. The tabs at the bottom show the other tables. The title of a table is its name.
+- A formula reads another table with `table("title")`: an aggregate over its rows, or one row by its name (spec `FORMULA.TABLE.*`). One run of Vex has all the tables (spec `SHEET.TABLES`), so a cycle across tables gives `#CYCLE!`.
+- A new title of a table does not change the formulas that read it, so they give an error with the reason.
 - The chart is a part of the document. Thus undo, the share link and the JSON file keep it.

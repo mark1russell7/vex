@@ -1,8 +1,9 @@
 import { compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, toVexChain } from "@vex/formula";
 import { describe, expect, it } from "vitest";
 import { setCellFormula, type SheetDoc } from "./doc.ts";
-import { evaluateDoc, gridLiteral, gridOf, rowNamesOf, type Compiler } from "./engine.ts";
-import { EXAMPLES } from "./examples.ts";
+import { showTable } from "./book.ts";
+import { evaluateBook, evaluateDoc, gridLiteral, gridOf, rowNamesOf, type Compiler } from "./engine.ts";
+import { EXAMPLES, exampleBook } from "./examples.ts";
 import { formatValue } from "./values.ts";
 
 const compiler: Compiler = { compile: compileFormula, toVexChain, highlight: highlightFormula, functions: FUNCTIONS, domains: FORMULA_DOMAINS };
@@ -20,12 +21,15 @@ function column(id: string, name: string): string[] {
 }
 
 describe("the examples with the formula language", () => {
-  it("each formula of each example compiles, and no cell has an error value", () => {
+  it("each formula of each table of each example compiles, and no cell has an error value", () => {
     for (const ex of EXAMPLES) {
-      const ev = evaluateDoc(ex.doc, compiler);
-      // A column of a grid has no formula of its own, so only a column with a formula must compile.
-      expect(ex.doc.columns.filter((c) => c.kind === "formula" && c.formula.trim() !== "" && ev.compiled.get(c.id)?.ok !== true).map((c) => c.name)).toEqual([]);
-      expect({ id: ex.id, errors: ev.errors }).toEqual({ id: ex.id, errors: 0 });
+      const book = exampleBook(ex);
+      book.tables.forEach((table, i) => {
+        const ev = evaluateBook(showTable(book, i), compiler);
+        // A column of a grid has no formula of its own, so only a column with a formula must compile.
+        expect(table.columns.filter((c) => c.kind === "formula" && c.formula.trim() !== "" && ev.compiled.get(c.id)?.ok !== true).map((c) => c.name)).toEqual([]);
+        expect({ id: ex.id, table: table.title, errors: ev.errors }).toEqual({ id: ex.id, table: table.title, errors: 0 });
+      });
     }
   });
 
@@ -140,6 +144,31 @@ describe("the examples with the formula language", () => {
     const ex = EXAMPLES.find((e) => e.id === "grid");
     const g = ex === undefined ? undefined : gridOf(ex.doc);
     expect([g?.columns, g?.cells.get("D2"), g?.cells.get("B2"), g?.cells.get("A1"), g?.cells.get("B9"), g?.cells.get("E1")]).toEqual([["A", "B", "C", "D", "E", "F"], "formula", "number", "text", "date", undefined]);
+  });
+
+  it("FORMULA.TABLE.AXIS SHEET.TABLES: orders read the prices of the products, and the products count their units in the orders", () => {
+    const ex = EXAMPLES.find((e) => e.id === "orders");
+    if (ex === undefined) throw new Error("orders");
+    const book = exampleBook(ex);
+    expect(exampleBook(ex)).toBe(book);
+    const columnOf = (b: typeof book, table: number, name: string): string[] => {
+      const shown = showTable(b, table);
+      const doc = shown.tables[table];
+      const ev = evaluateBook(shown, compiler);
+      const col = doc?.columns.find((c) => c.name === name);
+      return (doc?.rows ?? []).map((r) => {
+        const res = col === undefined ? undefined : ev.cell(r.id, col.id);
+        return res === undefined ? "" : res.ok ? formatValue(res.value) : res.error.code;
+      });
+    };
+    expect(columnOf(book, 0, "Price")).toEqual(["1.5", "12", "4", "1.5"]);
+    expect(columnOf(book, 0, "Cost")).toEqual(["4.5", "24", "20", "1.5"]);
+    expect(columnOf(book, 1, "Sold")).toEqual(["4", "2", "5", "0"]);
+    expect(columnOf(book, 1, "Revenue")).toEqual(["6", "24", "20", "0"]);
+    // A new name of the table Products breaks the reads of the orders, with the reason.
+    const renamed = { ...book, tables: book.tables.map((t, i) => (i === 1 ? { ...t, title: "Goods" } : t)) };
+    const price = evaluateBook(renamed, compiler).compiled.get("c3");
+    expect(price?.ok === false && price.error.message).toBe('the table "Products" does not exist');
   });
 
   it("FORMULA.NAV.NAME: the name of a row is the text of the first column, when that column is a text column", () => {

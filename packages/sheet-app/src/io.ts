@@ -1,6 +1,7 @@
 /**
  * The import and export of documents: CSV (RFC 4180), JSON, a share link, and the automatic save in the browser.
  */
+import { toBook, type Book } from "./book.ts";
 import { emptyDoc, isSheetDoc, nextId, type Column, type Row, type SheetDoc, type ValueType } from "./doc.ts";
 import type { Evaluation } from "./engine.ts";
 import { formatValue, parseValue } from "./values.ts";
@@ -101,14 +102,17 @@ export function importCsv(text: string, title = "Imported"): SheetDoc {
   return keepsTree(doc) ? doc : { ...doc, rows: rows.map((r) => ({ ...r, parent: null })) };
 }
 
-/** This function gives the JSON text of a document. */
-export const exportJson = (doc: SheetDoc): string => JSON.stringify(doc, null, 2);
+/** This function gives the JSON text of a book: each table of the document. */
+export const exportJson = (book: Book): string => JSON.stringify(book, null, 2);
 
-/** This function reads a document from JSON text, or gives `undefined` for text that is not a valid document. */
-export function importJson(text: string): SheetDoc | undefined {
+/**
+ * This function reads a book from JSON text. The JSON of a single table gives a book with one table. A text that is not
+ * a valid book or table gives `undefined`.
+ */
+export function importJson(text: string): Book | undefined {
   try {
     const u: unknown = JSON.parse(text);
-    return isSheetDoc(u) ? u : undefined;
+    return toBook(u);
   } catch {
     return undefined;
   }
@@ -126,13 +130,13 @@ async function pipe(bytes: Uint8Array, stream: CompressionStream | Decompression
   return new Uint8Array(await new Response(out).arrayBuffer());
 }
 
-/** This function encodes a document for the address of a share link: compressed JSON in base64url. */
-export async function encodeShare(doc: SheetDoc): Promise<string> {
-  return toBase64Url(await pipe(new TextEncoder().encode(JSON.stringify(doc)), new CompressionStream("deflate-raw")));
+/** This function encodes a book for the address of a share link: compressed JSON in base64url. */
+export async function encodeShare(book: Book): Promise<string> {
+  return toBase64Url(await pipe(new TextEncoder().encode(JSON.stringify(book)), new CompressionStream("deflate-raw")));
 }
 
 /** This function decodes a share link, or gives `undefined` for a broken link. */
-export async function decodeShare(text: string): Promise<SheetDoc | undefined> {
+export async function decodeShare(text: string): Promise<Book | undefined> {
   try {
     const json = new TextDecoder().decode(await pipe(fromBase64Url(text), new DecompressionStream("deflate-raw")));
     return importJson(json);
@@ -144,16 +148,16 @@ export async function decodeShare(text: string): Promise<SheetDoc | undefined> {
 const STORE = "vex-sheet:v1";
 
 /** This function saves a document in the browser. A browser without storage does not save it. */
-export function saveLocal(doc: SheetDoc): void {
+export function saveLocal(book: Book): void {
   try {
-    localStorage.setItem(STORE, JSON.stringify(doc));
+    localStorage.setItem(STORE, JSON.stringify(book));
   } catch {
     // A private window or blocked storage: the app works without the automatic save.
   }
 }
 
 /** This function gives the document that the browser saved, or `undefined`. */
-export function loadLocal(): SheetDoc | undefined {
+export function loadLocal(): Book | undefined {
   try {
     const text = localStorage.getItem(STORE);
     return text === null ? undefined : importJson(text);

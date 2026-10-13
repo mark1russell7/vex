@@ -1,6 +1,7 @@
 import { app, cell, each, offset, ref, axes, lit, type Expr } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
+import { bookOf } from "./book.ts";
 import { addRow, emptyDoc, setCell, type SheetDoc } from "./doc.ts";
 import { evaluateDoc, type Compiler } from "./engine.ts";
 import { exportCsv, importCsv, importJson, exportJson, parseCsv, toCsv, encodeShare, decodeShare } from "./io.ts";
@@ -125,11 +126,13 @@ describe("import and export", () => {
     expect(importCsv("When,Note\n2026-10-13,a\n2026-10-14,b\n").columns.map((c) => (c.kind === "value" ? c.type : c.kind))).toEqual(["date", "text"]);
   });
 
-  it("keeps a document through JSON and through a share link", async () => {
-    const d = doc();
-    expect(importJson(exportJson(d))).toEqual(d);
+  it("keeps a book through JSON and through a share link, and reads the JSON of one table as a book", async () => {
+    const b = bookOf(doc(), emptyDoc("Second"));
+    expect(importJson(exportJson(b))).toEqual(b);
+    expect(importJson(JSON.stringify(doc()))).toEqual(bookOf(doc()));
     expect(importJson("{")).toBeUndefined();
-    expect(await decodeShare(await encodeShare(d))).toEqual(d);
+    expect(importJson(JSON.stringify({ ...b, active: 2 }))).toBeUndefined();
+    expect(await decodeShare(await encodeShare(b))).toEqual(b);
     expect(await decodeShare("not-a-link")).toBeUndefined();
   });
 });

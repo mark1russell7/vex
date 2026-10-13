@@ -81,12 +81,12 @@ test("the CSV export has the tree and the columns", async ({ page }) => {
 
 test("a share link opens the same sheet in a new browser", async ({ page, browser }) => {
   await open(page);
-  await page.getByRole("textbox", { name: "The title of the sheet" }).fill("Shared budget");
+  await page.getByRole("textbox", { name: "The name of the table" }).fill("Shared budget");
   await page.getByRole("toolbar", { name: "The sheet" }).getByRole("button", { name: "Share" }).click();
   await expect(page).toHaveURL(/#sheet=/);
   const other = await (await browser.newContext()).newPage();
   await other.goto(page.url());
-  await expect(other.getByRole("textbox", { name: "The title of the sheet" })).toHaveValue("Shared budget");
+  await expect(other.getByRole("textbox", { name: "The name of the table" })).toHaveValue("Shared budget");
   await other.close();
 });
 
@@ -187,7 +187,7 @@ test("on a phone, the chart takes the width of the screen, and the page does not
 
 test("a link opens its example in the same tab, and after an edit a reload keeps the edit", async ({ page }) => {
   await open(page);
-  const title = page.getByRole("textbox", { name: "The title of the sheet" });
+  const title = page.getByRole("textbox", { name: "The name of the table" });
   await expect(title).toHaveValue("Budget");
   // The app is open, and the address changes: the app opens the example of the new link.
   await page.evaluate(() => {
@@ -275,7 +275,34 @@ test("a grid has A1 addresses: a cell reads other cells, a range sums them, and 
   await page.keyboard.type("=D6 * 2");
   await page.keyboard.press("Enter");
   await expect(at("E2")).toHaveText("114");
-  await page.getByRole("button", { name: "New grid" }).click();
+  await page.getByRole("button", { name: "+ Grid", exact: true }).click();
   await expect(page.getByRole("contentinfo")).toContainText("20 rows · 8 columns");
   await expect(page.getByRole("columnheader", { name: "H", exact: true })).toBeVisible();
+});
+
+test("two tables read each other: a tab shows each table, and a new price changes the orders", async ({ page }) => {
+  await page.goto("./app/#example=orders");
+  const tabs = page.getByRole("navigation", { name: "The tables of the document" });
+  const at = (row: number, column: number) => page.getByRole("treegrid").getByRole("row").nth(row).getByRole("gridcell").nth(column);
+  await expect(tabs.getByRole("button", { name: "Orders" })).toHaveAttribute("aria-current", "page");
+  // Item, Qty, Price, Cost: 2 units of ink at 12.
+  await expect(at(2, 2)).toHaveText("12");
+  await expect(at(2, 3)).toHaveText("24");
+  await tabs.getByRole("button", { name: "Products" }).click();
+  await expect(page.getByRole("textbox", { name: "The name of the table" })).toHaveValue("Products");
+  // Name, Price, Sold, Revenue: the pens sell 3 + 1 units.
+  await expect(at(1, 2)).toHaveText("4");
+  await at(2, 1).dblclick();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("10");
+  await page.keyboard.press("Enter");
+  await expect(at(2, 3)).toHaveText("20");
+  await tabs.getByRole("button", { name: "Orders" }).click();
+  await expect(at(2, 2)).toHaveText("10");
+  await expect(at(2, 3)).toHaveText("20");
+  // A new table gets a tab, and the button Delete table removes the table on the screen.
+  await tabs.getByRole("button", { name: "+ Table", exact: true }).click();
+  await expect(tabs.getByRole("button", { name: "Table", exact: true })).toHaveAttribute("aria-current", "page");
+  await tabs.getByRole("button", { name: "Delete table" }).click();
+  await expect(tabs.getByRole("button", { name: "Table", exact: true })).toHaveCount(0);
 });

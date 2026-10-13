@@ -1,6 +1,6 @@
 ---
 title: Spreadsheets
-description: "Spreadsheet programs in Vex formulas: four pilots that tests compare with plain TypeScript, and nine sheets where formulas read other formulas."
+description: "Spreadsheet programs in Vex formulas: four pilots that tests compare with plain TypeScript, and ten sheets where formulas read other formulas."
 ---
 
 These four programs come from real spreadsheets. Each program is a set of formula columns of [the sheet app](../../app/). The package `@vex/pilots` gives each program three times: with the typed builder, with the formula language, and in plain TypeScript. Property tests compare the three on random inputs.
@@ -89,7 +89,7 @@ cells("A", "totalOk"); // => { ok: false, error: { code: "#N/A", ... } }
 
 In the sheet app, a formula column can read other formula columns at other rows, and those columns can read more columns. The reads can go up the tree, down the tree and across to the row before. Vex finds the order of the evaluation, so the order of the columns has no effect. Only a real cycle gives `#CYCLE!`.
 
-The menu of the app has these nine sheets. Each link opens one of them.
+The menu of the app has these ten sheets. Each link opens one of them.
 
 | Sheet | How the formulas read each other |
 |---|---|
@@ -101,6 +101,7 @@ The menu of the app has these nine sheets. Each link opens one of them.
 | [An org chart](../../app/#example=org) | The headcount and the cost go up the tree. The level goes down the tree: `IFERROR(parent.Level, 0) + 1`. |
 | [Monthly sales](../../app/#example=sales) | `AVERAGE(rows(-2, 0).Sales)` is a moving average of three months. `rows(from, to)` reads a window of rows, so the total for the year is one `SUM`, not a chain of reads. |
 | [Invoices with dates](../../app/#example=invoices) | `Due` is `Issued + Terms`, a date plus some days. `Pay by` moves a due date on a weekend to the Monday after it with `WEEKDAY(Due)`. `Days late` is a date minus a date. |
+| [Orders and products](../../app/#example=orders) | Two tables read each other. An order reads the price of its product with `SUM(table("Products") WHERE Name = this.Item, Price)`, and a product counts its units in the orders. Each read goes to a value column, so the tables have no cycle. |
 | [A recipe that scales](../../app/#example=recipe) | The scale goes down the tree from the number of servings. The cost goes up the tree from the ingredients. |
 
 Four of the sheets read a row by its name, for example `row("Launch").Start`. The name of a row is the text of its first column. If you change the name, the formula gives `#VALUE!` with the reason. It does not read a different row.

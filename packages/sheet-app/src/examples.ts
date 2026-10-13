@@ -3,13 +3,26 @@
  * In the later examples, formulas read other formula columns in each direction of the tree. The loan, the rabbits and
  * the ball open with a chart.
  */
+import { bookOf, type Book } from "./book.ts";
 import { emptyGrid, type Column, type Row, type SheetDoc } from "./doc.ts";
 
-/** An example: an id for the menu, a title and a document. */
+/** An example: an id for the menu, a title, the first table, and the other tables of the book. */
 export interface Example {
   readonly id: string;
   readonly title: string;
   readonly doc: SheetDoc;
+  readonly tables?: readonly SheetDoc[];
+}
+
+const BOOKS = new WeakMap<Example, Book>();
+
+/** This function gives the book of an example. The book of an example is always the same object. */
+export function exampleBook(ex: Example): Book {
+  const known = BOOKS.get(ex);
+  if (known !== undefined) return known;
+  const book = bookOf(ex.doc, ...(ex.tables ?? []));
+  BOOKS.set(ex, book);
+  return book;
 }
 
 /** This function makes rows from `[id, parent, ...cells]` lists, in the order of the columns `cols`. */
@@ -158,6 +171,21 @@ function gridOf(title: string, cols: number, rowCount: number, cells: Readonly<R
     }),
   };
 }
+
+// Two tables that read each other: an order reads the price of its product, and a product counts its units in the
+// orders. Each read goes to a value column of the other table, so the two tables have no cycle.
+const orderCols: readonly Column[] = [
+  { id: "c1", name: "Item", kind: "value", type: "text" },
+  { id: "c2", name: "Qty", kind: "value", type: "number" },
+  { id: "c3", name: "Price", kind: "formula", formula: '= SUM(table("Products") WHERE Name = this.Item, Price)' },
+  { id: "c4", name: "Cost", kind: "formula", formula: "= Qty * Price" },
+];
+const productCols: readonly Column[] = [
+  { id: "c1", name: "Name", kind: "value", type: "text" },
+  { id: "c2", name: "Price", kind: "value", type: "number" },
+  { id: "c3", name: "Sold", kind: "formula", formula: '= SUM(table("Orders") WHERE Item = this.Name, Qty)' },
+  { id: "c4", name: "Revenue", kind: "formula", formula: "= Sold * Price" },
+];
 
 /** The example sheets. */
 export const EXAMPLES: readonly Example[] = [
@@ -360,6 +388,34 @@ export const EXAMPLES: readonly Example[] = [
       A8: "Largest line", D8: "=MAX(D2:D4)",
       A9: "Ordered", B9: "2026-10-13", C9: "Due", D9: "=B9 + 30",
     }),
+  },
+  {
+    id: "orders",
+    title: "Orders and products: two tables",
+    doc: {
+      version: 1,
+      title: "Orders",
+      columns: orderCols,
+      rows: rows(["c1", "c2"], [
+        ["r1", null, "Pens", "3"],
+        ["r2", null, "Ink", "2"],
+        ["r3", null, "Paper", "5"],
+        ["r4", null, "Pens", "1"],
+      ]),
+    },
+    tables: [
+      {
+        version: 1,
+        title: "Products",
+        columns: productCols,
+        rows: rows(["c1", "c2"], [
+          ["r1", null, "Pens", "1.5"],
+          ["r2", null, "Ink", "12"],
+          ["r3", null, "Paper", "4"],
+          ["r4", null, "Tea", "3"],
+        ]),
+      },
+    ],
   },
   {
     id: "recipe",

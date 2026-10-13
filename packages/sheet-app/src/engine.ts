@@ -5,6 +5,7 @@
  */
 import { fail, lit, ok, SheetRun, space, vexError, type AnyDomain, type Expr, type Result, type Trace } from "@mark1russell7/vex";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
+import { activeOf, bookOf, type Book } from "./book.ts";
 import type { Column, SheetDoc } from "./doc.ts";
 import { parseValue } from "./values.ts";
 
@@ -52,6 +53,27 @@ export interface FormulaContext {
   readonly rowNames?: ReadonlyMap<string, readonly string[]>;
   /** The cells of a grid. A table has no grid. */
   readonly grid?: GridContext;
+  /** The tables of the book, by title, for `table("title")`. */
+  readonly tables?: ReadonlyMap<string, TableContext>;
+}
+
+/** The columns and the rows of a table, for the formulas of the other tables. Refer to `spec/formula.md` §8. */
+export interface TableContext {
+  readonly valueColumns: readonly string[];
+  readonly formulaColumns: readonly string[];
+  readonly rowNames?: ReadonlyMap<string, readonly string[]>;
+  readonly nameColumn?: string;
+}
+
+/** This function gives the context of a table for the formulas of the other tables. */
+export function tableContextOf(doc: SheetDoc): TableContext {
+  const first = doc.columns[0];
+  return {
+    valueColumns: doc.columns.filter((c) => c.kind === "value").map((c) => c.name),
+    formulaColumns: doc.columns.filter((c) => c.kind === "formula").map((c) => c.name),
+    rowNames: rowNamesOf(doc),
+    ...(first?.kind === "value" && first.type === "text" ? { nameColumn: first.name } : {}),
+  };
 }
 
 /** A problem of a formula, with its position in the text. */
@@ -120,8 +142,17 @@ export function rowNamesOf(doc: SheetDoc): ReadonlyMap<string, readonly string[]
   return names;
 }
 
-/** This function evaluates each cell of a document. */
-export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
+/** A table, ready for a run: its space, the programs of its columns and of its cells, and the compile results. */
+interface Prepared {
+  readonly space: ReturnType<typeof space.tree>;
+  readonly compiled: ReadonlyMap<string, CompileResult>;
+  readonly programs: ReadonlyMap<string, Expr>;
+  readonly own: ReadonlyMap<string, CompileResult>;
+  readonly cells: ReadonlyMap<string, ReadonlyMap<string, Expr>>;
+}
+
+/** This function makes the space of a table and compiles its formulas. `tables` are the tables of the book. */
+function prepare(doc: SheetDoc, compiler: Compiler, tables: ReadonlyMap<string, TableContext>): Prepared {
   const valueCols = doc.columns.filter((c): c is Extract<Column, { kind: "value" }> => c.kind === "value");
   const formulaCols = doc.columns.filter((c): c is Extract<Column, { kind: "formula" }> => c.kind === "formula");
   // A cell whose text is not a value of its type keeps its text, so a formula that reads it gives an error value.
@@ -138,7 +169,13 @@ export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
   const parents: Record<string, string | null> = Object.fromEntries(doc.rows.map((r) => [r.id, r.parent]));
   const sp = space.tree(records, parents);
   const grid = doc.mode === "grid" ? gridOf(doc) : undefined;
-  const ctx: FormulaContext = { valueColumns: valueCols.map((c) => c.name), formulaColumns: formulaCols.map((c) => c.name), rowNames: rowNamesOf(doc), ...(grid === undefined ? {} : { grid }) };
+  const ctx: FormulaContext = {
+    valueColumns: valueCols.map((c) => c.name),
+    formulaColumns: formulaCols.map((c) => c.name),
+    rowNames: rowNamesOf(doc),
+    tables,
+    ...(grid === undefined ? {} : { grid }),
+  };
   const compiled = new Map<string, CompileResult>(formulaCols.map((c) => [c.id, compiler.compile(c.formula, ctx)]));
   const programs = new Map<string, Expr>();
   for (const c of formulaCols) {
@@ -158,7 +195,31 @@ export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
       if (result.ok) cells.set(c.name, new Map([...(cells.get(c.name) ?? []), [r.id, result.expr]]));
     }
   }
-  const run = new SheetRun(programs, { space: sp, domains: compiler.domains ?? DOMAINS, cells });
+  return { space: sp, compiled, programs, own, cells };
+}
+
+/** This function evaluates each cell of a document with one table. */
+export const evaluateDoc = (doc: SheetDoc, compiler: Compiler): Evaluation => evaluateBook(bookOf(doc), compiler);
+
+/**
+ * This function evaluates each cell of the table on the screen of a book. One run has all the tables, so a formula
+ * reads another table with `table("title")`, and a cycle across tables gives `#CYCLE!`. When two tables have one
+ * title, the first one has the title.
+ */
+export function evaluateBook(book: Book, compiler: Compiler): Evaluation {
+  const doc = activeOf(book);
+  const contexts = new Map<string, TableContext>();
+  for (const t of book.tables) if (!contexts.has(t.title)) contexts.set(t.title, tableContextOf(t));
+  const prepared = book.tables.map((t) => prepare(t, compiler, contexts));
+  const { space: sp, compiled, programs, own, cells } = prepared[book.active] ?? prepare(doc, compiler, contexts);
+  const others = new Map(
+    book.tables.flatMap((t, i) => {
+      const p = prepared[i];
+      const first = book.tables.findIndex((x) => x.title === t.title) === i;
+      return i === book.active || !first || p === undefined ? [] : [[t.title, { space: p.space, columns: p.programs, cells: p.cells }] as const];
+    }),
+  );
+  const run = new SheetRun(programs, { space: sp, domains: compiler.domains ?? DOMAINS, cells, name: doc.title, tables: others });
   const byId = new Map(doc.columns.map((c) => [c.id, c]));
   const cache = new Map<string, Result<unknown> | undefined>();
 

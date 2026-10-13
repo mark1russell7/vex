@@ -62,7 +62,15 @@ A grid sheet has the columns `A`, `B`, `C` and so on, and numbered rows. Each ce
 - **[FORMULA.GRID.RANGE]** An aggregate takes a range of cells, for example `SUM(B2:D4)`. `SUM`, `AVERAGE`, `MIN`, `MAX` and `COUNT` take the cells of the range with a number or a formula. `ANY` and `ALL` take the cells with a boolean or a formula. Empty cells and texts do not count. For a range without such cells, `SUM`, `MIN`, `MAX` and `COUNT` give 0, `AVERAGE` gives `#NUM!`, `ANY` gives `FALSE` and `ALL` gives `TRUE`. A range has 10000 cells or fewer.
 - **[FORMULA.GRID.ONLY]** A range outside an aggregate is an error, and an address outside the grid is an error. A range in a table is an error. In a table, a name like `B2` is the name of a column.
 
-## 8. The results of the compiler
+## 8. Tables
+
+A document can have more tables. The context of the compiler gives the columns, the names of the rows and the column of the names of each other table.
+
+- **[FORMULA.TABLE.AXIS]** `table("name")` as the axis of an aggregate has the rows of the table `name`, for example `SUM(table("Products").Price)`. In its test and its value, a name reads a column of that table, and `this.name` reads the row of the formula. The value of `this.name` comes in through a variable, because that row is not in the other table.
+- **[FORMULA.TABLE.ROW]** `table("name").row("row").column` reads the column of the row with the name `row` in the table `name`. The name of a row is the text of the first column of its table. The compiler checks that exactly one row has the name.
+- **[FORMULA.TABLE.ERRORS]** A table, a column of a table or a row name that does not exist is an error with its span. Two rows with the name, and a table without a column of names, are errors. `table("name").` comes first in the navigation, and a row of another table needs `row("name").` after it.
+
+## 9. The results of the compiler
 
 - **[FORMULA.READS]** `reads` gives each column that the formula reads, one time, in the sequence of the first read.
 - **[FORMULA.ROUND-TRIP]** The text of a syntax tree, read again, gives the same expression as the tree.

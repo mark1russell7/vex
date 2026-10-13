@@ -4,12 +4,14 @@
  * compiler as a property, so it depends only on the contract of the compiler.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
-import { addColumn, addRow, convertColumn, deleteColumn, deleteRow, emptyDoc, indentRow, moveColumn, moveRow, outdentRow, setCell, updateColumn, type SheetDoc, type ValueType } from "../doc.ts";
+import { defaultChart } from "../chart.ts";
+import { addColumn, addRow, convertColumn, deleteColumn, deleteRow, emptyDoc, indentRow, moveColumn, moveRow, outdentRow, setCell, setChart, updateColumn, type SheetDoc, type ValueType } from "../doc.ts";
 import { evaluateDoc, type Compiler } from "../engine.ts";
 import { EXAMPLES } from "../examples.ts";
 import { commit, historyOf, redo, undo, type History } from "../history.ts";
 import { decodeShare, encodeShare, exportCsv, exportJson, importCsv, importJson, loadLocal, saveLocal } from "../io.ts";
 import { PLAIN_VIEW, visibleRows, type View } from "../view.ts";
+import { Chart } from "./Chart.tsx";
 import { FormulaEditor } from "./FormulaEditor.tsx";
 import { Grid, type CellRef } from "./Grid.tsx";
 import { Inspector } from "./Inspector.tsx";
@@ -79,6 +81,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const shown = useMemo(() => (draft === undefined ? doc : updateColumn(doc, draft.col, { formula: draft.text })), [doc, draft]);
   const ev = useMemo(() => evaluateDoc(shown, compiler), [shown, compiler]);
   const rows = useMemo(() => visibleRows(shown, ev, view), [shown, ev, view]);
+  const rowIds = useMemo(() => rows.map((r) => r.id), [rows]);
 
   // The selection stays on a cell that exists.
   const row = rows.some((r) => r.id === sel.row) ? sel.row : (rows[0]?.id ?? "");
@@ -298,9 +301,12 @@ export function SheetApp(props: SheetAppProps): ReactElement {
       </div>
 
       <div className="vs-main">
-        <div className="vs-left">
+        <div className="vs-left" data-chart={shown.chart !== undefined}>
           <div className="vs-viewbar">
             <input className="vs-filter" type="search" placeholder="Filter rows" aria-label="Filter the rows" value={view.filter} onChange={(e) => setView((v) => ({ ...v, filter: e.target.value }))} />
+            <button type="button" className="vs-btn" aria-pressed={shown.chart !== undefined} onClick={() => apply((d) => setChart(d, d.chart === undefined ? defaultChart(d, ev) : undefined))}>
+              Chart
+            </button>
             <button type="button" className="vs-btn vs-inspector-toggle" aria-expanded={inspectorOpen} aria-controls="vs-inspector" onClick={() => setInspectorOpen((o) => !o)}>
               Inspector
             </button>
@@ -310,6 +316,17 @@ export function SheetApp(props: SheetAppProps): ReactElement {
               </button>
             )}
           </div>
+          {shown.chart === undefined ? null : (
+            <Chart
+              doc={shown}
+              ev={ev}
+              rows={rowIds}
+              spec={shown.chart}
+              selected={row}
+              onChange={(spec) => apply((d) => setChart(d, spec))}
+              onSelectRow={(r) => setSel({ row: r, col })}
+            />
+          )}
           <Grid
             doc={shown}
             ev={ev}

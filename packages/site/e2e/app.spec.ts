@@ -1,5 +1,6 @@
 /**
- * The browser tests of the sheet app at /app/: edits, rows, the keyboard, undo, the filter, export and share links.
+ * The browser tests of the sheet app at /app/: edits, rows, the keyboard, undo, the filter, export, share links and the
+ * chart.
  */
 import { expect, test, type Page } from "@playwright/test";
 
@@ -147,4 +148,39 @@ test("an example link opens the example, and a formula that reads a row by its n
   await expect(at(3, "Share of page")).toHaveText("#VALUE!");
   await at(3, "Share of page").click();
   await expect(page.getByRole("complementary", { name: "The inspector" })).toContainText('no row has the name "Page"');
+});
+
+test("a chart draws a line for each column of numbers, and a click on a point selects its row", async ({ page }) => {
+  await page.goto("./app/#example=prey");
+  const chart = page.getByRole("region", { name: "The chart" });
+  await expect(chart.getByRole("img", { name: "A chart of Rabbits and Foxes across Week" })).toBeVisible();
+  await expect(chart.locator("polyline")).toHaveCount(2);
+  // A third column joins the chart. A click on a point of the first line selects the row of that point.
+  await chart.getByRole("button", { name: "Rabbits per fox" }).click();
+  await expect(chart.locator("polyline")).toHaveCount(3);
+  await chart.locator("circle").nth(4).click();
+  await expect(page.locator(".vs-address")).toContainText("row 5");
+  // The chart draws only the rows on the screen. A filter that keeps no row leaves no point.
+  const filter = page.getByRole("searchbox", { name: "Filter the rows" });
+  await filter.fill("no such row");
+  await expect(chart).toContainText("The columns have no numbers or vectors on the rows on the screen.");
+  await filter.fill("");
+  // The chart is a part of the document, so undo gives it back.
+  await page.getByRole("button", { name: "Chart", exact: true }).click();
+  await expect(chart).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(chart.locator("polyline")).toHaveCount(3);
+  // A column of vectors gives a path, and the chart of the ball keeps one scale on the two axes.
+  await page.getByRole("combobox", { name: "Open an example" }).selectOption("ball");
+  await expect(chart.getByRole("img", { name: "A chart of Position" })).toBeVisible();
+  await expect(chart.getByRole("img")).toHaveAccessibleDescription("Position: 12 points, x from 0 to 11, y from -0.6875 to 8.875.");
+});
+
+test("on a phone, the chart takes the width of the screen, and the page does not scroll to the side", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("./app/#example=prey");
+  const img = page.getByRole("region", { name: "The chart" }).getByRole("img");
+  await expect(img).toBeVisible();
+  await expect.poll(async () => (await img.boundingBox())?.width ?? 0).toBeLessThanOrEqual(390 - 32);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });

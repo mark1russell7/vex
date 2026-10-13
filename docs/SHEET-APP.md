@@ -32,7 +32,6 @@ Vex is the semantics of a spreadsheet without the grid on the screen. The sheet 
 ## 4. Later versions
 
 - Grid sheets with A1 addresses (a grid space).
-- Charts.
 - More than one table, with references between tables.
 - Collaboration in real time.
 - Domains as plug-ins.
@@ -77,3 +76,5 @@ The owner made these decisions on 2026-10-11:
 - The formula language has its own spec, `spec/formula.md`, with requirement IDs and tests.
 - A row has a name: the text of its first column, when that column is a text column. `row("name").` reads the row with that name (spec `FORMULA.NAV.NAME`). A name of no row, or of two rows, is an error. Thus a formula does not read a row that the author did not mean.
 - The link `#example=<id>` opens an example. The gallery page of the spreadsheets uses it.
+- A chart draws the columns that the user chooses, over the rows on the screen. A column of numbers gives a line, and a column of vectors gives a path. A chart of paths has one scale on the two axes, so a shape keeps its form.
+- The chart is a part of the document. Thus undo, the share link and the JSON file keep it.

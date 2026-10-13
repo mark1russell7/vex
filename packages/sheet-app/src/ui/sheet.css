@@ -221,9 +221,14 @@
 }
 .vs-left {
   display: grid;
+  /* The column can be narrower than its content, so the chart takes the width of the screen. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
+}
+.vs-left[data-chart="true"] {
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 .vs-viewbar {
   display: flex;
@@ -462,6 +467,101 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2, 0.5rem);
+}
+/* ---------------------------------------------------------------- the chart */
+.vs-app {
+  --vs-series-1: var(--color-accent);
+  --vs-series-2: light-dark(#b45309, #ffb86b);
+  --vs-series-3: light-dark(#17692f, #8fdc9f);
+  --vs-series-4: light-dark(#7a2aa8, #d6a8ff);
+  --vs-series-5: var(--color-mark);
+  --vs-series-6: light-dark(#0e7490, #67e8f9);
+}
+.vs-chart {
+  padding: 0 var(--space-4, 1rem) var(--space-2, 0.5rem);
+  border-top: 1px solid var(--color-rule);
+  background: var(--color-surface);
+}
+.vs-chart-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 0.5rem) var(--space-4, 1rem);
+  padding: var(--space-2, 0.5rem) 0;
+}
+.vs-chart-axis {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+}
+.vs-chart-axis select {
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface);
+}
+.vs-chart-series {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1, 0.25rem);
+}
+.vs-key {
+  font-family: var(--font-sans);
+}
+.vs-key[aria-pressed="false"] {
+  color: var(--color-ink-muted);
+}
+.vs-key[aria-pressed="true"] {
+  border-color: var(--color-ink-secondary);
+  font-weight: 700;
+}
+.vs-key-mark {
+  align-self: center;
+  width: 0.75rem;
+  height: 0.25rem;
+  border-radius: 2px;
+  background: var(--color-rule-strong);
+}
+.vs-chart-box {
+  min-width: 0;
+  overflow: hidden;
+}
+.vs-chart-svg {
+  display: block;
+}
+.vs-axis line {
+  stroke: var(--color-grid);
+}
+.vs-axis line.vs-axis-zero {
+  stroke: var(--color-rule-strong);
+}
+.vs-axis text {
+  fill: var(--color-ink-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.vs-series polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.vs-dot {
+  fill: currentColor;
+  /* The clear stroke makes a larger target for the pointer. */
+  stroke: transparent;
+  stroke-width: 10;
+  cursor: pointer;
+}
+.vs-dot-sel {
+  fill: var(--color-surface);
+  stroke: currentColor;
+  stroke-width: 2.5;
+}
+.vs-chart-empty,
+.vs-chart-note {
+  margin: var(--space-1, 0.25rem) 0;
+  color: var(--color-ink-muted);
 }
 .vs-status {
   display: flex;

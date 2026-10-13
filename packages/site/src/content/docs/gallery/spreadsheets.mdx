@@ -103,6 +103,8 @@ The menu of the app has these seven sheets. Each link opens one of them.
 
 Four of the sheets read a row by its name, for example `row("Launch").Start`. The name of a row is the text of its first column. If you change the name, the formula gives `#VALUE!` with the reason. It does not read a different row.
 
+The rabbits and foxes, the thrown ball and the loan open with a chart. A column of numbers gives a line, and a column of vectors gives a path. The path of the ball has one scale on the two axes, so the arc keeps its real form. The button **Chart** adds a chart to any sheet, and a click on a point selects its row.
+
 ## What the pilots found
 
 - `SheetRun` gave a wrong balance at the end of a long recurrence, without an error. Version 0.5.0 removed the cause: a sheet does not depend on the call stack.

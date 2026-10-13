@@ -1,6 +1,7 @@
 /**
  * The example sheets. Each example shows one strength of Vex: roll-ups in a tree, ranks, a running total or vectors.
- * In the later examples, formulas read other formula columns in each direction of the tree.
+ * In the later examples, formulas read other formula columns in each direction of the tree. The loan, the rabbits and
+ * the ball open with a chart.
  */
 import type { Column, Row, SheetDoc } from "./doc.ts";
 
@@ -165,6 +166,7 @@ export const EXAMPLES: readonly Example[] = [
       title: "Loan",
       columns: loanCols,
       rows: rows(["c1", "c2"], Array.from({ length: 12 }, (_, i) => [`r${i + 1}`, null, String(i + 1), "860"])),
+      chart: { x: "c1", series: ["c4"] },
     },
   },
   {
@@ -206,6 +208,7 @@ export const EXAMPLES: readonly Example[] = [
       title: "Rabbits and foxes",
       columns: preyCols,
       rows: rows(["c1"], Array.from({ length: 30 }, (_, i) => [`r${i + 1}`, null, String(i)])),
+      chart: { x: "c1", series: ["c2", "c3"] },
     },
   },
   {
@@ -234,6 +237,7 @@ export const EXAMPLES: readonly Example[] = [
       title: "Thrown ball",
       columns: ballCols,
       rows: rows(["c1"], Array.from({ length: 12 }, (_, i) => [`r${i + 1}`, null, String(i / 4)])),
+      chart: { x: null, series: ["c3"] },
     },
   },
   {

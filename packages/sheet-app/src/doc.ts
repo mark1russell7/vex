@@ -33,12 +33,25 @@ export interface Row {
   readonly cells: Readonly<Record<string, string>>;
 }
 
+/**
+ * The chart of a document: the columns that it draws, and the column of the horizontal axis. A column of numbers
+ * gives a line, and a column of vectors gives a path of points.
+ */
+export interface ChartSpec {
+  /** The column of the horizontal axis, or `null` for the number of the row. */
+  readonly x: string | null;
+  /** The columns that the chart draws, in the order of the legend. */
+  readonly series: readonly string[];
+}
+
 /** The document. */
 export interface SheetDoc {
   readonly version: 1;
   readonly title: string;
   readonly columns: readonly Column[];
   readonly rows: readonly Row[];
+  /** The chart, or none. */
+  readonly chart?: ChartSpec;
 }
 
 /** The value types, in the order of the menus. */
@@ -199,10 +212,17 @@ export function convertColumn(doc: SheetDoc, id: string): SheetDoc {
   };
 }
 
-/** This function removes a column and the text of its cells. */
+/** This function sets the chart of a document, or removes the chart when `chart` is `undefined`. */
+export function setChart(doc: SheetDoc, chart: ChartSpec | undefined): SheetDoc {
+  const { chart: _old, ...rest } = doc;
+  return chart === undefined ? rest : { ...rest, chart };
+}
+
+/** This function removes a column and the text of its cells. The column also leaves the chart. */
 export function deleteColumn(doc: SheetDoc, id: string): SheetDoc {
   return {
     ...doc,
+    ...(doc.chart === undefined ? {} : { chart: { x: doc.chart.x === id ? null : doc.chart.x, series: doc.chart.series.filter((s) => s !== id) } }),
     columns: doc.columns.filter((c) => c.id !== id),
     rows: doc.rows.map((r) => {
       const { [id]: _gone, ...cells } = r.cells;
@@ -223,7 +243,19 @@ export function moveColumn(doc: SheetDoc, id: string, dir: -1 | 1): SheetDoc {
 
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> => typeof u === "object" && u !== null && !Array.isArray(u);
 
-/** This function tells if a value is a valid document: unique ids, known parents, and each parent before its children. */
+/** This function tells if a value is a valid chart for the columns `ids`: each column of the chart exists, once. */
+function isChartSpec(u: unknown, ids: ReadonlySet<string>): boolean {
+  if (!isRecord(u) || !Array.isArray(u["series"])) return false;
+  const x = u["x"];
+  const series = u["series"] as unknown[];
+  if (x !== null && (typeof x !== "string" || !ids.has(x))) return false;
+  return series.every((s) => typeof s === "string" && ids.has(s)) && new Set(series).size === series.length;
+}
+
+/**
+ * This function tells if a value is a valid document: unique ids, known parents, and each parent before its children.
+ * A chart uses only columns of the document.
+ */
 export function isSheetDoc(u: unknown): u is SheetDoc {
   if (!isRecord(u) || u["version"] !== 1 || typeof u["title"] !== "string" || !Array.isArray(u["columns"]) || !Array.isArray(u["rows"])) return false;
   const cols = u["columns"] as unknown[];
@@ -233,6 +265,7 @@ export function isSheetDoc(u: unknown): u is SheetDoc {
     colIds.add(c["id"]);
     if (c["kind"] === "value" ? !VALUE_TYPES.includes(c["type"] as ValueType) : c["kind"] !== "formula" || typeof c["formula"] !== "string") return false;
   }
+  if (u["chart"] !== undefined && !isChartSpec(u["chart"], colIds)) return false;
   const seen = new Set<string>();
   // The open rows: the ancestors of the next row. A child must follow its parent or a row under its parent.
   const open: string[] = [];

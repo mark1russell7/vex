@@ -18,6 +18,15 @@ for (const scheme of ["light", "dark"] as const) {
         expect(found).toEqual([]);
       });
     }
+    // The chart of the app shows only in an example with a chart, so the check opens those examples too.
+    for (const example of ["prey", "ball"]) {
+      test(`the chart of the example ${example} has no WCAG 2.1 AA violation`, async ({ page }) => {
+        await page.goto(`./app/#example=${example}`);
+        await expect(page.getByRole("region", { name: "The chart" })).toBeVisible();
+        const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+        expect(result.violations.map((v) => `${v.impact ?? ""} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`)).toEqual([]);
+      });
+    }
   });
 }
 

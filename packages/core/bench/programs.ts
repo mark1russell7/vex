@@ -46,6 +46,8 @@ const liveNeighbors = grid.start(0).neighbors(8, (n) => n.from("alive"), { where
 /** One step of the Game of Life: the number of live neighbors of each cell. */
 export const LIFE = {
   title: `one step of the Game of Life on a ${SIZE} by ${SIZE} grid`,
+  root: grid,
+  chain: liveNeighbors,
   vex: (): void => {
     liveNeighbors.all();
   },

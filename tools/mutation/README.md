@@ -1,6 +1,6 @@
 # The mutation lane
 
-The lane runs Stryker on the three published packages: `@mark1russell7/vex` (`core`), `@mark1russell7/vex-domains` (`domains`) and `@mark1russell7/vex-testkit` (`testkit`). It uses Vitest 4.1, because Stryker does not support Vitest 5 at this time.
+The lane runs Stryker on the four published packages: `@mark1russell7/vex` (`core`), `@mark1russell7/vex-domains` (`domains`), `@mark1russell7/vex-testkit` (`testkit`) and `@mark1russell7/vex-compiler` (`compiler`). It uses Vitest 4.1, because Stryker does not support Vitest 5 at this time.
 
 ## The gate
 

@@ -47,6 +47,7 @@ The types know the fields of the records and the ops of each domain. `root.from(
 
 - [`@mark1russell7/vex-domains`](https://www.npmjs.com/package/@mark1russell7/vex-domains): 2D vectors, colors, angles, numbers and booleans
 - [`@mark1russell7/vex-testkit`](https://www.npmjs.com/package/@mark1russell7/vex-testkit): property tests for the laws of your domains
+- [`@mark1russell7/vex-compiler`](https://www.npmjs.com/package/@mark1russell7/vex-compiler): generated JavaScript for your programs, with the results of the interpreter
 
 ## License
 

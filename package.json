@@ -10,7 +10,7 @@
   "scripts": {
     "package": "tsx packages/cli/src/index.ts package",
     "template": "tsx packages/cli/src/index.ts repo",
-    "build": "pnpm --filter @mark1russell7/vex --filter @mark1russell7/vex-domains --filter @mark1russell7/vex-testkit run build",
+    "build": "pnpm --filter @mark1russell7/vex --filter @mark1russell7/vex-domains --filter @mark1russell7/vex-testkit --filter @mark1russell7/vex-compiler run build",
     "check:packages": "pnpm build && node scripts/check-packages.mjs",
     "changeset": "changeset",
     "typecheck": "pnpm -r run typecheck",

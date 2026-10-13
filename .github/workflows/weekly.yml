@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ["@mark1russell7/vex-testkit", "@vex/pilots", "@vex/formula", "@vex/sheet-app", "@vex/site"]
+        package: ["@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@vex/pilots", "@vex/formula", "@vex/sheet-app", "@vex/site"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

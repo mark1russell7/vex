@@ -23,7 +23,7 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - Each package has a `tsconfig.test.json`. `pnpm typecheck` checks the source and the tests.
 - `@mark1russell7/vex` has no runtime dependencies. Other packages depend on it, and it depends on none of them.
 - The type `Optional` comes from `@mark1russell7/optional`, the Optional of the family. It is a dev dependency, and the build copies the type into the declarations.
-- The published packages are `@mark1russell7/vex`, `@mark1russell7/vex-domains` and `@mark1russell7/vex-testkit`. The other packages are private.
+- The published packages are `@mark1russell7/vex`, `@mark1russell7/vex-domains`, `@mark1russell7/vex-testkit` and `@mark1russell7/vex-compiler`. The other packages are private.
 
 ## Tests
 
@@ -33,5 +33,6 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - A code block of the docs with the meta word `doctest` is a test. Write `// => value` for a value and `// : Type` for a type.
 - A golden file in `packages/core/src/__golden__` changes only with a change of the semantics. To accept it, start `vitest run -u`.
 - The coverage of each published package must stay at 98, 96, 98 and 98 or more. The root `vitest.config.ts` sets these gates.
+- The compiler must give the result of the interpreter for each program. Property P17 tests this. Read `docs/COMPILER.md` before a change to the compiler.
 - The mutation lane (`pnpm --filter @vex/mutation run mutation`) fails under 95 %. Write a test that finds each surviving mutant.
 - Disable a mutant only if it is equivalent. Write `// Stryker disable next-line <Mutator>: <reason>` above the line.

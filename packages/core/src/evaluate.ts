@@ -602,11 +602,12 @@ class Compiler {
 }
 
 const FORBIDDEN_FIELDS = new Set(["__proto__", "constructor", "prototype"]);
-const isFieldName = (seg: string): boolean => seg.length > 0 && !FORBIDDEN_FIELDS.has(seg);
+/** This function tells if a segment of a path can name a field. A compiler uses the same rule as the interpreter. */
+export const isFieldName = (seg: string): boolean => seg.length > 0 && !FORBIDDEN_FIELDS.has(seg);
 
 /** This function runs the `is` test of a domain. A test that throws counts as `false`. */
 // Stryker disable BlockStatement: an empty catch gives undefined, which also counts as false
-function safeIs(d: AnyDomain, value: unknown): boolean {
+export function safeIs(d: AnyDomain, value: unknown): boolean {
   try {
     return d.is(value);
   } catch {
@@ -616,7 +617,8 @@ function safeIs(d: AnyDomain, value: unknown): boolean {
 // Stryker restore BlockStatement
 
 
-function matchesKind(kind: ParamKind, value: unknown, domain: AnyDomain): boolean {
+/** This function tells if an argument has the kind of a parameter of an op of the domain `domain`. */
+export function matchesKind(kind: ParamKind, value: unknown, domain: AnyDomain): boolean {
   switch (kind) {
     case "domain":
       return safeIs(domain, value);

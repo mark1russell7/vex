@@ -1,6 +1,6 @@
 # The Vex compiler: architecture and plan
 
-*Written: 2026-10-13. Status: accepted. §11 gives the decisions of the owner.*
+*Written: 2026-10-13. Status: accepted, phase C1 done. §11 gives the decisions of the owner, and §13 gives the record.*
 
 ## 1. The idea
 
@@ -81,6 +81,8 @@ The analysis resolves each op with the rule of the interpreter. The op belongs t
 
 The analysis also finds the nodes that do not depend on the origin (§7.2), and it estimates the cost of each node.
 
+Phase C1 has no static kinds. Each op site of the runtime keeps the facts of its last receiver instead (§13). The kinds and `returns` move to phase C2.
+
 ### 3.3 Lowering: the loop IR
 
 The loop IR is a small language of statements:
@@ -108,6 +110,14 @@ The lowering joins an axis and its reduction into one loop, so it makes no list.
 The generated code expects the usual case: each field exists, each value has its expected kind, each number is finite, and no op fails. A check guards each of these facts. When a check fails, the generated function stops and gives the value `FALLBACK`. Then the same evaluation runs again in tier 1, and its result is the result.
 
 Thus generated code does not make an error value. Each error of Vex (`#REF!`, `#N/A`, `#NUM!` and the others) comes from the interpreter, with its message, its path and its location.
+
+A failed check stops the program only where the error is the result. In three contexts, the error is not the result:
+
+- In an item of a list op, the error makes an error item. The list op skips it, and with the option `strict`, the list op fails.
+- In the first argument of `ifError`, the error gives the second argument.
+- In a binding of `let`, the error is an error only where the body reads the name. A flag tells each read.
+
+An exception in an op is the error `#CALC!` of that op, so it follows the same rules. A full call stack (`#DEPTH!`) always stops the program, because no list op and no `ifError` hides it.
 
 ### 4.2 The same bits
 
@@ -193,10 +203,10 @@ Each new construct goes through each stage. The stages are the interpreter, `exp
 
 | Function | What it does |
 |---|---|
-| `generate(expr, options)` | The loop IR and the JavaScript source of a program, with its constants. It is pure, so a build can use it. |
+| `generate(expr)` | The loop IR and the JavaScript source of a program, with its constants. It is pure, so a build can use it. |
 | `load(generated, options)` | A program of tier 2, made with `new Function` |
 | `tiered(expr, options)` | Tier 2 when it can, and else tier 1. After a failed check, tier 1 does that evaluation again. |
-| `emitModule(programs, options)` | An ES module for a build, standalone or with the fallback |
+| `emitModule(programs, options)` | An ES module for a build, standalone or with the fallback. It comes in phase C3. |
 
 Each program has the `Program` interface of the core (`run`, `explain`), so each tier can replace another tier.
 
@@ -204,7 +214,7 @@ Each program has the `Program` interface of the core (`run`, `explain`), so each
 
 - **Property P17**: on random programs and random spaces, `tiered` gives the result of the interpreter. The test also reports the share of programs in tier 2, so a fallback cannot hide a gap.
 - **Golden files** of the generated source for fixed programs. A change of the generated code shows in the diff.
-- **The speed gate** of the nightly workflow: generated code within 1.2 times the hand-written loops for the programs of the speed lane.
+- **The speed gate** of the nightly workflow: generated code against the hand-written loops for the programs of the speed lane, with no fallback. In phase C1, each limit is approximately twice the measured ratio. Phase C2 sets the limit 1.2.
 - **Standalone modules**: a test imports a generated module and compares it with the interpreter.
 - The mutation lane covers the compiler package at 95 % or more.
 
@@ -221,10 +231,40 @@ The owner made these decisions on 2026-10-13:
 
 | Phase | Deliverables | Done when |
 |---|---|---|
-| C1 The compiler | The package, the kinds (§3.2), `returns` on the ops of the built-in domains, the loop IR, the back end of JavaScript source, `tiered`, the checks and the fallback, P17, golden files, the speed gate | P17 passes, and the speed lane is within 1.2 times the loops |
-| C2 Speed | Inline forms from one definition, work that does not depend on the origin, aggregates by group, sheets with fixed addresses | The batch programs have the cost O(n) |
+| C1 The compiler | The package, the loop IR, the back end of JavaScript source, `tiered`, the checks and the fallback, P17, golden files, the speed gate | Done on 2026-10-13 (§13). P17 passes, and the speed lane is 2.3 and 1.6 times the loops. |
+| C2 Speed | The kinds (§3.2) and `returns` on the ops of the built-in domains, inline forms from one definition, array and grid spaces by index, work that does not depend on the origin, aggregates by group, sheets with fixed addresses | The speed lane is within 1.2 times the loops, and the batch programs have the cost O(n) |
 | C3 ireko | `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
 | C4 Iteration | `fold`, `iterate`, domain kernels, then `tree` and `layers` of ireko | Each construct passes each stage, and the layouts of ireko do not change |
 | C5 Later | Other back ends, recalculation (§7.5) | A decision of the owner |
 
 A separate item: the mutation score of the test kit is 95.47 %, near the gate of 95 %. Tests for its survivors give it more margin.
+
+## 13. Record
+
+### 13.1 Phase C1
+
+Phase C1 is done. The package `@mark1russell7/vex-compiler` has the loop IR (`loop.ts`), the lowering (`lower.ts`), the printer of JavaScript (`js.ts`), the runtime (`runtime.ts`) and the tiers (`tiers.ts`). The spec has the requirements COMPILE.TIERED, COMPILE.FALLBACK, COMPILE.TRACE and COMPILE.SOURCE.
+
+The tests:
+
+- P17 compares `tiered` with `evaluate` on three generators: the whole grammar, the chains of the builder, and list ops over axes. Tier 2 gave approximately 97 %, 85 % and 90 % of the values. The gate of the share is 50 %.
+- The work put ten defects into the lowering, one at a time. P17 found each of them.
+- The unit tests alone cover each statement and each branch of the package. The golden files hold the source of five programs.
+
+The speed, measured by `bench/gate.ts` on one machine:
+
+| Program | Hand-written loops | Tier 1 | Tier 2 |
+|---|---|---|---|
+| The nearest other box, 60 boxes | 1 | 80 | 2.3 |
+| One step of the Game of Life, 16 by 16 | 1 | 120 | 1.6 |
+
+Two caches of the runtime give most of the speed:
+
+- Each op site keeps the method of its last receiver. At each call, a read of the property must give the same method, so a changed prototype gives the new method. (§14.4 of the review did not add a cache without this read.)
+- Each costly axis keeps its targets for each space and focus. A space does not change, so the targets do not change.
+
+The rest of the time goes into the reads of the space and into the checks that the semantics need, for example `valid`. Phase C2 removes this time with the kinds and the inline forms.
+
+These cases operate in tier 1: a list value with an error item, and a list op on a list value. An error of an extension and each other exception also operate in tier 1.
+
+An item for the owner: npm trusted publishing needs the package on npm. Before the next release, the owner publishes `@mark1russell7/vex-compiler` once, or adds its trust, as for the other packages.

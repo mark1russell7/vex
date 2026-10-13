@@ -174,7 +174,16 @@ A sheet has named columns of formulas over a space. A cell is one column at one 
 - **[SHEET.DEEP]** A run evaluates a chain of cell references of any length. The length does not depend on the call stack of the engine, and the results are the results of a recursive search.
 - **[SHEET.ORDER]** The result of a cell does not depend on the order of the evaluations. `ifError` does not hide a cycle from the cells on that cycle.
 
-## 10. Examples
+## 10. The compiler
+
+These requirements apply to `@mark1russell7/vex-compiler`.
+
+- **[COMPILE.TIERED]** `tiered(e, options)` gives a program with the interface of `compile`. For each space, origin, variables and tables, its `run` gives the result of `evaluate`.
+- **[COMPILE.FALLBACK]** Where the generated code of tier 2 cannot give the result, tier 1 gives it. Each error value comes from tier 1. A page that does not permit `new Function` uses tier 1.
+- **[COMPILE.TRACE]** A run with a trace, and `explain`, use tier 1. Thus they give the traces of the interpreter.
+- **[COMPILE.SOURCE]** `generate(e)` gives the same source for the same expression. The source has no name and no literal of the expression. It reads them from its constants, by index.
+
+## 11. Examples
 
 - **[EXAMPLE.SEPARATION]** The test is `position + size - other.position` in a pair of boxes. A component that is not positive shows that the box at the origin ends before the other box starts.
 - **[EXAMPLE.NEAREST]** The minimum of the distances from the origin to the others is the distance to the nearest other record.

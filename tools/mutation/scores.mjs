@@ -10,8 +10,8 @@ import { fileURLToPath } from "node:url";
 /** @typedef {{ detected: number, valid: number, survived: string[] }} Total */
 
 const BREAK = 95;
-// The packages with the gate: the three published packages.
-const GATED = new Set(["core", "domains", "testkit"]);
+// The packages with the gate: the four published packages.
+const GATED = new Set(["core", "domains", "testkit", "compiler"]);
 const report = /** @type {Report} */ (JSON.parse(readFileSync(fileURLToPath(new URL("../../reports/mutation/mutation.json", import.meta.url)), "utf8")));
 /** @type {Map<string, Total>} */
 const totals = new Map();

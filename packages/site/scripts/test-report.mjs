@@ -10,7 +10,7 @@ const repo = join(site, "..", "..");
 const tmp = join(site, ".report");
 mkdirSync(tmp, { recursive: true });
 const tests = [];
-for (const pkg of ["core", "domains", "testkit"]) {
+for (const pkg of ["core", "domains", "testkit", "compiler"]) {
   const file = join(tmp, `${pkg}.json`);
   try {
     execFileSync("pnpm", ["exec", "vitest", "run", "--reporter=json", `--outputFile=${file}`], { cwd: join(repo, "packages", pkg), stdio: "inherit", shell: true });

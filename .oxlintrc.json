@@ -37,6 +37,7 @@
         "assertFunctionNames": [
           "expect",
           "expectGolden",
+          "expectSame",
           "bench.compare",
           "expectTypeOf"
         ]
@@ -57,6 +58,7 @@
     "docs/**",
     "**/dist/**",
     "**/node_modules/**",
+    "**/__golden__/**",
     "packages/site/scripts/**",
     "packages/site/src/content.config.ts",
     "packages/site/.astro/**"

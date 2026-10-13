@@ -23,6 +23,9 @@ export interface SheetAppProps {
   readonly docsHref?: string;
 }
 
+/** A link in the address that names a document. */
+const LINK = /#(example|sheet)=/;
+
 const firstCell = (doc: SheetDoc): CellRef => ({ row: doc.rows[0]?.id ?? "", col: doc.columns[0]?.id ?? "" });
 
 /** This function gives a file to the user. */
@@ -58,24 +61,45 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     setNote(message);
   };
 
-  // A share link or an example link in the address opens its document once, when the app starts.
-  useEffect(() => {
-    const example = EXAMPLES.find((x) => x.id === /#example=([\w-]+)/.exec(window.location.hash)?.[1]);
-    if (example !== undefined) {
-      load(example.doc, `Opened the example "${example.title}".`);
-      return;
-    }
-    const m = /#sheet=([\w-]+)/.exec(window.location.hash);
-    if (m?.[1] === undefined) return;
-    void decodeShare(m[1]).then((d) => {
-      if (d === undefined) setNote("The link has no valid sheet.");
-      else load(d, `Opened "${d.title}" from the link.`);
-    });
-    // The link is read once, when the app opens.
-  }, []);
+  // The document of the link in the address. The link stays in the address while the document is the one of the link.
+  const linked = useRef<SheetDoc | undefined>(undefined);
 
-  // The browser keeps the document, so a new visit opens it again.
-  useEffect(() => saveLocal(doc), [doc]);
+  // The browser keeps the document, so a new visit opens it again. After a change, the link in the address names an
+  // old document. Thus the app removes the link, and a reload opens the changed document. This effect comes before
+  // the effect that reads the link, because React starts the effects in this order.
+  useEffect(() => {
+    saveLocal(doc);
+    if (linked.current === undefined || linked.current === doc) return;
+    linked.current = undefined;
+    if (LINK.test(window.location.hash)) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  }, [doc]);
+
+  // An example link (`#example=<id>`) or a share link (`#sheet=<data>`) opens its document. The app reads the address
+  // when it starts and each time the address changes, for example when a link opens in the same tab.
+  useEffect(() => {
+    const open = (): void => {
+      const example = EXAMPLES.find((x) => x.id === /#example=([\w-]+)/.exec(window.location.hash)?.[1]);
+      if (example !== undefined) {
+        linked.current = example.doc;
+        load(example.doc, `Opened the example "${example.title}".`);
+        return;
+      }
+      const m = /#sheet=([\w-]+)/.exec(window.location.hash);
+      if (m?.[1] === undefined) return;
+      void decodeShare(m[1]).then((d) => {
+        if (d === undefined) {
+          setNote("The link has no valid sheet.");
+          return;
+        }
+        linked.current = d;
+        load(d, `Opened "${d.title}" from the link.`);
+      });
+    };
+    open();
+    window.addEventListener("hashchange", open);
+    return () => window.removeEventListener("hashchange", open);
+    // The listener uses only the setters of the state, which do not change.
+  }, []);
 
   // The draft formula changes the results at once. The history gets the formula when the edit ends.
   const shown = useMemo(() => (draft === undefined ? doc : updateColumn(doc, draft.col, { formula: draft.text })), [doc, draft]);
@@ -185,6 +209,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const share = async (): Promise<void> => {
     const url = `${window.location.origin}${window.location.pathname}#sheet=${await encodeShare(doc)}`;
     window.history.replaceState(null, "", url);
+    linked.current = doc;
     try {
       await navigator.clipboard.writeText(url);
       setNote("The link is on the clipboard.");
@@ -217,7 +242,11 @@ export function SheetApp(props: SheetAppProps): ReactElement {
             value=""
             onChange={(e) => {
               const ex = EXAMPLES.find((x) => x.id === e.target.value);
-              if (ex !== undefined) load(ex.doc, `Opened the example "${ex.title}".`);
+              if (ex === undefined) return;
+              // The address names the example, so the user can copy a link to it.
+              window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#example=${ex.id}`);
+              linked.current = ex.doc;
+              load(ex.doc, `Opened the example "${ex.title}".`);
             }}
           >
             <option value="">Examples…</option>

@@ -76,5 +76,6 @@ The owner made these decisions on 2026-10-11:
 - The formula language has its own spec, `spec/formula.md`, with requirement IDs and tests.
 - A row has a name: the text of its first column, when that column is a text column. `row("name").` reads the row with that name (spec `FORMULA.NAV.NAME`). A name of no row, or of two rows, is an error. Thus a formula does not read a row that the author did not mean.
 - The link `#example=<id>` opens an example. The gallery page of the spreadsheets uses it.
+- The app reads the link in the address when it starts and each time the address changes. After an edit, the app removes the link from the address. Thus a reload opens the changed sheet, not the link.
 - A chart draws the columns that the user chooses, over the rows on the screen. A column of numbers gives a line, and a column of vectors gives a path. A chart of paths has one scale on the two axes, so a shape keeps its form.
 - The chart is a part of the document. Thus undo, the share link and the JSON file keep it.

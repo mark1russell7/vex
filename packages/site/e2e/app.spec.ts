@@ -184,3 +184,22 @@ test("on a phone, the chart takes the width of the screen, and the page does not
   await expect.poll(async () => (await img.boundingBox())?.width ?? 0).toBeLessThanOrEqual(390 - 32);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
+
+test("a link opens its example in the same tab, and after an edit a reload keeps the edit", async ({ page }) => {
+  await open(page);
+  const title = page.getByRole("textbox", { name: "The title of the sheet" });
+  await expect(title).toHaveValue("Budget");
+  // The app is open, and the address changes: the app opens the example of the new link.
+  await page.evaluate(() => {
+    window.location.hash = "#example=prey";
+  });
+  await expect(title).toHaveValue("Rabbits and foxes");
+  // The menu writes the example into the address, so the address is a link to it.
+  await page.getByRole("combobox", { name: "Open an example" }).selectOption("ball");
+  await expect(page).toHaveURL(/#example=ball$/);
+  // An edit makes the link old. The app removes it, so a reload opens the changed sheet.
+  await title.fill("My ball");
+  await expect(page).toHaveURL(/\/app\/$/);
+  await page.reload();
+  await expect(title).toHaveValue("My ball");
+});

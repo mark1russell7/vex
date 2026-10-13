@@ -20,6 +20,8 @@ export interface CellRef {
 /** The properties of the grid. */
 export interface GridProps {
   readonly doc: SheetDoc;
+  /** In a grid, the columns have letters, the rows keep their numbers, and a cell is a formula only with "=". */
+  readonly grid?: boolean;
   readonly ev: Evaluation;
   readonly rows: readonly VisibleRow[];
   readonly view: View;
@@ -67,6 +69,9 @@ function CellView(props: { readonly r: Result<unknown> | undefined }): ReactElem
 export function Grid(props: GridProps): ReactElement {
   const { doc, ev, rows, sel, editing } = props;
   const byId = useMemo(() => new Map(doc.rows.map((r) => [r.id, r])), [doc]);
+  // In a grid, the number of a row is its address, so a filter does not change it.
+  const numberOf = useMemo(() => new Map(doc.rows.map((r, i) => [r.id, i + 1])), [doc]);
+  const grid = props.grid === true;
   const table = useRef<HTMLTableElement>(null);
 
   // The selected cell takes the focus when the grid has the focus, so the keys move the selection.
@@ -79,6 +84,15 @@ export function Grid(props: GridProps): ReactElement {
 
   const header = (c: Column): ReactElement => {
     const sorted = props.view.sort?.column === c.id ? props.view.sort.dir : 0;
+    if (grid) {
+      return (
+        <th key={c.id} role="columnheader" scope="col" className="vs-grid-letter">
+          <button type="button" className="vs-colname" onClick={() => props.onSelect({ row: sel.row, col: c.id })}>
+            {c.name}
+          </button>
+        </th>
+      );
+    }
     return (
       <th key={c.id} role="columnheader" scope="col" aria-sort={sorted === 1 ? "ascending" : sorted === -1 ? "descending" : "none"} className={c.kind === "formula" ? "vs-formula-col" : undefined}>
         <span className="vs-colhead">
@@ -106,14 +120,20 @@ export function Grid(props: GridProps): ReactElement {
             </th>
             {doc.columns.map(header)}
             <th role="columnheader" scope="col" className="vs-addcol-cell">
-              <span className="vs-addcols">
-                <button type="button" className="vs-addcol" aria-label="Add a value column" title="Add a value column" onClick={() => props.onAddColumn("value")}>
+              {grid ? (
+                <button type="button" className="vs-addcol" aria-label="Add a column" title="Add a column" onClick={() => props.onAddColumn("formula")}>
                   +
                 </button>
-                <button type="button" className="vs-addcol vs-addcol-f" aria-label="Add a formula column" title="Add a formula column" onClick={() => props.onAddColumn("formula")}>
-                  ƒ
-                </button>
-              </span>
+              ) : (
+                <span className="vs-addcols">
+                  <button type="button" className="vs-addcol" aria-label="Add a value column" title="Add a value column" onClick={() => props.onAddColumn("value")}>
+                    +
+                  </button>
+                  <button type="button" className="vs-addcol vs-addcol-f" aria-label="Add a formula column" title="Add a formula column" onClick={() => props.onAddColumn("formula")}>
+                    ƒ
+                  </button>
+                </span>
+              )}
             </th>
           </tr>
         </thead>
@@ -129,7 +149,7 @@ export function Grid(props: GridProps): ReactElement {
                   ) : (
                     <span className="vs-caret-space" />
                   )}
-                  {i + 1}
+                  {grid ? (numberOf.get(vr.id) ?? i + 1) : i + 1}
                 </span>
               </th>
               {doc.columns.map((c) => {
@@ -138,7 +158,10 @@ export function Grid(props: GridProps): ReactElement {
                 const isEdit = editing !== undefined && editing.row === vr.id && editing.col === c.id;
                 const r = ev.cell(vr.id, c.id);
                 const numeric = r?.ok === true && typeof r.value === "number";
-                const own = c.kind === "formula" && byId.get(vr.id)?.formulas?.[c.id] !== undefined;
+                const text = byId.get(vr.id)?.formulas?.[c.id];
+                // In a grid, each filled cell has its own text, so the mark of an own formula is only for a table.
+                const own = !grid && c.kind === "formula" && text !== undefined;
+                const formula = c.kind === "formula" && (!grid || text?.trimStart().startsWith("=") === true);
                 return (
                   <td
                     key={c.id}
@@ -146,14 +169,14 @@ export function Grid(props: GridProps): ReactElement {
                     role="gridcell"
                     aria-selected={isSel}
                     tabIndex={isSel ? 0 : -1}
-                    className={[c.kind === "formula" ? "vs-formula-col" : "", own ? "vs-own" : "", numeric ? "vs-num" : "", r?.ok === false ? "vs-cell-error" : "", isSel ? "vs-sel" : ""].join(" ").trim() || undefined}
+                    className={[formula ? "vs-formula-col" : "", own ? "vs-own" : "", numeric ? "vs-num" : "", r?.ok === false ? "vs-cell-error" : "", isSel ? "vs-sel" : ""].join(" ").trim() || undefined}
                     onMouseDown={() => props.onSelect(here)}
                     onDoubleClick={() => props.onStartEdit(here)}
                   >
                     {isEdit ? (
                       <input
                         className="vs-cell-input"
-                        aria-label={`${c.name}, row ${i + 1}`}
+                        aria-label={grid ? `${c.name}${numberOf.get(vr.id) ?? i + 1}` : `${c.name}, row ${i + 1}`}
                         // The field opens with the focus, because the user starts an edit with a key or a double click.
                         autoFocus
                         value={editing.text}

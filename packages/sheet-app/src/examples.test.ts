@@ -1,7 +1,7 @@
 import { compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, toVexChain } from "@vex/formula";
 import { describe, expect, it } from "vitest";
 import { setCellFormula, type SheetDoc } from "./doc.ts";
-import { evaluateDoc, rowNamesOf, type Compiler } from "./engine.ts";
+import { evaluateDoc, gridLiteral, gridOf, rowNamesOf, type Compiler } from "./engine.ts";
 import { EXAMPLES } from "./examples.ts";
 import { formatValue } from "./values.ts";
 
@@ -23,7 +23,8 @@ describe("the examples with the formula language", () => {
   it("each formula of each example compiles, and no cell has an error value", () => {
     for (const ex of EXAMPLES) {
       const ev = evaluateDoc(ex.doc, compiler);
-      expect([...ev.compiled.values()].filter((c) => !c.ok)).toEqual([]);
+      // A column of a grid has no formula of its own, so only a column with a formula must compile.
+      expect(ex.doc.columns.filter((c) => c.kind === "formula" && c.formula.trim() !== "" && ev.compiled.get(c.id)?.ok !== true).map((c) => c.name)).toEqual([]);
       expect({ id: ex.id, errors: ev.errors }).toEqual({ id: ex.id, errors: 0 });
     }
   });
@@ -128,6 +129,17 @@ describe("the examples with the formula language", () => {
     expect(column("invoices", "Pay by")).toEqual(["2026-10-01", "2026-10-05", "2026-09-29", "2026-11-02", "2026-11-17"]);
     expect(column("invoices", "Days late")).toEqual(["0", "4", "0", "", ""]);
     expect(column("invoices", "Status")).toEqual(["on time", "late", "on time", "open", "open"]);
+  });
+
+  it("FORMULA.GRID.ADDRESS FORMULA.GRID.RANGE: a grid with A1 addresses, ranges, labels, empty cells and a date", () => {
+    expect(column("grid", "A").slice(0, 9)).toEqual(["Item", "Pens", "Paper", "Ink", "", "Total", "Average price", "Largest line", "Ordered"]);
+    expect(column("grid", "B").slice(0, 9)).toEqual(["Price", "1.5", "4", "12.5", "", "", "6", "", "2026-10-13"]);
+    expect(column("grid", "D").slice(0, 10)).toEqual(["Total", "15", "12", "25", "", "52", "", "25", "2026-11-12", ""]);
+    // The literal of a cell: a number, TRUE or FALSE, a date, or else the text itself.
+    expect(["12", " true ", "yes", "2026-10-13", "hello"].map((t) => gridLiteral(t).kind)).toEqual(["number", "boolean", "text", "date", "text"]);
+    const ex = EXAMPLES.find((e) => e.id === "grid");
+    const g = ex === undefined ? undefined : gridOf(ex.doc);
+    expect([g?.columns, g?.cells.get("D2"), g?.cells.get("B2"), g?.cells.get("A1"), g?.cells.get("B9"), g?.cells.get("E1")]).toEqual([["A", "B", "C", "D", "E", "F"], "formula", "number", "text", "date", undefined]);
   });
 
   it("FORMULA.NAV.NAME: the name of a row is the text of the first column, when that column is a text column", () => {

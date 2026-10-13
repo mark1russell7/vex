@@ -57,10 +57,42 @@ export interface SheetDoc {
   readonly rows: readonly Row[];
   /** The chart, or none. */
   readonly chart?: ChartSpec;
+  /**
+   * The value "grid" makes the document a grid. Its columns have the letters A, B, C, and each cell keeps its text as
+   * its own formula. A text that starts with "=" is a formula, and another text is a value. Without it, the document
+   * is a table of records.
+   */
+  readonly mode?: "grid";
 }
 
 /** The value types, in the order of the menus. */
 export const VALUE_TYPES: readonly ValueType[] = ["number", "text", "boolean", "vec2", "color", "date"];
+
+/** This function gives the letters of a column of a grid: 0 gives "A", 25 gives "Z" and 26 gives "AA". */
+export function columnLetter(i: number): string {
+  let out = "";
+  for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) out = String.fromCharCode(65 + ((n - 1) % 26)) + out;
+  return out;
+}
+
+/** This function gives the first column letter that the grid does not use. */
+export const freeLetter = (doc: SheetDoc): string => {
+  const used = new Set(doc.columns.map((c) => c.name));
+  let i = 0;
+  while (used.has(columnLetter(i))) i++;
+  return columnLetter(i);
+};
+
+/** An empty grid with `cols` columns and `rows` rows. */
+export function emptyGrid(title = "Grid", cols = 8, rows = 20): SheetDoc {
+  return {
+    version: 1,
+    title,
+    mode: "grid",
+    columns: Array.from({ length: cols }, (_, i) => ({ id: `c${i + 1}`, name: columnLetter(i), kind: "formula", formula: "" })),
+    rows: Array.from({ length: rows }, (_, i) => ({ id: `r${i + 1}`, parent: null, cells: {} })),
+  };
+}
 
 /** This function gives a new id with the prefix `prefix` that is not in `used`. */
 export function nextId(prefix: "r" | "c", used: Iterable<string>): string {
@@ -194,6 +226,18 @@ export function setCellFormula(doc: SheetDoc, rowId: string, columnId: string, f
 /** This function gives the formula of the cell `rowId` of the column `columnId`, or `undefined` for a cell without one. */
 export const cellFormulaOf = (doc: SheetDoc, rowId: string, columnId: string): string | undefined => doc.rows.find((r) => r.id === rowId)?.formulas?.[columnId];
 
+/** This function gives the text of a cell: the text of a value cell, or in a grid, the text of the cell. */
+export function cellTextOf(doc: SheetDoc, rowId: string, columnId: string): string {
+  const row = doc.rows.find((r) => r.id === rowId);
+  return (doc.mode === "grid" ? row?.formulas?.[columnId] : row?.cells[columnId]) ?? "";
+}
+
+/** This function sets the text of a cell. In a grid, the text is the own formula of the cell, and an empty text removes it. */
+export function setCellText(doc: SheetDoc, rowId: string, columnId: string, text: string): SheetDoc {
+  if (doc.mode !== "grid") return setCell(doc, rowId, columnId, text);
+  return setCellFormula(doc, rowId, columnId, text.trim() === "" ? undefined : text);
+}
+
 /** This function tells if `name` is free for a column, apart from the column `except`. The test ignores the case of letters. */
 export function nameIsFree(doc: SheetDoc, name: string, except?: string): boolean {
   const n = name.trim().toLowerCase();
@@ -285,6 +329,7 @@ function isChartSpec(u: unknown, ids: ReadonlySet<string>): boolean {
  */
 export function isSheetDoc(u: unknown): u is SheetDoc {
   if (!isRecord(u) || u["version"] !== 1 || typeof u["title"] !== "string" || !Array.isArray(u["columns"]) || !Array.isArray(u["rows"])) return false;
+  if (u["mode"] !== undefined && u["mode"] !== "grid") return false;
   const cols = u["columns"] as unknown[];
   const colIds = new Set<string>();
   for (const c of cols) {

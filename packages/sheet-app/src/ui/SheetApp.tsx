@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { defaultChart } from "../chart.ts";
-import { addColumn, addRow, cellFormulaOf, convertColumn, deleteColumn, deleteRow, emptyDoc, indentRow, moveColumn, moveRow, outdentRow, setCell, setCellFormula, setChart, updateColumn, type SheetDoc, type ValueType } from "../doc.ts";
+import { addColumn, addRow, cellFormulaOf, cellTextOf, convertColumn, deleteColumn, deleteRow, emptyDoc, emptyGrid, freeLetter, indentRow, moveColumn, moveRow, outdentRow, setCellFormula, setCellText, setChart, updateColumn, type SheetDoc, type ValueType } from "../doc.ts";
 import { evaluateDoc, type Compiler } from "../engine.ts";
 import { EXAMPLES } from "../examples.ts";
 import { commit, historyOf, redo, undo, type History } from "../history.ts";
@@ -14,7 +14,7 @@ import { PLAIN_VIEW, visibleRows, type View } from "../view.ts";
 import { Chart } from "./Chart.tsx";
 import { FormulaEditor } from "./FormulaEditor.tsx";
 import { Grid, type CellRef } from "./Grid.tsx";
-import { Inspector } from "./Inspector.tsx";
+import { Inspector, type RowAction } from "./Inspector.tsx";
 
 /** The properties of the app. */
 export interface SheetAppProps {
@@ -109,7 +109,9 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   // The draft formula changes the results at once. The history gets the formula when the edit ends.
   const shown = useMemo(() => (draft === undefined ? doc : withDraft(doc, draft)), [doc, draft]);
   const ev = useMemo(() => evaluateDoc(shown, compiler), [shown, compiler]);
-  const rows = useMemo(() => visibleRows(shown, ev, view), [shown, ev, view]);
+  // In a grid, the row numbers are the addresses of the cells, so a grid keeps the order of its rows: it has no sort.
+  const grid = shown.mode === "grid";
+  const rows = useMemo(() => visibleRows(shown, ev, grid ? { ...view, sort: undefined } : view), [shown, ev, view, grid]);
   const rowIds = useMemo(() => rows.map((r) => r.id), [rows]);
 
   // The selection stays on a cell that exists.
@@ -118,6 +120,8 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const here: CellRef = { row, col };
   const column = shown.columns.find((c) => c.id === col);
   const rowIndex = rows.findIndex((r) => r.id === row);
+  // In a grid, the number of a row is its address, so a filter does not change it.
+  const rowNumber = grid ? shown.rows.findIndex((r) => r.id === row) + 1 : rowIndex + 1;
   const compiled = column?.kind === "formula" ? ev.compiledCell(row, column.id) : undefined;
   // The own formula of the selected cell, or `undefined` when the cell takes the formula of its column.
   const own = column?.kind === "formula" ? cellFormulaOf(shown, row, column.id) : undefined;
@@ -130,17 +134,17 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const startEdit = (cell: CellRef, text?: string): void => {
     const c = shown.columns.find((x) => x.id === cell.col);
     if (c === undefined) return;
-    if (c.kind === "formula") {
+    if (c.kind === "formula" && !grid) {
       const mine = cellFormulaOf(shown, cell.row, c.id);
       setDraft({ col: c.id, row: mine === undefined ? null : cell.row, text: mine ?? c.formula });
       requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".vs-bar .vs-editor-input")?.focus());
       return;
     }
     setSel(cell);
-    setEditing({ ...cell, text: text ?? shown.rows.find((r) => r.id === cell.row)?.cells[c.id] ?? "" });
+    setEditing({ ...cell, text: text ?? cellTextOf(shown, cell.row, c.id) });
   };
   const endEdit = (step: "down" | "right" | "none"): void => {
-    if (editing !== undefined) apply((d) => setCell(d, editing.row, editing.col, editing.text));
+    if (editing !== undefined) apply((d) => setCellText(d, editing.row, editing.col, editing.text));
     setEditing(undefined);
     if (step === "down") move(1, 0);
     if (step === "right") move(0, 1);
@@ -150,7 +154,15 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     if (draft !== undefined) apply((d) => withDraft(d, draft));
     setDraft(undefined);
   };
-  const rowAction = (action: "below" | "child" | "indent" | "outdent" | "up" | "down" | "delete"): void => {
+  const rowAction = (action: RowAction): void => {
+    // In a grid, a row in the middle moves the numbers of the rows after it, so the keys add a row at the end.
+    if (action === "end" || (grid && (action === "below" || action === "child"))) {
+      const r = addRow(doc);
+      apply(() => r.doc);
+      setSel({ row: r.id, col });
+      return;
+    }
+    if (grid && action !== "delete") return;
     if (action === "below" || action === "child") {
       const r = addRow(doc, row, action === "child");
       apply(() => r.doc);
@@ -166,6 +178,13 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     apply((d) => (action === "indent" ? indentRow(d, row) : action === "outdent" ? outdentRow(d, row) : moveRow(d, row, action === "up" ? -1 : 1)));
   };
   const newColumn = (kind: "value" | "formula"): void => {
+    if (grid) {
+      // A grid gets the next free letter. Each cell of the column keeps its own text.
+      const g = addColumn(doc, { name: freeLetter(doc), kind: "formula", formula: "" });
+      apply(() => g.doc);
+      setSel({ row, col: g.id });
+      return;
+    }
     const r = addColumn(doc, kind === "value" ? { name: "Column", kind, type: "number" } : { name: "Formula", kind, formula: "" });
     apply(() => r.doc);
     setSel({ row, col: r.id });
@@ -188,8 +207,8 @@ export function SheetApp(props: SheetAppProps): ReactElement {
       Enter: () => (mod ? rowAction(e.shiftKey ? "child" : "below") : startEdit(here)),
       F2: () => startEdit(here),
       Tab: () => move(0, e.shiftKey ? -1 : 1),
-      Delete: () => column?.kind === "value" && apply((d) => setCell(d, row, col, "")),
-      Backspace: () => column?.kind === "value" && apply((d) => setCell(d, row, col, "")),
+      Delete: () => (column?.kind === "value" || grid) && apply((d) => setCellText(d, row, col, "")),
+      Backspace: () => (column?.kind === "value" || grid) && apply((d) => setCellText(d, row, col, "")),
     };
     if (mod && e.key.toLowerCase() === "z") {
       e.preventDefault();
@@ -208,7 +227,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
       return;
     }
     // A printable key starts an edit of a value cell with that key.
-    if (e.key.length === 1 && !mod && !e.altKey && column?.kind === "value") {
+    if (e.key.length === 1 && !mod && !e.altKey && (column?.kind === "value" || grid)) {
       e.preventDefault();
       startEdit(here, e.key);
     }
@@ -264,8 +283,11 @@ export function SheetApp(props: SheetAppProps): ReactElement {
               </option>
             ))}
           </select>
-          <button type="button" className="vs-btn" onClick={() => load(emptyDoc(), "A new sheet.")}>
-            New
+          <button type="button" className="vs-btn" onClick={() => load(emptyDoc(), "A new table.")}>
+            New table
+          </button>
+          <button type="button" className="vs-btn" onClick={() => load(emptyGrid(), "A new grid. A text that starts with = is a formula, for example =SUM(A1:A5).")}>
+            New grid
           </button>
           <button type="button" className="vs-btn" disabled={hist.past.length === 0} onClick={() => setHist(undo)} aria-keyshortcuts="Control+Z">
             Undo
@@ -295,11 +317,11 @@ export function SheetApp(props: SheetAppProps): ReactElement {
 
       <div className="vs-bar">
         <span className="vs-address" aria-live="polite">
-          {column?.kind === "formula" ? "ƒ " : ""}
-          {column?.name ?? ""} · row {rowIndex + 1}
-          {own === undefined ? "" : " · own formula"}
+          {column?.kind === "formula" && !grid ? "ƒ " : ""}
+          {grid ? `${column?.name ?? ""}${rowNumber}` : `${column?.name ?? ""} · row ${rowNumber}`}
+          {own === undefined || grid ? "" : " · own formula"}
         </span>
-        {column?.kind === "formula" ? (
+        {column?.kind === "formula" && !grid ? (
           <div className="vs-bar-main">
             <FormulaEditor
               key={own === undefined ? column.id : `${column.id}:${row}`}
@@ -340,7 +362,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
           <input
             className="vs-bar-value"
             aria-label={`The value of ${column?.name ?? "the cell"}`}
-            value={editing?.row === row && editing.col === col ? editing.text : (shown.rows.find((r) => r.id === row)?.cells[col] ?? "")}
+            value={editing?.row === row && editing.col === col ? editing.text : cellTextOf(shown, row, col)}
             onFocus={() => editing === undefined && startEdit(here)}
             onChange={(e) => setEditing({ ...here, text: e.target.value })}
             onBlur={() => endEdit("none")}
@@ -380,6 +402,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
             />
           )}
           <Grid
+            grid={grid}
             doc={shown}
             ev={ev}
             rows={rows}
@@ -408,11 +431,12 @@ export function SheetApp(props: SheetAppProps): ReactElement {
           />
         </div>
         <Inspector
+          grid={grid}
           open={inspectorOpen}
           doc={shown}
           ev={ev}
           sel={here}
-          rowNumber={rowIndex + 1}
+          rowNumber={rowNumber}
           onRename={(c, name) => apply((d) => updateColumn(d, c, { name }))}
           onType={(c, type: ValueType) => apply((d) => updateColumn(d, c, { type }))}
           onConvert={(c) => apply((d) => convertColumn(d, c))}

@@ -107,6 +107,8 @@ Four of the sheets read a row by its name, for example `row("Launch").Start`. Th
 
 The rabbits and foxes, the thrown ball, the loan and the monthly sales open with a chart. A column of numbers gives a line, and a column of vectors gives a path. The path of the ball has one scale on the two axes, so the arc keeps its real form. The button **Chart** adds a chart to any sheet, and a click on a point selects its row.
 
+The button **New grid** starts a grid, like the sheet of a spreadsheet. [The price list](../../app/#example=grid) is an example. The columns have letters, the rows have numbers, and `D2` reads a cell. A text that starts with `=` is a formula, and `SUM(D2:D4)` adds a range. The cells of a grid are the cells of a Vex sheet, so a cycle gives `#CYCLE!` as in a table.
+
 ## What the pilots found
 
 - `SheetRun` gave a wrong balance at the end of a long recurrence, without an error. Version 0.5.0 removed the cause: a sheet does not depend on the call stack.

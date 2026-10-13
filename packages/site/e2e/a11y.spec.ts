@@ -19,10 +19,11 @@ for (const scheme of ["light", "dark"] as const) {
       });
     }
     // The chart and the mark of a cell with its own formula show only in some examples, so the check opens them too.
-    for (const example of ["prey", "ball", "loan"]) {
+    for (const example of ["prey", "ball", "loan", "grid"]) {
       test(`the example ${example} of the app has no WCAG 2.1 AA violation`, async ({ page }) => {
         await page.goto(`./app/#example=${example}`);
-        await expect(page.getByRole("region", { name: "The chart" })).toBeVisible();
+        await expect(page.getByRole("treegrid")).toBeVisible();
+        await expect(page.getByRole("contentinfo")).toContainText("Opened the example");
         const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
         expect(result.violations.map((v) => `${v.impact ?? ""} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`)).toEqual([]);
       });

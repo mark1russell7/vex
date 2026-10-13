@@ -1,7 +1,7 @@
 import { app, cell, key, lit, offset, origin, parent, ref, SheetRun, space, type Expr, type Result } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
-import { BUILT_IN_NAMES, compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, MAX_LENGTH, OP_NAMES, type FormulaContext } from "./index.ts";
+import { BUILT_IN_NAMES, compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, MAX_LENGTH, OP_NAMES, type FormulaContext, type GridCellKind, type GridContext } from "./index.ts";
 
 // fruit ─┬─ apple
 //        └─ pear
@@ -24,6 +24,36 @@ const compile = (text: string, formulas: readonly string[] = []): Expr => {
   return r.expr;
 };
 const show = (r: Result<unknown>): unknown => (r.ok ? r.value : r.error.code);
+
+/** The kind of a value cell of a test grid: a number or a text. */
+const kind = (u: string | number): GridCellKind => (typeof u === "number" ? "number" : "text");
+
+/**
+ * The results of the formulas of a grid. `filled` gives the values of the cells, and `formulas` gives the formulas,
+ * by address. The function compiles each formula with the context of the grid, and evaluates it with a sheet run.
+ */
+function grid(filled: Readonly<Record<string, string | number>>, formulas: Readonly<Record<string, string>>, rowCount = 10): Record<string, unknown> {
+  const columns = ["A", "B", "C"];
+  const rows = Array.from({ length: rowCount }, (_, i) => `r${i + 1}`);
+  const cells = new Map<string, GridCellKind>([...Object.entries(filled).map(([a, u]) => [a, kind(u)] as const), ...Object.keys(formulas).map((a) => [a, "formula"] as const)]);
+  const ctx: FormulaContext = { valueColumns: [], formulaColumns: columns, grid: { columns, rows, cells } };
+  const programs = new Map<string, Map<string, Expr>>();
+  const put = (address: string, e: Expr): void => {
+    const [, letter = "", row = "0"] = /^([A-Z]+)(\d+)$/.exec(address) ?? [];
+    programs.set(letter, new Map([...(programs.get(letter) ?? []), [`r${row}`, e]]));
+  };
+  for (const [a, u] of Object.entries(filled)) put(a, lit(u));
+  for (const [a, f] of Object.entries(formulas)) {
+    const r = compileFormula(f, ctx);
+    if (!r.ok) throw new Error(`${a}: ${r.error.message}`);
+    put(a, r.expr);
+  }
+  const run = new SheetRun(new Map(), { space: space.tree(Object.fromEntries(rows.map((k) => [k, {}])), {}), domains: FORMULA_DOMAINS, cells: programs });
+  return Object.fromEntries(Object.keys(formulas).map((a) => {
+    const [, letter = "", row = "0"] = /^([A-Z]+)(\d+)$/.exec(a) ?? [];
+    return [a, show(run.cell(letter, `r${row}`))];
+  }));
+}
 
 /** The results of the formula columns at each row, as values or error codes. */
 const table = (formulas: Readonly<Record<string, string>>): Record<string, Record<string, unknown>> => {
@@ -311,6 +341,48 @@ describe("aggregates", () => {
     expect(error("RATE(12, -860, 10000)").message).toBe('the function "RATE" does not exist');
     // The value of the logarithms of the number domain, which NPER uses.
     expect([value("LN(EXP(2))"), value("LOG10(1000)"), value("LN(0)")]).toEqual([2, 3, "#NUM!"]);
+  });
+
+  it("FORMULA.GRID.ADDRESS FORMULA.GRID.RANGE: a grid reads cells by address, and an aggregate takes a range", () => {
+    //      A       B         C
+    // 1    Item    Cost      Qty
+    // 2    Pens    1.5       10
+    // 3    Ink     12.5      2
+    // 4            (formulas of the test)
+    const filled: Record<string, string | number> = { A1: "Item", B1: "Cost", C1: "Qty", A2: "Pens", B2: 1.5, C2: 10, A3: "Ink", B3: 12.5, C3: 2 };
+    const results = grid(filled, {
+      B4: "=SUM(B2:B3)",
+      C4: "=B2 * C2 + $B$3 * C$3",
+      A5: "=AVERAGE(B2:B3)",
+      B5: "=COUNT(A1:C3)",
+      C5: "=MIN(B2:C3) & \" \" & MAX(C3:B2)",
+      A6: "=A9 + 1",
+      B6: "=SUM(A1:A3)",
+      C6: "=AVERAGE(A1:A3)",
+      A7: "=B8",
+      B8: "=A7",
+      C7: "=ANY(A1:C3) & ALL(A1:A3)",
+    });
+    // B4 = 1.5 + 12.5, C4 = 1.5 * 10 + 12.5 * 2, and the labels and the empty cells do not count in a range.
+    expect(results).toEqual({ B4: 14, C4: 40, A5: 7, B5: 4, C5: "1.5 12.5", A6: 1, B6: 0, C6: "#NUM!", A7: "#CYCLE!", B8: "#CYCLE!", C7: "falsetrue" });
+    // A range of 600 cells is a balanced tree of adds, so it does not reach the limit of the nesting.
+    const long = grid(Object.fromEntries(Array.from({ length: 600 }, (_, i) => [`A${i + 1}`, i + 1])), { B1: "=SUM(A1:A600)" }, 600);
+    expect(long).toEqual({ B1: 180300 });
+  });
+
+  it("FORMULA.GRID.ONLY: an address outside the grid, a range outside an aggregate and a range in a table are errors", () => {
+    const ctx: FormulaContext = { valueColumns: [], formulaColumns: ["A", "B"], grid: { columns: ["A", "B"], rows: ["r1", "r2"], cells: new Map<string, GridCellKind>([["A1", "number"]]) } };
+    expect(error("=C1", ctx).message).toBe("the grid has no cell C1");
+    expect(error("=SUM(A1:A3)", ctx).message).toBe("the grid has no cell A3");
+    expect(error("=A1:B2", ctx)).toEqual({ message: "a range like A1:B3 is valid only as the argument of an aggregate, for example SUM(A1:B3)", span: { start: 3, end: 4 } });
+    expect(error("=ABS(A1:B2)", ctx).message).toBe("a range like A1:B3 is valid only as the argument of an aggregate, for example SUM(A1:B3)");
+    expect(error("=SUM(A1:total)", ctx).message).toBe("a range needs two cell addresses, for example A1:B3");
+    expect(error("=SUM(A1:B2)").message).toBe("a range like A1:B3 needs a grid sheet. In a table, an aggregate takes an axis");
+    const big: GridContext = { columns: ["A"], rows: Array.from({ length: 10_002 }, (_, i) => `r${i + 1}`), cells: new Map() };
+    expect(error("=SUM(A1:A10001)", { ...ctx, grid: big }).message).toBe("the range has more than 10000 cells");
+    // In a table, A1 is a column name, as before.
+    expect(compileFormula("A1 * 2", { valueColumns: ["A1"], formulaColumns: [] })).toMatchObject({ ok: true, expr: app("multiply", ref(["A1"]), lit(2)) });
+    expect(compileFormula("=a1 + $B$2", ctx)).toMatchObject({ ok: true, reads: ["A"] });
   });
 
   it("FORMULA.AGGREGATE.WHERE: a test of the rows of the axis, and this. reads the row of the formula", () => {

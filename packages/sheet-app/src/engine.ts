@@ -3,10 +3,46 @@
  * evaluates the cells with a `SheetRun`. Thus a cycle of formula columns gives `#CYCLE!`, and the other cells stay
  * correct. The engine takes the compiler as an argument, so the app depends only on the contract of the compiler.
  */
-import { fail, ok, SheetRun, space, vexError, type AnyDomain, type Expr, type Result, type Trace } from "@mark1russell7/vex";
+import { fail, lit, ok, SheetRun, space, vexError, type AnyDomain, type Expr, type Result, type Trace } from "@mark1russell7/vex";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import type { Column, SheetDoc } from "./doc.ts";
 import { parseValue } from "./values.ts";
+
+/** The kind of a cell of a grid that is not empty: a value of a kind, or a formula. */
+export type GridCellKind = "number" | "boolean" | "text" | "date" | "formula";
+
+/** The cells of a grid, for the addresses and the ranges of the formulas. Refer to `spec/formula.md` §7. */
+export interface GridContext {
+  readonly columns: readonly string[];
+  readonly rows: readonly string[];
+  readonly cells: ReadonlyMap<string, GridCellKind>;
+}
+
+/**
+ * This function reads the text of a cell of a grid that is not a formula. The value is a number, `TRUE` or `FALSE`, a
+ * date like 2026-10-13, or else the text itself.
+ */
+export function gridLiteral(text: string): { readonly kind: Exclude<GridCellKind, "formula">; readonly value: unknown } {
+  const t = text.trim();
+  if (/^(true|false)$/i.test(t)) return { kind: "boolean", value: t.toLowerCase() === "true" };
+  for (const kind of ["number", "date"] as const) {
+    const p = parseValue(kind, t);
+    if (p.kind === "ok") return { kind, value: p.value };
+  }
+  return { kind: "text", value: text };
+}
+
+/** This function gives the context of the grid of a document: the letters, the rows and the kind of each cell. */
+export function gridOf(doc: SheetDoc): GridContext {
+  const cells = new Map<string, GridCellKind>();
+  doc.rows.forEach((r, i) => {
+    for (const c of doc.columns) {
+      const text = r.formulas?.[c.id];
+      if (text !== undefined && text.trim() !== "") cells.set(`${c.name}${i + 1}`, text.trimStart().startsWith("=") ? "formula" : gridLiteral(text).kind);
+    }
+  });
+  return { columns: doc.columns.map((c) => c.name), rows: doc.rows.map((r) => r.id), cells };
+}
 
 /** The names that a formula can read: the value columns are fields, and the formula columns are cells. */
 export interface FormulaContext {
@@ -14,6 +50,8 @@ export interface FormulaContext {
   readonly formulaColumns: readonly string[];
   /** The keys of the rows with each name, for `row("name")`. */
   readonly rowNames?: ReadonlyMap<string, readonly string[]>;
+  /** The cells of a grid. A table has no grid. */
+  readonly grid?: GridContext;
 }
 
 /** A problem of a formula, with its position in the text. */
@@ -99,7 +137,8 @@ export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
   }
   const parents: Record<string, string | null> = Object.fromEntries(doc.rows.map((r) => [r.id, r.parent]));
   const sp = space.tree(records, parents);
-  const ctx: FormulaContext = { valueColumns: valueCols.map((c) => c.name), formulaColumns: formulaCols.map((c) => c.name), rowNames: rowNamesOf(doc) };
+  const grid = doc.mode === "grid" ? gridOf(doc) : undefined;
+  const ctx: FormulaContext = { valueColumns: valueCols.map((c) => c.name), formulaColumns: formulaCols.map((c) => c.name), rowNames: rowNamesOf(doc), ...(grid === undefined ? {} : { grid }) };
   const compiled = new Map<string, CompileResult>(formulaCols.map((c) => [c.id, compiler.compile(c.formula, ctx)]));
   const programs = new Map<string, Expr>();
   for (const c of formulaCols) {
@@ -113,7 +152,8 @@ export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
     for (const c of formulaCols) {
       const text = r.formulas?.[c.id];
       if (text === undefined) continue;
-      const result = compiler.compile(text, ctx);
+      // In a grid, a text that does not start with "=" is a value, not a formula.
+      const result: CompileResult = grid !== undefined && !text.trimStart().startsWith("=") ? { ok: true, expr: lit(gridLiteral(text).value), reads: [] } : compiler.compile(text, ctx);
       own.set(`${r.id}\u0000${c.id}`, result);
       if (result.ok) cells.set(c.name, new Map([...(cells.get(c.name) ?? []), [r.id, result.expr]]));
     }

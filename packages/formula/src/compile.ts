@@ -6,7 +6,7 @@
 import { app, axes, cell, each, key, let_, lit, offset, origin, parent, ref, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { BUILT_IN_NAMES, OP_NAMES } from "./functions.ts";
-import { AGGREGATES, axisText, FormulaSyntaxError, parseFormula, type AggAxis, type Ast, type AxisName, type BinaryOp, type Nav, type Span } from "./syntax.ts";
+import { ADDRESS, AGGREGATES, axisText, FormulaSyntaxError, parseFormula, type AggAxis, type AggregateName, type Ast, type AxisName, type BinaryOp, type Nav, type Span } from "./syntax.ts";
 
 /** The columns that a formula can read. */
 export interface FormulaContext {
@@ -16,7 +16,25 @@ export interface FormulaContext {
   readonly formulaColumns: readonly string[];
   /** The keys of the rows with each name, for `row("name")`. Without this map, the name is the key of the row. */
   readonly rowNames?: ReadonlyMap<string, readonly string[]>;
+  /** The cells of a grid, for the addresses like `B2` and the ranges like `B2:D4`. A table has no grid. */
+  readonly grid?: GridContext;
 }
+
+/** The kind of a cell of a grid that is not empty: a value of a kind, or a formula. */
+export type GridCellKind = "number" | "boolean" | "text" | "date" | "formula";
+
+/** The cells of a grid: the columns by their letters, the rows by their numbers, and each cell that is not empty. */
+export interface GridContext {
+  /** The letters of the columns, in order: "A" first. The name of a column of a grid is its letter. */
+  readonly columns: readonly string[];
+  /** The key of each row, in order: the key of row 1 first. */
+  readonly rows: readonly string[];
+  /** The kind of each cell that is not empty, by its address in capital letters, for example "B2". */
+  readonly cells: ReadonlyMap<string, GridCellKind>;
+}
+
+/** The largest number of cells in one range, so a range like A1:ZZZ99999 cannot block the page. */
+export const MAX_RANGE = 10_000;
 
 /** An error of a formula: a message, and the span of the text that has the problem. */
 export interface FormulaError {
@@ -77,7 +95,20 @@ function finance(name: "PMT" | "FV" | "PV" | "NPER", given: readonly Expr[]): Ex
 }
 
 /** This function gives the Vex axis of the axis of an aggregate. `rows(from, to)` is the axis `window(from, to)`. */
-const axisOf = (a: AggAxis): Axis => (typeof a === "string" ? AXIS[a] : axes.window(a.from, a.to));
+const axisOf = (a: Exclude<AggAxis, { readonly range: unknown }>): Axis => (typeof a === "string" ? AXIS[a] : axes.window(a.from, a.to));
+
+/** This function reads a cell address, for example "B12", as a column letter and a row number. */
+function parseAddress(text: string): { readonly letter: string; readonly row: number } {
+  const m = ADDRESS.exec(text.toUpperCase());
+  return { letter: m?.[1] ?? "", row: Number(m?.[2] ?? 0) };
+}
+
+/** This function joins the values with the op `op` in a balanced tree, so 1000 values make a tree 10 levels deep. */
+function balanced(op: string, values: readonly Expr[]): Expr {
+  if (values.length === 1) return values[0] ?? lit(0);
+  const mid = Math.floor(values.length / 2);
+  return app(op, balanced(op, values.slice(0, mid)), balanced(op, values.slice(mid)));
+}
 const STRICT = lit({ strict: true });
 
 /** Where a part of a formula evaluates. `base` comes before each address. `inAggregate` is true in an aggregate. */
@@ -124,6 +155,53 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
     }
   };
 
+  // An address of a grid reads the cell at that column and row. An empty cell reads as 0, as in a spreadsheet.
+  const address = (grid: GridContext, text: string, span: Span): Expr => {
+    const { letter, row } = parseAddress(text);
+    const at = grid.rows[row - 1];
+    if (!grid.columns.includes(letter) || at === undefined) throw new FormulaSyntaxError(`the grid has no cell ${letter}${row}`, span);
+    if (!grid.cells.has(`${letter}${row}`)) return lit(0);
+    if (!reads.includes(letter)) reads.push(letter);
+    return cell(letter, [key(at)]);
+  };
+
+  // A range of a grid gives the cells between its two corners. The aggregates of numbers take the cells with a number
+  // or a formula, and ANY and ALL take the cells with a boolean or a formula. Thus an empty cell and a label in the
+  // range do not count, as in a spreadsheet. The expression is a balanced tree of ops, so its depth stays small.
+  const range = (fn: AggregateName, fromText: string, toText: string, span: Span): Expr => {
+    const grid = ctx.grid;
+    if (grid === undefined) throw new FormulaSyntaxError("a range like A1:B3 needs a grid sheet. In a table, an aggregate takes an axis", span);
+    const [p, q] = [parseAddress(fromText), parseAddress(toText)];
+    const [pc, qc] = [grid.columns.indexOf(p.letter), grid.columns.indexOf(q.letter)];
+    const [c0, c1, r0, r1] = [Math.min(pc, qc), Math.max(pc, qc), Math.min(p.row, q.row), Math.max(p.row, q.row)];
+    for (const corner of [fromText, toText]) address(grid, corner, span);
+    if ((c1 - c0 + 1) * (r1 - r0 + 1) > MAX_RANGE) throw new FormulaSyntaxError(`the range has more than ${MAX_RANGE} cells`, span);
+    const logic = fn === "ANY" || fn === "ALL";
+    const values: Expr[] = [];
+    for (const letter of grid.columns.slice(c0, c1 + 1)) {
+      for (let row = r0; row <= r1; row++) {
+        const kind = grid.cells.get(`${letter}${row}`);
+        if (kind === "formula" || kind === (logic ? "boolean" : "number")) values.push(address(grid, `${letter}${row}`, span));
+      }
+    }
+    const n = values.length;
+    switch (fn) {
+      case "SUM":
+        return n === 0 ? lit(0) : balanced("add", values);
+      case "COUNT":
+        return lit(n);
+      case "AVERAGE":
+        return app("divide", n === 0 ? lit(0) : balanced("add", values), lit(n));
+      case "MIN":
+      case "MAX":
+        return n === 0 ? lit(0) : balanced(fn.toLowerCase(), values);
+      case "ANY":
+        return n === 0 ? lit(false) : balanced("or", values);
+      case "ALL":
+        return n === 0 ? lit(true) : balanced("and", values);
+    }
+  };
+
   const go = (a: Ast, s: Scope): Expr => {
     switch (a.k) {
       case "num":
@@ -133,6 +211,7 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       case "bool":
         return lit(a.v);
       case "name": {
+        if (ctx.grid !== undefined && a.nav.length === 0 && ADDRESS.test(a.name)) return address(ctx.grid, a.name, a.span);
         const c = column(a.name, a.span);
         const at = [...s.base, ...a.nav.map(navMove)];
         return c.formula ? cell(c.name, at) : ref([c.name], at);
@@ -148,6 +227,7 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
         return app(BINARY[a.op], l, r);
       }
       case "agg": {
+        if (typeof a.axis === "object" && "range" in a.axis) return range(a.fn, a.axis.range.from, a.axis.range.to, a.span);
         const inner: Scope = { base: [], inAggregate: true };
         const axis = a.where === undefined ? axisOf(a.axis) : axes.where(axisOf(a.axis), go(a.where, inner));
         const text = axisText(a.axis);

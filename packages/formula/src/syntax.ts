@@ -32,12 +32,16 @@ export type Token =
   | { readonly t: "id"; readonly v: string; readonly span: Span }
   | { readonly t: "bracket"; readonly v: string; readonly span: Span }
   | { readonly t: "op"; readonly v: string; readonly span: Span }
-  | { readonly t: "punct"; readonly v: "(" | ")" | "," | "."; readonly span: Span }
+  | { readonly t: "punct"; readonly v: "(" | ")" | "," | "." | ":"; readonly span: Span }
   | { readonly t: "end"; readonly span: Span };
 
 /** The operators, longest first, so `<=` is one token and not `<` and `=`. */
 export const OPERATORS = ["<=", ">=", "<>", "<", ">", "=", "+", "-", "*", "/", "^", "&"] as const;
-const PUNCT = ["(", ")", ",", "."] as const;
+const PUNCT = ["(", ")", ",", ".", ":"] as const;
+/** A cell address of a grid with a dollar sign, for example `$A$1`. The dollar signs have no effect on the address. */
+const ADDRESS_ABS = /^\$?([A-Za-z]{1,3})\$?(\d+)(?![\p{L}\p{N}_])/u;
+/** A cell address of a grid, for example `B12`. */
+export const ADDRESS: RegExp = /^([A-Za-z]{1,3})(\d+)$/;
 const ID_START = /[\p{L}_]/u;
 const ID_PART = /[\p{L}\p{N}_]/u;
 
@@ -89,6 +93,12 @@ export function tokenize(src: string): readonly Token[] {
       out.push({ t: "bracket", v, span: { start, end: i } });
       continue;
     }
+    const abs = ADDRESS_ABS.exec(src.slice(i));
+    if (abs !== null && abs[0].includes("$")) {
+      i += abs[0].length;
+      out.push({ t: "id", v: `${abs[1] ?? ""}${abs[2] ?? ""}`, span: { start, end: i } });
+      continue;
+    }
     if (ID_START.test(c)) {
       while (i < src.length && ID_PART.test(src[i] ?? "")) i++;
       out.push({ t: "id", v: src.slice(start, i), span: { start, end: i } });
@@ -123,11 +133,14 @@ export type Nav =
 export const AXES = ["children", "descendants", "ancestors", "siblings", "others", "all"] as const;
 export type AxisName = (typeof AXES)[number];
 
-/** The axis of an aggregate: a named axis, or `rows(from, to)`, the rows at the offsets from `from` to `to`. */
-export type AggAxis = AxisName | { readonly from: number; readonly to: number };
+/**
+ * The axis of an aggregate. It is a named axis, or `rows(from, to)` with the rows at the offsets from `from` to `to`.
+ * In a grid, it can also be a range of cells, for example `B2:D4`.
+ */
+export type AggAxis = AxisName | { readonly from: number; readonly to: number } | { readonly range: { readonly from: string; readonly to: string } };
 
 /** This function gives the text of the axis of an aggregate, as a formula writes it. */
-export const axisText = (a: AggAxis): string => (typeof a === "string" ? a : `rows(${a.from}, ${a.to})`);
+export const axisText = (a: AggAxis): string => (typeof a === "string" ? a : "range" in a ? `${a.range.from}:${a.range.to}` : `rows(${a.from}, ${a.to})`);
 
 /** The aggregates: a function of the values of an axis. */
 export const AGGREGATES = { SUM: "sum", AVERAGE: "mean", MIN: "min", MAX: "max", COUNT: "count", ANY: "any", ALL: "all" } as const;
@@ -160,6 +173,8 @@ const PRECEDENCE: Readonly<Record<BinaryOp, number>> = { "=": 1, "<>": 1, "<": 1
 const isWord = (tok: Token | undefined, word: string): boolean => tok?.t === "id" && tok.v.toLowerCase() === word;
 const isPunct = (tok: Token | undefined, p: string): boolean => tok?.t === "punct" && tok.v === p;
 const isAxis = (tok: Token | undefined): boolean => tok?.t === "id" && (AXES as readonly string[]).includes(tok.v.toLowerCase());
+
+const RANGE_ONLY = "a range like A1:B3 is valid only as the argument of an aggregate, for example SUM(A1:B3)";
 
 /** This function reads a formula. An optional `=` can start it. A problem gives a `FormulaSyntaxError`. */
 export function parseFormula(src: string): Ast {
@@ -300,10 +315,19 @@ export function parseFormula(src: string): Ast {
     const named = isAxis(toks[axisAt]) && !isPunct(toks[axisAt + 1], "(");
     const rows = isWord(toks[axisAt], "rows") && isPunct(toks[axisAt + 1], "(");
     if (upper in AGGREGATES && (named || rows)) return parseAggregate(upper as AggregateName, fnTok);
+    // A range of a grid, for example SUM(B2:D4): two cell addresses with a colon.
+    const [from, colon, to] = [toks[i], toks[i + 1], toks[i + 2]];
+    if (upper in AGGREGATES && from?.t === "id" && isPunct(colon, ":") && to?.t === "id") {
+      if (!ADDRESS.test(from.v) || !ADDRESS.test(to.v)) throw new FormulaSyntaxError("a range needs two cell addresses, for example A1:B3", { start: from.span.start, end: to.span.end });
+      i += 3;
+      const close = expect(")", `")" after the range of ${upper}`);
+      return { k: "agg", fn: upper as AggregateName, fnSpan: fnTok.span, nav: [], axis: { range: { from: from.v.toUpperCase(), to: to.v.toUpperCase() } }, span: { start: fnTok.span.start, end: close.span.end } };
+    }
     const args: Ast[] = [];
     if (!isPunct(peek(), ")")) {
       for (;;) {
         args.push(parseExpr(0));
+        if (isPunct(peek(), ":")) throw new FormulaSyntaxError(RANGE_ONLY, peek().span);
         if (!isPunct(peek(), ",")) break;
         next();
       }
@@ -393,6 +417,7 @@ export function parseFormula(src: string): Ast {
   // The formula itself is not a level: each parenthesis, argument and sign in it is one level.
   const ast = parseExprAt(0);
   const rest = peek();
+  if (isPunct(rest, ":")) throw new FormulaSyntaxError(RANGE_ONLY, rest.span);
   if (rest.t !== "end") throw new FormulaSyntaxError(`${describe(rest)} is not expected here`, rest.span);
   return ast;
 }

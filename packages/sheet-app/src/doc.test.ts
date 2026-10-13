@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { addColumn, addRow, cellFormulaOf, convertColumn, deleteColumn, deleteRow, depthOf, emptyDoc, indentRow, isSheetDoc, moveColumn, moveRow, outdentRow, setCell, setCellFormula, subtree, updateColumn, type SheetDoc } from "./doc.ts";
+import { addColumn, addRow, cellFormulaOf, cellTextOf, columnLetter, convertColumn, deleteColumn, deleteRow, depthOf, emptyDoc, emptyGrid, freeLetter, indentRow, isSheetDoc, moveColumn, moveRow, outdentRow, setCell, setCellFormula, setCellText, subtree, updateColumn, type SheetDoc } from "./doc.ts";
 import { EXAMPLES } from "./examples.ts";
 
 const shape = (d: SheetDoc): string[] => d.rows.map((r) => `${"  ".repeat(depthOf(d, r.id))}${r.id}`);
@@ -95,6 +95,22 @@ describe("the document", () => {
     expect(isSheetDoc({ ...d, rows: [{ ...row, formulas: { c9: "= 1" } }] })).toBe(false);
     expect(isSheetDoc({ ...d, rows: [{ ...row, formulas: { c3: 1 } }] })).toBe(false);
     expect(isSheetDoc({ ...d, rows: [{ ...row, formulas: "= 1" }] })).toBe(false);
+  });
+
+  it("FORMULA.GRID.ADDRESS: a grid has letters for its columns, and each cell keeps its text as its own formula", () => {
+    expect([0, 25, 26, 701, 702].map(columnLetter)).toEqual(["A", "Z", "AA", "ZZ", "AAA"]);
+    let g = emptyGrid("G", 3, 2);
+    expect([g.mode, g.columns.map((c) => c.name), g.rows.length, isSheetDoc(g)]).toEqual(["grid", ["A", "B", "C"], 2, true]);
+    expect(freeLetter(g)).toBe("D");
+    expect(freeLetter({ ...g, columns: g.columns.filter((c) => c.name !== "B") })).toBe("B");
+    g = setCellText(setCellText(g, "r1", "c1", "=B1 * 2"), "r1", "c2", "21");
+    expect([cellTextOf(g, "r1", "c1"), cellTextOf(g, "r1", "c2"), cellTextOf(g, "r2", "c1")]).toEqual(["=B1 * 2", "21", ""]);
+    expect(g.rows[0]?.formulas).toEqual({ c1: "=B1 * 2", c2: "21" });
+    // An empty text empties the cell, and a table keeps the text of a value cell in its cells.
+    expect(setCellText(g, "r1", "c2", " ").rows[0]?.formulas).toEqual({ c1: "=B1 * 2" });
+    expect(setCellText(emptyDoc(), "r1", "c2", "5").rows[0]?.cells).toEqual({ c2: "5" });
+    expect(cellTextOf(setCellText(emptyDoc(), "r1", "c2", "5"), "r1", "c2")).toBe("5");
+    expect(isSheetDoc({ ...g, mode: "list" })).toBe(false);
   });
 
   it("checks a document: unique ids, known parents and the blocks of the tree", () => {

@@ -31,7 +31,6 @@ Vex is the semantics of a spreadsheet without the grid on the screen. The sheet 
 
 ## 4. Later versions
 
-- Grid sheets with A1 addresses (a grid space).
 - More than one table, with references between tables.
 - Collaboration in real time.
 - Domains as plug-ins.
@@ -79,4 +78,7 @@ The owner made these decisions on 2026-10-11:
 - The app reads the link in the address when it starts and each time the address changes. After an edit, the app removes the link from the address. Thus a reload opens the changed sheet, not the link.
 - A cell of a formula column can have its own formula (spec `SHEET.CELL.FORMULA`). That formula replaces the formula of the column in that cell. The grid marks the cell, and the button **Own formula** adds or removes the formula. The first row of a recurrence is the usual case, so the column needs no `IFERROR`.
 - A chart draws the columns that the user chooses, over the rows on the screen. A column of numbers gives a line, and a column of vectors gives a path. A chart of paths has one scale on the two axes, so a shape keeps its form.
+- A grid is a document with the mode "grid". Its columns have the letters A, B, C, and each cell keeps its text as its own formula. A text that starts with "=" is a formula, and another text is a number, `TRUE` or `FALSE`, a date or a text.
+- In a grid, `B2` reads a cell, and an aggregate takes a range like `SUM(B2:D4)` (spec `FORMULA.GRID.*`). A range expands to the cells that it reads, so the cycles of a grid give `#CYCLE!` as in a table.
+- A grid adds and deletes rows only at the end, and it has no sort. A row in the middle moves the numbers of the rows after it. A formula keeps its text, so its addresses then read other cells.
 - The chart is a part of the document. Thus undo, the share link and the JSON file keep it.

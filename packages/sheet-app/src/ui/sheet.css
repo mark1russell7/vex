@@ -367,6 +367,10 @@
 .vs-grid td.vs-cell-error {
   background: var(--color-mark-wash);
 }
+/* The letter of a column of a grid stands in the middle, as in a spreadsheet. */
+.vs-grid th.vs-grid-letter {
+  text-align: center;
+}
 /* A cell with its own formula has a mark in its top corner, like the mark of a note in a spreadsheet. */
 .vs-grid td.vs-formula-col.vs-own {
   background-image: linear-gradient(225deg, var(--color-accent) 0.45rem, transparent 0.45rem);

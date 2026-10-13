@@ -3,7 +3,7 @@
  * In the later examples, formulas read other formula columns in each direction of the tree. The loan, the rabbits and
  * the ball open with a chart.
  */
-import type { Column, Row, SheetDoc } from "./doc.ts";
+import { emptyGrid, type Column, type Row, type SheetDoc } from "./doc.ts";
 
 /** An example: an id for the menu, a title and a document. */
 export interface Example {
@@ -141,6 +141,23 @@ const invoiceCols: readonly Column[] = [
   { id: "c7", name: "Days late", kind: "formula", formula: '= IFERROR(MAX(Paid - Due, 0), "")' },
   { id: "c8", name: "Status", kind: "formula", formula: '= IFERROR(IF(Paid > Due, "late", "on time"), "open")' },
 ];
+
+/** This function makes a grid from the texts of its cells, by address, for example `{ B2: "=A2 * 2" }`. */
+function gridOf(title: string, cols: number, rowCount: number, cells: Readonly<Record<string, string>>): SheetDoc {
+  const base = emptyGrid(title, cols, rowCount);
+  const idOf = new Map(base.columns.map((c) => [c.name, c.id]));
+  return {
+    ...base,
+    rows: base.rows.map((r, i) => {
+      const own = Object.entries(cells).flatMap(([address, text]) => {
+        const m = /^([A-Z]+)(\d+)$/.exec(address);
+        const id = idOf.get(m?.[1] ?? "");
+        return m !== null && Number(m[2]) === i + 1 && id !== undefined ? [[id, text] as const] : [];
+      });
+      return own.length === 0 ? r : { ...r, formulas: Object.fromEntries(own) };
+    }),
+  };
+}
 
 /** The example sheets. */
 export const EXAMPLES: readonly Example[] = [
@@ -329,6 +346,20 @@ export const EXAMPLES: readonly Example[] = [
         ["r5", null, "Ember", "2026-10-03", "45"],
       ]),
     },
+  },
+  {
+    id: "grid",
+    title: "A grid with A1 addresses",
+    doc: gridOf("Price list", 6, 12, {
+      A1: "Item", B1: "Price", C1: "Qty", D1: "Total",
+      A2: "Pens", B2: "1.5", C2: "10", D2: "=B2 * C2",
+      A3: "Paper", B3: "4", C3: "3", D3: "=B3 * C3",
+      A4: "Ink", B4: "12.5", C4: "2", D4: "=B4 * C4",
+      A6: "Total", D6: "=SUM(D2:D4)",
+      A7: "Average price", B7: "=AVERAGE(B2:B4)",
+      A8: "Largest line", D8: "=MAX(D2:D4)",
+      A9: "Ordered", B9: "2026-10-13", C9: "Due", D9: "=B9 + 30",
+    }),
   },
   {
     id: "recipe",

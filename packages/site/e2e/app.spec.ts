@@ -253,3 +253,29 @@ test("a column of dates: a due date follows the date of the invoice, and a weeke
   await expect(at(4, "Issued")).toHaveText("#VALUE!");
   await expect(at(4, "Due")).toHaveClass(/vs-cell-error/);
 });
+
+test("a grid has A1 addresses: a cell reads other cells, a range sums them, and a new grid starts empty", async ({ page }) => {
+  await page.goto("./app/#example=grid");
+  const at = (address: string) => {
+    const [, letter = "A", row = "1"] = /^([A-Z])(\d+)$/.exec(address) ?? [];
+    return page.getByRole("treegrid").getByRole("row").nth(Number(row)).getByRole("gridcell").nth(letter.charCodeAt(0) - 65);
+  };
+  await expect(at("D2")).toHaveText("15");
+  await expect(at("D6")).toHaveText("52");
+  // A new price changes the line and the total: 2 * 10 = 20, and 20 + 12 + 25 = 57.
+  await at("B2").dblclick();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("2");
+  await page.keyboard.press("Enter");
+  await expect(at("D2")).toHaveText("20");
+  await expect(at("D6")).toHaveText("57");
+  // A text that starts with "=" is a formula. The bar shows the address of the cell.
+  await at("E2").click();
+  await expect(page.locator(".vs-address")).toHaveText("E2");
+  await page.keyboard.type("=D6 * 2");
+  await page.keyboard.press("Enter");
+  await expect(at("E2")).toHaveText("114");
+  await page.getByRole("button", { name: "New grid" }).click();
+  await expect(page.getByRole("contentinfo")).toContainText("20 rows · 8 columns");
+  await expect(page.getByRole("columnheader", { name: "H", exact: true })).toBeVisible();
+});

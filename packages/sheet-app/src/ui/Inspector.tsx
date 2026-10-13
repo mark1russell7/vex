@@ -13,6 +13,8 @@ import type { CellRef } from "./Grid.tsx";
 export interface InspectorProps {
   /** On a narrow screen, the inspector shows only when it is open. */
   readonly open?: boolean;
+  /** In a grid, the row numbers are addresses, so a row is added or deleted only at the end. */
+  readonly grid?: boolean;
   readonly doc: SheetDoc;
   readonly ev: Evaluation;
   readonly sel: CellRef;
@@ -22,7 +24,42 @@ export interface InspectorProps {
   readonly onConvert: (col: string) => void;
   readonly onMoveColumn: (col: string, dir: -1 | 1) => void;
   readonly onDeleteColumn: (col: string) => void;
-  readonly onRow: (action: "below" | "child" | "indent" | "outdent" | "up" | "down" | "delete") => void;
+  readonly onRow: (action: RowAction) => void;
+}
+
+/** An action on the selected row. "end" adds a row at the end of the document. */
+export type RowAction = "below" | "child" | "indent" | "outdent" | "up" | "down" | "delete" | "end";
+
+/** The settings of a column of a grid: its letter stays, so the only action is to delete it. */
+function GridColumn(props: InspectorProps & { readonly col: Column }): ReactElement {
+  return (
+    <section className="vs-panel" aria-label="The column">
+      <h2>Column {props.col.name}</h2>
+      <div className="vs-actions">
+        <button type="button" className="vs-btn vs-btn-danger" disabled={props.doc.columns.length <= 1} onClick={() => props.onDeleteColumn(props.col.id)}>
+          Delete column
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** The actions of the rows of a grid. A row in the middle moves the numbers of the rows after it, so a grid adds and deletes only at the end. */
+function GridRows(props: InspectorProps): ReactElement {
+  const last = props.doc.rows.at(-1)?.id;
+  return (
+    <section className="vs-panel" aria-label="The row">
+      <h2>Rows</h2>
+      <div className="vs-actions">
+        <button type="button" className="vs-btn" onClick={() => props.onRow("end")}>
+          Add a row at the end
+        </button>
+        <button type="button" className="vs-btn vs-btn-danger" disabled={props.doc.rows.length <= 1 || props.sel.row !== last} onClick={() => props.onRow("delete")}>
+          Delete the last row
+        </button>
+      </div>
+    </section>
+  );
 }
 
 /** The steps of a trace, as a list with one line for each node. */
@@ -91,12 +128,13 @@ export function Inspector(props: InspectorProps): ReactElement {
   const col = doc.columns.find((c) => c.id === sel.col);
   const r = ev.cell(sel.row, sel.col);
   const trace = r?.ok === false || col?.kind === "formula" ? ev.explain(sel.row, sel.col) : undefined;
-  const own = col?.kind === "formula" ? cellFormulaOf(doc, sel.row, sel.col) : undefined;
+  const own = col?.kind === "formula" && props.grid !== true ? cellFormulaOf(doc, sel.row, sel.col) : undefined;
   return (
     <aside id="vs-inspector" className="vs-inspector" data-open={props.open === true} aria-label="The inspector">
       <section className="vs-panel" aria-label="The cell">
         <h2>
-          {col?.name ?? "Cell"} <span className="vs-muted">· row {props.rowNumber}</span>
+          {props.grid === true ? `${col?.name ?? ""}${props.rowNumber}` : col?.name ?? "Cell"}
+          {props.grid === true ? null : <span className="vs-muted"> · row {props.rowNumber}</span>}
         </h2>
         {r === undefined ? (
           <p className="vs-muted">Empty</p>
@@ -120,7 +158,10 @@ export function Inspector(props: InspectorProps): ReactElement {
           </details>
         )}
       </section>
-      {col === undefined ? null : <ColumnSettings {...props} col={col} />}
+      {col === undefined ? null : props.grid === true ? <GridColumn {...props} col={col} /> : <ColumnSettings {...props} col={col} />}
+      {props.grid === true ? (
+        <GridRows {...props} />
+      ) : (
       <section className="vs-panel" aria-label="The row">
         <h2>Row</h2>
         <div className="vs-actions">
@@ -147,6 +188,7 @@ export function Inspector(props: InspectorProps): ReactElement {
           </button>
         </div>
       </section>
+      )}
     </aside>
   );
 }

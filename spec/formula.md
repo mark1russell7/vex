@@ -54,7 +54,15 @@ A function name has no difference between capital and small letters.
 - **[FORMULA.AGGREGATE.OP]** Without an axis, `MIN`, `MAX` and `SUM` are ops of the domains, for example `MIN(a, b)` of two numbers. `AVERAGE`, `COUNT`, `ANY` and `ALL` without an axis are errors.
 - **[FORMULA.RANK]** `RANK(value)` is 1 plus the number of other rows with a larger value. An error at another row makes the rank an error. `RANK` is not valid inside an aggregate.
 
-## 7. The results of the compiler
+## 7. Grids
+
+A grid sheet has the columns `A`, `B`, `C` and so on, and numbered rows. Each cell has a value or its own formula. The context of the compiler gives the columns, the rows and the kind of each cell that is not empty.
+
+- **[FORMULA.GRID.ADDRESS]** In a grid, a name like `B2` is the address of a cell: the column `B` at row 2. It reads that cell with a cell reference. Dollar signs, as in `$B$2`, have no effect. An empty cell reads as 0, as in a spreadsheet.
+- **[FORMULA.GRID.RANGE]** An aggregate takes a range of cells, for example `SUM(B2:D4)`. `SUM`, `AVERAGE`, `MIN`, `MAX` and `COUNT` take the cells of the range with a number or a formula. `ANY` and `ALL` take the cells with a boolean or a formula. Empty cells and texts do not count. For a range without such cells, `SUM`, `MIN`, `MAX` and `COUNT` give 0, `AVERAGE` gives `#NUM!`, `ANY` gives `FALSE` and `ALL` gives `TRUE`. A range has 10000 cells or fewer.
+- **[FORMULA.GRID.ONLY]** A range outside an aggregate is an error, and an address outside the grid is an error. A range in a table is an error. In a table, a name like `B2` is the name of a column.
+
+## 8. The results of the compiler
 
 - **[FORMULA.READS]** `reads` gives each column that the formula reads, one time, in the sequence of the first read.
 - **[FORMULA.ROUND-TRIP]** The text of a syntax tree, read again, gives the same expression as the tree.

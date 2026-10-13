@@ -103,6 +103,8 @@ function list(e: Extract<Expr, { tag: "each" }>): string {
       return `${head}.${axis.t}(${body}${where})`;
     case "window":
       return `${head}.window(${axis.from}, ${axis.to}, ${body}${where})`;
+    case "table":
+      return `${head}.table(${quote(axis.name)}, ${body}${where})`;
   }
 }
 

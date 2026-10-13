@@ -363,6 +363,21 @@
         {
           "type": "object",
           "required": [
+            "t",
+            "name"
+          ],
+          "properties": {
+            "t": {
+              "const": "table"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
             "t"
           ],
           "properties": {

@@ -226,6 +226,11 @@ export interface ChainBase<Ctx extends ChainContext, T> {
    * order. The offset 0 is the focus. An offset outside the space has no target.
    */
   window<U>(from: number, to: number, body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  /**
+   * The table axis: the body evaluates at each key of the table `name` of the evaluation, in the space of that table.
+   * The body reads the fields of that table, but the types of the chain are the types of this space.
+   */
+  table<U>(name: string, body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
 }
 
 /** The options of an axis. */
@@ -591,6 +596,9 @@ class ChainImpl {
   }
   window(from: number, to: number, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
     return this.#axis({ t: "window", from, to }, body, opts);
+  }
+  table(name: string, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+    return this.#axis({ t: "table", name }, body, opts);
   }
 }
 

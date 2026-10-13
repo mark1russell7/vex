@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
-import { app, lit, offset, other, ref } from "./ir.ts";
+import { app, axes, each, let_, lit, offset, other, ref, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import type { Result } from "./result.ts";
 import { cell, SheetRun } from "./sheet.ts";
@@ -191,6 +191,43 @@ describe("sheets (SHEET.*)", () => {
     // A small budget of the stack pauses the reads, and the results stay the same.
     const tight = new SheetRun(columns, { space: rows, domains: [Num], cells }, 1);
     expect(value(tight.cell("next", "0"))).toBe(6);
+  });
+
+  it("SHEET.TABLES: a run with two tables reads cells across the tables, and a cycle across the tables gives #CYCLE!", () => {
+    const Calc = defineDomain({
+      name: "Calc",
+      is: (u: unknown): u is number => typeof u === "number",
+      ops: { eq: { fn: (a: number, b: number): boolean => a === b, params: ["number"] }, multiply: { fn: (a: number, b: number): number => a * b, params: ["number"] } },
+    });
+    const orders = space.array([{ product: 2, qty: 3 }, { product: 1, qty: 10 }]);
+    const products = space.array([{ id: 1, price: 1.5 }, { id: 2, price: 12 }]);
+    // The price of the product of an order, from the cell "double" of the table products.
+    const priceOf = let_({ $p: ref("product") }, app("first", each(axes.where(axes.table("products"), app("eq", ref("id"), v("$p"))), cell("double"))));
+    const orderColumns = new Map<string, Expr>([
+      ["line", app("multiply", ref("qty"), priceOf)],
+      ["a", app("first", each(axes.table("products"), cell("b")))],
+    ]);
+    const productColumns = new Map<string, Expr>([
+      ["double", app("multiply", ref("price"), lit(2))],
+      // The units of the product in the orders: a read of the main table by its name.
+      ["sold", let_({ $id: ref("id") }, app("sum", each(axes.where(axes.table("orders"), app("eq", ref("product"), v("$id"))), ref("qty"))))],
+      ["b", app("first", each(axes.table("orders"), cell("a")))],
+    ]);
+    const tables = new Map([["products", { space: products, columns: productColumns }], ["orders", { space: products, columns: new Map() }]]);
+    const run = new SheetRun(orderColumns, { space: orders, domains: [Calc], name: "orders", tables });
+    // 3 units at 2 * 12, and 10 units at 2 * 1.5.
+    expect([value(run.cell("line", "0")), value(run.cell("line", "1"))]).toEqual([72, 30]);
+    expect([value(run.cell("sold", "0", "products")), value(run.cell("sold", "1", "products"))]).toEqual([10, 3]);
+    expect([error(run.cell("a", "0")).code, error(run.cell("b", "0", "products")).code]).toEqual(["#CYCLE!", "#CYCLE!"]);
+    expect(error(run.cell("x", "0", "nope"))).toMatchObject({ code: "#REF!", message: 'the run has no table "nope"' });
+    expect(error(run.cell("zzz", "0", "products"))).toMatchObject({ code: "#NAME?", message: 'the table "products" has no column "zzz"' });
+    expect(run.explain("double", "1", "products").events.length).toBeGreaterThan(0);
+    expect(run.explain("double", "1", "nope")).toMatchObject({ events: [], result: { ok: false } });
+    run.warm("sold", "1", "products");
+    run.warm("sold", "1", "nope");
+    // A small budget of the stack gives the same results.
+    const tight = new SheetRun(orderColumns, { space: orders, domains: [Calc], name: "orders", tables }, 1);
+    expect([value(tight.cell("line", "1")), value(tight.cell("sold", "0", "products"))]).toEqual([30, 10]);
   });
 
   it("SHEET.CELL: the columns are JSON data, and explain shows the cell reads", () => {

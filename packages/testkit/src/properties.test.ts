@@ -11,16 +11,23 @@ const DOMAINS = [Vec2Domain, NumDomain, BoolDomain] as const;
 const vec = fc.tuple(fc.integer({ min: -5, max: 5 }), fc.integer({ min: -5, max: 5 })).map(([x, y]) => new Vec2(x, y));
 const OPTS = { domainValue: vec, ops: ["add", "subtract", "scale", "length", "dot", "divide", "multiply", "anyNonPositive", "gt", "not", "and"] };
 
-/** A space, an expression and an origin (sometimes an origin that is not in the space). */
-const program = arbSpace(vec).chain((s) => fc.tuple(fc.constant(s), arbExpr(OPTS), arbOrigin(s)));
+/**
+ * A space, an expression, an origin (sometimes an origin that is not in the space), and the table "T" for the axis
+ * table (AXIS.TABLE).
+ */
+const program = arbSpace(vec).chain((s) => fc.tuple(fc.constant(s), arbExpr(OPTS), arbOrigin(s), arbSpace(vec).map((t) => ({ T: t }))));
 
-const run = (e: Expr, s: Space, origin: string): ReturnType<typeof evaluate> => evaluate(e, { space: s, origin, domains: DOMAINS });
+const run = (e: Expr, s: Space, origin: string, tables?: Readonly<Record<string, Space>>): ReturnType<typeof evaluate> =>
+  evaluate(e, { space: s, origin, domains: DOMAINS, ...(tables === undefined ? {} : { tables }) });
+
+/** The axis table "T" with a test: the boolean of `e`, or an error for a value that is not a boolean. */
+const tableWhere = (e: Expr): Axis => ({ t: "where", axis: { t: "table", name: "T" }, test: app("not", app("not", e)) });
 
 describe("properties of the interpreter", () => {
   it("P1 EVAL.TOTAL: evaluation does not throw, and a value is never undefined (V-009, V-022, V-041)", () => {
     fc.assert(
-      fc.property(program, ([s, e, k]) => {
-        const r = run(e, s, k);
+      fc.property(program, ([s, e, k, tables]) => {
+        const r = run(e, s, k, tables);
         expect(r.ok ? r.value !== undefined : r.error.code.startsWith("#")).toBe(true);
       }),
     );
@@ -28,19 +35,19 @@ describe("properties of the interpreter", () => {
 
   it("P2 EVAL.PURE: two evaluations agree, and explain gives the same result (V-004, V-010)", () => {
     fc.assert(
-      fc.property(program, ([s, e, k]) => {
-        const first = fromCore(run(e, s, k));
-        expect(fromCore(run(e, s, k))).toEqual(first);
-        expect(fromCore(explain(e, { space: s, origin: k, domains: DOMAINS }).result)).toEqual(first);
+      fc.property(program, ([s, e, k, tables]) => {
+        const first = fromCore(run(e, s, k, tables));
+        expect(fromCore(run(e, s, k, tables))).toEqual(first);
+        expect(fromCore(explain(e, { space: s, origin: k, domains: DOMAINS, tables }).result)).toEqual(first);
       }),
     );
   });
 
-  it("P8 EVAL.REFERENCE: the core interpreter and the reference interpreter agree", () => {
+  it("P8 EVAL.REFERENCE AXIS.TABLE: the core interpreter and the reference interpreter agree", () => {
     fc.assert(
-      fc.property(program, ([s, e, k]) => {
-        const core = fromCore(run(e, s, k));
-        const reference = fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS }));
+      fc.property(program, ([s, e, k, tables]) => {
+        const core = fromCore(run(e, s, k, tables));
+        const reference = fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS, tables }));
         expect(core).toEqual(reference);
       }),
     );
@@ -51,7 +58,8 @@ describe("properties of the interpreter", () => {
       fc.property(arbExpr(OPTS), fc.array(arbSpace(vec).chain((s) => fc.tuple(fc.constant(s), arbOrigin(s))), { minLength: 1, maxLength: 4 }), (e, runs) => {
         const compiled = compile(e, { domains: DOMAINS });
         for (const [s, k] of runs) {
-          expect(fromCore(compiled.run({ space: s, origin: k }))).toEqual(fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS })));
+          const tables = { T: s };
+          expect(fromCore(compiled.run({ space: s, origin: k, tables }))).toEqual(fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS, tables })));
         }
       }),
     );
@@ -59,18 +67,30 @@ describe("properties of the interpreter", () => {
 
   it("P13 EVAL.COMPILE IR.JSON: evaluate, compile, explain, the reference and a JSON round trip give one result", () => {
     fc.assert(
-      fc.property(program, ([s, e, k]) => {
-        const expected = fromCore(run(e, s, k));
+      fc.property(program, ([s, e, k, tables]) => {
+        const expected = fromCore(run(e, s, k, tables));
         // A program with a number that is not finite has no JSON form, so that path gives the expected result.
         const text = serialize(e, DOMAINS);
         const back = text.ok ? parse(text.value, DOMAINS) : undefined;
-        const json = back === undefined ? expected : back.ok ? fromCore(run(back.value, s, k)) : { ok: false, code: "no parse" };
+        const json = back === undefined ? expected : back.ok ? fromCore(run(back.value, s, k, tables)) : { ok: false, code: "no parse" };
         expect({
-          compile: fromCore(compile(e, { domains: DOMAINS }).run({ space: s, origin: k })),
-          explain: fromCore(explain(e, { space: s, origin: k, domains: DOMAINS }).result),
-          reference: fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS })),
+          compile: fromCore(compile(e, { domains: DOMAINS }).run({ space: s, origin: k, tables })),
+          explain: fromCore(explain(e, { space: s, origin: k, domains: DOMAINS, tables }).result),
+          reference: fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS, tables })),
           json,
         }).toEqual({ compile: expected, explain: expected, reference: expected, json: expected });
+      }),
+    );
+  });
+
+  it("P15 AXIS.TABLE: inside the axis table, the origin is the target, in the body and in the test of where", () => {
+    fc.assert(
+      fc.property(program, fc.constantFrom(...PATHS), ([s, , k, tables], path) => {
+        const at = (e: Expr): unknown => fromCore(run(e, s, k, tables));
+        const atOrigin = ref(path, [{ t: "origin" }]);
+        const atFocus = ref(path);
+        expect(at(each({ t: "table", name: "T" }, atOrigin))).toEqual(at(each({ t: "table", name: "T" }, atFocus)));
+        expect(at(each(tableWhere(atOrigin), lit(1)))).toEqual(at(each(tableWhere(atFocus), lit(1))));
       }),
     );
   });

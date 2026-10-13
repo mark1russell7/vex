@@ -26,6 +26,7 @@ export type Axis =
   | { readonly t: "descendants" }
   | { readonly t: "siblings" }
   | { readonly t: "window"; readonly from: number; readonly to: number }
+  | { readonly t: "table"; readonly name: string }
   | { readonly t: "where"; readonly axis: Axis; readonly test: Expr };
 
 /** A Vex expression. */
@@ -121,6 +122,11 @@ export const axes = {
    * a tree space, the offsets go among the siblings. An offset outside the space has no target.
    */
   window: (from: number, to: number): Axis => ({ t: "window", from, to }),
+  /**
+   * Each key of the table `name` of the evaluation, in key order. The body evaluates in the space of that table, and
+   * there the origin is the target.
+   */
+  table: (name: string): Axis => ({ t: "table", name }),
   /** The targets of `axis` where `test` gives `true`. */
   where: (axis: Axis, test: Expr): Axis => ({ t: "where", axis, test }),
 } as const;
@@ -179,6 +185,8 @@ function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boo
         if (u["n"] !== 4 && u["n"] !== 8) return false;
       } else if (t === "window") {
         if (!Number.isSafeInteger(u["from"]) || !Number.isSafeInteger(u["to"])) return false;
+      } else if (t === "table") {
+        if (typeof u["name"] !== "string") return false;
       } else if (t === "where") {
         push(true, [u["axis"]]);
         push(false, [u["test"]]);

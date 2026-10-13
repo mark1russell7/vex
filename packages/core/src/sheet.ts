@@ -13,7 +13,7 @@ import { vexError } from "./errors.ts";
 import { evaluate, explain, nestingOf, type EvalOptions, type ExtHandler } from "./evaluate.ts";
 import { ext, isMove, type Addr, type Expr } from "./ir.ts";
 import { fail, type Result } from "./result.ts";
-import { resolveAddr } from "./space.ts";
+import { resolveAddr, type Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
 
 /** The extension kind of a cell reference. */
@@ -38,21 +38,51 @@ const isCellRef = (u: unknown): u is CellRef =>
 /** The formulas of single cells: for each column, the formula of each key that has its own formula. */
 export type CellFormulas = ReadonlyMap<string, ReadonlyMap<string, Expr>>;
 
-/** The options of a sheet run: the evaluation options without the origin and the trace, and the formulas of cells. */
-export type SheetOptions = Omit<EvalOptions, "origin" | "trace"> & {
+/** A table of a run: its space, the formulas of its columns, and the formulas of its cells. */
+export interface SheetTable {
+  readonly space: Space;
+  readonly columns: ReadonlyMap<string, Expr>;
+  readonly cells?: CellFormulas;
+}
+
+/** The options of a sheet run: the evaluation options without the origin and the trace, and the tables. */
+export type SheetOptions = Omit<EvalOptions, "origin" | "trace" | "tables"> & {
   /** The cells with their own formula. The formula of a cell replaces the formula of its column at its key. */
   readonly cells?: CellFormulas;
+  /** The name of this table, so the axis `table(name)` in a formula of another table can read it. */
+  readonly name?: string;
+  /** The other tables, by name (SHEET.TABLES). A cell reference reads the table of the space where it evaluates. */
+  readonly tables?: ReadonlyMap<string, SheetTable>;
 };
+
+/** The state of one table in a run. */
+interface Table {
+  /** The name of the table. The main table without a name has the name "". */
+  readonly name: string;
+  /** A short text for the ids of the cells of the table. */
+  readonly tag: string;
+  readonly space: Space;
+  readonly columns: ReadonlyMap<string, Expr>;
+  readonly cells: CellFormulas;
+  // For each column, the number of keys at the start of the key order that a warm-up evaluated.
+  readonly warmed: Map<string, number>;
+  // The position of each key in the key order, made at the first warm-up.
+  index: ReadonlyMap<string, number> | undefined;
+}
 
 const cycleError = (column: string, key: string): Result<never> =>
   fail(vexError("cycle", `the cell "${column}" at "${key}" is on a cycle of cell references`, { origin: key, focus: key }));
 
 /** The id of a cell. */
-const idOf = (column: string, key: string): string => `${column}\u0000${key}`;
+const idOf = (t: Table, column: string, key: string): string => `${t.tag}\u0001${column}\u0000${key}`;
+
+/** This function gives the state of a table at the start of a run. */
+const tableState = (name: string, i: number, t: SheetTable): Table => ({ name, tag: String(i), space: t.space, columns: t.columns, cells: t.cells ?? new Map(), warmed: new Map(), index: undefined });
 
 /** The state of one cell in the search. */
 interface Visit {
   readonly id: string;
+  readonly table: Table;
   readonly column: string;
   readonly key: string;
   readonly index: number;
@@ -85,23 +115,23 @@ const STACK_BUDGET = 3000;
  * cell, and the cell that reads it pauses. A paused evaluation reads no other cell and changes no state of the
  * search. The run then evaluates the started cell from its own list, and it evaluates the paused cell again after
  * that cell. A formula is pure (EVAL.PURE), so the second evaluation gives the result of one evaluation.
+ *
+ * A run can have more tables (SHEET.TABLES). Each table has its own space, and one search covers the cells of all
+ * the tables. Thus a cycle across tables gives `#CYCLE!` too.
  */
 export class SheetRun {
-  readonly #columns: ReadonlyMap<string, Expr>;
-  readonly #cells: CellFormulas;
-  readonly #opts: Omit<EvalOptions, "origin" | "trace">;
+  readonly #main: Table;
+  // The tables by name and by space. A cell reference reads the table of the space where it evaluates.
+  readonly #byName = new Map<string, Table>();
+  readonly #bySpace = new Map<Space, Table>();
+  readonly #opts: Omit<EvalOptions, "origin" | "trace" | "space">;
   readonly #done = new Map<string, Result<unknown>>();
-  // For each column, the number of keys at the start of the key order that a warm-up evaluated.
-  readonly #warmed = new Map<string, number>();
-  // The position of each key in the key order, made at the first warm-up.
-  #index: ReadonlyMap<string, number> | undefined;
   // The cells on the stack of the search: started, but their component is not finished.
   readonly #visits = new Map<string, Visit>();
   // Stryker disable next-line ArrayDeclaration: the search never reads below the root of a component
   readonly #stack: Visit[] = [];
   // The cell whose formula is in evaluation. At the top level, it is a placeholder that is not a cell.
-  // Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields
-  #top: Visit = { id: "", column: "", key: "", index: -1, low: -1, reread: false, result: cycleError("", ""), paused: false, need: undefined };
+  #top: Visit;
   #next = 0;
   // The estimated frames of the stack that the evaluations in progress use, and the cost of each program.
   #used = 0;
@@ -110,53 +140,75 @@ export class SheetRun {
 
   /** `budget` is the budget of the stack in estimated frames. A test can make it small, so the run pauses often. */
   constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, budget: number = STACK_BUDGET) {
-    const { cells, ...rest } = opts;
-    this.#columns = columns;
-    this.#cells = cells ?? new Map();
+    const { cells, name, tables, space, ...rest } = opts;
+    this.#main = tableState(name ?? "", 0, { space, columns, ...(cells === undefined ? {} : { cells }) });
+    this.#bySpace.set(space, this.#main);
+    if (name !== undefined) this.#byName.set(name, this.#main);
+    [...(tables ?? [])].forEach(([n, t], i) => {
+      if (this.#byName.has(n)) return;
+      const other = tableState(n, i + 1, t);
+      this.#byName.set(n, other);
+      if (!this.#bySpace.has(t.space)) this.#bySpace.set(t.space, other);
+    });
+    // Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields
+    this.#top = { id: "", table: this.#main, column: "", key: "", index: -1, low: -1, reread: false, result: cycleError("", ""), paused: false, need: undefined };
     this.#budget = budget;
-    this.#opts = { ...rest, extensions: { ...rest.extensions, [CELL_KIND]: this.#handler } };
+    const spaces = Object.fromEntries([...this.#byName].map(([n, t]) => [n, t.space]));
+    this.#opts = { ...rest, tables: spaces, extensions: { ...rest.extensions, [CELL_KIND]: this.#handler } };
   }
 
   /** This method gives the program of a cell: its own formula, or the formula of its column (SHEET.CELL.FORMULA). */
-  #programOf(column: string, key: string): Expr | undefined {
+  #programOf(t: Table, column: string, key: string): Expr | undefined {
     // Stryker disable next-line ConditionalExpression: without formulas of cells, the lookup gives undefined anyway
-    const own = this.#cells.size === 0 ? undefined : this.#cells.get(column)?.get(key);
-    return own ?? this.#columns.get(column);
+    const own = t.cells.size === 0 ? undefined : t.cells.get(column)?.get(key);
+    return own ?? t.columns.get(column);
   }
 
   /** This method gives the error of a cell without a program. */
-  #unbound(column: string, key: string): Result<never> {
-    const message = this.#cells.has(column) ? `the cell "${column}" at "${key}" has no formula` : `the sheet has no column "${column}"`;
+  #unbound(t: Table, column: string, key: string): Result<never> {
+    const where = t === this.#main ? "the sheet" : `the table "${t.name}"`;
+    const message = t.cells.has(column) ? `the cell "${column}" at "${key}" has no formula` : `${where} has no column "${column}"`;
     return fail(vexError("unbound", message, { origin: key, focus: key }));
+  }
+
+  /** This method gives the table of a name for a read from a host. Without a name, it is the main table. */
+  #named(table: string | undefined, key: string): Table | Result<never> {
+    if (table === undefined) return this.#main;
+    return this.#byName.get(table) ?? fail(vexError("no-table", `the run has no table "${table}"`, { origin: key, focus: key }));
   }
 
   readonly #handler: ExtHandler = (data, ctx) => {
     if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address", { path: ctx.path }));
     const where = resolveAddr(ctx.space, ctx.position, data.at);
     if (!where.ok) return fail({ ...where.error, path: ctx.path });
-    return this.#read(data.column, where.value);
+    // The evaluation of a cell has the space of its table, and the body of the axis table has the space of that table.
+    /* v8 ignore next -- @preserve: each space of an evaluation of the run is the space of a table */
+    return this.#read(this.#bySpace.get(ctx.space) ?? this.#main, data.column, where.value);
   };
 
   /**
-   * This method gives the result of one cell: the column `column` at the key `key`. A read from a host first evaluates
-   * the column at the keys before `key`, in key order. Thus a recurrence over the keys reads finished cells.
+   * This method gives the result of one cell: the column `column` at the key `key` of the main table, or of the table
+   * `table`. A read from a host first evaluates the column at the keys before `key`, in key order. Thus a recurrence
+   * over the keys reads finished cells.
    */
-  cell(column: string, key: string): Result<unknown> {
+  cell(column: string, key: string, table?: string): Result<unknown> {
+    const t = this.#named(table, key);
+    if (!("space" in t)) return t;
     // The placeholder at the top has the index -1. A read inside a formula has a cell at the top, so it does not warm.
-    if (this.#top.index >= 0) return this.#read(column, key);
-    this.#warmTo(column, key);
-    return this.#drive(column, key);
+    if (this.#top.index >= 0) return this.#read(t, column, key);
+    this.#warmTo(t, column, key);
+    return this.#drive(t, column, key);
   }
 
   /** This method evaluates the column `column` at each key before `key` that it did not evaluate before, in key order. */
-  #warmTo(column: string, key: string): void {
-    if (!this.#columns.has(column)) return;
-    const keys = this.#opts.space.keys;
-    this.#index ??= new Map(keys.map((k, i) => [k, i]));
-    const end = this.#index.get(key) ?? 0;
-    const start = this.#warmed.get(column) ?? 0;
-    for (let i = start; i < end; i++) this.#drive(column, keys[i] ?? key);
-    if (end > start) this.#warmed.set(column, end);
+  #warmTo(t: Table, column: string, key: string): void {
+    if (!t.columns.has(column)) return;
+    const keys = t.space.keys;
+    t.index ??= new Map(keys.map((k, i) => [k, i]));
+    const end = t.index.get(key) ?? 0;
+    const start = t.warmed.get(column) ?? 0;
+    for (let i = start; i < end; i++) this.#drive(t, column, keys[i] ?? key);
+    if (end > start) t.warmed.set(column, end);
   }
 
   /** This method gives the estimated frames of the stack that one evaluation of the program `program` uses. */
@@ -170,9 +222,9 @@ export class SheetRun {
   }
 
   /** This method puts a new cell on the stack of the search. */
-  #start(column: string, key: string): Visit {
+  #start(t: Table, column: string, key: string): Visit {
     const n = this.#next++;
-    const visit: Visit = { id: idOf(column, key), column, key, index: n, low: n, reread: false, result: cycleError(column, key), paused: false, need: undefined };
+    const visit: Visit = { id: idOf(t, column, key), table: t, column, key, index: n, low: n, reread: false, result: cycleError(column, key), paused: false, need: undefined };
     this.#visits.set(visit.id, visit);
     this.#stack.push(visit);
     return visit;
@@ -186,7 +238,7 @@ export class SheetRun {
     visit.need = undefined;
     this.#top = visit;
     this.#used += cost;
-    const result = evaluate(program, { ...this.#opts, origin: visit.key });
+    const result = evaluate(program, { ...this.#opts, space: visit.table.space, origin: visit.key });
     this.#used -= cost;
     this.#top = caller;
     if (!visit.paused) visit.result = result;
@@ -199,8 +251,8 @@ export class SheetRun {
   }
 
   /** This method reads a cell from the formula of the cell at the top. */
-  #read(column: string, key: string): Result<unknown> {
-    const id = idOf(column, key);
+  #read(t: Table, column: string, key: string): Result<unknown> {
+    const id = idOf(t, column, key);
     const done = this.#done.get(id);
     if (done !== undefined) return done;
     const caller = this.#top;
@@ -215,9 +267,9 @@ export class SheetRun {
       seen.reread = true;
       return cycleError(column, key);
     }
-    const program = this.#programOf(column, key);
-    if (program === undefined) return this.#unbound(column, key);
-    const visit = this.#start(column, key);
+    const program = this.#programOf(t, column, key);
+    if (program === undefined) return this.#unbound(t, column, key);
+    const visit = this.#start(t, column, key);
     if (this.#used + this.#costOf(program) > this.#budget) {
       // Over the budget: the caller pauses, and the run evaluates the new cell from its own list.
       caller.paused = true;
@@ -235,14 +287,14 @@ export class SheetRun {
   }
 
   /** This method evaluates a cell from the top level. The cells that pause go on a list, not on the call stack. */
-  #drive(column: string, key: string): Result<unknown> {
-    const id = idOf(column, key);
+  #drive(t: Table, column: string, key: string): Result<unknown> {
+    const id = idOf(t, column, key);
     const done = this.#done.get(id);
     if (done !== undefined) return done;
-    if (this.#programOf(column, key) === undefined) return this.#unbound(column, key);
-    const work: Visit[] = [this.#start(column, key)];
+    if (this.#programOf(t, column, key) === undefined) return this.#unbound(t, column, key);
+    const work: Visit[] = [this.#start(t, column, key)];
     for (let visit = work.at(-1); visit !== undefined; visit = work.at(-1)) {
-      const program = this.#programOf(visit.column, visit.key);
+      const program = this.#programOf(visit.table, visit.column, visit.key);
       /* v8 ignore next -- @preserve: a visit exists only for a cell with a program */
       if (program === undefined) break;
       this.#evaluate(visit, program);
@@ -272,18 +324,20 @@ export class SheetRun {
   }
 
   /** This method evaluates one cell with a trace of the nodes of its program. The result is the result of the cell. */
-  explain(column: string, key: string): Trace {
-    const result = this.cell(column, key);
-    const program = this.#programOf(column, key);
-    if (program === undefined) return { events: [], result };
-    return { events: explain(program, { ...this.#opts, origin: key }).events, result };
+  explain(column: string, key: string, table?: string): Trace {
+    const result = this.cell(column, key, table);
+    const t = this.#named(table, key);
+    const program = "space" in t ? this.#programOf(t, column, key) : undefined;
+    if (program === undefined || !("space" in t)) return { events: [], result };
+    return { events: explain(program, { ...this.#opts, space: t.space, origin: key }).events, result };
   }
 
   /**
    * This method evaluates the column `column` at each key before `key`, in key order. A recurrence over the keys,
    * for example a running total, then reads finished cells.
    */
-  warm(column: string, key: string): void {
-    this.#warmTo(column, key);
+  warm(column: string, key: string, table?: string): void {
+    const t = this.#named(table, key);
+    if ("space" in t) this.#warmTo(t, column, key);
   }
 }

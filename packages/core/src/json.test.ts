@@ -98,6 +98,12 @@ describe("the edges of the address of an axis and of a tree offset", () => {
     expect(value(parse(value(serialize(e)), []))).toEqual(e);
   });
 
+  it("AXIS.TABLE: isExpr accepts a table axis with a name, and JSON keeps it", () => {
+    expect([isExpr(eachOf({ t: "table", name: "Products" })), isExpr(eachOf({ t: "table", name: 7 })), isExpr(eachOf({ t: "table" }))]).toEqual([true, false, false]);
+    const e = each(axes.table("Products"), lit(1));
+    expect(value(parse(value(serialize(e)), []))).toEqual(e);
+  });
+
   it("NAV.OFFSET.TREE: a space needs both parentOf and childrenOf for the tree offset, and an unknown focus has no siblings", () => {
     const base = { kind: "tree" as const, keys: ["A"], has: (k: string): k is string => k === "A", get: () => ({}), coords: () => undefined, keyAt: () => undefined };
     const onlyParent: Space = { ...base, parentOf: () => undefined };

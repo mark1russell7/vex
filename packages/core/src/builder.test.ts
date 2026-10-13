@@ -363,6 +363,14 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     expect(optionalValue(rows.start(0).window(-1, 1, (c) => c.from("weight"), { where: (c) => c.from("weight")._.gt(1) }).values().at("1"))).toEqual([2, 4]);
   });
 
+  it("AXIS.TABLE: table(name, body) reads the keys of another table of the evaluation", () => {
+    const rows = vex(Num).over(space.array([{ weight: 1 }]));
+    const others = rows.start(0).table("other", (c) => c.from("weight"));
+    expect(JSON.stringify(others.program)).toContain(JSON.stringify(each(axes.table("other"), ref("weight"))));
+    // Without the table in the evaluation, the axis gives #REF!.
+    expect(error(others.values().result("0")).code).toBe("#REF!");
+  });
+
   it("BUILD.LIST.KEYS: keys() gives the keys of the items with a value, and errors() gives the errors of the failed items", () => {
     // The grandparent of cto and cfo does not exist, so their items fail with #REF!.
     const grand = org.start(0).descendants((d) => d.parent().parent().from("name"));

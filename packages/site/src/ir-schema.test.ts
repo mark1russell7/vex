@@ -29,6 +29,7 @@ describe("the JSON Schema of the IR (IR.JSON)", () => {
       fc.jsonValue(),
       fc.record({ tag: fc.constantFrom("lit", "ref", "app", "let", "var", "rec", "each", "ext", "loop"), path: fc.jsonValue(), args: fc.jsonValue(), name: fc.jsonValue() }),
       fc.record({ tag: fc.constant("each"), axis: fc.record({ t: fc.constantFrom("all", "neighbors", "where", "children", "ancestors", "descendants", "siblings", "up"), n: fc.integer({ min: 3, max: 9 }) }), body: fc.constant({ tag: "lit", value: 1 }) }),
+      fc.record({ tag: fc.constant("each"), axis: fc.record({ t: fc.constant("table"), name: fc.oneof(fc.string(), fc.integer()) }, { requiredKeys: ["t"] }), body: fc.constant({ tag: "lit", value: 1 }) }),
       fc.record({ tag: fc.constant("each"), axis: fc.record({ t: fc.constant("window"), from: fc.oneof(fc.integer(), fc.double(), fc.constant(2 ** 53), fc.string()), to: fc.oneof(fc.integer(), fc.double()) }, { requiredKeys: ["t"] }), body: fc.constant({ tag: "lit", value: 1 }) }),
       fc.record({ tag: fc.constant("ref"), path: fc.array(fc.string()), at: fc.array(fc.record({ t: fc.constantFrom("key", "index", "other", "offset", "origin", "parent", "jump"), key: fc.jsonValue(), i: fc.double(), d: fc.jsonValue() })) }),
     );

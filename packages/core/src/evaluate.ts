@@ -33,6 +33,8 @@ export interface EvalOptions {
   readonly extensions?: Readonly<Record<string, ExtHandler>>;
   /** Variables that the program can read with `v(name)`. */
   readonly vars?: Readonly<Record<string, unknown>>;
+  /** The other spaces of the evaluation, by name. The axis `table(name)` reads them. */
+  readonly tables?: Readonly<Record<string, Space>>;
   /** A receiver of trace events. */
   readonly trace?: TraceSink;
 }
@@ -56,7 +58,7 @@ const isSpecialForm = (op: string): op is SpecialForm => SPECIAL_FORMS.has(op);
 export type CompileOptions = Pick<EvalOptions, "domains" | "fns" | "extensions">;
 
 /** The options of one run of a compiled program. */
-export type RunOptions = Pick<EvalOptions, "space" | "origin" | "vars" | "trace">;
+export type RunOptions = Pick<EvalOptions, "space" | "origin" | "vars" | "trace" | "tables">;
 
 /**
  * A compiled program: the expression as a tree of functions. A program evaluates many times at different origins,
@@ -104,7 +106,7 @@ export function compile(expr: Expr, opts: CompileOptions = {}): Program {
     if (!space.has(origin)) return fail(vexError("unknown-key", `the space has no key "${origin}"`, { origin, focus: origin }));
     const env = new Map<string, Result<unknown>>(Object.entries(r.vars ?? {}).map(([k, val]) => [k, ok(val)]));
     try {
-      return root({ pos: { origin, focus: origin }, env }, { space, trace: r.trace });
+      return root({ pos: { origin, focus: origin }, env }, { space, trace: r.trace, tables: r.tables });
     } catch (thrown) {
       // A defect in an extension handler or in a test of the interpreter itself. Totality still holds.
       if (isStackOverflow(thrown)) return fail(vexError("depth", DEPTH_MESSAGE, { origin, focus: origin, thrown }));
@@ -146,11 +148,15 @@ export function explain(expr: Expr, opts: Omit<EvalOptions, "trace">): Trace {
   return compiled(expr, opts).explain(opts);
 }
 
-/** The state of one run that the nodes read: the space and the trace sink. */
+/** The state of one run that the nodes read: the space, the trace sink and the other spaces. */
 interface Ctx {
   readonly space: Space;
   readonly trace: TraceSink | undefined;
+  readonly tables: Readonly<Record<string, Space>> | undefined;
 }
+
+/** This function gives the axis inside the `where` axes of an axis. */
+const baseAxis = (a: Axis): Exclude<Axis, { readonly t: "where" }> => (a.t === "where" ? baseAxis(a.axis) : a);
 
 /** A compiled node: it evaluates in a frame of a run. */
 type Node = (f: Frame, c: Ctx) => Result<unknown>;
@@ -332,11 +338,20 @@ class Compiler {
         if (!where.ok) return this.#emit(c, info, f, fail({ ...where.error, path }));
         from = { pos: { origin: f.pos.origin, focus: where.value }, env: f.env };
       }
-      const ts = targets(from, c);
+      // The axis table moves the evaluation to the space of its table, where the origin of this space is not a key.
+      // Thus there the origin is the target, and a value of this space goes in through a variable.
+      const base = baseAxis(e.axis);
+      let inner = c;
+      if (base.t === "table") {
+        const space = c.tables !== undefined && Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined;
+        if (space === undefined) return this.#emit(c, info, f, this.#err("no-table", `the evaluation has no table "${base.name}"`, f, path));
+        inner = { ...c, space };
+      }
+      const ts = targets(from, inner);
       if (!ts.ok) return this.#emit(c, info, f, ts);
       const items: ListItem[] = ts.value.map(({ key, test }) => {
         if (test !== undefined && !test.ok) return { key, result: test };
-        return { key, result: body({ pos: { origin: f.pos.origin, focus: key }, env: f.env }, c) };
+        return { key, result: body({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env: f.env }, inner) };
       });
       return this.#emit(c, info, f, ok(vexList(items)));
     };
@@ -344,6 +359,7 @@ class Compiler {
 
   /** This method compiles the targets of an axis. For `where`, a failed test keeps the target with its error. */
   #targets(a: Axis, path: readonly number[], counter: { next: number }): (f: Frame, c: Ctx) => Result<readonly { readonly key: string; readonly test?: Result<unknown> }[]> {
+    if (a.t === "table") return (_f, c) => ok(c.space.keys.map((key) => ({ key })));
     if (a.t !== "where") {
       return (f, c) => {
         const keys = axisTargets(c.space, f.pos, a);
@@ -353,6 +369,8 @@ class Compiler {
     const inner = this.#targets(a.axis, path, counter);
     const testPath = [...path, counter.next++];
     const test = this.node(a.test, testPath);
+    // In the space of the axis table, the origin of the test is the target, as for the body.
+    const sameOrigin = baseAxis(a).t === "table";
     return (f, c) => {
       const ts = inner(f, c);
       if (!ts.ok) return ts;
@@ -362,7 +380,7 @@ class Compiler {
           out.push(t);
           continue;
         }
-        const at: Frame = { pos: { origin: f.pos.origin, focus: t.key }, env: f.env };
+        const at: Frame = { pos: { origin: sameOrigin ? t.key : f.pos.origin, focus: t.key }, env: f.env };
         const r = test(at, c);
         if (!r.ok) out.push({ key: t.key, test: r });
         else if (r.value === true) out.push({ key: t.key });

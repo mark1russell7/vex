@@ -21,7 +21,12 @@ interface Ctx {
   readonly env: ReadonlyMap<string, RefOutcome>;
   readonly domains: readonly AnyDomain[];
   readonly fns: Readonly<Record<string, (...a: readonly unknown[]) => unknown>>;
+  /** The other spaces of the evaluation, for the axis table. */
+  readonly tables: Readonly<Record<string, Space>>;
 }
+
+/** The axis inside the `where` axes of an axis. */
+const baseOf = (a: Axis): Axis => (a.t === "where" ? baseOf(a.axis) : a);
 
 const safeIs = (d: AnyDomain, x: unknown): boolean => {
   try {
@@ -67,6 +72,8 @@ function all(xs: readonly Expr[], c: Ctx): RefOutcome {
 }
 
 function targets(a: Axis, c: Ctx): { ok: true; keys: { key: string; bad?: ErrorCode }[] } | { ok: false; code: ErrorCode } {
+  // The context of the axis table already has the space of the table, and each key of it is a target.
+  if (a.t === "table") return { ok: true, keys: c.space.keys.map((key) => ({ key })) };
   if (a.t !== "where") {
     const r = axisTargets(c.space, { origin: c.origin, focus: c.focus }, a);
     return r.ok ? { ok: true, keys: r.value.map((key) => ({ key })) } : { ok: false, code: r.error.code };
@@ -79,7 +86,8 @@ function targets(a: Axis, c: Ctx): { ok: true; keys: { key: string; bad?: ErrorC
       keys.push(t);
       continue;
     }
-    const r = run(a.test, { ...c, focus: t.key });
+    // In the space of the axis table, the origin is the target.
+    const r = run(a.test, { ...c, focus: t.key, ...(baseOf(a).t === "table" ? { origin: t.key } : {}) });
     if (!r.ok) keys.push({ key: t.key, bad: r.code });
     else if (r.value === true) keys.push({ key: t.key });
     else if (r.value !== false) keys.push({ key: t.key, bad: "#VALUE!" });
@@ -128,11 +136,17 @@ function run(e: Expr, c: Ctx): RefOutcome {
       // An axis with an address finds its targets from the key of the address.
       const from = resolveAddr(c.space, { origin: c.origin, focus: c.focus }, e.at);
       if (!from.ok) return err(from.error.code);
-      const t = targets(e.axis, { ...c, focus: from.value });
+      // The axis table moves to the space of its table, where the origin is the target.
+      const base = baseOf(e.axis);
+      const space = base.t === "table" ? (Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined) : c.space;
+      if (space === undefined) return err("#REF!");
+      const inner: Ctx = { ...c, space };
+      const t = targets(e.axis, { ...inner, focus: from.value });
       if (!t.ok) return err(t.code);
+      const at = (key: string): Ctx => ({ ...inner, focus: key, ...(base.t === "table" ? { origin: key } : {}) });
       return val({
         kind: "vex.list",
-        items: t.keys.map(({ key, bad }) => ({ key, result: bad === undefined ? toResult(run(e.body, { ...c, focus: key })) : { ok: false, error: { code: bad } } })),
+        items: t.keys.map(({ key, bad }) => ({ key, result: bad === undefined ? toResult(run(e.body, at(key))) : { ok: false, error: { code: bad } } })),
       });
     }
     case "app":
@@ -305,12 +319,13 @@ export function referenceEvaluate(
     readonly origin: string;
     readonly domains?: readonly AnyDomain[];
     readonly fns?: Readonly<Record<string, (...a: readonly unknown[]) => unknown>>;
+    readonly tables?: Readonly<Record<string, Space>>;
   },
 ): RefOutcome {
   if (!opts.space.has(opts.origin)) return err("#REF!");
   try {
     // Stryker disable next-line ArrayDeclaration: a list with a text accepts no value, like the empty list
-    return run(e, { space: opts.space, origin: opts.origin, focus: opts.origin, env: new Map(), domains: opts.domains ?? [], fns: opts.fns ?? {} });
+    return run(e, { space: opts.space, origin: opts.origin, focus: opts.origin, env: new Map(), domains: opts.domains ?? [], fns: opts.fns ?? {}, tables: opts.tables ?? {} });
   } catch {
     return err("#CALC!");
   }

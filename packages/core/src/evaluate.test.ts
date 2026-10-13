@@ -5,7 +5,7 @@ import { app, axes, each, ext, key, let_, lit, origin as toOrigin, other, parent
 import { parse, serialize } from "./json.ts";
 import { isVexList } from "./list.ts";
 import { fail, ok } from "./result.ts";
-import { space, type Space } from "./space.ts";
+import { axisTargets, space, type Space } from "./space.ts";
 import { defineDomain } from "./domain.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
 import { vexError } from "./errors.ts";
@@ -233,6 +233,30 @@ describe("axes (AXIS.*) and list ops (LIST.*)", () => {
     const liveNeighbors = app("count", each(axes.where(axes.neighbors(8), ref("alive")), lit(1)));
     expect(value(evaluate(liveNeighbors, { space: g, origin: "1,0" }))).toBe(3);
     expect(value(evaluate(liveNeighbors, { space: g, origin: "1,1" }))).toBe(2);
+  });
+
+  it("AXIS.TABLE: the axis table reads another space, there the origin is the target, and a variable brings a value in", () => {
+    const Calc = defineDomain({
+      name: "Calc",
+      is: (u: unknown): u is number => typeof u === "number",
+      ops: { eq: { fn: (a: number, b: number): boolean => a === b, params: ["number"] }, multiply: { fn: (a: number, b: number): number => a * b, params: ["number"] } },
+    });
+    const orders = space.array([{ product: 2, qty: 3 }, { product: 1, qty: 10 }]);
+    const products = space.array([{ id: 1, price: 1.5 }, { id: 2, price: 12 }, { id: 3, price: 4 }]);
+    const opts = (origin: string): EvalOptions => ({ space: orders, origin, domains: [Calc], tables: { products } });
+    // The body reads the fields of the table: 1.5 + 12 + 4.
+    expect(value(evaluate(app("sum", each(axes.table("products"), ref("price"))), opts("0")))).toBe(17.5);
+    // The product of each order goes into the test through a variable, and the test and the body read the product.
+    const price = let_({ $p: ref("product") }, app("first", each(axes.where(axes.table("products"), app("eq", ref("id"), v("$p"))), ref("price"))));
+    expect([value(evaluate(price, opts("0"))), value(evaluate(price, opts("1")))]).toEqual([12, 1.5]);
+    // In the space of the table, the origin is the target, so a read at the origin reads the product, not the order.
+    expect(value(evaluate(app("sum", each(axes.table("products"), ref("price", [toOrigin]))), opts("0")))).toBe(17.5);
+    expect(value(evaluate(app("count", each(axes.where(axes.table("products"), app("eq", ref("id", [toOrigin]), lit(3))), lit(1))), opts("1")))).toBe(1);
+    // A name that is not a table of the evaluation gives #REF!.
+    expect(error(evaluate(each(axes.table("nope"), lit(1)), opts("0")))).toMatchObject({ code: "#REF!", message: 'the evaluation has no table "nope"' });
+    expect(error(evaluate(each(axes.table("products"), lit(1)), { space: orders, origin: "0" })).code).toBe("#REF!");
+    const r = axisTargets(orders, { origin: "0", focus: "0" }, axes.table("products") as Exclude<ReturnType<typeof axes.table>, { t: "where" }>);
+    expect(r.ok ? "targets" : r.error.code).toBe("#REF!");
   });
 
   it("AXIS.WINDOW: a window of rows gives a moving sum, goes among the siblings in a tree, and needs an array or a tree", () => {

@@ -7,18 +7,24 @@ import { ReferenceSheetRun } from "./reference-sheet.ts";
 const COLUMNS = ["A", "B", "C"] as const;
 const ADDRESSES: readonly Addr[] = [[], [offset(-1)], [offset(1)], [offset(-2)], [index(0)]];
 
-/** A formula of a random sheet: numbers, the field v, cell references, add, ifError and a sum over the other rows. */
-const formula: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => ({
-  e: fc.oneof(
-    { maxDepth: 3, depthSize: "small" },
-    fc.integer({ min: -5, max: 5 }).map((n): Expr => lit(n)),
-    fc.constant(ref("v")),
-    fc.tuple(fc.constantFrom(...COLUMNS), fc.constantFrom(...ADDRESSES)).map(([c, at]): Expr => cell(c, at)),
-    fc.tuple(tie("e"), tie("e")).map(([a, b]): Expr => app("add", a, b)),
-    fc.tuple(tie("e"), tie("e")).map(([a, b]): Expr => app("ifError", a, b)),
-    fc.constantFrom(...COLUMNS).map((c): Expr => app("sum", each(axes.others, cell(c)))),
-  ),
-})).e;
+/**
+ * A formula of a random sheet: numbers, the field v, cell references, add, ifError and a sum over the other rows.
+ * With `tables`, a formula can also sum a column over each row of a table (SHEET.TABLES).
+ */
+const formulaOf = (tables: readonly string[]): fc.Arbitrary<Expr> =>
+  fc.letrec<{ e: Expr }>((tie) => ({
+    e: fc.oneof(
+      { maxDepth: 3, depthSize: "small" },
+      fc.integer({ min: -5, max: 5 }).map((n): Expr => lit(n)),
+      fc.constant(ref("v")),
+      fc.tuple(fc.constantFrom(...COLUMNS), fc.constantFrom(...ADDRESSES)).map(([c, at]): Expr => cell(c, at)),
+      fc.tuple(tie("e"), tie("e")).map(([a, b]): Expr => app("add", a, b)),
+      fc.tuple(tie("e"), tie("e")).map(([a, b]): Expr => app("ifError", a, b)),
+      fc.constantFrom(...COLUMNS).map((c): Expr => app("sum", each(axes.others, cell(c)))),
+      ...(tables.length === 0 ? [] : [fc.tuple(fc.constantFrom(...tables), fc.constantFrom(...COLUMNS)).map(([t, c]): Expr => app("sum", each(axes.table(t), cell(c))))]),
+    ),
+  })).e;
+const formula = formulaOf([]);
 
 /**
  * A random sheet: a formula for each column, the formulas of some cells, a space of rows, and an order of the reads of
@@ -58,6 +64,49 @@ describe("the scheduler of a sheet run (SHEET.DEEP)", () => {
         for (const budget of [undefined, 1, 40]) {
           const run = budget === undefined ? new SheetRun(columns, opts) : new SheetRun(columns, opts, budget);
           expect(reads.map(([c, k]) => plain(run.cell(c, k)))).toEqual(expected);
+        }
+      }),
+    );
+  });
+});
+
+/** This function gives the columns A, B and C with the formulas `fs`. */
+const columnsOf = (fs: readonly Expr[]): Map<string, Expr> => new Map(COLUMNS.map((c, i) => [c, fs[i] ?? lit(0)]));
+/** This function gives an array space with the field v. */
+const rowsOf = (vs: readonly number[]): ReturnType<typeof space.array> => space.array(vs.map((v) => ({ v })));
+
+/** Two tables, "main" and "other": the formulas and the rows of each, and an order of the reads of the host. */
+const twoTables = fc
+  .record({
+    main: fc.tuple(formulaOf(["main", "other"]), formulaOf(["main", "other"]), formulaOf(["main", "other"])),
+    other: fc.tuple(formulaOf(["main", "other"]), formulaOf(["main", "other"]), formulaOf(["main", "other"])),
+    mainRows: fc.array(fc.integer({ min: -3, max: 3 }), { minLength: 1, maxLength: 4 }),
+    otherRows: fc.array(fc.integer({ min: -3, max: 3 }), { minLength: 1, maxLength: 4 }),
+  })
+  .chain((t) =>
+    fc.record({
+      t: fc.constant(t),
+      reads: fc.shuffledSubarray(
+        [
+          ...t.mainRows.flatMap((_v, i) => COLUMNS.map((c) => ["main", c, String(i)] as const)),
+          ...t.otherRows.flatMap((_v, i) => COLUMNS.map((c) => ["other", c, String(i)] as const)),
+        ],
+        { minLength: 1 },
+      ),
+    }),
+  );
+
+describe("the scheduler of a sheet run with two tables (SHEET.TABLES)", () => {
+  it("SHEET.TABLES SHEET.CYCLE: SheetRun gives the results of the recursive search over two tables, with each budget", () => {
+    fc.assert(
+      fc.property(twoTables, ({ t, reads }) => {
+        const tables = new Map([["other", { space: rowsOf(t.otherRows), columns: columnsOf(t.other) }]]);
+        const opts = { space: rowsOf(t.mainRows), domains: [NumDomain], name: "main", tables };
+        const reference = new ReferenceSheetRun(columnsOf(t.main), opts);
+        const expected = reads.map(([table, c, k]) => plain(reference.cell(c, k, table)));
+        for (const budget of [undefined, 1, 40]) {
+          const run = budget === undefined ? new SheetRun(columnsOf(t.main), opts) : new SheetRun(columnsOf(t.main), opts, budget);
+          expect(reads.map(([table, c, k]) => plain(run.cell(c, k, table)))).toEqual(expected);
         }
       }),
     );

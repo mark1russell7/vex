@@ -898,6 +898,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Done after 0.5.0: `DateDomain` with `LocalDate`, and `ln`, `exp`, `log10` and `date` in `NumDomain`.
 - Done after 0.5.0: the formula language has `rows(from, to)`, the finance functions `PMT`, `FV`, `PV` and `NPER`, and the dates. It also has grids with A1 addresses and ranges, and `table("name")` (spec `formula.md` §6 to §8). `RATE`, `NPV` and `IRR` are not in it: they need a numeric search or the position of an item in a list.
 - Done after 0.5.0: the sheet app has date columns, grids, and books of tables with tabs. Its examples show each feature.
+- Next: the compiler of Vex (tier 2: generated JavaScript, at run time and at build time). Its plan is [`COMPILER.md`](./COMPILER.md). Its first user is ireko.
 
 ---
 

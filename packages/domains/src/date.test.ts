@@ -21,7 +21,8 @@ describe("dates (DateDomain)", () => {
     // The numbers of days come from Date.parse of JavaScript, a check that does not use LocalDate.
     expect([at("1970-01-01").days, at("2000-01-01").days, at("2026-10-13").days]).toEqual([0, 10957, 20739]);
     expect(at(" 2026-10-13 ").toString()).toBe("2026-10-13");
-    for (const bad of ["2026-02-30", "2026-13-01", "2026-1-5", "13/10/2026", ""]) expect(LocalDate.parse(bad)).toBeUndefined();
+    for (const bad of ["2026-02-30", "2026-13-01", "2026-00-10", "2026-04-31", "2026-1-5", "13/10/2026", "", "2026-10-13x", "x2026-10-13"]) expect(LocalDate.parse(bad)).toBeUndefined();
+    expect([at("9999-12-31").toString(), at("0001-01-01").toString()]).toEqual(["9999-12-31", "0001-01-01"]);
     expect([at("2024-02-29").toString(), at("+010000-01-01").year(), at("0000-03-01").toString()]).toEqual(["2024-02-29", 10000, "0000-03-01"]);
     expect([new LocalDate(at("+010000-01-01").days).toString(), LocalDate.of(-1, 12, 31).toString()]).toEqual(["+010000-01-01", "-000001-12-31"]);
   });
@@ -49,6 +50,8 @@ describe("dates (DateDomain)", () => {
   it("compares dates", () => {
     const [a, b] = [at("2026-10-13"), at("2026-10-14")];
     expect([a.lt(b), a.lte(a), b.gt(a), b.gte(b), a.eq(at("2026-10-13")), a.gt(b), b.lt(a), b.lte(a), a.gte(b), a.eq(b)]).toEqual([true, true, true, true, true, false, false, false, false, false]);
+    // A date is not later or earlier than itself.
+    expect([a.gt(a), a.lt(a)]).toEqual([false, false]);
   });
 
   it("is a domain: a valid date is a whole number of days within MAX_DAYS, and JSON keeps a date", () => {

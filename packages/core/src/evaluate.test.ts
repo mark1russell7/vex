@@ -255,8 +255,8 @@ describe("axes (AXIS.*) and list ops (LIST.*)", () => {
     // A name that is not a table of the evaluation gives #REF!.
     expect(error(evaluate(each(axes.table("nope"), lit(1)), opts("0")))).toMatchObject({ code: "#REF!", message: 'the evaluation has no table "nope"' });
     expect(error(evaluate(each(axes.table("products"), lit(1)), { space: orders, origin: "0" })).code).toBe("#REF!");
-    const r = axisTargets(orders, { origin: "0", focus: "0" }, axes.table("products") as Exclude<ReturnType<typeof axes.table>, { t: "where" }>);
-    expect(r.ok ? "targets" : r.error.code).toBe("#REF!");
+    const r = axisTargets(orders, { origin: "0", focus: "0" }, { t: "table", name: "products" });
+    expect(r.ok ? "targets" : [r.error.code, r.error.message]).toEqual(["#REF!", 'the axis "table" needs the tables of the evaluation, and "products" is not one of them']);
   });
 
   it("AXIS.WINDOW: a window of rows gives a moving sum, goes among the siblings in a tree, and needs an array or a tree", () => {

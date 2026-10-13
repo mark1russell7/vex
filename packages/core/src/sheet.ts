@@ -57,8 +57,8 @@ export type SheetOptions = Omit<EvalOptions, "origin" | "trace" | "tables"> & {
 
 /** The state of one table in a run. */
 interface Table {
-  /** The name of the table. The main table without a name has the name "". */
-  readonly name: string;
+  /** The words for the table in a message: "the sheet" for the main table, or the table and its name. */
+  readonly where: string;
   /** A short text for the ids of the cells of the table. */
   readonly tag: string;
   readonly space: Space;
@@ -77,7 +77,7 @@ const cycleError = (column: string, key: string): Result<never> =>
 const idOf = (t: Table, column: string, key: string): string => `${t.tag}\u0001${column}\u0000${key}`;
 
 /** This function gives the state of a table at the start of a run. */
-const tableState = (name: string, i: number, t: SheetTable): Table => ({ name, tag: String(i), space: t.space, columns: t.columns, cells: t.cells ?? new Map(), warmed: new Map(), index: undefined });
+const tableState = (where: string, i: number, t: SheetTable): Table => ({ where, tag: String(i), space: t.space, columns: t.columns, cells: t.cells ?? new Map(), warmed: new Map(), index: undefined });
 
 /** The state of one cell in the search. */
 interface Visit {
@@ -141,15 +141,19 @@ export class SheetRun {
   /** `budget` is the budget of the stack in estimated frames. A test can make it small, so the run pauses often. */
   constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, budget: number = STACK_BUDGET) {
     const { cells, name, tables, space, ...rest } = opts;
-    this.#main = tableState(name ?? "", 0, { space, columns, ...(cells === undefined ? {} : { cells }) });
+    this.#main = { where: "the sheet", tag: "0", space, columns, cells: cells ?? new Map(), warmed: new Map(), index: undefined };
     this.#bySpace.set(space, this.#main);
     if (name !== undefined) this.#byName.set(name, this.#main);
-    [...(tables ?? [])].forEach(([n, t], i) => {
-      if (this.#byName.has(n)) return;
-      const other = tableState(n, i + 1, t);
-      this.#byName.set(n, other);
-      if (!this.#bySpace.has(t.space)) this.#bySpace.set(t.space, other);
-    });
+    if (tables !== undefined) {
+      let i = 0;
+      for (const [n, t] of tables) {
+        if (this.#byName.has(n)) continue;
+        const other = tableState(`the table "${n}"`, ++i, t);
+        this.#byName.set(n, other);
+        // A table with the space of an earlier table does not take its cells: the first table keeps the space.
+        if (!this.#bySpace.has(t.space)) this.#bySpace.set(t.space, other);
+      }
+    }
     // Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields
     this.#top = { id: "", table: this.#main, column: "", key: "", index: -1, low: -1, reread: false, result: cycleError("", ""), paused: false, need: undefined };
     this.#budget = budget;
@@ -166,8 +170,7 @@ export class SheetRun {
 
   /** This method gives the error of a cell without a program. */
   #unbound(t: Table, column: string, key: string): Result<never> {
-    const where = t === this.#main ? "the sheet" : `the table "${t.name}"`;
-    const message = t.cells.has(column) ? `the cell "${column}" at "${key}" has no formula` : `${where} has no column "${column}"`;
+    const message = t.cells.has(column) ? `the cell "${column}" at "${key}" has no formula` : `${t.where} has no column "${column}"`;
     return fail(vexError("unbound", message, { origin: key, focus: key }));
   }
 
@@ -338,6 +341,7 @@ export class SheetRun {
    */
   warm(column: string, key: string, table?: string): void {
     const t = this.#named(table, key);
+    // Stryker disable next-line all: a warm-up changes no result, only the depth of the recursion (SHEET.ORDER)
     if ("space" in t) this.#warmTo(t, column, key);
   }
 }

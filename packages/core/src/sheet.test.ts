@@ -219,12 +219,31 @@ describe("sheets (SHEET.*)", () => {
     expect([value(run.cell("line", "0")), value(run.cell("line", "1"))]).toEqual([72, 30]);
     expect([value(run.cell("sold", "0", "products")), value(run.cell("sold", "1", "products"))]).toEqual([10, 3]);
     expect([error(run.cell("a", "0")).code, error(run.cell("b", "0", "products")).code]).toEqual(["#CYCLE!", "#CYCLE!"]);
-    expect(error(run.cell("x", "0", "nope"))).toMatchObject({ code: "#REF!", message: 'the run has no table "nope"' });
+    expect(error(run.cell("x", "0", "nope"))).toMatchObject({ code: "#REF!", message: 'the run has no table "nope"', origin: "0", focus: "0" });
     expect(error(run.cell("zzz", "0", "products"))).toMatchObject({ code: "#NAME?", message: 'the table "products" has no column "zzz"' });
     expect(run.explain("double", "1", "products").events.length).toBeGreaterThan(0);
     expect(run.explain("double", "1", "nope")).toMatchObject({ events: [], result: { ok: false } });
     run.warm("sold", "1", "products");
     run.warm("sold", "1", "nope");
+    // A third table: each table has its own cells, also for the same column and key.
+    const third = new SheetRun(new Map([["n", lit(1)]]), {
+      space: orders,
+      domains: [Calc],
+      tables: new Map([
+        ["b", { space: products, columns: new Map([["n", lit(2)]]) }],
+        ["c", { space: space.array([{}, {}]), columns: new Map([["n", lit(3)]]) }],
+      ]),
+    });
+    expect([third.cell("n", "0"), third.cell("n", "0", "c"), third.cell("n", "0", "b")].map(value)).toEqual([1, 3, 2]);
+    // A table with the space of the main table does not take its cells, and a run without a name has no table "undefined".
+    const alias = new SheetRun(new Map<string, Expr>([["n", app("first", each(axes.table("alias"), cell("m")))], ["m", lit(5)]]), {
+      space: orders,
+      domains: [Calc],
+      tables: new Map([["alias", { space: orders, columns: new Map([["n", lit(7)], ["m", lit(9)]]) }]]),
+    });
+    expect(value(alias.cell("n", "0"))).toBe(5);
+    expect(error(alias.cell("x", "0", "undefined")).code).toBe("#REF!");
+    expect(error(new SheetRun(new Map([["n", each(axes.table("undefined"), lit(1))]]), { space: orders }).cell("n", "0")).code).toBe("#REF!");
     // A small budget of the stack gives the same results.
     const tight = new SheetRun(orderColumns, { space: orders, domains: [Calc], name: "orders", tables }, 1);
     expect([value(tight.cell("line", "1")), value(tight.cell("sold", "0", "products"))]).toEqual([30, 10]);

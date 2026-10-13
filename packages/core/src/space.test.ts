@@ -164,8 +164,24 @@ describe("tree spaces (SPACE.TREE, NAV.PARENT, AXIS.TREE)", () => {
     expect([of("A", "reachable"), of("B", "reachable"), of("D", "reachable"), of("E", "reachable")]).toEqual([["B", "C"], ["C", "A"], [], []]);
     // In a space without edges, the axes of a graph give #REF!.
     expect(error(axisTargets(space.record({ A: 1 }), { origin: "A", focus: "A" }, { t: "successors" }))).toMatchObject({ code: "#REF!", message: '"successors" needs a graph space or a tree space, but this space is a record' });
-    expect(() => space.graph({ A: 1 }, { A: ["Z" as "A"] })).toThrow(TypeError);
-    expect(() => space.graph({ A: 1 }, { Z: ["A"] } as never)).toThrow(TypeError);
+    expect(() => space.graph({ A: 1 }, { A: ["Z" as "A"] })).toThrow(new TypeError('the edge from "A" goes to "Z", which is not a key of the graph'));
+    expect(() => space.graph({ A: 1 }, { Z: ["A"] } as never)).toThrow(new TypeError('the graph has no key "Z", but the edges name it'));
+    // A key without a list of edges has no edges, and a key that is not in the graph has none too.
+    // A JavaScript caller can give undefined for the edges of a key.
+    const noEdges: unknown = { A: undefined };
+    const lone = space.graph({ A: 1, B: 2 }, noEdges as never);
+    expect([lone.successorsOf?.("A"), lone.predecessorsOf?.("A"), g.successorsOf?.("Z"), g.predecessorsOf?.("Z")]).toEqual([[], [], [], []]);
+    // A space needs both successorsOf and predecessorsOf for the axes of a graph, and both parentOf and childrenOf
+    // for the axis window as a tree.
+    const base = { kind: "graph" as const, keys: ["A"], has: (k: string): k is string => k === "A", get: () => ({}), coords: () => undefined, keyAt: () => undefined };
+    for (const half of [{ ...base, successorsOf: () => [] }, { ...base, predecessorsOf: () => [] }]) {
+      expect(error(axisTargets(half, { origin: "A", focus: "A" }, { t: "successors" })).code).toBe("#REF!");
+    }
+    for (const half of [{ ...base, parentOf: () => undefined }, { ...base, childrenOf: () => [] }]) {
+      expect(error(axisTargets(half, { origin: "A", focus: "A" }, { t: "window", from: -1, to: 1 })).code).toBe("#REF!");
+    }
+    expect(error(applyMove(space.array([1, 2]), { origin: "0", focus: "0" }, offset(5))).message).toBe('the offset [5] from "0" is outside the space');
+    expect(error(applyMove(space.grid([[1]]), { origin: "0,0", focus: "0,0" }, offset(5, 0))).message).toBe('the offset [5,0] from "0,0" is outside the space');
   });
 
   it("SPACE.TREE: a parent that is not a key, a key that is not in the tree, and a cycle throw", () => {

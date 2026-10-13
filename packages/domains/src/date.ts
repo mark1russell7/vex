@@ -42,7 +42,8 @@ export class LocalDate {
     if (m === null) return undefined;
     const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
     const date = LocalDate.of(y, mo, d);
-    return date.year() === y && date.month() === mo && date.day() === d ? date : undefined;
+    // A month or a day outside its range rolls over into another month, so the month tells if the day exists.
+    return date.month() === mo ? date : undefined;
   }
 
   /** The year. */
@@ -74,14 +75,13 @@ export class LocalDate {
    * day: one month after 31 January is the last day of February.
    */
   addMonths(n: number): LocalDate {
-    if (!Number.isSafeInteger(n)) return new LocalDate(Number.NaN);
+    // LocalDate.of gives a date that is not valid for a number of months that is not whole.
     const first = LocalDate.of(this.year(), this.month() + n, 1);
     const last = LocalDate.of(first.year(), first.month() + 1, 0);
     return new LocalDate(Math.min(first.days + this.day() - 1, last.days));
   }
   /** The last day of the month `n` months later, like `EOMONTH` of a spreadsheet. */
   endOfMonth(n: number): LocalDate {
-    if (!Number.isSafeInteger(n)) return new LocalDate(Number.NaN);
     return LocalDate.of(this.year(), this.month() + n + 1, 0);
   }
   gt(o: LocalDate): boolean {
@@ -102,6 +102,7 @@ export class LocalDate {
   /** The form `YYYY-MM-DD`. A year before 0 or after 9999 has a sign and six digits, as in ISO 8601. */
   toString(): string {
     const y = this.year();
+    // Stryker disable next-line EqualityOperator: the year 0 takes the first branch, so y < 0 and y <= 0 are the same in the second
     const year = y >= 0 && y <= 9999 ? String(y).padStart(4, "0") : `${y < 0 ? "-" : "+"}${String(Math.abs(y)).padStart(6, "0")}`;
     return `${year}-${String(this.month()).padStart(2, "0")}-${String(this.day()).padStart(2, "0")}`;
   }

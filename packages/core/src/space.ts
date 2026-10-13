@@ -190,6 +190,9 @@ class TreeSpace<K extends string, O> implements Space<K, O> {
 }
 
 /** The constructors of spaces. */
+/** The empty list of keys. */
+const NO_KEYS: readonly never[] = Object.freeze([]);
+
 class GraphSpace<K extends string, O> implements Space<K, O> {
   readonly kind: SpaceKind = "graph";
   readonly keys: readonly K[];
@@ -201,16 +204,24 @@ class GraphSpace<K extends string, O> implements Space<K, O> {
     const entries = Object.entries(records) as [K, O][];
     this.keys = Object.freeze(entries.map(([k]) => k));
     this.#records = new Map(entries);
-    const out = new Map<string, readonly K[]>(this.keys.map((k) => [k, Object.freeze([])]));
+    const out = new Map<string, readonly K[]>();
     for (const [k, to] of Object.entries(edges) as [K, readonly K[] | undefined][]) {
       if (!this.#records.has(k)) throw new TypeError(`the graph has no key "${k}", but the edges name it`);
-      for (const t of to ?? []) if (!this.#records.has(t)) throw new TypeError(`the edge from "${k}" goes to "${t}", which is not a key of the graph`);
       // A second edge to the same key is the same edge.
-      out.set(k, Object.freeze([...new Set(to)]));
+      const ends = [...new Set(to ?? NO_KEYS)];
+      for (const t of ends) if (!this.#records.has(t)) throw new TypeError(`the edge from "${k}" goes to "${t}", which is not a key of the graph`);
+      out.set(k, Object.freeze(ends));
     }
     this.#out = out;
-    const into = new Map<string, K[]>(this.keys.map((k) => [k, []]));
-    for (const k of this.keys) for (const t of out.get(k) ?? []) into.get(t)?.push(k);
+    // The predecessors in key order: the keys in key order, and the ends of the edges of each key.
+    const into = new Map<string, K[]>();
+    for (const k of this.keys) {
+      for (const t of out.get(k) ?? NO_KEYS) {
+        const from = into.get(t);
+        if (from === undefined) into.set(t, [k]);
+        else from.push(k);
+      }
+    }
     this.#in = new Map([...into].map(([k, from]) => [k, Object.freeze(from)]));
   }
 
@@ -229,10 +240,10 @@ class GraphSpace<K extends string, O> implements Space<K, O> {
     return undefined;
   }
   successorsOf(k: string): readonly K[] {
-    return this.#out.get(k) ?? [];
+    return this.#out.get(k) ?? NO_KEYS;
   }
   predecessorsOf(k: string): readonly K[] {
-    return this.#in.get(k) ?? [];
+    return this.#in.get(k) ?? NO_KEYS;
   }
 }
 
@@ -424,17 +435,18 @@ function graphTargets(s: Space, at: Position, t: "successors" | "predecessors" |
   }
   if (t === "successors") return ok(successorsOf(at.focus));
   if (t === "predecessors") return ok(predecessorsOf(at.focus));
-  // A queue, not recursion, so a long path does not need a deep call stack.
+  // A queue, not recursion, so a long path does not need a deep call stack. A loop over an array also reads the
+  // keys that the loop adds to it.
   const seen = new Set<string>([at.focus]);
-  const out: string[] = [];
-  for (let i = -1; i < out.length; i++) {
-    for (const next of successorsOf(i < 0 ? at.focus : (out[i] ?? at.focus))) {
+  const queue: string[] = [at.focus];
+  for (const k of queue) {
+    for (const next of successorsOf(k)) {
       if (seen.has(next)) continue;
       seen.add(next);
-      out.push(next);
+      queue.push(next);
     }
   }
-  return ok(out);
+  return ok(queue.slice(1));
 }
 
 /**

@@ -894,6 +894,10 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Done in 0.5.0: Vex does not depend on the call stack of the engine. A `SheetRun` reads its cells from a work list, so a chain of 100000 cells gives its value (SHEET.DEEP). A property test compares it with the recursive search of `ReferenceSheetRun`, with small stack budgets. An expression can nest 500 levels deep (EVAL.NESTING). A full call stack in host code gives `#DEPTH!`, and `ifError` does not hide it (EVAL.DEPTH, V-050).
 - Done after 0.5.0: in the sheet app, a formula reads a row by its name (FORMULA.NAV.NAME), and seven new examples have formulas that read formulas. The app draws a chart: a line for a column of numbers, and a path for a column of vectors.
 - Done after 0.5.0: a cell can have its own formula (SHEET.CELL.FORMULA). `SheetRun` takes the formulas of cells, the builder has `cellFormula`, and the property test of the scheduler gives random sheets formulas of cells.
+- Done after 0.5.0: the axis `window(from, to)` (AXIS.WINDOW), and the axis `table(name)` with a `SheetRun` over more tables (AXIS.TABLE, SHEET.TABLES). Graph spaces have the axes `successors`, `predecessors` and `reachable` (SPACE.GRAPH, AXIS.GRAPH). New properties check each one: P14, P15, P16 and a scheduler property over two tables.
+- Done after 0.5.0: `DateDomain` with `LocalDate`, and `ln`, `exp`, `log10` and `date` in `NumDomain`.
+- Done after 0.5.0: the formula language has `rows(from, to)`, the finance functions `PMT`, `FV`, `PV` and `NPER`, and the dates. It also has grids with A1 addresses and ranges, and `table("name")` (spec `formula.md` §6 to §8). `RATE`, `NPV` and `IRR` are not in it: they need a numeric search or the position of an item in a list.
+- Done after 0.5.0: the sheet app has date columns, grids, and books of tables with tabs. Its examples show each feature.
 
 ---
 

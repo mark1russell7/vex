@@ -224,6 +224,9 @@ describe("the ops of NumDomain and BoolDomain", () => {
     ["abs", [], 7],
     ["negate", [], -7],
     ["sqrt", [], Math.sqrt(7)],
+    ["ln", [], Math.log(7)],
+    ["exp", [], Math.exp(7)],
+    ["log10", [], Math.log10(7)],
     ["floor", [], 7],
     ["ceil", [], 7],
     ["round", [], 7],
@@ -240,6 +243,9 @@ describe("the ops of NumDomain and BoolDomain", () => {
   it("Num gives #NUM! for a result that is not finite, and Bool has and, or, xor, not and eq", () => {
     expect(value(run([NumDomain], 1, "divide", 0))).toBe("#NUM! not-finite");
     expect(value(run([NumDomain], -1, "sqrt"))).toBe("#NUM! not-finite");
+    expect(value(run([NumDomain], 0, "ln"))).toBe("#NUM! not-finite");
+    expect(value(run([NumDomain], -1, "log10"))).toBe("#NUM! not-finite");
+    expect(value(run([NumDomain], 1000, "exp"))).toBe("#NUM! not-finite");
     expect(value(run([BoolDomain], true, "and", false))).toBe(false);
     expect(value(run([BoolDomain], false, "or", true))).toBe(true);
     expect(value(run([BoolDomain], true, "xor", true))).toBe(false);

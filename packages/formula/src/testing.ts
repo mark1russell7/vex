@@ -21,6 +21,10 @@ const CALLS: readonly (readonly [string, number, number])[] = [
   ["round", 1, 1],
   ["UPPER", 1, 1],
   ["RANK", 1, 1],
+  ["PMT", 3, 5],
+  ["fv", 3, 5],
+  ["PV", 3, 3],
+  ["NPER", 3, 4],
 ];
 
 /** A random step of navigation: `this.`, `parent.`, `row(n).` or `row("key").`. A key can be absent from the table. */

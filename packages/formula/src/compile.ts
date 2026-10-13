@@ -3,7 +3,7 @@
  * A value column is a field of the row records, so a read of it is a `ref`. A formula column is a column of a
  * sheet, so a read of it is a cell reference. Thus a cycle of formula columns gives `#CYCLE!`.
  */
-import { app, axes, cell, each, key, lit, offset, origin, parent, ref, type Axis, type Expr, type Move } from "@mark1russell7/vex";
+import { app, axes, cell, each, key, let_, lit, offset, origin, parent, ref, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { BUILT_IN_NAMES, OP_NAMES } from "./functions.ts";
 import { AGGREGATES, axisText, FormulaSyntaxError, parseFormula, type AggAxis, type Ast, type AxisName, type BinaryOp, type Nav, type Span } from "./syntax.ts";
@@ -29,6 +29,52 @@ export type CompileResult = { readonly ok: true; readonly expr: Expr; readonly r
 
 const BINARY: Readonly<Record<Exclude<BinaryOp, "<>">, string>> = { "+": "add", "-": "subtract", "*": "multiply", "/": "divide", "^": "pow", "&": "concat", "=": "eq", "<": "lt", "<=": "lte", ">": "gt", ">=": "gte" };
 const AXIS: Readonly<Record<AxisName, Axis>> = { children: axes.children, descendants: axes.descendants, ancestors: axes.ancestors, siblings: axes.siblings, others: axes.others, all: axes.all };
+
+// The arithmetic of the finance functions, as expressions of the IR.
+const add = (p: Expr, q: Expr): Expr => app("add", p, q);
+const sub = (p: Expr, q: Expr): Expr => app("subtract", p, q);
+const mul = (p: Expr, q: Expr): Expr => app("multiply", p, q);
+const div = (p: Expr, q: Expr): Expr => app("divide", p, q);
+const neg = (p: Expr): Expr => app("negate", p);
+
+/**
+ * The finance functions of a spreadsheet, with its signs: money that you pay is negative. Each function binds its
+ * arguments once with a let, and its body is arithmetic, so the steps of a cell show the calculation. The type 1
+ * puts each payment at the start of its period. A rate of 0 has its own formula, because the general formula
+ * divides by 0 there.
+ */
+function finance(name: "PMT" | "FV" | "PV" | "NPER", given: readonly Expr[]): Expr {
+  const [r, a, b, c = lit(0), t = lit(0)] = given;
+  const rate = v("$rate");
+  const x = v("$x");
+  const y = v("$y");
+  const z = v("$z");
+  // The growth of one unit over n periods, and the factor of the time of a payment.
+  const growth = (n: Expr): Expr => app("pow", add(lit(1), rate), n);
+  const timing = add(lit(1), mul(rate, v("$type")));
+  let general: Expr;
+  let zero: Expr;
+  switch (name) {
+    case "PMT": // x = nper, y = pv, z = fv
+      general = neg(div(mul(rate, add(mul(y, growth(x)), z)), mul(timing, sub(growth(x), lit(1)))));
+      zero = neg(div(add(y, z), x));
+      break;
+    case "FV": // x = nper, y = pmt, z = pv
+      general = neg(add(mul(z, growth(x)), div(mul(mul(y, timing), sub(growth(x), lit(1))), rate)));
+      zero = neg(add(z, mul(y, x)));
+      break;
+    case "PV": // x = nper, y = pmt, z = fv
+      general = neg(div(add(z, div(mul(mul(y, timing), sub(growth(x), lit(1))), rate)), growth(x)));
+      zero = neg(add(z, mul(y, x)));
+      break;
+    case "NPER": // x = pmt, y = pv, z = fv
+      general = div(app("ln", div(sub(mul(x, timing), mul(z, rate)), add(mul(x, timing), mul(y, rate)))), app("ln", add(lit(1), rate)));
+      zero = neg(div(add(y, z), x));
+      break;
+  }
+  const bind = { $rate: r ?? lit(0), $x: a ?? lit(0), $y: b ?? lit(0), $z: c, $type: t };
+  return let_(bind, app("if", app("eq", rate, lit(0)), zero, general));
+}
 
 /** This function gives the Vex axis of the axis of an aggregate. `rows(from, to)` is the axis `window(from, to)`. */
 const axisOf = (a: AggAxis): Axis => (typeof a === "string" ? AXIS[a] : axes.window(a.from, a.to));
@@ -149,9 +195,15 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       case "Y": {
         // X(v) and Y(v) are dot products with the unit vectors, so they use only the ops of Vec2.
         arity(1, 1);
-        const [v] = args();
-        return app("dot", v ?? lit(0), lit(name === "X" ? new Vec2(1, 0) : new Vec2(0, 1)));
+        const [vec] = args();
+        return app("dot", vec ?? lit(0), lit(name === "X" ? new Vec2(1, 0) : new Vec2(0, 1)));
       }
+      case "PMT":
+      case "FV":
+      case "PV":
+      case "NPER":
+        arity(3, 5);
+        return finance(name, args());
       case "RANK": {
         arity(1, 1);
         if (s.inAggregate) throw new FormulaSyntaxError("RANK is not valid inside an aggregate", a.fnSpan);

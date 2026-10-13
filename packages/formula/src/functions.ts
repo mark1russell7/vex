@@ -33,6 +33,10 @@ const BUILT_INS: readonly FunctionInfo[] = [
   { name: "VEC", signature: "VEC(x, y)", summary: "The vector with the components x and y." },
   { name: "X", signature: "X(vector)", summary: "The x component of the vector." },
   { name: "Y", signature: "Y(vector)", summary: "The y component of the vector." },
+  { name: "PMT", signature: "PMT(rate, nper, pv, [fv], [type])", summary: "The payment of each period of a loan or a saving. Money that you pay is negative." },
+  { name: "FV", signature: "FV(rate, nper, pmt, [pv], [type])", summary: "The value at the end of the periods, after the payments. Money that you pay is negative." },
+  { name: "PV", signature: "PV(rate, nper, pmt, [fv], [type])", summary: "The value now of the payments of the periods. Money that you pay is negative." },
+  { name: "NPER", signature: "NPER(rate, pmt, pv, [fv], [type])", summary: "The number of periods that the payments need to reach the value fv (0 by default)." },
 ];
 
 /** The names of the built-in functions, in capital letters. */

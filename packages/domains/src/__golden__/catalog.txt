@@ -11,6 +11,9 @@ Num (fromScalar -, valid yes, encode -, methods -)
   abs(?) | no lift | no laws | no identity | fn
   negate(?) | no lift | no laws | no identity | fn
   sqrt(?) | no lift | no laws | no identity | fn
+  ln(?) | no lift | no laws | no identity | fn
+  exp(?) | no lift | no laws | no identity | fn
+  log10(?) | no lift | no laws | no identity | fn
   floor(?) | no lift | no laws | no identity | fn
   ceil(?) | no lift | no laws | no identity | fn
   round(?) | no lift | no laws | no identity | fn

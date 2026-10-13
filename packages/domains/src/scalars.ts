@@ -19,6 +19,9 @@ export type NumOps = {
   readonly abs: FnOp<number, NumFn1>;
   readonly negate: FnOp<number, NumFn1>;
   readonly sqrt: FnOp<number, NumFn1>;
+  readonly ln: FnOp<number, NumFn1>;
+  readonly exp: FnOp<number, NumFn1>;
+  readonly log10: FnOp<number, NumFn1>;
   readonly floor: FnOp<number, NumFn1>;
   readonly ceil: FnOp<number, NumFn1>;
   readonly round: FnOp<number, NumFn1>;
@@ -48,6 +51,9 @@ export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", numb
     abs: { fn: (a: number): number => Math.abs(a) },
     negate: { fn: (a: number): number => -a },
     sqrt: { fn: (a: number): number => Math.sqrt(a) },
+    ln: { fn: (a: number): number => Math.log(a) },
+    exp: { fn: (a: number): number => Math.exp(a) },
+    log10: { fn: (a: number): number => Math.log10(a) },
     floor: { fn: (a: number): number => Math.floor(a) },
     ceil: { fn: (a: number): number => Math.ceil(a) },
     round: { fn: (a: number): number => Math.round(a) },

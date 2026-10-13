@@ -275,6 +275,32 @@ describe("aggregates", () => {
     expect(error("SUM(rows(-1, 0))").message).toBe("SUM needs a value: write SUM(rows(-1, 0).column) or SUM(rows(-1, 0), value)");
   });
 
+  it("FORMULA.FINANCE: PMT, FV, PV and NPER give the values of the examples of a spreadsheet, with its signs", () => {
+    // The values of the examples in the documentation of Microsoft Excel for each function.
+    const close = (text: string): number => {
+      const r = value(text);
+      if (typeof r !== "number") throw new Error(`${text} gave ${String(r)}`);
+      return r;
+    };
+    expect(close("PMT(0.08 / 12, 10, 10000)")).toBeCloseTo(-1037.03, 2);
+    expect(close("PMT(0.08 / 12, 10, 10000, 0, 1)")).toBeCloseTo(-1030.16, 2);
+    expect(close("PMT(0.06 / 12, 18 * 12, 0, 50000)")).toBeCloseTo(-129.08, 2);
+    expect(close("FV(0.06 / 12, 10, -200, -500, 1)")).toBeCloseTo(2581.4, 2);
+    expect(close("FV(0.12 / 12, 12, -1000)")).toBeCloseTo(12682.5, 2);
+    expect(close("PV(0.08 / 12, 12 * 20, 500, 0, 0)")).toBeCloseTo(-59777.15, 2);
+    expect(close("NPER(0.12 / 12, -100, -1000, 10000, 1)")).toBeCloseTo(59.6738657, 6);
+    expect(close("NPER(0.12 / 12, -100, -1000, 10000)")).toBeCloseTo(60.0821229, 6);
+    expect(close("NPER(0.12 / 12, -100, -1000)")).toBeCloseTo(-9.57859404, 7);
+    // A rate of 0 has its own formula, because the general formula divides by 0.
+    expect([value("PMT(0, 10, 1000)"), value("FV(0, 10, -100)"), value("PV(0, 10, -100)"), value("NPER(0, -100, 1000)")]).toEqual([-100, 1000, 1000, 10]);
+    // A loan that the payments never pay gives #NUM!, from the logarithm of a negative number.
+    expect(value("NPER(0.1, -10, 1000)")).toBe("#NUM!");
+    expect(error("PMT(0.1, 12)")).toEqual({ message: "PMT needs 3 to 5 arguments, not 2", span: { start: 0, end: 3 } });
+    expect(error("RATE(12, -860, 10000)").message).toBe('the function "RATE" does not exist');
+    // The value of the logarithms of the number domain, which NPER uses.
+    expect([value("LN(EXP(2))"), value("LOG10(1000)"), value("LN(0)")]).toEqual([2, 3, "#NUM!"]);
+  });
+
   it("FORMULA.AGGREGATE.WHERE: a test of the rows of the axis, and this. reads the row of the formula", () => {
     expect(at("SUM(children WHERE cost > 2, cost)", "fruit")).toBe(5);
     expect(at("COUNT(children WHERE active)", "fruit")).toBe(1);

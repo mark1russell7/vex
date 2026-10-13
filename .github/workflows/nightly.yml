@@ -122,9 +122,11 @@ jobs:
         with:
           persist-credentials: false
       # Only the web links: the relative links of the site pages resolve at build time.
+      # The journal LMCS does not answer the runners of GitHub: two nights of timeouts, but 200 from a local check.
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: >-
             --no-progress --scheme https --scheme http --max-retries 2 --timeout 30 --accept "200..=299,403,429"
+            --exclude "^https://lmcs\.episciences\.org/"
             README.md "spec/**/*.md" "docs/*.md" "packages/*/README.md" "packages/site/src/content/**/*.mdx"
           fail: true

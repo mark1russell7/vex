@@ -13,6 +13,11 @@ export interface Space<K extends string = string, O = unknown> {
   readonly kind: SpaceKind;
   /** The keys, in their order. */
   readonly keys: readonly K[];
+  /**
+   * The record of each key, in the order of `keys` (SPACE.RECORDS). A compiler reads a record by its index with it.
+   * A space without it gives each record with `get` only.
+   */
+  readonly records?: readonly (O | undefined)[];
   /** This function tells if the space has the key `k`. */
   has(k: string): k is K;
   /** This function gives the record at the key `k`, or `undefined`. */
@@ -40,11 +45,13 @@ export type ArrayKey = `${number}`;
 class RecordSpace<K extends string, O> implements Space<K, O> {
   readonly kind: SpaceKind = "record";
   readonly keys: readonly K[];
+  readonly records: readonly O[];
   readonly #records: ReadonlyMap<string, O>;
 
   constructor(records: Readonly<Record<K, O>>) {
     const entries = Object.entries(records) as [K, O][];
     this.keys = Object.freeze(entries.map(([k]) => k));
+    this.records = Object.freeze(entries.map(([, o]) => o));
     this.#records = new Map(entries);
   }
 
@@ -67,11 +74,13 @@ class RecordSpace<K extends string, O> implements Space<K, O> {
 class ArraySpace<O> implements Space<ArrayKey, O> {
   readonly kind: SpaceKind = "array";
   readonly keys: readonly ArrayKey[];
+  readonly records: readonly O[];
   readonly #items: ReadonlyMap<string, O>;
 
   constructor(items: readonly O[]) {
     const entries = items.map((item, i): [ArrayKey, O] => [`${i}`, item]);
     this.keys = Object.freeze(entries.map(([k]) => k));
+    this.records = Object.freeze(entries.map(([, o]) => o));
     this.#items = new Map(entries);
   }
 
@@ -93,12 +102,14 @@ class ArraySpace<O> implements Space<ArrayKey, O> {
 class GridSpace<O> implements Space<GridKey, O> {
   readonly kind: SpaceKind = "grid";
   readonly keys: readonly GridKey[];
+  readonly records: readonly O[];
   readonly #cells: ReadonlyMap<string, O>;
   readonly #coords: ReadonlyMap<string, readonly number[]>;
 
   constructor(rows: readonly (readonly O[])[]) {
     const entries = rows.flatMap((row, i) => row.map((cell, j): [GridKey, O, readonly number[]] => [`${i},${j}`, cell, Object.freeze([i, j])]));
     this.keys = Object.freeze(entries.map(([k]) => k));
+    this.records = Object.freeze(entries.map(([, o]) => o));
     this.#cells = new Map(entries.map(([k, cell]) => [k, cell]));
     this.#coords = new Map(entries.map(([k, , c]) => [k, c]));
   }
@@ -122,6 +133,7 @@ class GridSpace<O> implements Space<GridKey, O> {
 class TreeSpace<K extends string, O> implements Space<K, O> {
   readonly kind: SpaceKind = "tree";
   readonly keys: readonly K[];
+  readonly records: readonly O[];
   readonly #records: ReadonlyMap<string, O>;
   readonly #parents: ReadonlyMap<string, K>;
   readonly #children: ReadonlyMap<string, readonly K[]>;
@@ -129,6 +141,7 @@ class TreeSpace<K extends string, O> implements Space<K, O> {
   constructor(records: Readonly<Record<K, O>>, parents: Readonly<Partial<Record<K, K | null>>>) {
     const entries = Object.entries(records) as [K, O][];
     this.keys = Object.freeze(entries.map(([k]) => k));
+    this.records = Object.freeze(entries.map(([, o]) => o));
     this.#records = new Map(entries);
     const parentOf = new Map<string, K>();
     for (const [k, p] of Object.entries(parents) as [K, K | null | undefined][]) {
@@ -196,6 +209,7 @@ const NO_KEYS: readonly never[] = Object.freeze([]);
 class GraphSpace<K extends string, O> implements Space<K, O> {
   readonly kind: SpaceKind = "graph";
   readonly keys: readonly K[];
+  readonly records: readonly O[];
   readonly #records: ReadonlyMap<string, O>;
   readonly #out: ReadonlyMap<string, readonly K[]>;
   readonly #in: ReadonlyMap<string, readonly K[]>;
@@ -203,6 +217,7 @@ class GraphSpace<K extends string, O> implements Space<K, O> {
   constructor(records: Readonly<Record<K, O>>, edges: Readonly<Partial<Record<K, readonly K[]>>>) {
     const entries = Object.entries(records) as [K, O][];
     this.keys = Object.freeze(entries.map(([k]) => k));
+    this.records = Object.freeze(entries.map(([, o]) => o));
     this.#records = new Map(entries);
     const out = new Map<string, readonly K[]>();
     for (const [k, to] of Object.entries(edges) as [K, readonly K[] | undefined][]) {

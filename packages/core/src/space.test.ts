@@ -4,6 +4,21 @@ import { applyMove, axisTargets, resolveAddr, space } from "./space.ts";
 import { error, value } from "./test-support.ts";
 
 describe("spaces", () => {
+  it("SPACE.RECORDS: each space has the records in the order of its keys", () => {
+    const spaces = [
+      space.record({ A: { n: 1 }, B: null }),
+      space.array([{ n: 1 }, { n: 2 }]),
+      space.grid([[{ n: 1 }, { n: 2 }], [{ n: 3 }, { n: 4 }]]),
+      space.tree({ R: { n: 1 }, X: { n: 2 } }, { X: "R" }),
+      space.graph({ A: { n: 1 }, B: { n: 2 } }, { A: ["B"] }),
+    ];
+    for (const s of spaces) {
+      expect(s.records).toEqual(s.keys.map((k) => s.get(k)));
+      expect(s.records?.length).toBe(s.keys.length);
+      expect(Object.isFrozen(s.records)).toBe(true);
+    }
+  });
+
   it("record: keys in insertion order, get, has", () => {
     const s = space.record({ A: { n: 1 }, B: { n: 2 } });
     expect(s.kind).toBe("record");

@@ -46,7 +46,11 @@ export type PrimOp =
   | "isValue" // not undefined and not null
   | "isObject" // an object or a function
   | "get" // get(space, key): the record of a key
-  | "member"; // member(object, name): the property of an object
+  | "member" // member(object, name): the property of an object
+  | "records" // records(space): the records of the space by index, or undefined (SPACE.RECORDS)
+  | "recordAt" // recordAt(records, index, space, key): the record at an index, or else the record of the key
+  | "keysOf" // keysOf(targets): the keys of the targets of an axis
+  | "idxOf"; // idxOf(targets): the index of each target in the keys of the space
 
 /** A value of the loop IR. */
 export type LExpr =

@@ -60,12 +60,12 @@ The source has no name and no literal of the program. It reads each one from a l
 | Function | What it does |
 |---|---|
 | `tiered(expr, options)` | A program of tier 2 if it can, and else of tier 1 |
-| `generate(expr)` | The loop IR and the source of a program, or the reason that it has none |
-| `load(generated, options)` | The function of tier 2. It gives the value, or `FALLBACK`. |
+| `generate(expr, options)` | The loop IR and the source of a program for the options, or the reason that it has none |
+| `load(generated)` | The function of tier 2. It gives the value, or `FALLBACK`. |
 
 ## Speed
 
-The speed gate compares tier 2 with hand-written loops. On 2026-10-13, the nearest other box was 2.3 times the loops, and the Game of Life was 1.6 times. Tier 1 was 80 and 120 times. The plan of the compiler is in [`docs/COMPILER.md`](https://github.com/mark1russell7/vex/blob/main/docs/COMPILER.md).
+The speed gate compares tier 2 with hand-written loops. On 2026-10-13, the nearest other box was 1.0 to 1.1 times the loops, and the Game of Life was 1.05 to 1.13 times. Tier 1 was 80 and 120 times. The plan of the compiler is in [`docs/COMPILER.md`](https://github.com/mark1russell7/vex/blob/main/docs/COMPILER.md).
 
 ## License
 

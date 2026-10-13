@@ -43,6 +43,8 @@ interface Scope {
   readonly origin: LExpr;
   readonly focus: LExpr;
   readonly env: ReadonlyMap<string, Bound>;
+  /** The record at the focus. In a loop, it reads the record by its index (SPACE.RECORDS). */
+  readonly rec: LExpr;
 }
 
 /** A list of statements, and what a failed check in it does. */
@@ -77,7 +79,8 @@ export function lower(expr: Expr): LoopProgram {
   const l = new Lowerer();
   const b = block(RETURN);
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space");
-  const value = l.expr(expr, { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map() }, [], b);
+  const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
+  const value = l.expr(expr, top, [], b);
   b.stmts.push({ t: "return", value });
   return { body: b.stmts, locals: l.locals, constants: l.constants };
 }
@@ -175,11 +178,11 @@ class Lowerer {
    * A segment that cannot name a field always gives an error.
    */
   #ref(e: ExprOf<"ref">, s: Scope, b: Block): LExpr {
-    const key = e.at === undefined || e.at.length === 0 ? s.focus : this.checked(b, call("addr", s.space, s.origin, s.focus, this.constant(e.at)), "an address");
+    const record = e.at === undefined || e.at.length === 0 ? s.rec : prim("get", s.space, this.checked(b, call("addr", s.space, s.origin, s.focus, this.constant(e.at)), "an address"));
     if (!e.path.every(isFieldName)) return this.fail(b);
     const n = this.locals++;
     const x = local(n);
-    b.stmts.push({ t: "let", n, value: prim("get", s.space, key) });
+    b.stmts.push({ t: "let", n, value: record });
     this.check(b, prim("isValue", x), "a record");
     for (const seg of e.path) {
       this.check(b, prim("isObject", x), "an object");
@@ -404,6 +407,8 @@ class Lowerer {
     let space = s.space;
     let over: LExpr;
     let skip: LExpr | undefined;
+    // The index of the record of each target: the index of the loop, or else the index that the axis gives.
+    let idx: LExpr | undefined;
     if (base.t === "table") {
       // The axis table moves the evaluation to the space of its table, and there the origin is the target.
       space = this.checked(b, call("table", local(TABLES), this.constant(base.name)), "a table");
@@ -412,8 +417,11 @@ class Lowerer {
       over = call("keys", s.space);
       if (base.t === "others") skip = from;
     } else {
-      over = this.checked(b, { t: "targets", axis: this.index(base), args: [s.space, s.origin, from] }, "the targets of an axis");
+      const targets = this.checked(b, { t: "targets", axis: this.index(base), args: [s.space, s.origin, from] }, "the targets of an axis");
+      over = prim("keysOf", targets);
+      idx = this.value(b, prim("idxOf", targets));
     }
+    const records = this.value(b, prim("records", space));
     const label = this.labels++;
     const array_ = this.locals++;
     const index = this.locals++;
@@ -421,7 +429,8 @@ class Lowerer {
     const key = local(item);
     const body = block(items(label));
     if (skip !== undefined) body.stmts.push({ t: "if", cond: prim("===", key, skip), yes: [{ t: "next" }], no: [] });
-    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env };
+    const slot = idx === undefined ? local(index) : prim("member", idx, local(index));
+    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, rec: prim("recordAt", records, slot, space, key) };
     whereTests(e.axis).forEach((test, i) => {
       const ok = this.#boolean(this.expr(test, at, [...path, i + 1], body), body);
       body.stmts.push({ t: "if", cond: prim("!", ok), yes: [{ t: "next" }], no: [] });

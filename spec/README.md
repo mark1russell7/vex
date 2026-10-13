@@ -25,6 +25,7 @@ A Vex program is an expression. It evaluates at one key of a space. The key wher
 - A grid space has the key `"row,column"` for each cell. A row can be shorter than the others.
 - **[SPACE.TREE]** A tree space has records by key, and a parent for each key that is not a root. A parent that is not a key, or a cycle of parents, makes the constructor throw. The children of a key are in key order.
 - **[SPACE.GRAPH]** A graph space has records by key, and the edges from each key, in order. A graph can have cycles, and an edge can go from a key to itself. A second edge to the same key is the same edge. An edge to a key that is not in the graph makes the constructor throw.
+- **[SPACE.RECORDS]** Each space that `space` makes has `records`, a frozen list of its records in the order of `keys`. For each key, the record at its index is the record that `get` gives.
 - A space copies its input. A later change to the input does not change the space.
 
 ## 3. Addresses

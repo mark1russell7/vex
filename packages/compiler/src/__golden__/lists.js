@@ -25,7 +25,7 @@ const k12 = K[12];
 const a5 = R.axis(k5);
 const a8 = R.axis(k8);
 return function vex(l0, l1, l2, l3) {
-  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37, l38, l39, l40, l41, l42, l43, l44, l45, l46, l47, l48, l49, l50, l51, l52, l53, l54, l55, l56, l57, l58, l59, l60, l61, l62, l63, l64, l65, l66, l67, l68;
+  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37, l38, l39, l40, l41, l42, l43, l44, l45, l46, l47, l48, l49, l50, l51, l52, l53, l54, l55, l56, l57, l58, l59, l60, l61, l62, l63, l64, l65, l66, l67, l68, l69, l70, l71, l72, l73, l74, l75, l76, l77, l78, l79;
   try {
     if (!(has_(l0, l1))) return F; // the origin is a key of the space
     l4 = (opts_(k0) === true);
@@ -33,146 +33,157 @@ return function vex(l0, l1, l2, l3) {
     l5 = 0;
     l7 = table_(l3, k1);
     if (!((l7 !== F))) return F; // a table
-    l8 = keys_(l7);
-    L0: for (l9 = 0; l9 < l8.length; l9++) {
-      l10 = l8[l9];
-      l11 = l7.get(l10);
-      if (!((l11 !== undefined && l11 !== null))) { if (l4) return F; continue L0; } // a record
-      if (!((typeof l11 === "object" || typeof l11 === "function"))) { if (l4) return F; continue L0; } // an object
-      l11 = l11[k2];
-      if (!((l11 !== undefined && l11 !== null))) { if (l4) return F; continue L0; } // a field
-      if (!((typeof l11 === "boolean"))) { if (l4) return F; continue L0; } // a boolean
-      if ((!l11)) {
-        continue;
-      }
-      l12 = l7.get(l10);
+    l8 = l7.records;
+    l9 = keys_(l7);
+    L0: for (l10 = 0; l10 < l9.length; l10++) {
+      l11 = l9[l10];
+      l12 = (l8 !== undefined ? l8[l10] : l7.get(l11));
       if (!((l12 !== undefined && l12 !== null))) { if (l4) return F; continue L0; } // a record
       if (!((typeof l12 === "object" || typeof l12 === "function"))) { if (l4) return F; continue L0; } // an object
-      l12 = l12[k3];
+      l12 = l12[k2];
       if (!((l12 !== undefined && l12 !== null))) { if (l4) return F; continue L0; } // a field
-      if (!((typeof l12 === "number"))) return F; // a number
-      l5 = (l5 + l12);
+      if (!((typeof l12 === "boolean"))) { if (l4) return F; continue L0; } // a boolean
+      if ((!l12)) {
+        continue;
+      }
+      l13 = (l8 !== undefined ? l8[l10] : l7.get(l11));
+      if (!((l13 !== undefined && l13 !== null))) { if (l4) return F; continue L0; } // a record
+      if (!((typeof l13 === "object" || typeof l13 === "function"))) { if (l4) return F; continue L0; } // an object
+      l13 = l13[k3];
+      if (!((l13 !== undefined && l13 !== null))) { if (l4) return F; continue L0; } // a field
+      if (!((typeof l13 === "number"))) return F; // a number
+      l5 = (l5 + l13);
       l6 = (l6 + 1);
     }
-    l13 = result_(l5);
-    if (!((l13 !== F))) return F; // a finite sum
-    l15 = 0;
-    l14 = [];
-    l16 = keys_(l0);
-    L1: for (l17 = 0; l17 < l16.length; l17++) {
-      l18 = l16[l17];
-      if ((l18 === l1)) {
+    l14 = result_(l5);
+    if (!((l14 !== F))) return F; // a finite sum
+    l16 = 0;
+    l15 = [];
+    l17 = l0.records;
+    l18 = keys_(l0);
+    L1: for (l19 = 0; l19 < l18.length; l19++) {
+      l20 = l18[l19];
+      if ((l20 === l1)) {
         continue;
       }
-      l19 = l0.get(l18);
-      if (!((l19 !== undefined && l19 !== null))) continue L1; // a record
-      if (!((typeof l19 === "object" || typeof l19 === "function"))) continue L1; // an object
-      l19 = l19[k3];
-      if (!((l19 !== undefined && l19 !== null))) continue L1; // a field
-      l14.push(l18);
+      l21 = (l17 !== undefined ? l17[l19] : l0.get(l20));
+      if (!((l21 !== undefined && l21 !== null))) continue L1; // a record
+      if (!((typeof l21 === "object" || typeof l21 === "function"))) continue L1; // an object
+      l21 = l21[k3];
+      if (!((l21 !== undefined && l21 !== null))) continue L1; // a field
+      l15.push(l20);
     }
-    l20 = frozen_(l14);
+    l22 = frozen_(l15);
     if (!((typeof k4 === "string"))) return F; // an op name
-    l22 = 0;
-    l23 = a5(l0, l1, l1);
-    if (!((l23 !== F))) return F; // the targets of an axis
-    l24 = l23;
-    L2: for (l25 = 0; l25 < l24.length; l25++) {
-      l26 = l24[l25];
-      l27 = l0.get(l26);
-      if (!((l27 !== undefined && l27 !== null))) continue L2; // a record
-      if (!((typeof l27 === "object" || typeof l27 === "function"))) continue L2; // an object
-      l27 = l27[k6];
-      if (!((l27 !== undefined && l27 !== null))) continue L2; // a field
-      if ((l22 === 0)) {
-        l21 = l27;
+    l24 = 0;
+    l25 = a5(l0, l1, l1);
+    if (!((l25 !== F))) return F; // the targets of an axis
+    l26 = l25.idx;
+    l27 = l0.records;
+    l28 = l25.keys;
+    L2: for (l29 = 0; l29 < l28.length; l29++) {
+      l30 = l28[l29];
+      l31 = (l27 !== undefined ? l27[l26[l29]] : l0.get(l30));
+      if (!((l31 !== undefined && l31 !== null))) continue L2; // a record
+      if (!((typeof l31 === "object" || typeof l31 === "function"))) continue L2; // an object
+      l31 = l31[k6];
+      if (!((l31 !== undefined && l31 !== null))) continue L2; // a field
+      if ((l24 === 0)) {
+        l23 = l31;
       } else {
-        l28 = step_(k4, l21, l27);
-        if (!((l28 !== F))) return F; // a step of reduce
-        l21 = l28;
+        l32 = step_(k4, l23, l31);
+        if (!((l32 !== F))) return F; // a step of reduce
+        l23 = l32;
       }
-      l22 = (l22 + 1);
+      l24 = (l24 + 1);
     }
-    if (!((l22 !== 0))) return F; // a list that is not empty
-    l30 = 0;
-    l29 = false;
-    l31 = keys_(l0);
-    L3: for (l32 = 0; l32 < l31.length; l32++) {
-      l33 = l31[l32];
-      l34 = l0.get(l33);
-      if (!((l34 !== undefined && l34 !== null))) continue L3; // a record
-      if (!((typeof l34 === "object" || typeof l34 === "function"))) continue L3; // an object
-      l34 = l34[k7];
-      if (!((l34 !== undefined && l34 !== null))) continue L3; // a field
-      if (!((typeof l34 === "boolean"))) return F; // a boolean
-      l29 = (l29 || l34);
+    if (!((l24 !== 0))) return F; // a list that is not empty
+    l34 = 0;
+    l33 = false;
+    l35 = l0.records;
+    l36 = keys_(l0);
+    L3: for (l37 = 0; l37 < l36.length; l37++) {
+      l38 = l36[l37];
+      l39 = (l35 !== undefined ? l35[l37] : l0.get(l38));
+      if (!((l39 !== undefined && l39 !== null))) continue L3; // a record
+      if (!((typeof l39 === "object" || typeof l39 === "function"))) continue L3; // an object
+      l39 = l39[k7];
+      if (!((l39 !== undefined && l39 !== null))) continue L3; // a field
+      if (!((typeof l39 === "boolean"))) return F; // a boolean
+      l33 = (l33 || l39);
     }
-    l36 = 0;
-    l35 = 0;
-    l37 = a8(l0, l1, l1);
-    if (!((l37 !== F))) return F; // the targets of an axis
-    l38 = l37;
-    L4: for (l39 = 0; l39 < l38.length; l39++) {
-      l40 = l38[l39];
-      l41 = l0.get(l40);
-      if (!((l41 !== undefined && l41 !== null))) continue L4; // a record
-      if (!((typeof l41 === "object" || typeof l41 === "function"))) continue L4; // an object
-      l41 = l41[k3];
-      if (!((l41 !== undefined && l41 !== null))) continue L4; // a field
-      if (!((typeof l41 === "number"))) return F; // a number
-      l35 = (l35 + l41);
-      l36 = (l36 + 1);
-    }
-    if (!((l36 !== 0))) return F; // a list that is not empty
-    l42 = result_((l35 / l36));
-    if (!((l42 !== F))) return F; // a finite mean
-    l44 = 0;
-    l45 = keys_(l0);
-    L5: for (l46 = 0; l46 < l45.length; l46++) {
+    l41 = 0;
+    l40 = 0;
+    l42 = a8(l0, l1, l1);
+    if (!((l42 !== F))) return F; // the targets of an axis
+    l43 = l42.idx;
+    l44 = l0.records;
+    l45 = l42.keys;
+    L4: for (l46 = 0; l46 < l45.length; l46++) {
       l47 = l45[l46];
-      l48 = l0.get(l47);
-      if (!((l48 !== undefined && l48 !== null))) continue L5; // a record
-      if (!((typeof l48 === "object" || typeof l48 === "function"))) continue L5; // an object
+      l48 = (l44 !== undefined ? l44[l43[l46]] : l0.get(l47));
+      if (!((l48 !== undefined && l48 !== null))) continue L4; // a record
+      if (!((typeof l48 === "object" || typeof l48 === "function"))) continue L4; // an object
       l48 = l48[k3];
-      if (!((l48 !== undefined && l48 !== null))) continue L5; // a field
-      l44 = (l44 + 1);
+      if (!((l48 !== undefined && l48 !== null))) continue L4; // a field
+      if (!((typeof l48 === "number"))) return F; // a number
+      l40 = (l40 + l48);
+      l41 = (l41 + 1);
     }
-    l50 = 0;
-    l51 = keys_(l0);
-    L6: for (l52 = 0; l52 < l51.length; l52++) {
-      l53 = l51[l52];
-      l54 = (opts_(k9) === true);
-      l56 = 0;
-      l57 = keys_(l0);
-      L7: for (l58 = 0; l58 < l57.length; l58++) {
-        l59 = l57[l58];
-        l60 = l0.get(l59);
-        if (!((l60 !== undefined && l60 !== null))) { if (l54) continue L6; continue L7; } // a record
-        if (!((typeof l60 === "object" || typeof l60 === "function"))) { if (l54) continue L6; continue L7; } // an object
-        l60 = l60[k10];
-        if (!((l60 !== undefined && l60 !== null))) { if (l54) continue L6; continue L7; } // a field
-        l56 = (l56 + 1);
+    if (!((l41 !== 0))) return F; // a list that is not empty
+    l49 = result_((l40 / l41));
+    if (!((l49 !== F))) return F; // a finite mean
+    l51 = 0;
+    l52 = l0.records;
+    l53 = keys_(l0);
+    L5: for (l54 = 0; l54 < l53.length; l54++) {
+      l55 = l53[l54];
+      l56 = (l52 !== undefined ? l52[l54] : l0.get(l55));
+      if (!((l56 !== undefined && l56 !== null))) continue L5; // a record
+      if (!((typeof l56 === "object" || typeof l56 === "function"))) continue L5; // an object
+      l56 = l56[k3];
+      if (!((l56 !== undefined && l56 !== null))) continue L5; // a field
+      l51 = (l51 + 1);
+    }
+    l58 = 0;
+    l59 = l0.records;
+    l60 = keys_(l0);
+    L6: for (l61 = 0; l61 < l60.length; l61++) {
+      l62 = l60[l61];
+      l63 = (opts_(k9) === true);
+      l65 = 0;
+      l66 = l0.records;
+      l67 = keys_(l0);
+      L7: for (l68 = 0; l68 < l67.length; l68++) {
+        l69 = l67[l68];
+        l70 = (l66 !== undefined ? l66[l68] : l0.get(l69));
+        if (!((l70 !== undefined && l70 !== null))) { if (l63) continue L6; continue L7; } // a record
+        if (!((typeof l70 === "object" || typeof l70 === "function"))) { if (l63) continue L6; continue L7; } // an object
+        l70 = l70[k10];
+        if (!((l70 !== undefined && l70 !== null))) { if (l63) continue L6; continue L7; } // a field
+        l65 = (l65 + 1);
       }
-      l50 = (l50 + 1);
+      l58 = (l58 + 1);
     }
-    l62 = 0;
-    l63 = addr_(l0, l1, l1, k11);
-    if (!((l63 !== F))) return F; // an address
-    l64 = keys_(l0);
-    L8: for (l65 = 0; l65 < l64.length; l65++) {
-      l66 = l64[l65];
-      if ((l66 === l63)) {
+    l72 = 0;
+    l73 = addr_(l0, l1, l1, k11);
+    if (!((l73 !== F))) return F; // an address
+    l74 = l0.records;
+    l75 = keys_(l0);
+    L8: for (l76 = 0; l76 < l75.length; l76++) {
+      l77 = l75[l76];
+      if ((l77 === l73)) {
         continue;
       }
-      l67 = l0.get(l66);
-      if (!((l67 !== undefined && l67 !== null))) continue L8; // a record
-      if (!((typeof l67 === "object" || typeof l67 === "function"))) continue L8; // an object
-      l67 = l67[k3];
-      if (!((l67 !== undefined && l67 !== null))) continue L8; // a field
-      l62 = (l62 + 1);
+      l78 = (l74 !== undefined ? l74[l76] : l0.get(l77));
+      if (!((l78 !== undefined && l78 !== null))) continue L8; // a record
+      if (!((typeof l78 === "object" || typeof l78 === "function"))) continue L8; // an object
+      l78 = l78[k3];
+      if (!((l78 !== undefined && l78 !== null))) continue L8; // a field
+      l72 = (l72 + 1);
     }
-    l68 = rec_(k12, [l13, l20, l21, (!l29), l42, l44, l50, l62]);
-    return l68;
+    l79 = rec_(k12, [l14, l22, l23, (!l33), l49, l51, l58, l72]);
+    return l79;
   } catch {
     return F;
   }

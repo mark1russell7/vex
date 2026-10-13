@@ -76,6 +76,10 @@ class Box {
   pair(o: Box, x: unknown): string {
     return `${this.v + o.v}:${typeof x}`;
   }
+  /** A method with a boolean and a text. */
+  flag(b: boolean, s: string): string {
+    return `${this.v}:${String(b)}:${s}`;
+  }
   /** A method that is not an op of the domain. */
   hidden(): number {
     return 1;
@@ -107,6 +111,7 @@ const BoxDomain = defineDomain({
     nil: {},
     opt: { params: ["domain", "number"] },
     pair: { params: ["domain"] },
+    flag: { params: ["boolean", "string"] },
     // A declared op that the values do not have as a method. The free function of the same name gives the value.
     ghost: {},
     twice: { fn: (b: Box) => new Box(b.v * 2) },
@@ -149,6 +154,8 @@ const OPTIONS: CompileOptions = {
     double: (x: unknown) => (typeof x === "number" ? x * 2 : x),
     zero: () => 0,
     ghost: () => 7,
+    // The method "nothing" of Box gives no value. That is an error of the op, so this function does not apply.
+    nothing: () => 5,
     throws: () => {
       throw new Error("fn");
     },
@@ -188,9 +195,10 @@ const RUN: RunOptions = { space: S, origin: "A", tables: { T }, vars: { c: 5 } }
 const own = Object.assign(new Box(4), { get0: () => 99 });
 const methodOf = (name: string): unknown => Reflect.get(Box.prototype, name);
 const SITES = space.record({
-  A: { box: new Box(1), arg: new Box(1), k: 3, recv: new Box(1) },
-  B: { box: new Box(2), arg: new Box(5), k: 3, recv: new Box(2) },
-  C: { box: new Box(3), arg: 2, k: 1, recv: null },
+  A: { box: new Box(1), arg: new Box(1), k: 3, recv: new Box(1), on: true, word: "a" },
+  B: { box: new Box(2), arg: new Box(5), k: 3, recv: new Box(2), on: false, word: "b" },
+  C: { box: new Box(3), arg: 2, k: 1, recv: null, on: "x", word: "c" },
+  L: { box: new Box(6), arg: new Box(1), k: 1, on: true, word: 7 },
   D: { box: new Box(4), arg: new Tag("d"), k: "x" },
   E: { box: own, arg: new Box(1), k: 3, recv: 7 },
   F: { box: { get0: methodOf("get0"), plus: methodOf("plus") }, arg: new Box(1), k: 3, recv: new Box(3) },
@@ -292,6 +300,15 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
   it("a list op without arguments", () => expectSame(app("count"), false));
   it("ifError and then a list op", () => expectSame(rec({ a: app("ifError", ref("missing"), lit(0)), b: app("count", all(n)) }), true));
   it("a result that is not finite, without a domain of numbers", () => expectSame(app("values", all(app("bad", box))), true, RUN, { domains: [BoxDomain] }));
+  it("the check of the result stops at the first domain that accepts it, also without valid", () => {
+    const Loose = defineDomain({ name: "Loose", is: (u: unknown): u is number => typeof u === "number" && u > 2, ops: {} });
+    const Even = defineDomain({ name: "Even", is: (u: unknown): u is number => typeof u === "number", valid: (x: number) => x % 2 === 0, ops: {} });
+    // 3 is odd, but Loose takes it first, and Loose has no check. 4 is even.
+    const s1 = space.record({ A: { box: new Box(3) }, B: { box: new Box(4) } });
+    expectSame(app("values", all(app("get0", box))), true, { space: s1, origin: "A" }, { domains: [BoxDomain, Loose, Even] });
+  });
+  it("a function of a later domain, without an op in the first domain", () => expectSame(app("values", all(app("pow", n, lit(2)))), true, RUN, { domains: [BoxDomain, NumDomain] }));
+  it("a free function with two arguments", () => expectSame(app("values", all(app("pick", n, lit(4)))), true, RUN, { fns: { pick: (a: unknown, b: unknown) => (a === 1 ? b : a) } }));
   it("the check of the first domain that accepts the result", () => {
     const Even = defineDomain({ name: "Even", is: (u: unknown): u is number => typeof u === "number", valid: (x: number) => x % 2 === 0, ops: {} });
     expectSame(app("values", all(app("get0", box))), true, RUN, { domains: [BoxDomain, Even] });
@@ -370,6 +387,7 @@ describe("COMPILE.TIERED: the site of an op gives the result of the interpreter 
     ["fewer arguments than parameters, one", app("opt", box), true],
     ["fewer arguments than parameters, two", app("opt", box, ref("arg")), true],
     ["a second argument of any kind", app("pair", box, ref("arg"), ref("k")), true],
+    ["a boolean and a text", app("flag", box, ref("on"), ref("word")), true],
     ["a receiver of each kind", app("get0", ext("recv", null)), true],
     ["a method that is not an op", app("hidden", box), true],
     ["a declared op without a method, and a free function", app("ghost", box), true],

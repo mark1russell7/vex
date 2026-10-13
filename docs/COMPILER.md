@@ -203,8 +203,8 @@ Each new construct goes through each stage. The stages are the interpreter, `exp
 
 | Function | What it does |
 |---|---|
-| `generate(expr)` | The loop IR and the JavaScript source of a program, with its constants. It is pure, so a build can use it. |
-| `load(generated, options)` | A program of tier 2, made with `new Function` |
+| `generate(expr, options)` | The loop IR and the JavaScript source of a program, with its constants. The source is for the domains of the options. It is pure, so a build can use it. |
+| `load(generated)` | A program of tier 2, made with `new Function`, for the options of the source |
 | `tiered(expr, options)` | Tier 2 when it can, and else tier 1. After a failed check, tier 1 does that evaluation again. |
 | `emitModule(programs, options)` | An ES module for a build, standalone or with the fallback. It comes in phase C3. |
 
@@ -232,10 +232,10 @@ The owner made these decisions on 2026-10-13:
 | Phase | Deliverables | Done when |
 |---|---|---|
 | C1 The compiler | The package, the loop IR, the back end of JavaScript source, `tiered`, the checks and the fallback, P17, golden files, the speed gate | Done on 2026-10-13 (§13). P17 passes, and the speed lane is 2.3 and 1.6 times the loops. |
-| C2 Speed | The kinds (§3.2) and `returns` on the ops of the built-in domains, inline forms from one definition, array and grid spaces by index, work that does not depend on the origin, aggregates by group, sheets with fixed addresses | The speed lane is within 1.2 times the loops, and the batch programs have the cost O(n) |
-| C3 ireko | `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
+| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), work that does not depend on the origin, aggregates by group, sheets with fixed addresses | The speed lane is within 1.2 times the loops (done, §13.2), and the batch programs have the cost O(n) |
+| C3 ireko | The kinds (§3.2) and `returns` on the ops of the built-in domains, `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
 | C4 Iteration | `fold`, `iterate`, domain kernels, then `tree` and `layers` of ireko | Each construct passes each stage, and the layouts of ireko do not change |
-| C5 Later | Other back ends, recalculation (§7.5) | A decision of the owner |
+| C5 Later | Inline forms (§7.1), other back ends, recalculation (§7.5) | A decision of the owner |
 
 A separate item: the mutation score of the test kit is 95.47 %, near the gate of 95 %. Tests for its survivors give it more margin.
 
@@ -269,3 +269,21 @@ The rest of the time goes into the reads of the space and into the checks that t
 These cases operate in tier 1: a list value with an error item, and a list op on a list value. An error of an extension and each other exception also operate in tier 1.
 
 An item for the owner: npm trusted publishing needs the package on npm. Before the next release, the owner publishes `@mark1russell7/vex-compiler` once, or adds its trust, as for the other packages.
+
+### 13.2 Phase C2: the speed lane
+
+The first part of phase C2 is done. Two changes give the speed:
+
+- **The fast path of each op site is in the source.** The options give the facts of each site: the domain whose op comes first, and the kinds and the lifts of its parameters (`facts.ts`). The printer writes a guard and the call of the op for each site, and each failed guard goes to the dispatch of the runtime. Before this change, all sites shared the code of the runtime. Thus the engine saw each op and each receiver at one place, and it did not optimize the calls.
+- **A loop reads the records by index.** Each space of the core has `records`, in the order of its keys (SPACE.RECORDS). A loop over the keys reads `records[i]`, and the targets of an axis come with the index of each target.
+
+The rules of exactness do not change. A guard uses `is` of a domain outside the `try` of the op. Thus an exception of `is` stops the program, and tier 1 gives the result. The interpreter counts such an `is` as `false`, so tier 1 is necessary there.
+
+The speed, measured by `bench/gate.ts` with alternate samples on one machine:
+
+| Program | Phase C1 | Phase C2 |
+|---|---|---|
+| The nearest other box, 60 boxes | 2.3 | 1.0 to 1.1 |
+| One step of the Game of Life, 16 by 16 | 1.6 | 1.05 to 1.13 |
+
+The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they move to phase C5.

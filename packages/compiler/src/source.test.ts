@@ -2,8 +2,8 @@
  * The golden files of the generated source (docs/COMPILER.md §10). A change of the generated code shows as a readable
  * diff in review. To accept a change, run `vitest run -u` and commit the new files.
  */
-import { app, axes, each, ext, key, let_, lit, rec, ref, space, v, vex, type Expr } from "@mark1russell7/vex";
-import { Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
+import { app, axes, each, ext, key, let_, lit, rec, ref, space, v, vex, type CompileOptions, type Expr } from "@mark1russell7/vex";
+import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { generate } from "./tiers.ts";
 
@@ -19,13 +19,13 @@ const LIFE = vex(Vec2Domain)
   .neighbors(8, (c) => c.from("alive"), { where: (c) => c.from("alive") })
   .count().program;
 
-const sourceOf = (e: Expr): string => {
-  const g = generate(e);
+const sourceOf = (e: Expr, options?: CompileOptions): string => {
+  const g = generate(e, options);
   return g.ok ? g.source : `no source: ${g.reason}\n`;
 };
 
-const expectGolden = async (name: string, e: Expr): Promise<void> => {
-  await expect(sourceOf(e)).toMatchFileSnapshot(`./__golden__/${name}.js`);
+const expectGolden = async (name: string, e: Expr, options?: CompileOptions): Promise<void> => {
+  await expect(sourceOf(e, options)).toMatchFileSnapshot(`./__golden__/${name}.js`);
 };
 
 describe("COMPILE.SOURCE: the generated source", () => {
@@ -69,6 +69,23 @@ describe("COMPILE.SOURCE: the generated source", () => {
 
   it("a list and an extension stop the program at an error", async () => {
     await expectGolden("stops", rec({ list: each(axes.all, ref("n")), errors: app("errors", each(axes.all, ref("n"))), ext: ext("note", "a") }));
+  });
+
+  it("the fast path of each kind of op site, for the options", async () => {
+    const options: CompileOptions = { domains: [Vec2Domain, NumDomain, BoolDomain], fns: { twice: (x: unknown) => x } };
+    const e = rec({
+      // A method that lifts a number, a method without arguments, a function of a domain, and a free function.
+      method: app("subtract", ref("p"), lit(1)),
+      length: app("length", ref("p")),
+      fn: app("pow", ref("n"), lit(2)),
+      free: app("twice", ref("n")),
+      // A list op name and an unknown name use the dispatch of the runtime.
+      list: app("max", ref("n"), lit(1)),
+      unknown: app("nope", ref("n")),
+      neighbors: app("count", each(axes.neighbors(4), ref("n"))),
+    });
+    await expectGolden("sites", e, options);
+    await expectGolden("nearest-vec2", NEAREST, options);
   });
 
   it("the same expression gives the same source", () => {

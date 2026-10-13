@@ -3,35 +3,45 @@
  * gives each result that tier 2 cannot give. Thus a tiered program gives the results of the interpreter.
  */
 import { compile, ok, type CompileOptions, type Expr, type Program, type Space } from "@mark1russell7/vex";
+import { factsOf } from "./facts.ts";
 import { printJs } from "./js.ts";
 import type { LoopProgram } from "./loop.ts";
 import { lower, Unsupported } from "./lower.ts";
 import { createRuntime, FALLBACK } from "./runtime.ts";
 
-/** The output of `generate`: the loop IR and the source of a program, or the reason that the compiler cannot lower it. */
+/**
+ * The output of `generate`: the loop IR and the source of a program, and the options that the source is for. Or else
+ * the reason that the compiler cannot lower the program.
+ */
 export type Generated =
-  | { readonly ok: true; readonly program: LoopProgram; readonly source: string }
+  | { readonly ok: true; readonly program: LoopProgram; readonly source: string; readonly options: CompileOptions }
   | { readonly ok: false; readonly reason: string };
 
 /** A function of tier 2. It gives the value of the program, or `FALLBACK`. */
 export type Tier2 = (space: Space, origin: string, vars: Readonly<Record<string, unknown>> | undefined, tables: Readonly<Record<string, Space>> | undefined) => unknown;
 
-/** This function lowers an expression and prints its source. It is pure, so a build can use it. */
-export function generate(expr: Expr): Generated {
+/**
+ * This function lowers an expression and prints its source for the options. The op tables of the domains give the
+ * fast path of each op site. It is pure, so a build can use it.
+ */
+export function generate(expr: Expr, options: CompileOptions = {}): Generated {
   try {
     const program = lower(expr);
-    return { ok: true, program, source: printJs(program) };
+    return { ok: true, program, source: printJs(program, factsOf(options)), options };
   } catch (thrown) {
     // A stack overflow in the lowering of a deep expression also goes to tier 1.
     return { ok: false, reason: thrown instanceof Unsupported ? thrown.message : "the lowering threw an exception" };
   }
 }
 
-/** This function makes the function of tier 2 with `new Function`. It throws on a page that does not permit `new Function`. */
-export function load(generated: Extract<Generated, { readonly ok: true }>, options: CompileOptions = {}): Tier2 {
+/**
+ * This function makes the function of tier 2 with `new Function`, with the options of the source. It throws on a page
+ * that does not permit `new Function`.
+ */
+export function load(generated: Extract<Generated, { readonly ok: true }>): Tier2 {
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from printJs, and it reads each name and literal from K (§5).
   const make = new Function("K", "R", generated.source) as (k: readonly unknown[], r: ReturnType<typeof createRuntime>) => Tier2;
-  return make(generated.program.constants, createRuntime(options));
+  return make(generated.program.constants, createRuntime(generated.options));
 }
 
 /** The counts of the runs of a tiered program. */
@@ -57,12 +67,12 @@ export interface TieredProgram extends Program {
  */
 export function tiered(expr: Expr, options: CompileOptions = {}): TieredProgram {
   const slow = compile(expr, options);
-  const generated = generate(expr);
+  const generated = generate(expr, options);
   let fast: Tier2 | undefined;
   let reason: string | undefined;
   if (generated.ok) {
     try {
-      fast = load(generated, options);
+      fast = load(generated);
     } catch {
       reason = "the page does not permit new Function";
     }

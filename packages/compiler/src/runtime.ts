@@ -12,7 +12,6 @@ import {
   axisTargets,
   findMethod,
   isListOp,
-  isOpName,
   isStackOverflow,
   isVexList,
   liftsAt,
@@ -23,31 +22,38 @@ import {
   type Addr,
   type AnyDomain,
   type Axis,
-  type ExtHandler,
   type FreeFn,
-  type OpSpec,
   type Space,
 } from "@mark1russell7/vex";
+import { entryOf, type Entry, type Method, type Options } from "./facts.ts";
 
 /** The value of a program that stops at a failed check. */
 export const FALLBACK: unique symbol = Symbol("vex.fallback");
 export type Fallback = typeof FALLBACK;
 
 /** The options that a runtime keeps: the domains, the free functions and the extension handlers. */
-export interface RuntimeOptions {
-  readonly domains?: readonly AnyDomain[];
-  readonly fns?: Readonly<Record<string, FreeFn>>;
-  readonly extensions?: Readonly<Record<string, ExtHandler>>;
-}
+export type RuntimeOptions = Options;
 
 /**
  * The dispatch of one op name and one number of arguments. With up to 3 arguments, it takes the values themselves, the
- * receiver first. With more, it takes an array of the values.
+ * receiver first. With more, it takes an array of the values. Generated code also reads its fields: the method of the
+ * last receiver, the function of the op of the first domain, and the free function.
  */
-export type Site = (...values: never[]) => unknown;
+export interface Site {
+  (...values: never[]): unknown;
+  m: Method | undefined;
+  readonly fn: Method | undefined;
+  readonly free: FreeFn | undefined;
+}
 
 /** A base axis: an axis that is not `where`. */
 export type BaseAxis = Exclude<Axis, { readonly t: "where" }>;
+
+/** The targets of an axis at a focus: the keys, and the index of each key in `keys` of the space. */
+export interface Targets {
+  readonly keys: readonly string[];
+  readonly idx: readonly (number | undefined)[];
+}
 
 /** The functions of the runtime. The names are the names of `RuntimeFn` in the loop IR. */
 export interface Runtime {
@@ -58,11 +64,15 @@ export interface Runtime {
    * This function gives the function of the targets of one base axis. A space does not change, so the targets stay in
    * a cache for each space and focus. Generated code gets it once, when it loads.
    */
-  axis(axis: BaseAxis): (s: Space, origin: string, focus: string) => unknown;
+  axis(axis: BaseAxis): (s: Space, origin: string, focus: string) => Targets | Fallback;
   table(tables: Readonly<Record<string, Space>> | undefined, name: string): unknown;
   keys(s: Space): readonly string[];
   /** This function gives the dispatch of an op name with `arity` arguments. Generated code gets it once, when it loads. */
   site(name: string, arity: number): Site;
+  /** This function gives the domain at an index of the options. */
+  domain(index: number): AnyDomain | undefined;
+  /** An exception of an op is the error #CALC! of that op, so this function gives `FALLBACK`. A full call stack goes on. */
+  threw(thrown: unknown): Fallback;
   step(name: string, acc: unknown, value: unknown): unknown;
   result(value: unknown): unknown;
   opts(value: unknown): unknown;
@@ -73,20 +83,6 @@ export interface Runtime {
   var(vars: Readonly<Record<string, unknown>> | undefined, name: string): unknown;
 }
 
-type Method = (...args: unknown[]) => unknown;
-
-/**
- * The op of one name in one domain, as `resolveOp` of the core finds it. It is the function of the spec, or else a
- * method of the receiver. `undefined` is a domain without the op. The runtime reads the op tables when a program loads.
- */
-interface Entry {
-  readonly domain: AnyDomain;
-  readonly spec: OpSpec<unknown>;
-  readonly fn: Method | undefined;
-}
-
-const NO_SPEC: OpSpec<unknown> = Object.freeze({});
-
 /** This function makes the runtime of one set of options. */
 export function createRuntime(options: RuntimeOptions): Runtime {
   const domains = options.domains ?? [];
@@ -94,7 +90,6 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const extensions = options.extensions ?? {};
   const F: Fallback = FALLBACK;
 
-  // An exception of an op is the error #CALC! of that op. A full call stack goes on.
   const threw = (thrown: unknown): Fallback => {
     if (isStackOverflow(thrown)) throw thrown;
     return F;
@@ -141,16 +136,23 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     return undefined;
   };
 
-  const entriesOf = (name: string): readonly (Entry | undefined)[] =>
-    domains.map((domain): Entry | undefined => {
-      if (!isOpName(name)) return undefined;
-      const declared = Object.hasOwn(domain.ops, name) ? (domain.ops[name] as OpSpec<unknown>) : undefined;
-      if (declared === undefined) return domain.methods === "all" ? { domain, spec: NO_SPEC, fn: undefined } : undefined;
-      return { domain, spec: declared, fn: declared.fn as Method | undefined };
-    });
+  const entriesOf = (name: string): readonly (Entry | undefined)[] => domains.map((d) => entryOf(d, name));
 
   // The entries of the op names of reduce. A program can compute such a name, so the runtime keeps them by name.
   const stepEntries = new Map<string, readonly (Entry | undefined)[]>();
+
+  // The index of each key of a space, for the targets of an axis. A miss of the cache only makes the map again.
+  const indexes = new WeakMap<Space, ReadonlyMap<string, number>>();
+  const indexOf = (s: Space): ReadonlyMap<string, number> => {
+    let m = indexes.get(s);
+    // Stryker disable next-line ConditionalExpression: see the comment above
+    if (m === undefined) {
+      m = new Map(s.keys.map((k, i) => [k, i]));
+      // Stryker disable next-line CallExpression: see the comment above
+      indexes.set(s, m);
+    }
+    return m;
+  };
 
   return {
     F,
@@ -160,7 +162,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return r.ok ? r.value : F;
     },
     axis(axis) {
-      const cache = new WeakMap<Space, Map<string, unknown>>();
+      const cache = new WeakMap<Space, Map<string, Targets | Fallback>>();
       return (s, origin, focus) => {
         let byFocus = cache.get(s);
         if (byFocus === undefined) {
@@ -170,7 +172,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         let targets = byFocus.get(focus);
         if (targets === undefined) {
           const r = axisTargets(s, { origin, focus }, axis);
-          targets = r.ok ? r.value : F;
+          const index = indexOf(s);
+          targets = r.ok ? { keys: r.value, idx: r.value.map((k) => index.get(k)) } : F;
           byFocus.set(focus, targets);
         }
         return targets;
@@ -182,21 +185,19 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     },
     keys: (s) => s.keys,
     // The dispatch of `app` in the interpreter: the first domain that accepts the receiver and has the op, and else a
-    // free function.
+    // free function. Generated code has the fast path of each site, and it uses this dispatch for each other case.
     site(name, arity) {
       const entries = entriesOf(name);
       const listOp = isListOp(name);
       const fn = fns !== undefined && Object.hasOwn(fns, name) ? fns[name] : undefined;
-      let method: Method | undefined;
-      const seen = (m: Method): void => {
-        method = m;
-      };
       const generic = (values: readonly unknown[]): unknown => {
         // A list op on a list value is not an error, but tier 2 does not have it. The exception stops the program.
         // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
         if (listOp && isVexList(values[0])) throw new Error("tier 1 gives a list op on a list value");
         if (values.length > 0) {
-          const r = dispatch(entries, name, values, seen);
+          const r = dispatch(entries, name, values, (m) => {
+            site.m = m;
+          });
           if (r !== undefined) return r;
         }
         try {
@@ -206,60 +207,12 @@ export function createRuntime(options: RuntimeOptions): Runtime {
           return threw(thrown);
         }
       };
-      // The fast path of a method op of the first domain with the op. The method of the last receiver is the method of
-      // this receiver when a read of the property gives the same function. (A read differs from findMethod only for an
-      // accessor that gives that function.) A list op name has no fast path, because its receiver can be a list.
-      const first = entries.find((e) => e !== undefined);
-      // An op with a function never fills `method`, so a fast path of it always takes the generic path.
-      // Stryker disable next-line ConditionalExpression: see the line above
-      if (first === undefined || first.fn !== undefined || listOp || arity < 1 || arity > 3) return arity <= 3 ? (...values: unknown[]) => generic(values) : generic;
-      const { domain, spec } = first;
-      const lift0 = domain.fromScalar !== undefined && liftsAt(spec.liftScalar, 0);
-      const lift1 = domain.fromScalar !== undefined && liftsAt(spec.liftScalar, 1);
-      const kind0 = spec.params?.[0] ?? "any";
-      const kind1 = spec.params?.[1] ?? "any";
-      const fast = (self: unknown): Method | undefined => {
-        const m = method;
-        // A function as the receiver goes to the generic path, which gives the same method.
-        // Stryker disable next-line ConditionalExpression: see the line above
-        return m !== undefined && typeof self === "object" && self !== null && (self as Record<string, unknown>)[name] === m && safeIs(domain, self) ? m : undefined;
-      };
-      // One function for each number of arguments, so a call makes no array. A number that the op lifts goes to the
-      // generic path.
-      if (arity === 1) {
-        return (self: unknown) => {
-          const m = fast(self);
-          if (m === undefined) return generic([self]);
-          try {
-            return checked(m.call(self));
-          } catch (thrown) {
-            return threw(thrown);
-          }
-        };
-      }
-      if (arity === 2) {
-        return (self: unknown, a: unknown) => {
-          const m = fast(self);
-          if (m === undefined || (lift0 && typeof a === "number")) return generic([self, a]);
-          if (!matchesKind(kind0, a, domain)) return F;
-          try {
-            return checked(m.call(self, a));
-          } catch (thrown) {
-            return threw(thrown);
-          }
-        };
-      }
-      return (self: unknown, a: unknown, b: unknown) => {
-        const m = fast(self);
-        if (m === undefined || (lift0 && typeof a === "number") || (lift1 && typeof b === "number")) return generic([self, a, b]);
-        if (!matchesKind(kind0, a, domain) || !matchesKind(kind1, b, domain)) return F;
-        try {
-          return checked(m.call(self, a, b));
-        } catch (thrown) {
-          return threw(thrown);
-        }
-      };
+      const call = arity <= 3 ? (...values: unknown[]): unknown => generic(values) : generic;
+      const site: Site = Object.assign(call, { m: undefined, fn: entries.find((e) => e !== undefined)?.fn, free: fn });
+      return site;
     },
+    domain: (index) => domains[index],
+    threw,
     // One step of `reduce`: the first domain that accepts the accumulator and has the op. No free function.
     step(name, acc, value) {
       let entries = stepEntries.get(name);

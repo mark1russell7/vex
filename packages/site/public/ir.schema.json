@@ -422,6 +422,39 @@
         {
           "type": "object",
           "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "const": "successors"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "const": "predecessors"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "const": "reachable"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
             "t",
             "axis",
             "test"

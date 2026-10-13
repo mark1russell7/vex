@@ -3,7 +3,7 @@ import type { Addr, Axis, Move } from "./ir.ts";
 import { fail, ok, type Result } from "./result.ts";
 
 /** The kind of a space. The kind sets which moves and axes are valid. */
-export type SpaceKind = "record" | "array" | "grid" | "tree";
+export type SpaceKind = "record" | "array" | "grid" | "tree" | "graph";
 
 /**
  * A space: an immutable collection of records with keys. A Vex program evaluates at one key of a space.
@@ -25,6 +25,10 @@ export interface Space<K extends string = string, O = unknown> {
   parentOf?(k: string): K | undefined;
   /** The children of the key `k` in a tree space, in key order. Other spaces do not have it. */
   childrenOf?(k: string): readonly K[];
+  /** The keys at the ends of the edges from `k`, in a graph space or a tree space. Other spaces do not have it. */
+  successorsOf?(k: string): readonly K[];
+  /** The keys with an edge to `k`, in key order, in a graph space or a tree space. Other spaces do not have it. */
+  predecessorsOf?(k: string): readonly K[];
 }
 
 /** The key type of a grid space. */
@@ -169,6 +173,14 @@ class TreeSpace<K extends string, O> implements Space<K, O> {
   keyAt(): K | undefined {
     return undefined;
   }
+  // In a tree, the edges go from a parent to its children.
+  successorsOf(k: string): readonly K[] {
+    return this.childrenOf(k);
+  }
+  predecessorsOf(k: string): readonly K[] {
+    const p = this.#parents.get(k);
+    return p === undefined ? [] : [p];
+  }
   parentOf(k: string): K | undefined {
     return this.#parents.get(k);
   }
@@ -178,6 +190,52 @@ class TreeSpace<K extends string, O> implements Space<K, O> {
 }
 
 /** The constructors of spaces. */
+class GraphSpace<K extends string, O> implements Space<K, O> {
+  readonly kind: SpaceKind = "graph";
+  readonly keys: readonly K[];
+  readonly #records: ReadonlyMap<string, O>;
+  readonly #out: ReadonlyMap<string, readonly K[]>;
+  readonly #in: ReadonlyMap<string, readonly K[]>;
+
+  constructor(records: Readonly<Record<K, O>>, edges: Readonly<Partial<Record<K, readonly K[]>>>) {
+    const entries = Object.entries(records) as [K, O][];
+    this.keys = Object.freeze(entries.map(([k]) => k));
+    this.#records = new Map(entries);
+    const out = new Map<string, readonly K[]>(this.keys.map((k) => [k, Object.freeze([])]));
+    for (const [k, to] of Object.entries(edges) as [K, readonly K[] | undefined][]) {
+      if (!this.#records.has(k)) throw new TypeError(`the graph has no key "${k}", but the edges name it`);
+      for (const t of to ?? []) if (!this.#records.has(t)) throw new TypeError(`the edge from "${k}" goes to "${t}", which is not a key of the graph`);
+      // A second edge to the same key is the same edge.
+      out.set(k, Object.freeze([...new Set(to)]));
+    }
+    this.#out = out;
+    const into = new Map<string, K[]>(this.keys.map((k) => [k, []]));
+    for (const k of this.keys) for (const t of out.get(k) ?? []) into.get(t)?.push(k);
+    this.#in = new Map([...into].map(([k, from]) => [k, Object.freeze(from)]));
+  }
+
+  has(k: string): k is K {
+    return this.#records.has(k);
+  }
+  get(k: string): O | undefined {
+    return this.#records.get(k);
+  }
+  // Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too
+  coords(): readonly number[] | undefined {
+    return undefined;
+  }
+  // Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too
+  keyAt(): K | undefined {
+    return undefined;
+  }
+  successorsOf(k: string): readonly K[] {
+    return this.#out.get(k) ?? [];
+  }
+  predecessorsOf(k: string): readonly K[] {
+    return this.#in.get(k) ?? [];
+  }
+}
+
 export const space = {
   /** This function makes a space from the entries of an object. The keys are the property names. */
   record<const R extends Readonly<Record<string, unknown>>>(records: R): Space<keyof R & string, R[keyof R]> {
@@ -197,6 +255,13 @@ export const space = {
    */
   tree<const R extends Readonly<Record<string, unknown>>>(records: R, parents: Readonly<Partial<Record<keyof R & string, (keyof R & string) | null>>>): Space<keyof R & string, R[keyof R]> {
     return new TreeSpace<keyof R & string, R[keyof R]>(records, parents);
+  },
+  /**
+   * This function makes a graph space: the records by key, and the edges from each key, in order. An edge to a key
+   * that is not in the graph throws a `TypeError`. A graph can have cycles, and an edge can go from a key to itself.
+   */
+  graph<const R extends Readonly<Record<string, unknown>>>(records: R, edges: Readonly<Partial<Record<keyof R & string, readonly (keyof R & string)[]>>>): Space<keyof R & string, R[keyof R]> {
+    return new GraphSpace<keyof R & string, R[keyof R]>(records, edges);
   },
 } as const;
 
@@ -337,10 +402,39 @@ export function axisTargets(s: Space, at: Position, a: Exclude<Axis, { readonly 
       return treeTargets(s, at, a.t);
     case "window":
       return windowTargets(s, at, a.from, a.to);
+    case "successors":
+    case "predecessors":
+    case "reachable":
+      return graphTargets(s, at, a.t);
     case "table":
       // The evaluator gives the axis table the space of its table. Here, without the tables, it has no targets.
       return fail(vexError("no-table", `the axis "table" needs the tables of the evaluation, and "${a.name}" is not one of them`, at));
   }
+}
+
+/**
+ * This function gives the targets of an axis of a graph. `reachable` has each key that a path of one or more edges
+ * reaches from the focus, once, in the order of a breadth-first search. The focus is not a target of `reachable`.
+ */
+function graphTargets(s: Space, at: Position, t: "successors" | "predecessors" | "reachable"): Result<readonly string[]> {
+  const successorsOf = s.successorsOf?.bind(s);
+  const predecessorsOf = s.predecessorsOf?.bind(s);
+  if (successorsOf === undefined || predecessorsOf === undefined) {
+    return fail(vexError("no-graph", `"${t}" needs a graph space or a tree space, but this space is a ${s.kind}`, at));
+  }
+  if (t === "successors") return ok(successorsOf(at.focus));
+  if (t === "predecessors") return ok(predecessorsOf(at.focus));
+  // A queue, not recursion, so a long path does not need a deep call stack.
+  const seen = new Set<string>([at.focus]);
+  const out: string[] = [];
+  for (let i = -1; i < out.length; i++) {
+    for (const next of successorsOf(i < 0 ? at.focus : (out[i] ?? at.focus))) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      out.push(next);
+    }
+  }
+  return ok(out);
 }
 
 /**

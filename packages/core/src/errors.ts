@@ -13,6 +13,7 @@ export type ErrorKind =
   | "no-grid"
   | "no-tree"
   | "no-table"
+  | "no-graph"
   | "missing-field"
   | "empty"
   | "not-instance"
@@ -36,6 +37,7 @@ const CODE_OF: Readonly<Record<ErrorKind, ErrorCode>> = {
   "no-grid": "#REF!",
   "no-tree": "#REF!",
   "no-table": "#REF!",
+  "no-graph": "#REF!",
   "missing-field": "#N/A",
   empty: "#N/A",
   "not-instance": "#VALUE!",

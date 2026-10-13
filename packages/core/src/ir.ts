@@ -27,6 +27,9 @@ export type Axis =
   | { readonly t: "siblings" }
   | { readonly t: "window"; readonly from: number; readonly to: number }
   | { readonly t: "table"; readonly name: string }
+  | { readonly t: "successors" }
+  | { readonly t: "predecessors" }
+  | { readonly t: "reachable" }
   | { readonly t: "where"; readonly axis: Axis; readonly test: Expr };
 
 /** A Vex expression. */
@@ -127,6 +130,12 @@ export const axes = {
    * there the origin is the target.
    */
   table: (name: string): Axis => ({ t: "table", name }),
+  /** The keys at the ends of the edges from the focus, in a graph space. In a tree space, the children. */
+  successors: Object.freeze({ t: "successors" }) as Axis,
+  /** The keys with an edge to the focus, in key order. In a tree space, the parent. */
+  predecessors: Object.freeze({ t: "predecessors" }) as Axis,
+  /** Each key that a path of edges reaches from the focus, in breadth-first order, without the focus. */
+  reachable: Object.freeze({ t: "reachable" }) as Axis,
   /** The targets of `axis` where `test` gives `true`. */
   where: (axis: Axis, test: Expr): Axis => ({ t: "where", axis, test }),
 } as const;
@@ -190,7 +199,7 @@ function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boo
       } else if (t === "where") {
         push(true, [u["axis"]]);
         push(false, [u["test"]]);
-      } else if (!["all", "others", "other", "children", "ancestors", "descendants", "siblings"].includes(t as string)) {
+      } else if (!["all", "others", "other", "children", "ancestors", "descendants", "siblings", "successors", "predecessors", "reachable"].includes(t as string)) {
         return false;
       }
       continue;

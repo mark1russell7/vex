@@ -363,6 +363,13 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     expect(optionalValue(rows.start(0).window(-1, 1, (c) => c.from("weight"), { where: (c) => c.from("weight")._.gt(1) }).values().at("1"))).toEqual([2, 4]);
   });
 
+  it("AXIS.GRAPH: successors, predecessors and reachable follow the edges of a graph", () => {
+    const g = vex(Num).over(space.graph({ A: { weight: 1 }, B: { weight: 2 }, C: { weight: 4 } }, { A: ["B"], B: ["C"], C: ["A"] }));
+    expect(optionalValue(g.start(0).successors((c) => c.from("weight")).values().at("A"))).toEqual([2]);
+    expect(optionalValue(g.start(0).predecessors((c) => c.from("weight")).values().at("A"))).toEqual([4]);
+    expect(optionalValue(g.start(0).reachable((c) => c.from("weight")).values().at("A"))).toEqual([2, 4]);
+  });
+
   it("AXIS.TABLE: table(name, body) reads the keys of another table of the evaluation", () => {
     const rows = vex(Num).over(space.array([{ weight: 1 }]));
     const others = rows.start(0).table("other", (c) => c.from("weight"));

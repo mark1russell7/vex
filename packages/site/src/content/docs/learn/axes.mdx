@@ -144,6 +144,30 @@ Select a person to move the origin, and select an axis:
 
 <TreeExplorer client:visible />
 
+## Graphs
+
+A graph space has records by key, and the edges from each key: `space.graph(records, edges)`. A graph can have cycles. Three axes follow the edges (rule `AXIS.GRAPH`):
+
+| Axis | Targets |
+|---|---|
+| `successors` | the ends of the edges from the focus, in the order of the edges |
+| `predecessors` | the keys with an edge to the focus, in key order |
+| `reachable` | each key that a path of edges reaches, once, in breadth-first order, without the focus |
+
+The total cost of a task is its own cost and the cost of each task that it depends on, also through other tasks:
+
+```ts doctest
+const tasks = vex(NumDomain).over(space.graph(
+  { app: { cost: 5 }, api: { cost: 3 }, db: { cost: 2 }, auth: { cost: 4 } },
+  { app: ["api", "auth"], api: ["db"], auth: ["db"] },
+));
+
+tasks.from("cost")._.add(tasks.start(0).reachable((t) => t.from("cost")).sum()).at("app"); // => some(14)
+tasks.start(0).predecessors((t) => t.from("cost")).values().at("db");                       // => some([3, 4])
+```
+
+The task `db` is reachable through two paths, but it counts once: 5 + 3 + 4 + 2 is 14. In a tree space, the edges go from a parent to its children, so these axes work there too. In another space, they give `#REF!`.
+
 ## Windows of rows
 
 The axis `window(from, to)` has the keys at the offsets from `from` to `to` of the focus, in order (rule `AXIS.WINDOW`). The offset 0 is the focus, and an offset outside the space has no target. In a tree space, the offsets go among the siblings. A moving sum of two rows reads the row before and the row itself:

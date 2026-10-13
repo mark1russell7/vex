@@ -231,6 +231,12 @@ export interface ChainBase<Ctx extends ChainContext, T> {
    * The body reads the fields of that table, but the types of the chain are the types of this space.
    */
   table<U>(name: string, body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  /** The successors axis of a graph space: the ends of the edges from the focus. In a tree space, the children. */
+  successors<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  /** The predecessors axis of a graph space: the keys with an edge to the focus. In a tree space, the parent. */
+  predecessors<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  /** The reachable axis of a graph space: each key that a path of edges reaches, in breadth-first order. */
+  reachable<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
 }
 
 /** The options of an axis. */
@@ -599,6 +605,15 @@ class ChainImpl {
   }
   table(name: string, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
     return this.#axis({ t: "table", name }, body, opts);
+  }
+  successors(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+    return this.#axis({ t: "successors" }, body, opts);
+  }
+  predecessors(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+    return this.#axis({ t: "predecessors" }, body, opts);
+  }
+  reachable(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+    return this.#axis({ t: "reachable" }, body, opts);
   }
 }
 

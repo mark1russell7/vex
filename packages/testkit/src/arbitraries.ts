@@ -76,7 +76,24 @@ export const arbTreeInput = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<T
       })),
   );
 
-/** A record, array, grid or tree space. */
+/** The input of a graph space: the records by key, and the edges from each key. The edges can make cycles. */
+export interface GraphInput {
+  readonly records: Readonly<Record<string, unknown>>;
+  readonly edges: Readonly<Record<string, readonly string[]>>;
+}
+
+/** A graph input with 1 to 6 keys and random edges, also edges to the key itself and twice the same edge. */
+export const arbGraphInput = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<GraphInput> =>
+  fc.uniqueArray(fc.constantFrom("A", "B", "C", "D", "E", "F"), { minLength: 1, maxLength: 6 }).chain((keys) =>
+    fc
+      .tuple(fc.tuple(...keys.map(() => arbRecord(domainValue))), fc.tuple(...keys.map(() => fc.array(fc.constantFrom(...keys), { maxLength: 4 }))))
+      .map(([recs, es]) => ({
+        records: Object.fromEntries(keys.map((k, i) => [k, recs[i]])),
+        edges: Object.fromEntries(keys.map((k, i) => [k, es[i] ?? []])),
+      })),
+  );
+
+/** A record, array, grid, tree or graph space. */
 export const arbSpace = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<Space> =>
   fc.oneof(
     { weight: 4, arbitrary: fc.uniqueArray(fc.constantFrom(...RECORD_KEYS), { minLength: 1, maxLength: 4 }).chain((keys) =>
@@ -87,6 +104,7 @@ export const arbSpace = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<Space
       fc.array(fc.array(arbRecord(domainValue), { minLength: 1, maxLength: 3 }), { minLength: rows, maxLength: rows }).map((g) => space.grid(g) as Space),
     ) },
     { weight: 1, arbitrary: arbTreeInput(domainValue).map((t) => space.tree(t.records, t.parents)) },
+    { weight: 1, arbitrary: arbGraphInput(domainValue).map((g) => space.graph(g.records, g.edges)) },
   );
 
 /** A move of an address. */
@@ -154,6 +172,9 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
         { t: "window", from: -2, to: 2 },
         { t: "table", name: "T" },
         { t: "table", name: "missing" },
+        { t: "successors" },
+        { t: "predecessors" },
+        { t: "reachable" },
       ),
       fc.tuple(tie("axis"), tie("expr")).map(([axis, test]): Axis => ({ t: "where", axis, test })),
     ),

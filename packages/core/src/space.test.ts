@@ -153,6 +153,21 @@ describe("tree spaces (SPACE.TREE, NAV.PARENT, AXIS.TREE)", () => {
     expect(t.keyAt([0])).toBeUndefined();
   });
 
+  it("SPACE.GRAPH AXIS.GRAPH: a graph keeps its edges, gives the axes of the edges, and a bad edge throws", () => {
+    // A -> B, A -> C, B -> C, C -> A (a cycle), D -> D (to itself), and E without edges.
+    const g = space.graph({ A: 1, B: 2, C: 3, D: 4, E: 5 }, { A: ["B", "C", "B"], B: ["C"], C: ["A"], D: ["D"] });
+    expect([g.kind, g.keys, g.get("C"), g.has("E"), g.has("Z"), g.coords("A"), g.keyAt([0])]).toEqual(["graph", ["A", "B", "C", "D", "E"], 3, true, false, undefined, undefined]);
+    const of = (k: string, axis: "successors" | "predecessors" | "reachable"): unknown => value(axisTargets(g, { origin: k, focus: k }, { t: axis }));
+    // A second edge to the same key is the same edge.
+    expect([of("A", "successors"), of("C", "predecessors"), of("E", "successors"), of("E", "predecessors")]).toEqual([["B", "C"], ["A", "B"], [], []]);
+    // Breadth first, each key once, without the focus: also on a cycle and on an edge to itself.
+    expect([of("A", "reachable"), of("B", "reachable"), of("D", "reachable"), of("E", "reachable")]).toEqual([["B", "C"], ["C", "A"], [], []]);
+    // In a space without edges, the axes of a graph give #REF!.
+    expect(error(axisTargets(space.record({ A: 1 }), { origin: "A", focus: "A" }, { t: "successors" }))).toMatchObject({ code: "#REF!", message: '"successors" needs a graph space or a tree space, but this space is a record' });
+    expect(() => space.graph({ A: 1 }, { A: ["Z" as "A"] })).toThrow(TypeError);
+    expect(() => space.graph({ A: 1 }, { Z: ["A"] } as never)).toThrow(TypeError);
+  });
+
   it("SPACE.TREE: a parent that is not a key, a key that is not in the tree, and a cycle throw", () => {
     expect(() => space.tree({ a: 1 }, { a: "nope" as "a" })).toThrow(TypeError);
     expect(() => space.tree({ a: 1 }, { zzz: "a" } as never)).toThrow(TypeError);

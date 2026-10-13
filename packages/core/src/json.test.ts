@@ -98,6 +98,10 @@ describe("the edges of the address of an axis and of a tree offset", () => {
     expect(value(parse(value(serialize(e)), []))).toEqual(e);
   });
 
+  it("AXIS.GRAPH: isExpr accepts the axes of a graph", () => {
+    expect(["successors", "predecessors", "reachable", "edges"].map((t) => isExpr(eachOf({ t })))).toEqual([true, true, true, false]);
+  });
+
   it("AXIS.TABLE: isExpr accepts a table axis with a name, and JSON keeps it", () => {
     expect([isExpr(eachOf({ t: "table", name: "Products" })), isExpr(eachOf({ t: "table", name: 7 })), isExpr(eachOf({ t: "table" }))]).toEqual([true, false, false]);
     const e = each(axes.table("Products"), lit(1));

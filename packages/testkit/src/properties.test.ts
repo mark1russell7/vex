@@ -2,7 +2,7 @@ import { app, axisTargets, cell, compile, each, evaluate, explain, lit, parse, r
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { arbExpr, arbMove, arbOrigin, arbSpace, arbTreeInput, PATHS } from "./arbitraries.ts";
+import { arbExpr, arbGraphInput, arbMove, arbOrigin, arbSpace, arbTreeInput, PATHS } from "./arbitraries.ts";
 import { fromCore, fromReference } from "./compare.ts";
 import { structuralEqual } from "./laws.ts";
 import { referenceEvaluate } from "./reference.ts";
@@ -234,6 +234,51 @@ describe("properties of sheets", () => {
         expect(cells.map(([c, k]) => fromCore(shuffled.cell(c, k)))).toEqual(expected);
         // A fresh run for each cell gives the same result too.
         expect(cells.map(([c, k]) => fromCore(new SheetRun(columns, { space: s, domains: DOMAINS }).cell(c, k)))).toEqual(expected);
+      }),
+    );
+  });
+});
+
+describe("properties of graph spaces", () => {
+  // The laws read only the edges of the input, not the graph space, so they check the space independently.
+  it("P16 SPACE.GRAPH AXIS.GRAPH: successors, predecessors and reachable follow from the edges", () => {
+    fc.assert(
+      fc.property(arbGraphInput(fc.constant(0)), (input) => {
+        const s = space.graph(input.records, input.edges);
+        const keys = Object.keys(input.records);
+        const out = (k: string): string[] => [...new Set(input.edges[k] ?? [])];
+        const targets = (k: string, t: "successors" | "predecessors" | "reachable"): readonly string[] => {
+          const r = axisTargets(s, { origin: k, focus: k }, { t });
+          return r.ok ? r.value : ["<error>"];
+        };
+        for (const k of keys) {
+          expect(targets(k, "successors")).toEqual(out(k));
+          expect(targets(k, "predecessors")).toEqual(keys.filter((x) => out(x).includes(k)));
+          // Breadth first: a list of the keys at each distance from k, and k itself only as the start.
+          const order: string[] = [];
+          let level = [k];
+          while (level.length > 0) {
+            const next: string[] = [];
+            for (const x of level) for (const y of out(x)) if (y !== k && !order.includes(y) && !next.includes(y)) next.push(y);
+            order.push(...next);
+            level = next;
+          }
+          expect(targets(k, "reachable")).toEqual(order);
+        }
+      }),
+    );
+  });
+
+  it("P16 AXIS.GRAPH: in a tree space, the successors are the children and the predecessors are the parent", () => {
+    fc.assert(
+      fc.property(arbTreeInput(fc.constant(0)), (input) => {
+        const s = space.tree(input.records, input.parents);
+        for (const k of Object.keys(input.records)) {
+          const of = (t: "successors" | "predecessors" | "children" | "ancestors"): unknown => axisTargets(s, { origin: k, focus: k }, { t });
+          expect(of("successors")).toEqual(of("children"));
+          const parent = input.parents[k] ?? null;
+          expect(of("predecessors")).toEqual({ ok: true, value: parent === null ? [] : [parent] });
+        }
       }),
     );
   });

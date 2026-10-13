@@ -47,7 +47,7 @@ function arbSteps(o: ModelOptions, depth: number, vars: boolean): fc.Arbitrary<r
     arbArg(o, depth, vars).map((fallback): Step => ({ t: "ifError", fallback })),
   ];
   if (o.fns.length > 0) simple.push(fc.tuple(fc.constantFrom(...o.fns), args).map(([name, a]): Step => ({ t: "call", name, args: a })));
-  const axisNames = fc.constantFrom<AxisName>("others", "each", "neighbors4", "neighbors8", "children", "ancestors", "descendants", "siblings", "window");
+  const axisNames = fc.constantFrom<AxisName>("others", "each", "neighbors4", "neighbors8", "children", "ancestors", "descendants", "siblings", "window", "successors", "predecessors", "reachable");
   const nested: fc.Arbitrary<Step>[] =
     depth <= 0
       ? []

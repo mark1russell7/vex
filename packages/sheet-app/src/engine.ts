@@ -59,6 +59,8 @@ export interface Evaluation {
   readonly cell: (rowId: string, columnId: string) => Result<unknown> | undefined;
   /** The compile result of each formula column, by column id. */
   readonly compiled: ReadonlyMap<string, CompileResult>;
+  /** The compile result of the formula of one cell: its own formula, or the formula of its column. */
+  readonly compiledCell: (rowId: string, columnId: string) => CompileResult | undefined;
   /** The steps of one formula cell. */
   readonly explain: (rowId: string, columnId: string) => Trace | undefined;
   /** The number of cells with an error value. */
@@ -104,7 +106,19 @@ export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
     const r = compiled.get(c.id);
     if (r?.ok === true) programs.set(c.name, r.expr);
   }
-  const run = new SheetRun(programs, { space: sp, domains: compiler.domains ?? DOMAINS });
+  // The cells with their own formula: the compile result by row and column, and the programs for the run.
+  const own = new Map<string, CompileResult>();
+  const cells = new Map<string, Map<string, Expr>>();
+  for (const r of doc.rows) {
+    for (const c of formulaCols) {
+      const text = r.formulas?.[c.id];
+      if (text === undefined) continue;
+      const result = compiler.compile(text, ctx);
+      own.set(`${r.id}\u0000${c.id}`, result);
+      if (result.ok) cells.set(c.name, new Map([...(cells.get(c.name) ?? []), [r.id, result.expr]]));
+    }
+  }
+  const run = new SheetRun(programs, { space: sp, domains: compiler.domains ?? DOMAINS, cells });
   const byId = new Map(doc.columns.map((c) => [c.id, c]));
   const cache = new Map<string, Result<unknown> | undefined>();
 
@@ -118,9 +132,14 @@ export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
       const p = parseValue(col.type, doc.rows.find((r) => r.id === rowId)?.cells[col.id] ?? "");
       out = p.kind === "empty" ? undefined : p.kind === "ok" ? ok(p.value) : fail(vexError("kind-mismatch", p.reason, { origin: rowId, focus: rowId }));
     } else {
-      const c = compiled.get(col.id);
-      if (c === undefined || col.formula.trim() === "") out = undefined;
-      else out = c.ok ? run.cell(col.name, rowId) : fail(vexError("bad-expression", `the formula of "${col.name}" has an error: ${c.error.message}`, { origin: rowId, focus: rowId }));
+      const mine = own.get(key);
+      const c = mine ?? compiled.get(col.id);
+      if (c === undefined || (mine === undefined && col.formula.trim() === "")) out = undefined;
+      else if (c.ok) out = run.cell(col.name, rowId);
+      else {
+        const whose = mine === undefined ? `the formula of "${col.name}"` : `the formula of this cell of "${col.name}"`;
+        out = fail(vexError("bad-expression", `${whose} has an error: ${c.error.message}`, { origin: rowId, focus: rowId }));
+      }
     }
     cache.set(key, out);
     return out;
@@ -129,11 +148,13 @@ export function evaluateDoc(doc: SheetDoc, compiler: Compiler): Evaluation {
   let errors = 0;
   for (const r of doc.rows) for (const c of doc.columns) if (cell(r.id, c.id)?.ok === false) errors++;
 
+  const compiledCell = (rowId: string, columnId: string): CompileResult | undefined => own.get(`${rowId}\u0000${columnId}`) ?? compiled.get(columnId);
+
   const explain = (rowId: string, columnId: string): Trace | undefined => {
     const col = byId.get(columnId);
-    if (col?.kind !== "formula" || compiled.get(col.id)?.ok !== true || !sp.has(rowId)) return undefined;
+    if (col?.kind !== "formula" || compiledCell(rowId, col.id)?.ok !== true || !sp.has(rowId)) return undefined;
     return run.explain(col.name, rowId);
   };
 
-  return { cell, compiled, explain, errors };
+  return { cell, compiled, compiledCell, explain, errors };
 }

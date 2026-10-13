@@ -1,5 +1,6 @@
 import { compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, toVexChain } from "@vex/formula";
 import { describe, expect, it } from "vitest";
+import { setCellFormula, type SheetDoc } from "./doc.ts";
 import { evaluateDoc, rowNamesOf, type Compiler } from "./engine.ts";
 import { EXAMPLES } from "./examples.ts";
 import { formatValue } from "./values.ts";
@@ -33,7 +34,8 @@ describe("the examples with the formula language", () => {
     expect(column("grades", "Rank")).toEqual(["1", "4", "5", "3", "2"]);
     expect(column("grades", "Grade")).toEqual(["A", "B", "C", "B", "A"]);
     expect(column("loan", "Balance")[0]).toBe("9,190");
-    expect(column("loan", "Interest")[1]).toBe("45.95");
+    expect(column("loan", "Interest").slice(0, 2)).toEqual(["50", "45.95"]);
+    expect(column("loan", "Balance")[11]).toBe("8.194478");
     expect(column("shapes", "Far corner")).toEqual(["(12, 2)", "(3, 10)", "(12, 10)"]);
   });
 
@@ -83,6 +85,34 @@ describe("the examples with the formula language", () => {
     expect(column("recipe", "Buy")).toEqual(["", "", "300 g", "450 ml", "3 pcs", "", "90 ml", "150 g"]);
     expect(column("recipe", "Cost")).toEqual(["5.94", "1.89", "0.6", "0.54", "0.75", "4.05", "1.8", "2.25"]);
     expect(column("recipe", "Per serving")[0]).toBe("0.99");
+  });
+
+  it("SHEET.CELL.FORMULA: the first month of the loan has its own formulas, and the other months take the formulas of the columns", () => {
+    const loan = EXAMPLES.find((e) => e.id === "loan")?.doc;
+    if (loan === undefined) throw new Error("loan");
+    const text = (d: SheetDoc, row: string, col: string): string => {
+      const r = evaluateDoc(d, compiler).cell(row, col);
+      return r === undefined ? "" : r.ok ? formatValue(r.value) : r.error.code;
+    };
+    // Without its own formulas, the first month reads a month that does not exist. The interest gives #REF!, and the
+    // balance adds two failed values, so it gives #ARGS. Each later month reads the failed month before it.
+    const plain: SheetDoc = { ...loan, rows: loan.rows.map(({ formulas: _f, ...r }) => r) };
+    expect([text(plain, "r1", "c3"), text(plain, "r1", "c4"), text(plain, "r12", "c4")]).toEqual(["#REF!", "#ARGS", "#ARGS"]);
+    // An error in the own formula of a cell is an error of that cell, with the reason. The cells that read it fail too:
+    // the balance of month 2 adds the failed balance and the failed interest, so it gives #ARGS.
+    const typo = setCellFormula(loan, "r1", "c4", "= 10000 +");
+    const ev = evaluateDoc(typo, compiler);
+    const bad = ev.cell("r1", "c4");
+    expect(bad?.ok === false && bad.error.message).toMatch(/^the formula of this cell of "Balance" has an error: /);
+    expect([text(typo, "r1", "c3"), text(typo, "r1", "c4"), text(typo, "r2", "c4")]).toEqual(["50", "#VALUE!", "#ARGS"]);
+    expect(ev.compiledCell("r1", "c4")?.ok).toBe(false);
+    expect(ev.compiledCell("r2", "c4")?.ok).toBe(true);
+    // The trace of a cell shows the steps of its own formula.
+    expect(evaluateDoc(loan, compiler).explain("r1", "c3")?.events.length).toBeGreaterThan(0);
+    expect(ev.explain("r1", "c4")).toBeUndefined();
+    // A column without a formula gives empty cells, and a cell with its own formula gives its value.
+    const empty: SheetDoc = { ...loan, columns: loan.columns.map((c) => (c.id === "c3" && c.kind === "formula" ? { ...c, formula: "" } : c)) };
+    expect([text(empty, "r1", "c3"), text(empty, "r2", "c3")]).toEqual(["50", ""]);
   });
 
   it("FORMULA.NAV.NAME: the name of a row is the text of the first column, when that column is a text column", () => {

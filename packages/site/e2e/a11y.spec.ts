@@ -18,9 +18,9 @@ for (const scheme of ["light", "dark"] as const) {
         expect(found).toEqual([]);
       });
     }
-    // The chart of the app shows only in an example with a chart, so the check opens those examples too.
-    for (const example of ["prey", "ball"]) {
-      test(`the chart of the example ${example} has no WCAG 2.1 AA violation`, async ({ page }) => {
+    // The chart and the mark of a cell with its own formula show only in some examples, so the check opens them too.
+    for (const example of ["prey", "ball", "loan"]) {
+      test(`the example ${example} of the app has no WCAG 2.1 AA violation`, async ({ page }) => {
         await page.goto(`./app/#example=${example}`);
         await expect(page.getByRole("region", { name: "The chart" })).toBeVisible();
         const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();

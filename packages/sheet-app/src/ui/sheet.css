@@ -113,7 +113,7 @@
 }
 .vs-bar-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--space-2, 0.5rem);
   align-items: start;
 }
@@ -366,6 +366,27 @@
 }
 .vs-grid td.vs-cell-error {
   background: var(--color-mark-wash);
+}
+/* A cell with its own formula has a mark in its top corner, like the mark of a note in a spreadsheet. */
+.vs-grid td.vs-formula-col.vs-own {
+  background-image: linear-gradient(225deg, var(--color-accent) 0.45rem, transparent 0.45rem);
+}
+.vs-own-note {
+  margin: var(--space-2, 0.5rem) 0 0;
+  color: var(--color-ink-secondary);
+}
+.vs-own-note code {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+/* Text for a screen reader only. */
+.vs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .vs-err {
   color: var(--color-mark);

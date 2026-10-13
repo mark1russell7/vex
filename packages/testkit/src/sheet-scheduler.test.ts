@@ -20,15 +20,20 @@ const formula: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => ({
   ),
 })).e;
 
-/** A random sheet: a formula for each column, a space of rows, and an order of the reads of the host. */
+/**
+ * A random sheet: a formula for each column, the formulas of some cells, a space of rows, and an order of the reads of
+ * the host. A cell formula can be at a key outside the space, and then no read finds it.
+ */
 const sheet = fc
   .record({
     formulas: fc.tuple(formula, formula, formula),
+    own: fc.array(fc.tuple(fc.constantFrom(...COLUMNS), fc.nat(7), formula), { maxLength: 5 }),
     rows: fc.array(fc.integer({ min: -3, max: 3 }), { minLength: 1, maxLength: 7 }),
   })
-  .chain(({ formulas, rows }) =>
+  .chain(({ formulas, own, rows }) =>
     fc.record({
       formulas: fc.constant(formulas),
+      own: fc.constant(own),
       rows: fc.constant(rows),
       reads: fc.shuffledSubarray(
         rows.flatMap((_v, i) => COLUMNS.map((c) => [c, String(i)] as const)),
@@ -40,11 +45,13 @@ const sheet = fc
 const plain = (r: Result<unknown>): unknown => (r.ok ? r.value : r.error.code);
 
 describe("the scheduler of a sheet run (SHEET.DEEP)", () => {
-  it("SHEET.DEEP SHEET.CYCLE: SheetRun gives the results of the recursive search, also with a small stack budget", () => {
+  it("SHEET.DEEP SHEET.CYCLE SHEET.CELL.FORMULA: SheetRun gives the results of the recursive search, also with a small stack budget", () => {
     fc.assert(
-      fc.property(sheet, ({ formulas, rows, reads }) => {
+      fc.property(sheet, ({ formulas, own, rows, reads }) => {
         const columns = new Map(COLUMNS.map((c, i) => [c, formulas[i] ?? lit(0)]));
-        const opts = { space: space.array(rows.map((v) => ({ v }))), domains: [NumDomain] };
+        const cells = new Map<string, Map<string, Expr>>();
+        for (const [c, k, f] of own) cells.set(c, new Map([...(cells.get(c) ?? []), [String(k), f]]));
+        const opts = { space: space.array(rows.map((v) => ({ v }))), domains: [NumDomain], cells };
         const reference = new ReferenceSheetRun(columns, opts);
         const expected = reads.map(([c, k]) => plain(reference.cell(c, k)));
         // The default budget, and budgets so small that most reads pause.
@@ -54,5 +61,17 @@ describe("the scheduler of a sheet run (SHEET.DEEP)", () => {
         }
       }),
     );
+  });
+});
+
+describe("the reference of a sheet run", () => {
+  it("SHEET.CELL.FORMULA: the reference gives the errors of SheetRun for a cell without a formula", () => {
+    const columns = new Map([["A", ref("v")]]);
+    const opts = { space: space.array([{ v: 1 }, { v: 2 }]), domains: [NumDomain], cells: new Map([["only", new Map([["1", lit(5)]])]]) };
+    const reference = new ReferenceSheetRun(columns, opts);
+    const run = new SheetRun(columns, opts);
+    for (const [c, k] of [["only", "0"], ["only", "1"], ["none", "0"], ["A", "1"]] as const) expect(reference.cell(c, k)).toEqual(run.cell(c, k));
+    expect(reference.cell("only", "0")).toMatchObject({ ok: false, error: { code: "#NAME?", message: 'the cell "only" at "0" has no formula' } });
+    expect(reference.cell("none", "0")).toMatchObject({ ok: false, error: { code: "#NAME?", message: 'the sheet has no column "none"' } });
   });
 });

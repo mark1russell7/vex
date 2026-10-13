@@ -39,8 +39,8 @@ const gradeCols: readonly Column[] = [
 const loanCols: readonly Column[] = [
   { id: "c1", name: "Month", kind: "value", type: "number" },
   { id: "c2", name: "Payment", kind: "value", type: "number" },
-  { id: "c3", name: "Interest", kind: "formula", formula: "= IFERROR(row(-1).Balance, 10000) * 0.005" },
-  { id: "c4", name: "Balance", kind: "formula", formula: "= IFERROR(row(-1).Balance, 10000) + Interest - Payment" },
+  { id: "c3", name: "Interest", kind: "formula", formula: "= row(-1).Balance * 0.005" },
+  { id: "c4", name: "Balance", kind: "formula", formula: "= row(-1).Balance + Interest - Payment" },
 ];
 
 const shapeCols: readonly Column[] = [
@@ -165,7 +165,10 @@ export const EXAMPLES: readonly Example[] = [
       version: 1,
       title: "Loan",
       columns: loanCols,
-      rows: rows(["c1", "c2"], Array.from({ length: 12 }, (_, i) => [`r${i + 1}`, null, String(i + 1), "860"])),
+      // The first month has no month before it, so its two cells have their own formulas: the loan starts at 10000.
+      rows: rows(["c1", "c2"], Array.from({ length: 12 }, (_, i) => [`r${i + 1}`, null, String(i + 1), "860"])).map((r) =>
+        r.id === "r1" ? { ...r, formulas: { c3: "= 10000 * 0.005", c4: "= 10000 + Interest - Payment" } } : r,
+      ),
       chart: { x: "c1", series: ["c4"] },
     },
   },

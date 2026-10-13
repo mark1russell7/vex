@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { addColumn, addRow, convertColumn, deleteColumn, deleteRow, depthOf, emptyDoc, indentRow, isSheetDoc, moveColumn, moveRow, outdentRow, setCell, subtree, updateColumn, type SheetDoc } from "./doc.ts";
+import { addColumn, addRow, cellFormulaOf, convertColumn, deleteColumn, deleteRow, depthOf, emptyDoc, indentRow, isSheetDoc, moveColumn, moveRow, outdentRow, setCell, setCellFormula, subtree, updateColumn, type SheetDoc } from "./doc.ts";
 import { EXAMPLES } from "./examples.ts";
 
 const shape = (d: SheetDoc): string[] => d.rows.map((r) => `${"  ".repeat(depthOf(d, r.id))}${r.id}`);
@@ -77,6 +77,24 @@ describe("the document", () => {
     expect(deleteColumn(d, "c2").rows[0]?.cells).toEqual({});
     expect(moveColumn(d, "c1", 1).columns.map((c) => c.id)).toEqual(["c2", "c1", "c3"]);
     expect(moveColumn(d, "c1", -1)).toBe(d);
+  });
+
+  it("SHEET.CELL.FORMULA: a cell can have its own formula, and a deleted column takes the formulas of its cells with it", () => {
+    const base = emptyDoc();
+    let d: SheetDoc = { ...base, columns: [...base.columns, { id: "c3", name: "Twice", kind: "formula", formula: "= Amount * 2" }] };
+    d = setCellFormula(setCellFormula(d, "r1", "c3", "= 5"), "r1", "c2", "= 1");
+    expect(d.rows[0]?.formulas).toEqual({ c3: "= 5", c2: "= 1" });
+    expect([cellFormulaOf(d, "r1", "c3"), cellFormulaOf(d, "r1", "c1"), cellFormulaOf(d, "r9", "c3")]).toEqual(["= 5", undefined, undefined]);
+    expect(isSheetDoc(d)).toBe(true);
+    // Without its own formula, the cell takes the formula of the column again. A row without such cells has no record of them.
+    expect(setCellFormula(d, "r1", "c3", undefined).rows[0]?.formulas).toEqual({ c2: "= 1" });
+    expect(setCellFormula(setCellFormula(d, "r1", "c3", undefined), "r1", "c2", undefined).rows[0]).not.toHaveProperty("formulas");
+    expect(deleteColumn(d, "c3").rows[0]?.formulas).toEqual({ c2: "= 1" });
+    expect(deleteColumn(deleteColumn(d, "c3"), "c2").rows[0]).not.toHaveProperty("formulas");
+    const row = d.rows[0];
+    expect(isSheetDoc({ ...d, rows: [{ ...row, formulas: { c9: "= 1" } }] })).toBe(false);
+    expect(isSheetDoc({ ...d, rows: [{ ...row, formulas: { c3: 1 } }] })).toBe(false);
+    expect(isSheetDoc({ ...d, rows: [{ ...row, formulas: "= 1" }] })).toBe(false);
   });
 
   it("checks a document: unique ids, known parents and the blocks of the tree", () => {

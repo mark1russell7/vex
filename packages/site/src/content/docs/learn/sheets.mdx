@@ -44,6 +44,23 @@ The first row has no row above, so the read gives `#REF!`, and `ifError(0)` chan
 
 A sheet evaluates the earlier keys first. Thus a running total over thousands of rows reads finished cells. A sheet does not depend on the call stack of the engine: a chain of 100000 cells gives its value in each order (rule `SHEET.DEEP`).
 
+## A cell with its own formula
+
+A cell can have its own formula. That formula replaces the formula of the column at the key of the cell, and the other cells keep the formula of the column (rule `SHEET.CELL.FORMULA`). The first row of a running total is the usual case:
+
+```ts doctest
+const rows = vex(NumDomain).over(space.array([{ v: 4 }, { v: 1 }, { v: 3 }]));
+const total = rows
+  .sheet()
+  .declare<{ total: number }>()
+  .column("total", (r) => r.start(r.cell("total", [offset(-1)]))._.add("v"))
+  .cellFormula("0", "total", (r) => r.from("v"));
+
+total.table().map((row) => row.cells.total); // => [ok(4), ok(5), ok(8)]
+```
+
+The column reads the row above, and the first cell starts the total with its own formula. Thus the column needs no `ifError`. An error in the formula of the column then shows as an error, and no fallback hides it. The formula of a cell must give a value of the type of its column.
+
 ## Cycles
 
 A cell that reads itself, directly or through other cells, has no value. Each cell on such a cycle gives `#CYCLE!`:

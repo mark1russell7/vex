@@ -24,7 +24,9 @@ function nested(n: number): Expr {
   return e;
 }
 
-describe("evaluations that do not depend on the call stack", () => {
+// These tests build structures 100000 levels deep. With the coverage of `pnpm check`, one test takes some seconds.
+// The tests examine the depth, not the speed, so they have a longer time limit.
+describe("evaluations that do not depend on the call stack", { timeout: 30_000 }, () => {
   it("SHEET.DEEP: a roll-up from the root of a tree 100000 levels deep gives the sum", () => {
     const n = 100_000;
     const records: Record<string, { size: number }> = {};

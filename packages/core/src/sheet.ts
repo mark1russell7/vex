@@ -5,6 +5,9 @@
  *
  * A cell reference is the extension node `ext("vex.cell", { column, at })`. Thus the IR has no new kind, and the
  * JSON form, `deps` and the traces work without a change.
+ *
+ * A cell can have its own formula. That formula replaces the formula of the column at the key of the cell. A
+ * spreadsheet has the same thing: a cell with a formula that is different from the other formulas of its column.
  */
 import { vexError } from "./errors.ts";
 import { evaluate, explain, nestingOf, type EvalOptions, type ExtHandler } from "./evaluate.ts";
@@ -32,8 +35,14 @@ const isCellRef = (u: unknown): u is CellRef =>
   Array.isArray((u as { at?: unknown }).at) &&
   (u as { at: readonly unknown[] }).at.every(isMove);
 
-/** The options of a sheet run: the evaluation options without the origin and the trace. */
-export type SheetOptions = Omit<EvalOptions, "origin" | "trace">;
+/** The formulas of single cells: for each column, the formula of each key that has its own formula. */
+export type CellFormulas = ReadonlyMap<string, ReadonlyMap<string, Expr>>;
+
+/** The options of a sheet run: the evaluation options without the origin and the trace, and the formulas of cells. */
+export type SheetOptions = Omit<EvalOptions, "origin" | "trace"> & {
+  /** The cells with their own formula. The formula of a cell replaces the formula of its column at its key. */
+  readonly cells?: CellFormulas;
+};
 
 const cycleError = (column: string, key: string): Result<never> =>
   fail(vexError("cycle", `the cell "${column}" at "${key}" is on a cycle of cell references`, { origin: key, focus: key }));
@@ -79,7 +88,8 @@ const STACK_BUDGET = 3000;
  */
 export class SheetRun {
   readonly #columns: ReadonlyMap<string, Expr>;
-  readonly #opts: SheetOptions;
+  readonly #cells: CellFormulas;
+  readonly #opts: Omit<EvalOptions, "origin" | "trace">;
   readonly #done = new Map<string, Result<unknown>>();
   // For each column, the number of keys at the start of the key order that a warm-up evaluated.
   readonly #warmed = new Map<string, number>();
@@ -93,16 +103,31 @@ export class SheetRun {
   // Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields
   #top: Visit = { id: "", column: "", key: "", index: -1, low: -1, reread: false, result: cycleError("", ""), paused: false, need: undefined };
   #next = 0;
-  // The estimated frames of the stack that the evaluations in progress use, and the cost of a cell of each column.
+  // The estimated frames of the stack that the evaluations in progress use, and the cost of each program.
   #used = 0;
-  readonly #cost = new Map<string, number>();
+  readonly #cost = new Map<Expr, number>();
   readonly #budget: number;
 
   /** `budget` is the budget of the stack in estimated frames. A test can make it small, so the run pauses often. */
   constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, budget: number = STACK_BUDGET) {
+    const { cells, ...rest } = opts;
     this.#columns = columns;
+    this.#cells = cells ?? new Map();
     this.#budget = budget;
-    this.#opts = { ...opts, extensions: { ...opts.extensions, [CELL_KIND]: this.#handler } };
+    this.#opts = { ...rest, extensions: { ...rest.extensions, [CELL_KIND]: this.#handler } };
+  }
+
+  /** This method gives the program of a cell: its own formula, or the formula of its column (SHEET.CELL.FORMULA). */
+  #programOf(column: string, key: string): Expr | undefined {
+    // Stryker disable next-line ConditionalExpression: without formulas of cells, the lookup gives undefined anyway
+    const own = this.#cells.size === 0 ? undefined : this.#cells.get(column)?.get(key);
+    return own ?? this.#columns.get(column);
+  }
+
+  /** This method gives the error of a cell without a program. */
+  #unbound(column: string, key: string): Result<never> {
+    const message = this.#cells.has(column) ? `the cell "${column}" at "${key}" has no formula` : `the sheet has no column "${column}"`;
+    return fail(vexError("unbound", message, { origin: key, focus: key }));
   }
 
   readonly #handler: ExtHandler = (data, ctx) => {
@@ -134,12 +159,12 @@ export class SheetRun {
     if (end > start) this.#warmed.set(column, end);
   }
 
-  /** This method gives the estimated frames of the stack that one evaluation of a cell of `column` uses. */
-  #costOf(column: string, program: Expr): number {
-    let cost = this.#cost.get(column);
+  /** This method gives the estimated frames of the stack that one evaluation of the program `program` uses. */
+  #costOf(program: Expr): number {
+    let cost = this.#cost.get(program);
     if (cost === undefined) {
       cost = 3 * nestingOf(program) + 16;
-      this.#cost.set(column, cost);
+      this.#cost.set(program, cost);
     }
     return cost;
   }
@@ -156,7 +181,7 @@ export class SheetRun {
   /** This method evaluates the formula of a cell once. When the evaluation pauses, the result of the cell does not change. */
   #evaluate(visit: Visit, program: Expr): void {
     const caller = this.#top;
-    const cost = this.#costOf(visit.column, program);
+    const cost = this.#costOf(program);
     visit.paused = false;
     visit.need = undefined;
     this.#top = visit;
@@ -190,10 +215,10 @@ export class SheetRun {
       seen.reread = true;
       return cycleError(column, key);
     }
-    const program = this.#columns.get(column);
-    if (program === undefined) return fail(vexError("unbound", `the sheet has no column "${column}"`, { origin: key, focus: key }));
+    const program = this.#programOf(column, key);
+    if (program === undefined) return this.#unbound(column, key);
     const visit = this.#start(column, key);
-    if (this.#used + this.#costOf(column, program) > this.#budget) {
+    if (this.#used + this.#costOf(program) > this.#budget) {
       // Over the budget: the caller pauses, and the run evaluates the new cell from its own list.
       caller.paused = true;
       caller.need = visit;
@@ -214,11 +239,11 @@ export class SheetRun {
     const id = idOf(column, key);
     const done = this.#done.get(id);
     if (done !== undefined) return done;
-    if (!this.#columns.has(column)) return fail(vexError("unbound", `the sheet has no column "${column}"`, { origin: key, focus: key }));
+    if (this.#programOf(column, key) === undefined) return this.#unbound(column, key);
     const work: Visit[] = [this.#start(column, key)];
     for (let visit = work.at(-1); visit !== undefined; visit = work.at(-1)) {
-      const program = this.#columns.get(visit.column);
-      /* v8 ignore next -- @preserve: a visit exists only for a column with a program */
+      const program = this.#programOf(visit.column, visit.key);
+      /* v8 ignore next -- @preserve: a visit exists only for a cell with a program */
       if (program === undefined) break;
       this.#evaluate(visit, program);
       if (visit.paused) {
@@ -246,10 +271,10 @@ export class SheetRun {
     }
   }
 
-  /** This method evaluates one cell with a trace of the nodes of its column. The result is the result of the cell. */
+  /** This method evaluates one cell with a trace of the nodes of its program. The result is the result of the cell. */
   explain(column: string, key: string): Trace {
     const result = this.cell(column, key);
-    const program = this.#columns.get(column);
+    const program = this.#programOf(column, key);
     if (program === undefined) return { events: [], result };
     return { events: explain(program, { ...this.#opts, origin: key }).events, result };
   }

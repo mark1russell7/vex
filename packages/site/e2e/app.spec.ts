@@ -203,3 +203,31 @@ test("a link opens its example in the same tab, and after an edit a reload keeps
   await page.reload();
   await expect(title).toHaveValue("My ball");
 });
+
+test("a cell can have its own formula: the grid marks it, and the formula bar edits it", async ({ page }) => {
+  await page.goto("./app/#example=loan");
+  const balance = (row: number) => page.getByRole("treegrid").getByRole("row").nth(row).getByRole("gridcell").nth(3);
+  // The first month has its own formula. The grid marks the cell, and a screen reader hears it.
+  await expect(balance(1)).toHaveText("9,190, own formula");
+  await expect(balance(1)).toHaveClass(/vs-own/);
+  await balance(1).click();
+  const own = page.getByRole("button", { name: "Own formula", exact: true });
+  await expect(own).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("textbox", { name: "The own formula of Balance, row 1" })).toHaveValue("= 10000 + Interest - Payment");
+  // The second month takes the formula of the column. Its own formula replaces that formula in this cell only.
+  await balance(2).click();
+  await expect(own).toHaveAttribute("aria-pressed", "false");
+  await own.click();
+  const editor = page.getByRole("textbox", { name: "The own formula of Balance, row 2" });
+  await expect(editor).toHaveValue("= row(-1).Balance + Interest - Payment");
+  await editor.fill("= 5000");
+  await editor.press("Enter");
+  await expect(balance(2)).toHaveText("5,000, own formula");
+  await expect(balance(3)).toHaveText("4,165");
+  // Without its own formula, the balance of the first month reads a month that does not exist. Undo gives it back.
+  await balance(1).click();
+  await own.click();
+  await expect(balance(1)).toHaveText("#REF!");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(balance(1)).toHaveText("9,190, own formula");
+});

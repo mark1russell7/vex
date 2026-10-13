@@ -26,11 +26,16 @@ export interface FormulaColumn {
 /** A column of the table. */
 export type Column = ValueColumn | FormulaColumn;
 
-/** A row: its parent row or `null`, and the text of each value cell, by column id. */
+/**
+ * A row: its parent row or `null`, and the text of each value cell, by column id. A cell of a formula column can have
+ * its own formula. That formula replaces the formula of the column at this row.
+ */
 export interface Row {
   readonly id: string;
   readonly parent: string | null;
   readonly cells: Readonly<Record<string, string>>;
+  /** The formulas of the cells with their own formula, by column id. */
+  readonly formulas?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -169,6 +174,26 @@ export function setCell(doc: SheetDoc, rowId: string, columnId: string, text: st
   return { ...doc, rows: doc.rows.map((r) => (r.id === rowId ? { ...r, cells: { ...r.cells, [columnId]: text } } : r)) };
 }
 
+/**
+ * This function gives the cell `rowId` of the column `columnId` its own formula. The value `undefined` removes the
+ * formula of the cell, so the cell takes the formula of the column again.
+ */
+export function setCellFormula(doc: SheetDoc, rowId: string, columnId: string, formula: string | undefined): SheetDoc {
+  return {
+    ...doc,
+    rows: doc.rows.map((r) => {
+      if (r.id !== rowId) return r;
+      const { [columnId]: _old, ...rest } = r.formulas ?? {};
+      const formulas = formula === undefined ? rest : { ...rest, [columnId]: formula };
+      const { formulas: _all, ...row } = r;
+      return Object.keys(formulas).length === 0 ? row : { ...row, formulas };
+    }),
+  };
+}
+
+/** This function gives the formula of the cell `rowId` of the column `columnId`, or `undefined` for a cell without one. */
+export const cellFormulaOf = (doc: SheetDoc, rowId: string, columnId: string): string | undefined => doc.rows.find((r) => r.id === rowId)?.formulas?.[columnId];
+
 /** This function tells if `name` is free for a column, apart from the column `except`. The test ignores the case of letters. */
 export function nameIsFree(doc: SheetDoc, name: string, except?: string): boolean {
   const n = name.trim().toLowerCase();
@@ -218,7 +243,7 @@ export function setChart(doc: SheetDoc, chart: ChartSpec | undefined): SheetDoc 
   return chart === undefined ? rest : { ...rest, chart };
 }
 
-/** This function removes a column and the text of its cells. The column also leaves the chart. */
+/** This function removes a column, the text of its cells and the formulas of its cells. The column also leaves the chart. */
 export function deleteColumn(doc: SheetDoc, id: string): SheetDoc {
   return {
     ...doc,
@@ -226,7 +251,9 @@ export function deleteColumn(doc: SheetDoc, id: string): SheetDoc {
     columns: doc.columns.filter((c) => c.id !== id),
     rows: doc.rows.map((r) => {
       const { [id]: _gone, ...cells } = r.cells;
-      return { ...r, cells };
+      const { [id]: _formula, ...formulas } = r.formulas ?? {};
+      const { formulas: _all, ...row } = r;
+      return Object.keys(formulas).length === 0 ? { ...row, cells } : { ...row, cells, formulas };
     }),
   };
 }
@@ -276,6 +303,9 @@ export function isSheetDoc(u: unknown): u is SheetDoc {
     while (open.length > 0 && open.at(-1) !== parent) open.pop();
     if (parent !== null && open.length === 0) return false;
     if (!Object.values(r["cells"]).every((t) => typeof t === "string")) return false;
+    // A formula of a cell is text, and it belongs to a column of the document.
+    const formulas = r["formulas"];
+    if (formulas !== undefined && (!isRecord(formulas) || !Object.entries(formulas).every(([c, f]) => colIds.has(c) && typeof f === "string"))) return false;
     seen.add(r["id"]);
     open.push(r["id"]);
   }

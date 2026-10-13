@@ -4,7 +4,7 @@
  */
 import type { Trace } from "@mark1russell7/vex";
 import { useState, type ReactElement } from "react";
-import { VALUE_TYPES, type Column, type SheetDoc, type ValueType } from "../doc.ts";
+import { cellFormulaOf, VALUE_TYPES, type Column, type SheetDoc, type ValueType } from "../doc.ts";
 import type { Evaluation } from "../engine.ts";
 import { formatValue } from "../values.ts";
 import type { CellRef } from "./Grid.tsx";
@@ -91,6 +91,7 @@ export function Inspector(props: InspectorProps): ReactElement {
   const col = doc.columns.find((c) => c.id === sel.col);
   const r = ev.cell(sel.row, sel.col);
   const trace = r?.ok === false || col?.kind === "formula" ? ev.explain(sel.row, sel.col) : undefined;
+  const own = col?.kind === "formula" ? cellFormulaOf(doc, sel.row, sel.col) : undefined;
   return (
     <aside id="vs-inspector" className="vs-inspector" data-open={props.open === true} aria-label="The inspector">
       <section className="vs-panel" aria-label="The cell">
@@ -106,6 +107,11 @@ export function Inspector(props: InspectorProps): ReactElement {
             <p className="vs-value vs-err">{r.error.code}</p>
             <p>{r.error.message}</p>
           </div>
+        )}
+        {own === undefined ? null : (
+          <p className="vs-own-note">
+            This cell has its own formula: <code>{own}</code>
+          </p>
         )}
         {trace === undefined ? null : (
           <details open={r?.ok === false}>

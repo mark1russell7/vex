@@ -893,6 +893,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Done in 0.4.0: the key `$vex` in a JSON literal has an escape (IR.JSON.ESCAPE). The nightly run in CI gives the mutation scores of each package, and the gate is 95 %.
 - Done in 0.5.0: Vex does not depend on the call stack of the engine. A `SheetRun` reads its cells from a work list, so a chain of 100000 cells gives its value (SHEET.DEEP). A property test compares it with the recursive search of `ReferenceSheetRun`, with small stack budgets. An expression can nest 500 levels deep (EVAL.NESTING). A full call stack in host code gives `#DEPTH!`, and `ifError` does not hide it (EVAL.DEPTH, V-050).
 - Done after 0.5.0: in the sheet app, a formula reads a row by its name (FORMULA.NAV.NAME), and seven new examples have formulas that read formulas. The app draws a chart: a line for a column of numbers, and a path for a column of vectors.
+- Done after 0.5.0: a cell can have its own formula (SHEET.CELL.FORMULA). `SheetRun` takes the formulas of cells, the builder has `cellFormula`, and the property test of the scheduler gives random sheets formulas of cells.
 
 ---
 

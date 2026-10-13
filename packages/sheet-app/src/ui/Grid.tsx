@@ -1,11 +1,11 @@
 /**
  * The grid: a tree grid of the rows and the columns. The selected cell has the keyboard focus (a roving tab index).
  * A value cell opens a text field for an edit. A cell with an error value shows the code, and its title gives the
- * reason.
+ * reason. A mark in the corner shows a cell with its own formula.
  */
 import type { Result } from "@mark1russell7/vex";
 import { Color } from "@mark1russell7/vex-domains";
-import { useEffect, useRef, type KeyboardEvent, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, type KeyboardEvent, type ReactElement } from "react";
 import type { Column, SheetDoc } from "../doc.ts";
 import type { Evaluation } from "../engine.ts";
 import { colorHex, formatValue } from "../values.ts";
@@ -66,6 +66,7 @@ function CellView(props: { readonly r: Result<unknown> | undefined }): ReactElem
 /** The grid. */
 export function Grid(props: GridProps): ReactElement {
   const { doc, ev, rows, sel, editing } = props;
+  const byId = useMemo(() => new Map(doc.rows.map((r) => [r.id, r])), [doc]);
   const table = useRef<HTMLTableElement>(null);
 
   // The selected cell takes the focus when the grid has the focus, so the keys move the selection.
@@ -137,6 +138,7 @@ export function Grid(props: GridProps): ReactElement {
                 const isEdit = editing !== undefined && editing.row === vr.id && editing.col === c.id;
                 const r = ev.cell(vr.id, c.id);
                 const numeric = r?.ok === true && typeof r.value === "number";
+                const own = c.kind === "formula" && byId.get(vr.id)?.formulas?.[c.id] !== undefined;
                 return (
                   <td
                     key={c.id}
@@ -144,7 +146,7 @@ export function Grid(props: GridProps): ReactElement {
                     role="gridcell"
                     aria-selected={isSel}
                     tabIndex={isSel ? 0 : -1}
-                    className={[c.kind === "formula" ? "vs-formula-col" : "", numeric ? "vs-num" : "", r?.ok === false ? "vs-cell-error" : "", isSel ? "vs-sel" : ""].join(" ").trim() || undefined}
+                    className={[c.kind === "formula" ? "vs-formula-col" : "", own ? "vs-own" : "", numeric ? "vs-num" : "", r?.ok === false ? "vs-cell-error" : "", isSel ? "vs-sel" : ""].join(" ").trim() || undefined}
                     onMouseDown={() => props.onSelect(here)}
                     onDoubleClick={() => props.onStartEdit(here)}
                   >
@@ -172,7 +174,10 @@ export function Grid(props: GridProps): ReactElement {
                         }}
                       />
                     ) : (
-                      <CellView r={r} />
+                      <>
+                        <CellView r={r} />
+                        {own ? <span className="vs-sr">, own formula</span> : null}
+                      </>
                     )}
                   </td>
                 );

@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { defaultChart } from "../chart.ts";
-import { addColumn, addRow, convertColumn, deleteColumn, deleteRow, emptyDoc, indentRow, moveColumn, moveRow, outdentRow, setCell, setChart, updateColumn, type SheetDoc, type ValueType } from "../doc.ts";
+import { addColumn, addRow, cellFormulaOf, convertColumn, deleteColumn, deleteRow, emptyDoc, indentRow, moveColumn, moveRow, outdentRow, setCell, setCellFormula, setChart, updateColumn, type SheetDoc, type ValueType } from "../doc.ts";
 import { evaluateDoc, type Compiler } from "../engine.ts";
 import { EXAMPLES } from "../examples.ts";
 import { commit, historyOf, redo, undo, type History } from "../history.ts";
@@ -26,6 +26,10 @@ export interface SheetAppProps {
 /** A link in the address that names a document. */
 const LINK = /#(example|sheet)=/;
 
+/** This function gives the document with a draft formula: the formula of a column, or the own formula of a cell. */
+const withDraft = (doc: SheetDoc, draft: { readonly col: string; readonly row: string | null; readonly text: string }): SheetDoc =>
+  draft.row === null ? updateColumn(doc, draft.col, { formula: draft.text }) : setCellFormula(doc, draft.row, draft.col, draft.text);
+
 const firstCell = (doc: SheetDoc): CellRef => ({ row: doc.rows[0]?.id ?? "", col: doc.columns[0]?.id ?? "" });
 
 /** This function gives a file to the user. */
@@ -45,7 +49,8 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const doc = hist.present;
   const [sel, setSel] = useState<CellRef>(() => firstCell(doc));
   const [editing, setEditing] = useState<(CellRef & { readonly text: string }) | undefined>(undefined);
-  const [draft, setDraft] = useState<{ readonly col: string; readonly text: string } | undefined>(undefined);
+  // The draft of a formula: the formula of a column (`row` is `null`), or the own formula of one cell.
+  const [draft, setDraft] = useState<{ readonly col: string; readonly row: string | null; readonly text: string } | undefined>(undefined);
   const [view, setView] = useState<View>(PLAIN_VIEW);
   const [showVex, setShowVex] = useState(false);
   const [note, setNote] = useState("");
@@ -102,7 +107,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   }, []);
 
   // The draft formula changes the results at once. The history gets the formula when the edit ends.
-  const shown = useMemo(() => (draft === undefined ? doc : updateColumn(doc, draft.col, { formula: draft.text })), [doc, draft]);
+  const shown = useMemo(() => (draft === undefined ? doc : withDraft(doc, draft)), [doc, draft]);
   const ev = useMemo(() => evaluateDoc(shown, compiler), [shown, compiler]);
   const rows = useMemo(() => visibleRows(shown, ev, view), [shown, ev, view]);
   const rowIds = useMemo(() => rows.map((r) => r.id), [rows]);
@@ -113,7 +118,9 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const here: CellRef = { row, col };
   const column = shown.columns.find((c) => c.id === col);
   const rowIndex = rows.findIndex((r) => r.id === row);
-  const compiled = column?.kind === "formula" ? ev.compiled.get(column.id) : undefined;
+  const compiled = column?.kind === "formula" ? ev.compiledCell(row, column.id) : undefined;
+  // The own formula of the selected cell, or `undefined` when the cell takes the formula of its column.
+  const own = column?.kind === "formula" ? cellFormulaOf(shown, row, column.id) : undefined;
 
   const move = (dr: number, dc: number): void => {
     const ri = Math.min(rows.length - 1, Math.max(0, rowIndex + dr));
@@ -124,7 +131,8 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     const c = shown.columns.find((x) => x.id === cell.col);
     if (c === undefined) return;
     if (c.kind === "formula") {
-      setDraft({ col: c.id, text: c.formula });
+      const mine = cellFormulaOf(shown, cell.row, c.id);
+      setDraft({ col: c.id, row: mine === undefined ? null : cell.row, text: mine ?? c.formula });
       requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".vs-bar .vs-editor-input")?.focus());
       return;
     }
@@ -139,7 +147,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     requestAnimationFrame(() => document.getElementById(`vs-cell-${row}-${col}`)?.focus());
   };
   const endDraft = (): void => {
-    if (draft !== undefined) apply((d) => updateColumn(d, draft.col, { formula: draft.text }));
+    if (draft !== undefined) apply((d) => withDraft(d, draft));
     setDraft(undefined);
   };
   const rowAction = (action: "below" | "child" | "indent" | "outdent" | "up" | "down" | "delete"): void => {
@@ -163,7 +171,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     setSel({ row, col: r.id });
     // A new formula column opens the formula bar, so the user writes the formula at once.
     if (kind === "formula") {
-      setDraft({ col: r.id, text: "= " });
+      setDraft({ col: r.id, row: null, text: "= " });
       requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".vs-bar .vs-editor-input")?.focus());
     }
   };
@@ -289,14 +297,15 @@ export function SheetApp(props: SheetAppProps): ReactElement {
         <span className="vs-address" aria-live="polite">
           {column?.kind === "formula" ? "ƒ " : ""}
           {column?.name ?? ""} · row {rowIndex + 1}
+          {own === undefined ? "" : " · own formula"}
         </span>
         {column?.kind === "formula" ? (
           <div className="vs-bar-main">
             <FormulaEditor
-              key={column.id}
-              label={`The formula of the column ${column.name}`}
-              value={draft?.col === column.id ? draft.text : column.formula}
-              onChange={(text) => setDraft({ col: column.id, text })}
+              key={own === undefined ? column.id : `${column.id}:${row}`}
+              label={own === undefined ? `The formula of the column ${column.name}` : `The own formula of ${column.name}, row ${rowIndex + 1}`}
+              value={draft?.col === column.id && draft.row === (own === undefined ? null : row) ? draft.text : (own ?? column.formula)}
+              onChange={(text) => setDraft({ col: column.id, row: own === undefined ? null : row, text })}
               onDone={endDraft}
               onCancel={() => setDraft(undefined)}
               highlight={compiler.highlight}
@@ -304,6 +313,20 @@ export function SheetApp(props: SheetAppProps): ReactElement {
               functions={compiler.functions ?? []}
               columns={shown.columns.filter((c) => c.id !== column.id).map((c) => c.name)}
             />
+            {/* The cell gets a copy of the formula of the column as its own formula, or it takes the formula of the column again. */}
+            <button
+              type="button"
+              className="vs-btn"
+              aria-pressed={own !== undefined}
+              title={own === undefined ? "Give this cell its own formula" : "Use the formula of the column in this cell"}
+              onClick={() => {
+                const formula = own === undefined ? column.formula : undefined;
+                apply((d) => setCellFormula(d, row, column.id, formula));
+                setDraft(undefined);
+              }}
+            >
+              Own formula
+            </button>
             <button type="button" className="vs-btn vs-vex-toggle" aria-pressed={showVex} onClick={() => setShowVex((v) => !v)}>
               Vex
             </button>

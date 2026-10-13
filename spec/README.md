@@ -162,6 +162,7 @@ An expression is plain JSON data. It has one of these kinds.
 A sheet has named columns of formulas over a space. A cell is one column at one key. A formula reads a cell with a cell reference: the extension node `ext("vex.cell", { column, at })`.
 
 - **[SHEET.CELL]** A cell reference resolves its address from the focus, then gives the result of that cell. An unknown column gives `#NAME?`, and an address outside the space gives `#REF!`.
+- **[SHEET.CELL.FORMULA]** A cell can have its own formula. That formula replaces the formula of its column at its key, and the other keys keep the formula of the column. A cell without a formula gives `#NAME?`. In the builder, `cellFormula(k, column, formula)` gives the formula of a cell, and the formula must give a value of the type of the column.
 - **[SHEET.RECURRENCE]** A column can read itself at another key. A recurrence over the key order, for example a running total, gives the same result as a loop. The first key that a host reads does not change a result, also at the end of a long recurrence.
 - **[SHEET.DECLARE]** `declare<T>()` gives the types of columns before their formulas. A formula can read a declared column with its type, also the column itself or a later column. The formula of a declared column must give a value of the declared type. `declare` has no effect at run time.
 - **[SHEET.CYCLE]** Each cell on a cycle of cell references gives `#CYCLE!`. A cycle can contain one cell, or cells at different keys.

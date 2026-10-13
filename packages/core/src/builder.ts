@@ -6,7 +6,7 @@ import type { AnyDomain, Domain, OpSpec } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
 import { app, each, ext, index as indexMove, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Addr, type Axis, type Expr, type Move } from "./ir.ts";
-import { cell as cellRef, SheetRun } from "./sheet.ts";
+import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
@@ -360,8 +360,19 @@ export interface Sheet<Ctx extends ChainContext, Cols, Decl = object> {
    * `cell` and its type: the column itself (a recurrence) or a later column. It has no effect at run time.
    */
   declare<D extends Readonly<Record<string, unknown>>>(): Sheet<Ctx, Cols, Decl & D>;
+  /**
+   * This method gives a new sheet in which the cell of the column `column` at the key `k` has its own formula. That
+   * formula replaces the formula of the column at the key `k`. It must give a value of the type of the column.
+   */
+  cellFormula<const N extends keyof (Cols & Decl) & string>(
+    k: Ctx["keys"],
+    column: N,
+    formula: (r: SheetRoot<Ctx, Cols & Decl>) => ChainBase<Ctx, (Cols & Decl)[N]>,
+  ): Sheet<Ctx, Cols, Decl>;
   /** The program of each column. */
   readonly columns: Readonly<Record<string, Expr>>;
+  /** The program of each cell with its own formula, by column and then by key. */
+  readonly cellFormulas: Readonly<Record<string, Readonly<Record<string, Expr>>>>;
   /** This method evaluates one cell, and gives the error if there is one. */
   result<N extends keyof Cols & string>(k: Ctx["keys"], column: N): Result<Cols[N]>;
   /** This method evaluates one cell. An error gives `none`. */
@@ -704,25 +715,36 @@ class SheetRootImpl extends RootImpl {
 class SheetImpl {
   readonly #env: Env;
   readonly #columns: ReadonlyMap<string, Expr>;
-  constructor(env: Env, columns: ReadonlyMap<string, Expr>) {
+  readonly #cells: CellFormulas;
+  constructor(env: Env, columns: ReadonlyMap<string, Expr>, cells: CellFormulas = new Map()) {
     this.#env = env;
     this.#columns = columns;
+    this.#cells = cells;
   }
   get columns(): Readonly<Record<string, Expr>> {
     return Object.freeze(Object.fromEntries(this.#columns));
+  }
+  get cellFormulas(): Readonly<Record<string, Readonly<Record<string, Expr>>>> {
+    return Object.freeze(Object.fromEntries([...this.#cells].map(([c, keys]) => [c, Object.freeze(Object.fromEntries(keys))])));
   }
   declare(): SheetImpl {
     return this;
   }
   column(name: string, formula: (r: SheetRootImpl) => { readonly program: Expr }): SheetImpl {
     const program = formula(new SheetRootImpl(this.#env)).program;
-    return new SheetImpl(this.#env, new Map([...this.#columns, [name, program]]));
+    return new SheetImpl(this.#env, new Map([...this.#columns, [name, program]]), this.#cells);
+  }
+  cellFormula(k: string, column: string, formula: (r: SheetRootImpl) => { readonly program: Expr }): SheetImpl {
+    const program = formula(new SheetRootImpl(this.#env)).program;
+    const keys = new Map([...(this.#cells.get(column) ?? []), [k, program]]);
+    return new SheetImpl(this.#env, this.#columns, new Map([...this.#cells, [column, keys]]));
   }
   #run(): SheetRun {
     const { space: s, domains, options } = this.#env;
     return new SheetRun(this.#columns, {
       space: s,
       domains,
+      cells: this.#cells,
       // Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same
       ...(options.fns === undefined ? {} : { fns: options.fns }),
       // Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same

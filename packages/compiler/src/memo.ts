@@ -1,15 +1,33 @@
 /**
- * The work that does not depend on the origin (docs/COMPILER.md §7.2). A node whose value depends only on the space
- * has the same value at each origin. A program keeps that value for each space, so a run at each key of a space
- * computes the node once. A space does not change, so the value stays correct.
+ * The memo of a program (docs/COMPILER.md §7.2 and §7.3). The value of some nodes depends only on the space and on a
+ * few values that the node reads from outside: its keys. A program keeps the value of such a node for each space and
+ * each value of its keys. Thus a run at each key of a space evaluates the node once for each value of its keys.
  *
- * A node depends only on the space when it reads no focus and no origin, and no name from outside it. It also uses no
- * table and no extension. Only a node with a loop is worth its entry in the memo.
+ * - `AVERAGE(all.Score)` has no keys, so it evaluates once for each space.
+ * - "The largest width in the column of the origin" has one key, the column of the origin. It evaluates once for each
+ *   column, not once for each origin.
+ *
+ * A key reads the origin or a name from outside the node, and nothing that the node changes. Inside the node, the
+ * value of the key replaces the key. Thus the value of the node depends only on the space and the values of the keys.
  */
 import { isListOp, type Addr, type Axis, type Expr } from "@mark1russell7/vex";
 
+/** A read of the focus of the expression, outside its own loops. */
+const FOCUS = 1;
+/** A move to the origin. */
+const ORIGIN = 2;
+/** A name that the node does not bind: a variable of the run, or a binding outside the node. */
+const FREE = 4;
+/** A name that the node binds, outside the expression. */
+const INTERNAL = 8;
+/** An extension or an axis table. An extension can read each part of the evaluation, and a table is another space. */
+const OPAQUE = 16;
+/** A move to the origin or a free name inside a loop of the expression. Such a loop is a part of a node, not a key. */
+const DEEP = 32;
+
 /** This function gives the axis inside the `where` axes of an axis, and the tests of the `where` axes. */
 function parts(a: Axis): { readonly base: Exclude<Axis, { readonly t: "where" }>; readonly tests: readonly Expr[] } {
+  // Stryker disable next-line ArrayDeclaration: a test that is not an expression reads nothing, and it has no keys
   const tests: Expr[] = [];
   let x: Axis = a;
   while (x.t === "where") {
@@ -19,74 +37,120 @@ function parts(a: Axis): { readonly base: Exclude<Axis, { readonly t: "where" }>
   return { base: x, tests };
 }
 
-/**
- * This function tells if a read at an address can depend on the focus or the origin. A key or an index fixes the focus,
- * and a move to the origin after it makes the read depend on the origin. `focus` and `origin` tell if the scope can
- * change them.
- */
-function movable(at: Addr | undefined, focus: boolean, origin: boolean): boolean {
-  let moves = focus;
+/** This function adds `DEEP` to a read of the origin or of a free name inside a loop. */
+const inLoop = (r: number, top: boolean): number => (top || (r & (ORIGIN | FREE)) === 0 ? r : r | DEEP);
+
+/** This function gives the reads of an address: the focus at the top of the expression, or the origin, or nothing. */
+function addressReads(at: Addr | undefined, top: boolean): number {
+  let found = top ? FOCUS : 0;
   at?.forEach((m) => {
-    if (m.t === "key" || m.t === "index") moves = false;
-    else if (m.t === "origin") moves = origin;
+    if (m.t === "key" || m.t === "index") found = 0;
+    else if (m.t === "origin") found = ORIGIN;
   });
-  return moves;
+  return inLoop(found, top);
 }
 
 /**
- * This function tells if the value of `e` can depend on more than the space. Such a value can depend on the focus or
- * the origin of the scope, a name from outside `e`, a table or an extension. `bound` has the names that `e` binds
- * itself. Inside an axis, the focus is the target, so the body can read it.
+ * This function gives the reads of `e`. `outer` has the names that the node binds outside `e`, and `inner` has the
+ * names that `e` binds above this part. `top` is true outside the loops of `e`.
  */
-function dependsOn(e: Expr, focus: boolean, origin: boolean, bound: ReadonlySet<string>): boolean {
+function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, top: boolean): number {
   switch (e.tag) {
-    // Stryker disable next-line StringLiteral: without the case, the switch gives undefined, which is false too
+    // A missing case gives undefined, and a bitwise operation counts it as 0.
+    // Stryker disable next-line StringLiteral: see the comment above
     case "lit":
-      return false;
+      return 0;
     case "var":
-      return !bound.has(e.name);
+      return inner.has(e.name) ? 0 : outer.has(e.name) ? INTERNAL : inLoop(FREE, top);
     case "ext":
-      // An extension can read each part of the evaluation.
-      return true;
+      return OPAQUE;
     case "ref":
-      return movable(e.at, focus, origin);
+      return addressReads(e.at, top);
     case "app":
-      return e.args.some((x) => dependsOn(x, focus, origin, bound));
+      return e.args.reduce((r, x) => r | reads(x, outer, inner, top), 0);
     case "rec":
-      return Object.values(e.fields).some((x) => dependsOn(x, focus, origin, bound));
+      return Object.values(e.fields).reduce((r, x) => r | reads(x, outer, inner, top), 0);
     case "let": {
-      const inner = new Set([...bound, ...Object.keys(e.bind)]);
-      return Object.values(e.bind).some((x) => dependsOn(x, focus, origin, bound)) || dependsOn(e.body, focus, origin, inner);
+      const binds = Object.values(e.bind).reduce((r, x) => r | reads(x, outer, inner, top), 0);
+      return binds | reads(e.body, outer, new Set([...inner, ...Object.keys(e.bind)]), top);
     }
     case "each": {
       const { base, tests } = parts(e.axis);
       // The targets of `all` do not depend on the focus. Each other axis starts at its address.
-      const targets = base.t === "table" || (base.t !== "all" && movable(e.at, focus, origin));
-      return targets || [e.body, ...tests].some((x) => dependsOn(x, false, origin, bound));
+      const targets = base.t === "table" ? OPAQUE : base.t === "all" ? 0 : addressReads(e.at, top);
+      return [e.body, ...tests].reduce((r, x) => r | reads(x, outer, inner, false), targets);
     }
   }
 }
 
-/** This function tells if an expression has no loop. */
-function loopFree(e: Expr): boolean {
+/** This function joins the keys of the parts of an expression. A part that cannot be in the memo makes the expression the same. */
+function all(xs: readonly (readonly Expr[] | undefined)[]): readonly Expr[] | undefined {
+  // Stryker disable next-line ArrayDeclaration: after the check, each part has its keys, so no one reads the default list
+  return xs.every((x) => x !== undefined) ? xs.flatMap((x) => x ?? []) : undefined;
+}
+
+/**
+ * This function gives the keys of the part `e` of a node, or `undefined` if the part cannot be in the memo. `top` is
+ * true outside the loops of the node, and `outer` has the names that the node binds above `e`. The node itself (`root`)
+ * is not a key of itself.
+ */
+function keysOf(e: Expr, top: boolean, outer: ReadonlySet<string>, pure: Set<Expr>, root = false): readonly Expr[] | undefined {
+  const r = reads(e, outer, new Set(), true);
+  // In a loop of the node, the focus is a target of the node, and the node can read it. A part that depends only on
+  // the space has a memo of its own, if it has a loop.
+  if ((r & (ORIGIN | FREE | OPAQUE | (top ? FOCUS : 0))) === 0) {
+    if (!root) pure.add(e);
+    return [];
+  }
+  // A key evaluates once, outside the loops of the node. A loop that reads the origin is a part of the node, not a key.
+  if (!root && (r & (FOCUS | INTERNAL | OPAQUE | DEEP)) === 0) return [e];
   switch (e.tag) {
-    // Stryker disable next-line StringLiteral: without the case, the switch gives undefined, which is false too
-    case "each":
-      return false;
     case "app":
-      return e.args.every(loopFree);
+      return all(e.args.map((x) => keysOf(x, top, outer, pure)));
     case "rec":
-      return Object.values(e.fields).every(loopFree);
-    case "let":
-      return [...Object.values(e.bind), e.body].every(loopFree);
+      return all(Object.values(e.fields).map((x) => keysOf(x, top, outer, pure)));
+    case "let": {
+      const inner = new Set([...outer, ...Object.keys(e.bind)]);
+      return all([...Object.values(e.bind).map((x) => keysOf(x, top, outer, pure)), keysOf(e.body, top, inner, pure)]);
+    }
+    case "each": {
+      const { base, tests } = parts(e.axis);
+      // The targets of a loop must not depend on the origin: a set of targets is not a value of a key.
+      if (base.t === "table" || (base.t !== "all" && addressReads(e.at, top) !== 0)) return undefined;
+      return all([e.body, ...tests].map((x) => keysOf(x, false, outer, pure)));
+    }
+    // A leaf here reads the focus or a name of the node, so it is not a key, and the part cannot be in the memo. A
+    // missing case gives undefined too.
+    // Stryker disable StringLiteral,ConditionalExpression: see the comment above
     case "lit":
     case "ref":
-    // A name and an extension depend on more than the space, so the memo has no such node without the case too.
-    // Stryker disable next-line StringLiteral: see the comment above
     case "var":
-    // Stryker disable next-line StringLiteral: see the comment above
     case "ext":
+      return undefined;
+    // Stryker restore StringLiteral,ConditionalExpression
+  }
+}
+
+/** This function tells if an expression has a loop outside its keys and outside the parts that have a memo of their own. */
+function loopOutside(e: Expr, keys: ReadonlySet<Expr>): boolean {
+  if (keys.has(e)) return false;
+  switch (e.tag) {
+    case "each":
       return true;
+    case "app":
+      return e.args.some((x) => loopOutside(x, keys));
+    case "rec":
+      return Object.values(e.fields).some((x) => loopOutside(x, keys));
+    case "let":
+      return [...Object.values(e.bind), e.body].some((x) => loopOutside(x, keys));
+    // A missing case gives undefined, which is false too.
+    // Stryker disable StringLiteral,ConditionalExpression: see the comment above
+    case "lit":
+    case "ref":
+    case "var":
+    case "ext":
+      return false;
+    // Stryker restore StringLiteral,ConditionalExpression
   }
 }
 
@@ -102,14 +166,16 @@ function eachUnderLets(e: Expr | undefined): { readonly lets: readonly Extract<E
 }
 
 /**
- * This function gives the nodes of `expr` that a program keeps for each space. Each such node has a loop, and its
- * value depends only on the space. A node inside such a node is in the memo too. Thus the first evaluation of the outer
+ * This function gives the nodes of `expr` that a program keeps in its memo, each with its keys. Each such node has a
+ * loop outside its keys. A node inside such a node can be in the memo too. Thus the first evaluation of the outer
  * node evaluates the inner node once.
  */
-export function memoNodes(expr: Expr): ReadonlySet<Expr> {
-  const out = new Set<Expr>();
+export function memoNodes(expr: Expr): ReadonlyMap<Expr, readonly Expr[]> {
+  const out = new Map<Expr, readonly Expr[]>();
   const visit = (e: Expr): void => {
-    if (!loopFree(e) && !dependsOn(e, true, true, new Set())) out.add(e);
+    const pure = new Set<Expr>();
+    const keys = keysOf(e, true, new Set(), pure, true);
+    if (keys !== undefined && loopOutside(e, new Set([...keys, ...pure]))) out.set(e, keys);
     if (e.tag === "app") {
       // A list op over an `each` under `let` expressions is one loop, so that `each` and those `let` expressions have
       // no value of their own. Their parts can be in the memo.

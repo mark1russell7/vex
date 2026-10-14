@@ -167,7 +167,7 @@ A domain can give an **inline form** for an op: the arithmetic on the components
 
 ### 7.3 Aggregates by group
 
-"The width of a column is the largest width in the same column" is a group. One pass gives the value of each group, not one pass for each row.
+"The width of a column is the largest width in the same column" is a group. The node reads the origin only through its column, so its column is the key of the memo. Thus the node evaluates once for each column, not once for each row (§13.2).
 
 ### 7.4 Sheets
 
@@ -232,7 +232,7 @@ The owner made these decisions on 2026-10-13:
 | Phase | Deliverables | Done when |
 |---|---|---|
 | C1 The compiler | The package, the loop IR, the back end of JavaScript source, `tiered`, the checks and the fallback, P17, golden files, the speed gate | Done on 2026-10-13 (§13). P17 passes, and the speed lane is 2.3 and 1.6 times the loops. |
-| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), the memo of work that does not depend on the origin (COMPILE.MEMO), aggregates by group, sheets with fixed addresses | The speed lane is within 1.2 times the loops, and a run at each key costs O(n) for work that does not depend on the origin. Both are done (§13.2). The groups and the sheets are open. |
+| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), the memo of work that does not depend on the origin (COMPILE.MEMO), aggregates by group (COMPILE.GROUP), sheets with fixed addresses | The speed lane is within 1.2 times the loops. A run at each key costs O(n) for work that does not depend on the origin, and O(n times the groups) for an aggregate by group. These are done (§13.2). The sheets are open. |
 | C3 ireko | The kinds (§3.2) and `returns` on the ops of the built-in domains, `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
 | C4 Iteration | `fold`, `iterate`, domain kernels, then `tree` and `layers` of ireko | Each construct passes each stage, and the layouts of ireko do not change |
 | C5 Later | Inline forms (§7.1), other back ends, recalculation (§7.5) | A decision of the owner |
@@ -298,9 +298,22 @@ The memo needs no new API: the usual run at each key gets the gain. A value from
 
 The gate measures the share of each value in the total. The run at each of 1000 keys costs 2.0 times the run at each of 500 keys, so the cost is O(n). The cost of the interpreter grows 4 times, because it is O(n²).
 
-Phase C2 adds three tests. A property gives many runs of one program on the same spaces. A test counts the calls in a node of the memo. A test gives the nodes of the memo for each kind of expression. The mutation score of the compiler is 100 % of 1306 mutants, and comments disable 17 equivalent mutants, each with its reason.
+Phase C2 adds three tests. A property gives many runs of one program on the same spaces. A test counts the calls in a node of the memo. A test gives the nodes of the memo for each kind of expression.
+
+The mutation score of the compiler is 100 % of 1364 mutants. Comments disable 68 equivalent mutants, each with its reason. Most of them are labels of a `case` that gives the same value as a missing case.
+
+#### Aggregates by group: the keys of the memo
+
+A node can read the origin through a few values only: its keys. "The largest width in the column of the origin" reads the origin only through the column of the origin. Then the value of the node depends only on the space and its keys. The memo has an entry for each space and each value of the keys (COMPILE.GROUP).
+
+The analysis (`memo.ts`) gives the keys of each node. A key reads the origin or a name from outside the node, and nothing that the node binds or reads at its own targets. A loop that reads the origin is a part of the node, not a key.
+
+The program evaluates the keys where the node is. Inside the node, the value of each key replaces the key, also when the key has an error. Thus each error stays at its place. The node needs no new declaration from the domains, because the entry of a value of the keys is the value of the node itself. Each column evaluates once, so an aggregate by group costs O(n times the groups), not O(n²).
+
+The memo keeps no entry whose keys hold an object or a function. Each run can make a new object, so such entries only fill the memo. The keys 0 and -0 have different entries, because an op can tell them apart.
+
+The plan had a different solution: one pass for all groups. That needs an `eq` op with the equality of JavaScript, and a domain does not declare this. The keys of the memo need no such declaration.
 
 #### The open items of the phase
 
-- **Aggregates by group** (§7.3). One pass can give the aggregate of each group only if the test of the group compares keys with the equality of JavaScript (`===`). An op of a domain does not tell this. Thus the domains need a new declaration, for example a law of their `eq` ops. This is a change of the API of the domains, so it is a decision of the owner.
 - **Sheets with fixed addresses** (§7.4). The compiler needs the order of the cells of `SheetRun` and the references of the cells as nodes, not as extensions. This is a larger piece of work, and ireko does not need it for its first strategies.

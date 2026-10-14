@@ -72,6 +72,16 @@ const arbListProgram: fc.Arbitrary<Expr> = fc
     return { tag: "app", op, args: [list, ...rest] };
   });
 
+/** A list op over all with a key: the body or the test of where reads a field at the origin (COMPILE.GROUP). */
+const arbKeyedProgram: fc.Arbitrary<Expr> = fc
+  .tuple(fc.constantFrom(...LIST_OPS), fc.constantFrom("n", "p", "b"), fc.constantFrom("n", "p", "b"), fc.boolean(), fc.constantFrom("add", "gt", "subtract"))
+  .map(([op, f, g, inTest, combine]): Expr => {
+    const atOrigin: Expr = { tag: "ref", path: [f], at: [{ t: "origin" }] };
+    const both: Expr = { tag: "app", op: combine, args: [{ tag: "ref", path: [g] }, atOrigin] };
+    const axis: Axis = inTest ? { t: "where", axis: { t: "all" }, test: both } : { t: "all" };
+    return { tag: "app", op, args: [{ tag: "each", axis, body: inTest ? { tag: "ref", path: [g] } : both }, ...(op === "reduce" ? [{ tag: "lit", value: "add" } as Expr] : [])] };
+  });
+
 const tables = arbSpace(vec).map((t): Readonly<Record<string, Space>> => ({ T: t }));
 const vars = fc.option(fc.record({ a: arbLiteral(vec), c: arbLiteral(vec) }), { nil: undefined });
 
@@ -109,7 +119,7 @@ describe("the tiers", () => {
   });
 
   it("P17 COMPILE.MEMO: one program at each key of each space, twice, gives the result of the interpreter at each key", () => {
-    const programs = fc.oneof(arbExpr(OPTS), arbListProgram, arbListProgram.map((e): Expr => ({ tag: "app", op: "add", args: [{ tag: "ref", path: ["n"] }, e] })));
+    const programs = fc.oneof(arbExpr(OPTS), arbListProgram, arbKeyedProgram, arbKeyedProgram.map((e): Expr => ({ tag: "app", op: "add", args: [{ tag: "ref", path: ["n"] }, e] })));
     fc.assert(
       fc.property(programs, fc.array(arbSpace(vec), { minLength: 1, maxLength: 3 }), tables, (e, spaces, t) => {
         const options = { domains: DOMAINS, fns: FNS };

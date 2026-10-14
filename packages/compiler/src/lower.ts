@@ -90,9 +90,11 @@ class Lowerer {
   locals = FIXED_LOCALS;
   labels = 0;
   memos = 0;
-  readonly #memo: ReadonlySet<Expr>;
+  readonly #memo: ReadonlyMap<Expr, readonly Expr[]>;
+  /** The keys of the nodes of the memo whose code the lowering makes, with their values. */
+  #keys: ReadonlyMap<Expr, Bound> = new Map();
 
-  constructor(memo: ReadonlySet<Expr>) {
+  constructor(memo: ReadonlyMap<Expr, readonly Expr[]>) {
     this.#memo = memo;
   }
   readonly constants: unknown[] = [];
@@ -140,7 +142,14 @@ class Lowerer {
   }
 
   expr(e: Expr, s: Scope, path: readonly number[], b: Block): LExpr {
-    return this.#memo.has(e) ? this.#memoized(e, s, path, b) : this.#node(e, s, path, b);
+    // Inside a node of the memo, the value of a key replaces the key. An error of the key is an error at each place.
+    const key = this.#keys.get(e);
+    if (key !== undefined) {
+      if (key.ok !== undefined) this.check(b, key.ok, "a key with a value");
+      return key.value;
+    }
+    const keys = this.#memo.get(e);
+    return keys === undefined ? this.#node(e, s, path, b) : this.#memoized(e, keys, s, path, b);
   }
 
   /** This method lowers a node itself, without the memo. */
@@ -190,22 +199,37 @@ class Lowerer {
    * Without the entry of the space, the node evaluates in a block, and an error of it makes an entry without a value.
    * An exception stops the program, so the memo gets no entry for it.
    */
-  #memoized(e: Expr, s: Scope, path: readonly number[], b: Block): LExpr {
+  #memoized(e: Expr, keys: readonly Expr[], s: Scope, path: readonly number[], b: Block): LExpr {
     const memo: LExpr = { t: "memo", id: this.memos++ };
+    // Each key evaluates here, in a block of its own, as a binding does.
+    const values = keys.map((k): Bound => this.#attempt(b, (inner) => this.expr(k, s, path, inner)));
+    const tuple = array(...values.flatMap((k) => [k.value, flag(k)]));
     const h = this.locals++;
-    const label = this.labels++;
-    const v = this.locals++;
-    const ok = this.locals++;
-    const attempt = block({ t: "break", label });
-    attempt.stmts.push({ t: "set", n: v, value: this.#node(e, s, path, attempt) }, { t: "set", n: ok, value: bool(true) });
-    const compute: LStmt[] = [
-      { t: "let", n: ok, value: bool(false) },
-      { t: "block", label, body: attempt.stmts },
-      { t: "set", n: h, value: prim("memoPut", memo, s.space, local(v), local(ok)) },
-    ];
-    b.stmts.push({ t: "let", n: h, value: prim("get", memo, s.space) }, { t: "if", cond: prim("!", prim("isValue", local(h))), yes: compute, no: [] });
+    const outer = this.#keys;
+    this.#keys = new Map([...outer, ...keys.map((k, i): [Expr, Bound] => [k, values[i] as Bound])]);
+    const compute = block(b.fail);
+    const node = this.#attempt(compute, (inner) => this.#node(e, s, path, inner));
+    this.#keys = outer;
+    compute.stmts.push({ t: "set", n: h, value: prim("memoPut", memo, s.space, tuple, node.value, flag(node)) });
+    b.stmts.push({ t: "let", n: h, value: prim("memoGet", memo, s.space, tuple) }, { t: "if", cond: prim("!", prim("isValue", local(h))), yes: compute.stmts, no: [] });
     this.check(b, prim("entryOk", local(h)), "a value of the memo");
     return this.value(b, prim("entryValue", local(h)));
+  }
+
+  /**
+   * This method evaluates an expression in a block whose errors end the block, as a binding does. It gives the value
+   * and the flag that tells if the value exists. Without statements, the expression always has a value, so it gets no flag.
+   */
+  #attempt(b: Block, make: (inner: Block) => LExpr): Bound {
+    const label = this.labels++;
+    const attempt = block({ t: "break", label });
+    const value = make(attempt);
+    if (attempt.stmts.length === 0) return { value };
+    const v = this.locals++;
+    const ok = this.locals++;
+    attempt.stmts.push({ t: "set", n: v, value }, { t: "set", n: ok, value: bool(true) });
+    b.stmts.push({ t: "let", n: ok, value: bool(false) }, { t: "block", label, body: attempt.stmts });
+    return { value: local(v), ok: local(ok) };
   }
 
   /**
@@ -235,19 +259,7 @@ class Lowerer {
   #bind(e: ExprOf<"let">, s: Scope, path: readonly number[], b: Block): ReadonlyMap<string, Bound> {
     const env = new Map(s.env);
     Object.entries(e.bind).forEach(([name, x], i) => {
-      const label = this.labels++;
-      const attempt = block({ t: "break", label });
-      const value = this.expr(x, s, [...path, i], attempt);
-      // A binding without statements is a constant or a bound name, so it always has a value.
-      if (attempt.stmts.length === 0) {
-        env.set(name, { value });
-        return;
-      }
-      const v = this.locals++;
-      const ok = this.locals++;
-      attempt.stmts.push({ t: "set", n: v, value }, { t: "set", n: ok, value: bool(true) });
-      b.stmts.push({ t: "let", n: ok, value: bool(false) }, { t: "block", label, body: attempt.stmts });
-      env.set(name, { value: local(v), ok: local(ok) });
+      env.set(name, this.#attempt(b, (inner) => this.expr(x, s, [...path, i], inner)));
     });
     return env;
   }
@@ -476,3 +488,7 @@ class Lowerer {
 }
 
 const NEGATIVE_ZERO = Symbol("-0");
+
+/** This function gives the flag of a bound value: its local, or `true` for a value without a flag. */
+// Stryker disable next-line BooleanLiteral: a value without a flag always exists, so each constant gives the same entries
+const flag = (b: Bound): LExpr => b.ok ?? bool(true);

@@ -85,6 +85,9 @@ describe("COMPILE.SOURCE: the generated source", () => {
       neighbors: app("count", each(axes.neighbors(4), ref("n"))),
     });
     await expectGolden("sites", e, options);
+    // A group: the largest width in the column of the origin, with the column as the key of the memo.
+    const column = app("mod", ref("i", [{ t: "origin" }]), v("cols"));
+    await expectGolden("group", app("max", each(axes.where(axes.all, app("eq", app("mod", ref("i"), v("cols")), column)), ref("w"))), options);
     await expectGolden("nearest-vec2", NEAREST, options);
   });
 

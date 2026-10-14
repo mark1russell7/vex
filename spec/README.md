@@ -183,6 +183,7 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[COMPILE.FALLBACK]** Where the generated code of tier 2 cannot give the result, tier 1 gives it. Each error value comes from tier 1. A page that does not permit `new Function` uses tier 1.
 - **[COMPILE.TRACE]** A run with a trace, and `explain`, use tier 1. Thus they give the traces of the interpreter.
 - **[COMPILE.MEMO]** A program keeps the value of each node that depends only on the space, for each space. Thus a run at each key of a space evaluates such a node once. A space does not change, so each run gives the result of `evaluate`.
+- **[COMPILE.GROUP]** A program keeps the value of a node for each space and each value of its keys. A key reads the origin or a name from outside the node, and nothing that the node changes. Thus an aggregate over the group of the origin evaluates once for each group.
 - **[COMPILE.SOURCE]** `generate(e)` gives the same source for the same expression. The source has no name and no literal of the expression. It reads them from its constants, by index.
 
 ## 11. Examples

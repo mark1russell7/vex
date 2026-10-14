@@ -610,8 +610,26 @@ function ticks(e: Expr, spaces: readonly Space[]): { readonly tier2: number; rea
 /** This function gives an array space of the values 1 to `count`. */
 const values = (count: number): Space => space.array(Array.from({ length: count }, (_, i) => ({ x: i + 1 })));
 
+/** This function gives the sum of x plus the binding y, with y bound outside the loop to `bound`. */
+const sumWithY = (bound: Expr): Expr => let_({ y: bound }, app("sum", each(axes.all, app("add", ref("x"), v("y")))));
+
+/** A function as a value of a record. */
+const one = (): number => 1;
+
+/** This function gives the sum over all of the second argument of "second": the key `k`, and then a call of tick. */
+const node = (k: Expr): Expr => app("sum", each(axes.all, app("second", k, app("tick", ref("x")))));
+
 /** This function gives the nodes of the memo of an expression. */
-const memo = (e: Expr): readonly Expr[] => [...memoNodes(e)];
+const memo = (e: Expr): readonly Expr[] => [...memoNodes(e).keys()];
+
+/** The columns of 12 values: the index, and a width. */
+const columns = space.array(Array.from({ length: 12 }, (_, i) => ({ i, w: (i * 7) % 5 })));
+/** This function gives the largest width in the column of the origin, with `cols` columns. */
+const widest = (cols: Expr): Expr => {
+  const column = app("mod", ref("i", [{ t: "origin" }]), cols);
+  return app("max", each(axes.where(axes.all, app("eq", app("mod", ref("i"), cols), column)), app("tick", ref("w"))));
+};
+
 
 describe("COMPILE.MEMO: a node that depends only on the space evaluates once for each space", () => {
   const total = app("sum", each(axes.all, app("tick", ref("x"))));
@@ -626,40 +644,125 @@ describe("COMPILE.MEMO: a node that depends only on the space evaluates once for
     expect(ticks(app("count", each(axes.all, total)), [values(4)])).toEqual({ tier2: 4, interpreter: 64 });
   });
 
+  it("COMPILE.GROUP: the largest width in the column of the origin evaluates once for each column", () => {
+    // 12 values in 3 columns: each column has 4 values, so tier 2 has 12 calls, and the interpreter has 12 times 4.
+    expect(ticks(widest(lit(3)), [columns])).toEqual({ tier2: 12, interpreter: 48 });
+  });
+
+  it("COMPILE.GROUP: a variable of the run is a key too", () => {
+    let calls = 0;
+    const options = { domains: [NumDomain], fns: { tick: (x: unknown) => ((calls += 1), x) } };
+    const e = widest(v("cols"));
+    const p = tiered(e, options);
+    const runs = [3, 4, 3].flatMap((cols) => columns.keys.map((origin) => ({ space: columns, origin, vars: { cols } })));
+    const fast = runs.map((r) => p.run(r));
+    // 12 calls for 3 columns, 12 calls for 4 columns, and no call for 3 columns again.
+    expect(calls).toBe(24);
+    expect(fast).toEqual(runs.map((r) => evaluate(e, { ...options, ...r })));
+  });
+
+  it("COMPILE.GROUP: a binding outside the node is a key, with or without a flag", () => {
+    for (const bound of [lit(2), ref("x", [key("A")])]) {
+      const p = tiered(sumWithY(bound), OPTIONS);
+      expect(p.tier).toBe(2);
+      for (const origin of S.keys) expect(p.run({ ...RUN, origin })).toEqual(evaluate(sumWithY(bound), { ...OPTIONS, ...RUN, origin }));
+      expect(p.stats.fallbacks).toBe(0);
+    }
+    // The whole binding depends only on the space, and the loop has the key y.
+    expect([...memoNodes(sumWithY(lit(2))).values()]).toEqual([[], [v("y")]]);
+  });
+
+  it("COMPILE.GROUP: a key evaluates once for each run, and its value replaces it inside the node", () => {
+    // The key calls tick once for each of the 12 runs. Inside the node, the value of the key replaces the key.
+    const ticked = app("mod", app("tick", ref("i", [{ t: "origin" }])), lit(3));
+    const e = app("max", each(axes.where(axes.all, app("eq", app("mod", ref("i"), lit(3)), ticked)), ref("w")));
+    expect(ticks(e, [columns])).toEqual({ tier2: 12, interpreter: 144 });
+  });
+
+  it("COMPILE.GROUP: the memo keeps no entry with an object or a function in its keys, and keeps null", () => {
+    let calls = 0;
+    const shared = { n: 1 };
+    const options = { domains: [NumDomain], fns: { tick: (x: unknown) => ((calls += 1), x), second: (_a: unknown, b: unknown) => b } };
+    const s4 = space.array(Array.from({ length: 4 }, (_, x) => ({ x, obj: shared, fn: one })));
+    const cases: readonly (readonly [Expr, Readonly<Record<string, unknown>>, number])[] = [
+      // The same object at each origin: no entry, so each of the 4 runs evaluates the 4 items.
+      [ref("obj", [{ t: "origin" }]), {}, 16],
+      [ref("fn", [{ t: "origin" }]), {}, 16],
+      // null is not an object for the memo: one entry, so the first run evaluates the 4 items.
+      [v("c"), { c: null }, 4],
+    ];
+    for (const [k, vars, expected] of cases) {
+      calls = 0;
+      const p = tiered(node(k), options);
+      const fast = s4.keys.map((origin) => p.run({ space: s4, origin, vars }));
+      expect(calls).toBe(expected);
+      expect(fast).toEqual(s4.keys.map((origin) => evaluate(node(k), { ...options, space: s4, origin, vars })));
+    }
+  });
+
+  it("COMPILE.GROUP: a key with an error, a key that is an object, and the keys 0 and -0", () => {
+    const signs = { domains: [NumDomain], fns: { sign: (k: unknown, _x: unknown) => (Object.is(k, -0) ? -1 : 1), tick: (x: unknown) => x } };
+    const zeros = space.record({ A: { z: 0, x: 1 }, B: { z: -0, x: 2 }, C: { x: 3 }, D: { z: { n: 1 }, x: 4 } });
+    const e = app("sum", each(axes.all, app("sign", ref("z", [{ t: "origin" }]), ref("x"))));
+    const p = tiered(e, signs);
+    for (const origin of [...zeros.keys, ...zeros.keys]) expect(p.run({ space: zeros, origin })).toEqual(evaluate(e, { ...signs, space: zeros, origin }));
+    expect(p.stats.fallbacks).toBe(0);
+  });
+
   it("an error of the node is the error at each key", () => {
     const failing = app("sum", each(axes.all, app("tick", ref("missing"))), lit({ strict: true }));
     expect(ticks(app("ifError", failing, lit(0)), [values(3)])).toEqual({ tier2: 0, interpreter: 0 });
   });
 });
 
-describe("COMPILE.MEMO: the nodes that depend only on the space", () => {
+describe("COMPILE.MEMO: the nodes of the memo and their keys", () => {
   const loop = each(axes.all, ref("x"));
-  const cases: readonly (readonly [string, Expr, boolean])[] = [
-    ["a loop over all", app("sum", loop), true],
-    ["a literal", lit(1), false],
-    ["a read at the origin", ref("x"), false],
-    ["a loop over the others of the origin", app("sum", each(axes.others, ref("x"))), false],
-    ["a loop over the others of a key", app("sum", each(axes.others, ref("x"), [key("A")])), true],
-    ["a loop over the others of an index", app("sum", each(axes.others, ref("x"), [{ t: "index", i: 0 }])), true],
-    ["a loop from a key and then the origin", app("sum", each(axes.others, ref("x"), [key("A"), { t: "origin" }])), false],
-    ["a read at a key in the body", app("sum", each(axes.all, ref("x", [key("A")]))), true],
-    ["a read at the origin in the body", app("sum", each(axes.all, ref("x", [{ t: "origin" }]))), false],
-    ["a relative read in the body", app("sum", each(axes.all, ref("x", [{ t: "parent" }]))), true],
-    ["a loop over a table", app("sum", each(axes.table("T"), ref("x"))), false],
-    ["a name from the run", app("sum", each(axes.all, v("c"))), false],
-    ["a name bound inside", app("sum", each(axes.all, let_({ y: ref("x") }, v("y")))), true],
-    ["a name bound outside, to a read at the origin", let_({ y: ref("x") }, app("sum", each(axes.all, v("y")))), false],
-    ["a binding inside the node", let_({ y: lit(1) }, app("sum", each(axes.all, v("y")))), true],
-    ["a node with one binding that reads the origin", let_({ y: lit(1), z: ref("x") }, app("sum", each(axes.all, v("y")))), false],
-    ["a test of where at the origin", app("sum", each(axes.where(axes.all, ref("b", [{ t: "origin" }])), ref("x"))), false],
-    ["a loop over a table from a key", app("sum", each(axes.table("T"), ref("x"), [key("A")])), false],
-    ["an extension", app("sum", each(axes.all, ext("echo", 1))), false],
-    ["a record of loops", rec({ a: app("sum", loop), b: lit(1) }), true],
-    ["a binding of a loop", let_({ y: app("sum", loop) }, v("y")), true],
-    ["a where test at the target", app("sum", each(axes.where(axes.all, ref("b")), ref("x"))), true],
+  const atOrigin = ref("x", [{ t: "origin" }]);
+  const run = v("c");
+  const testAtOrigin = ref("b", [{ t: "origin" }]);
+  const column = app("mod", ref("i", [{ t: "origin" }]), run);
+  const boundKey = let_({ y: atOrigin }, v("y"));
+  const recordKey = rec({ a: atOrigin });
+  const loopKey = app("add", atOrigin, app("sum", loop));
+  // Each case: the expression, and the keys of its node in the memo, or undefined for a node without a memo.
+  const cases: readonly (readonly [string, Expr, readonly Expr[] | undefined])[] = [
+    ["a loop over all", app("sum", loop), []],
+    ["a literal", lit(1), undefined],
+    ["a read at the origin", ref("x"), undefined],
+    ["a loop over the others of the origin", app("sum", each(axes.others, ref("x"))), undefined],
+    ["a loop over the others of a key", app("sum", each(axes.others, ref("x"), [key("A")])), []],
+    ["a loop over the others of an index", app("sum", each(axes.others, ref("x"), [{ t: "index", i: 0 }])), []],
+    ["a loop from a key and then the origin", app("sum", each(axes.others, ref("x"), [key("A"), { t: "origin" }])), undefined],
+    ["a read at a key in the body", app("sum", each(axes.all, ref("x", [key("A")]))), []],
+    ["a read at the origin in the body: the read is a key", app("sum", each(axes.all, app("add", ref("x"), atOrigin))), [atOrigin]],
+    ["a relative read in the body", app("sum", each(axes.all, ref("x", [{ t: "parent" }]))), []],
+    ["a loop over a table", app("sum", each(axes.table("T"), ref("x"))), undefined],
+    ["a name from the run is a key", app("sum", each(axes.all, app("add", ref("x"), run))), [run]],
+    ["a name bound inside", app("sum", each(axes.all, let_({ y: ref("x") }, v("y")))), []],
+    ["a name bound outside, to a read at the origin", let_({ y: ref("x") }, app("sum", each(axes.all, v("y")))), undefined],
+    ["a binding inside the node", let_({ y: lit(1) }, app("sum", each(axes.all, v("y")))), []],
+    ["a node with one binding that reads the origin", let_({ y: lit(1), z: ref("x") }, app("sum", each(axes.all, v("y")))), undefined],
+    ["a test of where at the origin is a key", app("sum", each(axes.where(axes.all, testAtOrigin), ref("x"))), [testAtOrigin]],
+    ["a group: the column of the origin is a key", app("max", each(axes.where(axes.all, app("eq", app("mod", ref("i"), run), column)), ref("w"))), [run, column]],
+    ["a key that reads a name of the node is not a key", let_({ y: lit(1) }, app("sum", each(axes.all, app("add", app("add", ref("x"), atOrigin), v("y"))))), [atOrigin]],
+    ["a loop over a table from a key", app("sum", each(axes.table("T"), ref("x"), [key("A")])), undefined],
+    ["an extension", app("sum", each(axes.all, ext("echo", 1))), undefined],
+    ["an extension in a key", app("sum", each(axes.all, app("add", ref("x"), app("add", atOrigin, ext("echo", 1))))), undefined],
+    ["a record of loops", rec({ a: app("sum", loop), b: lit(1) }), []],
+    ["a binding of a loop", let_({ y: app("sum", loop) }, v("y")), []],
+    ["a where test at the target", app("sum", each(axes.where(axes.all, ref("b")), ref("x"))), []],
+    ["a node whose only loop is in a key", app("negate", app("add", atOrigin, app("sum", loop))), undefined],
+    ["a key with a binding", app("sum", each(axes.all, app("add", ref("x"), boundKey))), [boundKey]],
+    ["a record as a key", app("count", each(axes.all, app("add", ref("x"), recordKey))), [recordKey]],
+    ["a record with a key in it", app("count", each(axes.all, rec({ a: ref("x"), b: atOrigin }))), [atOrigin]],
+    ["a key with a loop of its own", app("count", each(axes.where(axes.all, app("eq", ref("x"), loopKey)), ref("x"))), [loopKey]],
+    ["a loop from a key, with a key in it", app("sum", each(axes.others, app("add", ref("x"), atOrigin), [key("A")])), [atOrigin]],
   ];
-  it.each(cases)("%s", (_title, e, kept) => {
-    expect(memo(e).includes(e)).toBe(kept);
+  it.each(cases)("%s", (_title, e, keys) => {
+    const got = memoNodes(e).get(e);
+    expect(got).toEqual(keys);
+    // The keys are the parts of the expression themselves, not copies.
+    expect((got ?? []).every((k, i) => k === (keys ?? [])[i])).toBe(true);
   });
 
   it("the nodes inside other nodes", () => {

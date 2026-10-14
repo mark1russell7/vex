@@ -51,7 +51,8 @@ export type PrimOp =
   | "recordAt" // recordAt(records, index, space, key): the record at an index, or else the record of the key
   | "keysOf" // keysOf(targets): the keys of the targets of an axis
   | "idxOf" // idxOf(targets): the index of each target in the keys of the space
-  | "memoPut" // memoPut(memo, space, value, ok): the new entry of a space in a memo
+  | "memoGet" // memoGet(memo, space, keys): the entry of a space and the values of its keys, or undefined
+  | "memoPut" // memoPut(memo, space, keys, value, ok): the new entry of a space and the values of its keys
   | "entryValue" // entryValue(entry): the value of an entry of a memo
   | "entryOk"; // entryOk(entry): true if the entry has a value
 

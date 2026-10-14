@@ -65,7 +65,7 @@ export function printJs(p: LoopProgram, facts: Facts): string {
         return `${site}(${x.args.map(expr).join(", ")})`;
       }
       case "prim": {
-        const [a, b, c, d] = x.args.map(expr);
+        const [a, b, c, d, e] = x.args.map(expr);
         switch (x.op) {
           case "!":
             return `(!${a})`;
@@ -94,8 +94,10 @@ export function printJs(p: LoopProgram, facts: Facts): string {
             return `${a}.keys`;
           case "idxOf":
             return `${a}.idx`;
+          case "memoGet":
+            return `${a}.get(${b}, ${c})`;
           case "memoPut":
-            return `${a}.put(${b}, ${c}, ${d})`;
+            return `${a}.put(${b}, ${c}, ${d}, ${e})`;
           case "entryValue":
             return `${a}.v`;
           case "entryOk":

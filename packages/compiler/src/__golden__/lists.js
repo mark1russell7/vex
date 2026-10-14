@@ -103,28 +103,28 @@ return function vex(l0, l1, l2, l3) {
       l24 = (l24 + 1);
     }
     if (!((l24 !== 0))) return F; // a list that is not empty
-    l33 = mo0.get(l0);
+    l33 = mo0.get(l0, []);
     if ((!(l33 !== undefined && l33 !== null))) {
-      l35 = false;
+      l42 = false;
       L3: {
-        l37 = 0;
-        l36 = false;
-        l38 = l0.records;
-        l39 = keys_(l0);
-        L4: for (l40 = 0; l40 < l39.length; l40++) {
-          l41 = l39[l40];
-          l42 = (l38 !== undefined ? l38[l40] : l0.get(l41));
-          if (!((l42 !== undefined && l42 !== null))) continue L4; // a record
-          if (!((typeof l42 === "object" || typeof l42 === "function"))) continue L4; // an object
-          l42 = l42[k7];
-          if (!((l42 !== undefined && l42 !== null))) continue L4; // a field
-          if (!((typeof l42 === "boolean"))) break L3; // a boolean
-          l36 = (l36 || l42);
+        l35 = 0;
+        l34 = false;
+        l36 = l0.records;
+        l37 = keys_(l0);
+        L4: for (l38 = 0; l38 < l37.length; l38++) {
+          l39 = l37[l38];
+          l40 = (l36 !== undefined ? l36[l38] : l0.get(l39));
+          if (!((l40 !== undefined && l40 !== null))) continue L4; // a record
+          if (!((typeof l40 === "object" || typeof l40 === "function"))) continue L4; // an object
+          l40 = l40[k7];
+          if (!((l40 !== undefined && l40 !== null))) continue L4; // a field
+          if (!((typeof l40 === "boolean"))) break L3; // a boolean
+          l34 = (l34 || l40);
         }
-        l34 = (!l36);
-        l35 = true;
+        l41 = (!l34);
+        l42 = true;
       }
-      l33 = mo0.put(l0, l34, l35);
+      l33 = mo0.put(l0, [], l41, l42);
     }
     if (!(l33.ok)) return F; // a value of the memo
     l43 = l33.v;
@@ -149,96 +149,96 @@ return function vex(l0, l1, l2, l3) {
     if (!((l45 !== 0))) return F; // a list that is not empty
     l53 = result_((l44 / l45));
     if (!((l53 !== F))) return F; // a finite mean
-    l54 = mo1.get(l0);
+    l54 = mo1.get(l0, []);
     if ((!(l54 !== undefined && l54 !== null))) {
-      l56 = false;
+      l63 = false;
       L6: {
-        l58 = 0;
-        l59 = l0.records;
-        l60 = keys_(l0);
-        L7: for (l61 = 0; l61 < l60.length; l61++) {
-          l62 = l60[l61];
-          l63 = (l59 !== undefined ? l59[l61] : l0.get(l62));
-          if (!((l63 !== undefined && l63 !== null))) continue L7; // a record
-          if (!((typeof l63 === "object" || typeof l63 === "function"))) continue L7; // an object
-          l63 = l63[k3];
-          if (!((l63 !== undefined && l63 !== null))) continue L7; // a field
-          l58 = (l58 + 1);
+        l56 = 0;
+        l57 = l0.records;
+        l58 = keys_(l0);
+        L7: for (l59 = 0; l59 < l58.length; l59++) {
+          l60 = l58[l59];
+          l61 = (l57 !== undefined ? l57[l59] : l0.get(l60));
+          if (!((l61 !== undefined && l61 !== null))) continue L7; // a record
+          if (!((typeof l61 === "object" || typeof l61 === "function"))) continue L7; // an object
+          l61 = l61[k3];
+          if (!((l61 !== undefined && l61 !== null))) continue L7; // a field
+          l56 = (l56 + 1);
         }
-        l55 = l58;
-        l56 = true;
+        l62 = l56;
+        l63 = true;
       }
-      l54 = mo1.put(l0, l55, l56);
+      l54 = mo1.put(l0, [], l62, l63);
     }
     if (!(l54.ok)) return F; // a value of the memo
     l64 = l54.v;
-    l65 = mo2.get(l0);
+    l65 = mo2.get(l0, []);
     if ((!(l65 !== undefined && l65 !== null))) {
-      l67 = false;
+      l85 = false;
       L8: {
-        l69 = 0;
-        l70 = l0.records;
-        l71 = keys_(l0);
-        L9: for (l72 = 0; l72 < l71.length; l72++) {
-          l73 = l71[l72];
-          l74 = mo3.get(l0);
-          if ((!(l74 !== undefined && l74 !== null))) {
-            l76 = false;
+        l67 = 0;
+        l68 = l0.records;
+        l69 = keys_(l0);
+        L9: for (l70 = 0; l70 < l69.length; l70++) {
+          l71 = l69[l70];
+          l72 = mo3.get(l0, []);
+          if ((!(l72 !== undefined && l72 !== null))) {
+            l82 = false;
             L10: {
-              l77 = (opts_(k9) === true);
-              l79 = 0;
-              l80 = l0.records;
-              l81 = keys_(l0);
-              L11: for (l82 = 0; l82 < l81.length; l82++) {
-                l83 = l81[l82];
-                l84 = (l80 !== undefined ? l80[l82] : l0.get(l83));
-                if (!((l84 !== undefined && l84 !== null))) { if (l77) break L10; continue L11; } // a record
-                if (!((typeof l84 === "object" || typeof l84 === "function"))) { if (l77) break L10; continue L11; } // an object
-                l84 = l84[k10];
-                if (!((l84 !== undefined && l84 !== null))) { if (l77) break L10; continue L11; } // a field
-                l79 = (l79 + 1);
+              l73 = (opts_(k9) === true);
+              l75 = 0;
+              l76 = l0.records;
+              l77 = keys_(l0);
+              L11: for (l78 = 0; l78 < l77.length; l78++) {
+                l79 = l77[l78];
+                l80 = (l76 !== undefined ? l76[l78] : l0.get(l79));
+                if (!((l80 !== undefined && l80 !== null))) { if (l73) break L10; continue L11; } // a record
+                if (!((typeof l80 === "object" || typeof l80 === "function"))) { if (l73) break L10; continue L11; } // an object
+                l80 = l80[k10];
+                if (!((l80 !== undefined && l80 !== null))) { if (l73) break L10; continue L11; } // a field
+                l75 = (l75 + 1);
               }
-              l75 = l79;
-              l76 = true;
+              l81 = l75;
+              l82 = true;
             }
-            l74 = mo3.put(l0, l75, l76);
+            l72 = mo3.put(l0, [], l81, l82);
           }
-          if (!(l74.ok)) continue L9; // a value of the memo
-          l85 = l74.v;
-          l69 = (l69 + 1);
+          if (!(l72.ok)) continue L9; // a value of the memo
+          l83 = l72.v;
+          l67 = (l67 + 1);
         }
-        l66 = l69;
-        l67 = true;
+        l84 = l67;
+        l85 = true;
       }
-      l65 = mo2.put(l0, l66, l67);
+      l65 = mo2.put(l0, [], l84, l85);
     }
     if (!(l65.ok)) return F; // a value of the memo
     l86 = l65.v;
-    l87 = mo4.get(l0);
+    l87 = mo4.get(l0, []);
     if ((!(l87 !== undefined && l87 !== null))) {
-      l89 = false;
+      l97 = false;
       L12: {
-        l91 = 0;
-        l92 = addr_(l0, l1, l1, k11);
-        if (!((l92 !== F))) break L12; // an address
-        l93 = l0.records;
-        l94 = keys_(l0);
-        L13: for (l95 = 0; l95 < l94.length; l95++) {
-          l96 = l94[l95];
-          if ((l96 === l92)) {
+        l89 = 0;
+        l90 = addr_(l0, l1, l1, k11);
+        if (!((l90 !== F))) break L12; // an address
+        l91 = l0.records;
+        l92 = keys_(l0);
+        L13: for (l93 = 0; l93 < l92.length; l93++) {
+          l94 = l92[l93];
+          if ((l94 === l90)) {
             continue;
           }
-          l97 = (l93 !== undefined ? l93[l95] : l0.get(l96));
-          if (!((l97 !== undefined && l97 !== null))) continue L13; // a record
-          if (!((typeof l97 === "object" || typeof l97 === "function"))) continue L13; // an object
-          l97 = l97[k3];
-          if (!((l97 !== undefined && l97 !== null))) continue L13; // a field
-          l91 = (l91 + 1);
+          l95 = (l91 !== undefined ? l91[l93] : l0.get(l94));
+          if (!((l95 !== undefined && l95 !== null))) continue L13; // a record
+          if (!((typeof l95 === "object" || typeof l95 === "function"))) continue L13; // an object
+          l95 = l95[k3];
+          if (!((l95 !== undefined && l95 !== null))) continue L13; // a field
+          l89 = (l89 + 1);
         }
-        l88 = l91;
-        l89 = true;
+        l96 = l89;
+        l97 = true;
       }
-      l87 = mo4.put(l0, l88, l89);
+      l87 = mo4.put(l0, [], l96, l97);
     }
     if (!(l87.ok)) return F; // a value of the memo
     l98 = l87.v;

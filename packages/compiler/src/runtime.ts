@@ -61,11 +61,26 @@ export interface MemoEntry {
   readonly ok: boolean;
 }
 
-/** The memo of one node: an entry for each space (docs/COMPILER.md §7.2). */
+/**
+ * The memo of one node: an entry for each space and each value of the keys (docs/COMPILER.md §7.2 and §7.3). An entry
+ * with an object or a function in its keys is not kept, because each run can make a new one.
+ */
 export interface Memo {
-  get(s: Space): MemoEntry | undefined;
-  put(s: Space, v: unknown, ok: boolean): MemoEntry;
+  get(s: Space, keys: readonly unknown[]): MemoEntry | undefined;
+  put(s: Space, keys: readonly unknown[], v: unknown, ok: boolean): MemoEntry;
 }
+
+/** A level of a memo: the entry of the keys so far, and the levels of the next key. */
+interface MemoLevel {
+  entry?: MemoEntry;
+  next?: Map<unknown, MemoLevel>;
+}
+
+/** A map key does not tell 0 from -0, but an op can. Thus -0 has its own key. */
+const NEGATIVE_ZERO = Symbol("-0");
+
+/** This function tells if a memo keeps an entry with these keys: keys without objects and functions. */
+const kept = (keys: readonly unknown[]): boolean => keys.every((k) => (typeof k !== "object" || k === null) && typeof k !== "function");
 
 /** The functions of the runtime. The names are the names of `RuntimeFn` in the loop IR. */
 export interface Runtime {
@@ -226,12 +241,38 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return site;
     },
     memo() {
-      const entries = new WeakMap<Space, MemoEntry>();
+      const spaces = new WeakMap<Space, MemoLevel>();
+      // The level of a space and some keys. With `make`, the function makes each missing level. A level that a read
+      // makes only uses memory, so the checks of `make` have no other effect.
+      const level = (s: Space, keys: readonly unknown[], make: boolean): MemoLevel | undefined => {
+        let at: MemoLevel | undefined = spaces.get(s);
+        if (at === undefined) {
+          // A read comes before each write, so the level of the space exists for each write.
+          // Stryker disable next-line ConditionalExpression,BooleanLiteral: see the comments above
+          if (!make) return undefined;
+          at = {};
+          spaces.set(s, at);
+        }
+        for (const k of keys) {
+          // Stryker disable next-line UnaryOperator: with +0 as the special key, 0 and -0 still get different entries
+          const slot = Object.is(k, -0) ? NEGATIVE_ZERO : k;
+          let next: MemoLevel | undefined = at.next?.get(slot);
+          if (next === undefined) {
+            // Stryker disable next-line ConditionalExpression: see the comment above
+            if (!make) return undefined;
+            next = {};
+            (at.next ??= new Map()).set(slot, next);
+          }
+          at = next;
+        }
+        return at;
+      };
       return {
-        get: (s) => entries.get(s),
-        put(s, v, ok) {
+        // Stryker disable next-line BooleanLiteral: a read that makes the levels only uses memory
+        get: (s, keys) => level(s, keys, false)?.entry,
+        put(s, keys, v, ok) {
           const e = { v, ok };
-          entries.set(s, e);
+          if (kept(keys)) (level(s, keys, true) as MemoLevel).entry = e;
           return e;
         },
       };

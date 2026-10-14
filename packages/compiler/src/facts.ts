@@ -40,7 +40,8 @@ export function entryOf(domain: AnyDomain, name: string): Entry | undefined {
  * - `op`: the op of the domain `domain` comes first. It is a method of the receiver, or else the function of the spec.
  *   `params` are the kinds of the parameters, and `lift` lifts numbers (`liftScalar`, if the domain has `fromScalar`).
  * - `free`: no domain has the op, and a free function has the name.
- * - `generic`: the site uses the dispatch of the runtime only.
+ *
+ * Without facts, the site uses the dispatch of the runtime only.
  */
 export type SiteFacts =
   | {
@@ -50,16 +51,14 @@ export type SiteFacts =
       readonly params: readonly ParamKind[] | undefined;
       readonly lift: OpSpec<unknown>["liftScalar"];
     }
-  | { readonly t: "free" }
-  | { readonly t: "generic" };
+  | { readonly t: "free" };
 
-const GENERIC: SiteFacts = Object.freeze({ t: "generic" });
 const FREE: SiteFacts = Object.freeze({ t: "free" });
 
 /** The facts of the options. */
 export interface Facts {
-  /** This function gives the facts of the site of the op `name` with `arity` values, the receiver first. */
-  site(name: string, arity: number): SiteFacts;
+  /** This function gives the facts of the site of the op `name` with `arity` values, the receiver first, if it has facts. */
+  site(name: string, arity: number): SiteFacts | undefined;
   /**
    * The checks of the result of an op, as `#checkResult` of the interpreter: for each domain, `true` if it has `valid`.
    * The list ends at the last domain with `valid`, because the domains after it check nothing.
@@ -76,9 +75,9 @@ export function factsOf(options: Options): Facts {
     checks: domains.slice(0, last + 1).map((d) => d.valid !== undefined),
     site(name, arity) {
       // Without values, the interpreter takes no op of a domain. A list op can have a list as its receiver.
-      if (arity === 0 || isListOp(name)) return GENERIC;
+      if (arity === 0 || isListOp(name)) return undefined;
       const index = domains.findIndex((d) => entryOf(d, name) !== undefined);
-      if (index < 0) return fns !== undefined && Object.hasOwn(fns, name) ? FREE : GENERIC;
+      if (index < 0) return fns !== undefined && Object.hasOwn(fns, name) ? FREE : undefined;
       const e = entryOf(domains[index] as AnyDomain, name) as Entry;
       return { t: "op", domain: index, method: e.fn === undefined, params: e.spec.params, lift: e.domain.fromScalar === undefined ? undefined : e.spec.liftScalar };
     },

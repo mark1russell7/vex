@@ -24,6 +24,7 @@ import {
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { fromCore } from "@mark1russell7/vex-testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { memoNodes } from "./memo.ts";
 import { generate, tiered } from "./tiers.ts";
 
 /** A value of the test domain. Its methods have each number of arguments, and some of them fail. */
@@ -303,8 +304,8 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
   it("the check of the result stops at the first domain that accepts it, also without valid", () => {
     const Loose = defineDomain({ name: "Loose", is: (u: unknown): u is number => typeof u === "number" && u > 2, ops: {} });
     const Even = defineDomain({ name: "Even", is: (u: unknown): u is number => typeof u === "number", valid: (x: number) => x % 2 === 0, ops: {} });
-    // 3 is odd, but Loose takes it first, and Loose has no check. 4 is even.
-    const s1 = space.record({ A: { box: new Box(3) }, B: { box: new Box(4) } });
+    // 3 is odd, but Loose takes it first, and Loose has no check. 4 is even. The fast path of the site gets 3.
+    const s1 = space.record({ A: { box: new Box(4) }, B: { box: new Box(3) } });
     expectSame(app("values", all(app("get0", box))), true, { space: s1, origin: "A" }, { domains: [BoxDomain, Loose, Even] });
   });
   it("a function of a later domain, without an op in the first domain", () => expectSame(app("values", all(app("pow", n, lit(2)))), true, RUN, { domains: [BoxDomain, NumDomain] }));
@@ -586,6 +587,106 @@ describe("COMPILE.FALLBACK: a program that tier 2 cannot give operates in tier 1
     expect(p.tier).toBe(1);
     expect(p.reason).toBe("the page does not permit new Function");
     expect(p.run(RUN)).toEqual(ok(1));
+  });
+});
+
+/**
+ * This function gives the calls of the free function "tick" in a run of `e` at each key of each space: the calls of
+ * tier 2 and the calls of the interpreter. The results of the two are the same.
+ */
+function ticks(e: Expr, spaces: readonly Space[]): { readonly tier2: number; readonly interpreter: number } {
+  let calls = 0;
+  const options = { domains: [NumDomain], fns: { tick: (x: unknown) => ((calls += 1), x) } };
+  const p = tiered(e, options);
+  const fast = spaces.flatMap((s) => s.keys.map((origin) => p.run({ space: s, origin })));
+  const tier2 = calls;
+  calls = 0;
+  const slow = spaces.flatMap((s) => s.keys.map((origin) => evaluate(e, { ...options, space: s, origin })));
+  expect(fast).toEqual(slow);
+  expect(p.stats.fallbacks).toBe(0);
+  return { tier2, interpreter: calls };
+}
+
+/** This function gives an array space of the values 1 to `count`. */
+const values = (count: number): Space => space.array(Array.from({ length: count }, (_, i) => ({ x: i + 1 })));
+
+/** This function gives the nodes of the memo of an expression. */
+const memo = (e: Expr): readonly Expr[] => [...memoNodes(e)];
+
+describe("COMPILE.MEMO: a node that depends only on the space evaluates once for each space", () => {
+  const total = app("sum", each(axes.all, app("tick", ref("x"))));
+
+  it("the share of each value in the total: the total evaluates once for each space", () => {
+    // 10 values: 10 calls of tick in tier 2, and 100 in the interpreter. Then 5 more values in a second space.
+    expect(ticks(app("divide", ref("x"), total), [values(10)])).toEqual({ tier2: 10, interpreter: 100 });
+    expect(ticks(app("divide", ref("x"), total), [values(10), values(5)])).toEqual({ tier2: 15, interpreter: 125 });
+  });
+
+  it("a node inside an item evaluates once for each space, too", () => {
+    expect(ticks(app("count", each(axes.all, total)), [values(4)])).toEqual({ tier2: 4, interpreter: 64 });
+  });
+
+  it("an error of the node is the error at each key", () => {
+    const failing = app("sum", each(axes.all, app("tick", ref("missing"))), lit({ strict: true }));
+    expect(ticks(app("ifError", failing, lit(0)), [values(3)])).toEqual({ tier2: 0, interpreter: 0 });
+  });
+});
+
+describe("COMPILE.MEMO: the nodes that depend only on the space", () => {
+  const loop = each(axes.all, ref("x"));
+  const cases: readonly (readonly [string, Expr, boolean])[] = [
+    ["a loop over all", app("sum", loop), true],
+    ["a literal", lit(1), false],
+    ["a read at the origin", ref("x"), false],
+    ["a loop over the others of the origin", app("sum", each(axes.others, ref("x"))), false],
+    ["a loop over the others of a key", app("sum", each(axes.others, ref("x"), [key("A")])), true],
+    ["a loop over the others of an index", app("sum", each(axes.others, ref("x"), [{ t: "index", i: 0 }])), true],
+    ["a loop from a key and then the origin", app("sum", each(axes.others, ref("x"), [key("A"), { t: "origin" }])), false],
+    ["a read at a key in the body", app("sum", each(axes.all, ref("x", [key("A")]))), true],
+    ["a read at the origin in the body", app("sum", each(axes.all, ref("x", [{ t: "origin" }]))), false],
+    ["a relative read in the body", app("sum", each(axes.all, ref("x", [{ t: "parent" }]))), true],
+    ["a loop over a table", app("sum", each(axes.table("T"), ref("x"))), false],
+    ["a name from the run", app("sum", each(axes.all, v("c"))), false],
+    ["a name bound inside", app("sum", each(axes.all, let_({ y: ref("x") }, v("y")))), true],
+    ["a name bound outside, to a read at the origin", let_({ y: ref("x") }, app("sum", each(axes.all, v("y")))), false],
+    ["a binding inside the node", let_({ y: lit(1) }, app("sum", each(axes.all, v("y")))), true],
+    ["a node with one binding that reads the origin", let_({ y: lit(1), z: ref("x") }, app("sum", each(axes.all, v("y")))), false],
+    ["a test of where at the origin", app("sum", each(axes.where(axes.all, ref("b", [{ t: "origin" }])), ref("x"))), false],
+    ["a loop over a table from a key", app("sum", each(axes.table("T"), ref("x"), [key("A")])), false],
+    ["an extension", app("sum", each(axes.all, ext("echo", 1))), false],
+    ["a record of loops", rec({ a: app("sum", loop), b: lit(1) }), true],
+    ["a binding of a loop", let_({ y: app("sum", loop) }, v("y")), true],
+    ["a where test at the target", app("sum", each(axes.where(axes.all, ref("b")), ref("x"))), true],
+  ];
+  it.each(cases)("%s", (_title, e, kept) => {
+    expect(memo(e).includes(e)).toBe(kept);
+  });
+
+  it("the nodes inside other nodes", () => {
+    const inner = app("sum", loop);
+    expect(memo(app("add", ref("x"), inner))).toEqual([inner]);
+    const outer = app("count", each(axes.all, inner));
+    expect(memo(outer)).toEqual([outer, inner]);
+    expect(memo(app("count", each(axes.others, inner)))).toEqual([inner]);
+    expect(memo(let_({ y: ref("x") }, app("add", v("y"), inner)))).toEqual([inner]);
+    expect(memo(rec({ a: ref("x"), b: inner }))).toEqual([inner]);
+    const test = app("gt", inner, lit(0));
+    expect(memo(app("count", each(axes.where(axes.others, test), ref("x"))))).toEqual([test, inner]);
+    // The bindings above the loop of a list op: the loop and the bindings have no value of their own.
+    const fused = app("count", let_({ t: inner }, each(axes.all, ref("x"))));
+    expect(memo(fused)).toEqual([fused, inner]);
+    expect(memo(app("sum", let_({ y: lit(1) }, each(axes.all, v("y")))))).toHaveLength(1);
+    // A binding and the body of a let, and the body of a list.
+    expect(memo(let_({ y: inner }, ref("x")))).toEqual([inner]);
+    expect(memo(each(axes.others, inner))).toEqual([inner]);
+    expect(memo(app("add", let_({ y: lit(1) }, inner), ref("x")))).toEqual([let_({ y: lit(1) }, inner), inner]);
+    // Nodes without a loop.
+    expect(memo(let_({ y: lit(1) }, v("y")))).toEqual([]);
+    expect(memo(ref("x", [key("A")]))).toEqual([]);
+    // An op that is not a list op has a value of its first argument, so its bindings and its loop can be in the memo.
+    const lets = let_({ y: lit(1) }, each(axes.all, ref("x")));
+    const notList = app("add", lets, lit(1));
+    expect(memo(notList)).toEqual([notList, lets, lets.body]);
   });
 });
 

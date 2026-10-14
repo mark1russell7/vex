@@ -50,7 +50,10 @@ export type PrimOp =
   | "records" // records(space): the records of the space by index, or undefined (SPACE.RECORDS)
   | "recordAt" // recordAt(records, index, space, key): the record at an index, or else the record of the key
   | "keysOf" // keysOf(targets): the keys of the targets of an axis
-  | "idxOf"; // idxOf(targets): the index of each target in the keys of the space
+  | "idxOf" // idxOf(targets): the index of each target in the keys of the space
+  | "memoPut" // memoPut(memo, space, value, ok): the new entry of a space in a memo
+  | "entryValue" // entryValue(entry): the value of an entry of a memo
+  | "entryOk"; // entryOk(entry): true if the entry has a value
 
 /** A value of the loop IR. */
 export type LExpr =
@@ -64,6 +67,8 @@ export type LExpr =
   | { readonly t: "call"; readonly fn: RuntimeFn; readonly args: readonly LExpr[] }
   /** The dispatch of the op whose name is the constant `name`, with the values of its arguments, the receiver first. */
   | { readonly t: "op"; readonly name: number; readonly args: readonly LExpr[] }
+  /** The memo `id` of the program: the value of one node for each space (§7.2). */
+  | { readonly t: "memo"; readonly id: number }
   /** The targets of the base axis that is the constant `axis`, at the space, the origin and the focus of `args`. */
   | { readonly t: "targets"; readonly axis: number; readonly args: readonly [LExpr, LExpr, LExpr] };
 

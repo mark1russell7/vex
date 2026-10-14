@@ -108,6 +108,19 @@ describe("the tiers", () => {
     expect(count.fast / count.values).toBeGreaterThan(0.5);
   });
 
+  it("P17 COMPILE.MEMO: one program at each key of each space, twice, gives the result of the interpreter at each key", () => {
+    const programs = fc.oneof(arbExpr(OPTS), arbListProgram, arbListProgram.map((e): Expr => ({ tag: "app", op: "add", args: [{ tag: "ref", path: ["n"] }, e] })));
+    fc.assert(
+      fc.property(programs, fc.array(arbSpace(vec), { minLength: 1, maxLength: 3 }), tables, (e, spaces, t) => {
+        const options = { domains: DOMAINS, fns: FNS };
+        const p = tiered(e, options);
+        for (const s of [...spaces, ...spaces]) {
+          for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k, tables: t }))).toStrictEqual(fromCore(evaluate(e, { ...options, space: s, origin: k, tables: t })));
+        }
+      }),
+    );
+  });
+
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {
     const count = { values: 0, fast: 0 };
     fc.assert(fc.property(runOf(arbListProgram), ([s, e, k, t, v]) => agree(e, s, k, t, v, count)));

@@ -55,6 +55,18 @@ export interface Targets {
   readonly idx: readonly (number | undefined)[];
 }
 
+/** An entry of a memo: the value of a node for one space, or no value after an error. */
+export interface MemoEntry {
+  readonly v: unknown;
+  readonly ok: boolean;
+}
+
+/** The memo of one node: an entry for each space (docs/COMPILER.md §7.2). */
+export interface Memo {
+  get(s: Space): MemoEntry | undefined;
+  put(s: Space, v: unknown, ok: boolean): MemoEntry;
+}
+
 /** The functions of the runtime. The names are the names of `RuntimeFn` in the loop IR. */
 export interface Runtime {
   readonly F: Fallback;
@@ -69,6 +81,8 @@ export interface Runtime {
   keys(s: Space): readonly string[];
   /** This function gives the dispatch of an op name with `arity` arguments. Generated code gets it once, when it loads. */
   site(name: string, arity: number): Site;
+  /** This function gives a new memo. Generated code gets one for each node of the memo, when it loads. */
+  memo(): Memo;
   /** This function gives the domain at an index of the options. */
   domain(index: number): AnyDomain | undefined;
   /** An exception of an op is the error #CALC! of that op, so this function gives `FALLBACK`. A full call stack goes on. */
@@ -210,6 +224,17 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       const call = arity <= 3 ? (...values: unknown[]): unknown => generic(values) : generic;
       const site: Site = Object.assign(call, { m: undefined, fn: entries.find((e) => e !== undefined)?.fn, free: fn });
       return site;
+    },
+    memo() {
+      const entries = new WeakMap<Space, MemoEntry>();
+      return {
+        get: (s) => entries.get(s),
+        put(s, v, ok) {
+          const e = { v, ok };
+          entries.set(s, e);
+          return e;
+        },
+      };
     },
     domain: (index) => domains[index],
     threw,

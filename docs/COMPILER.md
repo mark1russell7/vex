@@ -163,7 +163,7 @@ A domain can give an **inline form** for an op: the arithmetic on the components
 
 ### 7.2 Work that does not depend on the origin
 
-`AVERAGE(all.Score)` is the same at each row. The interpreter computes it at each row, so the cost is O(n²). A batch run (`all`) computes such a node once, so the cost is O(n).
+`AVERAGE(all.Score)` is the same at each row. The interpreter computes it at each row, so the cost is O(n²). A program keeps the value of such a node for each space. Thus a run at each row computes it once, and the cost is O(n) (§13.2).
 
 ### 7.3 Aggregates by group
 
@@ -232,7 +232,7 @@ The owner made these decisions on 2026-10-13:
 | Phase | Deliverables | Done when |
 |---|---|---|
 | C1 The compiler | The package, the loop IR, the back end of JavaScript source, `tiered`, the checks and the fallback, P17, golden files, the speed gate | Done on 2026-10-13 (§13). P17 passes, and the speed lane is 2.3 and 1.6 times the loops. |
-| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), work that does not depend on the origin, aggregates by group, sheets with fixed addresses | The speed lane is within 1.2 times the loops (done, §13.2), and the batch programs have the cost O(n) |
+| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), the memo of work that does not depend on the origin (COMPILE.MEMO), aggregates by group, sheets with fixed addresses | The speed lane is within 1.2 times the loops, and a run at each key costs O(n) for work that does not depend on the origin. Both are done (§13.2). The groups and the sheets are open. |
 | C3 ireko | The kinds (§3.2) and `returns` on the ops of the built-in domains, `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
 | C4 Iteration | `fold`, `iterate`, domain kernels, then `tree` and `layers` of ireko | Each construct passes each stage, and the layouts of ireko do not change |
 | C5 Later | Inline forms (§7.1), other back ends, recalculation (§7.5) | A decision of the owner |
@@ -287,3 +287,20 @@ The speed, measured by `bench/gate.ts` with alternate samples on one machine:
 | One step of the Game of Life, 16 by 16 | 1.6 | 1.05 to 1.13 |
 
 The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they move to phase C5.
+
+#### The memo of each space
+
+A node with a loop whose value depends only on the space has the same value at each origin. Such a node reads no focus and no origin, and no name from outside it. It also uses no table and no extension (`memo.ts`).
+
+The program keeps a memo for each such node, with an entry for each space (COMPILE.MEMO). An entry holds the value of the node, or the fact of an error. Thus a run at each key of a space evaluates the node once. A space does not change, so the entry stays correct.
+
+The memo needs no new API: the usual run at each key gets the gain. A value from the memo is the same object at each origin. The interpreter makes a new value at each origin, but the two values are equal and frozen.
+
+The gate measures the share of each value in the total. The run at each of 1000 keys costs 2.0 times the run at each of 500 keys, so the cost is O(n). The cost of the interpreter grows 4 times, because it is O(n²).
+
+Phase C2 adds three tests. A property gives many runs of one program on the same spaces. A test counts the calls in a node of the memo. A test gives the nodes of the memo for each kind of expression. The mutation score of the compiler is 100 % of 1306 mutants, and comments disable 17 equivalent mutants, each with its reason.
+
+#### The open items of the phase
+
+- **Aggregates by group** (§7.3). One pass can give the aggregate of each group only if the test of the group compares keys with the equality of JavaScript (`===`). An op of a domain does not tell this. Thus the domains need a new declaration, for example a law of their `eq` ops. This is a change of the API of the domains, so it is a decision of the owner.
+- **Sheets with fixed addresses** (§7.4). The compiler needs the order of the cells of `SheetRun` and the references of the cells as nodes, not as extensions. This is a larger piece of work, and ireko does not need it for its first strategies.

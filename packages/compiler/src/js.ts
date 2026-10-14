@@ -55,6 +55,9 @@ export function printJs(p: LoopProgram, facts: Facts): string {
         return `${x.fn}_(${x.args.map(expr).join(", ")})`;
       case "op":
         return generic(x, siteOf(x), x.args.map(expr));
+      case "memo":
+        sites.set(`mo${x.id}`, "R.memo()");
+        return `mo${x.id}`;
       case "targets": {
         // An axis has one function of targets for each site, with its cache.
         const site = `a${x.axis}`;
@@ -91,6 +94,12 @@ export function printJs(p: LoopProgram, facts: Facts): string {
             return `${a}.keys`;
           case "idxOf":
             return `${a}.idx`;
+          case "memoPut":
+            return `${a}.put(${b}, ${c}, ${d})`;
+          case "entryValue":
+            return `${a}.v`;
+          case "entryOk":
+            return `${a}.ok`;
           case "+":
           case "/":
           case "===":
@@ -133,8 +142,8 @@ export function printJs(p: LoopProgram, facts: Facts): string {
       threw = true;
       lines.push(`${ind}try { ${name(n)} = ${call}; } catch (e) { ${name(n)} = threw_(e); }`);
     };
-    switch (f.t) {
-      case "generic":
+    switch (f?.t) {
+      case undefined:
         return false;
       case "free": {
         const site = siteOf(x);

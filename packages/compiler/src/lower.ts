@@ -7,6 +7,7 @@
  * Each other error stops the program with `FALLBACK`.
  */
 import { isFieldName, isListOp, MAX_NESTING, nestingOf, type Axis, type Expr, type ExprOf, type ListOp } from "@mark1russell7/vex";
+import { memoNodes } from "./memo.ts";
 import {
   array,
   bool,
@@ -76,7 +77,7 @@ function eachUnderLets(e: Expr | undefined): ExprOf<"each"> | undefined {
 export function lower(expr: Expr): LoopProgram {
   // EVAL.NESTING: tier 1 gives the error of a program that is nested too deep.
   if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
-  const l = new Lowerer();
+  const l = new Lowerer(memoNodes(expr));
   const b = block(RETURN);
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space");
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
@@ -88,6 +89,12 @@ export function lower(expr: Expr): LoopProgram {
 class Lowerer {
   locals = FIXED_LOCALS;
   labels = 0;
+  memos = 0;
+  readonly #memo: ReadonlySet<Expr>;
+
+  constructor(memo: ReadonlySet<Expr>) {
+    this.#memo = memo;
+  }
   readonly constants: unknown[] = [];
   readonly #pool = new Map<unknown, number>();
 
@@ -133,6 +140,11 @@ class Lowerer {
   }
 
   expr(e: Expr, s: Scope, path: readonly number[], b: Block): LExpr {
+    return this.#memo.has(e) ? this.#memoized(e, s, path, b) : this.#node(e, s, path, b);
+  }
+
+  /** This method lowers a node itself, without the memo. */
+  #node(e: Expr, s: Scope, path: readonly number[], b: Block): LExpr {
     switch (e.tag) {
       case "lit":
         return this.constant(e.value);
@@ -171,6 +183,29 @@ class Lowerer {
         return x;
       }
     }
+  }
+
+  /**
+   * This method gives the value of a node that depends only on the space (§7.2). The memo has an entry for each space.
+   * Without the entry of the space, the node evaluates in a block, and an error of it makes an entry without a value.
+   * An exception stops the program, so the memo gets no entry for it.
+   */
+  #memoized(e: Expr, s: Scope, path: readonly number[], b: Block): LExpr {
+    const memo: LExpr = { t: "memo", id: this.memos++ };
+    const h = this.locals++;
+    const label = this.labels++;
+    const v = this.locals++;
+    const ok = this.locals++;
+    const attempt = block({ t: "break", label });
+    attempt.stmts.push({ t: "set", n: v, value: this.#node(e, s, path, attempt) }, { t: "set", n: ok, value: bool(true) });
+    const compute: LStmt[] = [
+      { t: "let", n: ok, value: bool(false) },
+      { t: "block", label, body: attempt.stmts },
+      { t: "set", n: h, value: prim("memoPut", memo, s.space, local(v), local(ok)) },
+    ];
+    b.stmts.push({ t: "let", n: h, value: prim("get", memo, s.space) }, { t: "if", cond: prim("!", prim("isValue", local(h))), yes: compute, no: [] });
+    this.check(b, prim("entryOk", local(h)), "a value of the memo");
+    return this.value(b, prim("entryValue", local(h)));
   }
 
   /**

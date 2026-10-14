@@ -11,6 +11,8 @@
 import type { Space } from "@mark1russell7/vex";
 import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
+import { app, axes, each, ref, space } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
 import { tiered } from "../src/index.ts";
 
 /** This function gives the time of one call of `f` in one sample of 30 ms, in microseconds. */
@@ -48,20 +50,27 @@ function compare(v: () => void, h: () => void): { readonly ratio: number; readon
 }
 
 /** This function gives a run of a program at each key of a space, in tier 2. */
-function atEachKey(program: { readonly program: Parameters<typeof tiered>[0] }, space: Space): { readonly run: () => void; readonly tier: 1 | 2; readonly fallbacks: () => number } {
-  const p = tiered(program.program, { domains: [PtDomain] });
+function atEachKey(program: { readonly program: Parameters<typeof tiered>[0] }, s: Space, domains: Parameters<typeof tiered>[1] = { domains: [PtDomain] }): { readonly run: () => void; readonly tier: 1 | 2; readonly fallbacks: () => number } {
+  const p = tiered(program.program, domains);
   return {
     run: (): void => {
-      for (const origin of space.keys) p.run({ space, origin });
+      for (const origin of s.keys) p.run({ space: s, origin });
     },
     tier: p.tier,
     fallbacks: () => p.stats.fallbacks,
   };
 }
 
+// The share of each value in the total (§7.2). The interpreter computes the total at each key, so its cost is O(n²).
+// Tier 2 computes the total once for each space, so the run at each of 1000 keys costs twice the run at each of 500.
+const share = (n: number): ReturnType<typeof atEachKey> =>
+  atEachKey({ program: app("divide", ref("x"), app("sum", each(axes.all, ref("x")))) }, space.array(Array.from({ length: n }, (_, i) => ({ x: (i % 7) + 1 }))), { domains: [NumDomain] });
+const [small, large] = [share(500), share(1000)];
+
 const CASES = [
   { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limit: 1.5 },
   { title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limit: 1.5 },
+
 ] as const;
 
 let failed = false;
@@ -70,5 +79,12 @@ for (const { title, compiled, hand, limit } of CASES) {
   const ok = ratio <= limit && compiled.tier === 2 && compiled.fallbacks() === 0;
   failed ||= !ok;
   console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, ratio ${ratio.toFixed(2)} (limit ${limit})`);
+}
+{
+  // The limit 2.6 is between the growth of O(n), 2, and the growth of O(n²), 4.
+  const { ratio, v, h } = compare(large.run, small.run);
+  const ok = ratio <= 2.6 && large.tier === 2 && large.fallbacks() === 0;
+  failed ||= !ok;
+  console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (limit 2.6)`);
 }
 process.exit(failed ? 1 : 0);

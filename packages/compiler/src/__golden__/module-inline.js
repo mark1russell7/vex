@@ -8,6 +8,7 @@ function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
 function G(x) { return x === E ? F() : x; }
 function T(f) { try { return f(); } catch { return E; } }
+const op_0_0 = (a,b)=>a+b;
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 const op_0_3 = (a) => a * a;
 const op_0_26 = (a) => "a" + a;
@@ -172,7 +173,13 @@ export function run(records, vars) {
       } catch {
         t23 = 0;
       }
-      out.push(({ "tight": k_number((R[o]["n"])+(R[o]["w"])), "loose": k_number((R[o]["n"])  -  (R[o]["w"])), "bare": k_number(-(R[o]["n"])), "square": ({ "plain": G(c0), "read": k_number(op_0_3(R[o]["n"])) }), "finite": (Number.isFinite((R[o]["n"]))), "decimal": k_number((R[o]["n"]) * 2.5 + .5), "math": ({ "abs": t1, "ceil": t2, "floor": t3, "round": t4, "trunc": t5, "sign": t6, "sqrt": t7, "cbrt": t8, "exp": t9, "log": t10, "log10": t11, "log2": t12, "sin": t13, "cos": t14, "tan": t15, "min": t16, "max": t17, "pow": t18, "hypot": t19, "atan2": t20 }), "quoted": op_0_26(R[o]["n"]), "assign": ({ "value": k_number(op_0_27(R[o]["n"])), "n": R[o]["n"] }), "increment": ({ "value": k_number(op_0_28(R[o]["n"])), "n": R[o]["n"] }), "call": 1, "group": 1, "unused": t23, "exponent": k_number(op_0_33(R[o]["n"])), "member": op_0_34(R[o]["n"]), "fn": k_number(op_0_35(R[o]["n"])), "none": k_number(op_0_36(R[o]["n"])) }));
+      let t24;
+      try {
+        t24 = k_number(op_0_0(R[o]["n"]));
+      } catch {
+        t24 = 0;
+      }
+      out.push(({ "tight": k_number((R[o]["n"])+(R[o]["w"])), "loose": k_number((R[o]["n"])  -  (R[o]["w"])), "bare": k_number(-(R[o]["n"])), "square": ({ "plain": G(c0), "read": k_number(op_0_3(R[o]["n"])) }), "finite": (Number.isFinite((R[o]["n"]))), "decimal": k_number((R[o]["n"]) * 2.5 + .5), "math": ({ "abs": t1, "ceil": t2, "floor": t3, "round": t4, "trunc": t5, "sign": t6, "sqrt": t7, "cbrt": t8, "exp": t9, "log": t10, "log10": t11, "log2": t12, "sin": t13, "cos": t14, "tan": t15, "min": t16, "max": t17, "pow": t18, "hypot": t19, "atan2": t20 }), "quoted": op_0_26(R[o]["n"]), "assign": ({ "value": k_number(op_0_27(R[o]["n"])), "n": R[o]["n"] }), "increment": ({ "value": k_number(op_0_28(R[o]["n"])), "n": R[o]["n"] }), "call": 1, "group": 1, "unused": t23, "exponent": k_number(op_0_33(R[o]["n"])), "member": op_0_34(R[o]["n"]), "fn": k_number(op_0_35(R[o]["n"])), "none": k_number(op_0_36(R[o]["n"])), "more": k_number(op_0_0(R[o]["n"], R[o]["w"], 1)), "fewer": t24 }));
     } catch {
       out.push(VEX_ERROR);
     }

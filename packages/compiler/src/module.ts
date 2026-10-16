@@ -1155,6 +1155,7 @@ class Printer {
    * test or of the result throws, so it is the value of the iteration.
    */
   #iterate(e: ExprOf<"iterate">, ctx: Ctx): Code {
+    // Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code
     const loop = this.#loops++;
     const names = this.#loopNames(e.init, ctx, loop);
     const inner: Ctx = { ...ctx, env: names.env };
@@ -1177,6 +1178,7 @@ class Printer {
    * only the names outside the fold. An error throws, so it is the value of the fold.
    */
   #fold(e: ExprOf<"fold">, ctx: Ctx): Code {
+    // Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code
     const loop = this.#loops++;
     const names = this.#loopNames(e.init, ctx, loop);
     const t = this.#targetLoop(e.axis, e.at ?? [], ctx);
@@ -1378,8 +1380,8 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
   }
   p.use("C");
   const helpers = new Set<Helper>();
+  // A helper comes after the helpers that it needs. A set keeps the first place of each helper.
   const add = (h: Helper): void => {
-    if (helpers.has(h)) return;
     for (const x of NEEDS[h]) add(x);
     helpers.add(h);
   };

@@ -476,6 +476,57 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(reasonOf(fold(axes.children, { x: lit(0) }, {}, v("x")))).toBe('the axis "children"');
   });
 
+  it("a part that cannot fail needs no try: and and or of safe booleans, a count of the records, and a list from the origin", async () => {
+    const e = rec({
+      and: let_({ x: op("and", ref("b"), op("not", ref("b"))) }, op("if", v("x"), n, w)),
+      or: let_({ x: op("or", op("not", ref("b")), ref("b")) }, op("if", v("x"), n, w)),
+      count: op("count", each(axes.all, ref("b"))),
+      origin: let_({ x: op("count", each(axes.all, ref("b"), [{ t: "origin" }])) }, op("add", v("x"), n)),
+      moved: op("ifError", op("count", each(axes.all, ref("b"), [offset(1)])), lit(-1)),
+      // The option strict: false is the default: a list op skips each item with an error.
+      lax: op("sum", each(axes.all, op("divide", lit(1), n)), lit({ strict: false })),
+    });
+    await expectGolden("safe", e);
+  });
+
+  it("COMPILE.GROUP: the nodes of the memo with keys, at the edges of the items that a node keeps", async () => {
+    const where = (...tests: Expr[]): Axis => tests.reduce<Axis>((a, t) => axes.where(a, t), axes.all);
+    const e = rec({
+      // Two keys vary, so the function of the node takes both. A key that can fail is a name with an error.
+      two: op("add", op("count", each(axes.where(axes.all, op("and", op("eq", n, K), op("lt", w, KW))), n)), lit(1)),
+      failing: let_({ k: op("divide", lit(6), n) }, op("count", each(where(op("eq", w, v("k"))), n))),
+      sum: op("sum", each(where(op("eq", n, K)), w)),
+      // The axis others, a body that reads the key, a second test that reads the key, and a test with one argument do not
+      // keep their items.
+      others: op("count", each(axes.where(axes.others, op("eq", n, K)), n)),
+      body: op("sum", each(where(op("eq", n, K)), op("add", w, K))),
+      second: op("count", each(where(op("eq", n, K), op("gt", w, K)), n)),
+      single: op("count", each(where(op("not", op("eq", n, K))), n)),
+    });
+    await expectGolden("keys", e);
+  });
+
+  it("LOOP.NAMES: a fold and an iteration that read a name of the origin depend on the origin", () => {
+    // The step, the test and the result of a fold read the name o of the origin, so the loop is not a constant of the run.
+    const e = let_(
+      { o: n },
+      rec({
+        step: fold(axes.all, { s: lit(0) }, { s: op("add", v("s"), op("multiply", w, v("o"))) }, v("s")),
+        test: fold(axes.where(axes.all, op("gt", n, v("o"))), { s: lit(0) }, { s: op("add", v("s"), w) }, v("s")),
+        result: fold(axes.all, { s: lit(0) }, { s: op("add", v("s"), w) }, op("add", v("s"), v("o"))),
+        iterate: iterate(2, { s: lit(0) }, { s: op("add", v("s"), v("o")) }, v("s")),
+      }),
+    );
+    expectSame(make(sourceOf(e)), e);
+    expectSame(make(sourceOf(e)), e, MANY);
+  });
+
+  it("two constants of the run with the same structure but other names do not share one value", () => {
+    const plus = op("multiply", op("add", v("x"), lit(1)), n);
+    const e = rec({ p: let_({ x: v("a") }, plus), q: let_({ x: op("multiply", v("a"), lit(10)) }, plus) });
+    expectSame(make(sourceOf(e)), e);
+  });
+
   it("two constants of the run with one structure share one value, and a constant that can fail keeps its error", async () => {
     // With the variable a = 2, the quotient 1 / (a - 2) is not finite, so its constant holds the error.
     const e = rec({
@@ -680,6 +731,9 @@ describe("COMPILE.MODULE: the text of a module", () => {
       member: op("member", n),
       fn: op("fn", n),
       none: op("none", n),
+      // A call with more arguments than the form has parameters, and a call with fewer, use the function.
+      more: op("tight", n, w, lit(1)),
+      fewer: safe(op("tight", n)),
     });
     await expectGolden("inline", e, options);
   });

@@ -73,6 +73,11 @@ export interface DomainSpec<Name extends string, D, Ops extends Readonly<Record<
   readonly encode?: (d: D) => unknown;
   /** The value of a JSON form that `encode` made. */
   readonly decode?: (json: unknown) => D;
+  /**
+   * Some values of the domain. A compiler gives them to an op and to its copy in a module: the two must give the same
+   * results (KIND.DOMAIN).
+   */
+  readonly samples?: () => readonly D[];
 }
 
 /** A domain. Make one with `defineDomain`. */

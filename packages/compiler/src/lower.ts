@@ -7,7 +7,7 @@
  * Each other error stops the program with `FALLBACK`.
  */
 import { addrExprs, isFieldName, isListOp, MAX_NESTING, nestingOf, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
-import { factsOf, type Facts, type Schema } from "./facts.ts";
+import { factsOf, primitiveOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
   array,
@@ -216,7 +216,7 @@ class Lowerer {
         const bound = s.env.get(e.name);
         if (bound === undefined) {
           const x = this.checked(b, call("var", local(VARS), this.constant(e.name)), "a variable");
-          return this.#declared(b, x, this.#schema.vars?.[e.name], "a variable of the schema");
+          return this.#declared(b, x, primitiveOf(this.#schema.vars?.[e.name]), "a variable of the schema");
         }
         if (bound.ok !== undefined) this.check(b, bound.ok, "a binding with a value");
         return bound.value;
@@ -311,7 +311,8 @@ class Lowerer {
       this.check(b, prim("isValue", x), "a field");
     }
     const [field, ...more] = e.path;
-    return field === undefined || more.length > 0 ? x : this.#declared(b, x, this.#schema.fields?.[field], "a field of the schema");
+    // Tier 2 knows only the primitive kinds. A value of a domain goes through the dispatch of the runtime.
+    return field === undefined || more.length > 0 ? x : this.#declared(b, x, primitiveOf(this.#schema.fields?.[field]), "a field of the schema");
   }
 
   /**
@@ -347,7 +348,7 @@ class Lowerer {
     // A static site checks the kind of its result, so the result has the kind that the op declares (KIND.RETURNS).
     const site = this.#facts.staticSite(op, kinds);
     const x = this.checked(b, { t: "op", name: this.index(op), args: values, kinds }, "an op");
-    return this.#typed(x, site?.t === "fn" ? site.returns : undefined);
+    return this.#typed(x, site?.t === "fn" ? primitiveOf(site.returns) : undefined);
   }
 
   /** The condition must be a boolean. Only the branch that the condition selects is evaluated. */

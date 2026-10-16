@@ -9,12 +9,24 @@ import { isListOp, isOpName, liftsAt, type AnyDomain, type ExtHandler, type Free
 export type Method = (...args: unknown[]) => unknown;
 
 /**
+ * The kind of a value that the compiler knows: a primitive type, or `domain:Name`. The second kind is for a value of
+ * the domain `Name` without a primitive type (KIND.DOMAIN).
+ */
+export type Kind = PrimitiveKind | `domain:${string}`;
+
+/** This function gives the kind of the values of a domain. */
+export const kindOfDomain = (d: AnyDomain): Kind => d.primitive ?? `domain:${d.name}`;
+
+/** This function gives a kind if it is a primitive type, else `undefined`. */
+export const primitiveOf = (k: Kind | undefined): PrimitiveKind | undefined => (k === "number" || k === "string" || k === "boolean" ? k : undefined);
+
+/**
  * The kinds that a host declares (docs/COMPILER.md §3.2): the kind of each field of the records, and of each variable of
  * the run. A read of a declared field or variable checks the kind. When the check fails, tier 1 evaluates the program.
  */
 export interface Schema {
-  readonly fields?: Readonly<Record<string, PrimitiveKind>>;
-  readonly vars?: Readonly<Record<string, PrimitiveKind>>;
+  readonly fields?: Readonly<Record<string, Kind>>;
+  readonly vars?: Readonly<Record<string, Kind>>;
 }
 
 /** The options of a program: the domains, the free functions and the extension handlers, and the schema of the host. */
@@ -72,22 +84,31 @@ const FREE: SiteFacts = Object.freeze({ t: "free" });
  * - `free`: no domain that accepts the receiver has the op, and a free function has the name.
  */
 export type StaticSite =
-  | { readonly t: "fn"; readonly domain: number; readonly bad: boolean; readonly returns: PrimitiveKind | undefined }
+  | { readonly t: "fn"; readonly domain: number; readonly bad: boolean; readonly returns: Kind | undefined }
   | { readonly t: "free" };
 
 const STATIC_FREE: StaticSite = Object.freeze({ t: "free" });
 
 /** This function gives the kind of the result of an op of a domain, if the op declares it. */
-function returnsOf(domain: AnyDomain, kind: ParamKind | undefined): PrimitiveKind | undefined {
-  if (kind === "domain") return domain.primitive;
+function returnsOf(domain: AnyDomain, kind: ParamKind | undefined): Kind | undefined {
+  if (kind === "domain") return kindOfDomain(domain);
   return kind === "any" ? undefined : kind;
 }
 
 /** This function tells if an argument of a kind fits a parameter, or `undefined` if the kind of the argument is unknown. */
-function fits(domain: AnyDomain, param: ParamKind | undefined, arg: PrimitiveKind | undefined): boolean | undefined {
+function fits(domain: AnyDomain, param: ParamKind | undefined, arg: Kind | undefined): boolean | undefined {
   if (param === undefined || param === "any") return true;
   if (arg === undefined) return undefined;
-  return arg === (param === "domain" ? domain.primitive : param);
+  return arg === (param === "domain" ? kindOfDomain(domain) : param);
+}
+
+/**
+ * This function tells if a domain accepts a value of a kind. A domain with a primitive type accepts its type, and a
+ * domain without one accepts the values of its kind. For another value, it gives `undefined`: its `is` can accept it.
+ */
+function accepts(d: AnyDomain, kind: Kind): boolean | undefined {
+  if (d.primitive !== undefined) return d.primitive === kind;
+  return kind === kindOfDomain(d) ? true : undefined;
 }
 
 /** The facts of the options. */
@@ -104,12 +125,12 @@ export interface Facts {
    * the op, it gives `undefined`. Each domain before the op must declare a primitive type. Then the interpreter takes
    * the same op at each run.
    */
-  staticSite(name: string, kinds: readonly (PrimitiveKind | undefined)[]): StaticSite | undefined;
+  staticSite(name: string, kinds: readonly (Kind | undefined)[]): StaticSite | undefined;
   /**
    * This function gives the index of the domain that checks a result of a kind. When no domain accepts such a value,
    * it gives -1. When a domain without a primitive type comes first, it gives `undefined`.
    */
-  checkOf(kind: PrimitiveKind): number | undefined;
+  checkOf(kind: Kind): number | undefined;
 }
 
 /** This function gives the facts of a set of options. */
@@ -124,10 +145,15 @@ export function factsOf(options: Options): Facts {
       // A primitive value is not a list, so a list op name is an op of a domain here, as in the interpreter.
       if (self === undefined) return undefined;
       for (const [i, d] of domains.entries()) {
-        if (d.primitive === undefined) return undefined;
-        const e = d.primitive === self ? entryOf(d, name) : undefined;
-        // A primitive value has no methods, so only the function of a spec is an op for it.
-        if (e?.fn === undefined) continue;
+        const takes = accepts(d, self);
+        if (takes === undefined) return undefined;
+        const e = takes ? entryOf(d, name) : undefined;
+        // A primitive value has no methods, so only the function of a spec is an op for it. The domain of a value without
+        // a primitive type can have methods, and a later domain can accept the value too.
+        if (e?.fn === undefined) {
+          if (takes && d.primitive === undefined) return undefined;
+          continue;
+        }
         // A lifted number goes through fromScalar: the site keeps the dispatch of the runtime.
         if (d.fromScalar !== undefined && args.some((a, j) => a !== "string" && a !== "boolean" && liftsAt(e.spec.liftScalar, j))) return undefined;
         const ok = args.map((a, j) => fits(d, e.spec.params?.[j], a));
@@ -138,8 +164,9 @@ export function factsOf(options: Options): Facts {
     },
     checkOf(kind) {
       for (const [i, d] of domains.entries()) {
-        if (d.primitive === undefined) return undefined;
-        if (d.primitive === kind) return i;
+        const takes = accepts(d, kind);
+        if (takes === undefined) return undefined;
+        if (takes) return i;
       }
       return -1;
     },

@@ -202,6 +202,7 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[COMPILE.MEMO]** A program keeps the value of each node that depends only on the space, for each space. Thus a run at each key of a space evaluates such a node once. A space does not change, so each run gives the result of `evaluate`.
 - **[COMPILE.GROUP]** A program keeps the value of a node for each space and each value of its keys. A key reads the origin or a name from outside the node, and nothing that the node changes. Thus an aggregate over the group of the origin evaluates once for each group.
 - **[KIND.STATIC]** When the kinds of the values of an op site decide its op, the site uses that op with no guard. A value against the schema, or a result against `returns`, sends the evaluation to tier 1.
+- **[KIND.DOMAIN]** A value of a domain without a primitive type has the kind of its domain, `domain:Name`. An op with `returns: "domain"` gives this kind, and a schema can declare it for a field. A module checks such a field with a copy of `is` of the domain. It checks each copy of an op with the `samples` of the domain.
 - **[COMPILE.MODULE]** `emitModule(e, options)` gives an ES module with no import of Vex. For an input that keeps the schema, its run gives the value of the interpreter at each key, or `VEX_ERROR` for an error. An input against the schema throws a `VexContractError`.
 - **[COMPILE.SOURCE]** `generate(e)` gives the same source for the same expression. The source has no name and no literal of the expression. It reads them from its constants, by index.
 

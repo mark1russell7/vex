@@ -20,7 +20,7 @@
  * gives a reason, not code.
  */
 import { addrExprs, children, isFieldName, moveExpr, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
-import { factsOf, type Facts, type Schema } from "./facts.ts";
+import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
 /** The options of a standalone module. */
@@ -44,7 +44,7 @@ class NotStandalone extends Error {}
  */
 interface Value {
   readonly code: string;
-  readonly kind: PrimitiveKind | undefined;
+  readonly kind: Kind | undefined;
   readonly safe: boolean;
   /** For the read of a name that can hold the error sentinel: the name itself, which holds the value or the sentinel. */
   readonly held?: string;
@@ -66,7 +66,7 @@ interface Code {
 /** A name of the program in the code: its variable, its kind, true when it can hold the error sentinel, and its levels. */
 interface Name {
   readonly code: string;
-  readonly kind: PrimitiveKind | undefined;
+  readonly kind: Kind | undefined;
   readonly lazy: boolean;
   readonly deps: ReadonlySet<number>;
 }
@@ -281,7 +281,7 @@ const NUMBER_LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "m
 const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
 
 /** This function gives the kind of the result of a list op: first gives the kind of its items. */
-const listKind = (op: string, item: PrimitiveKind | undefined): PrimitiveKind | undefined => (NUMBER_LIST_OPS.has(op) ? "number" : BOOLEAN_LIST_OPS.has(op) ? "boolean" : item);
+const listKind = (op: string, item: Kind | undefined): Kind | undefined => (NUMBER_LIST_OPS.has(op) ? "number" : BOOLEAN_LIST_OPS.has(op) ? "boolean" : item);
 
 const LOOPS = new WeakMap<Expr, boolean>();
 
@@ -348,10 +348,10 @@ function partsOf(t: Expr): readonly Expr[] {
 }
 
 /** This function gives the kind of two values in the branches of a form, if they have the same kind. */
-const join = (a: PrimitiveKind | undefined, b: PrimitiveKind | undefined): PrimitiveKind | undefined => (a === b ? a : undefined);
+const join = (a: Kind | undefined, b: Kind | undefined): Kind | undefined => (a === b ? a : undefined);
 
 /** This function gives a value that is a constant of the run, with plain code. */
-const plainValue = (code: string, kind: PrimitiveKind | undefined): Value => ({ code, kind, safe: true, deps: NO_DEPS, plain: true });
+const plainValue = (code: string, kind: Kind | undefined): Value => ({ code, kind, safe: true, deps: NO_DEPS, plain: true });
 
 /** This function gives the code of a value with no statements. */
 const bare = (v: Value): Code => ({ s: [], v });
@@ -384,9 +384,19 @@ const SAMPLES: Readonly<Record<PrimitiveKind, readonly unknown[]>> = {
   boolean: [true, false],
 };
 
-/** This function gives each list of arguments with one sample of each kind. */
-function samples(kinds: readonly PrimitiveKind[]): readonly (readonly unknown[])[] {
-  return kinds.reduce<readonly (readonly unknown[])[]>((acc, k) => acc.flatMap((xs) => SAMPLES[k].map((x) => [...xs, x])), [[]]);
+/** This function gives each list of arguments with one sample of each parameter, from the samples of each parameter. */
+function samples(each: readonly (readonly unknown[])[]): readonly (readonly unknown[])[] {
+  return each.reduce<readonly (readonly unknown[])[]>((acc, values) => acc.flatMap((xs) => values.map((x) => [...xs, x])), [[]]);
+}
+
+/** This function gives the text of plain data, with -0 apart from 0. */
+const dataText = (x: unknown): string => canonical(x as Expr, () => undefined);
+
+/** This function tells if two values are the same: the same primitive, or plain data with the same structure. */
+function same(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || a === null || typeof b !== "object" || b === null || Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  return dataText(a) === dataText(b);
 }
 
 /** This function gives the value of a call, or that it threw. */
@@ -402,7 +412,7 @@ function call(f: () => unknown): { readonly threw: boolean; readonly value?: unk
 function sameCall(a: () => unknown, b: () => unknown): boolean {
   const x = call(a);
   const y = call(b);
-  return x.threw === y.threw && Object.is(x.value, y.value);
+  return x.threw === y.threw && same(x.value, y.value);
 }
 
 /**
@@ -411,7 +421,7 @@ function sameCall(a: () => unknown, b: () => unknown): boolean {
  * a function that reads a name outside itself gives an exception in the copy. Thus the copy and the function must give
  * the same for the samples of their kinds.
  */
-function copied(f: (...a: never[]) => unknown, kinds: readonly PrimitiveKind[], what: string): string {
+function copied(f: (...a: never[]) => unknown, each: readonly (readonly unknown[])[], what: string): string {
   const src = Function.prototype.toString.call(f);
   let copy: (...a: unknown[]) => unknown;
   try {
@@ -422,7 +432,7 @@ function copied(f: (...a: never[]) => unknown, kinds: readonly PrimitiveKind[], 
     throw new NotStandalone(`${what} has no source that a module can copy`);
   }
   const fn = f as (...a: unknown[]) => unknown;
-  if (!samples(kinds).every((xs) => sameCall(() => fn(...xs), () => copy(...xs)))) throw new NotStandalone(`${what} reads a name outside itself, so a module cannot copy it`);
+  if (!samples(each).every((xs) => sameCall(() => fn(...xs), () => copy(...xs)))) throw new NotStandalone(`${what} reads a name outside itself, so a module cannot copy it`);
   return src;
 }
 
@@ -517,7 +527,7 @@ class Printer {
   /** The node of the memo whose function the printer prints, so it prints the node itself. */
   #inside: Expr | undefined;
   readonly #structures = new Map<string, string>();
-  readonly #kinds = new Map<string, PrimitiveKind | undefined>();
+  readonly #kinds = new Map<string, Kind | undefined>();
   readonly #ops = new Map<string, number>();
   /** The inline form of each function of an op, or undefined for a function that the module calls. */
   readonly #forms = new Map<string, InlineForm | undefined>();
@@ -548,12 +558,12 @@ class Printer {
    * finite, and the domain of the kind can check the value with valid. The law checker of the test kit checks the
    * declaration `returns` of each op (KIND.RETURNS), so the module trusts the kind itself.
    */
-  check(kind: PrimitiveKind): string | undefined {
-    const name = `k_${kind}`;
+  check(kind: Kind): string | undefined {
+    const name = `k_${kind.replace(":", "_")}`;
     // Stryker disable next-line ConditionalExpression: a check of a kind is always the same, so the map only saves time
     if (!this.top.has(name)) {
       const d = this.#facts.checkOf(kind);
-      if (d === undefined) throw new NotStandalone(`a domain without a primitive type comes before the domain of a ${kind}`);
+      if (d === undefined) throw new NotStandalone(`a domain without a primitive type comes before the domain of ${primitiveOf(kind) === undefined ? `a value of the domain ${kind.slice("domain:".length)}` : `a ${kind}`}`);
       const domain = this.#domains[d];
       const valid = domain?.valid === undefined ? undefined : this.#valid(d, domain.name, kind, domain.valid);
       const conds = [...(kind === "number" ? ["Number.isFinite(x)"] : []), ...(valid === undefined ? [] : [`${valid}(x)`])];
@@ -564,19 +574,46 @@ class Printer {
   }
 
   /** This method gives the code of a result with its check, if it needs one. */
-  #checked(kind: PrimitiveKind, code: string): string {
+  #checked(kind: Kind, code: string): string {
     const k = this.check(kind);
     return k === undefined ? code : `${k}(${code})`;
   }
 
-  #valid(d: number, domain: string, kind: PrimitiveKind, valid: (x: never) => boolean): string | undefined {
+  #valid(d: number, domain: string, kind: Kind, valid: (x: never) => boolean): string | undefined {
     const name = `v_${d}`;
-    const src = copied(valid, [kind], `the check "valid" of the domain ${domain}`);
+    const src = copied(valid, [this.#samples(kind)], `the check "valid" of the domain ${domain}`);
     // A check that is Number.isFinite of a number adds nothing to the check of the result.
     const form = inlineForm(src);
     if (kind === "number" && form !== undefined && patternOf(form, (p) => p) === "Number.isFinite(#0)") return undefined;
     this.top.set(name, `const ${name} = ${src};`);
     return name;
+  }
+
+  /** This method gives the samples of a kind: the samples of a primitive type, or the samples of a domain (KIND.DOMAIN). */
+  #samples(kind: Kind): readonly unknown[] {
+    const primitive = primitiveOf(kind);
+    if (primitive !== undefined) return SAMPLES[primitive];
+    const d = this.#domains.find((x) => kindOfDomain(x) === kind) as AnyDomain;
+    if (d.samples === undefined) throw new NotStandalone(`the domain ${d.name} gives no samples, so a module cannot check a copy of its op`);
+    return d.samples();
+  }
+
+  /**
+   * This method gives the code of a check of the kind of an input. The check is a test of its JavaScript type, or the
+   * copy of `is` of a domain. The code is true for an input against the kind.
+   */
+  against(kind: Kind, input: string): string {
+    const primitive = primitiveOf(kind);
+    if (primitive !== undefined) return `typeof ${input} !== "${primitive}"`;
+    const d = this.#domains.findIndex((x) => kindOfDomain(x) === kind);
+    const domain = this.#domains[d];
+    if (domain === undefined) throw new NotStandalone(`the schema has the kind ${kind}, and no domain has it`);
+    const name = `is_${String(d)}`;
+    if (!this.top.has(name)) {
+      const src = copied(domain.is, [[...SAMPLES.number, ...SAMPLES.string, ...SAMPLES.boolean, null, {}, [], ...this.#samples(kind)]], `the test "is" of the domain ${domain.name}`);
+      this.top.set(name, `const ${name} = ${src};`);
+    }
+    return `!${name}(${input})`;
   }
 
   /** This method gives a new name for the code. */
@@ -872,9 +909,10 @@ class Printer {
     if (!this.#forms.has(name)) {
       // A static site of a domain has the function of the op of that domain.
       const fn = (d.ops[op] as { fn: (...a: never[]) => unknown }).fn;
-      const kinds = values.map((x) => x.v.kind).filter((k): k is PrimitiveKind => k !== undefined);
-      const src = copied(fn, kinds, `the op "${op}" of the domain ${d.name}`);
-      this.#forms.set(name, inlineForm(src));
+      const kinds = values.map((x) => x.v.kind).filter((k): k is Kind => k !== undefined);
+      const src = copied(fn, kinds.map((k) => this.#samples(k)), `the op "${op}" of the domain ${d.name}`);
+      // An inline form cannot throw for primitive values only.
+      this.#forms.set(name, kinds.every((k) => primitiveOf(k) !== undefined) ? inlineForm(src) : undefined);
       this.top.set(name, `const ${name} = ${src};`);
     }
     const form = this.#forms.get(name);
@@ -1219,7 +1257,7 @@ class Printer {
    * items whose test is true are a prefix. Each prefix keeps its running value. The values add in the order of the items, so the result has the bits of the interpreter. An error before the test
    * of the key is an error of the item at each key. An error after it is an error at the keys whose test is true.
    */
-  #cached(e: Expr, key: Expr, bodyCtx: Ctx, fn: string): { readonly lines: readonly string[]; readonly kind: PrimitiveKind | undefined } | undefined {
+  #cached(e: Expr, key: Expr, bodyCtx: Ctx, fn: string): { readonly lines: readonly string[]; readonly kind: Kind | undefined } | undefined {
     // Only an app has an op, and a node of the memo has a loop, so a list op has its target.
     const { op, args } = e as ExprOf<"app">;
     if (!LIST_OPS.has(op)) return undefined;
@@ -1338,11 +1376,18 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
     for (const x of NEEDS[h]) add(x);
     helpers.add(h);
   };
-  [...p.helpers].toSorted().forEach(add);
   const fields = Object.entries(options.schema.fields ?? {});
   const vars = Object.entries(options.schema.vars ?? {});
-  const fieldChecks = fields.map(([f, k]) => ` || typeof r[${JSON.stringify(f)}] !== "${k}"`).join("");
-  const varChecks = vars.map(([v, k]) => ` || typeof vars[${JSON.stringify(v)}] !== "${k}"`).join("");
+  let fieldChecks: string;
+  let varChecks: string;
+  try {
+    fieldChecks = fields.map(([f, k]) => ` || ${p.against(k, `r[${JSON.stringify(f)}]`)}`).join("");
+    varChecks = vars.map(([v, k]) => ` || ${p.against(k, `vars[${JSON.stringify(v)}]`)}`).join("");
+  } catch (thrown) {
+    if (!(thrown instanceof NotStandalone)) throw thrown;
+    return { ok: false, reason: thrown.message };
+  }
+  [...p.helpers].toSorted().forEach(add);
   const lines = [
     "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
     "/** The error of a run whose input does not keep the schema of the program. */",

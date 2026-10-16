@@ -480,6 +480,41 @@ describe("COMPILE.MODULE: the text of a module", () => {
     await expectGolden("columns", e);
   });
 
+  it("KIND.DOMAIN: a value of a domain without a primitive type has the kind of its domain, so a kernel is in a module", () => {
+    type Span = { readonly lo: number; readonly hi: number };
+    const Interval = defineDomain({
+      name: "Interval",
+      is: (u: unknown): u is Span => typeof u === "object" && u !== null && typeof (u as Partial<Span>).lo === "number" && typeof (u as Partial<Span>).hi === "number",
+      ops: {
+        span: { fn: (i: Span): number => i.hi - i.lo, returns: "number" },
+        grow: { fn: (i: Span, d: number): Span => ({ lo: i.lo - d, hi: i.hi + d }), params: ["number"], returns: "domain" },
+        merge: { fn: (a: Span, b: Span): Span => ({ lo: Math.min(a.lo, b.lo), hi: Math.max(a.hi, b.hi) }), params: ["domain"], returns: "domain" },
+      },
+      samples: (): readonly Span[] => [{ lo: 0, hi: 1 }, { lo: -2, hi: 5 }],
+    });
+    const options: ModuleOptions = { domains: [NumDomain, Interval], schema: { fields: { iv: "domain:Interval", n: "number" } } };
+    const rows = [{ iv: { lo: 0, hi: 2 }, n: 1 }, { iv: { lo: -3, hi: -1 }, n: 2 }, { iv: { lo: 5, hi: 6 }, n: 0.5 }];
+    const iv = ref("iv");
+    const e = rec({
+      span: op("span", op("grow", iv, ref("n"))),
+      // A fold builds an interval of all the rows, and a constant of the run keeps it.
+      all: fold(axes.all, { u: ref("iv", [index(0)]) }, { u: op("merge", v("u"), iv) }, op("span", v("u"))),
+    });
+    const m = make(sourceOf(e, options));
+    expectSame(m, e, rows, {}, options);
+    // A record against the kind of the domain is against the schema.
+    expect(() => m.run([{ iv: { lo: 0 }, n: 1 }], {})).toThrow(m.VexContractError);
+    // A domain needs samples, and an op of a kernel must not read a name outside itself.
+    const noSamples = defineDomain({ name: "Interval", is: Interval.is, ops: Interval.ops });
+    expect(reasonOf(op("span", iv), { ...options, domains: [NumDomain, noSamples] })).toBe("the domain Interval gives no samples, so a module cannot check a copy of its op");
+    const outside = { lo: 0 };
+    const leaky = defineDomain({ ...Interval, ops: { span: { fn: (i: Span): number => i.hi - outside.lo, returns: "number" } } });
+    expect(reasonOf(op("span", iv), { ...options, domains: [NumDomain, leaky] })).toBe('the op "span" of the domain Interval reads a name outside itself, so a module cannot copy it');
+    expect(reasonOf(iv, { ...options, schema: { fields: { iv: "domain:Nope" } } })).toBe("the schema has the kind domain:Nope, and no domain has it");
+    // A domain without a primitive type before the domain of the value can accept it, so the kinds do not decide the op.
+    expect(reasonOf(op("span", iv), { ...options, domains: [Vec2Domain, Interval] })).toBe(undecided("span"));
+  });
+
   it("NAV.COMPUTED: the moves with a position or a key from an expression", async () => {
     const safe = (x: Expr): Expr => op("ifError", x, lit(-1));
     const e = rec({

@@ -222,6 +222,17 @@ These constructs give the full ring of `radial`. The code of ireko adds the angl
 
 Each stage has the loops. The formulas have `ITERATE(limit, name, first, step, ..., result, UNTIL test)` and `FOLD(axis WHERE test, name, first, step, ..., result)` (FORMULA.ITERATE, FORMULA.FOLD), and the Vex view of a formula shows them as calls of the builder. Tier 2 has a local for each name and a labeled loop. A new value of another kind stops the program, and tier 1 evaluates it. A module has a `let` for each name and a `for` loop. Each name has a level of its own, so a part of a step that reads a name stays in the loop. A loop that reads no key of the run is a constant of the run. Thus the bisection of a ring evaluates once for each run, not once for each child.
 
+### 8.2 The design of domain kernels
+
+A kernel is a domain whose values are data structures. Two examples are the bands of the shape of a subtree and the index of a sweep over boxes. Its ops run the algorithms. A value of a kernel does not change: an op gives a new value. Vex composes the ops: a fold builds a structure, and an op reads it.
+
+- **Kinds.** A value of a domain without a primitive type has the kind `domain:Name`. An op with `returns: "domain"` gives this kind, and a parameter `domain` takes it. Thus a site on such a value is static (KIND.STATIC) when each domain before its domain has a primitive type.
+- **Modules.** A module copies the function of each kernel op, as for each other op. A kernel domain gives `samples`: values for the check of each copy. An op that reads a name outside itself gives a reason, not code.
+- **Schema.** A field of the records can have the kind of a domain. The module checks it with the copy of `is` of the domain.
+- **Scans.** A fold over the keys before the origin evaluates at each origin again, so a run costs O(n²). A scan gives each prefix in one pass, so the run costs O(n). The angles of `radial` and the packing of `tree` are such folds.
+
+The first kernels are the bands of ireko for `tree`, and a sweep over boxes for the check `OVERLAP`.
+
 ## 9. Packages
 
 - `@mark1russell7/vex-compiler` is a new published package. It has the analysis, the lowering, the back end of JavaScript source, the tiers, and `emitModule` for builds. The core stays small, because a page that does not compile does not load the compiler.

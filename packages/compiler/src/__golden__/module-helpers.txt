@@ -1,0 +1,5 @@
+offset: E C F X
+index: E C F I
+key: E C F K
+any: E C F U
+first: E F B C G U

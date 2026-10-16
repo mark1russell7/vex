@@ -529,6 +529,24 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expectSame(make(sourceOf(e)), e);
   });
 
+  it("each helper of a module brings the helpers that it needs", async () => {
+    // In these programs, the helper F comes only from the helper that needs it: X, I, K or U.
+    const programs: Readonly<Record<string, Expr>> = {
+      offset: ref("s", [offset(1)]),
+      index: ref("s", [index(n)]),
+      key: ref("s", [key(ref("s"))]),
+      any: op("any", each(axes.all, ref("b"))),
+      first: op("first", each(axes.all, ref("s"))),
+    };
+    const lines = Object.entries(programs).map(([name, e]) => {
+      const source = sourceOf(e);
+      expectSame(make(source), e);
+      const helpers = source.split("\n").flatMap((l) => /^(?:function|const) ([A-Z]\d?)\b/.exec(l)?.[1] ?? []);
+      return `${name}: ${helpers.join(" ")}`;
+    });
+    await expect(`${lines.join("\n")}\n`).toMatchFileSnapshot("./__golden__/module-helpers.txt");
+  });
+
   it("two constants of the run with one structure share one value, and a constant that can fail keeps its error", async () => {
     // With the variable a = 2, the quotient 1 / (a - 2) is not finite, so its constant holds the error.
     const e = rec({

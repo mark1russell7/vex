@@ -97,7 +97,7 @@ interface Ctx {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S";
+type Helper = "F" | "C" | "T" | "L" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -106,6 +106,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // An exception of an op is an error of Vex too, as in the interpreter. Only the checks of the contract throw a
   // VexContractError, and they come before the run, so each catch of the run gives the sentinel.
   T: "function T(f) { try { return f(); } catch { return E; } }",
+  // A constant of the run with a loop evaluates on its first read, so a loop in a branch that no run takes costs nothing.
+  L: "function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }",
   G: "function G(x) { return x === E ? F() : x; }",
   B: 'function B(x) { return typeof x === "boolean" ? x : F(); }',
   U: 'function U(x) { return typeof x === "number" ? x : F(); }',
@@ -269,7 +271,7 @@ const STEPS: Readonly<Record<string, readonly [string, string]>> = {
 };
 
 /** The helpers that each helper uses. */
-const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"] };
+const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], L: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"] };
 
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
@@ -278,6 +280,18 @@ const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
 
 /** This function gives the kind of the result of a list op: first gives the kind of its items. */
 const listKind = (op: string, item: PrimitiveKind | undefined): PrimitiveKind | undefined => (NUMBER_LIST_OPS.has(op) ? "number" : BOOLEAN_LIST_OPS.has(op) ? "boolean" : item);
+
+const LOOPS = new WeakMap<Expr, boolean>();
+
+/** This function tells if an expression has a loop of names: a fold or an iteration. */
+function hasLoop(e: Expr): boolean {
+  let found = LOOPS.get(e);
+  if (found === undefined) {
+    found = e.tag === "fold" || e.tag === "iterate" || children(e).some(hasLoop);
+    LOOPS.set(e, found);
+  }
+  return found;
+}
 
 /**
  * This function tells if a node of the memo has a loop of its own. Such a loop is outside its keys and outside the nodes
@@ -573,15 +587,19 @@ class Printer {
     return [`let ${name};`, "try {", ...ind(c.s), `  ${name} = ${c.v.code};`, "} catch {", `  ${name} = E;`, "}"];
   }
 
-  /** This method evaluates a constant of the run once, before the loop over the keys, and gives the read of its value. */
-  #hoist(c: Code): Code {
+  /**
+   * This method evaluates a constant of the run once, before the loop over the keys, and gives the read of its value. A
+   * constant with a loop (`lazy`) evaluates on its first read instead, as a branch of the interpreter does.
+   */
+  #hoist(c: Code, lazy = false): Code {
     if (c.v.deps.size > 0 || (c.v.plain === true && c.s.length === 0)) return c;
     const key = this.#keyOf.get(c);
     const hit = key === undefined ? undefined : this.#constants.get(key);
     if (hit !== undefined) return hit;
     const name = this.fresh("c");
-    this.run.push(...this.#store(name, c, true));
-    const read = bare(this.#read({ code: name, kind: c.v.kind, lazy: !c.v.safe, deps: NO_DEPS }));
+    if (lazy) this.run.push(`const ${name} = ${this.use("L")}(() => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
+    else this.run.push(...this.#store(name, c, true));
+    const read = bare(this.#read(lazy ? { code: `${name}()`, kind: c.v.kind, lazy: true, deps: NO_DEPS } : { code: name, kind: c.v.kind, lazy: !c.v.safe, deps: NO_DEPS }));
     if (key !== undefined) this.#constants.set(key, read);
     return read;
   }
@@ -590,8 +608,8 @@ class Printer {
    * This method gives the parts of a node with levels `deps`. When the node is not a constant of the run, each part that
    * is a constant evaluates once, before the loop. A node that is a constant keeps its parts, and its parent decides.
    */
-  #settle(parts: readonly Code[], deps: ReadonlySet<number>): readonly Code[] {
-    return deps.size === 0 ? parts : parts.map((x) => this.#hoist(x));
+  #settle(parts: readonly Code[], deps: ReadonlySet<number>, exprs: readonly Expr[] = []): readonly Code[] {
+    return deps.size === 0 ? parts : parts.map((x, i) => this.#hoist(x, exprs[i] !== undefined && hasLoop(exprs[i])));
   }
 
   expr(e: Expr, ctx: Ctx): Code {
@@ -618,7 +636,7 @@ class Printer {
         const names = Object.keys(e.fields);
         const raw = Object.values(e.fields).map((x) => this.expr(x, ctx));
         const deps = depsOf(...raw);
-        const fields = this.#settle(raw, deps);
+        const fields = this.#settle(raw, deps, Object.values(e.fields));
         // A record of a module is a new object, so it needs no freeze.
         const code = `({ ${fields.map((x, i) => `${JSON.stringify(names[i])}: ${x.v.code}`).join(", ")} })`;
         return { s: stmtsOf(...fields), v: { code, kind: undefined, safe: fields.every((x) => x.v.safe), deps } };
@@ -755,7 +773,7 @@ class Printer {
     const s: string[] = [];
     let deps = new Set<number>();
     for (const [name, x] of Object.entries(e.bind)) {
-      const c = this.#hoist(this.expr(x, ctx));
+      const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
       if (c.v.deps.size === 0) {
         env.set(name, this.#nameOf(c.v));
         continue;
@@ -788,7 +806,7 @@ class Printer {
     if (LIST_OPS.has(op) && head?.tag === "each") return this.#list(op, head, args.slice(1), ctx);
     const raw = args.map((x) => this.expr(x, ctx));
     const deps = depsOf(...raw);
-    const values = this.#settle(raw, deps);
+    const values = this.#settle(raw, deps, args);
     const site = this.#facts.staticSite(op, values.map((x) => x.v.kind));
     if (site?.t !== "fn") throw new NotStandalone(`the kinds of the values of "${op}" do not decide its op`);
     if (site.bad) return { s: stmtsOf(...values), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
@@ -825,7 +843,7 @@ class Printer {
     const [c, a, b] = args as [Expr, Expr, Expr];
     const raw = [this.expr(c, ctx), this.expr(a, ctx), this.expr(b, ctx)];
     const deps = depsOf(...raw);
-    const [cond, yes, no] = this.#settle(raw, deps) as [Code, Code, Code];
+    const [cond, yes, no] = this.#settle(raw, deps, [c, a, b]) as [Code, Code, Code];
     const v = { kind: join(yes.v.kind, no.v.kind), safe: this.#safeBoolean(cond.v) && yes.v.safe && no.v.safe, deps };
     if (yes.s.length === 0 && no.s.length === 0) return { s: cond.s, v: { ...v, code: `(${this.#boolean(cond.v)} ? ${yes.v.code} : ${no.v.code})` } };
     const t = this.fresh("t");
@@ -838,7 +856,7 @@ class Printer {
     if (args.length === 0) throw new NotStandalone(`an ${and ? "and" : "or"} without arguments`);
     const raw = args.map((x) => this.expr(x, ctx));
     const deps = depsOf(...raw);
-    const parts = this.#settle(raw, deps);
+    const parts = this.#settle(raw, deps, args);
     const v = { kind: "boolean" as const, safe: parts.every((x) => this.#safeBoolean(x.v)), deps };
     const [first, ...rest] = parts as [Code, ...Code[]];
     if (rest.every((x) => x.s.length === 0)) return { s: first.s, v: { ...v, code: `(${parts.map((x) => this.#boolean(x.v)).join(and ? " && " : " || ")})` } };
@@ -854,7 +872,7 @@ class Printer {
     const [a, b] = args as [Expr, Expr];
     const raw = [this.expr(a, ctx), this.expr(b, ctx)];
     const deps = depsOf(...raw);
-    const [first, second] = this.#settle(raw, deps) as [Code, Code];
+    const [first, second] = this.#settle(raw, deps, [a, b]) as [Code, Code];
     if (first.v.safe) return first;
     const t = this.fresh("t");
     const s = [`let ${t};`, "try {", ...ind(first.s), `  ${t} = ${first.v.code};`, "} catch {", ...ind(second.s), `  ${t} = ${second.v.code};`, "}"];
@@ -937,8 +955,8 @@ class Printer {
     const { s, j, lo, hi, skip, fixed, start, tests, inner } = this.#targetLoop(target.axis, at, ctx);
     const { level } = inner;
     // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run.
-    const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner)));
-    const body = this.#hoist(this.expr(target.body, inner));
+    const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
+    const body = this.#hoist(this.expr(target.body, inner), hasLoop(target.body));
     // A count of all the items, whose body cannot fail, is the count of the records. A safe body covers its statements.
     if (op === "count" && fixed && tests.length === 0 && body.v.safe) return bare(plainValue("n", "number"));
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== level));
@@ -1024,7 +1042,7 @@ class Printer {
     const sets: string[] = [];
     const deps = new Set<number>();
     for (const [name, x] of Object.entries(step)) {
-      const c = this.#hoist(this.expr(x, inner));
+      const c = this.#hoist(this.expr(x, inner), hasLoop(x));
       const v = vars.get(name) as Name;
       if (c.v.kind !== v.kind) throw new NotStandalone(`a step of a loop changes the kind of the name "${name}"`);
       const t = this.fresh("t");
@@ -1065,7 +1083,7 @@ class Printer {
     const loop = this.#loops++;
     const names = this.#loopNames(e.init, ctx, loop);
     const t = this.#targetLoop(e.axis, e.at ?? [], ctx);
-    const tests = t.tests.map((x) => this.#hoist(this.expr(x, t.inner)));
+    const tests = t.tests.map((x) => this.#hoist(this.expr(x, t.inner), hasLoop(x)));
     const step = this.#loopStep(e.step, { ...t.inner, env: names.env }, names.vars);
     const result = this.expr(e.result, { ...ctx, env: names.env });
     const body = [

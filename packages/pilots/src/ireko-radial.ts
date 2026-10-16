@@ -1,16 +1,16 @@
 /**
- * The ireko radial pilot (docs/COMPILER.md §13.3, phase C3). The strategy `radial` of ireko
- * (https://github.com/mark1russell7/ireko) puts the children of a box on a ring. This module has the parts of the
- * strategy that have a closed form. These are one child, a part of a ring, and a full ring of more than
- * `PAIRWISE_LIMIT` children. A full ring of 2 to `PAIRWISE_LIMIT` children needs a search for its radius. That search
- * comes in phase C4.
+ * The ireko radial pilot (docs/COMPILER.md §13.3). The strategy `radial` of ireko (https://github.com/mark1russell7/ireko)
+ * puts the children of a box on a ring. One child, a part of a ring and a full ring of more than `PAIRWISE_LIMIT`
+ * children have a closed form. A full ring of 2 to `PAIRWISE_LIMIT` children searches for its smallest radius. A loop
+ * doubles the radius until a test is true, and then a bisection finds it. The test checks each pair of children.
  *
  * `radialArrange` follows the code of ireko step by step. `RADIAL_PROGRAM` is one Vex program that evaluates at each
- * child. The tests compare the two, with the same bits. ireko has the MIT license and the same author.
+ * child, with the loops `fold` and `iterate` for the search. The tests compare the two, with the same bits. ireko has
+ * the MIT license and the same author.
  */
-import { app, axes, each, let_, lit, rec, ref, space, v, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axes, each, fold, index, iterate, let_, lit, rec, ref, space, v, type Expr, type Space } from "@mark1russell7/vex";
 import type { Schema } from "@mark1russell7/vex-compiler";
-import { NumDomain, TextDomain } from "@mark1russell7/vex-domains";
+import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import type { Extent } from "./ireko-grid.ts";
 
 /** The options of the strategy `radial`, as in ireko. The angles are in degrees. */
@@ -44,11 +44,8 @@ export interface RadialOutput {
 /** Above this number of children, a full ring of ireko uses equal angles. Up to it, ireko searches for the radius. */
 export const PAIRWISE_LIMIT = 256;
 
-/** This function tells if the strategy places the children with no search: then the program gives the layout. */
-export function radialClosed(input: RadialInput): boolean {
-  const n = input.children.length;
-  return n <= 1 || input.options.sweep < 360 || n > PAIRWISE_LIMIT;
-}
+/** The item at an index that exists by construction. */
+const at = (list: readonly number[], i: number): number => list[i] ?? Number.NaN;
 
 /** This function gives the radius of the circle around the center of a child box that holds its extent. */
 function rhoOf(child: RadialChild): number {
@@ -59,9 +56,49 @@ function rhoOf(child: RadialChild): number {
   return Math.hypot(dx, dy);
 }
 
-/** This function arranges the children like the strategy `radial` of ireko. It takes only an input with a closed form. */
+/** This function gives the angle of each child at the radius `r`, or undefined if the angles do not fit in the ring. */
+function anglesAt(r: number, need: readonly number[], start: number, direction: number): number[] | undefined {
+  const steps = need.map((d) => 2 * Math.asin(Math.min(1, d / (2 * r))));
+  const spare = (2 * Math.PI - steps.reduce((a, b) => a + b, 0)) / need.length;
+  if (spare < -1e-9) return undefined;
+  const out: number[] = [];
+  let angle = start;
+  for (const step of steps) {
+    out.push(angle);
+    angle += direction * (step + Math.max(0, spare));
+  }
+  return out;
+}
+
+/** This function tells if the circles of all pairs of children keep apart by the gap. */
+function pairsApart(angles: readonly number[], rhos: readonly number[], r: number, gap: number): boolean {
+  for (let i = 0; i < angles.length; i++) {
+    for (let j = i + 1; j < angles.length; j++) {
+      const d = Math.abs(at(angles, i) - at(angles, j)) % (2 * Math.PI);
+      const chord = 2 * r * Math.sin(Math.min(d, 2 * Math.PI - d) / 2);
+      if (chord < at(rhos, i) + at(rhos, j) + gap - 1e-7) return false;
+    }
+  }
+  return true;
+}
+
+/** This function gives the smallest radius at which the chords `need` fit in the angle `total`, with a bisection. */
+function smallestRadius(need: readonly number[], total: number): number {
+  const angle = (r: number): number => need.reduce((sum, d) => sum + 2 * Math.asin(Math.min(1, d / (2 * r))), 0);
+  let lo = Math.max(...need) / 2;
+  if (angle(lo) <= total) return lo;
+  let hi = lo * 2;
+  while (angle(hi) > total) hi *= 2;
+  for (let k = 0; k < 64; k++) {
+    const mid = (lo + hi) / 2;
+    if (angle(mid) > total) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
+/** This function arranges the children like the strategy `radial` of ireko. */
 export function radialArrange(input: RadialInput): RadialOutput {
-  if (!radialClosed(input)) throw new Error(`A full ring of 2 to ${String(PAIRWISE_LIMIT)} children needs the search of ireko.`);
   const { mode, self, children, options, gap } = input;
   const n = children.length;
   const rhos = children.map(rhoOf);
@@ -76,6 +113,26 @@ export function radialArrange(input: RadialInput): RadialOutput {
   if (n === 1) {
     r = floor;
     angles = [full ? start : start + (direction * (options.sweep * Math.PI) / 180) / 2];
+  } else if (full && n <= PAIRWISE_LIMIT) {
+    // The angle that each pair of neighbors needs. The pair (n - 1, 0) closes the ring.
+    const need = rhos.map((rho, i) => rho + at(rhos, (i + 1) % n) + gap);
+    const ok = (radius: number): boolean => {
+      const a = anglesAt(radius, need, start, direction);
+      return a !== undefined && pairsApart(a, rhos, radius, gap);
+    };
+    let lo = Math.max(floor, smallestRadius(need, 2 * Math.PI));
+    if (ok(lo)) r = lo;
+    else {
+      let hi = lo * 2;
+      while (!ok(hi)) hi *= 2;
+      for (let k = 0; k < 50; k++) {
+        const mid = (lo + hi) / 2;
+        if (ok(mid)) hi = mid;
+        else lo = mid;
+      }
+      r = hi;
+    }
+    angles = anglesAt(r, need, start, direction) ?? [];
   } else if (full) {
     const step = (2 * Math.PI) / n;
     r = Math.max(floor, (2 * rhoMax + gap) / (2 * Math.sin(step / 2)));
@@ -88,7 +145,7 @@ export function radialArrange(input: RadialInput): RadialOutput {
 
   const center = mode === "linked" ? { x: self.width / 2, y: self.height / 2 } : { x: 0, y: 0 };
   const offsets = children.map((child, i) => {
-    const angle = angles[i] ?? Number.NaN;
+    const angle = at(angles, i);
     return { x: center.x + r * Math.cos(angle) - child.box.width / 2, y: center.y + r * Math.sin(angle) - child.box.height / 2 };
   });
   return { offsets };
@@ -98,17 +155,134 @@ export function radialArrange(input: RadialInput): RadialOutput {
 // extent (`ex`, `ey`, `ew`, `eh`). The options are variables.
 const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
 const half = (a: Expr): Expr => op("divide", a, lit(2));
+const TWO_PI = lit(2 * Math.PI);
+/** The largest number of doublings of a radius. A finite radius doubles to infinity in fewer steps. */
+const DOUBLINGS = 2048;
 /** The distance from the center of the box to the farther side of the extent, on one axis. */
-const corner = (at: string, size: string, box: string): Expr =>
-  op("max", op("abs", op("subtract", ref(at), half(ref(box)))), op("abs", op("subtract", op("add", ref(at), ref(size)), half(ref(box)))));
+const corner = (from: string, size: string, box: string): Expr =>
+  op("max", op("abs", op("subtract", ref(from), half(ref(box)))), op("abs", op("subtract", op("add", ref(from), ref(size)), half(ref(box)))));
 /** The radius of the circle around the center of the box of a child that holds its extent. */
 const RHO = op("hypot", corner("ex", "ew", "bw"), corner("ey", "eh", "bh"));
 /** An angle in degrees, in radians. */
 const radians = (degrees: Expr): Expr => op("divide", op("multiply", degrees, lit(Math.PI)), lit(180));
 
+// The search of a full ring. A radius is always a name, so each use of it reads a value.
+/** The radius of the next child on the ring: after the last child comes the first child. */
+const RHO_NEXT = op("ifError", op("first", each(axes.window(1, 1), RHO)), op("first", each(axes.window(0, 0), RHO, [index(0)])));
+/** The chord that a child and the next child need: their radii and the gap. */
+const NEED = op("add", op("add", RHO, RHO_NEXT), v("gap"));
+/** The angle of the chord of a child at the radius `r`. */
+const stepAt = (r: Expr): Expr => op("multiply", lit(2), op("asin", op("min", lit(1), op("divide", NEED, op("multiply", lit(2), r)))));
+/** The sum of the angles of the chords at the radius `r`, in the order of the children. */
+const angleSum = (r: Expr): Expr => op("sum", each(axes.all, stepAt(r)));
+/** The angle from a child to the next child at the radius `r`, with the spare angle in the name `$spare`. */
+const advance = (r: Expr): Expr => op("multiply", v("$dir"), op("add", stepAt(r), op("max", lit(0), v("$spare"))));
+/** The spare angle of each child at the radius `r`. */
+const spareAt = (r: Expr): Expr => op("divide", op("subtract", TWO_PI, angleSum(r)), v("$n"));
+
+/** True when two circles at the angles `a` and `b` of a ring of radius `r` are closer than the gap. */
+const tooClose = (a: Expr, b: Expr, rhoA: Expr, rhoB: Expr, r: Expr): Expr =>
+  let_(
+    { $d: op("mod", op("abs", op("subtract", a, b)), TWO_PI) },
+    op("lt", op("multiply", op("multiply", lit(2), r), op("sin", half(op("min", v("$d"), op("subtract", TWO_PI, v("$d")))))), op("subtract", op("add", op("add", rhoA, rhoB), v("gap")), lit(1e-7))),
+  );
+
 /**
- * The program of the strategy `radial`, for an input with a closed form (`radialClosed`). It evaluates at each child,
- * and it gives the offset of the child. The variables are the options, `mode`, `gap`, `selfW` and `selfH`.
+ * True when the angles fit in the ring at the radius `r`, and the circles of each pair keep apart by the gap. A fold
+ * over the children gives each angle, from the same sums as ireko. For each child, a fold over the later children
+ * gives their angles from its angle.
+ */
+const fits = (r: Expr): Expr =>
+  let_(
+    { $spare: spareAt(r) },
+    op(
+      "and",
+      op("not", op("lt", v("$spare"), lit(-1e-9))),
+      fold(
+        axes.all,
+        { ang: v("$start"), ok: lit(true) },
+        {
+          ang: op("add", v("ang"), advance(r)),
+          ok: op(
+            "and",
+            v("ok"),
+            let_(
+              { $ai: advance(r), $rhoI: RHO, $i: ref("i") },
+              fold(
+                axes.where(axes.all, op("gt", ref("i"), v("$i"))),
+                { angJ: op("add", v("ang"), v("$ai")), apart: lit(true) },
+                { angJ: op("add", v("angJ"), advance(r)), apart: op("and", v("apart"), op("not", tooClose(v("ang"), v("angJ"), v("$rhoI"), RHO, r))) },
+                v("apart"),
+              ),
+            ),
+          ),
+        },
+        v("ok"),
+      ),
+    ),
+  );
+
+/** The middle of the names `lo` and `hi`. */
+const MID = half(op("add", v("lo"), v("hi")));
+
+/** The smallest radius at which the chords fit in the ring, as `smallestRadius` of ireko. */
+const SMALLEST = let_(
+  { $lo0: half(op("max", each(axes.all, NEED))) },
+  op(
+    "if",
+    op("lte", angleSum(v("$lo0")), TWO_PI),
+    v("$lo0"),
+    let_(
+      { $hi0: iterate(DOUBLINGS, { h: op("multiply", v("$lo0"), lit(2)) }, { h: op("multiply", v("h"), lit(2)) }, v("h"), op("not", op("gt", angleSum(v("h")), TWO_PI))) },
+      iterate(
+        64,
+        { lo: v("$lo0"), hi: v("$hi0") },
+        {
+          lo: let_({ $m: MID }, op("if", op("gt", angleSum(v("$m")), TWO_PI), v("$m"), v("lo"))),
+          hi: let_({ $m: MID }, op("if", op("gt", angleSum(v("$m")), TWO_PI), v("hi"), v("$m"))),
+        },
+        v("hi"),
+      ),
+    ),
+  ),
+);
+
+/**
+ * The radius of a full ring with a search, as ireko. It is the smallest radius, if the circles fit there. Else a loop
+ * doubles it until the circles fit, and then 50 steps of a bisection find it. The name `good` holds the test of the
+ * middle, so each step tests once.
+ */
+const SEARCHED = let_(
+  { $lo: op("max", v("$floor"), SMALLEST) },
+  op(
+    "if",
+    fits(v("$lo")),
+    v("$lo"),
+    let_(
+      { $hi: iterate(DOUBLINGS, { h: op("multiply", v("$lo"), lit(2)) }, { h: op("multiply", v("h"), lit(2)) }, v("h"), fits(v("h"))) },
+      iterate(
+        50,
+        { lo: v("$lo"), hi: v("$hi"), good: let_({ $m: half(op("add", v("$lo"), v("$hi"))) }, fits(v("$m"))) },
+        {
+          lo: op("if", v("good"), v("lo"), MID),
+          hi: op("if", v("good"), MID, v("hi")),
+          good: let_({ $m: half(op("add", op("if", v("good"), v("lo"), MID), op("if", v("good"), MID, v("hi")))) }, fits(v("$m"))),
+        },
+        v("hi"),
+      ),
+    ),
+  ),
+);
+
+/** The angle of the child at the origin on a searched ring: the sum of the angles of the children before it. */
+const SEARCHED_ANGLE = let_(
+  { $spare: spareAt(v("$r")) },
+  fold(axes.where(axes.all, op("lt", ref("i"), ref("i", [{ t: "origin" }]))), { a: v("$start") }, { a: op("add", v("a"), advance(v("$r"))) }, v("a")),
+);
+
+/**
+ * The program of the strategy `radial`. It evaluates at each child, and it gives the offset of the child. The variables
+ * are the options, `mode`, `gap`, `selfW` and `selfH`.
  */
 export const RADIAL_PROGRAM: Expr = let_(
   {
@@ -124,25 +298,40 @@ export const RADIAL_PROGRAM: Expr = let_(
       // In the linked mode, no child circle can touch the circle of the node.
       $floor: op("if", v("$linked"), op("add", op("add", half(op("hypot", v("selfW"), v("selfH"))), v("$rhoMax")), op("if", op("gt", v("distance"), lit(0)), v("distance"), v("gap"))), lit(0)),
       $one: op("eq", v("$n"), lit(1)),
+      $search: op("and", v("$full"), op("lte", v("$n"), lit(PAIRWISE_LIMIT))),
       // A full ring has equal angles. A part of a ring has equal parts of the arc, and each child is at the middle of its part.
       $step: op("if", v("$full"), op("divide", op("multiply", lit(2), lit(Math.PI)), v("$n")), op("divide", radians(v("sweep")), v("$n"))),
     },
     let_(
       {
-        $r: op("if", v("$one"), v("$floor"), op("max", v("$floor"), op("divide", op("add", op("multiply", lit(2), v("$rhoMax")), v("gap")), op("multiply", lit(2), op("sin", half(v("$step"))))))),
-        $angle: op(
+        $r: op(
           "if",
           v("$one"),
-          op("if", v("$full"), v("$start"), op("add", v("$start"), half(op("divide", op("multiply", v("$dir"), op("multiply", v("sweep"), lit(Math.PI))), lit(180))))),
-          op("add", v("$start"), op("multiply", op("multiply", v("$dir"), op("if", v("$full"), ref("i"), op("add", ref("i"), lit(0.5)))), v("$step"))),
+          v("$floor"),
+          op("if", v("$search"), SEARCHED, op("max", v("$floor"), op("divide", op("add", op("multiply", lit(2), v("$rhoMax")), v("gap")), op("multiply", lit(2), op("sin", half(v("$step"))))))),
         ),
         $cx: op("if", v("$linked"), half(v("selfW")), lit(0)),
         $cy: op("if", v("$linked"), half(v("selfH")), lit(0)),
       },
-      rec({
-        x: op("subtract", op("add", v("$cx"), op("multiply", v("$r"), op("cos", v("$angle")))), half(ref("bw"))),
-        y: op("subtract", op("add", v("$cy"), op("multiply", v("$r"), op("sin", v("$angle")))), half(ref("bh"))),
-      }),
+      let_(
+        {
+          $angle: op(
+            "if",
+            v("$one"),
+            op("if", v("$full"), v("$start"), op("add", v("$start"), half(op("divide", op("multiply", v("$dir"), op("multiply", v("sweep"), lit(Math.PI))), lit(180))))),
+            op(
+              "if",
+              v("$search"),
+              SEARCHED_ANGLE,
+              op("add", v("$start"), op("multiply", op("multiply", v("$dir"), op("if", v("$full"), ref("i"), op("add", ref("i"), lit(0.5)))), v("$step"))),
+            ),
+          ),
+        },
+        rec({
+          x: op("subtract", op("add", v("$cx"), op("multiply", v("$r"), op("cos", v("$angle")))), half(ref("bw"))),
+          y: op("subtract", op("add", v("$cy"), op("multiply", v("$r"), op("sin", v("$angle")))), half(ref("bh"))),
+        }),
+      ),
     ),
   ),
 );
@@ -153,8 +342,8 @@ export const RADIAL_SCHEMA: Schema = {
   vars: { startAngle: "number", sweep: "number", clockwise: "boolean", distance: "number", mode: "string", gap: "number", selfW: "number", selfH: "number" },
 };
 
-/** The domains of the program: numbers, and texts for the mode. */
-export const RADIAL_DOMAINS: readonly [typeof NumDomain, typeof TextDomain] = [NumDomain, TextDomain];
+/** The domains of the program: numbers, texts for the mode, and booleans for the tests of the search. */
+export const RADIAL_DOMAINS: readonly [typeof NumDomain, typeof TextDomain, typeof BoolDomain] = [NumDomain, TextDomain, BoolDomain];
 
 /** This function gives the space of the children and the variables of a run of the program. */
 export function radialRun(input: RadialInput): { readonly space: Space; readonly vars: Readonly<Record<string, unknown>> } {

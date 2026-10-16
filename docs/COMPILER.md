@@ -465,6 +465,26 @@ The module has no search, so ireko keeps its own code for most rings. The module
 
 The module is approximately two times slower. A module without the checks of finite numbers and without the `try` blocks in its loops has the same speed. Thus the cause is elsewhere.
 
+#### The full ring (phase C4)
+
+With `fold` and `iterate`, `RADIAL_PROGRAM` has each case of `radial`, also the search. The test of a radius is a fold over the children, with a fold over the later children in each step. Thus each angle comes from the same sums as in ireko. The bisection holds the test of the middle in the name `good`, so each step tests once. The bits are the same in the interpreter, in tier 2 and in the module.
+
+A constant of the run with a loop is lazy in a module: it evaluates on its first read. Before, the module evaluated each constant before the run, also a loop in a branch that the run does not take.
+
+| The full module of `radial` | Bytes | Gzip |
+|---|---|---|
+| The module | 59486 | 8180 |
+| The module, minified | 23289 | 4335 |
+| The module, minified, after the module of `grid` | | 4077 more |
+
+| A full ring, one run | The code of ireko | The module |
+|---|---|---|
+| 6 children | 7 to 14 µs | 190 to 250 µs |
+| 30 children | 23 to 25 µs | 1.2 to 2.1 ms |
+| 120 children | 141 to 372 µs | 11.6 to 15.1 ms |
+
+The module is too large and too slow for ireko. Vex has no functions, so the test of a radius is in the program four times. Each step of the search computes the radius of each child again, and ireko computes these values once. A value that depends only on the target of a loop can be a column of the run, with one value for each record. That is the next step of the printer.
+
 #### The audit pilot
 
 After a layout, the audit of ireko gives two checks. `ESCAPE` finds each node that is not inside its container, the nearest ancestor in the nested mode. `OVERLAP` finds each pair of boxes that overlap.

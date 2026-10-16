@@ -7,6 +7,7 @@ const E = {};
 function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
 function G(x) { return x === E ? F() : x; }
+function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
 function X(t, n) { return t >= 0 && t < n ? t : F(); }
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 export function run(records, vars) {
@@ -18,19 +19,15 @@ export function run(records, vars) {
     if (typeof r !== "object" || r === null || typeof r["n"] !== "number" || typeof r["w"] !== "number" || typeof r["s"] !== "string" || typeof r["b"] !== "boolean") C(`the record ${i} does not keep the schema`);
   }
   if (typeof vars !== "object" || vars === null || typeof vars["a"] !== "number" || typeof vars["t"] !== "string") C("the variables do not keep the schema");
-  let c31;
-  try {
+  const c31 = L(() => {
     let l0 = 0;
     for (let j1 = 0; j1 < n; j1++) {
       const t2 = k_number((k_number((l0) * (10))) + (R[j1]["n"]));
       l0 = t2;
     }
-    c31 = l0;
-  } catch {
-    c31 = E;
-  }
-  let c32;
-  try {
+    return l0;
+  });
+  const c32 = L(() => {
     let l14 = 0;
     let l15 = 2;
     for (let k18 = 0; ; k18++) {
@@ -40,24 +37,24 @@ export function run(records, vars) {
       l14 = t16;
       l15 = t17;
     }
-    c32 = l15;
-  } catch {
-    c32 = E;
-  }
-  let t30;
-  try {
-    let l27 = 1;
-    for (let k29 = 0; ; k29++) {
-      if (((l27) > (5))) break;
-      if (k29 === 2) F();
-      const t28 = l27;
-      l27 = t28;
+    return l15;
+  });
+  const c33 = L(() => {
+    let t30;
+    try {
+      let l27 = 1;
+      for (let k29 = 0; ; k29++) {
+        if (((l27) > (5))) break;
+        if (k29 === 2) F();
+        const t28 = l27;
+        l27 = t28;
+      }
+      t30 = l27;
+    } catch {
+      t30 = -1;
     }
-    t30 = l27;
-  } catch {
-    t30 = -1;
-  }
-  const c33 = t30;
+    return t30;
+  });
   const out = [];
   for (let o = 0; o < n; o++) {
     try {
@@ -99,7 +96,7 @@ export function run(records, vars) {
         const t25 = k_number((l24) * (2));
         l24 = t25;
       }
-      out.push(({ "digits": G(c31), "window": t8, "tested": k_number((l9) + (R[o]["n"])), "root": G(c32), "swap": k_number((l19) - (l20)), "until": l24, "never": c33 }));
+      out.push(({ "digits": G(c31()), "window": t8, "tested": k_number((l9) + (R[o]["n"])), "root": G(c32()), "swap": k_number((l19) - (l20)), "until": l24, "never": G(c33()) }));
     } catch {
       out.push(VEX_ERROR);
     }

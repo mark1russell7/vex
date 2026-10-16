@@ -387,9 +387,13 @@ describe("sheets (SHEET.*)", () => {
     const siblings = space.tree({ r: { v: 1 }, x: { v: 2 }, y: { v: 3 }, z: { v: 4 } }, { x: "r", y: "r", z: "r" });
     expect(fill(new Map([["before", plus(orZero(cell("before", [offset(-1)])), ref("v"))]]), siblings)).toBe(4);
     expect(fill(new Map([["after", plus(orZero(cell("after", [offset(1)])), ref("v"))]]), siblings)).toBe(4);
-    // A grid reads the row above it.
+    // A grid reads the row above it, or the cell on its right.
     const grid = space.grid([[{ v: 1 }, { v: 2 }], [{ v: 3 }, { v: 4 }]]);
     expect(fill(new Map([["g", plus(orZero(cell("g", [offset(-1, 0)])), ref("v"))]]), grid)).toBe(4);
+    expect(fill(new Map([["g", plus(orZero(cell("g", [offset(0, 1)])), ref("v"))]]), grid)).toBe(4);
+    // Reads of earlier and of later rows keep the key order: here only the last row reads a later row, and it has none.
+    const flags = space.array([{ v: 1, up: false }, { v: 2, up: false }, { v: 3, up: true }]);
+    expect(fill(new Map([["m", plus(app("if", ref("up"), orZero(cell("m", [offset(1)])), orZero(cell("m", [offset(-1)]))), ref("v"))]]), flags)).toBe(3);
     // A read of a cell that is not finished goes to the search: the first cell reads the last cell, and the fill
     // evaluates the first cell again.
     const own = new Map([["last", new Map([["5", lit(0)]])]]);
@@ -398,6 +402,25 @@ describe("sheets (SHEET.*)", () => {
     expect(fill(new Map([["x", plus(cell("y"), lit(1))], ["y", orZero(cell("x", [offset(-1)]))]]), rows)).toBeGreaterThan(12);
     // A cycle gives #CYCLE!, and a column with formulas of cells only is filled too.
     expect(fill(new Map([["p", cell("q")], ["q", cell("p")]]), rows, { cells: new Map([["only", new Map([["1", lit(5)]])]]) })).toBeGreaterThan(0);
+  });
+
+  it("SHEET.FILL: a fill of a table by its name evaluates the cells of that table only", () => {
+    let runs = 0;
+    const counting: CompileFn = (expr, options) => {
+      const program = compile(expr, options);
+      return { ...program, run: (r) => (runs++, program.run(r)) };
+    };
+    const rows = space.array([{ v: 1 }, { v: 2 }, { v: 3 }]);
+    const total = app("plus", app("ifError", cell("total", [offset(-1)]), lit(0)), ref("v"));
+    const tables = new Map([["t2", { space: space.array([{ v: 10 }, { v: 20 }]), columns: new Map([["total", total]]) }]]);
+    const run = new SheetRun(new Map([["total", total]]), { space: rows, domains: [Num], tables, compile: counting });
+    run.fill("t2");
+    expect(runs).toBe(2);
+    expect([run.cell("total", "0", "t2"), run.cell("total", "1", "t2")].map(value)).toEqual([10, 30]);
+    expect(runs).toBe(2);
+    // The main table is not filled, so its reads evaluate its cells.
+    expect(value(run.cell("total", "2"))).toBe(6);
+    expect(runs).toBe(5);
   });
 
   it("SHEET.FILL: a fill inside a formula, or of a table that does not exist, has no effect", () => {

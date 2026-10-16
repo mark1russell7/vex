@@ -112,55 +112,58 @@ function setDone(t: Table, column: string, key: string, result: Result<unknown>)
   results.set(key, result);
 }
 
-/** The directions of the reads of a column from itself: to an earlier key, to a later key, up a tree, or down a tree. */
-interface Directions {
-  before: boolean;
-  after: boolean;
-  up: boolean;
-  down: boolean;
-}
+/** A direction of the reads of a column from itself: to an earlier key, to a later key, or down a tree to the children. */
+type Direction = "before" | "after" | "down";
 
 /** This function adds the direction of one move or one axis of a read of a column from itself. */
-function addDirection(d: Directions, m: Move | Axis): void {
-  if (m.t === "offset") {
-    const step = m.d.find((x) => x !== 0) ?? 0;
-    if (step < 0) d.before = true;
-    if (step > 0) d.after = true;
-  } else if (m.t === "window") {
-    if (m.from < 0) d.before = true;
-    if (m.to > 0) d.after = true;
-  } else if (m.t === "parent" || m.t === "ancestors") d.up = true;
-  else if (m.t === "children" || m.t === "descendants") d.down = true;
+function addDirection(d: Set<Direction>, m: Move | Axis): void {
+  if (m.t === "offset" || m.t === "window") {
+    // An offset moves by its first step that is not 0. A window reads the keys from `from` to `to`.
+    const steps = m.t === "offset" ? [m.d.find((x) => x !== 0) ?? 0] : [m.from, m.to];
+    // A step of 0 reads the cell itself, which is a cycle in each order.
+    // Stryker disable next-line EqualityOperator: see the comment above
+    if (steps.some((x) => x < 0)) d.add("before");
+    // Stryker disable next-line EqualityOperator: see the comment above
+    if (steps.some((x) => x > 0)) d.add("after");
+  } else if (m.t === "children" || m.t === "descendants") d.add("down");
+}
+
+/** This function gives the base axis of an axis, and the tests of its `where` axes. */
+function partsOf(axis: Axis): { readonly base: Axis; readonly tests: readonly Expr[] } {
+  const tests: Expr[] = [];
+  let base = axis;
+  while (base.t === "where") {
+    tests.push(base.test);
+    base = base.axis;
+  }
+  return { base, tests };
 }
 
 /**
  * This function gives the columns that the formulas of the column `self` read with a cell reference: its formula and
- * the formulas of its cells. It also gives the directions of their reads of the column itself. It walks each
- * expression with a stack, not with recursion.
+ * the formulas of its cells. It also gives the directions of their reads of the column itself. A read in the body or
+ * in a test of an axis also has the direction of that axis. It walks each expression with a stack, not with recursion.
  */
-function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string>; readonly directions: Directions } {
+function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string>; readonly directions: ReadonlySet<Direction> } {
   const columns = new Set<string>();
-  const directions: Directions = { before: false, after: false, up: false, down: false };
+  const directions = new Set<Direction>();
   const formula = t.columns.get(self);
-  const todo: [Expr, readonly Axis[]][] = [...(formula === undefined ? [] : [formula]), ...(t.cells.get(self)?.values() ?? [])].map((e) => [e, []]);
+  const todo: [Expr, Axis | undefined][] = [...(formula === undefined ? [] : [formula]), ...(t.cells.get(self)?.values() ?? [])].map((e) => [e, undefined]);
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
-    const [e, axes] = item;
-    if (e.tag === "ext") {
-      if (e.kind === CELL_KIND && isCellRef(e.data)) {
-        columns.add(e.data.column);
-        if (e.data.column === self) for (const m of [...axes, ...e.data.at]) addDirection(directions, m);
-      }
-    } else if (e.tag === "each") {
-      const inner: Axis[] = [...axes];
-      for (let a: Axis = e.axis; ; a = a.axis) {
-        if (a.t !== "where") {
-          inner.push(a);
-          break;
-        }
-        todo.push([a.test, [...axes, a]]);
-      }
-      todo.push([e.body, inner]);
-    } else for (const child of children(e)) todo.push([child, axes]);
+    const [e, axis] = item;
+    if (e.tag === "each") {
+      const { base, tests } = partsOf(e.axis);
+      for (const x of [e.body, ...tests]) todo.push([x, base]);
+    } else if (e.tag !== "ext") {
+      for (const child of children(e)) todo.push([child, axis]);
+      // The data of an extension of another kind can look like a cell reference. It only changes the order of a fill.
+      // Stryker disable next-line ConditionalExpression,LogicalOperator: see the comment above
+    } else if (e.kind === CELL_KIND && isCellRef(e.data)) {
+      columns.add(e.data.column);
+      // The directions of the reads of another column only change the order of a fill, because that column comes first.
+      // Stryker disable next-line ConditionalExpression: see the comment above
+      if (e.data.column === self) for (const m of [...(axis === undefined ? [] : [axis]), ...e.data.at]) addDirection(directions, m);
+    }
   }
   return { columns, directions };
 }
@@ -188,30 +191,29 @@ function columnOrder(t: Table): readonly string[] {
 }
 
 /**
- * This function gives the keys of a space in the order of the reads of a column from itself. In a tree, the children
- * come before their parent when the column reads down the tree. A read of a later key reverses the order.
+ * This function gives the keys of a space in the order of the reads of a column from itself. A read of a later key
+ * reverses the order. In a tree, a read of the children puts the children before their parent.
  */
-function keyOrder(s: Space, d: Directions): readonly string[] {
-  const reverse = d.after && !d.before;
-  if (s.parentOf === undefined || s.childrenOf === undefined) return reverse ? s.keys.toReversed() : s.keys;
-  const parentOf = s.parentOf.bind(s);
-  const childrenOf = s.childrenOf.bind(s);
-  const post = d.down && !d.up;
-  const kids = (k: string | undefined): readonly string[] => {
-    const ks = k === undefined ? s.keys.filter((x) => parentOf(x) === undefined) : childrenOf(k);
-    return reverse ? ks.toReversed() : ks;
+function keyOrder(s: Space, d: ReadonlySet<Direction>): readonly string[] {
+  const reverse = d.has("after") && !d.has("before");
+  const childrenOf = s.childrenOf?.bind(s);
+  if (childrenOf === undefined) return reverse ? s.keys.toReversed() : s.keys;
+  const post = d.has("down");
+  // The order with each parent before its children, and the order after the children is that order from the end, with
+  // the siblings in the other order. `push` puts the next key to visit at the end of the stack.
+  const backwards = post !== reverse;
+  const push = (stack: string[], keys: readonly string[]): void => {
+    for (const k of backwards ? keys : keys.toReversed()) stack.push(k);
   };
+  const isChild = new Set(s.keys.flatMap((k) => childrenOf(k)));
+  const stack: string[] = [];
+  push(stack, s.keys.filter((k) => !isChild.has(k)));
   const out: string[] = [];
-  // Each entry is a key, and true when its children are on the stack already.
-  const stack: [string, boolean][] = kids(undefined).map((k): [string, boolean] => [k, false]).toReversed();
-  for (let item = stack.pop(); item !== undefined; item = stack.pop()) {
-    const [k, expanded] = item;
-    if (expanded || !post) out.push(k);
-    if (expanded) continue;
-    if (post) stack.push([k, true]);
-    for (const c of kids(k).toReversed()) stack.push([c, false]);
+  for (let k = stack.pop(); k !== undefined; k = stack.pop()) {
+    out.push(k);
+    push(stack, childrenOf(k));
   }
-  return out;
+  return post ? out.toReversed() : out;
 }
 
 /** The state of one cell in the search. */
@@ -319,7 +321,7 @@ export class SheetRun {
   /** The cell handler of the compiled programs: it reads the cells of the active run. */
   static readonly #cellOfActive: ExtHandler = (data, ctx) => {
     const run = SheetRun.#active;
-    return run === undefined ? fail(vexError("unbound", "a compiled formula reads cells only in the evaluation of a sheet run", { path: ctx.path })) : run.#handler(data, ctx);
+    return run === undefined ? fail(vexError("unbound", "a compiled formula reads cells only in the evaluation of a sheet run")) : run.#handler(data, ctx);
   };
 
   /** This method gives the program of a cell: its own formula, or the formula of its column (SHEET.CELL.FORMULA). */
@@ -342,7 +344,8 @@ export class SheetRun {
   }
 
   readonly #handler: ExtHandler = (data, ctx) => {
-    if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address", { path: ctx.path }));
+    // The interpreter gives an error without an origin the path and the position of its node.
+    if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address"));
     const where = resolveAddr(ctx.space, ctx.position, data.at);
     if (!where.ok) return fail({ ...where.error, path: ctx.path });
     // The evaluation of a cell has the space of its table, and the body of the axis table has the space of that table.
@@ -538,15 +541,12 @@ export class SheetRun {
    * evaluates its cell. A read of a cell gives the same result after a fill.
    */
   fill(table?: string): void {
-    const t = this.#named(table, "");
+    const t = table === undefined ? this.#main : this.#byName.get(table);
     // A read inside a formula has a cell at the top. A fill there has no effect.
-    if (!("space" in t) || this.#top.index >= 0) return;
+    if (t === undefined || this.#top.index >= 0) return;
     const host = this.#top;
     for (const column of columnOrder(t)) {
-      const formula = t.columns.get(column);
-      const own = t.cells.get(column);
-      const keys = formula === undefined ? t.space.keys.filter((k) => own?.has(k) === true) : keyOrder(t.space, readsOf(t, column).directions);
-      for (const key of keys) {
+      for (const key of keyOrder(t.space, readsOf(t, column).directions)) {
         const program = this.#programOf(t, column, key);
         if (program === undefined || doneOf(t, column, key) !== undefined) continue;
         this.#top = this.#filling;

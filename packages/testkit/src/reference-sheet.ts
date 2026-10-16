@@ -76,7 +76,8 @@ export class ReferenceSheetRun {
       }
     }
     const handler: ExtHandler = (data, ctx) => {
-      if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address", { path: ctx.path }));
+      // The interpreter gives an error without an origin the path and the position of its node.
+      if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address"));
       const where = resolveAddr(ctx.space, ctx.position, data.at);
       // Each space of an evaluation is the space of a table, so the main table is a default that no read takes.
       const table = this.#bySpace.get(ctx.space) ?? this.#main;

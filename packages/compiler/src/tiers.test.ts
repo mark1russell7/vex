@@ -82,6 +82,19 @@ const arbKeyedProgram: fc.Arbitrary<Expr> = fc
     return { tag: "app", op, args: [{ tag: "each", axis, body: inTest ? { tag: "ref", path: [g] } : both }, ...(op === "reduce" ? [{ tag: "lit", value: "add" } as Expr] : [])] };
   });
 
+/** A program over the numbers of the field n and the variable a: with a schema, most of its op sites are static. */
+const arbNumeric: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => ({
+  e: fc.oneof(
+    { maxDepth: 3, depthSize: "small" },
+    fc.integer({ min: -3, max: 3 }).map((x): Expr => ({ tag: "lit", value: x })),
+    fc.constantFrom<Expr>({ tag: "ref", path: ["n"] }, { tag: "ref", path: ["n"], at: [{ t: "origin" }] }, { tag: "var", name: "a" }),
+    fc.tuple(fc.constantFrom("add", "subtract", "multiply", "max", "divide"), tie("e"), tie("e")).map(([op, a, b]): Expr => ({ tag: "app", op, args: [a, b] })),
+    fc.tuple(tie("e"), tie("e"), tie("e")).map(([c, a, b]): Expr => ({ tag: "app", op: "if", args: [{ tag: "app", op: "gt", args: [c, { tag: "lit", value: 0 }] }, a, b] })),
+    tie("e").map((x): Expr => ({ tag: "app", op: "sum", args: [{ tag: "each", axis: { t: "others" }, body: x }] })),
+    tie("e").map((x): Expr => ({ tag: "app", op: "ifError", args: [x, { tag: "lit", value: 0 }] })),
+  ),
+})).e;
+
 const tables = arbSpace(vec).map((t): Readonly<Record<string, Space>> => ({ T: t }));
 const vars = fc.option(fc.record({ a: arbLiteral(vec), c: arbLiteral(vec) }), { nil: undefined });
 
@@ -136,14 +149,14 @@ describe("the tiers", () => {
     const count = { values: 0, fast: 0 };
     let direct = 0;
     fc.assert(
-      fc.property(runOf(fc.oneof(arbExpr(OPTS), arbListProgram, arbKeyedProgram)), ([s, e, k, t, v]) => {
+      fc.property(runOf(fc.oneof(arbExpr(OPTS), arbListProgram, arbKeyedProgram, arbNumeric, arbNumeric)), ([s, e, k, t, v]) => {
         agree(e, s, k, t, v, count, options);
         const g = generate(e, options);
         if (g.ok && /= f\d+_\d+\(/.test(g.source)) direct++;
       }),
     );
     // Some programs have static sites.
-    expect(direct).toBeGreaterThan(3);
+    expect(direct).toBeGreaterThan(20);
   });
 
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {

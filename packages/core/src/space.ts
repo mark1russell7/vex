@@ -93,8 +93,7 @@ class ArraySpace<O> implements Space<ArrayKey, O> {
     return this.has(k) ? [Number(k)] : undefined;
   }
   keyAt(coords: readonly number[]): ArrayKey | undefined {
-    const [i] = coords;
-    return coords.length === 1 && i !== undefined ? this.keys[i] : undefined;
+    return coords.length === 1 ? this.keys[Number(coords[0])] : undefined;
   }
 }
 

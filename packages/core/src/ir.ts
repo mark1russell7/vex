@@ -203,7 +203,7 @@ export function isMove(u: unknown): u is Move {
 }
 
 /**
- * A test of a number of a move or of a window. The JSON form needs a whole number. An expression in code can have any
+ * A test of the numbers of a move or of a window. The JSON form needs whole numbers. An expression in code can have any
  * number, and a number that is not whole has a meaning at run time (EVAL.SHAPE).
  */
 type NumberTest = (x: unknown) => boolean;

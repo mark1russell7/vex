@@ -47,7 +47,15 @@ export type Expr =
   | { readonly tag: "var"; readonly name: string }
   | { readonly tag: "rec"; readonly fields: Readonly<Record<string, Expr>> }
   | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr; readonly at?: Addr }
+  | { readonly tag: "fold"; readonly axis: Axis; readonly init: Names; readonly step: Names; readonly result: Expr; readonly at?: Addr }
+  | { readonly tag: "iterate"; readonly limit: number; readonly init: Names; readonly step: Names; readonly until?: Expr; readonly result: Expr }
   | { readonly tag: "ext"; readonly kind: string; readonly data: unknown };
+
+/** The names of a loop and an expression for each (LOOP.NAMES). */
+export type Names = Readonly<Record<string, Expr>>;
+
+/** The largest number of steps of `iterate` (ITERATE.LIMIT). */
+export const MAX_ITERATIONS = 100_000;
 
 /** The tag of an expression kind. */
 export type ExprTag = Expr["tag"];
@@ -88,6 +96,22 @@ export const rec = (fields: Readonly<Record<string, Expr>>): ExprOf<"rec"> => ({
  */
 export function each(axis: Axis, body: Expr, at?: Addr): ExprOf<"each"> {
   return at === undefined || at.length === 0 ? { tag: "each", axis, body } : { tag: "each", axis, body, at };
+}
+
+/**
+ * This function makes a fold: a step at each target of `axis`, in order. `init` gives the names and their first
+ * values, and `step` gives the next values. `result` gives the value from the last values (LOOP.NAMES, FOLD.ORDER).
+ */
+export function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Addr): ExprOf<"fold"> {
+  return at === undefined || at.length === 0 ? { tag: "fold", axis, init, step, result } : { tag: "fold", axis, init, step, result, at };
+}
+
+/**
+ * This function makes an iteration: up to `limit` steps. `init` gives the names and their first values, and `step`
+ * gives the next values. A true `until` stops it, and `result` gives the value (ITERATE.LIMIT, ITERATE.UNTIL).
+ */
+export function iterate(limit: number, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate"> {
+  return until === undefined ? { tag: "iterate", limit, init, step, result } : { tag: "iterate", limit, init, step, until, result };
 }
 
 /** This function makes an expression of an extension kind. */
@@ -207,6 +231,17 @@ export function isExpr(u: unknown): u is Expr {
   return validTree([{ axis: false, u }]);
 }
 
+/**
+ * This function checks the names of a loop: `init` and `step` are records, and each name of `step` is a name of `init`.
+ * It gives the expressions of `init`, of `step` and `result`, or `undefined` (LOOP.NAMES).
+ */
+function loopParts(u: Readonly<Record<string, unknown>>): readonly unknown[] | undefined {
+  const { init, step } = u;
+  if (!isObject(init) || Array.isArray(init) || !isObject(step) || Array.isArray(step)) return undefined;
+  if (!Object.keys(step).every((n) => Object.hasOwn(init, n))) return undefined;
+  return [...Object.values(init), ...Object.values(step), u["result"]];
+}
+
 /** This function checks the fixed parts of an address. It gives the expressions of its moves, or `undefined`. */
 function addrParts(u: unknown): readonly unknown[] | undefined {
   if (u === undefined) return [];
@@ -279,6 +314,21 @@ function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boo
         push(false, [u["body"], ...at]);
         break;
       }
+      case "fold": {
+        const at = addrParts(u["at"]);
+        const names = loopParts(u);
+        if (at === undefined || names === undefined) return false;
+        push(true, [u["axis"]]);
+        push(false, [...names, ...at]);
+        break;
+      }
+      case "iterate": {
+        const limit = u["limit"];
+        const names = loopParts(u);
+        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 0 || limit > MAX_ITERATIONS || names === undefined) return false;
+        push(false, [...names, ...(u["until"] === undefined ? [] : [u["until"]])]);
+        break;
+      }
       case "ext":
         if (typeof u["kind"] !== "string" || !("data" in u)) return false;
         break;
@@ -303,6 +353,10 @@ export function children(e: Expr): readonly Expr[] {
       return Object.values(e.fields);
     case "each":
       return [e.body, ...whereTests(e.axis), ...addrExprs(e.at)];
+    case "fold":
+      return [...Object.values(e.init), ...Object.values(e.step), ...whereTests(e.axis), ...addrExprs(e.at), e.result];
+    case "iterate":
+      return [...Object.values(e.init), ...Object.values(e.step), ...(e.until === undefined ? [] : [e.until]), e.result];
     case "ref":
       return addrExprs(e.at);
     case "lit":

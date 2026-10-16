@@ -26,11 +26,14 @@ export function deps(e: Expr): readonly Dependency[] {
     const { x } = item;
     if (x.tag === "ref") out.push({ at: x.at ?? [], path: x.path, axes: item.axes, axisAt: item.axisAt });
     const all = children(x);
-    // The expressions of an address come last, and they evaluate at the node, outside its axis.
-    const outside = all.length - addrExprs(x.tag === "ref" || x.tag === "each" ? x.at : undefined).length;
-    const axes = x.tag === "each" ? [...item.axes, x.axis.t] : item.axes;
-    const axisAt = x.tag === "each" ? [...item.axisAt, x.at ?? []] : item.axisAt;
-    for (let i = all.length - 1; i >= 0; i--) todo.push(i < outside ? { x: all[i] as Expr, axes, axisAt } : { ...item, x: all[i] as Expr });
+    const axial = x.tag === "each" || x.tag === "fold";
+    // Inside the axis: the body or the values of the step, and the tests of where. The values of init, the result of a
+    // fold and the expressions of an address evaluate at the node, outside the axis.
+    const first = x.tag === "fold" ? Object.keys(x.init).length : 0;
+    const last = axial ? all.length - addrExprs(x.at).length - (x.tag === "fold" ? 1 : 0) : 0;
+    const axes = axial ? [...item.axes, x.axis.t] : item.axes;
+    const axisAt = axial ? [...item.axisAt, x.at ?? []] : item.axisAt;
+    for (let i = all.length - 1; i >= 0; i--) todo.push(i >= first && i < last ? { x: all[i] as Expr, axes, axisAt } : { ...item, x: all[i] as Expr });
   }
   return out;
 }

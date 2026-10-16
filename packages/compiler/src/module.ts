@@ -625,6 +625,9 @@ class Printer {
         return this.#app(e, ctx);
       case "each":
         throw new NotStandalone("a list is a value of the program");
+      case "fold":
+      case "iterate":
+        throw new NotStandalone(`the loop "${e.tag}"`);
       case "ext":
         throw new NotStandalone(`the extension "${e.kind}"`);
     }

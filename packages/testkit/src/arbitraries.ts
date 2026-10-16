@@ -155,6 +155,21 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
       fc.tuple(tie("axis"), tie("expr"), fc.option(fc.array(tie("move"), { maxLength: 2 }), { nil: undefined })).map(([axis, body, at]): Expr =>
         at === undefined || at.length === 0 ? { tag: "each", axis, body } : { tag: "each", axis, body, at },
       ),
+      // The loops (LOOP.NAMES): the names a and b, a step for some of them, and a result that reads them.
+      fc
+        .tuple(tie("axis"), fc.boolean(), tie("expr"), tie("expr"), tie("expr"), tie("expr"), tie("expr"), fc.option(fc.array(tie("move"), { maxLength: 1 }), { nil: undefined }))
+        .map(([axis, two, a, b, nextA, nextB, result, at]): Expr => {
+          const init: Readonly<Record<string, Expr>> = two ? { a, b } : { a };
+          // With two names, only a has a step, so b keeps its value.
+          const step: Readonly<Record<string, Expr>> = two && nextB.tag === "lit" ? { a: nextA } : two ? { a: nextA, b: nextB } : { a: nextA };
+          return at === undefined || at.length === 0 ? { tag: "fold", axis, init, step, result } : { tag: "fold", axis, init, step, result, at };
+        }),
+      fc
+        .tuple(fc.integer({ min: 0, max: 4 }), fc.boolean(), tie("expr"), tie("expr"), tie("expr"), fc.option(tie("expr"), { nil: undefined }))
+        .map(([limit, two, init, step, result, until]): Expr => {
+          const loop: Expr = { tag: "iterate", limit, init: two ? { a: init, b: init } : { a: init }, step: { a: step }, result };
+          return until === undefined ? loop : { ...loop, until };
+        }),
     ),
     axis: fc.oneof(
       { depthSize: "small", maxDepth: 2 },

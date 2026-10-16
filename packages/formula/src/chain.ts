@@ -62,6 +62,9 @@ function inline(e: Expr, env: ReadonlyMap<string, Expr>): Expr {
       return { ...e, fields: Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, inline(v, env)])) };
     case "each":
       return { ...e, body: inline(e.body, env), axis: inlineAxis(e.axis, env) };
+    // A formula has no loop, and the view has no text for one.
+    case "fold":
+    case "iterate":
     case "lit":
     case "ref":
     case "ext":
@@ -136,6 +139,9 @@ function chain(e: Expr): string {
       return chain(inline(e, new Map()));
     case "var":
       return "root.start(null)";
+    case "fold":
+    case "iterate":
+      throw new TypeError(`the Vex view has no text for the loop "${e.tag}"`);
   }
 }
 

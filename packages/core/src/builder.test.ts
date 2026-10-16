@@ -237,6 +237,25 @@ describe("the other members of the builder", () => {
     expect(row.start(0).offset(1).from("n").all().values()).toEqual([2, 4]);
   });
 
+  it("LOOP.NAMES FOLD.ORDER ITERATE.UNTIL: fold of a list chain and iterate of a chain", () => {
+    const row = vex(Num).over(space.array([{ n: 1 }, { n: 2 }, { n: 3 }]));
+    // The digits in the order of the axis: ((0 * 10 + 1) * 10 + 2) * 10 + 3.
+    const digits = row.start(0).each((t) => t.from("n")).fold({ s: 0 }, (vars, n) => ({ s: vars.s._.times(10)._.plus(n) }), (vars) => vars.s);
+    expect(optionalValue(digits.at("0"))).toBe(123);
+    expectTypeOf(digits.at("0")).toEqualTypeOf<Optional<number>>();
+    // A name without a step keeps its value. A bare field name in init reads the field at the node.
+    const both = row.start(0).each((t) => t.from("n")).fold({ s: 0, k: "n" }, (vars, n) => ({ s: vars.s._.plus(n)._.plus(vars.k) }), (vars) => vars.s);
+    expect(both.all().values()).toEqual([9, 12, 15]);
+    const pow = row.from("n").iterate(4, { x: 1 }, (vars) => ({ x: vars.x._.times(2) }), (vars) => vars.x);
+    expect(optionalValue(pow.at("0"))).toBe(16);
+    const doubling = row.from("n").iterate(100, { x: "n" }, (vars) => ({ x: vars.x._.times(2) }), (vars) => vars.x, { until: (vars) => vars.x._.gt(10) });
+    expect(doubling.all().values()).toEqual([16, 16, 12]);
+    // The names of a loop inside a loop do not meet: each depth has its own names.
+    const nested = row.from("n").iterate(2, { x: 0 }, (o) => ({ x: o.x._.plus(row.from("n").iterate(3, { x: 1 }, (i) => ({ x: i.x._.plus(1) }), (i) => i.x)) }), (o) => o.x);
+    expect(optionalValue(nested.at("0"))).toBe(8);
+    expect(() => row.from("n").iterate(1, { x: 0 }, () => ({ y: 1 }) as never, (vars) => vars.x)).toThrow('the name "y" of the step is not a name of init');
+  });
+
   it("each() and the reductions of a list chain", () => {
     expect(weights.program.tag).toBe("let");
     expect(optionalValue(weights.sum().at("A"))).toBe(17);

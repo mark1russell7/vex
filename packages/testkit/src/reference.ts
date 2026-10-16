@@ -181,9 +181,68 @@ function run(e: Expr, c: Ctx): RefOutcome {
         items: t.keys.map(({ key, bad }) => ({ key, result: bad === undefined ? toResult(run(e.body, at(key))) : { ok: false, error: { code: bad } } })),
       });
     }
+    case "fold": {
+      // The first values come before the address and the targets. The tests of where read only the names outside.
+      let env = bindNames(e.init, c, c.env);
+      if (!env.ok) return env;
+      const from = keyOf(e.at, c);
+      if (!from.ok) return from;
+      const base = baseOf(e.axis);
+      const space = base.t === "table" ? (Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined) : c.space;
+      if (space === undefined) return err("#REF!");
+      const inner: Ctx = { ...c, space };
+      const t = targets(e.axis, { ...inner, focus: from.key });
+      if (!t.ok) return err(t.code);
+      for (const { key, bad } of t.keys) {
+        if (bad !== undefined) return err(bad);
+        const next = bindNames(e.step, { ...inner, focus: key, ...(base.t === "table" ? { origin: key } : {}), env: env.env }, env.env);
+        if (!next.ok) return next;
+        env = next;
+      }
+      return run(e.result, { ...c, env: env.env });
+    }
+    case "iterate": {
+      let env = bindNames(e.init, c, c.env);
+      if (!env.ok) return env;
+      for (let k = 0; ; k++) {
+        const here: Ctx = { ...c, env: env.env };
+        if (e.until !== undefined) {
+          const t = run(e.until, here);
+          if (!t.ok) return t;
+          if (t.value === true) break;
+          if (t.value !== false) return err("#VALUE!");
+        }
+        if (k === e.limit) {
+          if (e.until !== undefined) return err("#NUM!");
+          break;
+        }
+        const next = bindNames(e.step, here, env.env);
+        if (!next.ok) return next;
+        env = next;
+      }
+      return run(e.result, { ...c, env: env.env });
+    }
     case "app":
       return app(e, c);
   }
+}
+
+/**
+ * This function evaluates the expressions of a record of names in `c`, in order. It gives `base` with the new values,
+ * or the first error.
+ */
+function bindNames(
+  record: Readonly<Record<string, Expr>>,
+  c: Ctx,
+  base: ReadonlyMap<string, RefOutcome>,
+): { readonly ok: true; readonly env: ReadonlyMap<string, RefOutcome> } | { readonly ok: false; readonly code: ErrorCode } {
+  const env = new Map(base);
+  for (const [name, x] of Object.entries(record)) {
+    const r = run(x, c);
+    if (!r.ok) return r;
+    env.set(name, r);
+  }
+  return { ok: true, env };
 }
 
 const toResult = (r: RefOutcome): unknown => (r.ok ? { ok: true, value: r.value } : { ok: false, error: { code: r.code } });

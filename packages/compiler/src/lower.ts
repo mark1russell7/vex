@@ -231,6 +231,9 @@ class Lowerer {
       }
       case "app":
         return this.#app(e, s, path, b);
+      case "fold":
+      case "iterate":
+        throw new Unsupported(`the loop "${e.tag}"`);
       case "each": {
         // A list keeps its error items, and generated code makes no error values. Thus an error item stops the program.
         const keys = this.locals++;

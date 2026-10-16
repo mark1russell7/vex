@@ -55,6 +55,8 @@ An expression is plain JSON data. It has one of these kinds.
 | `var` | `name` | the value of a bound name |
 | `rec` | `fields` | a record of the values of the fields |
 | `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address |
+| `fold` | `axis`, `init`, `step`, `result`, `at` | the result, after a step at each target of the axis |
+| `iterate` | `limit`, `init`, `step`, `until`, `result` | the result, after the steps |
 | `ext` | `kind`, `data` | the value of an extension handler |
 
 - **[IR.JSON]** An expression gives the same expression after `serialize` and `parse`, if each literal is JSON data or a value of a domain. A domain value needs `encode` and `decode` in its domain. A domain value can be in a list or a record of a literal.
@@ -133,6 +135,15 @@ An expression is plain JSON data. It has one of these kinds.
 - **[FORM.IF]** `if` evaluates only the branch that its condition selects. A condition that is not a boolean gives `#VALUE!`.
 - **[FORM.AND-OR]** `and` and `or` stop at the first argument that decides the result.
 - **[FORM.IFERROR]** `ifError` gives its first argument, or its second argument when the first is an error.
+
+### 5.7 Iteration
+
+- **[LOOP.NAMES]** `fold` and `iterate` bind the names of their record `init` to its values, at the node. A step evaluates each expression of the record `step` with the values before the step. Then each name of `step` gets its new value, and the other names keep their values. `result` evaluates at the node with the last values, and it gives the value. A name of `step` that is not a name of `init` makes the expression not valid.
+- **[FOLD.ORDER]** `fold` makes one step at each target of its axis, in the order of the axis. The focus of a step is the target. A target that a test of `where` removes has no step. The tests evaluate before the steps, so a test cannot read the names of the fold.
+- **[FOLD.ERROR]** The first error of a value, of a test or of `result` is the value of the fold. A test that is not a boolean gives `#VALUE!`.
+- **[ITERATE.LIMIT]** `iterate` makes `limit` steps at the position of the node. `limit` is a whole number from 0 to 100000 in the expression.
+- **[ITERATE.UNTIL]** With `until`, the test evaluates before each step and after the last step. A true test stops the iteration. With no true test, the value is `#NUM!`. A test that is not a boolean gives `#VALUE!`.
+- **[ITERATE.ERROR]** The first error of a value, of the test or of `result` is the value of the iteration.
 
 ## 6. Folds
 

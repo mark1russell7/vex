@@ -197,6 +197,31 @@ These give the strategies of ireko that are not formulas today:
 
 Each new construct goes through each stage. The stages are the interpreter, `explain`, `deps`, JSON, the builder, the formulas, the reference interpreter of the test kit and the compiler.
 
+### 8.1 The design of `fold` and `iterate`
+
+Each construct is a new kind of expression. It binds names for its steps, as `let` binds names for its body.
+
+| Kind | JSON | Children, in order |
+|---|---|---|
+| `fold` | `{ "tag": "fold", "axis", "init", "step", "result", "at"? }` | the values of `init`, the values of `step`, the tests of `where`, the expressions of the address, `result` |
+| `iterate` | `{ "tag": "iterate", "limit", "init", "step", "until"?, "result" }` | the values of `init`, the values of `step`, `until`, `result` |
+
+`init` is a record of names and expressions: the names of the loop and their first values. `step` is a record of some of these names and an expression for the next value of each. Each step evaluates all its expressions with the values before the step, and then all the names get their new values. A name without a step keeps its value. `result` evaluates at the node with the last values, and it gives the value of the construct.
+
+A value of a loop is a value of a name, not a field of a record. Thus a bisection holds two numbers, `lo` and `hi`, and the compiler holds each name in a local variable, as a loop of ireko does.
+
+A fold evaluates `init` at the node. Then it evaluates `step` at each target of the axis, in the order of the axis. The focus of a step is the target. A target that a test of `where` removes has no step. The first error of a value, of a test or of `result` is the value of the fold.
+
+An iteration evaluates `init` at the node, and then `step` up to `limit` times, at the same position. `limit` is a whole number from 0 to 100000 in the expression, not a value of a run. Thus each program ends.
+
+Without `until`, the iteration makes `limit` steps. With `until`, the test evaluates before each step and after the last one. A true test stops the iteration, and with no true test the value is `#NUM!`. The first error of a value, of the test or of `result` is the value of the iteration.
+
+A step is a function of the values before it. Thus a step that gives the same values again gives them at each later step, and an implementation can stop there.
+
+These constructs give the full ring of `radial`. The code of ireko adds the angles one after another, so a fold gives the same bits. It finds the radius with a loop that doubles it until a test is true, and then with 50 steps of a bisection. These are an iteration with `until`, and an iteration with the limit 50.
+
+The first stages are the interpreter, `explain`, `deps`, JSON, the builder and the reference interpreter. Tier 2 and the modules come next, and then the formulas.
+
 ## 9. Packages
 
 - `@mark1russell7/vex-compiler` is a new published package. It has the analysis, the lowering, the back end of JavaScript source, the tiers, and `emitModule` for builds. The core stays small, because a page that does not compile does not load the compiler.

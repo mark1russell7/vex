@@ -47,6 +47,9 @@ function inline(e: Expr, name: string, by: Expr): Expr {
       return { ...e, bind: Object.fromEntries(Object.entries(e.bind).map(([k, v]) => [k, inline(v, name, by)])), body: inline(e.body, name, by) };
     case "rec":
       return { ...e, fields: Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, inline(v, name, by)])) };
+    // A formula has no loop.
+    case "fold":
+    case "iterate":
     case "lit":
     case "ref":
     case "var":

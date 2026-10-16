@@ -154,11 +154,12 @@ function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string
   const todo: [Expr, Axis | undefined][] = [...(formula === undefined ? [] : [formula]), ...(t.cells.get(self)?.values() ?? [])].map((e) => [e, undefined]);
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
     const [e, axis] = item;
-    if (e.tag === "each") {
+    if (e.tag === "each" || e.tag === "fold") {
       const { base, tests } = partsOf(e.axis);
-      for (const x of [e.body, ...tests]) todo.push([x, base]);
-      // The expressions of the address of an axis evaluate at the axis, so they keep the outer direction.
-      for (const x of addrExprs(e.at)) todo.push([x, axis]);
+      for (const x of [...(e.tag === "each" ? [e.body] : Object.values(e.step)), ...tests]) todo.push([x, base]);
+      // The values of init, the result of a fold and the expressions of the address evaluate at the node, so they keep
+      // the outer direction.
+      for (const x of [...(e.tag === "fold" ? [...Object.values(e.init), e.result] : []), ...addrExprs(e.at)]) todo.push([x, axis]);
     } else if (e.tag !== "ext") {
       for (const child of children(e)) todo.push([child, axis]);
       // The data of an extension of another kind can look like a cell reference. It only changes the order of a fill.

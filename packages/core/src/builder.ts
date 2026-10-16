@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { app, each, ext, index as indexMove, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
+import { app, each, ext, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type ExprOf, type FixedMove, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -208,6 +208,17 @@ export interface ChainBase<Ctx extends ChainContext, T> {
   call<N extends CallableFns<Ctx, T>>(name: N, ...args: CallArgs<Ctx, N>): ChainOf<Ctx, CallReturn<Ctx, N>>;
   /** This method evaluates each branch with the current value, and gives a record of the results. */
   fork<const B extends Readonly<Record<string, (c: ChainOf<Ctx, T>) => ChainBase<Ctx, unknown>>>>(branches: B): ChainOf<Ctx, { readonly [N in keyof B]: ValueOf<ReturnType<B[N]>> }>;
+  /**
+   * This method makes up to `limit` steps (ITERATE.LIMIT). `init` gives the names and their first values, and `step`
+   * gives the next values. A true `until` stops the steps (ITERATE.UNTIL). `result` gives the value of the chain.
+   */
+  iterate<const I extends Readonly<Record<string, unknown>>, R>(
+    limit: number,
+    init: I,
+    step: (vars: LoopVars<Ctx, I>) => NoInfer<LoopStep<Ctx, I>>,
+    result: (vars: LoopVars<Ctx, I>) => ArgInput<R, Ctx, false>,
+    opts?: { readonly until?: (vars: LoopVars<Ctx, I>) => ArgInput<boolean, Ctx, false> },
+  ): ChainOf<Ctx, R>;
   /** This method binds names for the body. The body gets a variable token for each name. */
   with<const B extends Readonly<Record<string, unknown>>, U>(
     binds: B,
@@ -281,10 +292,28 @@ export type ArgValue<Ctx extends ChainContext, A> = A extends Arg<infer T>
       : A;
 
 /** A chain whose value is a list: the result of an axis. */
+/** The type of a value of a name of a loop: a literal of `init` gives its primitive type. */
+type LoopValue<Ctx extends ChainContext, A> = ArgValue<Ctx, A> extends infer T ? (T extends number ? number : T extends string ? string : T extends boolean ? boolean : T) : never;
+
+/** The names of a loop of the builder: a chain of the value of each name of `init` (LOOP.NAMES). */
+export type LoopVars<Ctx extends ChainContext, I> = { readonly [N in keyof I]: ChainOf<Ctx, LoopValue<Ctx, I[N]>> };
+
+/** The next values of a step of a loop: a value for some of the names of `init`. */
+export type LoopStep<Ctx extends ChainContext, I> = { readonly [N in keyof I]?: ArgInput<LoopValue<Ctx, I[N]>, Ctx, false> };
+
 export interface ListChain<Ctx extends ChainContext, U> {
   readonly kind: "vex.list-chain";
   /** The expression of the chain, as plain data. */
   readonly program: Expr;
+  /**
+   * This method folds the items in the order of the axis (FOLD.ORDER). `init` gives the names and their first values.
+   * `step` gives the next values from the names and the item, a chain at the target. `result` gives the value.
+   */
+  fold<const I extends Readonly<Record<string, unknown>>, R>(
+    init: I,
+    step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>) => NoInfer<LoopStep<Ctx, I>>,
+    result: (vars: LoopVars<Ctx, I>) => ArgInput<R, Ctx, false>,
+  ): ChainOf<Ctx, R>;
   count(opts?: ListOpts): ChainOf<Ctx, number>;
   sum(this: ListChain<Ctx, number>, opts?: ListOpts): ChainOf<Ctx, number>;
   mean(this: ListChain<Ctx, number>, opts?: ListOpts): ChainOf<Ctx, number>;
@@ -469,6 +498,17 @@ function toExpr(a: unknown, addr: readonly Move[]): Expr {
   return lit(a);
 }
 
+/** This function gives the expressions of a step of a loop, with the unique names of the loop. */
+function stepExprs(step: Readonly<Record<string, unknown>>, unique: ReadonlyMap<string, string>, addr: readonly Move[]): Readonly<Record<string, Expr>> {
+  const out: Record<string, Expr> = {};
+  for (const [n, a] of Object.entries(step)) {
+    const name = unique.get(n);
+    if (name === undefined) throw new TypeError(`the name "${n}" of the step is not a name of init`);
+    out[name] = toExpr(a, addr);
+  }
+  return out;
+}
+
 const PROXY_RESERVED = new Set(["then", "catch", "finally", "toJSON", "valueOf", "toString", "constructor", "inspect", "asymmetricMatch", "$$typeof", "nodeType"]);
 
 class ChainImpl {
@@ -577,6 +617,37 @@ class ChainImpl {
     return new ChainImpl({ ...this.#s, expr: let_(bindExprs, inner.program) });
   }
 
+  /**
+   * This method gives the names of a loop. Each name of `init` gets a name that is unique at the depth of the chain.
+   * It also gets its first value at the address of the chain, and a chain of its value.
+   */
+  loopNames(init: Readonly<Record<string, unknown>>): { readonly unique: ReadonlyMap<string, string>; readonly first: Readonly<Record<string, Expr>>; readonly vars: Readonly<Record<string, ChainImpl>> } {
+    const depth = this.#s.depth;
+    const unique = new Map<string, string>();
+    const first: Record<string, Expr> = {};
+    const vars: Record<string, ChainImpl> = {};
+    for (const [n, a] of Object.entries(init)) {
+      const name = `${n}$${depth}`;
+      unique.set(n, name);
+      first[name] = toExpr(a, this.#s.addr);
+      vars[n] = new ChainImpl({ ...this.#s, expr: v(name), addr: [], depth: depth + 1 });
+    }
+    return { unique, first, vars };
+  }
+
+  iterate(
+    limit: number,
+    init: Readonly<Record<string, unknown>>,
+    step: (vars: Readonly<Record<string, ChainImpl>>) => Readonly<Record<string, unknown>>,
+    result: (vars: Readonly<Record<string, ChainImpl>>) => unknown,
+    opts?: { readonly until?: (vars: Readonly<Record<string, ChainImpl>>) => unknown },
+  ): ChainImpl {
+    const { unique, first, vars } = this.loopNames(init);
+    const next = stepExprs(step(vars), unique, this.#s.addr);
+    const until = opts?.until === undefined ? undefined : toExpr(opts.until(vars), this.#s.addr);
+    return new ChainImpl({ ...this.#s, expr: iterateExpr(limit, first, next, toExpr(result(vars), this.#s.addr), until) });
+  }
+
   #axis(a: Axis, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
     const { name, start } = this.#bound();
     // Inside the axis, the focus is the target, so the address of the body starts empty.
@@ -647,6 +718,20 @@ class ListChainImpl {
   get program(): Expr {
     return this.#s.expr;
   }
+  fold(
+    init: Readonly<Record<string, unknown>>,
+    step: (vars: Readonly<Record<string, ChainImpl>>, item: ChainImpl) => Readonly<Record<string, unknown>>,
+    result: (vars: Readonly<Record<string, ChainImpl>>) => unknown,
+  ): ChainImpl {
+    // The list of an axis is a let of the start value around the axis. The fold keeps the let, and the body of the
+    // axis is the item of each step.
+    const { bind, body: loop } = this.#s.expr as ExprOf<"let"> & { readonly body: ExprOf<"each"> };
+    const names = new ChainImpl({ ...this.#s, expr: lit(null) }).loopNames(init);
+    const item = new ChainImpl({ ...this.#s, expr: loop.body, addr: [] });
+    const next = stepExprs(step(names.vars, item), names.unique, []);
+    return new ChainImpl({ ...this.#s, expr: let_(bind, foldExpr(loop.axis, names.first, next, toExpr(result(names.vars), this.#s.addr), loop.at)) });
+  }
+
   #op(op: string, extra: readonly Expr[], opts?: ListOpts & { readonly domain?: string }): ChainImpl {
     const options = { ...(opts?.strict === true ? { strict: true } : {}), ...(opts?.domain === undefined ? {} : { domain: opts.domain }) };
     const args = Object.keys(options).length > 0 ? [...extra, lit(options)] : extra;

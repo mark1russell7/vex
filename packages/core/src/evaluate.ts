@@ -240,6 +240,10 @@ class Compiler {
         return isSpecialForm(e.op) ? this.#special(e.op, this.#nodes(e.args, path), info) : this.#app(e.op, this.#nodes(e.args, path), info);
       case "each":
         return this.#each(e, info);
+      case "fold":
+        return this.#fold(e, info);
+      case "iterate":
+        return this.#iterate(e, info);
       case "ext": {
         const extensions = this.#extensions ?? {};
         const handler = Object.hasOwn(extensions, e.kind) ? extensions[e.kind] : undefined;
@@ -378,6 +382,119 @@ class Compiler {
         return { key, result: body({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env: f.env }, inner) };
       });
       return this.#emit(c, info, f, ok(vexList(items)));
+    };
+  }
+
+  /**
+   * This method compiles the names of a loop: `init` at the indexes from 0, and `step` after them (LOOP.NAMES). Its
+   * functions give the first values, and the values after one step. The first error stops each of them.
+   */
+  #names(e: ExprOf<"fold"> | ExprOf<"iterate">, path: readonly number[]): {
+    readonly first: (f: Frame, c: Ctx) => Result<Map<string, Result<unknown>>>;
+    readonly next: (f: Frame, c: Ctx) => Result<Map<string, Result<unknown>>>;
+  } {
+    const inits = Object.entries(e.init).map(([name, x], i) => [name, this.node(x, [...path, i])] as const);
+    const steps = Object.entries(e.step).map(([name, x], i) => [name, this.node(x, [...path, inits.length + i])] as const);
+    return {
+      first: (f, c) => {
+        const env = new Map(f.env);
+        for (const [name, n] of inits) {
+          const r = n(f, c);
+          if (!r.ok) return r;
+          env.set(name, r);
+        }
+        return ok(env);
+      },
+      // Each value of a step reads the values before the step, so the names change only after all the values.
+      next: (f, c) => {
+        const values: (readonly [string, Result<unknown>])[] = [];
+        for (const [name, n] of steps) {
+          const r = n(f, c);
+          if (!r.ok) return r;
+          values.push([name, r]);
+        }
+        const env = new Map(f.env);
+        for (const [name, r] of values) env.set(name, r);
+        return ok(env);
+      },
+    };
+  }
+
+  /**
+   * This method compiles a fold (FOLD.ORDER, FOLD.ERROR). `init` evaluates at the node, then the address and the
+   * targets. A step evaluates at each target in order. `result` evaluates at the node with the last values.
+   */
+  #fold(e: ExprOf<"fold">, info: Info): Node {
+    const { path } = info;
+    const at = e.at ?? [];
+    const names = this.#names(e, path);
+    const counter = { next: Object.keys(e.init).length + Object.keys(e.step).length };
+    const targets = this.#targets(e.axis, path, counter);
+    const address = this.#address(at, path, counter.next);
+    const result = this.node(e.result, [...path, counter.next + addrExprs(at).length]);
+    const base = baseAxis(e.axis);
+    return (f, c) => {
+      const first = names.first(f, c);
+      if (!first.ok) return this.#emit(c, info, f, first);
+      let env = first.value;
+      let from = f;
+      // Stryker disable next-line ConditionalExpression,EqualityOperator: resolveAddr of [] gives the focus too
+      if (at.length > 0) {
+        const where = address(f, c);
+        if (!where.ok) return this.#emit(c, info, f, where);
+        from = { pos: { origin: f.pos.origin, focus: where.value }, env: f.env };
+      }
+      let inner = c;
+      if (base.t === "table") {
+        const space = c.tables !== undefined && Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined;
+        if (space === undefined) return this.#emit(c, info, f, this.#err("no-table", `the evaluation has no table "${base.name}"`, f, path));
+        inner = { ...c, space };
+      }
+      const ts = targets(from, inner);
+      if (!ts.ok) return this.#emit(c, info, f, ts);
+      for (const { key, test } of ts.value) {
+        if (test !== undefined && !test.ok) return this.#emit(c, info, f, test);
+        const after = names.next({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env }, inner);
+        if (!after.ok) return this.#emit(c, info, f, after);
+        env = after.value;
+      }
+      return this.#emit(c, info, f, result({ pos: f.pos, env }, c));
+    };
+  }
+
+  /**
+   * This method compiles an iteration (ITERATE.LIMIT, ITERATE.UNTIL, ITERATE.ERROR). The test `until` evaluates before
+   * each step and after the last step. `result` evaluates with the last values.
+   */
+  #iterate(e: ExprOf<"iterate">, info: Info): Node {
+    const { path } = info;
+    const names = this.#names(e, path);
+    const untilAt = Object.keys(e.init).length + Object.keys(e.step).length;
+    const untilPath = [...path, untilAt];
+    const until = e.until === undefined ? undefined : this.node(e.until, untilPath);
+    const result = this.node(e.result, [...path, untilAt + (until === undefined ? 0 : 1)]);
+    const { limit } = e;
+    return (f, c) => {
+      const first = names.first(f, c);
+      if (!first.ok) return this.#emit(c, info, f, first);
+      let env = first.value;
+      for (let k = 0; ; k++) {
+        const frame: Frame = { pos: f.pos, env };
+        if (until !== undefined) {
+          const t = until(frame, c);
+          if (!t.ok) return this.#emit(c, info, f, t);
+          if (t.value === true) break;
+          if (t.value !== false) return this.#emit(c, info, f, this.#err("kind-mismatch", `the test "until" of "iterate" gave a ${typeof t.value}, not a boolean`, f, untilPath));
+        }
+        if (k === limit) {
+          if (until !== undefined) return this.#emit(c, info, f, this.#err("limit", `"iterate" made its ${String(limit)} steps, and its test "until" is not true`, f, path));
+          break;
+        }
+        const after = names.next(frame, c);
+        if (!after.ok) return this.#emit(c, info, f, after);
+        env = after.value;
+      }
+      return this.#emit(c, info, f, result({ pos: f.pos, env }, c));
     };
   }
 
@@ -685,7 +802,10 @@ export function labelOf(e: Expr): string {
     case "rec":
       return `{ ${Object.keys(e.fields).join(", ")} }`;
     case "each":
-      return e.at === undefined ? `each ${e.axis.t}` : `each ${e.axis.t} from ${e.at.map(moveText).join(".")}`;
+    case "fold":
+      return e.at === undefined ? `${e.tag} ${e.axis.t}` : `${e.tag} ${e.axis.t} from ${e.at.map(moveText).join(".")}`;
+    case "iterate":
+      return `iterate ${String(e.limit)}`;
     case "ext":
       return e.kind;
   }

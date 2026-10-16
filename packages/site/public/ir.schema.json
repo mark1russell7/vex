@@ -29,6 +29,12 @@
           "$ref": "#/$defs/each"
         },
         {
+          "$ref": "#/$defs/fold"
+        },
+        {
+          "$ref": "#/$defs/iterate"
+        },
+        {
           "$ref": "#/$defs/ext"
         }
       ]
@@ -176,6 +182,85 @@
           "items": {
             "$ref": "#/$defs/move"
           }
+        }
+      }
+    },
+    "fold": {
+      "description": "A loop over the targets of the axis, in order. 'init' gives the names of the loop and their first values at the node. 'step' gives the next values of some of these names, at each target, and each name of 'step' must be a name of 'init'. 'result' gives the value with the last values.",
+      "type": "object",
+      "required": [
+        "tag",
+        "axis",
+        "init",
+        "step",
+        "result"
+      ],
+      "properties": {
+        "tag": {
+          "const": "fold"
+        },
+        "axis": {
+          "$ref": "#/$defs/axis"
+        },
+        "init": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/expr"
+          }
+        },
+        "step": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/expr"
+          }
+        },
+        "result": {
+          "$ref": "#/$defs/expr"
+        },
+        "at": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/move"
+          }
+        }
+      }
+    },
+    "iterate": {
+      "description": "A loop of up to 'limit' steps at the node. 'init' gives the names of the loop and their first values. 'step' gives the next values of some of these names, and each name of 'step' must be a name of 'init'. A true 'until' stops the loop, and with no true test the value is #NUM!. 'result' gives the value with the last values.",
+      "type": "object",
+      "required": [
+        "tag",
+        "limit",
+        "init",
+        "step",
+        "result"
+      ],
+      "properties": {
+        "tag": {
+          "const": "iterate"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "init": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/expr"
+          }
+        },
+        "step": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/expr"
+          }
+        },
+        "until": {
+          "$ref": "#/$defs/expr"
+        },
+        "result": {
+          "$ref": "#/$defs/expr"
         }
       }
     },

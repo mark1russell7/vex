@@ -63,6 +63,9 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
     case "var":
       return inner.has(e.name) ? 0 : outer.has(e.name) ? INTERNAL : inLoop(FREE, top);
     case "ext":
+    // A loop of names is not in the memo yet, so a node with one is not either.
+    case "fold":
+    case "iterate":
       return OPAQUE;
     case "ref":
       // The expressions of computed moves evaluate at the position of the node (NAV.COMPUTED).
@@ -132,6 +135,8 @@ function keysOf(e: Expr, top: boolean, outer: ReadonlySet<string>, pure: Set<Exp
     case "ref":
     case "var":
     case "ext":
+    case "fold":
+    case "iterate":
       return undefined;
     // Stryker restore StringLiteral,ConditionalExpression
   }
@@ -142,6 +147,8 @@ function loopOutside(e: Expr, keys: ReadonlySet<Expr>): boolean {
   if (keys.has(e)) return false;
   switch (e.tag) {
     case "each":
+    case "fold":
+    case "iterate":
       return true;
     case "app":
       return e.args.some((x) => loopOutside(x, keys));

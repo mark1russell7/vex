@@ -173,6 +173,14 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
       out["axis"] = a.value;
       return child("body") ?? address() ?? ok(out);
     }
+    case "fold": {
+      const a = axis(u["axis"]);
+      if (!a.ok) return a;
+      out["axis"] = a.value;
+      return each("init") ?? each("step") ?? child("result") ?? address() ?? ok(out);
+    }
+    case "iterate":
+      return each("init") ?? each("step") ?? (u["until"] === undefined ? undefined : child("until")) ?? child("result") ?? ok(out);
     case "ref":
       return address() ?? ok(out);
     default:

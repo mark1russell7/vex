@@ -27,7 +27,8 @@ export type ErrorKind =
   | "args"
   | "cycle"
   | "depth"
-  | "bad-expression";
+  | "bad-expression"
+  | "limit";
 
 const CODE_OF: Readonly<Record<ErrorKind, ErrorCode>> = {
   "unknown-key": "#REF!",
@@ -47,6 +48,7 @@ const CODE_OF: Readonly<Record<ErrorKind, ErrorCode>> = {
   unbound: "#NAME?",
   "not-finite": "#NUM!",
   "invalid-value": "#NUM!",
+  limit: "#NUM!",
   threw: "#CALC!",
   "undefined-result": "#CALC!",
   args: "#ARGS",

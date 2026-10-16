@@ -207,9 +207,10 @@ const fits = (r: Expr): Expr =>
             "and",
             v("ok"),
             let_(
-              { $ai: advance(r), $rhoI: RHO, $i: ref("i") },
+              { $ai: advance(r), $rhoI: RHO },
+              // The later children: a ring of a search has at most PAIRWISE_LIMIT children.
               fold(
-                axes.where(axes.all, op("gt", ref("i"), v("$i"))),
+                axes.window(1, PAIRWISE_LIMIT),
                 { angJ: op("add", v("ang"), v("$ai")), apart: lit(true) },
                 { angJ: op("add", v("angJ"), advance(r)), apart: op("and", v("apart"), op("not", tooClose(v("ang"), v("angJ"), v("$rhoI"), RHO, r))) },
                 v("apart"),

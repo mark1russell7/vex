@@ -488,7 +488,17 @@ A part with little work is not a column. Its work counts its nodes, and a node o
 | 30 children | 23 to 42 µs | 1.2 to 2.1 ms | 124 to 131 µs |
 | 120 children | 141 to 372 µs | 11.6 to 15.1 ms | 1.05 to 1.11 ms |
 
-The module is approximately five times slower than ireko, and approximately 1.5 kB larger. Vex has no functions, so the test of a radius is in the program four times. Each copy of the fold over the pairs is a loop of its own.
+The module is approximately five times slower than ireko, and approximately 1.5 kB larger. Vex has no functions, so the test of a radius is in the program four times. Each copy of the fold over the pairs is a loop of its own. The angle of a child depends on the radius under test, so it is not a column. Thus the fold over the pairs computes it again for each pair. A column with keys keeps a value for the last values of some names. It made the module slower, because most of its keys change at almost each read. Functions or lists in Vex are the better fix.
+
+A local branch of ireko (`vex/radial-module`, after `vex/grid-module`) uses the module in the strategy `radial`. The 213 tests of ireko pass, also its golden SVG files. The core is 16.58 kB, so the branch sets the limit to 17 kB. The benchmark of the engine alternated between ireko and the branch, two times each:
+
+| The benchmark of the engine, layouts each second | ireko | The branch |
+|---|---|---|
+| 111 nodes | 1881 to 2072 | 1343 to 1599 |
+| 1111 nodes | 148 to 169 | 106 to 143 |
+| 11111 nodes | 11.8 to 14.7 | 10.1 to 12.3 |
+
+A layout with the strategy `radial` is 15 % to 28 % slower, so the benchmarks of ireko do not hold for `radial` yet.
 
 #### The audit pilot
 

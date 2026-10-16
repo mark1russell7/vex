@@ -98,6 +98,9 @@ const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
 const K = ref("n", [{ t: "origin" }]);
 const KW = ref("w", [{ t: "origin" }]);
 const column = op("mod", K, lit(2));
+
+/** This function gives the axis all with each test, the first test inside. */
+const allWhere = (...tests: Expr[]): Axis => tests.reduce<Axis>((a, t) => axes.where(a, t), axes.all);
 /** The reasons of the printer. */
 const field = (path: string): string => `a read of a field that is not in the schema: "${path}"`;
 const undecided = (name: string): string => `the kinds of the values of "${name}" do not decide its op`;
@@ -490,18 +493,17 @@ describe("COMPILE.MODULE: the text of a module", () => {
   });
 
   it("COMPILE.GROUP: the nodes of the memo with keys, at the edges of the items that a node keeps", async () => {
-    const where = (...tests: Expr[]): Axis => tests.reduce<Axis>((a, t) => axes.where(a, t), axes.all);
     const e = rec({
       // Two keys vary, so the function of the node takes both. A key that can fail is a name with an error.
       two: op("add", op("count", each(axes.where(axes.all, op("and", op("eq", n, K), op("lt", w, KW))), n)), lit(1)),
-      failing: let_({ k: op("divide", lit(6), n) }, op("count", each(where(op("eq", w, v("k"))), n))),
-      sum: op("sum", each(where(op("eq", n, K)), w)),
+      failing: let_({ k: op("divide", lit(6), n) }, op("count", each(allWhere(op("eq", w, v("k"))), n))),
+      sum: op("sum", each(allWhere(op("eq", n, K)), w)),
       // The axis others, a body that reads the key, a second test that reads the key, and a test with one argument do not
       // keep their items.
       others: op("count", each(axes.where(axes.others, op("eq", n, K)), n)),
-      body: op("sum", each(where(op("eq", n, K)), op("add", w, K))),
-      second: op("count", each(where(op("eq", n, K), op("gt", w, K)), n)),
-      single: op("count", each(where(op("not", op("eq", n, K))), n)),
+      body: op("sum", each(allWhere(op("eq", n, K)), op("add", w, K))),
+      second: op("count", each(allWhere(op("eq", n, K), op("gt", w, K)), n)),
+      single: op("count", each(allWhere(op("not", op("eq", n, K))), n)),
     });
     await expectGolden("keys", e);
   });

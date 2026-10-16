@@ -1,8 +1,8 @@
 import { compile, type Result } from "@mark1russell7/vex";
-import { tiered } from "@mark1russell7/vex-compiler";
+import { emitModule, tiered } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { GRID_DOMAINS, GRID_PROGRAM, gridArrange, gridRun, type GridInput, type GridOutput } from "./ireko-grid.ts";
+import { GRID_DOMAINS, GRID_PROGRAM, GRID_SCHEMA, gridArrange, gridRun, type GridInput, type GridOutput } from "./ireko-grid.ts";
 
 const size = fc.double({ min: 0, max: 400, noNaN: true, noDefaultInfinity: true });
 const coord = fc.double({ min: -200, max: 200, noNaN: true, noDefaultInfinity: true });
@@ -49,6 +49,22 @@ describe("the ireko grid pilot", () => {
     );
     expect(generated.tier).toBe(2);
     expect(generated.stats.fallbacks).toBe(0);
+  });
+
+  it("COMPILE.MODULE: the standalone module of the program gives the layout of ireko with the same bits", () => {
+    const m = emitModule(GRID_PROGRAM, { domains: GRID_DOMAINS, schema: GRID_SCHEMA, name: "grid" });
+    if (!m.ok) throw new Error(m.reason);
+    expect(m.source).not.toContain("import");
+    // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
+    const grid = new Function(`${m.source.replaceAll(/^export /gm, "")}
+return grid;`)() as (records: unknown, vars: unknown) => readonly Cell[];
+    fc.assert(
+      fc.property(input, (i) => {
+        const { space, vars } = gridRun(i);
+        const cells = grid(space.records, vars);
+        expect({ offsets: cells.map((c) => ({ x: c.x, y: c.y })), width: cells[0]?.width ?? 0, height: cells[0]?.height ?? 0 }).toEqual(gridArrange(i));
+      }),
+    );
   });
 
   it("gives the layout of fixed cases: a square grid of three children, and a tree in one row", () => {

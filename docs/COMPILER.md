@@ -366,4 +366,23 @@ ireko has a budget of 15 kB of minified gzip for its core, and its core uses 13.
 | Tier 2, without a schema | 156909 | 24375 |
 | Tier 2, with a schema: each op site is static | 135044 | 20539 |
 
-The source of tier 2 has approximately seven lines for each node: the checks of each read, the blocks of the memo and the bindings. The kinds remove the guards, but most lines remain. A standalone module needs another printer: one expression for each node, with the inline forms of the ops (§7.1). That printer is the next step of phase C3.
+The source of tier 2 has approximately seven lines for each node: the checks of each read, the blocks of the memo and the bindings. The kinds remove the guards, but most lines remain. Thus a standalone module has another printer.
+
+#### Standalone modules
+
+`emitModule` prints a program as an ES module with no import of Vex (COMPILE.MODULE). The module checks the schema once, at the start of a run, and an input against the schema throws a `VexContractError`. Each node is one expression:
+
+- An error of Vex is a thrown sentinel. `ifError`, the items of a list op and the bindings catch it as the interpreter does. A key with an error gives `VEX_ERROR`.
+- Each op is the text of the function of its domain. Thus the module has the bits of the interpreter. The printer gives samples of their kinds to each function and to its copy. A function that reads a name outside itself, for example `concat` of `TextDomain`, gives a reason, not code.
+- A node of the memo is one function of its keys. Two nodes with the same expression share the function, so the widths of the columns in three places of the grid have one function.
+- A value that cannot throw, for example a variable of the schema, needs no check where the program reads it.
+
+The printer takes a part of the language. It takes an array space, the fields and the variables of the schema, and the axes `all`, `others` and `window`. Each op site must have a static op. Another construct gives a reason. A property compares random programs with the interpreter, and the grid pilot compares the module with the code of ireko.
+
+| The strategy `grid` | Bytes | Gzip |
+|---|---|---|
+| The module of `GRID_PROGRAM` | 8841 | 2660 |
+| The module, minified | 4976 | 1861 |
+| `grid.ts` of ireko, minified | 2615 | 1186 |
+
+The options and the descriptions of `grid.ts` stay in ireko, so the module adds approximately 1.0 to 1.4 kB to its core. The core of ireko has 1.28 kB of room. A build of ireko with the module and its size check decide it. That is the next step.

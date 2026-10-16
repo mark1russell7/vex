@@ -8,6 +8,7 @@
  * of the additions decides the bits of a result.
  */
 import { app, axes, each, let_, lit, rec, ref, space, v, type Expr, type Move, type Space } from "@mark1russell7/vex";
+import type { Schema } from "@mark1russell7/vex-compiler";
 import { NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 
 /** The extent of a child: the box of its subtree, relative to the position of the child. */
@@ -217,6 +218,12 @@ export const GRID_PROGRAM: Expr = let_(
     ),
   ),
 );
+
+/** The kinds of the fields of a child and of the variables, for the compiler (docs/COMPILER.md §3.2). */
+export const GRID_SCHEMA: Schema = {
+  fields: { i: "number", x: "number", y: "number", w: "number", h: "number" },
+  vars: { columns: "number", justify: "string", align: "string", uniform: "boolean", side: "string", distance: "number", mode: "string", gap: "number", selfW: "number", selfH: "number" },
+};
 
 /** The domains of the program: numbers, and texts for the options. */
 export const GRID_DOMAINS: readonly [typeof NumDomain, typeof TextDomain] = [NumDomain, TextDomain];

@@ -5,6 +5,7 @@
 import { app, axes, defineDomain, each, evaluate, ext, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
+import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -731,6 +732,20 @@ const keyed: fc.Arbitrary<Expr> = fc
     const body = ["any", "all", "none"].includes(r.op) ? r.boolBody : ["count", "first"].includes(r.op) ? r.anyBody : r.numBody;
     return op(r.op, each(axis, body), ...(r.strict ? [lit({ strict: true })] : []));
   });
+
+describe("COMPILE.MODULE: the text of the modules of a fixed set of random programs", () => {
+  it("each module gives the value of the interpreter, and the golden file has the hash of the text of each module", async () => {
+    // A change of the printer changes the text of some of these modules. Thus the file finds a change of a decision that
+    // keeps the values, for example a constant that a module computes twice, or a column of the run that it does not make.
+    const programs = fc.sample(fc.oneof(program.num, program.bool, keyed, fc.tuple(keyed, keyed).map(([a, b]) => rec({ a, b }))), { seed: 20261016, numRuns: 60 });
+    const lines = programs.map((e, i) => {
+      const source = sourceOf(e);
+      expectSame(make(source), e, MANY);
+      return `${String(i)} ${String(source.length)} ${createHash("sha256").update(source).digest("hex").slice(0, 16)}`;
+    });
+    await expect(`${lines.join("\n")}\n`).toMatchFileSnapshot("./__golden__/module-corpus.txt");
+  });
+});
 
 describe("COMPILE.MODULE: random programs", () => {
   it("P17 COMPILE.MODULE: a node of the memo that keeps its items gives the value of the interpreter at each key", () => {

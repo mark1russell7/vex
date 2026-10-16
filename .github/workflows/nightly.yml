@@ -6,11 +6,16 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      packages:
+        description: The packages of the mutation lane, as a JSON list
+        default: '["core", "domains", "testkit", "compiler"]'
 
 permissions: {}
 
+# A run for some packages does not stop a run for other packages.
 concurrency:
-  group: nightly
+  group: nightly-${{ inputs.packages || 'all' }}
   cancel-in-progress: true
 
 jobs:
@@ -45,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [core, domains, testkit, compiler]
+        package: ${{ fromJSON(inputs.packages || '["core", "domains", "testkit", "compiler"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -513,6 +513,15 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(reasonOf(iv, { ...options, schema: { fields: { iv: "domain:Nope" } } })).toBe("the schema has the kind domain:Nope, and no domain has it");
     // A domain without a primitive type before the domain of the value can accept it, so the kinds do not decide the op.
     expect(reasonOf(op("span", iv), { ...options, domains: [Vec2Domain, Interval] })).toBe(undecided("span"));
+    // An op that the domain of the value does not have can be a method of the value, or an op of a later domain.
+    expect(reasonOf(op("nope", iv), options)).toBe(undecided("nope"));
+    // A domain with valid checks each result of its kind. A variable can have the kind of a domain too.
+    const checked = defineDomain({ ...Interval, valid: (i: Span): boolean => i.lo <= i.hi });
+    const withVar: ModuleOptions = { domains: [NumDomain, checked], schema: { fields: { iv: "domain:Interval", n: "number" }, vars: { base: "domain:Interval" } } };
+    const grown = rec({ grown: op("span", op("grow", iv, ref("n"))), merged: op("span", op("merge", v("base"), iv)) });
+    const mv = make(sourceOf(grown, withVar));
+    expectSame(mv, grown, [...rows, { iv: { lo: 0, hi: 1 }, n: -2 }], { base: { lo: 10, hi: 11 } }, withVar);
+    expect(() => mv.run(rows, { base: 3 })).toThrow(mv.VexContractError);
   });
 
   it("NAV.COMPUTED: the moves with a position or a key from an expression", async () => {

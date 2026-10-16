@@ -426,6 +426,22 @@ describe("COMPILE.MODULE: the text of a module", () => {
     await expectGolden("lists", e);
   });
 
+  it("COMPILE.MODULE V-052: a move before a fixed key or the origin can fail, so the module evaluates it", () => {
+    // V-052: the printer kept only the code of the last fixed move, so the module read a record where the interpreter
+    // gives #REF!. A move from the focus that fails makes the read fail too.
+    const safe = (at: Parameters<typeof ref>[1]): Expr => op("ifError", ref("n", at), lit(99));
+    const e = rec({
+      key: safe([offset(1), key("0")]),
+      index: safe([offset(-1), index(0)]),
+      origin: safe([offset(1), { t: "origin" }]),
+      computed: safe([offset(1), index(lit(0))]),
+      twice: safe([{ t: "origin" }, offset(2), key("1")]),
+      list: op("ifError", op("count", each(axes.all, n, [offset(1), key("0")])), lit(-1)),
+    });
+    expectSame(make(sourceOf(e)), e);
+    expectSame(make(sourceOf(e)), e, MANY);
+  });
+
   it("NAV.COMPUTED: the moves with a position or a key from an expression", async () => {
     const safe = (x: Expr): Expr => op("ifError", x, lit(-1));
     const e = rec({
@@ -558,13 +574,13 @@ const program = fc.letrec<{ num: Expr; bool: Expr }>((tie) => ({
   num: fc.oneof(
     { maxDepth: 4, depthSize: "small" },
     fc.integer({ min: -3, max: 3 }).map((x) => lit(x)),
-    fc.constantFrom(n, w, v("a"), ref("n", [{ t: "origin" }]), ref("w", [offset(-1)]), ref("n", [offset(1)]), ref("w", [index(n)]), ref("n", [index(v("a"))])),
+    fc.constantFrom(n, w, v("a"), ref("n", [{ t: "origin" }]), ref("w", [offset(-1)]), ref("n", [offset(1)]), ref("w", [index(n)]), ref("n", [index(v("a"))]), ref("w", [offset(1), key("0")]), ref("n", [offset(-1), { t: "origin" }])),
     tie("num").map((x) => ref("w", [index(x)])),
     fc.tuple(fc.constantFrom("add", "subtract", "multiply", "divide", "max", "min", "mod"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
     fc.tuple(tie("bool"), tie("num"), tie("num")).map(([c, a, b]) => op("if", c, a, b)),
     fc.tuple(tie("num"), tie("num")).map(([a, b]) => op("ifError", a, b)),
     fc
-      .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(axes.all, axes.others, axes.window(-1, 0)), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(undefined, [offset(1)], [index(1)], [{ t: "origin" as const }], [index(n)], [index(v("a"))]))
+      .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(axes.all, axes.others, axes.window(-1, 0)), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(undefined, [offset(1)], [index(1)], [{ t: "origin" as const }], [index(n)], [index(v("a"))], [offset(1), index(0)]))
       .map(([o, a, body, test, strict, at]) => op(o, each(test === undefined ? a : axes.where(a, test), body, at), ...(strict ? [lit({ strict: true })] : []))),
     fc.tuple(tie("num"), tie("num")).map(([a, b]) => let_({ x: a }, op("add", v("x"), b))),
     fc.constant(op("length", ref("s"))),

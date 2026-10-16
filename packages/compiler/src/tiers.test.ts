@@ -171,6 +171,27 @@ describe("the tiers", () => {
     }
   });
 
+  it("COMPILE.MEMO V-052: a move from the focus before a fixed key can fail, so the address reads the focus", () => {
+    // V-052: the memo took an address that ends with a fixed key as a fixed key. At the last key, offset(1) fails.
+    const s = space.array([{ n: 1 }, { n: 2 }, { n: 3 }]);
+    const loop: Expr = { tag: "app", op: "sum", args: [{ tag: "each", axis: { t: "all" }, body: { tag: "ref", path: ["n"] } }] };
+    const addresses = [
+      [{ t: "offset", d: [1] }, { t: "key", key: "0" }],
+      [{ t: "offset", d: [-1] }, { t: "index", i: 0 }],
+      [{ t: "offset", d: [1] }, { t: "origin" }],
+      [{ t: "offset", d: [1] }, { t: "index", i: { tag: "lit", value: 0 } }],
+      [{ t: "origin" }, { t: "offset", d: [1] }, { t: "key", key: "1" }],
+    ] as const satisfies readonly Addr[];
+    for (const at of addresses) {
+      const e: Expr = { tag: "rec", fields: { loop, moved: { tag: "ref", path: ["n"], at } } };
+      const all: Expr = { tag: "app", op: "count", args: [{ tag: "each", axis: { t: "all" }, body: { tag: "ref", path: ["n"] }, at }] };
+      for (const x of [e, all]) {
+        const p = tiered(x, { domains: DOMAINS });
+        for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(x, { domains: DOMAINS, space: s, origin: k })));
+      }
+    }
+  });
+
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {
     const count = { values: 0, fast: 0 };
     fc.assert(fc.property(runOf(arbListProgram), ([s, e, k, t, v]) => agree(e, s, k, t, v, count)));

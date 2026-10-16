@@ -640,12 +640,20 @@ class Printer {
   #address(at: readonly Move[], ctx: Ctx, values: readonly Code[]): string {
     let index = ctx.focus;
     let next = 0;
-    for (const m of at) index = moveExpr(m) === undefined ? this.#move(m, index, ctx.origin) : this.#computed(m, values[next++] as Code);
+    // A move that can fail keeps its check when a later fixed key, index or origin replaces its index (V-052). The focus
+    // and the origin cannot fail, and the code of a move from an index has the code of that index in it.
+    let fails = false;
+    const checks: string[] = [];
+    for (const m of at) {
+      if (fails && index !== undefined && m.t !== "offset" && m.t !== "other") checks.push(index);
+      index = moveExpr(m) === undefined ? this.#move(m, index, ctx.origin) : this.#computed(m, values[next++] as Code);
+      fails = m.t !== "origin";
+    }
     // A node of the memo reads neither its origin nor its focus (memo.ts), so the guards of this method do not fail.
     // Stryker disable next-line ConditionalExpression,StringLiteral: see the comment above
     /* v8 ignore next -- @preserve */
     if (index === undefined) throw new NotStandalone("a node of the memo reads its focus");
-    return index;
+    return checks.length === 0 ? index : `(${[...checks, index].join(", ")})`;
   }
 
   /** This method gives the code of the index of a computed move, from the code of its value. */
@@ -709,12 +717,17 @@ class Printer {
   #addressDeps(at: readonly Move[], ctx: Ctx, values: readonly Code[]): ReadonlySet<number> {
     let deps: ReadonlySet<number> = new Set([ctx.level]);
     let next = 0;
+    // A move from an index that can fail, or a move from the focus, keeps the levels of that index (V-052).
+    let fails = false;
+    const kept = new Set<number>();
     for (const m of at) {
+      if (fails || m.t === "offset" || m.t === "other") for (const d of deps) kept.add(d);
       if (moveExpr(m) !== undefined) deps = (values[next++] as Code).v.deps;
       else if (m.t === "origin") deps = new Set([1]);
       else if (m.t === "key" || m.t === "index" || m.t === "parent") deps = NO_DEPS;
+      fails = m.t !== "origin";
     }
-    return deps;
+    return kept.size === 0 ? deps : new Set([...deps, ...kept]);
   }
 
   #var(name: string, ctx: Ctx): Value {

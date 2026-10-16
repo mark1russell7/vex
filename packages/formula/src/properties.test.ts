@@ -1,4 +1,4 @@
-import { SheetRun, type Expr } from "@mark1russell7/vex";
+import { SheetRun, type Addr, type Expr, type Move } from "@mark1russell7/vex";
 import { fromCore, fromReference, referenceEvaluate } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -34,6 +34,9 @@ describe("properties of the formula language", () => {
 
 /** This function replaces each cell reference to `name` without an address by the expression `by`. */
 function inline(e: Expr, name: string, by: Expr): Expr {
+  // The expressions of the computed moves of an address are expressions too (NAV.COMPUTED).
+  const at = (moves: Addr | undefined): Addr | undefined =>
+    moves?.map((m): Move => (m.t === "index" && typeof m.i !== "number" ? { ...m, i: inline(m.i, name, by) } : m.t === "key" && typeof m.key !== "string" ? { ...m, key: inline(m.key, name, by) } : m));
   switch (e.tag) {
     case "ext": {
       const d = e.data as { column?: unknown; at?: readonly unknown[] };
@@ -41,8 +44,14 @@ function inline(e: Expr, name: string, by: Expr): Expr {
     }
     case "app":
       return { ...e, args: e.args.map((x) => inline(x, name, by)) };
-    case "each":
-      return { ...e, body: inline(e.body, name, by), axis: e.axis.t === "where" ? { ...e.axis, test: inline(e.axis.test, name, by) } : e.axis };
+    case "each": {
+      const moves = at(e.at);
+      return { ...e, body: inline(e.body, name, by), axis: e.axis.t === "where" ? { ...e.axis, test: inline(e.axis.test, name, by) } : e.axis, ...(moves === undefined ? {} : { at: moves }) };
+    }
+    case "ref": {
+      const moves = at(e.at);
+      return moves === undefined ? e : { ...e, at: moves };
+    }
     case "let":
       return { ...e, bind: Object.fromEntries(Object.entries(e.bind).map(([k, v]) => [k, inline(v, name, by)])), body: inline(e.body, name, by) };
     case "rec":
@@ -51,7 +60,6 @@ function inline(e: Expr, name: string, by: Expr): Expr {
     case "fold":
     case "iterate":
     case "lit":
-    case "ref":
     case "var":
       return e;
   }

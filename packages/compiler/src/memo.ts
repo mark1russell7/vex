@@ -40,14 +40,19 @@ function parts(a: Axis): { readonly base: Exclude<Axis, { readonly t: "where" }>
 /** This function adds `DEEP` to a read of the origin or of a free name inside a loop. */
 const inLoop = (r: number, top: boolean): number => (top || (r & (ORIGIN | FREE)) === 0 ? r : r | DEEP);
 
-/** This function gives the reads of an address: the focus at the top of the expression, or the origin, or nothing. */
+/**
+ * This function gives the reads of an address: the focus at the top of the expression, or the origin, or nothing. A
+ * move from the focus or the origin can fail, so the address reads its start also before a fixed key (V-052).
+ */
 function addressReads(at: Addr | undefined, top: boolean): number {
-  let found = top ? FOCUS : 0;
+  let start = top ? FOCUS : 0;
+  let found = 0;
   at?.forEach((m) => {
-    if (m.t === "key" || m.t === "index") found = 0;
-    else if (m.t === "origin") found = ORIGIN;
+    if (m.t === "key" || m.t === "index") start = 0;
+    else if (m.t === "origin") start = ORIGIN;
+    else found |= start;
   });
-  return inLoop(found, top);
+  return inLoop(found | start, top);
 }
 
 /**

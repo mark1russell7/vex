@@ -1,3 +1,5 @@
+import type { PrimitiveKind } from "@mark1russell7/vex";
+
 /**
  * The loop IR (docs/COMPILER.md §3.3): a small language of statements between the Vex IR and the back ends. It has
  * locals, loops over arrays, checks and the functions of the runtime. A back end reads only this IR.
@@ -66,8 +68,11 @@ export type LExpr =
   | { readonly t: "array"; readonly items: readonly LExpr[] }
   | { readonly t: "prim"; readonly op: PrimOp; readonly args: readonly LExpr[] }
   | { readonly t: "call"; readonly fn: RuntimeFn; readonly args: readonly LExpr[] }
-  /** The dispatch of the op whose name is the constant `name`, with the values of its arguments, the receiver first. */
-  | { readonly t: "op"; readonly name: number; readonly args: readonly LExpr[] }
+  /**
+   * The dispatch of the op whose name is the constant `name`, with the values of its arguments, the receiver first.
+   * `kinds` are the kinds of the values that the lowering knows (KIND.STATIC).
+   */
+  | { readonly t: "op"; readonly name: number; readonly args: readonly LExpr[]; readonly kinds: readonly (PrimitiveKind | undefined)[] }
   /** The memo `id` of the program: the value of one node for each space (§7.2). */
   | { readonly t: "memo"; readonly id: number }
   /** The targets of the base axis that is the constant `axis`, at the space, the origin and the focus of `args`. */

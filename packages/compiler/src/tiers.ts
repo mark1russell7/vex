@@ -3,7 +3,10 @@
  * gives each result that tier 2 cannot give. Thus a tiered program gives the results of the interpreter.
  */
 import { compile, ok, type CompileOptions, type Expr, type Program, type Space } from "@mark1russell7/vex";
-import { factsOf } from "./facts.ts";
+import { factsOf, type Schema } from "./facts.ts";
+
+/** The options of the compiler: the options of `compile`, and the schema of the host (docs/COMPILER.md §3.2). */
+export type GenerateOptions = CompileOptions & { readonly schema?: Schema };
 import { printJs } from "./js.ts";
 import type { LoopProgram } from "./loop.ts";
 import { lower, Unsupported } from "./lower.ts";
@@ -14,7 +17,7 @@ import { createRuntime, FALLBACK } from "./runtime.ts";
  * the reason that the compiler cannot lower the program.
  */
 export type Generated =
-  | { readonly ok: true; readonly program: LoopProgram; readonly source: string; readonly options: CompileOptions }
+  | { readonly ok: true; readonly program: LoopProgram; readonly source: string; readonly options: GenerateOptions }
   | { readonly ok: false; readonly reason: string };
 
 /** A function of tier 2. It gives the value of the program, or `FALLBACK`. */
@@ -24,10 +27,11 @@ export type Tier2 = (space: Space, origin: string, vars: Readonly<Record<string,
  * This function lowers an expression and prints its source for the options. The op tables of the domains give the
  * fast path of each op site. It is pure, so a build can use it.
  */
-export function generate(expr: Expr, options: CompileOptions = {}): Generated {
+export function generate(expr: Expr, options: GenerateOptions = {}): Generated {
   try {
-    const program = lower(expr);
-    return { ok: true, program, source: printJs(program, factsOf(options)), options };
+    const facts = factsOf(options);
+    const program = lower(expr, facts, options.schema);
+    return { ok: true, program, source: printJs(program, facts), options };
   } catch (thrown) {
     // A stack overflow in the lowering of a deep expression also goes to tier 1.
     return { ok: false, reason: thrown instanceof Unsupported ? thrown.message : "the lowering threw an exception" };
@@ -65,7 +69,7 @@ export interface TieredProgram extends Program {
  * This function compiles an expression into tier 2 if it can, and else into tier 1. After a failed check of tier 2,
  * tier 1 does that evaluation again. A run with a trace and `explain` always use tier 1, because tier 2 makes no trace.
  */
-export function tiered(expr: Expr, options: CompileOptions = {}): TieredProgram {
+export function tiered(expr: Expr, options: GenerateOptions = {}): TieredProgram {
   const slow = compile(expr, options);
   const generated = generate(expr, options);
   let fast: Tier2 | undefined;

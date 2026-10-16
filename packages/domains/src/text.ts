@@ -27,15 +27,16 @@ const textOf = (u: unknown): string => (typeof u === "object" && u !== null && O
 export const TextDomain: Domain<"Text", string, TextOps> = defineDomain<"Text", string, TextOps>({
   name: "Text",
   is: (u: unknown): u is string => typeof u === "string",
+  primitive: "string",
   show: (s: string): string => JSON.stringify(s),
   ops: {
-    concat: { fn: (a: string, b: unknown): string => a + textOf(b), params: ["any"] },
+    concat: { fn: (a: string, b: unknown): string => a + textOf(b), params: ["any"], returns: "string" },
     // The length counts UTF-16 code units, like the function LEN of a spreadsheet.
-    length: { fn: (a: string): number => a.length },
-    upper: { fn: (a: string): string => a.toUpperCase() },
-    lower: { fn: (a: string): string => a.toLowerCase() },
-    trim: { fn: (a: string): string => a.trim() },
-    contains: { fn: (a: string, b: string): boolean => a.includes(b), params: ["string"] },
-    eq: { fn: (a: string, b: string): boolean => a === b, laws: ["commutative"], params: ["string"] },
+    length: { fn: (a: string): number => a.length, returns: "number" },
+    upper: { fn: (a: string): string => a.toUpperCase(), returns: "string" },
+    lower: { fn: (a: string): string => a.toLowerCase(), returns: "string" },
+    trim: { fn: (a: string): string => a.trim(), returns: "string" },
+    contains: { fn: (a: string, b: string): boolean => a.includes(b), params: ["string"], returns: "boolean" },
+    eq: { fn: (a: string, b: string): boolean => a === b, laws: ["commutative"], params: ["string"], returns: "boolean" },
   },
 });

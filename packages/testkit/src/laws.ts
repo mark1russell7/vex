@@ -1,9 +1,10 @@
 /**
  * The law checker. A domain declares laws for its ops (`commutative`, `associative`, `idempotent`, and an
  * `identity`). The law checker turns each claim into a fast-check property. A false claim gives a
- * counterexample.
+ * counterexample. It also checks the kinds that a domain declares for a compiler. These are the primitive type of its
+ * values (KIND.PRIMITIVE) and the kind of the result of each op (KIND.RETURNS).
  */
-import { resolveOp, type AnyDomain, type Law } from "@mark1russell7/vex";
+import { resolveOp, type AnyDomain, type Law, type OpSpec, type ParamKind } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The options of the law checker. */
@@ -68,11 +69,73 @@ function call(domain: AnyDomain, name: string, self: unknown, args: readonly unk
 
 const lawsOf = (domain: AnyDomain, name: string): readonly Law[] => (domain.ops[name] as { laws?: readonly Law[] } | undefined)?.laws ?? [];
 
+/** This function tells if a value has a kind. A value of the kind `domain` is a value of the domain. */
+function hasKind(domain: AnyDomain, kind: ParamKind, u: unknown): boolean {
+  switch (kind) {
+    case "domain":
+      return domain.is(u);
+    case "any":
+      return true;
+    case "number":
+    case "string":
+    case "boolean":
+      return typeof u === kind;
+  }
+}
+
+/** This function gives the values of a parameter of a kind. */
+function argsOf<D>(kind: ParamKind, arb: fc.Arbitrary<D>): fc.Arbitrary<unknown> {
+  switch (kind) {
+    case "domain":
+      return arb;
+    case "any":
+      return fc.anything();
+    case "number":
+      return fc.double();
+    case "string":
+      return fc.string({ maxLength: 6 });
+    case "boolean":
+      return fc.boolean();
+  }
+}
+
+/**
+ * This function gives the property of `returns`: each result of the op has the declared kind. The interpreter does
+ * not accept some results, for example `undefined` or a number that is not finite. Such a result is an error of Vex,
+ * so it does not count. An exception is the error `#CALC!`, so it does not count either.
+ */
+function returnsProperty<D>(domain: AnyDomain, name: string, spec: OpSpec<unknown>, kind: ParamKind, arb: fc.Arbitrary<D>): LawProperty {
+  // Without params, each argument is a value of the domain, one for each parameter of the function after the receiver.
+  const kinds: readonly ParamKind[] = spec.params ?? Array.from({ length: Math.max(0, (spec.fn?.length ?? 1) - 1) }, (): ParamKind => "domain");
+  const args = fc.tuple(...kinds.map((k) => argsOf(k, arb)));
+  return lawProperty(
+    `${domain.name}.${name} returns ${kind}`,
+    fc.property(arb, args, (self, xs) => {
+      let r: unknown;
+      try {
+        r = call(domain, name, self, xs);
+      } catch {
+        return true;
+      }
+      return r === undefined || r === null || (typeof r === "number" && !Number.isFinite(r)) || hasKind(domain, kind, r);
+    }),
+  );
+}
+
 /** This function gives one property for each law that the ops of `domain` declare. */
 export function lawProperties<D>(domain: AnyDomain, opts: LawOptions<D>): readonly LawProperty[] {
   const eq = opts.eq ?? structuralEqual;
   const out: LawProperty[] = [];
+  const primitive = domain.primitive;
+  if (primitive !== undefined) {
+    // The domain accepts each value of its type, and no other value: also the values of the domain arbitrary.
+    const values = fc.oneof(fc.anything(), opts.arb, fc.double(), fc.string({ maxLength: 4 }), fc.boolean());
+    out.push(lawProperty(`${domain.name} primitive ${primitive}`, fc.property(values, (u) => domain.is(u) === (typeof u === primitive))));
+  }
   for (const name of Object.keys(domain.ops)) {
+    // An entry of the op table can be undefined. It declares nothing.
+    const spec = domain.ops[name] as OpSpec<unknown> | undefined;
+    if (spec?.returns !== undefined) out.push(returnsProperty(domain, name, spec, spec.returns, opts.arb));
     const laws = lawsOf(domain, name);
     const label = `${domain.name}.${name}`;
     for (const law of laws) {

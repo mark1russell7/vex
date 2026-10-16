@@ -1,9 +1,9 @@
 import { evaluate, isVexList, type Axis, type Expr, type FreeFn, type Space } from "@mark1russell7/vex";
-import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
+import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, modelChain, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { tiered } from "./tiers.ts";
+import { generate, tiered, type GenerateOptions } from "./tiers.ts";
 
 const DOMAINS = [Vec2Domain, NumDomain, BoolDomain] as const;
 const vec = fc.tuple(fc.integer({ min: -5, max: 5 }), fc.integer({ min: -5, max: 5 })).map(([x, y]) => new Vec2(x, y));
@@ -92,8 +92,7 @@ const runOf = <E,>(e: fc.Arbitrary<E>) => arbSpace(vec).chain((s) => fc.tuple(fc
  * This function checks that the tiered program gives the result of the interpreter. It counts the runs with a value,
  * and the runs where tier 2 gave the value. Tier 2 makes no error values, so a list with an error item does not count.
  */
-function agree(e: Expr, s: Space, k: string, t: Readonly<Record<string, Space>>, v: Readonly<Record<string, unknown>> | undefined, count: { values: number; fast: number }): void {
-  const options = { domains: DOMAINS, fns: FNS };
+function agree(e: Expr, s: Space, k: string, t: Readonly<Record<string, Space>>, v: Readonly<Record<string, unknown>> | undefined, count: { values: number; fast: number }, options: GenerateOptions = { domains: DOMAINS, fns: FNS }): void {
   const p = tiered(e, options);
   const run = { space: s, origin: k, tables: t, ...(v === undefined ? {} : { vars: v }) };
   const expected = evaluate(e, { ...options, ...run });
@@ -129,6 +128,22 @@ describe("the tiers", () => {
         }
       }),
     );
+  });
+
+  it("P17 KIND.STATIC: with the domains of primitive types first and a schema, a tiered program gives the result of the interpreter", () => {
+    // The records of the spaces often break the schema: then a run goes to tier 1.
+    const options: GenerateOptions = { domains: [NumDomain, BoolDomain, TextDomain, Vec2Domain], fns: FNS, schema: { fields: { n: "number", b: "boolean", s: "string" }, vars: { a: "number", c: "boolean" } } };
+    const count = { values: 0, fast: 0 };
+    let direct = 0;
+    fc.assert(
+      fc.property(runOf(fc.oneof(arbExpr(OPTS), arbListProgram, arbKeyedProgram)), ([s, e, k, t, v]) => {
+        agree(e, s, k, t, v, count, options);
+        const g = generate(e, options);
+        if (g.ok && /= f\d+_\d+\(/.test(g.source)) direct++;
+      }),
+    );
+    // Some programs have static sites.
+    expect(direct).toBeGreaterThan(3);
   });
 
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {

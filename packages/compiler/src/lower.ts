@@ -6,7 +6,8 @@
  * (`Fail`). A list op skips an error item, and an error in the first argument of `ifError` gives the second argument.
  * Each other error stops the program with `FALLBACK`.
  */
-import { isFieldName, isListOp, MAX_NESTING, nestingOf, type Axis, type Expr, type ExprOf, type ListOp } from "@mark1russell7/vex";
+import { isFieldName, isListOp, MAX_NESTING, nestingOf, type Axis, type Expr, type ExprOf, type ListOp, type PrimitiveKind } from "@mark1russell7/vex";
+import { factsOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
   array,
@@ -73,11 +74,23 @@ function eachUnderLets(e: Expr | undefined): ExprOf<"each"> | undefined {
   return x?.tag === "each" ? x : undefined;
 }
 
-/** This function lowers an expression into a program of the loop IR. It throws `Unsupported` for an expression it cannot lower. */
-export function lower(expr: Expr): LoopProgram {
+/** The kinds of the values of the primitive operations that always give a boolean. */
+const BOOLEAN_PRIMS: ReadonlySet<string> = new Set(["!", "===", "!==", "isNumber", "isBoolean", "isString", "isValue", "isObject"]);
+
+/** The checks of the kinds of a schema. */
+const KIND_CHECKS = { number: "isNumber", string: "isString", boolean: "isBoolean" } as const;
+
+/** This function gives the kind of two values in the branches of a form, if they have the same kind. */
+const join = (a: PrimitiveKind | undefined, b: PrimitiveKind | undefined): PrimitiveKind | undefined => (a === b ? a : undefined);
+
+/**
+ * This function lowers an expression into a program of the loop IR. It throws `Unsupported` for an expression it cannot
+ * lower. The facts of the options decide the op of a site whose values have known kinds (KIND.STATIC).
+ */
+export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {}): LoopProgram {
   // EVAL.NESTING: tier 1 gives the error of a program that is nested too deep.
   if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
-  const l = new Lowerer(memoNodes(expr));
+  const l = new Lowerer(memoNodes(expr), facts, schema);
   const b = block(RETURN);
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space");
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
@@ -93,9 +106,42 @@ class Lowerer {
   readonly #memo: ReadonlyMap<Expr, readonly Expr[]>;
   /** The keys of the nodes of the memo whose code the lowering makes, with their values. */
   #keys: ReadonlyMap<Expr, Bound> = new Map();
+  readonly #facts: Facts;
+  readonly #schema: Schema;
+  /** The kind of each local whose kind the lowering knows. A local gets its kind where it gets its value. */
+  readonly #kinds = new Map<number, PrimitiveKind>();
 
-  constructor(memo: ReadonlyMap<Expr, readonly Expr[]>) {
+  constructor(memo: ReadonlyMap<Expr, readonly Expr[]>, facts: Facts, schema: Schema) {
     this.#memo = memo;
+    this.#facts = facts;
+    this.#schema = schema;
+  }
+
+  /** This method gives the kind of a value, if the lowering knows it. */
+  kindOf(x: LExpr): PrimitiveKind | undefined {
+    if (x.t === "const") {
+      const t = typeof this.constants[x.i];
+      return t === "number" || t === "string" || t === "boolean" ? t : undefined;
+    }
+    if (x.t === "local") return this.#kinds.get(x.n);
+    // The other values have no kind that the lowering knows.
+    return x.t === "prim" && BOOLEAN_PRIMS.has(x.op) ? "boolean" : undefined;
+  }
+
+  /** This method gives a local the kind `kind`. A value that is not a local keeps its kind. */
+  #typed(x: LExpr, kind: PrimitiveKind | undefined): LExpr {
+    if (x.t === "local" && kind !== undefined) this.#kinds.set(x.n, kind);
+    return x;
+  }
+
+  /**
+   * This method checks the kind that the schema declares for a value. A failure is no error of the interpreter, so it
+   * stops the program, and tier 1 evaluates it.
+   */
+  #declared(b: Block, x: LExpr, kind: PrimitiveKind | undefined, reason: string): LExpr {
+    if (kind === undefined) return x;
+    b.stmts.push({ t: "check", ok: prim(KIND_CHECKS[kind], x), reason, fail: RETURN });
+    return this.#typed(x, kind);
   }
   readonly constants: unknown[] = [];
   readonly #pool = new Map<unknown, number>();
@@ -115,6 +161,13 @@ class Lowerer {
   /** This method gives the constant of a value. */
   constant(value: unknown): LExpr {
     return constant(this.index(value));
+  }
+
+  /** This method gives the number of a new local of a kind. */
+  typedLocal(kind: PrimitiveKind): number {
+    const n = this.locals++;
+    this.#kinds.set(n, kind);
+    return n;
   }
 
   /** This method gives a new local with a value. */
@@ -161,7 +214,10 @@ class Lowerer {
         return this.#ref(e, s, b);
       case "var": {
         const bound = s.env.get(e.name);
-        if (bound === undefined) return this.checked(b, call("var", local(VARS), this.constant(e.name)), "a variable");
+        if (bound === undefined) {
+          const x = this.checked(b, call("var", local(VARS), this.constant(e.name)), "a variable");
+          return this.#declared(b, x, this.#schema.vars?.[e.name], "a variable of the schema");
+        }
         if (bound.ok !== undefined) this.check(b, bound.ok, "a binding with a value");
         return bound.value;
       }
@@ -213,7 +269,8 @@ class Lowerer {
     compute.stmts.push({ t: "set", n: h, value: prim("memoPut", memo, s.space, tuple, node.value, flag(node)) });
     b.stmts.push({ t: "let", n: h, value: prim("memoGet", memo, s.space, tuple) }, { t: "if", cond: prim("!", prim("isValue", local(h))), yes: compute.stmts, no: [] });
     this.check(b, prim("entryOk", local(h)), "a value of the memo");
-    return this.value(b, prim("entryValue", local(h)));
+    // Each entry of the memo comes from the code of the node, so it has the kind of the value of the node.
+    return this.#typed(this.value(b, prim("entryValue", local(h))), this.kindOf(node.value));
   }
 
   /**
@@ -227,6 +284,7 @@ class Lowerer {
     if (attempt.stmts.length === 0) return { value };
     const v = this.locals++;
     const ok = this.locals++;
+    this.#typed(local(v), this.kindOf(value));
     attempt.stmts.push({ t: "set", n: v, value }, { t: "set", n: ok, value: bool(true) });
     b.stmts.push({ t: "let", n: ok, value: bool(false) }, { t: "block", label, body: attempt.stmts });
     return { value: local(v), ok: local(ok) };
@@ -248,7 +306,8 @@ class Lowerer {
       b.stmts.push({ t: "set", n, value: prim("member", x, this.constant(seg)) });
       this.check(b, prim("isValue", x), "a field");
     }
-    return x;
+    const [field, ...more] = e.path;
+    return field === undefined || more.length > 0 ? x : this.#declared(b, x, this.#schema.fields?.[field], "a field of the schema");
   }
 
   /**
@@ -280,7 +339,11 @@ class Lowerer {
       if (target !== undefined) return this.#fused(op, e, target, s, path, b);
     }
     const values = args.map((x, i) => this.expr(x, s, [...path, i], b));
-    return this.checked(b, { t: "op", name: this.index(op), args: values }, "an op");
+    const kinds = values.map((x) => this.kindOf(x));
+    // A static site checks the kind of its result, so the result has the kind that the op declares (KIND.RETURNS).
+    const site = this.#facts.staticSite(op, kinds);
+    const x = this.checked(b, { t: "op", name: this.index(op), args: values, kinds }, "an op");
+    return this.#typed(x, site?.t === "fn" ? site.returns : undefined);
   }
 
   /** The condition must be a boolean. Only the branch that the condition selects is evaluated. */
@@ -289,18 +352,22 @@ class Lowerer {
     if (cond === undefined) return this.fail(b);
     const c = this.#boolean(this.expr(cond, s, [...path, 0], b), b);
     const r = this.locals++;
+    const kinds: (PrimitiveKind | undefined)[] = [];
     const branch = (x: Expr | undefined, i: number): LStmt[] => {
       const inner = block(b.fail);
-      inner.stmts.push({ t: "set", n: r, value: x === undefined ? this.fail(inner) : this.expr(x, s, [...path, i], inner) });
+      const value = x === undefined ? this.fail(inner) : this.expr(x, s, [...path, i], inner);
+      kinds.push(this.kindOf(value));
+      inner.stmts.push({ t: "set", n: r, value });
       return inner.stmts;
     };
     b.stmts.push({ t: "if", cond: c, yes: branch(yes, 1), no: branch(no, 2) });
-    return local(r);
+    return this.#typed(local(r), join(kinds[0], kinds[1]));
   }
 
   /** `or` stops at the first `true`, and `and` at the first `false`. Each argument before the stop must be a boolean. */
   #andOr(isOr: boolean, args: readonly Expr[], i: number, s: Scope, path: readonly number[], b: Block, r = this.locals++): LExpr {
     const x = this.#boolean(this.expr(args[i] as Expr, s, [...path, i], b), b);
+    this.#typed(local(r), "boolean");
     if (i === args.length - 1) {
       b.stmts.push({ t: "set", n: r, value: x });
     } else {
@@ -323,20 +390,23 @@ class Lowerer {
     const r = this.locals++;
     const ok = this.locals++;
     const attempt = block({ t: "break", label });
-    attempt.stmts.push({ t: "set", n: r, value: this.expr(first, s, [...path, 0], attempt) }, { t: "set", n: ok, value: bool(true) });
+    const value = this.expr(first, s, [...path, 0], attempt);
+    attempt.stmts.push({ t: "set", n: r, value }, { t: "set", n: ok, value: bool(true) });
     const otherwise = block(b.fail);
-    otherwise.stmts.push({ t: "set", n: r, value: second === undefined ? this.fail(otherwise) : this.expr(second, s, [...path, 1], otherwise) });
+    const fallback = second === undefined ? this.fail(otherwise) : this.expr(second, s, [...path, 1], otherwise);
+    otherwise.stmts.push({ t: "set", n: r, value: fallback });
     b.stmts.push({ t: "let", n: ok, value: bool(false) }, { t: "block", label, body: attempt.stmts }, { t: "if", cond: prim("!", local(ok)), yes: otherwise.stmts, no: [] });
-    return local(r);
+    return this.#typed(local(r), join(this.kindOf(value), this.kindOf(fallback)));
   }
 
+  /** A value of a known kind needs no check. */
   #boolean(x: LExpr, b: Block): LExpr {
-    this.check(b, prim("isBoolean", x), "a boolean");
+    if (this.kindOf(x) !== "boolean") this.check(b, prim("isBoolean", x), "a boolean");
     return x;
   }
 
   #number(x: LExpr, b: Block): LExpr {
-    this.check(b, prim("isNumber", x), "a number");
+    if (this.kindOf(x) !== "number") this.check(b, prim("isNumber", x), "a number");
     return x;
   }
 
@@ -367,7 +437,7 @@ class Lowerer {
     };
 
     const acc = this.locals++;
-    const n = this.locals++;
+    const n = this.typedLocal("number");
     const init = (value: LExpr): void => {
       b.stmts.push({ t: "let", n: acc, value });
     };
@@ -397,9 +467,9 @@ class Lowerer {
           body.stmts.push({ t: "set", n: acc, value: prim("+", local(acc), this.#number(v, opCheck(body))) });
           count(body);
         });
-        if (op === "sum") return this.checked(b, call("result", local(acc)), "a finite sum");
+        if (op === "sum") return this.#typed(this.checked(b, call("result", local(acc)), "a finite sum"), "number");
         nonEmpty();
-        return this.checked(b, call("result", prim("/", local(acc), local(n))), "a finite mean");
+        return this.#typed(this.checked(b, call("result", prim("/", local(acc), local(n))), "a finite mean"), "number");
       case "min":
       case "max":
         this.#loop(target, inner, at, b, items, (body, _key, v) => {
@@ -408,7 +478,7 @@ class Lowerer {
           count(body);
         });
         nonEmpty();
-        return local(acc);
+        return this.#typed(local(acc), "number");
       case "any":
       case "all":
       case "none":
@@ -416,7 +486,7 @@ class Lowerer {
         this.#loop(target, inner, at, b, items, (body, _key, v) => {
           body.stmts.push({ t: "set", n: acc, value: prim(op === "all" ? "&&" : "||", local(acc), this.#boolean(v, opCheck(body))) });
         });
-        return op === "none" ? prim("!", local(acc)) : local(acc);
+        return op === "none" ? prim("!", local(acc)) : this.#typed(local(acc), "boolean");
       case "first":
         this.#loop(target, inner, at, b, items, (body, _key, v) => {
           firstThen(body, v, () => local(acc));

@@ -379,6 +379,8 @@ describe("sheets (SHEET.*)", () => {
     // In a tree whose keys have each child before its parent: a roll-up goes up from the leaves, and a depth goes down from the root.
     const tree = space.tree({ c: { v: 1 }, b: { v: 2 }, d: { v: 4 }, a: { v: 8 } }, { c: "b", b: "a", d: "a" });
     expect(fill(new Map([["size", plus(ref("v"), app("sum", each(axes.children, cell("size"))))]]), tree)).toBe(4);
+    // The test of a where axis reads the column too, and the fill still goes up from the leaves.
+    expect(fill(new Map([["big", plus(ref("v"), app("sum", each(axes.where(axes.children, app("gt", cell("big"), lit(0))), cell("big"))))]]), tree)).toBe(4);
     expect(fill(new Map([["depth", plus(orZero(cell("depth", [parent])), lit(1))]]), tree)).toBe(4);
     expect(fill(new Map([["all", plus(ref("v"), app("sum", each(axes.descendants, cell("all"))))], ["top", plus(app("sum", each(axes.ancestors, cell("top"))), lit(1))]]), tree)).toBe(8);
     // Among siblings, a read of the sibling before, and a read of the sibling after.

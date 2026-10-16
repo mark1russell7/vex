@@ -9,7 +9,7 @@
  * inline caches in the engine, and a guard sends each other case to the dispatch of the runtime.
  */
 import { liftsAt, type ParamKind } from "@mark1russell7/vex";
-import type { Facts, SiteFacts } from "./facts.ts";
+import type { Facts, SiteFacts, StaticSite } from "./facts.ts";
 import { constant, FIXED_LOCALS, type Fail, type LExpr, type LoopProgram, type LStmt, type RuntimeFn } from "./loop.ts";
 
 type OpExpr = Extract<LExpr, { readonly t: "op" }>;
@@ -34,6 +34,8 @@ export function printJs(p: LoopProgram, facts: Facts): string {
   const constants = new Set<number>();
   const sites = new Map<string, string>();
   const domains = new Set<number>();
+  // The functions of the ops of the static sites. They read the domains, so they come after them.
+  const fns = new Map<string, string>();
   let threw = false;
   let siteLabels = 0;
   const expr = (x: LExpr): string => {
@@ -139,11 +141,16 @@ export function printJs(p: LoopProgram, facts: Facts): string {
    * the op in a `try`, and checks the result. A number that the op lifts, and each failed guard, go to the dispatch.
    */
   const siteBlock = (n: number, x: OpExpr, indent: string): boolean => {
-    const f = facts.site(p.constants[x.name] as string, x.args.length);
     const attempt = (call: string, ind: string): void => {
       threw = true;
       lines.push(`${ind}try { ${name(n)} = ${call}; } catch (e) { ${name(n)} = threw_(e); }`);
     };
+    const st = facts.staticSite(p.constants[x.name] as string, x.kinds);
+    if (st !== undefined) {
+      staticBlock(n, x, st, indent, attempt);
+      return true;
+    }
+    const f = facts.site(p.constants[x.name] as string, x.args.length);
     switch (f?.t) {
       case undefined:
         return false;
@@ -157,6 +164,41 @@ export function printJs(p: LoopProgram, facts: Facts): string {
       case "op":
         opBlock(n, x, f, indent, attempt);
         return true;
+    }
+  };
+  /**
+   * The block of a static site (KIND.STATIC). The kinds of its values decide its op, so the site uses the function of the
+   * op with no guard. A result of another kind breaks the declaration of the op. Then the program stops, and tier 1
+   * evaluates it.
+   */
+  const staticBlock = (n: number, x: OpExpr, st: StaticSite, indent: string, attempt: (call: string, ind: string) => void): void => {
+    const out = name(n);
+    const values = x.args.map(expr);
+    if (st.t === "free") {
+      const site = siteOf(x);
+      sites.set(`${site}_f`, `${site}.free`);
+      attempt(`${site}_f(${values.join(", ")})`, indent);
+      resultChecks(out, facts.checks, indent);
+      return;
+    }
+    // An argument of a kind that the op does not accept: the interpreter gives an error.
+    if (st.bad) {
+      lines.push(`${indent}${out} = F;`);
+      return;
+    }
+    const f = `f${x.name}_${st.domain}`;
+    fns.set(f, `${domain(st.domain)}.ops[${expr(constant(x.name))}].fn`);
+    attempt(`${f}(${values.join(", ")})`, indent);
+    const kind = st.returns;
+    const check = kind === undefined ? undefined : facts.checkOf(kind);
+    if (kind !== undefined) {
+      lines.push(`${indent}if (${out} !== F && typeof ${out} !== "${kind}") return F; // the kind of the result`);
+      if (kind === "number") lines.push(`${indent}if (${out} !== F && !Number.isFinite(${out})) ${out} = F;`);
+    }
+    if (kind === undefined || check === undefined) resultChecks(out, facts.checks, indent);
+    else if (facts.checks[check] === true) {
+      const d = domain(check);
+      lines.push(`${indent}if (${out} !== F) { try { if (!${d}.valid(${out})) ${out} = F; } catch (e) { ${out} = threw_(e); } }`);
     }
   };
   const opBlock = (n: number, x: OpExpr, f: Extract<SiteFacts, { readonly t: "op" }>, indent: string, attempt: (call: string, ind: string) => void): void => {
@@ -264,6 +306,7 @@ export function printJs(p: LoopProgram, facts: Facts): string {
     ...[...constants].map((i) => `const k${i} = K[${i}];`),
     ...[...sites].map(([site, init]) => `const ${site} = ${init};`),
     ...[...domains].map((i) => `const d${i} = R.domain(${i});`),
+    ...[...fns].map(([f, init]) => `const ${f} = ${init};`),
     ...(threw ? [`const threw_ = R.threw;`] : []),
     `return function vex(${params.join(", ")}) {`,
     ...(locals.length > 0 ? [`  let ${locals.join(", ")};`] : []),

@@ -239,7 +239,7 @@ The owner made these decisions on 2026-10-13:
 | C4 Iteration | `fold`, `iterate`, domain kernels, then `tree` and `layers` of ireko | Each construct passes each stage, and the layouts of ireko do not change |
 | C5 Later | Cell reads in the generated code (§7.4), other back ends, recalculation (§7.5) | A decision of the owner |
 
-A separate item: the mutation score of the test kit is 95.47 %, near the gate of 95 %. Tests for its survivors give it more margin.
+A separate item: the mutation score of the test kit was 95.47 %, near the gate of 95 %. Tests for its survivors gave it 99.5 % (2026-10-15).
 
 ## 13. Record
 
@@ -344,3 +344,26 @@ The results of the finished cells are in a map for each column, by key. Before, 
 | A fill with `tiered` | 13 to 20 ms |
 
 The sheet app and `table()` of the builder fill the table first. The remaining time is in the extension of each cell reference and in the maps. Generated code that reads the cells of a column as an array is the next step. It is an open item of phase C5.
+
+### 13.3 Phase C3: ireko
+
+#### The grid pilot
+
+`@vex/pilots` has the strategy `grid` of ireko twice: `gridArrange` copies the arithmetic of ireko, and `GRID_PROGRAM` is one Vex program that evaluates at each child. Column widths and row heights are aggregates by group (COMPILE.GROUP). The start of a column is a sum over the earlier columns, in the order of the additions of ireko. A property compares the two on random layouts. The bits are the same in the interpreter and in tier 2, with no fallback.
+
+#### The kinds
+
+A domain can declare `primitive`: the JavaScript type of its values (KIND.PRIMITIVE). An op can declare `returns`: the kind of its result (KIND.RETURNS). The law checker of the test kit checks both declarations on random values. The scalar domains declare them.
+
+`generate` takes a `schema`: the kind of each field of the records and of each variable. The lowering knows the kind of each literal, of each read of the schema, and of each result of an op with `returns`. The kinds go through `if`, `ifError`, the bindings, the list ops and the memo. When the kinds of the values of an op site decide its op, the site uses that op with no guard (KIND.STATIC). A read against the schema, or a result against `returns`, stops the program, and tier 1 evaluates it. A property compares such programs with the interpreter, also on records that break the schema.
+
+#### The size of the generated code
+
+ireko has a budget of 15 kB of minified gzip for its core, and its core uses 13.72 kB. Thus a generated strategy must fit in approximately 1.3 kB.
+
+| The source of `GRID_PROGRAM` (376 nodes) | Bytes | Gzip |
+|---|---|---|
+| Tier 2, without a schema | 156909 | 24375 |
+| Tier 2, with a schema: each op site is static | 135044 | 20539 |
+
+The source of tier 2 has approximately seven lines for each node: the checks of each read, the blocks of the memo and the bindings. The kinds remove the guards, but most lines remain. A standalone module needs another printer: one expression for each node, with the inline forms of the ops (§7.1). That printer is the next step of phase C3.

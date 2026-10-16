@@ -54,15 +54,12 @@ return function vex(l0, l1, l2, l3) {
       if (l13) {
         l12 = true;
       } else {
-        if (!((typeof k6 === "boolean"))) return F; // a boolean
         l12 = k6;
       }
-      if (!((typeof l12 === "boolean"))) return F; // a boolean
       l10 = l12;
     } else {
       l10 = false;
     }
-    if (!((typeof l10 === "boolean"))) return F; // a boolean
     if (l10) {
       l15 = l0.get(l1);
       if (!((l15 !== undefined && l15 !== null))) return F; // a record

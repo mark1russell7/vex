@@ -60,6 +60,32 @@ describe("the law checker finds a false claim (V-016)", () => {
     expect(structuralEqual({ a: { b: [1, 2] } }, { a: { b: [1, 2] } })).toBe(true);
   });
 
+  it("KIND.PRIMITIVE KIND.RETURNS: a false primitive type and a false kind of a result fail, and true ones hold", () => {
+    // The domain accepts only the integers, so it does not accept each number.
+    const Ints = defineDomain({
+      name: "Ints",
+      is: (u: unknown): u is number => Number.isInteger(u),
+      primitive: "number",
+      ops: {
+        half: { fn: (a: number): number => a / 2, returns: "domain" },
+        twice: { fn: (a: number): number => a * 2, returns: "domain" },
+        name: { fn: (a: number): string => String(a), returns: "number" },
+        same: { fn: (_a: number, b: unknown): unknown => b, params: ["any"], returns: "any" },
+        none: { fn: (): undefined => undefined, returns: "boolean" },
+        boom: { fn: (): never => {
+          throw new Error("boom");
+        }, returns: "string" },
+        flag: { fn: (a: number, b: boolean, c: string): boolean => b && c.length > a, params: ["boolean", "string"], returns: "boolean" },
+        // Without params, each argument is a value of the domain.
+        plus: { fn: (a: number, b: number): number => a + b, returns: "domain" },
+        scale: { fn: (a: number, k: number): number => a * k, params: ["number"], returns: "number" },
+      },
+    });
+    const results = checkLaws(Ints, { arb: fc.integer({ min: -9, max: 9 }), numRuns: 100 });
+    expect(results.filter((r) => !r.ok).map((r) => r.name)).toEqual(["Ints primitive number", "Ints.half returns domain", "Ints.name returns number"]);
+    expect(results.map((r) => r.name)).toEqual(expect.arrayContaining(["Ints.flag returns boolean", "Ints.plus returns domain", "Ints.scale returns number"]));
+  });
+
   it("a law of an op that the values do not have fails", () => {
     const NoMethod = defineDomain({ name: "NoMethod", is: (u: unknown): u is number => typeof u === "number", ops: { join: { laws: ["commutative"] } } });
     const [result] = checkLaws(NoMethod, { arb: fc.integer(), numRuns: 5 });

@@ -145,7 +145,8 @@ export const MoneyDomain: Domain<"Money", Money, OpTable<Money, "add" | "times",
 |---|---|
 | `name` | The name of the domain |
 | `is` | The runtime test for the values. It must not accept a value of another kind. |
-| `ops` | The ops. Each op can declare `laws`, `identity`, `liftScalar`, `params` and `fn`. |
+| `ops` | The ops. Each op can declare `laws`, `identity`, `liftScalar`, `params`, `returns` and `fn`. |
+| `primitive` | `"number"`, `"string"` or `"boolean"`, if `is` accepts each value of that type and no other value |
 | `methods` | With `"all"`, each method of a value is an op. The default is `"declared"`. |
 | `fromScalar` | The lift from a number to a value |
 | `valid` | A check of the values that ops give. A value that fails it gives `#NUM!`. |

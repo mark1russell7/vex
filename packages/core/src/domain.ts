@@ -24,7 +24,15 @@ export interface OpSpec<D = never> {
   readonly liftScalar?: boolean | readonly boolean[];
   /** The kinds of the parameters after the receiver. When set, the interpreter checks the arguments. */
   readonly params?: readonly ParamKind[];
+  /**
+   * The kind of the result: `domain` for a value of this domain. A compiler reads it to know the kinds of the values
+   * of a program (KIND.RETURNS). The interpreter does not check it, and the law checker of the test kit does.
+   */
+  readonly returns?: ParamKind;
 }
+
+/** A JavaScript type of primitive values that a domain can accept. */
+export type PrimitiveKind = "number" | "string" | "boolean";
 
 /** The type of an op that lifts number arguments. Use it to type the ops of a domain under `isolatedDeclarations`. */
 export type LiftedOp<D> = OpSpec<D> & { readonly liftScalar: true };
@@ -46,6 +54,11 @@ export interface DomainSpec<Name extends string, D, Ops extends Readonly<Record<
   readonly name: Name;
   /** The runtime test for the values of the domain. It must not give false positives. */
   readonly is: (u: unknown) => u is D;
+  /**
+   * The JavaScript type of the values of the domain, if `is` accepts each value of that type and no other value
+   * (KIND.PRIMITIVE). A compiler then finds the op of such a value before a run.
+   */
+  readonly primitive?: PrimitiveKind;
   /** The ops of the domain, with their metadata. */
   readonly ops: Ops;
   /** With `"all"`, each method of a value is an op, also without an entry in `ops`. The default is `"declared"`. */

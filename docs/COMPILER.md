@@ -233,6 +233,12 @@ A kernel is a domain whose values are data structures. Two examples are the band
 
 The first kernels are the bands of ireko for `tree`, and a sweep over boxes for the check `OVERLAP`.
 
+The kinds of domains are done (KIND.DOMAIN): a module holds the values of a kernel, also through a fold. Three needs of the kernels are decisions of the owner:
+
+- **Functions.** Vex has no functions, so the test of a radius of `radial` is in the program four times. Its module is 2.6 kB, and the code of ireko is 1.1 kB.
+- **Lists as values.** A test of a radius needs the angle of each child. Without a list, a fold over the pairs computes each angle again for each pair. The sweep of `OVERLAP` also needs all the boxes as one value.
+- **The reverse order.** The strategy `tree` packs the row from the last child to the first, too. An axis of Vex has one order, so that packing is not a fold.
+
 ## 9. Packages
 
 - `@mark1russell7/vex-compiler` is a new published package. It has the analysis, the lowering, the back end of JavaScript source, the tiers, and `emitModule` for builds. The core stays small, because a page that does not compile does not load the compiler.

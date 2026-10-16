@@ -174,6 +174,7 @@ A sheet has named columns of formulas over a space. A cell is one column at one 
 - **[SHEET.CYCLE]** Each cell on a cycle of cell references gives `#CYCLE!`. A cycle can contain one cell, or cells at different keys.
 - **[SHEET.DEEP]** A run evaluates a chain of cell references of any length. The length does not depend on the call stack of the engine, and the results are the results of a recursive search.
 - **[SHEET.ORDER]** The result of a cell does not depend on the order of the evaluations. `ifError` does not hide a cycle from the cells on that cycle.
+- **[SHEET.COMPILE]** A run with the option `compile` evaluates each formula of a column with a compiled program. It gives the results of a run without the option. A formula compiles once for each compiler and its options, also across runs. A compiled program reads the cells of the run that evaluates it.
 
 ## 10. The compiler
 

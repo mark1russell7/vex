@@ -13,7 +13,8 @@
     "!work/*/index.ts",
     "!work/testkit/fc-setup.ts",
     "!work/testkit/arbitraries.ts",
-    "!work/testkit/builder-model-arbitraries.ts"
+    "!work/testkit/builder-model-arbitraries.ts",
+    "!work/testkit/sheet-arbitraries.ts"
   ],
   "coverageAnalysis": "perTest",
   "disableTypeChecks": false,

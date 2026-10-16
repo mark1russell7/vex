@@ -3,7 +3,7 @@
  * evaluates the cells with a `SheetRun`. Thus a cycle of formula columns gives `#CYCLE!`, and the other cells stay
  * correct. The engine takes the compiler as an argument, so the app depends only on the contract of the compiler.
  */
-import { fail, lit, ok, SheetRun, space, vexError, type AnyDomain, type Expr, type Result, type Trace } from "@mark1russell7/vex";
+import { fail, lit, ok, SheetRun, space, vexError, type AnyDomain, type Expr, type Result, type SheetOptions, type Trace } from "@mark1russell7/vex";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import { activeOf, bookOf, type Book } from "./book.ts";
 import type { Column, SheetDoc } from "./doc.ts";
@@ -104,6 +104,11 @@ export interface FunctionInfo {
  */
 export interface Compiler {
   readonly domains?: readonly AnyDomain[];
+  /**
+   * The compiler of the IR into a program, for example `tiered` of `@mark1russell7/vex-compiler` (SHEET.COMPILE). Without
+   * it, the interpreter evaluates each formula.
+   */
+  readonly compileProgram?: SheetOptions["compile"];
   readonly compile: (text: string, ctx: FormulaContext) => CompileResult;
   readonly toVexChain: (expr: Expr) => string;
   readonly highlight?: (text: string) => readonly FormulaPiece[];
@@ -151,6 +156,36 @@ interface Prepared {
   readonly cells: ReadonlyMap<string, ReadonlyMap<string, Expr>>;
 }
 
+/** The most compile results that the cache of a compiler keeps. A full cache starts again empty. */
+const CACHE_LIMIT = 2000;
+
+/**
+ * The compile results of each compiler, by the text of the formula and its context. A formula that does not change
+ * keeps its IR object across evaluations, so a run can use its compiled program again (SHEET.COMPILE).
+ */
+const RESULTS = new WeakMap<Compiler, Map<string, CompileResult>>();
+
+/** This function gives the text of a context, for the key of a compile result. */
+const contextText = (ctx: FormulaContext): string =>
+  JSON.stringify(ctx, (_k, x: unknown) => (x instanceof Map ? [...(x as ReadonlyMap<unknown, unknown>)] : x));
+
+/** This function compiles a formula, or it gives the result of an earlier compile of the same text in the same context. */
+function compileCached(compiler: Compiler, text: string, ctx: FormulaContext, ctxText: string): CompileResult {
+  let results = RESULTS.get(compiler);
+  if (results === undefined) {
+    results = new Map();
+    RESULTS.set(compiler, results);
+  }
+  const key = `${ctxText}\u0000${text}`;
+  let result = results.get(key);
+  if (result === undefined) {
+    result = compiler.compile(text, ctx);
+    if (results.size >= CACHE_LIMIT) results.clear();
+    results.set(key, result);
+  }
+  return result;
+}
+
 /** This function makes the space of a table and compiles its formulas. `tables` are the tables of the book. */
 function prepare(doc: SheetDoc, compiler: Compiler, tables: ReadonlyMap<string, TableContext>): Prepared {
   const valueCols = doc.columns.filter((c): c is Extract<Column, { kind: "value" }> => c.kind === "value");
@@ -176,7 +211,8 @@ function prepare(doc: SheetDoc, compiler: Compiler, tables: ReadonlyMap<string, 
     tables,
     ...(grid === undefined ? {} : { grid }),
   };
-  const compiled = new Map<string, CompileResult>(formulaCols.map((c) => [c.id, compiler.compile(c.formula, ctx)]));
+  const ctxText = contextText(ctx);
+  const compiled = new Map<string, CompileResult>(formulaCols.map((c) => [c.id, compileCached(compiler, c.formula, ctx, ctxText)]));
   const programs = new Map<string, Expr>();
   for (const c of formulaCols) {
     const r = compiled.get(c.id);
@@ -190,7 +226,7 @@ function prepare(doc: SheetDoc, compiler: Compiler, tables: ReadonlyMap<string, 
       const text = r.formulas?.[c.id];
       if (text === undefined) continue;
       // In a grid, a text that does not start with "=" is a value, not a formula.
-      const result: CompileResult = grid !== undefined && !text.trimStart().startsWith("=") ? { ok: true, expr: lit(gridLiteral(text).value), reads: [] } : compiler.compile(text, ctx);
+      const result: CompileResult = grid !== undefined && !text.trimStart().startsWith("=") ? { ok: true, expr: lit(gridLiteral(text).value), reads: [] } : compileCached(compiler, text, ctx, ctxText);
       own.set(`${r.id}\u0000${c.id}`, result);
       if (result.ok) cells.set(c.name, new Map([...(cells.get(c.name) ?? []), [r.id, result.expr]]));
     }
@@ -219,7 +255,14 @@ export function evaluateBook(book: Book, compiler: Compiler): Evaluation {
       return i === book.active || !first || p === undefined ? [] : [[t.title, { space: p.space, columns: p.programs, cells: p.cells }] as const];
     }),
   );
-  const run = new SheetRun(programs, { space: sp, domains: compiler.domains ?? DOMAINS, cells, name: doc.title, tables: others });
+  const run = new SheetRun(programs, {
+    space: sp,
+    domains: compiler.domains ?? DOMAINS,
+    cells,
+    name: doc.title,
+    tables: others,
+    ...(compiler.compileProgram === undefined ? {} : { compile: compiler.compileProgram }),
+  });
   const byId = new Map(doc.columns.map((c) => [c.id, c]));
   const cache = new Map<string, Result<unknown> | undefined>();
 

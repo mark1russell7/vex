@@ -10,7 +10,7 @@
  * spreadsheet has the same thing: a cell with a formula that is different from the other formulas of its column.
  */
 import { vexError } from "./errors.ts";
-import { evaluate, explain, nestingOf, type EvalOptions, type ExtHandler } from "./evaluate.ts";
+import { evaluate, explain, nestingOf, type CompileOptions, type EvalOptions, type ExtHandler, type Program } from "./evaluate.ts";
 import { ext, isMove, type Addr, type Expr } from "./ir.ts";
 import { fail, type Result } from "./result.ts";
 import { resolveAddr, type Space } from "./space.ts";
@@ -53,7 +53,25 @@ export type SheetOptions = Omit<EvalOptions, "origin" | "trace" | "tables"> & {
   readonly name?: string;
   /** The other tables, by name (SHEET.TABLES). A cell reference reads the table of the space where it evaluates. */
   readonly tables?: ReadonlyMap<string, SheetTable>;
+  /**
+   * The compiler of the formulas of the columns (SHEET.COMPILE), for example `tiered` of `@mark1russell7/vex-compiler`.
+   * Without a compiler, the interpreter evaluates each formula. The compiled program must give the results of the
+   * interpreter.
+   */
+  readonly compile?: CompileFn;
 };
+
+/** A compiler of the formulas of the columns of a run. */
+export type CompileFn = (expr: Expr, options: CompileOptions) => Program;
+
+/**
+ * The compiled programs of the formulas of the columns: one entry for each formula, for the last compiler and options.
+ * A compiled program reads the cells of the active run, so each run with the same compiler and options can use it.
+ */
+const PROGRAMS = new WeakMap<Expr, { readonly compile: CompileFn; readonly domains: unknown; readonly fns: unknown; readonly extensions: unknown; readonly program: Program }>();
+
+/** The key of the options without extensions, for the extensions of the compiled programs. */
+const NO_EXTENSIONS = {};
 
 /** The state of one table in a run. */
 interface Table {
@@ -137,10 +155,18 @@ export class SheetRun {
   #used = 0;
   readonly #cost = new Map<Expr, number>();
   readonly #budget: number;
+  readonly #compile: CompileFn | undefined;
+  readonly #compileOptions: CompileOptions;
+  // The run that evaluates a formula with a compiled program. Each run is synchronous, so a run inside the evaluation
+  // of another run gives the active run back when it ends.
+  static #active: SheetRun | undefined;
+  // The extensions of the compiled programs, for each object of extensions of the options. Their cell handler reads
+  // the cells of the active run, so a compiled program does not depend on one run.
+  static readonly #shared = new WeakMap<object, Readonly<Record<string, ExtHandler>>>();
 
   /** `budget` is the budget of the stack in estimated frames. A test can make it small, so the run pauses often. */
   constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, budget: number = STACK_BUDGET) {
-    const { cells, name, tables, space, ...rest } = opts;
+    const { cells, name, tables, space, compile, ...rest } = opts;
     this.#main = { where: "the sheet", tag: "0", space, columns, cells: cells ?? new Map(), warmed: new Map(), index: undefined };
     this.#bySpace.set(space, this.#main);
     if (name !== undefined) this.#byName.set(name, this.#main);
@@ -157,9 +183,23 @@ export class SheetRun {
     // Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields
     this.#top = { id: "", table: this.#main, column: "", key: "", index: -1, low: -1, reread: false, result: cycleError("", ""), paused: false, need: undefined };
     this.#budget = budget;
+    this.#compile = compile;
     const spaces = Object.fromEntries([...this.#byName].map(([n, t]) => [n, t.space]));
     this.#opts = { ...rest, tables: spaces, extensions: { ...rest.extensions, [CELL_KIND]: this.#handler } };
+    const outer = rest.extensions ?? NO_EXTENSIONS;
+    let shared = SheetRun.#shared.get(outer);
+    if (shared === undefined) {
+      shared = { ...rest.extensions, [CELL_KIND]: SheetRun.#cellOfActive };
+      SheetRun.#shared.set(outer, shared);
+    }
+    this.#compileOptions = { ...this.#opts, extensions: shared };
   }
+
+  /** The cell handler of the compiled programs: it reads the cells of the active run. */
+  static readonly #cellOfActive: ExtHandler = (data, ctx) => {
+    const run = SheetRun.#active;
+    return run === undefined ? fail(vexError("unbound", "a compiled formula reads cells only in the evaluation of a sheet run", { path: ctx.path })) : run.#handler(data, ctx);
+  };
 
   /** This method gives the program of a cell: its own formula, or the formula of its column (SHEET.CELL.FORMULA). */
   #programOf(t: Table, column: string, key: string): Expr | undefined {
@@ -241,10 +281,35 @@ export class SheetRun {
     visit.need = undefined;
     this.#top = visit;
     this.#used += cost;
-    const result = evaluate(program, { ...this.#opts, space: visit.table.space, origin: visit.key });
+    const options = { ...this.#opts, space: visit.table.space, origin: visit.key };
+    const compiled = this.#compiled(visit, program);
+    let result: Result<unknown>;
+    if (compiled === undefined) result = evaluate(program, options);
+    else {
+      const active = SheetRun.#active;
+      SheetRun.#active = this;
+      result = compiled.run(options);
+      SheetRun.#active = active;
+    }
     this.#used -= cost;
     this.#top = caller;
     if (!visit.paused) visit.result = result;
+  }
+
+  /**
+   * This method gives the compiled program of the formula of a column, or `undefined` for the interpreter. A formula
+   * compiles once for each compiler and options, also across runs.
+   */
+  #compiled(visit: Visit, program: Expr): Program | undefined {
+    const compile = this.#compile;
+    // The formula of a cell evaluates once in a run, so the run compiles only the formulas of the columns.
+    if (compile === undefined || visit.table.columns.get(visit.column) !== program) return undefined;
+    const { domains, fns, extensions } = this.#compileOptions;
+    const hit = PROGRAMS.get(program);
+    if (hit !== undefined && hit.compile === compile && hit.domains === domains && hit.fns === fns && hit.extensions === extensions) return hit.program;
+    const compiled = compile(program, this.#compileOptions);
+    PROGRAMS.set(program, { compile, domains, fns, extensions, program: compiled });
+    return compiled;
   }
 
   /** This method ends a cell whose evaluation did not pause: it finishes its component, or it gives its low to the caller. */

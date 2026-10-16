@@ -1,10 +1,12 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
+import { vexError } from "./errors.ts";
+import { compile, type CompileOptions, type Program } from "./evaluate.ts";
 import { app, axes, each, let_, lit, offset, other, ref, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
-import type { Result } from "./result.ts";
-import { cell, SheetRun } from "./sheet.ts";
+import { fail, type Result } from "./result.ts";
+import { cell, SheetRun, type SheetOptions } from "./sheet.ts";
 import { space } from "./space.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
 
@@ -262,5 +264,84 @@ describe("sheets (SHEET.*)", () => {
     expect(value(trace.result)).toEqual(new Pt(8, 10));
     expect(trace.events.filter((e) => e.tag === "ext")).toHaveLength(2);
     expect(s.explain("A", "corner").result.ok).toBe(true);
+  });
+
+  it("SHEET.COMPILE: a formula of a column compiles once for each compiler and options, and it gives the results of the interpreter", () => {
+    const rows = space.array([{ v: 1 }, { v: 2 }, { v: 3 }]);
+    const extra = space.array([{ v: 10 }, { v: 20 }]);
+    const total = app("plus", app("ifError", cell("total", [offset(-1)]), lit(0)), ref("v"));
+    const columns = new Map<string, Expr>([
+      ["total", total],
+      ["loop", cell("loop")],
+      ["other", app("sum", each(axes.table("extra"), cell("w")))],
+      ["fixed", app("plus", cell("total", [{ t: "key", key: "2" }]), v("bonus"))],
+    ]);
+    const cells = new Map([["total", new Map([["1", lit(100)]])]]);
+    const tables = new Map([["extra", { space: extra, columns: new Map([["w", app("plus", ref("v"), cell("w", [offset(-1)]))]]), cells: new Map([["w", new Map([["0", ref("v")]])]]) }]]);
+    const formulas = new Set([...columns.values(), tables.get("extra")?.columns.get("w")]);
+    const compiled: Expr[] = [];
+    const seen: CompileOptions[] = [];
+    const kept: Program[] = [];
+    let runs = 0;
+    // A new compiler for each call, so each test starts without programs in the cache.
+    const counting = (): ((expr: Expr, options: CompileOptions) => Program) => (expr, options) => {
+      compiled.push(expr);
+      seen.push(options);
+      const program = compile(expr, options);
+      kept.push(program);
+      return { ...program, run: (r) => (runs++, program.run(r)) };
+    };
+    const opts = { space: rows, domains: [Num], cells, tables, vars: { bonus: 5 } };
+    const reads = [["fixed", "0"], ["total", "2"], ["total", "0"], ["loop", "1"], ["other", "0"], ["w", "1", "extra"], ["none", "0"]] as const;
+    for (const budget of [undefined, 1]) {
+      compiled.length = 0;
+      const plain = new SheetRun(columns, opts, budget);
+      const compileFn = counting();
+      const fast = new SheetRun(columns, { ...opts, compile: compileFn }, budget);
+      for (const [c, k, t] of reads) expect(fast.cell(c, k, t)).toEqual(plain.cell(c, k, t));
+      // Each formula of a column once, and the formulas of the cells never: they evaluate once in a run.
+      expect(compiled).toHaveLength(formulas.size);
+      expect(new Set(compiled)).toEqual(formulas);
+      // Another run with the same compiler and options compiles nothing, and it gives the same results.
+      compiled.length = 0;
+      const again = new SheetRun(columns, { ...opts, compile: compileFn }, budget);
+      for (const [c, k, t] of reads) expect(again.cell(c, k, t)).toEqual(plain.cell(c, k, t));
+      expect(compiled).toEqual([]);
+    }
+    // Another compiler, or other options, compile the formula again. The cache keeps the last options of a formula.
+    const compileFn = counting();
+    const ext = {};
+    const steps: [SheetOptions, boolean][] = [
+      [{ ...opts, compile: compileFn }, true],
+      [{ ...opts, compile: compileFn }, false],
+      [{ ...opts, compile: counting() }, true],
+      [{ ...opts, compile: compileFn }, true],
+      [{ ...opts, domains: [Num], compile: compileFn }, true],
+      [{ ...opts, compile: compileFn }, true],
+      [{ ...opts, fns: {}, compile: compileFn }, true],
+      [{ ...opts, compile: compileFn }, true],
+      [{ ...opts, extensions: ext, compile: compileFn }, true],
+      [{ ...opts, extensions: ext, compile: compileFn }, false],
+      [{ ...opts, compile: compileFn }, true],
+    ];
+    for (const [options, compiles] of steps) {
+      compiled.length = 0;
+      expect(error(new SheetRun(columns, options).cell("loop", "0")).code).toBe("#CYCLE!");
+      expect(compiled).toEqual(compiles ? [columns.get("loop")] : []);
+    }
+    // The compiled programs give the results: the run does not evaluate the formulas of the columns again.
+    runs = 0;
+    const once = new SheetRun(columns, { ...opts, compile: counting() });
+    expect(value(once.cell("fixed", "0"))).toBe(108);
+    // fixed at 0 and total at 2. The cell total at 1 has its own formula, so the interpreter evaluates it.
+    expect(runs).toBe(2);
+    // The compiler gets the domains, the variables and the extension of the cell references.
+    expect(seen[0]?.domains).toEqual([Num]);
+    expect(Object.keys(seen[0]?.extensions ?? {})).toEqual(["vex.cell"]);
+    // A compiled program reads the cells of the active run. Outside a run, a cell reference gives an error.
+    const outside = error(kept.find((p) => p.expr === columns.get("loop"))?.run({ space: rows, origin: "2" }) ?? fail(vexError("threw", "no program")));
+    expect([outside.code, outside.message]).toEqual(["#NAME?", "a compiled formula reads cells only in the evaluation of a sheet run"]);
+    // The trace of a cell still comes from the interpreter.
+    expect(new SheetRun(columns, { ...opts, compile: counting() }).explain("total", "2").events.some((e) => e.tag === "ext")).toBe(true);
   });
 });

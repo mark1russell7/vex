@@ -2,7 +2,7 @@ import { app, cell, each, offset, ref, axes, lit, type Expr } from "@mark1russel
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { bookOf } from "./book.ts";
-import { addRow, emptyDoc, setCell, type SheetDoc } from "./doc.ts";
+import { addRow, emptyDoc, setCell, setCellFormula, updateColumn, type SheetDoc } from "./doc.ts";
 import { evaluateDoc, type Compiler } from "./engine.ts";
 import { exportCsv, importCsv, importJson, exportJson, parseCsv, toCsv, encodeShare, decodeShare } from "./io.ts";
 import { commit, historyOf, redo, undo } from "./history.ts";
@@ -89,6 +89,37 @@ describe("the engine", () => {
       return r?.ok === false ? r.error.code : r?.value;
     };
     expect([code("c5"), code("c6"), code("c7")]).toEqual(["#CYCLE!", "#CYCLE!", 2400]);
+  });
+
+  it("SHEET.COMPILE: a formula keeps its IR across evaluations while its text and its context stay the same", () => {
+    let compiles = 0;
+    const counting: Compiler = { ...json, compile: (text, ctx) => (compiles++, json.compile(text, ctx)) };
+    const d = doc();
+    const first = evaluateDoc(d, counting);
+    expect(compiles).toBe(2);
+    // A new value of a number cell changes no formula and no context.
+    const second = evaluateDoc(setCell(d, "r2", "c2", "1300"), counting);
+    expect(compiles).toBe(2);
+    expect(second.compiled.get("c3")).toBe(first.compiled.get("c3"));
+    // A new name of a column changes the context, so each formula compiles again.
+    evaluateDoc(updateColumn(d, "c2", { name: "Price" }), counting);
+    expect(compiles).toBe(4);
+    // A new formula compiles, and the other formula keeps its result.
+    evaluateDoc(updateColumn(d, "c3", { formula: JSON.stringify(lit(1)) }), counting);
+    expect(compiles).toBe(5);
+    // The cache of a compiler keeps 2000 results at most. Then it starts again empty.
+    let big = d;
+    for (let i = 0; i < 1000; i++) {
+      const added = addRow(big);
+      big = setCellFormula(setCellFormula(added.doc, added.id, "c3", JSON.stringify(lit(i))), added.id, "c4", JSON.stringify(lit(-i - 1)));
+    }
+    // A new compiler object has a new cache.
+    const fresh: Compiler = { ...counting };
+    compiles = 0;
+    evaluateDoc(big, fresh);
+    expect(compiles).toBe(2002);
+    evaluateDoc(big, fresh);
+    expect(compiles).toBeGreaterThan(2002);
   });
 });
 

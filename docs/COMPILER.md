@@ -232,7 +232,7 @@ The owner made these decisions on 2026-10-13:
 | Phase | Deliverables | Done when |
 |---|---|---|
 | C1 The compiler | The package, the loop IR, the back end of JavaScript source, `tiered`, the checks and the fallback, P17, golden files, the speed gate | Done on 2026-10-13 (§13). P17 passes, and the speed lane is 2.3 and 1.6 times the loops. |
-| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), the memo of work that does not depend on the origin (COMPILE.MEMO), aggregates by group (COMPILE.GROUP), sheets with fixed addresses | The speed lane is within 1.2 times the loops. A run at each key costs O(n) for work that does not depend on the origin, and O(n times the groups) for an aggregate by group. These are done (§13.2). The sheets are open. |
+| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), the memo of work that does not depend on the origin (COMPILE.MEMO), aggregates by group (COMPILE.GROUP), sheets with fixed addresses | The speed lane is within 1.2 times the loops. A run at each key costs O(n) for work that does not depend on the origin, and O(n times the groups) for an aggregate by group. These are done (§13.2), also the compiled formulas of a sheet run. The static order of the cells of a sheet is open. |
 | C3 ireko | The kinds (§3.2) and `returns` on the ops of the built-in domains, `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
 | C4 Iteration | `fold`, `iterate`, domain kernels, then `tree` and `layers` of ireko | Each construct passes each stage, and the layouts of ireko do not change |
 | C5 Later | Inline forms (§7.1), other back ends, recalculation (§7.5) | A decision of the owner |
@@ -313,6 +313,14 @@ The program evaluates the keys where the node is. Inside the node, the value of 
 The memo keeps no entry whose keys hold an object or a function. Each run can make a new object, so such entries only fill the memo. The keys 0 and -0 have different entries, because an op can tell them apart.
 
 The plan had a different solution: one pass for all groups. That needs an `eq` op with the equality of JavaScript, and a domain does not declare this. The keys of the memo need no such declaration.
+
+#### Sheets: compiled formulas in a run
+
+A `SheetRun` takes the option `compile`, for example `tiered` (SHEET.COMPILE). The run then evaluates each formula of a column with its compiled program. A cell reference stays an extension, so the search of the run does not change. After an error of a cell reference, for example `#CYCLE!`, tier 1 evaluates the formula again. The run gives the result of tier 1.
+
+A formula compiles once for each compiler and its options, also across runs. A compiled program reads the cells of the active run, so it does not depend on one run. The formula of a single cell evaluates once in a run, so the run does not compile it.
+
+The sheet app keeps the IR of each formula while its text and its context stay the same. Thus a change of a value compiles no formula again. With the compiler, the examples of the app take approximately 0.8 times the time of the interpreter. A property compares a run with `tiered` and the recursive reference, with each budget of the stack.
 
 #### The open items of the phase
 

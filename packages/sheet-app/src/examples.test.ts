@@ -1,3 +1,5 @@
+import type { CompileOptions, Expr } from "@mark1russell7/vex";
+import { tiered, type TieredProgram } from "@mark1russell7/vex-compiler";
 import { compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, toVexChain } from "@vex/formula";
 import { describe, expect, it } from "vitest";
 import { setCellFormula, type SheetDoc } from "./doc.ts";
@@ -31,6 +33,30 @@ describe("the examples with the formula language", () => {
         expect({ id: ex.id, table: table.title, errors: ev.errors }).toEqual({ id: ex.id, table: table.title, errors: 0 });
       });
     }
+  });
+
+  it("SHEET.COMPILE: with the compiler of the IR, each cell of each table of each example has the same result", () => {
+    const programs: TieredProgram[] = [];
+    const compileProgram = (e: Expr, o: CompileOptions): TieredProgram => {
+      const p = tiered(e, o);
+      programs.push(p);
+      return p;
+    };
+    const fast: Compiler = { ...compiler, compileProgram };
+    for (const ex of EXAMPLES) {
+      const book = exampleBook(ex);
+      book.tables.forEach((table, i) => {
+        const shown = showTable(book, i);
+        const slow = evaluateBook(shown, compiler);
+        const quick = evaluateBook(shown, fast);
+        for (const r of table.rows) for (const c of table.columns) expect({ id: ex.id, row: r.id, column: c.name, result: quick.cell(r.id, c.id) }).toEqual({ id: ex.id, row: r.id, column: c.name, result: slow.cell(r.id, c.id) });
+      });
+    }
+    // Most formulas of the examples have generated code, and tier 2 gives most results.
+    const runs = programs.reduce((n, p) => n + p.stats.runs, 0);
+    const fallbacks = programs.reduce((n, p) => n + p.stats.fallbacks, 0);
+    expect(programs.filter((p) => p.tier === 2).length / programs.length).toBeGreaterThan(0.8);
+    expect(1 - fallbacks / runs).toBeGreaterThan(0.8);
   });
 
   it("gives the roll-ups of the budget, the ranks of the grades, the loan balance and the far corners", () => {

@@ -122,7 +122,7 @@ A use case is a real program from a real domain. Each use case gives three thing
 
 ## 9. The status
 
-*Updated: 2026-10-12.*
+*Updated: 2026-10-16.*
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -131,7 +131,7 @@ A use case is a real program from a real domain. Each use case gives three thing
 | C | Done, except the screenshot comparison | The browser tests run in Chromium, Firefox and WebKit. The speed gate checks the ratio of Vex to hand-written loops. The screenshot comparison needs reference images from Linux, so it waits. |
 | D | Started | The weekly workflow runs one million runs of each property. The phase ends after four weeks without a new defect. |
 
-The defects that the plan found: V-043 (a move before an axis), V-044 (`toJSON` in `serialize`), V-045 (the key `$vex`), V-046 (`-0` in JSON), V-047 (the types of a lifted number) V-048 (a deep recurrence in `SheetRun` gave a wrong number), V-049 (an empty `reduce` of vectors gave the number 0) and V-050 (`ifError` hid a full call stack). The use cases also closed gaps. A list chain has `keys()`, `errors()`, `result`, `at` and `explain`, and a chain has `if()`. A tree has an offset. The domains have `TextDomain` and the WCAG ops of `ColorDomain`. The formula language has `&` for numbers and `VEC`.
+The defects that the plan found: V-043 (a move before an axis), V-044 (`toJSON` in `serialize`), V-045 (the key `$vex`), V-046 (`-0` in JSON), V-047 (the types of a lifted number) V-048 (a deep recurrence in `SheetRun` gave a wrong number), V-049 (an empty `reduce` of vectors gave the number 0), V-050 (`ifError` hid a full call stack) and V-051 (the memo of the compiler did not see the address of the axis `all`). The use cases also closed gaps. A list chain has `keys()`, `errors()`, `result`, `at` and `explain`, and a chain has `if()`. A tree has an offset. The domains have `TextDomain` and the WCAG ops of `ColorDomain`. The formula language has `&` for numbers and `VEC`.
 
 The decisions that the owner made:
 

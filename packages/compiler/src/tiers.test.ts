@@ -1,4 +1,4 @@
-import { evaluate, isVexList, type Axis, type Expr, type FreeFn, type Space } from "@mark1russell7/vex";
+import { evaluate, isVexList, space, type Addr, type Axis, type Expr, type FreeFn, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, modelChain, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -65,9 +65,11 @@ const arbListProgram: fc.Arbitrary<Expr> = fc
     fc.option(fc.oneof(fc.constant<Expr>({ tag: "ref", path: ["b"] }), arbExpr({ ...OPTS, maxDepth: 2 })), { nil: undefined }),
     fc.constantFrom<readonly Expr[]>([], [{ tag: "lit", value: { strict: true } }], [{ tag: "lit", value: "add" }], [{ tag: "lit", value: "max" }, { tag: "lit", value: null }]),
     fc.boolean(),
+    // An address: an offset and an index can fail at some keys (V-051).
+    fc.constantFrom<Addr | undefined>(undefined, undefined, [{ t: "offset", d: [1] }], [{ t: "index", i: 1 }], [{ t: "origin" }]),
   )
-  .map(([op, axis, body, test, rest, bind]): Expr => {
-    const each: Expr = { tag: "each", axis: test === undefined ? axis : { t: "where", axis, test }, body };
+  .map(([op, axis, body, test, rest, bind, at]): Expr => {
+    const each: Expr = { tag: "each", axis: test === undefined ? axis : { t: "where", axis, test }, body, ...(at === undefined ? {} : { at }) };
     const list: Expr = bind ? { tag: "let", bind: { a: { tag: "ref", path: ["n"] } }, body: each } : each;
     return { tag: "app", op, args: [list, ...rest] };
   });
@@ -157,6 +159,16 @@ describe("the tiers", () => {
     );
     // Some programs have static sites.
     expect(direct).toBeGreaterThan(20);
+  });
+
+  it("COMPILE.MEMO V-051: the axis all with an address that fails at some keys gives the error at those keys", () => {
+    // V-051: the memo took the list op as a value of the space, so tier 2 gave the value of the first key at each key.
+    const s = space.array([{ n: 1 }, { n: 2 }, { n: 3 }]);
+    for (const at of [[{ t: "offset", d: [1] }], [{ t: "offset", d: [-1] }], [{ t: "index", i: 1 }]] as const satisfies readonly Addr[]) {
+      const e: Expr = { tag: "app", op: "count", args: [{ tag: "each", axis: { t: "all" }, body: { tag: "ref", path: ["n"] }, at }] };
+      const p = tiered(e, { domains: DOMAINS });
+      for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: DOMAINS, space: s, origin: k })));
+    }
   });
 
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {

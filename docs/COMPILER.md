@@ -375,12 +375,12 @@ The source of tier 2 has approximately seven lines for each node: the checks of 
 - A binding is a variable, and a list op is a `for` loop with a running value.
 - An error of Vex is a thrown sentinel. A binding, `ifError` and an item of a list op catch it, as in the interpreter. A key with an error gives `VEX_ERROR`.
 - Each op is the text of the function of its domain. Thus the module has the bits of the interpreter. The printer gives samples of their kinds to each function and to its copy. A function that reads a name outside itself, for example `concat` of `TextDomain`, gives a reason, not code.
-- An op whose function is one expression of operators and of `Math` is inline, with no call.
+- An op whose function is one expression of operators, numbers, its parameters and the functions of `Math` is inline, with no call. An assignment, a call of a value and a quote stop the inline form.
 - A part that depends on no key of the space is a constant of the run. It evaluates once, before the loop over the keys.
 - A node of the memo with a loop of its own is one function of its keys. Two nodes with the same expression share the function.
 - A node whose key is only in one test of a list op keeps its items. One pass gives the items, and each lookup uses them. With the test `===`, the lookup is a map of the groups. With `<` and values that do not decrease, the lookup is a binary search on the prefixes.
 
-The printer takes a part of the language. It takes an array space, the fields and the variables of the schema, and the axes `all`, `others` and `window`. Each op site must have a static op. Another construct gives a reason. A property compares random programs with the interpreter, and the grid pilot compares the module with the code of ireko.
+The printer takes a part of the language. It takes an array space, the fields and the variables of the schema, and the axes `all`, `others` and `window`. Each op site must have a static op. Another construct gives a reason. A property compares random programs with the interpreter, and the grid pilot compares the module with the code of ireko. The golden files `__golden__/module-*.js` keep the text of some modules, so a change of the text shows in review.
 
 | The strategy `grid` | Bytes | Gzip |
 |---|---|---|

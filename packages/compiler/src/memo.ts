@@ -76,8 +76,9 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
     }
     case "each": {
       const { base, tests } = parts(e.axis);
-      // The targets of `all` do not depend on the focus. Each other axis starts at its address.
-      const targets = base.t === "table" ? OPAQUE : base.t === "all" ? 0 : addressReads(e.at, top);
+      // The targets of `all` do not depend on the focus, but its address can fail (V-051). Each other axis starts at its
+      // address.
+      const targets = base.t === "table" ? OPAQUE : base.t === "all" && (e.at ?? []).length === 0 ? 0 : addressReads(e.at, top);
       return [e.body, ...tests].reduce((r, x) => r | reads(x, outer, inner, false), targets);
     }
   }
@@ -115,8 +116,9 @@ function keysOf(e: Expr, top: boolean, outer: ReadonlySet<string>, pure: Set<Exp
     }
     case "each": {
       const { base, tests } = parts(e.axis);
-      // The targets of a loop must not depend on the origin: a set of targets is not a value of a key.
-      if (base.t === "table" || (base.t !== "all" && addressReads(e.at, top) !== 0)) return undefined;
+      // The targets of a loop must not depend on the origin: a set of targets is not a value of a key. The address of
+      // `all` can fail, so it must not depend on the origin either.
+      if (base.t === "table" || ((base.t !== "all" || (e.at ?? []).length > 0) && addressReads(e.at, top) !== 0)) return undefined;
       return all([e.body, ...tests].map((x) => keysOf(x, false, outer, pure)));
     }
     // A leaf here reads the focus or a name of the node, so it is not a key, and the part cannot be in the memo. A

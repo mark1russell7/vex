@@ -271,6 +271,10 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: []
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
 const NUMBER_LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max"]);
+const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
+
+/** This function gives the kind of the result of a list op: first gives the kind of its items. */
+const listKind = (op: string, item: PrimitiveKind | undefined): PrimitiveKind | undefined => (NUMBER_LIST_OPS.has(op) ? "number" : BOOLEAN_LIST_OPS.has(op) ? "boolean" : item);
 
 /**
  * This function tells if a node of the memo has a loop of its own. Such a loop is outside its keys and outside the nodes
@@ -292,21 +296,21 @@ function contains(e: Expr, x: Expr): boolean {
   return e === x || children(e).some((c) => contains(c, x));
 }
 
-/**
- * This function gives the base of an axis and its tests in the order of evaluation. A test `and` is its parts: `and`
- * stops at the first `false`, as a chain of tests does, and each part must be a boolean.
- */
+/** This function gives the base of an axis and its tests in the order of evaluation. */
 function testsOf(axis: Axis): { readonly base: Axis; readonly tests: readonly Expr[] } {
-  const raw: Expr[] = [];
+  const tests: Expr[] = [];
   let base = axis;
   while (base.t === "where") {
-    raw.unshift(base.test);
+    tests.unshift(base.test);
     base = base.axis;
   }
-  return { base, tests: raw.flatMap(partsOf) };
+  return { base, tests };
 }
 
-/** This function gives the parts of a test `and`, and of each part that is a test `and` too. */
+/**
+ * This function gives the parts of a test `and`, and of each part that is a test `and` too. `and` stops at the first
+ * `false`, as a chain of tests does, and each part must be a boolean.
+ */
 function partsOf(t: Expr): readonly Expr[] {
   return t.tag === "app" && t.op === "and" && t.args.length > 0 ? t.args.flatMap(partsOf) : [t];
 }
@@ -333,15 +337,12 @@ function literal(value: unknown): Value {
 }
 
 /**
- * This function gives a text that is the same for two expressions with the same structure. -0 is not 0. Each key of
- * `keys` gives its token, so the text does not depend on the expression of a key.
+ * This function gives a text that is the same for two expressions with the same structure. -0 is not 0. A part with a
+ * token gives the token, so the text does not depend on that part. A token is an object, and a literal of a module is
+ * not, so a token is not the text of a literal.
  */
-function canonical(e: unknown, keys: ReadonlyMap<unknown, string>): string {
-  const k = keys.get(e);
-  if (k !== undefined) return k;
-  if (typeof e !== "object" || e === null) return Object.is(e, -0) ? "-0" : JSON.stringify(e);
-  if (Array.isArray(e)) return `[${e.map((x) => canonical(x, keys)).join(",")}]`;
-  return `{${Object.entries(e).map(([name, x]) => `${JSON.stringify(name)}:${canonical(x, keys)}`).join(",")}}`;
+function canonical(e: Expr, token: (x: unknown) => object | undefined): string {
+  return JSON.stringify(e, (_name, x: unknown) => token(x) ?? (Object.is(x, -0) ? { "-0": 0 } : x));
 }
 
 /** The values of each kind that `copied` gives to a function and to its copy. */
@@ -373,30 +374,50 @@ function sameCall(a: () => unknown, b: () => unknown): boolean {
 }
 
 /**
- * This function gives the source of a function of a domain, for a copy in a module. A native function or a method has
- * no source of its own. A copy must give the values of the function: a function that reads a name outside itself gives
- * an exception in the copy. Thus the copy and the function must give the same for the samples of their kinds.
+ * This function gives the source of a function of a domain, for a copy in a module. The source must be an expression:
+ * the source of a native function or of a method does not compile as one. A copy must give the values of the function:
+ * a function that reads a name outside itself gives an exception in the copy. Thus the copy and the function must give
+ * the same for the samples of their kinds.
  */
 function copied(f: (...a: never[]) => unknown, kinds: readonly PrimitiveKind[], what: string): string {
   const src = Function.prototype.toString.call(f);
-  const none = new NotStandalone(`${what} has no source that a module can copy`);
-  // The source must be an expression: an arrow function or a function expression.
-  if (src.includes("[native code]") || !/^(async\s+)?(\(|[\w$]+\s*=>|function\b)/.test(src)) throw none;
   let copy: (...a: unknown[]) => unknown;
   try {
     // oxlint-disable-next-line typescript/no-implied-eval -- the source is the source of a function of a domain.
     const make = new Function(`"use strict"; return (${src});`) as () => (...a: unknown[]) => unknown;
     copy = make();
   } catch {
-    throw none;
+    throw new NotStandalone(`${what} has no source that a module can copy`);
   }
   const fn = f as (...a: unknown[]) => unknown;
   if (!samples(kinds).every((xs) => sameCall(() => fn(...xs), () => copy(...xs)))) throw new NotStandalone(`${what} reads a name outside itself, so a module cannot copy it`);
   return src;
 }
 
-/** The functions of `Math` that an inline form can use. They do not throw for numbers. */
-const MATH: ReadonlySet<string> = new Set(["abs", "ceil", "floor", "round", "trunc", "sign", "sqrt", "cbrt", "exp", "log", "log10", "log2", "min", "max", "pow", "hypot", "sin", "cos", "tan", "atan2"]);
+/** The functions that an inline form can use. They do not throw for numbers. */
+const CALLS: ReadonlySet<string> = new Set([
+  "Math.abs",
+  "Math.ceil",
+  "Math.floor",
+  "Math.round",
+  "Math.trunc",
+  "Math.sign",
+  "Math.sqrt",
+  "Math.cbrt",
+  "Math.exp",
+  "Math.log",
+  "Math.log10",
+  "Math.log2",
+  "Math.min",
+  "Math.max",
+  "Math.pow",
+  "Math.hypot",
+  "Math.sin",
+  "Math.cos",
+  "Math.tan",
+  "Math.atan2",
+  "Number.isFinite",
+]);
 
 /** The inline form of a function of an op: its parameters, and its body with a hole for each use of a parameter. */
 interface InlineForm {
@@ -409,32 +430,38 @@ interface InlineForm {
 
 /**
  * This function gives the inline form of the source of an arrow function. The body of the function must be an
- * expression of operators, numbers, its parameters and the functions of `Math`. Such a body cannot throw for primitive
+ * expression of operators, numbers, its parameters and the functions of `CALLS`. Such a body cannot throw for primitive
  * values (§7.1). The inline form is the text of the function itself, so it has its bits.
  */
 function inlineForm(src: string): InlineForm | undefined {
-  const m = /^\(?\s*((?:[A-Za-z_$][\w$]*\s*,\s*)*[A-Za-z_$][\w$]*)?\s*\)?\s*=>\s*([^{\s][\s\S]*)$/.exec(src);
+  const m = /^\(?\s*((?:[A-Za-z_$][\w$]*\s*,\s*)*[A-Za-z_$][\w$]*)\s*\)?\s*=>\s*([\s\S]*)/.exec(src);
   if (m === null) return undefined;
-  const params = (m[1] ?? "").split(",").map((x) => x.trim()).filter((x) => x !== "");
-  const body = (m[2] as string).trim();
+  const params = (m[1] as string).split(",").map((x) => x.trim());
   const parts: (string | number)[] = [];
   const uses = params.map(() => 0);
   let text = "";
-  for (const t of body.match(/Math\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|\d+(?:\.\d+)?(?:e[+-]?\d+)?|\s+|[+\-*/%<>=!&|?:(),]/g) ?? []) {
-    const p = params.indexOf(t);
-    if (p >= 0) {
+  // The even parts are the text between the names: numbers, operators and parentheses. An assignment, a call of a value
+  // and another character, for example a quote, stop the inline form.
+  const split = (m[2] as string).split(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/);
+  for (const [i, t] of split.entries()) {
+    if (i % 2 === 0) {
+      if (!/^(?:\d|\.\d|\s|===?|!==?|<=|>=|[+\-*/%<>!?:(),&|^~])*$/.test(t) || /\+\+|--|\)\s*\(/.test(t)) return undefined;
+      text += t;
+    } else if (CALLS.has(t)) text += t;
+    else {
+      const p = params.indexOf(t);
+      if (p < 0 || /^\s*\(/.test(split[i + 1] as string)) return undefined;
       parts.push(text, p);
       text = "";
-      uses[p] = (uses[p] ?? 0) + 1;
-    } else if (/^[A-Za-z_$]/.test(t) && !(t.startsWith("Math.") && MATH.has(t.slice(5)))) return undefined;
-    else text += t;
+      uses[p] = (uses[p] as number) + 1;
+    }
   }
-  // The tokens must cover the whole body: another character, for example a quote, stops the inline form.
-  const covered = body.replaceAll(/Math\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|\d+(?:\.\d+)?(?:e[+-]?\d+)?|\s+|[+\-*/%<>=!&|?:(),]/g, "");
-  if (covered !== "") return undefined;
   parts.push(text);
   return { params, parts, uses };
 }
+
+/** This function gives the text of an inline form without spaces, with `#i` for the parameter `at(i)`. */
+const patternOf = (form: InlineForm, at: (p: number) => number): string => form.parts.map((p) => (typeof p === "number" ? `#${at(p)}` : p.replaceAll(/\s/g, ""))).join("");
 
 class Printer {
   readonly #facts: Facts;
@@ -485,6 +512,7 @@ class Printer {
    */
   check(kind: PrimitiveKind): string | undefined {
     const name = `k_${kind}`;
+    // Stryker disable next-line ConditionalExpression: a check of a kind is always the same, so the map only saves time
     if (!this.top.has(name)) {
       const d = this.#facts.checkOf(kind);
       if (d === undefined) throw new NotStandalone(`a domain without a primitive type comes before the domain of a ${kind}`);
@@ -507,7 +535,8 @@ class Printer {
     const name = `v_${d}`;
     const src = copied(valid, [kind], `the check "valid" of the domain ${domain}`);
     // A check that is Number.isFinite of a number adds nothing to the check of the result.
-    if (kind === "number" && /^\(?\s*([\w$]+)\s*\)?\s*=>\s*Number\.isFinite\(\s*\1\s*\)$/.test(src)) return undefined;
+    const form = inlineForm(src);
+    if (kind === "number" && form !== undefined && patternOf(form, (p) => p) === "Number.isFinite(#0)") return undefined;
     this.top.set(name, `const ${name} = ${src};`);
     return name;
   }
@@ -599,11 +628,11 @@ class Printer {
   }
 
   /** This method gives the code of the index of an address from the focus. */
-  #address(at: readonly Move[] | undefined, ctx: Ctx): string {
+  #address(at: readonly Move[], ctx: Ctx): string {
     let index = ctx.focus;
-    for (const m of at ?? []) index = this.#move(m, index, ctx.origin);
+    for (const m of at) index = this.#move(m, index, ctx.origin);
     // A node of the memo reads neither its origin nor its focus (memo.ts), so the guards of this method do not fail.
-    // Stryker disable next-line ConditionalExpression: see the comment above
+    // Stryker disable next-line ConditionalExpression,StringLiteral: see the comment above
     /* v8 ignore next -- @preserve */
     if (index === undefined) throw new NotStandalone("a node of the memo reads its focus");
     return index;
@@ -613,7 +642,7 @@ class Printer {
     const F = this.use("F");
     switch (m.t) {
       case "origin":
-        // Stryker disable next-line ConditionalExpression: see #address
+        // Stryker disable next-line ConditionalExpression,StringLiteral: see #address
         /* v8 ignore next -- @preserve */
         if (origin === undefined) throw new NotStandalone("a node of the memo reads its origin");
         return origin;
@@ -624,14 +653,14 @@ class Printer {
         return Number.isInteger(m.i) && m.i >= 0 ? `(${m.i} < n ? ${m.i} : ${F}())` : `${F}()`;
       case "offset": {
         const [d, ...more] = m.d;
-        // Stryker disable next-line ConditionalExpression: see #address
+        // Stryker disable next-line ConditionalExpression,StringLiteral: see #address
         /* v8 ignore next -- @preserve */
         if (focus === undefined) throw new NotStandalone("a node of the memo reads its focus");
         if (d === undefined || more.length > 0 || !Number.isInteger(d)) return `${F}()`;
         return `${this.use("X")}(${focus} + ${d}, n)`;
       }
       case "other":
-        // Stryker disable next-line ConditionalExpression: see #address
+        // Stryker disable next-line ConditionalExpression,StringLiteral: see #address
         /* v8 ignore next -- @preserve */
         if (focus === undefined) throw new NotStandalone("a node of the memo reads its focus");
         return `(n === 2 ? 1 - ${focus} : ${F}())`;
@@ -722,6 +751,7 @@ class Printer {
     if (site.returns === undefined) throw new NotStandalone(`the op "${op}" does not declare the kind of its result`);
     const d = this.#domains[site.domain] as AnyDomain;
     const name = `op_${site.domain}_${this.#opIndex(op)}`;
+    // Stryker disable next-line ConditionalExpression: the form of an op is always the same, so the map only saves time
     if (!this.#forms.has(name)) {
       // A static site of a domain has the function of the op of that domain.
       const fn = (d.ops[op] as { fn: (...a: never[]) => unknown }).fn;
@@ -732,9 +762,9 @@ class Printer {
     }
     const form = this.#forms.get(name);
     // An inline form takes each argument once, or a plain argument more often, so each argument evaluates once.
-    const inline = form !== undefined && form.params.length === values.length && form.uses.every((u, i) => u === 1 || (values[i]?.v.plain === true && values[i].v.safe && u > 0));
+    const inline = form !== undefined && form.params.length === values.length && values.every((x, i) => form.uses[i] === 1 || (x.v.plain === true && x.v.safe && (form.uses[i] as number) > 0));
     if (inline) {
-      const text = form.parts.map((x) => (typeof x === "number" ? `(${values[x]?.v.code ?? ""})` : x)).join("");
+      const text = form.parts.map((x) => (typeof x === "number" ? `(${(values[x] as Code).v.code})` : x)).join("");
       const checked = this.check(site.returns);
       const code = checked === undefined ? `(${text})` : `${checked}(${text})`;
       return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: checked === undefined && values.every((x) => x.v.safe), deps } };
@@ -747,8 +777,8 @@ class Printer {
 
   /** The condition must be a boolean. Only the branch that the condition selects is evaluated. */
   #if(args: readonly Expr[], ctx: Ctx): Code {
-    const [c, a, b] = args;
-    if (c === undefined || a === undefined || b === undefined || args.length > 3) throw new NotStandalone("an if without three arguments");
+    if (args.length !== 3) throw new NotStandalone("an if without three arguments");
+    const [c, a, b] = args as [Expr, Expr, Expr];
     const raw = [this.expr(c, ctx), this.expr(a, ctx), this.expr(b, ctx)];
     const deps = depsOf(...raw);
     const [cond, yes, no] = this.#settle(raw, deps) as [Code, Code, Code];
@@ -776,8 +806,8 @@ class Printer {
 
   /** The value of the first argument, or else the value of the second argument. */
   #ifError(args: readonly Expr[], ctx: Ctx): Code {
-    const [a, b] = args;
-    if (a === undefined || b === undefined || args.length > 2) throw new NotStandalone("an ifError without two arguments");
+    if (args.length !== 2) throw new NotStandalone("an ifError without two arguments");
+    const [a, b] = args as [Expr, Expr];
     const raw = [this.expr(a, ctx), this.expr(b, ctx)];
     const deps = depsOf(...raw);
     const [first, second] = this.#settle(raw, deps) as [Code, Code];
@@ -797,21 +827,26 @@ class Printer {
   }
 
   /**
+   * This method gives the option strict of a list op. The options must be one literal with only strict. Only a literal
+   * has a value, so another expression gives the reason too.
+   */
+  #strict(op: string, rest: readonly Expr[]): boolean {
+    const [options, ...more] = rest;
+    if (more.length > 0) throw new NotStandalone(`"${op}" with more than one option`);
+    if (options === undefined) return false;
+    const opts = (options as { readonly value?: unknown }).value;
+    if (typeof opts !== "object" || opts === null || Object.keys(opts).some((k) => k !== "strict")) throw new NotStandalone(`the options of "${op}" are not a literal with strict`);
+    return (opts as { readonly strict?: unknown }).strict === true;
+  }
+
+  /**
    * A list op over an axis: one `for` loop with a running value. An item with an error is skipped, and with `strict` it
    * is an error of the list op. A value of the wrong kind is an error of the list op, as in the interpreter.
    */
   #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
-    const [options, ...more] = rest;
-    if (more.length > 0) throw new NotStandalone(`"${op}" with more than one option`);
-    const opts = options === undefined ? undefined : options.tag === "lit" ? options.value : Symbol("not a literal");
-    if (opts !== undefined && (typeof opts !== "object" || opts === null || Object.keys(opts).some((k) => k !== "strict"))) throw new NotStandalone(`the options of "${op}" are not a literal with strict`);
-    const strict = typeof opts === "object" && opts !== null && "strict" in opts && opts.strict === true;
-    const tests: Expr[] = [];
-    let base: Axis = target.axis;
-    while (base.t === "where") {
-      tests.unshift(base.test);
-      base = base.axis;
-    }
+    const strict = this.#strict(op, rest);
+    const { base, tests } = testsOf(target.axis);
+    const at = target.at ?? [];
     const j = this.fresh("j");
     const level = ctx.level + 1;
     const inner: Ctx = { ...ctx, focus: j, level };
@@ -819,25 +854,27 @@ class Printer {
     let lo = "0";
     let hi = "n";
     let skip: string | undefined;
-    // The targets of the axis all depend on no key. The other axes start at their address.
+    // The targets of the axis all depend on no key, but its address can fail (V-051). The other axes start at their
+    // address.
     let start: ReadonlySet<number> = NO_DEPS;
-    if (base.t === "others" || base.t === "window") {
-      const f = this.fresh("f");
-      s.push(`const ${f} = ${this.#address(target.at, ctx)};`);
-      start = this.#addressDeps(target.at ?? [], ctx);
-      if (base.t === "others") skip = f;
-      else if (Number.isInteger(base.from) && Number.isInteger(base.to)) {
-        const h = this.fresh("h");
-        lo = `Math.max(0, ${f} + Math.max(${base.from}, -n))`;
-        s.push(`const ${h} = Math.min(n, ${f} + Math.min(${base.to}, n) + 1);`);
-        hi = h;
-      } else throw new NotStandalone('the axis "window" with a bound that is not an integer');
+    const f = base.t === "all" && at.length === 0 ? undefined : this.fresh("f");
+    if (f !== undefined) {
+      s.push(`const ${f} = ${this.#address(at, ctx)};`);
+      start = this.#addressDeps(at, ctx);
+    }
+    if (base.t === "others") skip = f;
+    else if (base.t === "window") {
+      if (!Number.isInteger(base.from) || !Number.isInteger(base.to)) throw new NotStandalone('the axis "window" with a bound that is not an integer');
+      const h = this.fresh("h");
+      lo = `Math.max(0, ${f as string} + Math.max(${base.from}, -n))`;
+      s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
+      hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
     // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run.
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner)));
     const body = this.#hoist(this.expr(target.body, inner));
-    // A count of all the items, whose body cannot fail, is the count of the records.
-    if (op === "count" && base.t === "all" && tests.length === 0 && body.v.safe && body.s.length === 0) return bare(plainValue("n", "number"));
+    // A count of all the items, whose body cannot fail, is the count of the records. A safe body covers its statements.
+    if (op === "count" && f === undefined && tests.length === 0 && body.v.safe) return bare(plainValue("n", "number"));
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== level));
     const a = this.fresh("a");
     const n = this.fresh("n");
@@ -873,7 +910,7 @@ class Printer {
       ...(safeItem
         ? [...item, `const ${v} = ${body.v.code};`]
         : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", strict ? `  ${F}();` : "  continue;", "}"]),
-      steps[op] ?? "",
+      steps[op] as string,
     ];
     s.push(`for (let ${j} = ${lo}; ${j} < ${hi}; ${j}++) {`, ...ind(loop), "}");
     const results: Readonly<Record<string, string>> = {
@@ -887,10 +924,9 @@ class Printer {
     const code = results[op] ?? `(${n} === 0 ? ${F}() : ${a})`;
     // A count without strict, and any, all and none over booleans without strict, cannot fail. The address of the axis
     // can fail, except at the focus or at the origin.
-    const startSafe = (target.at ?? []).every((m) => m.t === "origin");
-    const safe = startSafe && !strict && (op === "count" || (["any", "all", "none"].includes(op) && body.v.kind === "boolean"));
-    const kind = NUMBER_LIST_OPS.has(op) ? "number" : op === "first" ? body.v.kind : "boolean";
-    return { s, v: { code, kind, safe, deps } };
+    const startSafe = at.every((m) => m.t === "origin");
+    const safe = startSafe && !strict && (op === "count" || (BOOLEAN_LIST_OPS.has(op) && body.v.kind === "boolean"));
+    return { s, v: { code, kind: listKind(op, body.v.kind), safe, deps } };
   }
 
   /**
@@ -919,27 +955,22 @@ class Printer {
     }
     // The kinds of the keys decide the ops in the node, so they are a part of the structure. Each key of the function
     // can hold the error sentinel, so the nodes with a safe key and the nodes without one share it.
-    const tokens = new Map(keys.map((k, i): [Expr, string] => [k, varying.includes(k) ? `#${varying.indexOf(k)}:${String(values[i]?.v.kind)}` : `@${names.get(k)?.code ?? ""}`]));
-    const structure = canonical(e, tokens);
+    const tokens = new Map(keys.map((k, i): [Expr, object] => [k, varying.includes(k) ? { "#": varying.indexOf(k), kind: (values[i] as Code).v.kind } : { "@": (names.get(k) as Name).code }]));
+    const structure = canonical(e, (x) => tokens.get(x as Expr));
     let fn = this.#structures.get(structure);
     if (fn === undefined) {
       fn = this.fresh("m");
       this.#structures.set(structure, fn);
       this.memos = true;
-      const [key] = varying;
-      const cached = params.length === 1 && key !== undefined ? this.#cached(e, key, values[keys.indexOf(key)]?.v.kind, bodyCtx, fn) : undefined;
+      const cached = varying.length === 1 ? this.#cached(e, varying[0] as Expr, bodyCtx, fn) : undefined;
       if (cached !== undefined) {
-        this.#kinds.set(fn, (e as ExprOf<"app">).op === "first" ? undefined : ["any", "all", "none"].includes((e as ExprOf<"app">).op) ? "boolean" : "number");
-        this.run.push(...cached);
+        this.#kinds.set(fn, cached.kind);
+        this.run.push(...cached.lines);
       } else {
+        // The loop of the node gives statements.
         const body = this.expr(e, bodyCtx);
         this.#kinds.set(fn, body.v.kind);
-        const helper = this.use(params.length === 1 ? "M1" : "M");
-        this.run.push(
-          ...(body.s.length === 0
-            ? [`const ${fn} = ${helper}((${params.join(", ")}) => ${body.v.code});`]
-            : [`const ${fn} = ${helper}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});"]),
-        );
+        this.run.push(`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});");
       }
     }
     this.#inside = outer;
@@ -965,14 +996,16 @@ class Printer {
    * items whose test is true are a prefix. Each prefix keeps its running value. The values add in the order of the items, so the result has the bits of the interpreter. An error before the test
    * of the key is an error of the item at each key. An error after it is an error at the keys whose test is true.
    */
-  #cached(e: Expr, key: Expr, kind: PrimitiveKind | undefined, bodyCtx: Ctx, fn: string): string[] | undefined {
-    if (e.tag !== "app" || !LIST_OPS.has(e.op) || e.args.length > 2) return undefined;
-    const [target, options] = e.args;
-    if (target?.tag !== "each" || (target.at ?? []).length > 0) return undefined;
-    const opts = options === undefined ? undefined : options.tag === "lit" ? options.value : Symbol("not a literal");
-    if (opts !== undefined && (typeof opts !== "object" || opts === null || Object.keys(opts).some((k) => k !== "strict"))) return undefined;
-    const strict = typeof opts === "object" && opts !== null && "strict" in opts && opts.strict === true;
-    const { base, tests } = testsOf(target.axis);
+  #cached(e: Expr, key: Expr, bodyCtx: Ctx, fn: string): { readonly lines: readonly string[]; readonly kind: PrimitiveKind | undefined } | undefined {
+    // Only an app has an op, and a node of the memo has a loop, so a list op has its target.
+    const { op, args } = e as ExprOf<"app">;
+    if (!LIST_OPS.has(op)) return undefined;
+    const [target, ...rest] = args as [Expr, ...Expr[]];
+    if (target.tag !== "each" || (target.at ?? []).length > 0) return undefined;
+    const strict = this.#strict(op, rest);
+    const kind = (bodyCtx.keys.get(key) as Name).kind;
+    const { base, tests: raw } = testsOf(target.axis);
+    const tests = raw.flatMap(partsOf);
     const at = tests.findIndex((t) => contains(t, key));
     const test = tests[at];
     if (base.t !== "all" || test?.tag !== "app" || test.args.length !== 2 || contains(target.body, key) || tests.some((t, i) => i !== at && contains(t, key))) return undefined;
@@ -986,8 +1019,8 @@ class Printer {
     // The test of the key is an op whose inline form cannot fail: then the loop over the items needs no try.
     const site = this.#facts.staticSite(test.op, keyFirst ? [kind, t.v.kind] : [t.v.kind, kind]);
     if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
-    const fnOf = (this.#domains[site.domain]?.ops[test.op] as { fn?: (...a: never[]) => unknown } | undefined)?.fn;
-    const form = fnOf === undefined ? undefined : inlineForm(Function.prototype.toString.call(fnOf));
+    // A static site of a domain has the function of the op of that domain.
+    const form = inlineForm(Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn));
     if (form?.params.length !== 2) return undefined;
     const before = tests.slice(0, at).map((x) => this.#hoist(this.expr(x, loop)));
     const after = tests.slice(at + 1).map((x) => this.#hoist(this.expr(x, loop)));
@@ -995,10 +1028,10 @@ class Printer {
     const B = (v: Value): string => this.#boolean(v);
     // The kind of the test of the key: `===` gives the groups of equal values, and `<` or `<=` from T to the key gives
     // the prefixes of the items when T does not decrease. NaN satisfies neither test, so its item is in no group.
-    const pattern = form.parts.map((p) => (typeof p === "number" ? `#${keyFirst ? 1 - p : p}` : p.replaceAll(/\s/g, ""))).join("");
+    const pattern = patternOf(form, (p) => (keyFirst ? 1 - p : p));
     const mode = pattern === "#0===#1" || pattern === "#1===#0" ? 1 : ["#0<#1", "#0<=#1", "#1>#0", "#1>=#0"].includes(pattern) ? 2 : 0;
     const testArgs = keyFirst ? ["q", "t"] : ["t", "q"];
-    const keyTest = form.parts.map((p) => (typeof p === "number" ? `(${testArgs[p] ?? ""})` : p)).join("");
+    const keyTest = form.parts.map((p) => (typeof p === "number" ? `(${testArgs[p] as string})` : p)).join("");
     if (mode === 1) this.features.add("group");
     if (mode === 2) this.features.add("prefix");
     if (strict) this.features.add("strict");
@@ -1012,9 +1045,8 @@ class Printer {
       after.length === 0 && body.v.safe && body.s.length === 0
         ? arrow([], body.v.code)
         : [`(${j}) => {`, "  try {", ...ind(ind([...after.flatMap((x) => [...x.s, `if (!${B(x.v)}) return N;`]), ...body.s])), `    return ${body.v.code};`, "  } catch {", "    return E;", "  }", "}"];
-    const op = e.op;
-    const [stepName, stepCode] = STEPS[op] ?? FIRST_STEP;
-    if (!this.top.has(stepName)) this.top.set(stepName, `const ${stepName} = ${stepCode};`);
+    const [stepName, stepCode] = STEPS[op] as readonly [string, string];
+    this.top.set(stepName, `const ${stepName} = ${stepCode};`);
     // A sum has the check of a number, and only a sum or a mean needs that check.
     const results: Readonly<Record<string, () => readonly [string, string]>> = {
       count: () => ["r_count", "(a, c) => c"],
@@ -1026,15 +1058,15 @@ class Printer {
     };
     const [resultName, resultCode] = results[op]?.() ?? ["r_one", `(a, c) => (c === 0 ? ${F}() : a)`];
     if (!this.top.has(resultName)) this.top.set(resultName, `const ${resultName} = ${resultCode};`);
-    const a0 = op === "sum" || op === "mean" ? "0" : op === "all" ? "true" : op === "any" || op === "none" ? "false" : "undefined";
-    // The values of an op of numbers or of booleans have that kind, or the result is an error.
-    const needs = NUMBER_LIST_OPS.has(op) && op !== "count" ? "number" : ["any", "all", "none"].includes(op) ? "boolean" : undefined;
+    const a0 = op === "sum" || op === "mean" ? "0" : op === "all" ? "true" : BOOLEAN_LIST_OPS.has(op) ? "false" : "undefined";
+    // The values of an op of numbers or of booleans have that kind, or the result is an error. Count takes each kind.
+    const needs = op === "count" ? undefined : listKind(op, undefined);
     const ok = needs === undefined || body.v.kind === needs ? [] : [`(x) => typeof x === "${needs}"`];
     if (ok.length > 0) this.features.add("ok");
     if (pre !== undefined) this.features.add("pre");
-    const args = [arrow(t.s, t.v.code), value, [`(t, q) => ${keyTest}`], ...(pre === undefined && ok.length === 0 ? [] : [pre ?? ["undefined"]]), ...(ok.length === 0 ? [] : [ok])];
-    const lines = args.flatMap((x, i) => [...x.slice(0, -1), `${x.at(-1) ?? ""}${i < args.length - 1 ? "," : ""}`]);
-    return [`const ${fn} = ${this.use("S")}(n, ${mode}, ${String(strict)}, ${a0}, ${stepName}, ${resultName},`, ...ind(lines), ");"];
+    const fns = [arrow(t.s, t.v.code), value, [`(t, q) => ${keyTest}`], ...(pre === undefined && ok.length === 0 ? [] : [pre ?? ["undefined"]]), ...(ok.length === 0 ? [] : [ok])];
+    const lines = fns.flatMap((x, i) => [...x.slice(0, -1), `${x.at(-1) ?? ""}${i < fns.length - 1 ? "," : ""}`]);
+    return { lines: [`const ${fn} = ${this.use("S")}(n, ${mode}, ${String(strict)}, ${a0}, ${stepName}, ${resultName},`, ...ind(lines), ");"], kind: listKind(op, body.v.kind) };
   }
 
   /** This method gives the code of the program at the key of the run. A constant of the run evaluates once. */
@@ -1050,33 +1082,13 @@ class Printer {
    * that the expression does not bind gives its variable in the code, and a key of the memo gives its variable too.
    */
   #constKey(e: Expr, ctx: Ctx): string {
-    const walk = (x: Expr, bound: ReadonlySet<string>): string => {
-      const key = ctx.keys.get(x);
-      if (key !== undefined) return `@${key.code}`;
-      switch (x.tag) {
-        case "lit":
-          return `l${canonical(x.value, new Map())}`;
-        case "ref":
-          return `r${JSON.stringify(x.path)}${canonical(x.at ?? [], new Map())}`;
-        case "var":
-          return bound.has(x.name) ? `v${JSON.stringify(x.name)}` : `$${ctx.env.get(x.name)?.code ?? JSON.stringify(x.name)}`;
-        case "let": {
-          const inner = new Set([...bound, ...Object.keys(x.bind)]);
-          return `L{${Object.entries(x.bind).map(([k, v]) => `${JSON.stringify(k)}=${walk(v, bound)}`).join(",")}}${walk(x.body, inner)}`;
-        }
-        case "rec":
-          return `R{${Object.entries(x.fields).map(([k, v]) => `${JSON.stringify(k)}=${walk(v, bound)}`).join(",")}}`;
-        case "app":
-          return `A${JSON.stringify(x.op)}(${x.args.map((a) => walk(a, bound)).join(",")})`;
-        case "each": {
-          const axis = (a: Axis): string => (a.t === "where" ? `W(${axis(a.axis)},${walk(a.test, bound)})` : JSON.stringify(a));
-          return `E${axis(x.axis)}${canonical(x.at ?? [], new Map())}(${walk(x.body, bound)})`;
-        }
-        case "ext":
-          return `X${JSON.stringify(x.kind)}`;
-      }
-    };
-    return walk(e, new Set());
+    // A name gives its variable for each read, also for a read of a name that the expression binds. The variable depends
+    // only on the name, so two expressions with the same text have the same value.
+    return canonical(e, (x) => {
+      const key = ctx.keys.get(x as Expr);
+      if (key !== undefined) return { "@": key.code };
+      return (x as Expr | undefined)?.tag === "var" ? { $: ctx.env.get((x as ExprOf<"var">).name)?.code ?? (x as ExprOf<"var">).name } : undefined;
+    });
   }
 }
 
@@ -1093,7 +1105,6 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
     value = p.root(expr);
   } catch (thrown) {
     // Each error of the printer is a NotStandalone. Another exception is a defect, so it goes to the caller.
-    /* v8 ignore next -- @preserve */
     if (!(thrown instanceof NotStandalone)) throw thrown;
     return { ok: false, reason: thrown.message };
   }

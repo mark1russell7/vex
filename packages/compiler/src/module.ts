@@ -97,7 +97,7 @@ interface Ctx {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -108,6 +108,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   T: "function T(f) { try { return f(); } catch { return E; } }",
   // A constant of the run with a loop evaluates on its first read, so a loop in a branch that no run takes costs nothing.
   L: "function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }",
+  // A column of the run: the value of an expression at each record, on its first read.
+  Q: "function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }",
   G: "function G(x) { return x === E ? F() : x; }",
   B: 'function B(x) { return typeof x === "boolean" ? x : F(); }',
   U: 'function U(x) { return typeof x === "number" ? x : F(); }',
@@ -271,7 +273,7 @@ const STEPS: Readonly<Record<string, readonly [string, string]>> = {
 };
 
 /** The helpers that each helper uses. */
-const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], L: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"] };
+const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"] };
 
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
@@ -282,6 +284,19 @@ const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
 const listKind = (op: string, item: PrimitiveKind | undefined): PrimitiveKind | undefined => (NUMBER_LIST_OPS.has(op) ? "number" : BOOLEAN_LIST_OPS.has(op) ? "boolean" : item);
 
 const LOOPS = new WeakMap<Expr, boolean>();
+
+/** This function gives the names that an expression reads, also the names that it binds itself. */
+function namesOf(e: Expr, out = new Set<string>()): Set<string> {
+  if (e.tag === "var") out.add(e.name);
+  for (const x of children(e)) namesOf(x, out);
+  return out;
+}
+
+/**
+ * The smallest work of an expression in a column of the run. The work is the number of nodes. A node of the memo and a
+ * constant of the run count as one node each. A part with less work costs less than the read of its column.
+ */
+const COLUMN_WORK = 10;
 
 /** This function tells if an expression has a loop of names: a fold or an iteration. */
 function hasLoop(e: Expr): boolean {
@@ -511,6 +526,10 @@ class Printer {
   /** The key of the expression of each code that is a constant of the run, and the read of each hoisted constant by key. */
   readonly #keyOf = new WeakMap<Code, string>();
   readonly #constants = new Map<string, Code>();
+  /** The columns of the run, by the structure of their expression. */
+  readonly #columns = new Map<string, string>();
+  /** The expressions whose code is a constant of the run. */
+  readonly #constant = new WeakSet<Expr>();
 
   constructor(expr: Expr, options: ModuleOptions) {
     this.#domains = options.domains ?? [];
@@ -619,7 +638,43 @@ class Printer {
     const c = keys !== undefined && this.#inside !== e ? this.#memoized(e, keys, ctx) : this.#node(e, ctx);
     // A constant of the run with the structure of an earlier one is that constant.
     if (c.v.deps.size === 0 && !(c.v.plain === true && c.s.length === 0)) this.#keyOf.set(c, this.#constKey(e, ctx));
-    return c;
+    if (c.v.deps.size === 0) this.#constant.add(e);
+    return this.#columnar(e, c, ctx) ? this.#column(e, c, ctx) : c;
+  }
+
+  /**
+   * This method tells if a part of a loop over the targets is a column of the run. Its value depends only on the
+   * target and on the constants of the run, so each run computes it once for each record. Each name that it reads
+   * from outside is a constant of the run, so its code can be outside the loop.
+   */
+  #columnar(e: Expr, c: Code, ctx: Ctx): boolean {
+    if (ctx.level < 2 || ctx.focus === undefined || c.v.deps.size !== 1 || !c.v.deps.has(ctx.level) || this.#work(e) < COLUMN_WORK) return false;
+    // A node of the memo with keys keeps its costly part for each value of its keys already.
+    if (this.#keyed(e)) return false;
+    return [...namesOf(e)].every((name) => (ctx.env.get(name)?.deps.size ?? 0) === 0);
+  }
+
+  /** This method tells if an expression has a node of the memo with keys in it. */
+  #keyed(e: Expr): boolean {
+    return (this.#memo.get(e)?.length ?? 0) > 0 || children(e).some((x) => this.#keyed(x));
+  }
+
+  /** This method gives the work of an expression: a node of the memo and a constant of the run are one read each. */
+  #work(e: Expr): number {
+    if (this.#memo.has(e) || this.#constant.has(e)) return 1;
+    return children(e).reduce((sum, x) => sum + this.#work(x), 1);
+  }
+
+  /** This method gives the read of a column of the run. Two parts with the same structure share one column. */
+  #column(e: Expr, c: Code, ctx: Ctx): Code {
+    const key = this.#constKey(e, ctx);
+    let name = this.#columns.get(key);
+    if (name === undefined) {
+      name = this.fresh("col");
+      this.run.push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
+      this.#columns.set(key, name);
+    }
+    return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps });
   }
 
   #node(e: Expr, ctx: Ctx): Code {

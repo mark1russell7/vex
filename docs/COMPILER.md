@@ -471,19 +471,24 @@ With `fold` and `iterate`, `RADIAL_PROGRAM` has each case of `radial`, also the 
 
 A constant of the run with a loop is lazy in a module: it evaluates on its first read. Before, the module evaluated each constant before the run, also a loop in a branch that the run does not take.
 
+A part of a loop over the targets can depend only on the target and on the constants of the run. Then it is a column of the run. The module computes it once for each record, on its first read, with the helper `Q`. Two parts with the same structure share one column.
+
+A part with little work is not a column. Its work counts its nodes, and a node of the memo or a constant of the run counts as one node. A node of the memo with keys keeps its costly part for each key already, so a part with one is not a column. Thus the module of `grid` is the same.
+
 | The full module of `radial` | Bytes | Gzip |
 |---|---|---|
-| The module | 59486 | 8180 |
-| The module, minified | 23289 | 4335 |
-| The module, minified, after the module of `grid` | | 4077 more |
+| Before the columns, minified | 23289 | 4335 |
+| With the columns | 23124 | 4914 |
+| With the columns, minified | 8433 | 2939 |
+| With the columns, minified, after the module of `grid` | | 2628 more |
 
-| A full ring, one run | The code of ireko | The module |
-|---|---|---|
-| 6 children | 7 to 14 µs | 190 to 250 µs |
-| 30 children | 23 to 25 µs | 1.2 to 2.1 ms |
-| 120 children | 141 to 372 µs | 11.6 to 15.1 ms |
+| A full ring, one run | The code of ireko | Before the columns | With the columns |
+|---|---|---|---|
+| 6 children | 6 to 14 µs | 190 to 250 µs | 29 to 30 µs |
+| 30 children | 23 to 42 µs | 1.2 to 2.1 ms | 124 to 131 µs |
+| 120 children | 141 to 372 µs | 11.6 to 15.1 ms | 1.05 to 1.11 ms |
 
-The module is too large and too slow for ireko. Vex has no functions, so the test of a radius is in the program four times. Each step of the search computes the radius of each child again, and ireko computes these values once. A value that depends only on the target of a loop can be a column of the run, with one value for each record. That is the next step of the printer.
+The module is approximately five times slower than ireko, and approximately 1.5 kB larger. Vex has no functions, so the test of a radius is in the program four times. Each copy of the fold over the pairs is a loop of its own.
 
 #### The audit pilot
 

@@ -465,6 +465,21 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(reasonOf(fold(axes.children, { x: lit(0) }, {}, v("x")))).toBe('the axis "children"');
   });
 
+  it("a part of a loop over the targets that depends only on the target is a column of the run", async () => {
+    // The part has enough work, so each run computes it once for each record. Two loops share the column.
+    const heavy = op("max", op("abs", op("subtract", w, op("divide", n, lit(2)))), op("abs", op("add", w, op("multiply", n, lit(3)))));
+    const e = rec({
+      loop: iterate(3, { x: lit(0) }, { x: op("add", v("x"), op("sum", each(axes.all, heavy))) }, v("x")),
+      again: op("ifError", op("max", each(axes.others, heavy)), lit(0)),
+      // A light part, and a part that reads the origin, are not columns.
+      light: op("sum", each(axes.all, op("add", w, lit(1)))),
+      origin: op("sum", each(axes.all, op("max", heavy, K))),
+    });
+    const source = sourceOf(e);
+    expect(source.match(/= Q\(/g)).toHaveLength(1);
+    await expectGolden("columns", e);
+  });
+
   it("NAV.COMPUTED: the moves with a position or a key from an expression", async () => {
     const safe = (x: Expr): Expr => op("ifError", x, lit(-1));
     const e = rec({

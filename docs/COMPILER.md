@@ -388,3 +388,17 @@ The printer takes a part of the language. It takes an array space, the fields an
 Four changes made the module smaller. The list helper has only the branches of the list ops of the program. A name that holds the error sentinel goes to a key as it is. The keys of a function of the memo can always hold the sentinel, so more nodes share a function. A call of the list helper has no empty arguments at its end.
 
 A branch of ireko (`vex/grid-module`, not merged) uses the module in the strategy `grid`. The 213 tests of ireko pass, also its golden SVG files. The size check of its core gives 14.93 kB of 15 kB. Before the module, it gave 13.72 kB.
+
+#### The speed of a module
+
+The module of the grid gives the right bits, but it is slower than the code of ireko. A run evaluates the program at each child, and each read of a column width goes through a map of the memo. The code of ireko makes two loops.
+
+Three changes made the module faster. A part that depends on no key of the space is a constant of the run. It evaluates once, before the loop over the keys. A key of the memo that is such a constant is not a key of the function. An op is a direct call: the boundaries of the errors also catch the exceptions of the ops. A function of the memo with one key has one map and no array of keys.
+
+| The grid, 10 children | Time of one run |
+|---|---|
+| The code of ireko | 2.5 µs |
+| The module, before the three changes | 35 µs |
+| The module, after the three changes | 22 to 30 µs |
+
+In the benchmark of the engine of ireko, the trees of 111 nodes are approximately 2.2 times slower with the module. The trees of 11111 nodes stay approximately the same. The rule of ireko says that its benchmarks hold, so the branch of ireko is not merged. A module at the speed of the loops needs another printer. That printer makes statements and loops, not closures, and it evaluates an aggregate by group for all groups in one pass.

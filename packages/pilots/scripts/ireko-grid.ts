@@ -1,6 +1,6 @@
 /**
  * This script writes the standalone module of the strategy `grid` for ireko (docs/COMPILER.md §13.3). Start it with
- * `node scripts/ireko-grid.ts <file>`.
+ * `npx tsx scripts/ireko-grid.ts <file>`. Node itself leaves spaces where the types of the copied functions were.
  */
 import { emitModule } from "@mark1russell7/vex-compiler";
 import { writeFileSync } from "node:fs";

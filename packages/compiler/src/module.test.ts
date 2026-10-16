@@ -150,7 +150,7 @@ describe("COMPILE.MODULE: a standalone module", () => {
     const source = sourceOf(e);
     // The two groups share one function, and the nodes above them have functions of their own.
     expect(source.match(/L\("max"/g)).toHaveLength(1);
-    expect(source.match(/= M\(/g)).toHaveLength(3);
+    expect(source.match(/= M1?\(/g)).toHaveLength(3);
     expectSame(make(source), e);
     const records = Array.from({ length: 40 }, (_v, i) => ({ n: i, w: i % 7, s: "", b: true }));
     expectSame(make(source), e, records);

@@ -11,6 +11,10 @@
  * the bits of the interpreter (§4.2). A node of the memo is one function of its keys, and the nodes with the same
  * expression share it.
  *
+ * A part of the program that depends on no key of the space is a constant of the run. The module evaluates it once,
+ * before the loop over the keys, and the code reads its value. A key of the memo that is a constant of the run is not
+ * a key of the function.
+ *
  * The printer takes a part of the language. It takes an array space of records, the fields and the variables of the
  * schema, and the axes `all`, `others` and `window`. The kinds of each op site must decide its op. Another construct
  * gives a reason, not code.
@@ -44,14 +48,28 @@ interface Value {
   readonly safe: boolean;
   /** For the read of a name that can hold the error sentinel: the name itself, which holds the value or the sentinel. */
   readonly held?: string;
+  /**
+   * The levels of the keys that the value depends on: 1 for the key of the run, and one more for each axis around it.
+   * A value with no levels is a constant of the run.
+   */
+  readonly deps: ReadonlySet<number>;
+  /** True for a literal and for the read of a name: a constant of the run with such code needs no variable of its own. */
+  readonly plain?: boolean;
 }
 
-/** A name of the program in the code: its variable, its kind, and true when it can hold the error sentinel. */
+/** A name of the program in the code: its variable, its kind, true when it can hold the error sentinel, and its levels. */
 interface Name {
   readonly code: string;
   readonly kind: PrimitiveKind | undefined;
   readonly lazy: boolean;
+  readonly deps: ReadonlySet<number>;
 }
+
+/** The levels of a constant of the run. */
+const NO_DEPS: ReadonlySet<number> = new Set();
+
+/** This function gives the levels of some values together. */
+const depsOf = (...xs: readonly Value[]): ReadonlySet<number> => new Set(xs.flatMap((x) => [...x.deps]));
 
 /**
  * The lexical position of a node: the code of the index of its origin and of its focus, and its names. It also has the
@@ -60,22 +78,24 @@ interface Name {
 interface Ctx {
   readonly origin: string | undefined;
   readonly focus: string | undefined;
+  /** The level of the focus: 1 at the key of the run, and one more in each axis. */
+  readonly level: number;
   readonly env: ReadonlyMap<string, Name>;
   readonly keys: ReadonlyMap<Expr, Name>;
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "G" | "B" | "I" | "W" | "M" | "L";
+type Helper = "F" | "C" | "T" | "G" | "B" | "I" | "M" | "M1" | "L";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Helper, string>> = {
   F: "function F() { throw E; }",
   C: "function C(m) { throw new VexContractError(m); }",
-  T: "function T(f) { try { return f(); } catch (e) { if (e === E) return E; throw e; } }",
+  // An exception of an op is an error of Vex too, as in the interpreter. Only a break of the contract goes on.
+  T: "function T(f) { try { return f(); } catch (e) { if (e instanceof VexContractError) throw e; return E; } }",
   G: "function G(x) { return x === E ? F() : x; }",
   B: 'function B(x) { return typeof x === "boolean" ? x : F(); }',
-  I: "function I(a, b) { try { return a(); } catch (e) { if (e === E) return b(); throw e; } }",
-  W: "function W(f, k) { return (...a) => { let r; try { r = f(...a); } catch { return F(); } return k(r); }; }",
+  I: "function I(a, b) { try { return a(); } catch (e) { if (e instanceof VexContractError) throw e; return b(); } }",
   M: [
     "function M(f) {",
     "  const root = new Map();",
@@ -89,6 +109,18 @@ const HELPERS: Readonly<Record<Helper, string>> = {
     "    }",
     "    if (!m.has(Z)) m.set(Z, T(() => f(...k)));",
     "    return G(m.get(Z));",
+    "  };",
+    "}",
+  ].join("\n"),
+  // The memo of a function of one key: one map, and no array for the keys.
+  M1: [
+    "function M1(f) {",
+    "  const m = new Map();",
+    "  return (k) => {",
+    "    const s = Object.is(k, -0) ? Z : k;",
+    "    let v = m.get(s);",
+    "    if (v === undefined) m.set(s, (v = T(() => f(k))));",
+    "    return G(v);",
     "  };",
     "}",
   ].join("\n"),
@@ -112,7 +144,7 @@ function listHelper(ops: ReadonlySet<string>): string {
     "      if (test !== undefined && !test(j)) continue;",
     "      v = body(j);",
     "    } catch (e) {",
-    "      if (e !== E) throw e;",
+    "      if (e instanceof VexContractError) throw e;",
     "      if (strict) F();",
     "      continue;",
     "    }",
@@ -151,24 +183,28 @@ const NUMBER_LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "m
 const join = (a: PrimitiveKind | undefined, b: PrimitiveKind | undefined): PrimitiveKind | undefined => (a === b ? a : undefined);
 
 /** This function gives the code of a literal. A value that is not a finite number, a text, a boolean or null has no code. */
+/** This function gives a value that is a constant of the run, with plain code. */
+const plainValue = (code: string, kind: PrimitiveKind | undefined): Value => ({ code, kind, safe: true, deps: NO_DEPS, plain: true });
+
 function literal(value: unknown): Value {
+  const c = plainValue;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new NotStandalone("a literal is a number that is not finite");
-    return { code: Object.is(value, -0) ? "-0" : String(value), kind: "number", safe: true };
+    return c(Object.is(value, -0) ? "-0" : String(value), "number");
   }
-  if (typeof value === "string") return { code: JSON.stringify(value), kind: "string", safe: true };
-  if (typeof value === "boolean") return { code: String(value), kind: "boolean", safe: true };
-  if (value === null) return { code: "null", kind: undefined, safe: true };
+  if (typeof value === "string") return c(JSON.stringify(value), "string");
+  if (typeof value === "boolean") return c(String(value), "boolean");
+  if (value === null) return c("null", undefined);
   throw new NotStandalone("a literal is not a number, a text, a boolean or null");
 }
 
 /**
  * This function gives a text that is the same for two expressions with the same structure. -0 is not 0. Each key of
- * `keys` gives its position, so the text does not depend on the expression of a key.
+ * `keys` gives its token, so the text does not depend on the expression of a key.
  */
-function canonical(e: unknown, keys: ReadonlyMap<unknown, number>): string {
+function canonical(e: unknown, keys: ReadonlyMap<unknown, string>): string {
   const k = keys.get(e);
-  if (k !== undefined) return `#${k}`;
+  if (k !== undefined) return k;
   if (typeof e !== "object" || e === null) return Object.is(e, -0) ? "-0" : JSON.stringify(e);
   if (Array.isArray(e)) return `[${e.map((x) => canonical(x, keys)).join(",")}]`;
   return `{${Object.entries(e).map(([name, x]) => `${JSON.stringify(name)}:${canonical(x, keys)}`).join(",")}}`;
@@ -262,11 +298,11 @@ class Printer {
       const d = this.#facts.checkOf(kind);
       if (d === undefined) throw new NotStandalone(`a domain without a primitive type comes before the domain of a ${kind}`);
       const domain = this.#domains[d];
-      const v = domain?.valid === undefined ? "" : ` && ${this.#valid(d, domain.name, kind, domain.valid)}(x)`;
-      const finite = kind === "number" ? " && Number.isFinite(x)" : "";
-      this.use("F");
+      // A number must be finite, and the domain of the kind can check the value with valid.
+      const conds = [...(kind === "number" ? ["Number.isFinite(x)"] : []), ...(domain?.valid === undefined ? [] : [`${this.#valid(d, domain.name, kind, domain.valid)}(x)`])];
+      const tail = conds.length === 0 ? "x" : `${conds.join(" && ")} ? x : ${this.use("F")}()`;
       this.use("C");
-      this.top.set(name, `const ${name} = (x) => (typeof x !== "${kind}" ? C("an op gave a value that is not a ${kind}") : true${finite}${v} ? x : F());`);
+      this.top.set(name, `const ${name} = (x) => (typeof x !== "${kind}" ? C("an op gave a value that is not a ${kind}") : ${tail});`);
     }
     return name;
   }
@@ -284,7 +320,24 @@ class Printer {
 
   /** This method gives the code of a name: a read that throws the error of its value, if it can hold an error. */
   #read(name: Name): Value {
-    return name.lazy ? { code: `${this.use("G")}(${name.code})`, kind: name.kind, safe: false, held: name.code } : { code: name.code, kind: name.kind, safe: true };
+    const base = { kind: name.kind, deps: name.deps, plain: true };
+    return name.lazy ? { ...base, code: `${this.use("G")}(${name.code})`, safe: false, held: name.code } : { ...base, code: name.code, safe: true };
+  }
+
+  /** This method evaluates a constant of the run once, before the loop over the keys, and gives the read of its value. */
+  #hoist(v: Value): Value {
+    if (v.deps.size > 0 || v.plain === true) return v;
+    const code = this.fresh("c");
+    this.run.set(code, `const ${code} = ${this.#attempt(v)};`);
+    return this.#read({ code, kind: v.kind, lazy: !v.safe, deps: NO_DEPS });
+  }
+
+  /**
+   * This method gives the parts of a node with levels `deps`. When the node is not a constant of the run, each part that
+   * is a constant evaluates once, before the loop. A node that is a constant keeps its parts, and its parent decides.
+   */
+  #settle(parts: readonly Value[], deps: ReadonlySet<number>): readonly Value[] {
+    return deps.size === 0 ? parts : parts.map((x) => this.#hoist(x));
   }
 
   /**
@@ -315,8 +368,12 @@ class Printer {
       case "let":
         return this.#let(e, ctx);
       case "rec": {
-        const fields = Object.entries(e.fields).map(([k, x]): [string, Value] => [k, this.expr(x, ctx)]);
-        return { code: `Object.freeze({ ${fields.map(([k, x]) => `${JSON.stringify(k)}: ${x.code}`).join(", ")} })`, kind: undefined, safe: fields.every(([, x]) => x.safe) };
+        const names = Object.keys(e.fields);
+        const raw = Object.values(e.fields).map((x) => this.expr(x, ctx));
+        const deps = depsOf(...raw);
+        const fields = this.#settle(raw, deps);
+        const code = `Object.freeze({ ${fields.map((x, i) => `${JSON.stringify(names[i])}: ${x.code}`).join(", ")} })`;
+        return { code, kind: undefined, safe: fields.every((x) => x.safe), deps };
       }
       case "app":
         return this.#app(e, ctx);
@@ -375,8 +432,19 @@ class Printer {
     const kind = field === undefined ? undefined : this.#schema.fields?.[field];
     if (field === undefined || more.length > 0 || !isFieldName(field) || kind === undefined) throw new NotStandalone(`a read of a field that is not in the schema: "${e.path.join(".")}"`);
     // A move to the origin cannot fail, and the schema has the field in each record.
-    const safe = (e.at ?? []).every((m) => m.t === "origin");
-    return { code: `R[${this.#address(e.at, ctx)}][${JSON.stringify(field)}]`, kind, safe };
+    const at = e.at ?? [];
+    const safe = at.every((m) => m.t === "origin");
+    return { code: `R[${this.#address(at, ctx)}][${JSON.stringify(field)}]`, kind, safe, deps: this.#addressDeps(at, ctx) };
+  }
+
+  /** This method gives the level of the key of an address: the focus, the origin, or no level for a fixed key. */
+  #addressDeps(at: readonly Move[], ctx: Ctx): ReadonlySet<number> {
+    let level: number | undefined = ctx.level;
+    for (const m of at) {
+      if (m.t === "origin") level = 1;
+      else if (m.t === "key" || m.t === "index" || m.t === "parent") level = undefined;
+    }
+    return level === undefined ? NO_DEPS : new Set([level]);
   }
 
   #var(name: string, ctx: Ctx): Value {
@@ -389,7 +457,7 @@ class Printer {
       code = `v${this.vars.size}`;
       this.vars.set(name, code);
     }
-    return { code, kind, safe: true };
+    return { code, kind, safe: true, deps: NO_DEPS, plain: true };
   }
 
   /** A binding with an error is an error only where the body reads its name, so each binding can hold the sentinel. */
@@ -398,14 +466,20 @@ class Printer {
     const params: string[] = [];
     const values: string[] = [];
     for (const [name, x] of Object.entries(e.bind)) {
-      const value = this.expr(x, ctx);
+      // A binding that is a constant of the run is the variable of that constant.
+      const value = this.#hoist(this.expr(x, ctx));
+      if (value.deps.size === 0) {
+        env.set(name, { code: value.held ?? value.code, kind: value.kind, lazy: value.held !== undefined, deps: NO_DEPS });
+        continue;
+      }
       const code = this.fresh("b");
       params.push(code);
       values.push(this.#attempt(value));
-      env.set(name, { code, kind: value.kind, lazy: !value.safe });
+      env.set(name, { code, kind: value.kind, lazy: !value.safe, deps: value.deps });
     }
     const body = this.expr(e.body, { ...ctx, env });
-    return { code: `((${params.join(", ")}) => ${body.code})(${values.join(", ")})`, kind: body.kind, safe: body.safe };
+    if (params.length === 0) return body;
+    return { code: `((${params.join(", ")}) => ${body.code})(${values.join(", ")})`, kind: body.kind, safe: body.safe, deps: body.deps };
   }
 
   #boolean(v: Value): string {
@@ -422,30 +496,35 @@ class Printer {
     if (op === "if") {
       const [c, a, b] = args;
       if (c === undefined || a === undefined || b === undefined || args.length > 3) throw new NotStandalone("an if without three arguments");
-      const cond = this.expr(c, ctx);
-      const yes = this.expr(a, ctx);
-      const no = this.expr(b, ctx);
-      return { code: `(${this.#boolean(cond)} ? ${yes.code} : ${no.code})`, kind: join(yes.kind, no.kind), safe: this.#safeBoolean(cond) && yes.safe && no.safe };
+      const raw = [this.expr(c, ctx), this.expr(a, ctx), this.expr(b, ctx)];
+      const deps = depsOf(...raw);
+      const [cond, yes, no] = this.#settle(raw, deps) as [Value, Value, Value];
+      return { code: `(${this.#boolean(cond)} ? ${yes.code} : ${no.code})`, kind: join(yes.kind, no.kind), safe: this.#safeBoolean(cond) && yes.safe && no.safe, deps };
     }
     if (op === "and" || op === "or") {
       if (args.length === 0) throw new NotStandalone(`an ${op} without arguments`);
-      const parts = args.map((x) => this.expr(x, ctx));
-      return { code: `(${parts.map((x) => this.#boolean(x)).join(op === "and" ? " && " : " || ")})`, kind: "boolean", safe: parts.every((x) => this.#safeBoolean(x)) };
+      const raw = args.map((x) => this.expr(x, ctx));
+      const deps = depsOf(...raw);
+      const parts = this.#settle(raw, deps);
+      return { code: `(${parts.map((x) => this.#boolean(x)).join(op === "and" ? " && " : " || ")})`, kind: "boolean", safe: parts.every((x) => this.#safeBoolean(x)), deps };
     }
     if (op === "ifError") {
       const [a, b] = args;
       if (a === undefined || b === undefined || args.length > 2) throw new NotStandalone("an ifError without two arguments");
-      const first = this.expr(a, ctx);
-      const second = this.expr(b, ctx);
+      const raw = [this.expr(a, ctx), this.expr(b, ctx)];
+      const deps = depsOf(...raw);
+      const [first, second] = this.#settle(raw, deps) as [Value, Value];
       if (first.safe) return first;
-      return { code: `${this.use("I")}(() => ${first.code}, () => ${second.code})`, kind: join(first.kind, second.kind), safe: second.safe };
+      return { code: `${this.use("I")}(() => ${first.code}, () => ${second.code})`, kind: join(first.kind, second.kind), safe: second.safe, deps };
     }
-    const [first] = args;
-    if (LIST_OPS.has(op) && first?.tag === "each") return this.#list(op, first, args.slice(1), ctx);
-    const values = args.map((x) => this.expr(x, ctx));
+    const [head] = args;
+    if (LIST_OPS.has(op) && head?.tag === "each") return this.#list(op, head, args.slice(1), ctx);
+    const raw = args.map((x) => this.expr(x, ctx));
+    const deps = depsOf(...raw);
+    const values = this.#settle(raw, deps);
     const site = this.#facts.staticSite(op, values.map((x) => x.kind));
     if (site?.t !== "fn") throw new NotStandalone(`the kinds of the values of "${op}" do not decide its op`);
-    if (site.bad) return { code: `${this.use("F")}()`, kind: site.returns, safe: false };
+    if (site.bad) return { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps };
     if (site.returns === undefined) throw new NotStandalone(`the op "${op}" does not declare the kind of its result`);
     const d = this.#domains[site.domain] as AnyDomain;
     const name = `op_${site.domain}_${this.#opIndex(op)}`;
@@ -453,9 +532,10 @@ class Printer {
       // A static site of a domain has the function of the op of that domain.
       const fn = (d.ops[op] as { fn: (...a: never[]) => unknown }).fn;
       const kinds = values.map((x) => x.kind).filter((k): k is PrimitiveKind => k !== undefined);
-      this.top.set(name, `const ${name} = ${this.use("W")}(${copied(fn, kinds, `the op "${op}" of the domain ${d.name}`)}, ${this.check(site.returns)});`);
+      this.top.set(name, `const ${name} = ${copied(fn, kinds, `the op "${op}" of the domain ${d.name}`)};`);
     }
-    return { code: `${name}(${values.map((x) => x.code).join(", ")})`, kind: site.returns, safe: false };
+    // An exception of the op is an error of Vex: the boundary around the op catches it (the helpers T, I, L and M).
+    return { code: `${this.check(site.returns)}(${name}(${values.map((x) => x.code).join(", ")}))`, kind: site.returns, safe: false, deps };
   }
 
   readonly #ops = new Map<string, number>();
@@ -482,54 +562,87 @@ class Printer {
       base = base.axis;
     }
     const j = this.fresh("j");
-    const inner: Ctx = { ...ctx, focus: j };
+    const level = ctx.level + 1;
+    const inner: Ctx = { ...ctx, focus: j, level };
     let range: string;
+    // The targets of the axis all depend on no key. The other axes start at their address.
+    let start: ReadonlySet<number> = NO_DEPS;
     if (base.t === "all") range = "0, n, -1";
-    else if (base.t === "others") range = `0, n, ${this.#address(target.at, ctx)}`;
-    else if (base.t === "window" && Number.isInteger(base.from) && Number.isInteger(base.to)) {
+    else if (base.t === "others") {
+      range = `0, n, ${this.#address(target.at, ctx)}`;
+      start = this.#addressDeps(target.at ?? [], ctx);
+    } else if (base.t === "window" && Number.isInteger(base.from) && Number.isInteger(base.to)) {
       const from = this.#address(target.at, ctx);
       const f = this.fresh("f");
       range = `...((${f}) => [Math.max(0, ${f} + Math.max(${base.from}, -n)), Math.min(n, ${f} + Math.min(${base.to}, n) + 1), -1])(${from})`;
+      start = this.#addressDeps(target.at ?? [], ctx);
     } else throw new NotStandalone(`the axis "${base.t}"`);
-    const test = tests.length === 0 ? "undefined" : `(${j}) => ${tests.map((t) => this.#boolean(this.expr(t, inner))).join(" && ")}`;
-    const body = this.expr(target.body, inner);
+    // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run.
+    const testValues = tests.map((t) => this.#hoist(this.expr(t, inner)));
+    const body = this.#hoist(this.expr(target.body, inner));
+    const deps = new Set([...start, ...[body, ...testValues].flatMap((x) => [...x.deps])].filter((d) => d !== level));
+    const test = testValues.length === 0 ? "undefined" : `(${j}) => ${testValues.map((t) => this.#boolean(t)).join(" && ")}`;
     const num = op === "sum" || op === "mean" ? this.check("number") : "undefined";
     const kind = NUMBER_LIST_OPS.has(op) ? "number" : op === "first" ? body.kind : "boolean";
     this.lists.add(op);
     // The arguments at the end with no effect go away: an absent test, false and an absent check.
     const args = [JSON.stringify(op), range, `(${j}) => ${body.code}`, test, String(strict), num];
     while (["undefined", "false"].includes(args.at(-1) ?? "")) args.pop();
-    return { code: `${this.use("L")}(${args.join(", ")})`, kind, safe: false };
+    return { code: `${this.use("L")}(${args.join(", ")})`, kind, safe: false, deps };
   }
 
-  /** A node of the memo: one function of its keys for each structure, with an entry for each value of the keys. */
+  /**
+   * A node of the memo: one function of its keys for each structure, with an entry for each value of the keys. A key
+   * that is a constant of the run is the variable of that constant, not a key of the function. A node with no other key
+   * is a constant of the run itself.
+   */
   #memoized(e: Expr, keys: readonly Expr[], ctx: Ctx): Value {
-    const values = keys.map((k) => this.expr(k, ctx));
-    // The kinds of the keys decide the ops in the node, so they are a part of the structure. Each key can hold the error
-    // sentinel in the function, so the nodes with a safe key and the nodes without one share it.
-    const structure = canonical([e, values.map((x) => String(x.kind))], new Map(keys.map((k, i) => [k, i])));
+    const values = keys.map((k) => this.#hoist(this.expr(k, ctx)));
+    const varying = keys.filter((_k, i) => (values[i] as Value).deps.size > 0);
+    const params = varying.map(() => this.fresh("q"));
+    const names = new Map(
+      keys.map((k, i): [Expr, Name] => {
+        const x = values[i] as Value;
+        const p = varying.indexOf(k);
+        return [k, p < 0 ? { code: x.held ?? x.code, kind: x.kind, lazy: x.held !== undefined, deps: NO_DEPS } : { code: params[p] as string, kind: x.kind, lazy: true, deps: new Set([1]) }];
+      }),
+    );
+    const outer = this.#inside;
+    this.#inside = e;
+    const bodyCtx: Ctx = { origin: undefined, focus: undefined, level: 1, env: new Map(), keys: names };
+    if (varying.length === 0) {
+      const body = this.#hoist(this.expr(e, bodyCtx));
+      this.#inside = outer;
+      return body;
+    }
+    // The kinds of the keys decide the ops in the node, so they are a part of the structure. Each key of the function
+    // can hold the error sentinel, so the nodes with a safe key and the nodes without one share it.
+    const tokens = new Map(keys.map((k, i): [Expr, string] => [k, varying.includes(k) ? `#${varying.indexOf(k)}:${String(values[i]?.kind)}` : `@${names.get(k)?.code ?? ""}`]));
+    const structure = canonical(e, tokens);
     let fn = this.#structures.get(structure);
     if (fn === undefined) {
       fn = this.fresh("m");
       this.#structures.set(structure, fn);
-      const params = keys.map(() => this.fresh("q"));
-      const outer = this.#inside;
-      this.#inside = e;
-      const names = values.map((x, i): Name => ({ code: params[i] as string, kind: x.kind, lazy: true }));
-      const body = this.expr(e, { origin: undefined, focus: undefined, env: new Map(), keys: new Map(keys.map((k, i): [Expr, Name] => [k, names[i] as Name])) });
-      this.#inside = outer;
+      const body = this.expr(e, bodyCtx);
       this.#kinds.set(fn, body.kind);
-      this.run.set(fn, `const ${fn} = ${this.use("M")}((${params.join(", ")}) => ${body.code});`);
+      this.run.set(fn, `const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => ${body.code});`);
     }
-    return { code: `${fn}(${values.map((x) => this.#attempt(x)).join(", ")})`, kind: this.#kinds.get(fn), safe: false };
+    this.#inside = outer;
+    const args = varying.map((k) => this.#attempt(values[keys.indexOf(k)] as Value));
+    return { code: `${fn}(${args.join(", ")})`, kind: this.#kinds.get(fn), safe: false, deps: depsOf(...values) };
   }
 
   readonly #structures = new Map<string, string>();
   readonly #kinds = new Map<string, PrimitiveKind | undefined>();
+
+  /** This method gives the value of the program at the key of the run. A constant of the run evaluates once. */
+  root(expr: Expr): Value {
+    return this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, env: new Map(), keys: new Map() }));
+  }
 }
 
 /** The helpers that each helper uses. */
-const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], G: ["F"], B: ["F"], I: [], W: ["F"], M: ["T", "G"], L: ["F"] };
+const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], G: ["F"], B: ["F"], I: [], M: ["T", "G"], M1: ["T", "G"], L: ["F"] };
 
 /**
  * This function prints a program as a standalone ES module. The module exports `VexContractError`, `VEX_ERROR` and a
@@ -541,7 +654,7 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
   const p = new Printer(expr, options);
   let value: Value;
   try {
-    value = p.expr(expr, { origin: "o", focus: "o", env: new Map(), keys: new Map() });
+    value = p.root(expr);
   } catch (thrown) {
     // Each error of the printer is a NotStandalone. Another exception is a defect, so it goes to the caller.
     /* v8 ignore next -- @preserve */
@@ -568,7 +681,7 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
     "/** The value of a key where the program gives an error of Vex. */",
     "export const VEX_ERROR = Object.freeze({ vexError: true });",
     "const E = {};",
-    ...(helpers.has("M") ? ["const Z = {};"] : []),
+    ...(helpers.has("M") || helpers.has("M1") ? ["const Z = {};"] : []),
     ...[...helpers].map((h) => (h === "L" ? listHelper(p.lists) : HELPERS[h])),
     ...p.top.values(),
     `export function ${name}(records, vars) {`,
@@ -583,7 +696,7 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
     ...[...p.vars].map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
     ...[...p.run.values()].map((x) => `  ${x}`),
     "  const out = [];",
-    `  for (let o = 0; o < n; o++) out.push(T(() => ${value.code}));`,
+    `  for (let o = 0; o < n; o++) out.push(${value.held ?? `T(() => ${value.code})`});`,
     "  return out.map((x) => (x === E ? VEX_ERROR : x));",
     "}",
     "",

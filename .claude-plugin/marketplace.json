@@ -1,0 +1,18 @@
+{
+  "name": "vex",
+  "description": "The Claude Code plugin of Vex, the typed spreadsheet formulas over TypeScript objects.",
+  "owner": { "name": "Mark Russell" },
+  "plugins": [
+    {
+      "name": "vex",
+      "source": "./plugins/vex",
+      "description": "The skill for Vex: the model, the rules, the catalog of the domains, recipes, how to make a domain and how to report a gap.",
+      "relevance": {
+        "topic": "Vex",
+        "signals": {
+          "manifestDeps": [{ "file": "[/\\\\]package\\.json$", "pattern": "\"@mark1russell7/vex(-domains|-compiler|-testkit)?\"\\s*:" }]
+        }
+      }
+    }
+  ]
+}

@@ -39,6 +39,17 @@ separated.at("A"); // => { tag: "some", value: false }
 separated.explain("A"); // a trace of each step
 ```
 
+## For AI agents
+
+The repository has a plugin for Claude Code with the skill `vex`. The skill gives the model, the rules, the catalog of the domains and recipes. It also tells how to make a domain and how to report a gap. A test makes the catalog from the code, and each example of the skill is a doc test.
+
+```sh
+/plugin marketplace add mark1russell7/vex
+/plugin install vex@vex
+```
+
+Another agent can read [`plugins/vex/skills/vex/SKILL.md`](./plugins/vex/skills/vex/SKILL.md) and [`llms.txt`](https://mark1russell7.github.io/vex/llms.txt).
+
 ## Status
 
 The packages are on npm (see the badge for the version). The specification (Vex 1.0) is in [`spec/README.md`](./spec/README.md), and the plan is in [`docs/REVIEW.md`](./docs/REVIEW.md). The code before the rebuild is in the git history (package `@vex/legacy`, removed after the parity tests passed).

@@ -1,0 +1,242 @@
+# The catalog of the domains
+
+The test `packages/site/src/skill-catalog.test.ts` makes this file from the domain objects of `@mark1russell7/vex-domains`. Do not change it by hand.
+
+- An op applies to a receiver, the first argument. The first domain in `vex(...)` whose `is` accepts the receiver gives the op.
+- In the builder, write `value._.op(...rest)`. In the IR, write `app("op", receiver, ...rest)`.
+- "Lifts numbers" means that a number argument becomes a value of the domain, for example 2 becomes the vector (2, 2).
+- "Laws" are the claims of the op. The law checker of `@mark1russell7/vex-testkit` tests them.
+- "Identity" is the value of `reduce` over an empty list.
+- "not declared" means that the op does not declare the kinds of its result or of its parameters.
+
+## The ops of the core
+
+These ops apply to each value. They are not ops of a domain.
+
+| Op | What it gives |
+|---|---|
+| `if(test, then, otherwise)` | `then` or `otherwise`. Only the selected branch evaluates. |
+| `and(...)`, `or(...)` | A boolean. The evaluation stops at the first value that decides. |
+| `ifError(value, fallback)` | `fallback` when `value` gives an error. It does not hide `#DEPTH!`. |
+| `count`, `values`, `keys`, `errors`, `first` | A fact of a list, for each kind of item |
+| `sum`, `mean`, `min`, `max` | A number from a list of numbers. Other items give an error. |
+| `any`, `all`, `none` | A boolean from a list of booleans |
+| `reduce(list, op)` | The left fold of the list with the op of the domain of the items, for example `reduce(sizes, "max")` |
+
+A list op skips error items. The option `{ strict: true }` gives the first error.
+
+## `NumDomain`
+
+Numbers. A result that is not finite gives `#NUM!`. The values are of the type `number`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `add` | `add(number, number)` | number |  | commutative, associative | 0 |
+| `subtract` | `subtract(number, number)` | number |  |  |  |
+| `multiply` | `multiply(number, number)` | number |  | commutative, associative | 1 |
+| `divide` | `divide(number, number)` | number |  |  |  |
+| `mod` | `mod(number, number)` | number |  |  |  |
+| `pow` | `pow(number, number)` | number |  |  |  |
+| `min` | `min(number, number)` | number |  | commutative, associative, idempotent |  |
+| `max` | `max(number, number)` | number |  | commutative, associative, idempotent |  |
+| `clamp` | `clamp(number, number, number)` | number |  |  |  |
+| `abs` | `abs(number)` | number |  |  |  |
+| `negate` | `negate(number)` | number |  |  |  |
+| `sqrt` | `sqrt(number)` | number |  |  |  |
+| `ln` | `ln(number)` | number |  |  |  |
+| `exp` | `exp(number)` | number |  |  |  |
+| `log10` | `log10(number)` | number |  |  |  |
+| `sin` | `sin(number)` | number |  |  |  |
+| `cos` | `cos(number)` | number |  |  |  |
+| `asin` | `asin(number)` | number |  |  |  |
+| `hypot` | `hypot(number, number)` | number |  | commutative |  |
+| `date` | `date(number, number, number)` | LocalDate |  |  |  |
+| `vec2` | `vec2(number, number)` | Vec2 |  |  |  |
+| `floor` | `floor(number)` | number |  |  |  |
+| `ceil` | `ceil(number)` | number |  |  |  |
+| `round` | `round(number)` | number |  |  |  |
+| `gt` | `gt(number, number)` | boolean |  |  |  |
+| `gte` | `gte(number, number)` | boolean |  |  |  |
+| `lt` | `lt(number, number)` | boolean |  |  |  |
+| `lte` | `lte(number, number)` | boolean |  |  |  |
+| `eq` | `eq(number, number)` | boolean |  | commutative |  |
+
+## `BoolDomain`
+
+Booleans. The values are of the type `boolean`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `and` | `and(boolean, boolean)` | boolean |  | commutative, associative, idempotent | true |
+| `or` | `or(boolean, boolean)` | boolean |  | commutative, associative, idempotent | false |
+| `xor` | `xor(boolean, boolean)` | boolean |  | commutative, associative | false |
+| `not` | `not(boolean)` | boolean |  |  |  |
+| `eq` | `eq(boolean, boolean)` | boolean |  | commutative |  |
+
+## `TextDomain`
+
+Texts. The values are of the type `string`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `concat` | `concat(string, value)` | string |  |  |  |
+| `length` | `length(string)` | number |  |  |  |
+| `upper` | `upper(string)` | string |  |  |  |
+| `lower` | `lower(string)` | string |  |  |  |
+| `trim` | `trim(string)` | string |  |  |  |
+| `contains` | `contains(string, string)` | boolean |  |  |  |
+| `eq` | `eq(string, string)` | boolean |  | commutative |  |
+
+## `Vec2Domain`
+
+2D vectors: `new Vec2(x, y)`, or `vec2` of `NumDomain`. A component that is not finite gives `#NUM!`. The values are of the type `Vec2`. A number lifts to a value of the domain.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `x` | `x(Vec2)` | number |  |  |  |
+| `y` | `y(Vec2)` | number |  |  |  |
+| `add` | `add(Vec2, Vec2)` | Vec2 | yes | commutative, associative | (0, 0) |
+| `subtract` | `subtract(Vec2, Vec2)` | Vec2 | yes |  |  |
+| `multiply` | `multiply(Vec2, Vec2)` | Vec2 | yes | commutative, associative | (1, 1) |
+| `divide` | `divide(Vec2, Vec2)` | Vec2 | yes |  |  |
+| `min` | `min(Vec2, Vec2)` | Vec2 | yes | commutative, associative, idempotent |  |
+| `max` | `max(Vec2, Vec2)` | Vec2 | yes | commutative, associative, idempotent |  |
+| `scale` | `scale(Vec2, number)` | Vec2 |  |  |  |
+| `negate` | `negate(Vec2)` | Vec2 |  |  |  |
+| `halve` | `halve(Vec2)` | Vec2 |  |  |  |
+| `abs` | `abs(Vec2)` | Vec2 |  |  |  |
+| `round` | `round(Vec2)` | Vec2 |  |  |  |
+| `floor` | `floor(Vec2)` | Vec2 |  |  |  |
+| `ceil` | `ceil(Vec2)` | Vec2 |  |  |  |
+| `clamp` | `clamp(Vec2, number, number)` | Vec2 |  |  |  |
+| `swap` | `swap(Vec2)` | Vec2 |  |  |  |
+| `rotate` | `rotate(Vec2, number)` | Vec2 |  |  |  |
+| `normalize` | `normalize(Vec2)` | Vec2 |  |  |  |
+| `lerp` | `lerp(Vec2, Vec2, number)` | Vec2 |  |  |  |
+| `length` | `length(Vec2)` | number |  |  |  |
+| `lengthSq` | `lengthSq(Vec2)` | number |  |  |  |
+| `distance` | `distance(Vec2, Vec2)` | number |  |  |  |
+| `dot` | `dot(Vec2, Vec2)` | number |  | commutative |  |
+| `cross` | `cross(Vec2, Vec2)` | number |  |  |  |
+| `angle` | `angle(Vec2)` | number |  |  |  |
+| `area` | `area(Vec2)` | number |  |  |  |
+| `sum` | `sum(Vec2)` | number |  |  |  |
+| `minComponent` | `minComponent(Vec2)` | number |  |  |  |
+| `maxComponent` | `maxComponent(Vec2)` | number |  |  |  |
+| `equals` | `equals(Vec2, Vec2)` | boolean |  | commutative |  |
+| `anyNonPositive` | `anyNonPositive(Vec2)` | boolean |  |  |  |
+| `allPositive` | `allPositive(Vec2)` | boolean |  |  |  |
+| `anyNegative` | `anyNegative(Vec2)` | boolean |  |  |  |
+| `allNonNegative` | `allNonNegative(Vec2)` | boolean |  |  |  |
+| `anyZero` | `anyZero(Vec2)` | boolean |  |  |  |
+| `allZero` | `allZero(Vec2)` | boolean |  |  |  |
+| `anyLessThan` | `anyLessThan(Vec2, number)` | boolean |  |  |  |
+| `allLessThan` | `allLessThan(Vec2, number)` | boolean |  |  |  |
+| `anyGreaterThan` | `anyGreaterThan(Vec2, number)` | boolean |  |  |  |
+| `allGreaterThan` | `allGreaterThan(Vec2, number)` | boolean |  |  |  |
+
+## `NDVectorDomain`
+
+Vectors with named components. A component that one vector does not have counts as 0. No op lifts a number. The values are of the type `NDVector`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `add` | `add(NDVector, NDVector)` | NDVector |  | commutative, associative | NDVector({}) |
+| `subtract` | `subtract(NDVector, NDVector)` | NDVector |  |  |  |
+| `multiply` | `multiply(NDVector, NDVector)` | NDVector |  | commutative, associative |  |
+| `min` | `min(NDVector, NDVector)` | NDVector |  | commutative, associative, idempotent |  |
+| `max` | `max(NDVector, NDVector)` | NDVector |  | commutative, associative, idempotent |  |
+| `mergePreferNonZero` | `mergePreferNonZero(NDVector, NDVector)` | NDVector |  | associative, idempotent |  |
+| `scale` | `scale(NDVector, number)` | NDVector |  |  |  |
+| `clamp` | `clamp(NDVector, number, number)` | NDVector |  |  |  |
+| `dot` | `dot(NDVector, NDVector)` | number |  | commutative |  |
+| `length` | `length(NDVector)` | number |  |  |  |
+| `norm1` | `norm1(NDVector)` | number |  |  |  |
+| `normInf` | `normInf(NDVector)` | number |  |  |  |
+| `equals` | `equals(NDVector, NDVector)` | boolean |  | commutative |  |
+| `pick` | `pick(NDVector, …)` | not declared |  |  |  |
+| `withKeys` | `withKeys(NDVector, …)` | not declared |  |  |  |
+| `get` | `get(NDVector, string)` | number |  |  |  |
+| `set` | `set(NDVector, string, number)` | NDVector |  |  |  |
+
+## `LiftedNDVectorDomain`
+
+The vectors of `NDVectorDomain`, but a number argument of `add`, `subtract`, `multiply` or `dot` becomes `{ scalar: n }`. The values are of the type `NDVector`. A number lifts to a value of the domain.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `add` | `add(NDVector, NDVector)` | NDVector | yes | commutative, associative | NDVector({}) |
+| `subtract` | `subtract(NDVector, NDVector)` | NDVector | yes |  |  |
+| `multiply` | `multiply(NDVector, NDVector)` | NDVector | yes | commutative, associative |  |
+| `min` | `min(NDVector, NDVector)` | NDVector |  | commutative, associative, idempotent |  |
+| `max` | `max(NDVector, NDVector)` | NDVector |  | commutative, associative, idempotent |  |
+| `mergePreferNonZero` | `mergePreferNonZero(NDVector, NDVector)` | NDVector |  | associative, idempotent |  |
+| `scale` | `scale(NDVector, number)` | NDVector |  |  |  |
+| `clamp` | `clamp(NDVector, number, number)` | NDVector |  |  |  |
+| `dot` | `dot(NDVector, NDVector)` | number | yes | commutative |  |
+| `length` | `length(NDVector)` | number |  |  |  |
+| `norm1` | `norm1(NDVector)` | number |  |  |  |
+| `normInf` | `normInf(NDVector)` | number |  |  |  |
+| `equals` | `equals(NDVector, NDVector)` | boolean |  | commutative |  |
+| `pick` | `pick(NDVector, …)` | not declared |  |  |  |
+| `withKeys` | `withKeys(NDVector, …)` | not declared |  |  |  |
+| `get` | `get(NDVector, string)` | number |  |  |  |
+| `set` | `set(NDVector, string, number)` | NDVector |  |  |  |
+
+## `NumRecordDomain`
+
+Plain records of finite numbers, for example from `rec`. `toNDVector` makes a vector. The values are of the type `record of numbers`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `toNDVector` | `toNDVector(record of numbers)` | NDVector |  |  |  |
+
+## `ColorDomain`
+
+RGB colors, with the WCAG ops of contrast. The values are of the type `Color`. A number lifts to a value of the domain.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `add` | `add(Color, Color)` | Color |  | commutative, associative | rgba(0, 0, 0, 0) |
+| `multiply` | `multiply(Color, number)` | Color |  |  |  |
+| `clamp` | `clamp(Color, number, number)` | Color |  |  |  |
+| `mix` | `mix(Color, Color, number)` | Color |  |  |  |
+| `luminance` | `luminance(Color)` | number |  |  |  |
+| `relativeLuminance` | `relativeLuminance(Color)` | number |  |  |  |
+| `contrast` | `contrast(Color, Color)` | number |  | commutative |  |
+| `equals` | `equals(Color, Color)` | boolean |  | commutative |  |
+
+## `AngleDomain`
+
+Angles. The values are of the type `Angle`. A number lifts to a value of the domain.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `add` | `add(Angle, Angle)` | Angle | yes | commutative, associative | 0 rad |
+| `subtract` | `subtract(Angle, Angle)` | Angle | yes |  |  |
+| `scale` | `scale(Angle, number)` | Angle |  |  |  |
+| `normalize` | `normalize(Angle)` | Angle |  |  |  |
+| `toVec2` | `toVec2(Angle, number)` | Vec2 |  |  |  |
+| `sin` | `sin(Angle)` | number |  |  |  |
+| `cos` | `cos(Angle)` | number |  |  |  |
+| `degrees` | `degrees(Angle)` | number |  |  |  |
+
+## `DateDomain`
+
+Days of the calendar, without a time. `date` of `NumDomain` makes a date. The values are of the type `LocalDate`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `add` | `add(LocalDate, number)` | LocalDate |  |  |  |
+| `subtract` | `subtract(LocalDate, value)` | number |  |  |  |
+| `addMonths` | `addMonths(LocalDate, number)` | LocalDate |  |  |  |
+| `endOfMonth` | `endOfMonth(LocalDate, number)` | LocalDate |  |  |  |
+| `year` | `year(LocalDate)` | number |  |  |  |
+| `month` | `month(LocalDate)` | number |  |  |  |
+| `day` | `day(LocalDate)` | number |  |  |  |
+| `weekday` | `weekday(LocalDate)` | number |  |  |  |
+| `gt` | `gt(LocalDate, LocalDate)` | boolean |  |  |  |
+| `gte` | `gte(LocalDate, LocalDate)` | boolean |  |  |  |
+| `lt` | `lt(LocalDate, LocalDate)` | boolean |  |  |  |
+| `lte` | `lte(LocalDate, LocalDate)` | boolean |  |  |  |
+| `eq` | `eq(LocalDate, LocalDate)` | boolean |  | commutative |  |

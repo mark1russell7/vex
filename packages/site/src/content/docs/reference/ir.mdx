@@ -24,6 +24,8 @@ The chain `others(...)` binds the current value to a fresh name (`$0`), and the 
 | `var` | `name` | the value of a bound name |
 | `rec` | `fields` | a record of the values of the fields |
 | `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address `at` |
+| `fold` | `axis`, `init`, `step`, `result`, `at` | a loop over the targets of the axis, in order. `init` gives the names and their first values, and `step` gives the next values at each target. |
+| `iterate` | `limit`, `init`, `step`, `result`, `until` | a loop of at most `limit` steps (a whole number up to 100000). A true `until` stops it. |
 | `ext` | `kind`, `data` | the value that the extension handler of `kind` gives |
 
 The first three kinds have the same shape as the expressions of the `render` project. Thus a `render` expression is also a Vex expression.
@@ -36,8 +38,8 @@ An address is a list of moves. The moves apply in order, from the focus.
 
 | Move | Goes to |
 |---|---|
-| `{ t: "key", key }` | the key, or `#REF!` |
-| `{ t: "index", i }` | the key at position `i` of the key order |
+| `{ t: "key", key }` | the key, or `#REF!`. `key` can be an expression that gives a text. |
+| `{ t: "index", i }` | the key at position `i` of the key order. `i` can be an expression that gives a number. |
 | `{ t: "other" }` | the other key of a space with two keys |
 | `{ t: "offset", d }` | a relative position in an array (one number) or a grid (two numbers) |
 | `{ t: "origin" }` | the origin of the evaluation |
@@ -54,6 +56,9 @@ Vex does not simplify an address. For example, `[other, other]` in a space with 
 | `{ t: "other" }` | the other key of a pair |
 | `{ t: "neighbors", n }` | the 4 or 8 neighbor cells of a grid |
 | `{ t: "children" }`, `{ t: "ancestors" }`, `{ t: "descendants" }`, `{ t: "siblings" }` | the relations of a tree space. Refer to [trees](../../learn/axes/#trees). |
+| `{ t: "window", from, to }` | the keys at the offsets from `from` to `to`, in an array or among siblings |
+| `{ t: "successors" }`, `{ t: "predecessors" }`, `{ t: "reachable" }` | the edges of a graph space |
+| `{ t: "table", name }` | each key of another table of the evaluation |
 | `{ t: "where", axis, test }` | the targets of `axis` where `test` gives `true` |
 
 ## Programs are data

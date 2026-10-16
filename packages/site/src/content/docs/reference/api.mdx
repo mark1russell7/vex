@@ -54,7 +54,7 @@ withHalf.from("weight").call("half").at("A"); // : Optional<number>
 |---|---|
 | `._.op(...args)` | Applies an op of the domain of the current value. The types list only the declared ops, with their parameter types. |
 | `from(field)` | Starts a new value: the field at the current address |
-| `to(key)`, `index(i)`, `offset(...d)` | Moves the address of the later field references and axes |
+| `to(key)`, `index(i)`, `offset(...d)` | Moves the address of the later field references and axes. `to` and `index` also take a chain, for a key or a position from the data. |
 | `other()` | Moves to the other key of a pair. The types offer it only for a space with two keys. |
 | `origin()` | Moves back to the origin |
 | `parent()` | Moves to the parent of the focus, in a tree space |
@@ -65,6 +65,8 @@ withHalf.from("weight").call("half").at("A"); // : Optional<number>
 | `with(binds, body)` | Binds names. The body gets a typed argument for each name. |
 | `fork(branches)` | Evaluates each branch with the current value, and gives a record |
 | `ifError(fallback)` | Gives `fallback` when the chain gives an error |
+| `if(then, otherwise)` | For a boolean value: gives `then` or `otherwise`. Only the selected branch evaluates. |
+| `iterate(limit, init, step, result, { until })` | A loop of at most `limit` steps. `step` and `result` get a chain for each name of `init`. |
 | `call(name, ...args)` | Applies a free function of `withOptions` to the current value. The types accept only the functions whose first parameter accepts the value. |
 | `at(key)`, `value(key)`, `result(key)`, `explain(key)`, `all()` | Evaluates the chain |
 | `program` | The expression of the chain |
@@ -77,7 +79,7 @@ const org = vex(NumDomain).over(space.tree({ ceo: { pay: 300 }, cto: { pay: 200 
 org.start(0).parent().children((c) => c.from("pay")).sum().at("cto"); // => some(390)
 ```
 
-An axis gives a list chain. `result(key)`, `at(key)` and `explain(key)` give the list at an origin: one item for each target, with its key and its result. A list chain has the reductions `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `values`, `keys`, `first` and `reduce(op)`. Each reduction takes `{ strict: true }`. By default, a reduction skips error items. `keys()` gives the keys of the items with a value, and `errors()` gives the error of each item that failed.
+An axis gives a list chain. `result(key)`, `at(key)` and `explain(key)` give the list at an origin: one item for each target, with its key and its result. A list chain has the reductions `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `values`, `keys`, `first` and `reduce(op)`. `sum`, `mean`, `min` and `max` take only numbers, and `reduce("max")` takes the values of a domain, for example vectors. `fold(init, step, result)` is a loop over the items, in order. Each reduction takes `{ strict: true }`. By default, a reduction skips error items. `keys()` gives the keys of the items with a value, and `errors()` gives the error of each item that failed.
 
 ### The traversal
 
@@ -171,7 +173,7 @@ Under `isolatedDeclarations`, give a domain an explicit type. `OpTable<D, Names,
 
 ## The IR
 
-`lit`, `ref`, `app`, `let_`, `v`, `rec`, `each` and `ext` make expressions. `key`, `index`, `other`, `offset`, `origin` and `parent` make moves. `axes.all`, `axes.others`, `axes.other`, `axes.neighbors(n)`, `axes.children`, `axes.ancestors`, `axes.descendants`, `axes.siblings` and `axes.where(axis, test)` make axes. Refer to [the IR](../ir/).
+`lit`, `ref`, `app`, `let_`, `v`, `rec`, `each`, `fold`, `iterate` and `ext` make expressions. `key`, `index`, `other`, `offset`, `origin` and `parent` make moves. `axes.all`, `axes.others`, `axes.other`, `axes.neighbors(n)`, `axes.children`, `axes.ancestors`, `axes.descendants`, `axes.siblings` and `axes.where(axis, test)` make axes. Refer to [the IR](../ir/).
 
 ## Results
 

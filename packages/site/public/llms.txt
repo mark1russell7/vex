@@ -10,10 +10,19 @@ To write a Vex program as data, follow the JSON Schema of the IR: https://mark1r
 - [Concepts](https://mark1russell7.github.io/vex/learn/concepts/): space, origin, focus, address, axis, domain, result
 - [Axes](https://mark1russell7.github.io/vex/learn/axes/): the relations between positions, and the reductions
 - [Sheets and cycles](https://mark1russell7.github.io/vex/learn/sheets/): named columns that read each other, and #CYCLE!
+- [Vectors](https://mark1russell7.github.io/vex/learn/vectors/): one value for the math of two dimensions, and how to make, reduce and read vectors
 - [Error values](https://mark1russell7.github.io/vex/learn/errors/): the codes, and how errors go up the tree
 - [The IR](https://mark1russell7.github.io/vex/reference/ir/): the kinds of expression, the moves, the axes
 - [The API](https://mark1russell7.github.io/vex/reference/api/): the functions and the types of the packages
 - [The specification](https://mark1russell7.github.io/vex/spec/): each rule with its requirement ID and its test status
+
+## For agents
+
+- [The skill of Vex](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/SKILL.md): the model, the rules, a first program, the IR, and when to make a domain or report a gap
+- [The catalog of the domains](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/reference/catalog.md): each domain and each op, with its call, its result and its laws. A test makes it from the code.
+- [Recipes](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/reference/recipes.md): a total over a tree, a running position, a lookup, loops, the compiler and programs as data
+- [Make a domain](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/reference/domains.md): an example, the checklist, and the rules for a standalone module
+- [Versions](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/reference/versions.md): the features of each version. Find the installed version before you use a feature.
 
 ## Optional
 

@@ -26,6 +26,8 @@ const sources = [
   join(repo, "spec/README.md"),
   ...readdirSync(join(repo, "packages")).map((p) => join(repo, "packages", p, "README.md")),
   ...walk(join(site, "src/content/docs")).filter((f) => /\.mdx?$/.test(f)),
+  // The skill of the plugin of Vex: its examples must work too.
+  ...walk(join(repo, "plugins")).filter((f) => /\.md$/.test(f)),
 ].filter((f) => {
   try {
     readFileSync(f);

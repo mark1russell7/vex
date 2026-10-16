@@ -1,0 +1,9 @@
+{
+  "name": "vex",
+  "description": "The skill for Vex, the typed spreadsheet formulas over TypeScript objects: the model, the rules, the catalog of the domains, recipes, how to make a domain and how to report a gap.",
+  "author": { "name": "Mark Russell" },
+  "homepage": "https://mark1russell7.github.io/vex/",
+  "repository": "https://github.com/mark1russell7/vex",
+  "license": "MIT",
+  "keywords": ["vex", "spreadsheet", "formulas", "layout", "domains"]
+}

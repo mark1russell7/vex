@@ -192,6 +192,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     addr(s, origin, focus, at, values) {
       const pos = { origin, focus };
       // An address without computed moves has no values, and its moves are fixed.
+      // Stryker disable next-line ConditionalExpression: fixAddr gives the same fixed moves, so the test only saves an array
       const fixed = values === undefined ? undefined : fixAddr(at, values, pos);
       if (fixed?.ok === false) return F;
       const r = resolveAddr(s, pos, fixed === undefined ? (at as readonly FixedMove[]) : fixed.value);

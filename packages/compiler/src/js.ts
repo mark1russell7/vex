@@ -190,12 +190,14 @@ export function printJs(p: LoopProgram, facts: Facts): string {
     fns.set(f, `${domain(st.domain)}.ops[${expr(constant(x.name))}].fn`);
     attempt(`${f}(${values.join(", ")})`, indent);
     const kind = st.returns;
-    const check = kind === undefined ? undefined : facts.checkOf(kind);
-    if (kind !== undefined) {
-      lines.push(`${indent}if (${out} !== F && typeof ${out} !== "${kind}") return F; // the kind of the result`);
-      if (kind === "number") lines.push(`${indent}if (${out} !== F && !Number.isFinite(${out})) ${out} = F;`);
+    if (kind === undefined) {
+      resultChecks(out, facts.checks, indent);
+      return;
     }
-    if (kind === undefined || check === undefined) resultChecks(out, facts.checks, indent);
+    lines.push(`${indent}if (${out} !== F && typeof ${out} !== "${kind}") return F; // the kind of the result`);
+    if (kind === "number") lines.push(`${indent}if (${out} !== F && !Number.isFinite(${out})) ${out} = F;`);
+    const check = facts.checkOf(kind);
+    if (check === undefined) resultChecks(out, facts.checks, indent);
     else if (facts.checks[check] === true) {
       const d = domain(check);
       lines.push(`${indent}if (${out} !== F) { try { if (!${d}.valid(${out})) ${out} = F; } catch (e) { ${out} = threw_(e); } }`);

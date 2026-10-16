@@ -20,18 +20,25 @@ const k12 = K[12];
 const k13 = K[13];
 const k14 = K[14];
 const k15 = K[15];
+const k16 = K[16];
+const k17 = K[17];
+const k18 = K[18];
 const s3_2 = R.site(k3, 2);
 const s3_2_f = s3_2.fn;
 const s4_2 = R.site(k4, 2);
 const s4_2_f = s4_2.fn;
+const mo0 = R.memo();
+const mo1 = R.memo();
+const mo2 = R.memo();
 const d0 = R.domain(0);
 const d1 = R.domain(1);
 const f3_0 = d0.ops[k3].fn;
 const f6_0 = d0.ops[k6].fn;
 const f11_1 = d1.ops[k11].fn;
+const f16_0 = d0.ops[k16].fn;
 const threw_ = R.threw;
 return function vex(l0, l1, l2, l3) {
-  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37;
+  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37, l38, l39, l40, l41, l42, l43, l44, l45, l46, l47, l48, l49, l50, l51, l52, l53, l54, l55, l56, l57, l58, l59;
   try {
     if (!(has_(l0, l1))) return F; // the origin is a key of the space
     l4 = k0;
@@ -182,8 +189,65 @@ return function vex(l0, l1, l2, l3) {
     if (!((typeof l36 === "object" || typeof l36 === "function"))) return F; // an object
     l36 = l36[k2];
     if (!((l36 !== undefined && l36 !== null))) return F; // a field
-    l37 = rec_(k15, [l10, l11, l33, l36]);
-    return l37;
+    l37 = mo0.get(l0, []);
+    if ((!(l37 !== undefined && l37 !== null))) {
+      l57 = false;
+      L3: {
+        l38 = mo1.get(l0, []);
+        if ((!(l38 !== undefined && l38 !== null))) {
+          l52 = false;
+          L4: {
+            l39 = mo2.get(l0, []);
+            if ((!(l39 !== undefined && l39 !== null))) {
+              l48 = false;
+              L5: {
+                l41 = 0;
+                l42 = l0.records;
+                l43 = keys_(l0);
+                L6: for (l44 = 0; l44 < l43.length; l44++) {
+                  l45 = l43[l44];
+                  l46 = (l42 !== undefined ? l42[l44] : l0.get(l45));
+                  if (!((l46 !== undefined && l46 !== null))) continue L6; // a record
+                  if (!((typeof l46 === "object" || typeof l46 === "function"))) continue L6; // an object
+                  l46 = l46[k2];
+                  if (!((l46 !== undefined && l46 !== null))) continue L6; // a field
+                  l41 = (l41 + 1);
+                }
+                l47 = l41;
+                l48 = true;
+              }
+              l39 = mo2.put(l0, [], l47, l48);
+            }
+            if (!(l39.ok)) break L4; // a value of the memo
+            l49 = l39.v;
+            try { l50 = f16_0(l49, k15); } catch (e) { l50 = threw_(e); }
+            if (l50 !== F && typeof l50 !== "number") return F; // the kind of the result
+            if (l50 !== F && !Number.isFinite(l50)) l50 = F;
+            if (l50 !== F) { try { if (!d0.valid(l50)) l50 = F; } catch (e) { l50 = threw_(e); } }
+            if (!((l50 !== F))) break L4; // an op
+            l51 = l50;
+            l52 = true;
+          }
+          l38 = mo1.put(l0, [], l51, l52);
+        }
+        if (!(l38.ok)) break L3; // a value of the memo
+        l53 = l38.v;
+        l54 = addr_(l0, l1, l1, k17, [l53]);
+        if (!((l54 !== F))) break L3; // an address
+        l55 = l0.get(l54);
+        if (!((l55 !== undefined && l55 !== null))) break L3; // a record
+        if (!((typeof l55 === "object" || typeof l55 === "function"))) break L3; // an object
+        l55 = l55[k2];
+        if (!((l55 !== undefined && l55 !== null))) break L3; // a field
+        l56 = l55;
+        l57 = true;
+      }
+      l37 = mo0.put(l0, [], l56, l57);
+    }
+    if (!(l37.ok)) return F; // a value of the memo
+    l58 = l37.v;
+    l59 = rec_(k18, [l10, l11, l33, l36, l58]);
+    return l59;
   } catch {
     return F;
   }

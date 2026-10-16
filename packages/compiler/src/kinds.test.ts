@@ -7,6 +7,7 @@ import { app, axes, defineDomain, each, evaluate, ext, let_, lit, ref, space, v,
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import { fromCore } from "@mark1russell7/vex-testkit";
 import { describe, expect, it } from "vitest";
+import { factsOf } from "./facts.ts";
 import { generate, tiered, type GenerateOptions } from "./tiers.ts";
 
 // The third record breaks the schema: each of its fields has another kind.
@@ -123,6 +124,30 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
     // No domain accepts a boolean, so the result needs no check of a domain.
     expect(sitesOf(op("gt", n, lit(1)), { domains: [NumDomain], schema: SCHEMA }).source).not.toContain("d1");
     expect(expectSame(op("gt", n, lit(1)), { domains: [NumDomain], schema: SCHEMA })).toBe(1);
+  });
+});
+
+describe("KIND.STATIC: the facts of a static site", () => {
+  it("decides the op from the kinds only: a receiver of an unknown kind, a method of a kernel, a lift and a free function", () => {
+    const twice = (x: unknown): unknown => x;
+    // A receiver without a kind has no static site, also when a free function has the name.
+    expect(factsOf({ domains: [NumDomain], fns: { twice } }).staticSite("twice", [undefined])).toBeUndefined();
+    expect(factsOf({ domains: [NumDomain], fns: { twice } }).staticSite("twice", ["number"])).toEqual({ t: "free" });
+    expect(factsOf({ domains: [NumDomain] }).staticSite("twice", ["number"])).toBeUndefined();
+    // A method of a domain without a primitive type is an op of the value, not a free function with the same name.
+    type Span = { readonly lo: number; readonly hi: number };
+    const Interval = defineDomain({ name: "Interval", is: (u: unknown): u is Span => typeof u === "object" && u !== null, ops: { span: {} } });
+    expect(factsOf({ domains: [Interval], fns: { span: twice } }).staticSite("span", ["domain:Interval"])).toBeUndefined();
+    // A number argument of a lifting parameter needs the dispatch. A boolean argument does not lift, so it is a bad argument.
+    const Lifted = defineDomain({
+      name: "Lifted",
+      is: (u: unknown): u is Span => typeof u === "object" && u !== null,
+      fromScalar: (x: number): Span => ({ lo: x, hi: x }),
+      ops: { mix: { fn: (a: Span, _b: Span, _c: Span): Span => a, liftScalar: [false, true], params: ["domain", "domain"], returns: "domain" } },
+    });
+    const facts = factsOf({ domains: [Lifted] });
+    expect(facts.staticSite("mix", ["domain:Lifted", "domain:Lifted", "number"])).toBeUndefined();
+    expect(facts.staticSite("mix", ["domain:Lifted", "domain:Lifted", "boolean"])).toEqual({ t: "fn", domain: 0, bad: true, returns: "domain:Lifted" });
   });
 });
 

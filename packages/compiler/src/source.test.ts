@@ -74,6 +74,8 @@ describe("COMPILE.SOURCE: the generated source", () => {
       until: iterate(10, { a: lit(1) }, { a: app("multiply", v("a"), lit(2)) }, v("a"), app("gt", v("a"), ref("n"))),
       fold: fold(axes.where(axes.all, app("gt", ref("n"), lit(0))), { sum: lit(0), text: lit("") }, { sum: app("add", v("sum"), ref("n")), text: app("concat", v("text"), ref("s")) }, rec({ sum: v("sum"), text: v("text") }), [index(ref("i"))]),
       computed: ref("n", [key(ref("k")), offset(1)]),
+      // A node of the memo in a computed move: the count of the records.
+      memo: ref("n", [index(app("mod", app("count", each(axes.all, ref("n"))), lit(3)))]),
     });
     await expectGolden("loops", e, { domains: [NumDomain, TextDomain, BoolDomain] });
   });

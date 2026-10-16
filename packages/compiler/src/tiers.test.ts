@@ -1,4 +1,4 @@
-import { evaluate, isVexList, space, type Addr, type Axis, type Expr, type FreeFn, type Space } from "@mark1russell7/vex";
+import { app, axes, each, evaluate, ext, fold, index, isVexList, iterate, key, lit, offset, ok, rec, ref, space, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, modelChain, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -7,6 +7,12 @@ import { emitModule } from "./module.ts";
 import { generate, tiered, type GenerateOptions } from "./tiers.ts";
 
 const DOMAINS = [Vec2Domain, NumDomain, BoolDomain] as const;
+
+/** An extension handler that gives the path of its node, as a text. */
+const pathOf: ExtHandler = (_data, ctx) => ok(ctx.path.join("."));
+
+/** A position from the text of a path: its length, modulo 3, the number of keys of the test. */
+const positionOf = (x: Expr): Expr => app("mod", app("length", x), lit(3));
 const vec = fc.tuple(fc.integer({ min: -5, max: 5 }), fc.integer({ min: -5, max: 5 })).map(([x, y]) => new Vec2(x, y));
 const OPS = ["add", "subtract", "scale", "length", "dot", "divide", "multiply", "anyNonPositive", "gt", "not", "and"];
 const OPTS = { domainValue: vec, ops: OPS };
@@ -70,8 +76,8 @@ const arbListProgram: fc.Arbitrary<Expr> = fc
     fc.constantFrom<Addr | undefined>(undefined, undefined, [{ t: "offset", d: [1] }], [{ t: "index", i: 1 }], [{ t: "origin" }]),
   )
   .map(([op, axis, body, test, rest, bind, at]): Expr => {
-    const each: Expr = { tag: "each", axis: test === undefined ? axis : { t: "where", axis, test }, body, ...(at === undefined ? {} : { at }) };
-    const list: Expr = bind ? { tag: "let", bind: { a: { tag: "ref", path: ["n"] } }, body: each } : each;
+    const items: Expr = { tag: "each", axis: test === undefined ? axis : { t: "where", axis, test }, body, ...(at === undefined ? {} : { at }) };
+    const list: Expr = bind ? { tag: "let", bind: { a: { tag: "ref", path: ["n"] } }, body: items } : items;
     return { tag: "app", op, args: [list, ...rest] };
   });
 
@@ -191,6 +197,25 @@ describe("the tiers", () => {
         for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(x, { domains: DOMAINS, space: s, origin: k })));
       }
     }
+  });
+
+  it("COMPILE.TIERED: an extension in each part of a loop and of an address gets the path of its node", () => {
+    // The handler "where" gives the path of its node, so a wrong path in tier 2 gives another value than the interpreter.
+    const w = ext("where", null);
+    const s = space.array([{ n: 1 }, { n: 2 }, { n: 3 }]);
+    const e = rec({
+      iterate: iterate(2, { a: w, b: lit("") }, { a: app("concat", variable("a"), w) }, app("concat", app("concat", variable("a"), w), variable("b"))),
+      until: iterate(3, { a: lit("") }, { a: app("concat", variable("a"), w) }, app("concat", variable("a"), w), app("gt", app("length", variable("a")), lit(4))),
+      fold: fold(axes.where(axes.all, app("eq", app("length", w), lit(1))), { a: w }, { a: app("concat", variable("a"), w) }, app("concat", variable("a"), w), [index(positionOf(w))]),
+      each: app("values", each(axes.all, w, [index(positionOf(w))])),
+      ref: ref("n", [key(app("concat", lit(""), positionOf(w))), offset(0)]),
+      keyed: ref("n", [index(positionOf(w))]),
+    });
+    const options = { domains: [NumDomain, TextDomain, BoolDomain], extensions: { where: pathOf } };
+    const p = tiered(e, options);
+    expect(p.tier).toBe(2);
+    for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { ...options, space: s, origin: k })));
+    expect(p.stats.fallbacks).toBeLessThan(p.stats.runs);
   });
 
   it("EVAL.SHAPE V-053: an expression that is not valid goes to tier 1, and a module gives the reason", () => {

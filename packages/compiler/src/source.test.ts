@@ -2,8 +2,8 @@
  * The golden files of the generated source (docs/COMPILER.md §10). A change of the generated code shows as a readable
  * diff in review. To accept a change, run `vitest run -u` and commit the new files.
  */
-import { app, axes, each, ext, key, let_, lit, rec, ref, space, v, vex, type CompileOptions, type Expr } from "@mark1russell7/vex";
-import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
+import { app, axes, each, ext, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, vex, type CompileOptions, type Expr } from "@mark1russell7/vex";
+import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { generate } from "./tiers.ts";
 
@@ -65,6 +65,17 @@ describe("COMPILE.SOURCE: the generated source", () => {
       from: app("count", each(axes.others, ref("n"), [key("B")])),
     });
     await expectGolden("lists", e);
+  });
+
+  it("LOOP.NAMES: the loops fold and iterate, with until, a where test, an address and a step of an unknown kind", async () => {
+    const e = rec({
+      // A name without a step keeps its value. The step of "a" reads a field, so its kind needs a check.
+      iterate: iterate(5, { a: lit(0), b: lit(1) }, { a: app("add", ref("n"), v("b")) }, app("add", v("a"), v("b"))),
+      until: iterate(10, { a: lit(1) }, { a: app("multiply", v("a"), lit(2)) }, v("a"), app("gt", v("a"), ref("n"))),
+      fold: fold(axes.where(axes.all, app("gt", ref("n"), lit(0))), { sum: lit(0), text: lit("") }, { sum: app("add", v("sum"), ref("n")), text: app("concat", v("text"), ref("s")) }, rec({ sum: v("sum"), text: v("text") }), [index(ref("i"))]),
+      computed: ref("n", [key(ref("k")), offset(1)]),
+    });
+    await expectGolden("loops", e, { domains: [NumDomain, TextDomain, BoolDomain] });
   });
 
   it("a list and an extension stop the program at an error", async () => {

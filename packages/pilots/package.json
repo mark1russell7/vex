@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@mark1russell7/cue": "github:mark1russell7/cue",
+    "@mark1russell7/vex-compiler": "workspace:*",
     "@mark1russell7/vex-testkit": "workspace:*",
     "@types/node": "^26.6.4",
     "fast-check": "^4.10.2",

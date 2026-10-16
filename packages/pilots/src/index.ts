@@ -5,6 +5,7 @@
  */
 export * from "./grid.ts";
 export * from "./layout-audit.ts";
+export * from "./ireko-grid.ts";
 export * from "./heat.ts";
 export * from "./flock.ts";
 export * from "./polygon.ts";

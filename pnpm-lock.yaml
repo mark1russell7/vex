@@ -333,6 +333,9 @@ importers:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
+      '@mark1russell7/vex-compiler':
+        specifier: workspace:*
+        version: link:../compiler
       '@mark1russell7/vex-testkit':
         specifier: workspace:*
         version: link:../testkit

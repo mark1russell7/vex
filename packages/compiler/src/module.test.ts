@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, defineDomain, each, evaluate, ext, index, key, let_, lit, offset, rec, ref, space, v, type Expr } from "@mark1russell7/vex";
+import { app, axes, defineDomain, each, evaluate, ext, index, key, let_, lit, offset, rec, ref, space, v, type Axis, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -73,7 +73,8 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(source).not.toContain("import");
     const m = await load(source);
     expectSame(m, e);
-    expect(Object.isFrozen(m.run(RECORDS, VARS)[0])).toBe(true);
+    // A record of a module is a new object, not frozen.
+    expect(Object.isFrozen(m.run(RECORDS, VARS)[0])).toBe(false);
   });
 
   it("checks the schema once and throws a VexContractError for an input against it", async () => {
@@ -148,16 +149,15 @@ describe("COMPILE.MODULE: a standalone module", () => {
     const group = (): Expr => op("max", each(axes.where(axes.all, op("eq", op("mod", n, lit(2)), column)), w));
     const e = op("add", group(), op("multiply", group(), lit(2)));
     const source = sourceOf(e);
-    // The two groups share one function, and the nodes above them have functions of their own.
-    expect(source.match(/L\("max"/g)).toHaveLength(1);
-    expect(source.match(/= M1?\(/g)).toHaveLength(3);
+    // The two groups share one function. The nodes above them have no loop of their own, so they have no function.
+    expect(source.match(/= (?:M1?|S)\(/g)).toHaveLength(1);
     expectSame(make(source), e);
     const records = Array.from({ length: 40 }, (_v, i) => ({ n: i, w: i % 7, s: "", b: true }));
     expectSame(make(source), e, records);
     // Two groups that differ only by 0 and -0 have two functions: -0 + 0 is 0, but -0 + -0 is -0.
     const signed = (zero: number): Expr => op("max", each(axes.where(axes.all, op("eq", op("mod", n, lit(2)), column)), op("add", w, lit(zero))));
     const zeros = rec({ plus: signed(0), minus: signed(-0) });
-    expect(sourceOf(zeros).match(/L\("max"/g)).toHaveLength(2);
+    expect(sourceOf(zeros).match(/= (?:M1?|S)\(/g)).toHaveLength(2);
     expectSame(make(sourceOf(zeros)), zeros, [{ n: 0, w: -0, s: "", b: true }, { n: 1, w: -0, s: "", b: true }]);
   });
 
@@ -229,7 +229,45 @@ const records = fc.array(
   { maxLength: 6 },
 );
 
+/**
+ * A list op whose test reads a key of the origin: a node of the memo that keeps its items. The value T, the key, the
+ * other tests and the body can fail, and the list op can be strict.
+ */
+const keyed: fc.Arbitrary<Expr> = fc
+  .record({
+    op: fc.constantFrom("count", "sum", "mean", "min", "max", "any", "all", "none", "first"),
+    cmp: fc.constantFrom("eq", "lt", "lte", "gt", "gte"),
+    keyFirst: fc.boolean(),
+    t: fc.constantFrom<Expr>(n, w, op("mod", n, lit(2)), op("divide", lit(1), w)),
+    key: fc.constantFrom<Expr>(ref("n", [{ t: "origin" }]), op("mod", ref("n", [{ t: "origin" }]), lit(2)), op("divide", lit(1), ref("w", [{ t: "origin" }]))),
+    before: fc.option(fc.constantFrom<Expr>(ref("b"), op("gt", w, lit(0)), op("gt", op("divide", lit(1), w), lit(0))), { nil: undefined }),
+    after: fc.option(fc.constantFrom<Expr>(ref("b"), op("lt", n, lit(2)), op("gt", op("divide", lit(1), n), lit(0))), { nil: undefined }),
+    numBody: fc.constantFrom<Expr>(w, n, op("divide", lit(1), n), op("add", w, ref("w", [{ t: "origin" }]))),
+    boolBody: fc.constantFrom<Expr>(ref("b"), op("gt", w, lit(1)), op("gt", op("divide", lit(1), w), lit(0)), w),
+    strict: fc.boolean(),
+  })
+  .map((r) => {
+    const keyTest = r.keyFirst ? op(r.cmp, r.key, r.t) : op(r.cmp, r.t, r.key);
+    const tests = [...(r.before === undefined ? [] : [r.before]), keyTest, ...(r.after === undefined ? [] : [r.after])];
+    const axis = tests.reduce<Axis>((a, t) => axes.where(a, t), axes.all);
+    const body = ["any", "all", "none"].includes(r.op) ? r.boolBody : r.numBody;
+    return op(r.op, each(axis, body), ...(r.strict ? [lit({ strict: true })] : []));
+  });
+
 describe("COMPILE.MODULE: random programs", () => {
+  it("P17 COMPILE.MODULE: a node of the memo that keeps its items gives the value of the interpreter at each key", () => {
+    let cached = 0;
+    fc.assert(
+      fc.property(keyed, records, (e, rs) => {
+        const source = sourceOf(e);
+        if (source.includes("reach = 0")) cached++;
+        expectSame(make(source), e, rs, VARS);
+      }),
+    );
+    // Most of these programs have a node that keeps its items.
+    expect(cached).toBeGreaterThan(50);
+  });
+
   it("P17 COMPILE.MODULE: a module gives the value of the interpreter at each key, or VEX_ERROR", () => {
     fc.assert(
       fc.property(fc.oneof(program.num, program.bool), records, fc.integer({ min: -3, max: 3 }), fc.constantFrom("x", "y"), (e, rs, a, t) => {

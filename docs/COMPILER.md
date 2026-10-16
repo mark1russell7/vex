@@ -370,35 +370,44 @@ The source of tier 2 has approximately seven lines for each node: the checks of 
 
 #### Standalone modules
 
-`emitModule` prints a program as an ES module with no import of Vex (COMPILE.MODULE). The module checks the schema once, at the start of a run, and an input against the schema throws a `VexContractError`. Each node is one expression:
+`emitModule` prints a program as an ES module with no import of Vex (COMPILE.MODULE). The module checks the schema once, at the start of a run, and an input against the schema throws a `VexContractError`. The module has statements and loops, as a person writes them:
 
-- An error of Vex is a thrown sentinel. `ifError`, the items of a list op and the bindings catch it as the interpreter does. A key with an error gives `VEX_ERROR`.
+- A binding is a variable, and a list op is a `for` loop with a running value.
+- An error of Vex is a thrown sentinel. A binding, `ifError` and an item of a list op catch it, as in the interpreter. A key with an error gives `VEX_ERROR`.
 - Each op is the text of the function of its domain. Thus the module has the bits of the interpreter. The printer gives samples of their kinds to each function and to its copy. A function that reads a name outside itself, for example `concat` of `TextDomain`, gives a reason, not code.
-- A node of the memo is one function of its keys. Two nodes with the same expression share the function, so the widths of the columns in three places of the grid have one function.
-- A value that cannot throw, for example a variable of the schema, needs no check where the program reads it.
+- An op whose function is one expression of operators and of `Math` is inline, with no call.
+- A part that depends on no key of the space is a constant of the run. It evaluates once, before the loop over the keys.
+- A node of the memo with a loop of its own is one function of its keys. Two nodes with the same expression share the function.
+- A node whose key is only in one test of a list op keeps its items. One pass gives the items, and each lookup uses them. With the test `===`, the lookup is a map of the groups. With `<` and values that do not decrease, the lookup is a binary search on the prefixes.
 
 The printer takes a part of the language. It takes an array space, the fields and the variables of the schema, and the axes `all`, `others` and `window`. Each op site must have a static op. Another construct gives a reason. A property compares random programs with the interpreter, and the grid pilot compares the module with the code of ireko.
 
 | The strategy `grid` | Bytes | Gzip |
 |---|---|---|
-| The module of `GRID_PROGRAM` | 8273 | 2551 |
-| The module, minified | 4316 | 1773 |
+| The module of `GRID_PROGRAM` | 9440 | 2768 |
+| The module, minified | 4360 | 1851 |
 | `grid.ts` of ireko, minified | 2615 | 1186 |
 
-Four changes made the module smaller. The list helper has only the branches of the list ops of the program. A name that holds the error sentinel goes to a key as it is. The keys of a function of the memo can always hold the sentinel, so more nodes share a function. A call of the list helper has no empty arguments at its end.
+The module is a part of the core of ireko, so its helpers are small. The helper of a node that keeps its items has only the parts that the nodes of the module use. Only the checks before the run throw a `VexContractError`, so each catch of the run gives the sentinel directly. A count of all the items, whose body cannot fail, is the count of the records.
 
-A branch of ireko (`vex/grid-module`, not merged) uses the module in the strategy `grid`. The 213 tests of ireko pass, also its golden SVG files. The size check of its core gives 14.93 kB of 15 kB. Before the module, it gave 13.72 kB.
+A branch of ireko (`vex/grid-module`, not merged) uses the module in the strategy `grid`. The 213 tests of ireko pass, also its golden SVG files. The size check of its core gives 14.97 kB of 15 kB. Before the module, it gave 13.72 kB.
 
 #### The speed of a module
 
-The module of the grid gives the right bits, but it is slower than the code of ireko. A run evaluates the program at each child, and each read of a column width goes through a map of the memo. The code of ireko makes two loops.
+The first printer made one expression with closures for each node. Its module was approximately 15 times slower than the code of ireko. In the benchmark of the engine of ireko, the trees of 111 nodes were approximately 2.2 times slower. The printer of statements and loops replaced it.
 
-Three changes made the module faster. A part that depends on no key of the space is a constant of the run. It evaluates once, before the loop over the keys. A key of the memo that is such a constant is not a key of the function. An op is a direct call: the boundaries of the errors also catch the exceptions of the ops. A function of the memo with one key has one map and no array of keys.
+| One run of the grid | The code of ireko | The module |
+|---|---|---|
+| 10 children | 1.2 to 1.6 µs | 4.5 µs |
+| 100 children | 4.2 to 6.7 µs | 32 µs |
 
-| The grid, 10 children | Time of one run |
-|---|---|
-| The code of ireko | 2.5 µs |
-| The module, before the three changes | 35 µs |
-| The module, after the three changes | 22 to 30 µs |
+A run of the module is still slower than the code of ireko. Each lookup of a node of the memo goes through a map. But the grid is a small part of a layout. In the benchmark of the engine, four runs alternated between ireko and the module. The two are in the noise of the machine:
 
-In the benchmark of the engine of ireko, the trees of 111 nodes are approximately 2.2 times slower with the module. The trees of 11111 nodes stay approximately the same. The rule of ireko says that its benchmarks hold, so the branch of ireko is not merged. A module at the speed of the loops needs another printer. That printer makes statements and loops, not closures, and it evaluates an aggregate by group for all groups in one pass.
+| The benchmark of the engine, layouts each second | ireko | The module |
+|---|---|---|
+| 111 nodes, nested | 1051 and 1537 | 1733 and 1610 |
+| 111 nodes, linked | 1018 and 1378 | 1345 and 1390 |
+| 1111 nodes, nested | 77 and 117 | 119 and 112 |
+| 11111 nodes, nested | 4.7 and 6.5 | 7.7 and 5.8 |
+
+Thus the benchmarks of ireko hold. The branch of ireko waits for a decision of the owner.

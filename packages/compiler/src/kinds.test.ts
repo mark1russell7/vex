@@ -18,6 +18,9 @@ const ROWS = space.array([
 ]);
 const SCHEMA = { fields: { n: "number", s: "string", b: "boolean" }, vars: { k: "number", t: "string" } } as const;
 const FNS: Readonly<Record<string, FreeFn>> = { twice: (x: unknown): unknown => (typeof x === "number" ? x * 2 : x) };
+
+/** A free function that gives its argument. */
+const same: FreeFn = (x: unknown): unknown => x;
 const OPTIONS: GenerateOptions = { domains: [NumDomain, BoolDomain, TextDomain], fns: FNS, schema: SCHEMA };
 
 /** This function compares the tiered program with the interpreter at each key, and gives the number of fallbacks. */
@@ -129,15 +132,14 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
 
 describe("KIND.STATIC: the facts of a static site", () => {
   it("decides the op from the kinds only: a receiver of an unknown kind, a method of a kernel, a lift and a free function", () => {
-    const twice = (x: unknown): unknown => x;
     // A receiver without a kind has no static site, also when a free function has the name.
-    expect(factsOf({ domains: [NumDomain], fns: { twice } }).staticSite("twice", [undefined])).toBeUndefined();
-    expect(factsOf({ domains: [NumDomain], fns: { twice } }).staticSite("twice", ["number"])).toEqual({ t: "free" });
+    expect(factsOf({ domains: [NumDomain], fns: FNS }).staticSite("twice", [undefined])).toBeUndefined();
+    expect(factsOf({ domains: [NumDomain], fns: FNS }).staticSite("twice", ["number"])).toEqual({ t: "free" });
     expect(factsOf({ domains: [NumDomain] }).staticSite("twice", ["number"])).toBeUndefined();
     // A method of a domain without a primitive type is an op of the value, not a free function with the same name.
     type Span = { readonly lo: number; readonly hi: number };
     const Interval = defineDomain({ name: "Interval", is: (u: unknown): u is Span => typeof u === "object" && u !== null, ops: { span: {} } });
-    expect(factsOf({ domains: [Interval], fns: { span: twice } }).staticSite("span", ["domain:Interval"])).toBeUndefined();
+    expect(factsOf({ domains: [Interval], fns: { span: same } }).staticSite("span", ["domain:Interval"])).toBeUndefined();
     // A number argument of a lifting parameter needs the dispatch. A boolean argument does not lift, so it is a bad argument.
     const Lifted = defineDomain({
       name: "Lifted",

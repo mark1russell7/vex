@@ -19,7 +19,7 @@
  * schema, and the axes `all`, `others` and `window`. The kinds of each op site must decide its op. Another construct
  * gives a reason, not code.
  */
-import { addrExprs, children, isFieldName, moveExpr, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, children, isFieldName, moveExpr, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
@@ -483,6 +483,8 @@ class Printer {
   /** The parts of the helper S that the nodes of the memo that keep their items need (helperS). */
   readonly features = new Set<Feature>();
   #names = 0;
+  /** The level of the names of the next loop. It is far above the levels of the axes, so the two do not meet. */
+  #loops = 1_000_000;
   /** The node of the memo whose function the printer prints, so it prints the node itself. */
   #inside: Expr | undefined;
   readonly #structures = new Map<string, string>();
@@ -626,8 +628,9 @@ class Printer {
       case "each":
         throw new NotStandalone("a list is a value of the program");
       case "fold":
+        return this.#fold(e, ctx);
       case "iterate":
-        throw new NotStandalone(`the loop "${e.tag}"`);
+        return this.#iterate(e, ctx);
       case "ext":
         throw new NotStandalone(`the extension "${e.kind}"`);
     }
@@ -884,13 +887,25 @@ class Printer {
    * A list op over an axis: one `for` loop with a running value. An item with an error is skipped, and with `strict` it
    * is an error of the list op. A value of the wrong kind is an error of the list op, as in the interpreter.
    */
-  #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
-    const strict = this.#strict(op, rest);
-    const { base, tests } = testsOf(target.axis);
-    const at = target.at ?? [];
+  /**
+   * This method gives the loop over the targets of an axis: the statements before it, its bounds and the key that it
+   * skips. `start` has the levels of the address, and `inner` is the position at a target. The axes all, others and
+   * window have a loop.
+   */
+  #targetLoop(axis: Axis, at: readonly Move[], ctx: Ctx): {
+    readonly s: string[];
+    readonly j: string;
+    readonly lo: string;
+    readonly hi: string;
+    readonly skip: string | undefined;
+    readonly fixed: boolean;
+    readonly start: ReadonlySet<number>;
+    readonly tests: readonly Expr[];
+    readonly inner: Ctx;
+  } {
+    const { base, tests } = testsOf(axis);
     const j = this.fresh("j");
-    const level = ctx.level + 1;
-    const inner: Ctx = { ...ctx, focus: j, level };
+    const inner: Ctx = { ...ctx, focus: j, level: ctx.level + 1 };
     const s: string[] = [];
     let lo = "0";
     let hi = "n";
@@ -913,11 +928,19 @@ class Printer {
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
+    return { s, j, lo, hi, skip, fixed: f === undefined, start, tests, inner };
+  }
+
+  #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
+    const strict = this.#strict(op, rest);
+    const at = target.at ?? [];
+    const { s, j, lo, hi, skip, fixed, start, tests, inner } = this.#targetLoop(target.axis, at, ctx);
+    const { level } = inner;
     // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run.
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner)));
     const body = this.#hoist(this.expr(target.body, inner));
     // A count of all the items, whose body cannot fail, is the count of the records. A safe body covers its statements.
-    if (op === "count" && f === undefined && tests.length === 0 && body.v.safe) return bare(plainValue("n", "number"));
+    if (op === "count" && fixed && tests.length === 0 && body.v.safe) return bare(plainValue("n", "number"));
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== level));
     const a = this.fresh("a");
     const n = this.fresh("n");
@@ -970,6 +993,90 @@ class Printer {
     const startSafe = at.every((m) => m.t === "origin");
     const safe = startSafe && !strict && (op === "count" || (BOOLEAN_LIST_OPS.has(op) && body.v.kind === "boolean"));
     return { s, v: { code, kind: listKind(op, body.v.kind), safe, deps } };
+  }
+
+  /**
+   * This method gives the names of a loop (LOOP.NAMES): a variable for each name of `init`, with its first value at the
+   * node. Inside the loop, each name has the level `loop`. Thus a part that reads a name stays in the loop. A loop that
+   * reads no key of the run is a constant of the run.
+   */
+  #loopNames(init: Names, ctx: Ctx, loop: number): { readonly s: string[]; readonly env: Map<string, Name>; readonly vars: ReadonlyMap<string, Name>; readonly deps: Set<number> } {
+    const s: string[] = [];
+    const env = new Map(ctx.env);
+    const vars = new Map<string, Name>();
+    const deps = new Set<number>();
+    for (const [name, x] of Object.entries(init)) {
+      const c = this.expr(x, ctx);
+      if (c.v.kind === undefined) throw new NotStandalone(`the first value of the name "${name}" of a loop has no kind`);
+      const v = this.fresh("l");
+      s.push(...c.s, `let ${v} = ${c.v.code};`);
+      const read: Name = { code: v, kind: c.v.kind, lazy: false, deps: new Set([loop]) };
+      env.set(name, read);
+      vars.set(name, read);
+      for (const d of c.v.deps) deps.add(d);
+    }
+    return { s, env, vars, deps };
+  }
+
+  /** This method gives the statements of one step of a loop: each new value first, and then each name gets its value. */
+  #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>): { readonly s: string[]; readonly deps: ReadonlySet<number> } {
+    const s: string[] = [];
+    const sets: string[] = [];
+    const deps = new Set<number>();
+    for (const [name, x] of Object.entries(step)) {
+      const c = this.#hoist(this.expr(x, inner));
+      const v = vars.get(name) as Name;
+      if (c.v.kind !== v.kind) throw new NotStandalone(`a step of a loop changes the kind of the name "${name}"`);
+      const t = this.fresh("t");
+      s.push(...c.s, `const ${t} = ${c.v.code};`);
+      sets.push(`${v.code} = ${t};`);
+      for (const d of c.v.deps) deps.add(d);
+    }
+    return { s: [...s, ...sets], deps };
+  }
+
+  /**
+   * An iteration (ITERATE.LIMIT, ITERATE.UNTIL): a `for` loop with a variable for each name. An error of a value, of the
+   * test or of the result throws, so it is the value of the iteration.
+   */
+  #iterate(e: ExprOf<"iterate">, ctx: Ctx): Code {
+    const loop = this.#loops++;
+    const names = this.#loopNames(e.init, ctx, loop);
+    const inner: Ctx = { ...ctx, env: names.env };
+    const until = e.until === undefined ? undefined : this.expr(e.until, inner);
+    const step = this.#loopStep(e.step, inner, names.vars);
+    const result = this.expr(e.result, inner);
+    const k = this.fresh("k");
+    const body = [
+      ...(until === undefined ? [] : [...until.s, `if (${this.#boolean(until.v)}) break;`]),
+      `if (${k} === ${String(e.limit)}) ${until === undefined ? "break;" : `${this.use("F")}();`}`,
+      ...step.s,
+    ];
+    const inside = [...(until?.v.deps ?? []), ...step.deps, ...result.v.deps].filter((d) => d !== loop);
+    const deps = new Set([...names.deps, ...inside]);
+    return { s: [...names.s, `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps } };
+  }
+
+  /**
+   * A fold (FOLD.ORDER, FOLD.ERROR): the loop over the targets of an axis, with a variable for each name. The tests read
+   * only the names outside the fold. An error throws, so it is the value of the fold.
+   */
+  #fold(e: ExprOf<"fold">, ctx: Ctx): Code {
+    const loop = this.#loops++;
+    const names = this.#loopNames(e.init, ctx, loop);
+    const t = this.#targetLoop(e.axis, e.at ?? [], ctx);
+    const tests = t.tests.map((x) => this.#hoist(this.expr(x, t.inner)));
+    const step = this.#loopStep(e.step, { ...t.inner, env: names.env }, names.vars);
+    const result = this.expr(e.result, { ...ctx, env: names.env });
+    const body = [
+      ...(t.skip === undefined ? [] : [`if (${t.j} === ${t.skip}) continue;`]),
+      ...tests.flatMap((c) => [...c.s, `if (!${this.#boolean(c.v)}) continue;`]),
+      ...step.s,
+    ];
+    const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level);
+    const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
+    const head = `for (let ${t.j} = ${t.lo}; ${t.j} < ${t.hi}; ${t.j}++) {`;
+    return { s: [...names.s, ...t.s, head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps } };
   }
 
   /**

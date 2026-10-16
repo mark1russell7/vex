@@ -284,6 +284,11 @@ export function printJs(p: LoopProgram, facts: Facts): string {
         stmts(s.body, `${indent}  `);
         lines.push(`${indent}}`);
         return;
+      case "repeat":
+        lines.push(`${indent}L${s.label}: for (;;) {`);
+        stmts(s.body, `${indent}  `);
+        lines.push(`${indent}}`);
+        return;
       case "next":
         lines.push(`${indent}continue;`);
         return;

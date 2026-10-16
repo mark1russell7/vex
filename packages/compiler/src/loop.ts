@@ -110,6 +110,8 @@ export type LStmt =
   | { readonly t: "loop"; readonly label: number; readonly item: number; readonly index: number; readonly array: number; readonly over: LExpr; readonly body: readonly LStmt[] }
   /** A block with a label. A `break` with the label ends it. */
   | { readonly t: "block"; readonly label: number; readonly body: readonly LStmt[] }
+  /** A loop with a label that repeats its body until a `break` with the label ends it. */
+  | { readonly t: "repeat"; readonly label: number; readonly body: readonly LStmt[] }
   /** The next item of the innermost loop. */
   | { readonly t: "next" }
   /** A value at the end of an array. */

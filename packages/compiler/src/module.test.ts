@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, defineDomain, each, evaluate, ext, index, key, let_, lit, offset, rec, ref, space, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
+import { app, axes, defineDomain, each, evaluate, ext, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -442,6 +442,29 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expectSame(make(sourceOf(e)), e, MANY);
   });
 
+  it("LOOP.NAMES: fold and iterate are for loops with a variable for each name", async () => {
+    const mid = op("divide", op("add", v("lo"), v("hi")), lit(2));
+    const below = op("gt", lit(2), op("multiply", mid, mid));
+    const e = rec({
+      // A fold in the order of the axis, which depends on no key: a constant of the run.
+      digits: fold(axes.all, { s: lit(0) }, { s: op("add", op("multiply", v("s"), lit(10)), n) }, v("s")),
+      // A fold from the key, and a fold with a test and a result at the node.
+      window: op("ifError", fold(axes.window(0, 1), { s: lit(0) }, { s: op("add", v("s"), w) }, v("s"), [offset(1)]), lit(-1)),
+      tested: fold(axes.where(axes.others, ref("b")), { s: lit(0), k: K }, { s: op("add", v("s"), op("multiply", n, v("k"))) }, op("add", v("s"), n)),
+      // A bisection with two names: a constant of the run. A swap of two names at each key.
+      root: iterate(30, { lo: lit(0), hi: lit(2) }, { lo: op("if", below, mid, v("lo")), hi: op("if", below, v("hi"), mid) }, v("hi")),
+      swap: iterate(3, { a: w, b: n }, { a: v("b"), b: v("a") }, op("subtract", v("a"), v("b"))),
+      // An iteration that a test stops, and one whose test is never true.
+      until: iterate(10, { x: lit(1) }, { x: op("multiply", v("x"), lit(2)) }, v("x"), op("gt", v("x"), K)),
+      never: op("ifError", iterate(2, { x: lit(1) }, { x: v("x") }, v("x"), op("gt", v("x"), lit(5))), lit(-1)),
+    });
+    await expectGolden("loops", e);
+    // A name needs a kind, and a step keeps the kind of its name.
+    expect(reasonOf(iterate(1, { x: op("if", ref("b"), n, ref("s")) }, {}, lit(0)))).toBe('the first value of the name "x" of a loop has no kind');
+    expect(reasonOf(iterate(1, { x: lit(0) }, { x: ref("b") }, lit(0)))).toBe('a step of a loop changes the kind of the name "x"');
+    expect(reasonOf(fold(axes.children, { x: lit(0) }, {}, v("x")))).toBe('the axis "children"');
+  });
+
   it("NAV.COMPUTED: the moves with a position or a key from an expression", async () => {
     const safe = (x: Expr): Expr => op("ifError", x, lit(-1));
     const e = rec({
@@ -584,6 +607,11 @@ const program = fc.letrec<{ num: Expr; bool: Expr }>((tie) => ({
       .map(([o, a, body, test, strict, at]) => op(o, each(test === undefined ? a : axes.where(a, test), body, at), ...(strict ? [lit({ strict: true })] : []))),
     fc.tuple(tie("num"), tie("num")).map(([a, b]) => let_({ x: a }, op("add", v("x"), b))),
     fc.constant(op("length", ref("s"))),
+    // The loops: a name s with a first value and a step, as an iteration or as a fold over an axis.
+    fc.tuple(fc.integer({ min: 0, max: 3 }), tie("num"), tie("num")).map(([k, init, step]) => iterate(k, { s: init }, { s: op("add", v("s"), step) }, v("s"))),
+    fc
+      .tuple(fc.constantFrom(axes.all, axes.others, axes.window(-1, 0)), tie("num"), tie("num"), fc.constantFrom(undefined, [offset(1)]))
+      .map(([a, init, step, at]) => fold(a, { s: init }, { s: op("max", v("s"), step) }, v("s"), at)),
   ),
   bool: fc.oneof(
     { maxDepth: 4, depthSize: "small" },

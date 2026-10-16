@@ -28,13 +28,15 @@ interface Ctx {
 /** The axis inside the `where` axes of an axis. */
 const baseOf = (a: Axis): Axis => (a.t === "where" ? baseOf(a.axis) : a);
 
+/** This function gives the test of a domain for a value. A test that throws rejects the value. */
 const safeIs = (d: AnyDomain, x: unknown): boolean => {
+  let accepted = false;
   try {
-    return d.is(x);
-    // Stryker disable next-line BlockStatement: an empty catch gives undefined, which also counts as false
+    accepted = d.is(x);
   } catch {
-    return false;
+    // The value stays rejected.
   }
+  return accepted;
 };
 
 function method(self: unknown, name: string): ((...a: unknown[]) => unknown) | undefined {
@@ -231,7 +233,8 @@ function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[],
         const named = typeof o === "object" && o !== null ? (o as { domain?: unknown }).domain : undefined;
         if (named !== undefined && !c.domains.some((dom) => dom.name === named)) return err("#NAME?");
         const ds = c.domains.filter((dom) => Object.hasOwn(dom.ops, name) && (dom.ops[name] as { identity?: unknown }).identity !== undefined && (named === undefined || dom.name === named));
-        const id = ds.length === 1 ? (ds[0]?.ops[name] as { identity: () => unknown } | undefined)?.identity : undefined;
+        const only = ds.length === 1 ? (ds[0]?.ops[name] as { identity: () => unknown } | undefined) : undefined;
+        const id = only?.identity;
         return id === undefined ? err("#N/A") : val(id());
       }
       let acc: unknown = vs[0];
@@ -263,9 +266,10 @@ function callOp(op: string, vs: readonly unknown[], c: Ctx): RefOutcome {
     const m = spec?.fn === undefined && (spec !== undefined || d.methods === "all") ? method(self, op) : undefined;
     if (spec?.fn === undefined && m === undefined) continue;
     let rest = vs.slice(1);
+    // An op without liftScalar, or with false, lifts no argument, so the map below changes nothing for it.
     const lift = spec?.liftScalar;
-    if (lift !== undefined && lift !== false && d.fromScalar !== undefined) {
-      const from = d.fromScalar;
+    const from = d.fromScalar;
+    if (from !== undefined) {
       try {
         rest = rest.map((a, i): unknown => (typeof a === "number" && (lift === true || (Array.isArray(lift) && lift[i] === true)) ? from(a) : a));
       } catch {

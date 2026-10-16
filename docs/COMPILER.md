@@ -173,6 +173,8 @@ A domain can give an **inline form** for an op: the arithmetic on the components
 
 A sheet whose cell references have fixed addresses has a fixed order of evaluation. The compiler gives straight-line code in that order, like the calculation chain of a spreadsheet. A recurrence over `row(-1)` becomes one forward loop.
 
+The first form of this is done (§13.2). `SheetRun.fill` evaluates the cells in a static order, and each cell reference finds a finished cell. Generated code that reads the cells without the extension is a later step.
+
 ### 7.5 Recalculation
 
 A run knows which cell reads which cell. After a change of one record, only the cells that depend on it change. This is for the live editor of ireko and for the drag of a box in Graph.
@@ -232,10 +234,10 @@ The owner made these decisions on 2026-10-13:
 | Phase | Deliverables | Done when |
 |---|---|---|
 | C1 The compiler | The package, the loop IR, the back end of JavaScript source, `tiered`, the checks and the fallback, P17, golden files, the speed gate | Done on 2026-10-13 (§13). P17 passes, and the speed lane is 2.3 and 1.6 times the loops. |
-| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), the memo of work that does not depend on the origin (COMPILE.MEMO), aggregates by group (COMPILE.GROUP), sheets with fixed addresses | The speed lane is within 1.2 times the loops. A run at each key costs O(n) for work that does not depend on the origin, and O(n times the groups) for an aggregate by group. These are done (§13.2), also the compiled formulas of a sheet run. The static order of the cells of a sheet is open. |
-| C3 ireko | The kinds (§3.2) and `returns` on the ops of the built-in domains, `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
+| C2 Speed | The fast path of each op site in the source, the records of a space by index (SPACE.RECORDS), the memo of work that does not depend on the origin (COMPILE.MEMO), aggregates by group (COMPILE.GROUP), sheets with fixed addresses | The speed lane is within 1.2 times the loops. A run at each key costs O(n) for work that does not depend on the origin, and O(n times the groups) for an aggregate by group. These are done (§13.2), also the compiled formulas of a sheet run and the static order of its cells. |
+| C3 ireko | The kinds (§3.2) and `returns` on the ops of the built-in domains, then the inline forms (§7.1), `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
 | C4 Iteration | `fold`, `iterate`, domain kernels, then `tree` and `layers` of ireko | Each construct passes each stage, and the layouts of ireko do not change |
-| C5 Later | Inline forms (§7.1), other back ends, recalculation (§7.5) | A decision of the owner |
+| C5 Later | Cell reads in the generated code (§7.4), other back ends, recalculation (§7.5) | A decision of the owner |
 
 A separate item: the mutation score of the test kit is 95.47 %, near the gate of 95 %. Tests for its survivors give it more margin.
 
@@ -286,7 +288,7 @@ The speed, measured by `bench/gate.ts` with alternate samples on one machine:
 | The nearest other box, 60 boxes | 2.3 | 1.0 to 1.1 |
 | One step of the Game of Life, 16 by 16 | 1.6 | 1.05 to 1.13 |
 
-The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they move to phase C5.
+The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they moved to phase C5. Later they moved to phase C3, after the kinds: a value in its components needs its kind.
 
 #### The memo of each space
 
@@ -322,6 +324,23 @@ A formula compiles once for each compiler and its options, also across runs. A c
 
 The sheet app keeps the IR of each formula while its text and its context stay the same. Thus a change of a value compiles no formula again. With the compiler, the examples of the app take approximately 0.8 times the time of the interpreter. A property compares a run with `tiered` and the recursive reference, with each budget of the stack.
 
-#### The open items of the phase
+#### Sheets: the order of the cells
 
-- **Sheets with fixed addresses** (§7.4). The compiler needs the order of the cells of `SheetRun` and the references of the cells as nodes, not as extensions. This is a larger piece of work, and ireko does not need it for its first strategies.
+`SheetRun.fill` evaluates each cell of a table in a static order (SHEET.FILL). Each column comes after the columns that it reads. The keys of a column follow its reads from itself:
+
+- A read of an earlier row gives the key order, and a read of a later row gives the reverse order.
+- In a tree, a read of the children puts each child before its parent. A read of the parent puts each parent first.
+- A read of the sibling after reverses the order of the siblings.
+
+In a fill, a cell reference only looks for a finished cell. Thus the fill has no search and no recursion. A cell that reads a cell that is not finished goes to the search, so a cycle still gives `#CYCLE!`. The order only changes the speed, not a result.
+
+The results of the finished cells are in a map for each column, by key. Before, one map had a text id for each cell. A key of an array space finds its record by its position.
+
+| 20000 rows: a running total and a column that reads it | Time |
+|---|---|
+| The search, before | 160 ms |
+| The search, with the new maps | 55 ms |
+| A fill with the interpreter | 26 ms |
+| A fill with `tiered` | 13 to 20 ms |
+
+The sheet app and `table()` of the builder fill the table first. The remaining time is in the extension of each cell reference and in the maps. Generated code that reads the cells of a column as an array is the next step. It is an open item of phase C5.

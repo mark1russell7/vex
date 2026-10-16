@@ -11,7 +11,7 @@
  */
 import { vexError } from "./errors.ts";
 import { evaluate, explain, nestingOf, type CompileOptions, type EvalOptions, type ExtHandler, type Program } from "./evaluate.ts";
-import { ext, isMove, type Addr, type Expr } from "./ir.ts";
+import { children, ext, isMove, type Addr, type Axis, type Expr, type Move } from "./ir.ts";
 import { fail, type Result } from "./result.ts";
 import { resolveAddr, type Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
@@ -86,6 +86,8 @@ interface Table {
   readonly warmed: Map<string, number>;
   // The position of each key in the key order, made at the first warm-up.
   index: ReadonlyMap<string, number> | undefined;
+  /** The result of each finished cell: for each column, the result at each key. */
+  readonly done: Map<string, Map<string, Result<unknown>>>;
 }
 
 const cycleError = (column: string, key: string): Result<never> =>
@@ -95,7 +97,122 @@ const cycleError = (column: string, key: string): Result<never> =>
 const idOf = (t: Table, column: string, key: string): string => `${t.tag}\u0001${column}\u0000${key}`;
 
 /** This function gives the state of a table at the start of a run. */
-const tableState = (where: string, i: number, t: SheetTable): Table => ({ where, tag: String(i), space: t.space, columns: t.columns, cells: t.cells ?? new Map(), warmed: new Map(), index: undefined });
+const tableState = (where: string, i: number, t: SheetTable): Table => ({ where, tag: String(i), space: t.space, columns: t.columns, cells: t.cells ?? new Map(), warmed: new Map(), index: undefined, done: new Map() });
+
+/** This function gives the result of a finished cell, or `undefined`. */
+const doneOf = (t: Table, column: string, key: string): Result<unknown> | undefined => t.done.get(column)?.get(key);
+
+/** This function keeps the result of a finished cell. */
+function setDone(t: Table, column: string, key: string, result: Result<unknown>): void {
+  let results = t.done.get(column);
+  if (results === undefined) {
+    results = new Map();
+    t.done.set(column, results);
+  }
+  results.set(key, result);
+}
+
+/** The directions of the reads of a column from itself: to an earlier key, to a later key, up a tree, or down a tree. */
+interface Directions {
+  before: boolean;
+  after: boolean;
+  up: boolean;
+  down: boolean;
+}
+
+/** This function adds the direction of one move or one axis of a read of a column from itself. */
+function addDirection(d: Directions, m: Move | Axis): void {
+  if (m.t === "offset") {
+    const step = m.d.find((x) => x !== 0) ?? 0;
+    if (step < 0) d.before = true;
+    if (step > 0) d.after = true;
+  } else if (m.t === "window") {
+    if (m.from < 0) d.before = true;
+    if (m.to > 0) d.after = true;
+  } else if (m.t === "parent" || m.t === "ancestors") d.up = true;
+  else if (m.t === "children" || m.t === "descendants") d.down = true;
+}
+
+/**
+ * This function gives the columns that the formulas of the column `self` read with a cell reference: its formula and
+ * the formulas of its cells. It also gives the directions of their reads of the column itself. It walks each
+ * expression with a stack, not with recursion.
+ */
+function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string>; readonly directions: Directions } {
+  const columns = new Set<string>();
+  const directions: Directions = { before: false, after: false, up: false, down: false };
+  const formula = t.columns.get(self);
+  const todo: [Expr, readonly Axis[]][] = [...(formula === undefined ? [] : [formula]), ...(t.cells.get(self)?.values() ?? [])].map((e) => [e, []]);
+  for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
+    const [e, axes] = item;
+    if (e.tag === "ext") {
+      if (e.kind === CELL_KIND && isCellRef(e.data)) {
+        columns.add(e.data.column);
+        if (e.data.column === self) for (const m of [...axes, ...e.data.at]) addDirection(directions, m);
+      }
+    } else if (e.tag === "each") {
+      const inner: Axis[] = [...axes];
+      for (let a: Axis = e.axis; ; a = a.axis) {
+        if (a.t !== "where") {
+          inner.push(a);
+          break;
+        }
+        todo.push([a.test, [...axes, a]]);
+      }
+      todo.push([e.body, inner]);
+    } else for (const child of children(e)) todo.push([child, axes]);
+  }
+  return { columns, directions };
+}
+
+/**
+ * This function gives the columns of a table in an order where each column comes after the columns that it reads.
+ * The columns of a cycle keep their order. The columns with formulas of cells only come last.
+ */
+function columnOrder(t: Table): readonly string[] {
+  const names = new Set([...t.columns.keys(), ...t.cells.keys()]);
+  let left = [...names].map((c) => ({ c, needs: [...readsOf(t, c).columns].filter((x) => x !== c && names.has(x)) }));
+  const order: string[] = [];
+  const placed = new Set<string>();
+  // Each pass places each column whose reads are placed. A pass that places no column leaves a cycle, so it places
+  // the first column that is left.
+  while (left.length > 0) {
+    const ready = left.filter((x) => x.needs.every((n) => placed.has(n)));
+    for (const x of ready.length > 0 ? ready : left.slice(0, 1)) {
+      order.push(x.c);
+      placed.add(x.c);
+    }
+    left = left.filter((x) => !placed.has(x.c));
+  }
+  return order;
+}
+
+/**
+ * This function gives the keys of a space in the order of the reads of a column from itself. In a tree, the children
+ * come before their parent when the column reads down the tree. A read of a later key reverses the order.
+ */
+function keyOrder(s: Space, d: Directions): readonly string[] {
+  const reverse = d.after && !d.before;
+  if (s.parentOf === undefined || s.childrenOf === undefined) return reverse ? s.keys.toReversed() : s.keys;
+  const parentOf = s.parentOf.bind(s);
+  const childrenOf = s.childrenOf.bind(s);
+  const post = d.down && !d.up;
+  const kids = (k: string | undefined): readonly string[] => {
+    const ks = k === undefined ? s.keys.filter((x) => parentOf(x) === undefined) : childrenOf(k);
+    return reverse ? ks.toReversed() : ks;
+  };
+  const out: string[] = [];
+  // Each entry is a key, and true when its children are on the stack already.
+  const stack: [string, boolean][] = kids(undefined).map((k): [string, boolean] => [k, false]).toReversed();
+  for (let item = stack.pop(); item !== undefined; item = stack.pop()) {
+    const [k, expanded] = item;
+    if (expanded || !post) out.push(k);
+    if (expanded) continue;
+    if (post) stack.push([k, true]);
+    for (const c of kids(k).toReversed()) stack.push([c, false]);
+  }
+  return out;
+}
 
 /** The state of one cell in the search. */
 interface Visit {
@@ -143,13 +260,15 @@ export class SheetRun {
   readonly #byName = new Map<string, Table>();
   readonly #bySpace = new Map<Space, Table>();
   readonly #opts: Omit<EvalOptions, "origin" | "trace" | "space">;
-  readonly #done = new Map<string, Result<unknown>>();
   // The cells on the stack of the search: started, but their component is not finished.
   readonly #visits = new Map<string, Visit>();
   // Stryker disable next-line ArrayDeclaration: the search never reads below the root of a component
   readonly #stack: Visit[] = [];
   // The cell whose formula is in evaluation. At the top level, it is a placeholder that is not a cell.
   #top: Visit;
+  // The placeholder at the top in a fill, and true when the evaluation of a fill reads a cell that is not finished.
+  readonly #filling: Visit;
+  #missed = false;
   #next = 0;
   // The estimated frames of the stack that the evaluations in progress use, and the cost of each program.
   #used = 0;
@@ -167,7 +286,7 @@ export class SheetRun {
   /** `budget` is the budget of the stack in estimated frames. A test can make it small, so the run pauses often. */
   constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, budget: number = STACK_BUDGET) {
     const { cells, name, tables, space, compile, ...rest } = opts;
-    this.#main = { where: "the sheet", tag: "0", space, columns, cells: cells ?? new Map(), warmed: new Map(), index: undefined };
+    this.#main = { where: "the sheet", tag: "0", space, columns, cells: cells ?? new Map(), warmed: new Map(), index: undefined, done: new Map() };
     this.#bySpace.set(space, this.#main);
     if (name !== undefined) this.#byName.set(name, this.#main);
     if (tables !== undefined) {
@@ -182,6 +301,8 @@ export class SheetRun {
     }
     // Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields
     this.#top = { id: "", table: this.#main, column: "", key: "", index: -1, low: -1, reread: false, result: cycleError("", ""), paused: false, need: undefined };
+    // Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields
+    this.#filling = { id: "", table: this.#main, column: "", key: "", index: 0, low: 0, reread: false, result: cycleError("", ""), paused: false, need: undefined };
     this.#budget = budget;
     this.#compile = compile;
     const spaces = Object.fromEntries([...this.#byName].map(([n, t]) => [n, t.space]));
@@ -239,6 +360,9 @@ export class SheetRun {
     if (!("space" in t)) return t;
     // The placeholder at the top has the index -1. A read inside a formula has a cell at the top, so it does not warm.
     if (this.#top.index >= 0) return this.#read(t, column, key);
+    // A finished cell needs no warm-up.
+    const done = doneOf(t, column, key);
+    if (done !== undefined) return done;
     this.#warmTo(t, column, key);
     return this.#drive(t, column, key);
   }
@@ -281,29 +405,32 @@ export class SheetRun {
     visit.need = undefined;
     this.#top = visit;
     this.#used += cost;
-    const options = { ...this.#opts, space: visit.table.space, origin: visit.key };
-    const compiled = this.#compiled(visit, program);
-    let result: Result<unknown>;
-    if (compiled === undefined) result = evaluate(program, options);
-    else {
-      const active = SheetRun.#active;
-      SheetRun.#active = this;
-      result = compiled.run(options);
-      SheetRun.#active = active;
-    }
+    const result = this.#run(visit.table, visit.column, visit.key, program);
     this.#used -= cost;
     this.#top = caller;
     if (!visit.paused) visit.result = result;
+  }
+
+  /** This method evaluates the formula `program` of a cell, with its compiled program or with the interpreter. */
+  #run(t: Table, column: string, key: string, program: Expr): Result<unknown> {
+    const options = { ...this.#opts, space: t.space, origin: key };
+    const compiled = this.#compiled(t, column, program);
+    if (compiled === undefined) return evaluate(program, options);
+    const active = SheetRun.#active;
+    SheetRun.#active = this;
+    const result = compiled.run(options);
+    SheetRun.#active = active;
+    return result;
   }
 
   /**
    * This method gives the compiled program of the formula of a column, or `undefined` for the interpreter. A formula
    * compiles once for each compiler and options, also across runs.
    */
-  #compiled(visit: Visit, program: Expr): Program | undefined {
+  #compiled(t: Table, column: string, program: Expr): Program | undefined {
     const compile = this.#compile;
     // The formula of a cell evaluates once in a run, so the run compiles only the formulas of the columns.
-    if (compile === undefined || visit.table.columns.get(visit.column) !== program) return undefined;
+    if (compile === undefined || t.columns.get(column) !== program) return undefined;
     const { domains, fns, extensions } = this.#compileOptions;
     const hit = PROGRAMS.get(program);
     if (hit !== undefined && hit.compile === compile && hit.domains === domains && hit.fns === fns && hit.extensions === extensions) return hit.program;
@@ -320,12 +447,17 @@ export class SheetRun {
 
   /** This method reads a cell from the formula of the cell at the top. */
   #read(t: Table, column: string, key: string): Result<unknown> {
-    const id = idOf(t, column, key);
-    const done = this.#done.get(id);
+    const done = doneOf(t, column, key);
     if (done !== undefined) return done;
     const caller = this.#top;
     // A paused evaluation reads no other cell, so it does not follow a path that its final evaluation does not follow.
+    // In a fill, the cell goes to the search after the evaluation (SHEET.FILL).
     if (caller.paused) return cycleError(column, key);
+    if (caller === this.#filling) {
+      this.#missed = true;
+      return cycleError(column, key);
+    }
+    const id = idOf(t, column, key);
     const seen = this.#visits.get(id);
     if (seen !== undefined) {
       // A read of a cell that is not finished: the caller and this cell are on one cycle. The cell is on the
@@ -351,13 +483,12 @@ export class SheetRun {
       return cycleError(column, key);
     }
     this.#end(visit, caller);
-    return this.#done.get(id) ?? cycleError(column, key);
+    return doneOf(t, column, key) ?? cycleError(column, key);
   }
 
   /** This method evaluates a cell from the top level. The cells that pause go on a list, not on the call stack. */
   #drive(t: Table, column: string, key: string): Result<unknown> {
-    const id = idOf(t, column, key);
-    const done = this.#done.get(id);
+    const done = doneOf(t, column, key);
     if (done !== undefined) return done;
     if (this.#programOf(t, column, key) === undefined) return this.#unbound(t, column, key);
     const work: Visit[] = [this.#start(t, column, key)];
@@ -374,7 +505,7 @@ export class SheetRun {
       work.pop();
       this.#end(visit, work.at(-1));
     }
-    return this.#done.get(id) ?? cycleError(column, key);
+    return doneOf(t, column, key) ?? cycleError(column, key);
   }
 
   /** This method takes the component of `root` from the stack, and sets the final result of each of its cells. */
@@ -385,9 +516,9 @@ export class SheetRun {
     // Stryker disable next-line ConditionalExpression,LogicalOperator: members.length > 1 implies root.reread
     const cyclic = members.length > 1 || root.reread;
     for (const m of members) {
-      // Stryker disable next-line CallExpression: a finished cell is in #done, and cell() reads #done first
+      // Stryker disable next-line CallExpression: a finished cell has a result, and a read looks for the result first
       this.#visits.delete(m.id);
-      this.#done.set(m.id, cyclic ? cycleError(m.column, m.key) : m.result);
+      setDone(m.table, m.column, m.key, cyclic ? cycleError(m.column, m.key) : m.result);
     }
   }
 
@@ -398,6 +529,34 @@ export class SheetRun {
     const program = "space" in t ? this.#programOf(t, column, key) : undefined;
     if (program === undefined || !("space" in t)) return { events: [], result };
     return { events: explain(program, { ...this.#opts, space: t.space, origin: key }).events, result };
+  }
+
+  /**
+   * This method evaluates each cell of the table `table`, or of the main table (SHEET.FILL). Each column comes after
+   * the columns that it reads, and the keys of a column come in the order of its reads from itself. Thus most reads
+   * find a finished cell. An evaluation that reads a cell that is not finished has no effect, and the search then
+   * evaluates its cell. A read of a cell gives the same result after a fill.
+   */
+  fill(table?: string): void {
+    const t = this.#named(table, "");
+    // A read inside a formula has a cell at the top. A fill there has no effect.
+    if (!("space" in t) || this.#top.index >= 0) return;
+    const host = this.#top;
+    for (const column of columnOrder(t)) {
+      const formula = t.columns.get(column);
+      const own = t.cells.get(column);
+      const keys = formula === undefined ? t.space.keys.filter((k) => own?.has(k) === true) : keyOrder(t.space, readsOf(t, column).directions);
+      for (const key of keys) {
+        const program = this.#programOf(t, column, key);
+        if (program === undefined || doneOf(t, column, key) !== undefined) continue;
+        this.#top = this.#filling;
+        this.#missed = false;
+        const result = this.#run(t, column, key, program);
+        this.#top = host;
+        if (this.#missed) this.#drive(t, column, key);
+        else setDone(t, column, key, result);
+      }
+    }
   }
 
   /**

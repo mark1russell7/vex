@@ -76,6 +76,15 @@ describe("the builder model at fixed cases", () => {
     expect(results(c, three)).toEqual([{ a: 1, b: 2 }, { a: 2, b: 2 }, { a: 4, b: 2 }]);
   });
 
+  it("fork gives a record of two branches, and each branch starts with the value before the fork", () => {
+    const c: BuilderChain = { head: fromN, steps: [{ t: "fork", a: [{ t: "op", op: "add", args: [{ k: "lit", value: 1 }] }], b: [] }] };
+    expect(results(c, three)).toEqual([{ a: 2, b: 1 }, { a: 3, b: 2 }, { a: 5, b: 4 }]);
+  });
+
+  it("start with a text is a reference to the field of that name", () => {
+    expect(results({ head: { t: "start", value: "n" }, steps: [] }, three)).toEqual([1, 2, 4]);
+  });
+
   it("a chain argument evaluates at the origin", () => {
     const c: BuilderChain = { head: fromN, steps: [{ t: "op", op: "add", args: [{ k: "chain", chain: { head: fromN, steps: [] } }] }] };
     expect(results(c, three)).toEqual([2, 4, 8]);

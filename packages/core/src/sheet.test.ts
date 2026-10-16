@@ -2,12 +2,12 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
 import { vexError } from "./errors.ts";
-import { compile, type CompileOptions, type Program } from "./evaluate.ts";
-import { app, axes, each, let_, lit, offset, other, ref, v, type Expr } from "./ir.ts";
+import { compile, type CompileOptions, type ExtHandler, type Program } from "./evaluate.ts";
+import { app, axes, each, ext, index, let_, lit, offset, other, parent, ref, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { fail, type Result } from "./result.ts";
-import { cell, SheetRun, type SheetOptions } from "./sheet.ts";
-import { space } from "./space.ts";
+import { cell, SheetRun, type CompileFn, type SheetOptions } from "./sheet.ts";
+import { space, type Space } from "./space.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
 
 const Num = defineDomain({
@@ -19,6 +19,8 @@ const Num = defineDomain({
 });
 
 const A = { position: new Pt(0, 0), size: new Pt(2, 2) };
+const plus = (a: Expr, b: Expr): Expr => app("plus", a, b);
+const orZero = (e: Expr): Expr => app("ifError", e, lit(0));
 const B = { position: new Pt(3, 4), size: new Pt(1, 1) };
 
 describe("sheets (SHEET.*)", () => {
@@ -310,7 +312,7 @@ describe("sheets (SHEET.*)", () => {
     }
     // Another compiler, or other options, compile the formula again. The cache keeps the last options of a formula.
     const compileFn = counting();
-    const ext = {};
+    const userExtensions = {};
     const steps: [SheetOptions, boolean][] = [
       [{ ...opts, compile: compileFn }, true],
       [{ ...opts, compile: compileFn }, false],
@@ -320,8 +322,8 @@ describe("sheets (SHEET.*)", () => {
       [{ ...opts, compile: compileFn }, true],
       [{ ...opts, fns: {}, compile: compileFn }, true],
       [{ ...opts, compile: compileFn }, true],
-      [{ ...opts, extensions: ext, compile: compileFn }, true],
-      [{ ...opts, extensions: ext, compile: compileFn }, false],
+      [{ ...opts, extensions: userExtensions, compile: compileFn }, true],
+      [{ ...opts, extensions: userExtensions, compile: compileFn }, false],
       [{ ...opts, compile: compileFn }, true],
     ];
     for (const [options, compiles] of steps) {
@@ -339,9 +341,80 @@ describe("sheets (SHEET.*)", () => {
     expect(seen[0]?.domains).toEqual([Num]);
     expect(Object.keys(seen[0]?.extensions ?? {})).toEqual(["vex.cell"]);
     // A compiled program reads the cells of the active run. Outside a run, a cell reference gives an error.
-    const outside = error(kept.find((p) => p.expr === columns.get("loop"))?.run({ space: rows, origin: "2" }) ?? fail(vexError("threw", "no program")));
-    expect([outside.code, outside.message]).toEqual(["#NAME?", "a compiled formula reads cells only in the evaluation of a sheet run"]);
+    const outside = error(kept.find((p) => p.expr === columns.get("fixed"))?.run({ space: rows, origin: "2", vars: { bonus: 5 } }) ?? fail(vexError("threw", "no program")));
+    expect([outside.code, outside.message, outside.path]).toEqual(["#NAME?", "a compiled formula reads cells only in the evaluation of a sheet run", [0]]);
     // The trace of a cell still comes from the interpreter.
     expect(new SheetRun(columns, { ...opts, compile: counting() }).explain("total", "2").events.some((e) => e.tag === "ext")).toBe(true);
+  });
+
+  it("SHEET.FILL: a fill evaluates each cell once, in the order of the reads of its column, and a read then gives the result of the search", () => {
+    let runs = 0;
+    // A new compiler for each sheet, which counts the evaluations of the formulas of the columns.
+    const counting = (): CompileFn => (expr, options) => {
+      const program = compile(expr, options);
+      return { ...program, run: (r) => (runs++, program.run(r)) };
+    };
+    /** This function fills a sheet and gives the evaluations of the fill. A read of each cell then gives the result of the search. */
+    const fill = (columns: ReadonlyMap<string, Expr>, s: Space, more: Partial<SheetOptions> = {}): number => {
+      const opts: SheetOptions = { space: s, domains: [Num], ...more };
+      const run = new SheetRun(columns, { ...opts, compile: counting() });
+      runs = 0;
+      run.fill();
+      const filled = runs;
+      const search = new SheetRun(columns, opts);
+      const names = [...new Set([...columns.keys(), ...(more.cells?.keys() ?? [])])];
+      for (const c of names) for (const k of s.keys) expect([c, k, run.cell(c, k)]).toEqual([c, k, search.cell(c, k)]);
+      // The reads after the fill evaluate nothing.
+      expect(runs).toBe(filled);
+      return filled;
+    };
+    const rows = space.array([{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }, { v: 5 }, { v: 6 }]);
+    // A column comes after the columns that it reads, and a running total reads the row above.
+    expect(fill(new Map([["double", plus(cell("total"), cell("total"))], ["total", plus(orZero(cell("total", [offset(-1)])), ref("v"))]]), rows)).toBe(12);
+    // A column that reads the row below goes from the last row up.
+    expect(fill(new Map([["rest", plus(orZero(cell("rest", [offset(1)])), ref("v"))]]), rows)).toBe(6);
+    // A window of the rows above, and a window of the rows below.
+    expect(fill(new Map([["up", plus(app("sum", each(axes.window(-2, -1), cell("up"))), ref("v"))]]), rows)).toBe(6);
+    expect(fill(new Map([["down", plus(app("sum", each(axes.window(1, 2), cell("down"))), ref("v"))]]), rows)).toBe(6);
+    // In a tree whose keys have each child before its parent: a roll-up goes up from the leaves, and a depth goes down from the root.
+    const tree = space.tree({ c: { v: 1 }, b: { v: 2 }, d: { v: 4 }, a: { v: 8 } }, { c: "b", b: "a", d: "a" });
+    expect(fill(new Map([["size", plus(ref("v"), app("sum", each(axes.children, cell("size"))))]]), tree)).toBe(4);
+    expect(fill(new Map([["depth", plus(orZero(cell("depth", [parent])), lit(1))]]), tree)).toBe(4);
+    expect(fill(new Map([["all", plus(ref("v"), app("sum", each(axes.descendants, cell("all"))))], ["top", plus(app("sum", each(axes.ancestors, cell("top"))), lit(1))]]), tree)).toBe(8);
+    // Among siblings, a read of the sibling before, and a read of the sibling after.
+    const siblings = space.tree({ r: { v: 1 }, x: { v: 2 }, y: { v: 3 }, z: { v: 4 } }, { x: "r", y: "r", z: "r" });
+    expect(fill(new Map([["before", plus(orZero(cell("before", [offset(-1)])), ref("v"))]]), siblings)).toBe(4);
+    expect(fill(new Map([["after", plus(orZero(cell("after", [offset(1)])), ref("v"))]]), siblings)).toBe(4);
+    // A grid reads the row above it.
+    const grid = space.grid([[{ v: 1 }, { v: 2 }], [{ v: 3 }, { v: 4 }]]);
+    expect(fill(new Map([["g", plus(orZero(cell("g", [offset(-1, 0)])), ref("v"))]]), grid)).toBe(4);
+    // A read of a cell that is not finished goes to the search: the first cell reads the last cell, and the fill
+    // evaluates the first cell again.
+    const own = new Map([["last", new Map([["5", lit(0)]])]]);
+    expect(fill(new Map([["last", plus(cell("last", [index(5)]), lit(1))]]), rows, { cells: own })).toBe(6);
+    // Two columns that read each other at different keys. The fill keeps their order, and the search gives each value.
+    expect(fill(new Map([["x", plus(cell("y"), lit(1))], ["y", orZero(cell("x", [offset(-1)]))]]), rows)).toBeGreaterThan(12);
+    // A cycle gives #CYCLE!, and a column with formulas of cells only is filled too.
+    expect(fill(new Map([["p", cell("q")], ["q", cell("p")]]), rows, { cells: new Map([["only", new Map([["1", lit(5)]])]]) })).toBeGreaterThan(0);
+  });
+
+  it("SHEET.FILL: a fill inside a formula, or of a table that does not exist, has no effect", () => {
+    const rows = space.array([{ v: 1 }, { v: 2 }, { v: 3 }]);
+    let run: SheetRun | undefined;
+    // An extension that fills the run and reads a cell of it, in the evaluation of a formula.
+    const probe: ExtHandler = () => {
+      run?.fill();
+      return run?.cell("total", "2") ?? fail(vexError("threw", "no run"));
+    };
+    const columns = new Map<string, Expr>([["total", app("plus", app("ifError", cell("total", [offset(-1)]), lit(0)), ref("v"))], ["probe", ext("probe", null)]]);
+    const opts = { space: rows, domains: [Num], extensions: { probe } };
+    run = new SheetRun(columns, opts);
+    run.fill("nope");
+    run.fill();
+    expect([value(run.cell("probe", "0")), value(run.cell("total", "2"))]).toEqual([6, 6]);
+    // In the order of the columns, probe comes first. Its fill reads a cell that is not finished, so the search gives it.
+    run = new SheetRun(new Map([["probe", ext("probe", null)], ["total", columns.get("total") ?? lit(0)]]), opts);
+    run.fill();
+    expect(value(run.cell("probe", "1"))).toBe(6);
   });
 });

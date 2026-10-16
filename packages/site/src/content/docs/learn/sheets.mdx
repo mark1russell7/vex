@@ -79,6 +79,26 @@ The column `b` has `ifError(0)`, but it gives `#CYCLE!` too. If `ifError` hides 
 
 A cell that only reads a cycle is not on the cycle. It gets `#CYCLE!` as a value, and `ifError` can change it.
 
+## Large sheets
+
+A `SheetRun` evaluates a cell when a read needs it. For a large table, `fill()` first evaluates each cell in a static order. Each column comes after the columns that it reads, and a running total goes down the rows in key order. Thus each read finds a finished cell, and the results do not change (rule `SHEET.FILL`).
+
+With the option `compile`, a run evaluates the formula of each column with generated JavaScript. The compiler `tiered` of `@mark1russell7/vex-compiler` gives the results of the interpreter (rule `SHEET.COMPILE`).
+
+```ts doctest
+import { app, cell, lit, offset, ref, SheetRun, space } from "@mark1russell7/vex";
+import { tiered } from "@mark1russell7/vex-compiler";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+const rows = space.array([{ v: 4 }, { v: 1 }, { v: 3 }]);
+const total = app("add", app("ifError", cell("total", [offset(-1)]), lit(0)), ref("v"));
+const run = new SheetRun(new Map([["total", total]]), { space: rows, domains: [NumDomain], compile: tiered });
+run.fill();
+run.cell("total", "2"); // => ok(8)
+```
+
+The sheet app and `table()` of a sheet use `fill()`. A fill of 20000 rows takes 13 to 26 milliseconds.
+
 ## Try it
 
 Each column adds its own number and the cells that it reads. Select the reads in the grid. A red column is on a cycle. Select "ifError" for a column to catch the errors of its reads, and see which cells change.

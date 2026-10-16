@@ -75,27 +75,26 @@ class ArraySpace<O> implements Space<ArrayKey, O> {
   readonly kind: SpaceKind = "array";
   readonly keys: readonly ArrayKey[];
   readonly records: readonly O[];
-  readonly #items: ReadonlyMap<string, O>;
 
   constructor(items: readonly O[]) {
-    const entries = items.map((item, i): [ArrayKey, O] => [`${i}`, item]);
-    this.keys = Object.freeze(entries.map(([k]) => k));
-    this.records = Object.freeze(entries.map(([, o]) => o));
-    this.#items = new Map(entries);
+    this.keys = Object.freeze(Array.from(items, (_item, i): ArrayKey => `${i}`));
+    this.records = Object.freeze(Array.from(items));
   }
 
+  // The key at the position i is the text of i, so the position of a key finds it. A text that is not a key of the
+  // space, for example "01" or "1.0", has no key at its position.
   has(k: string): k is ArrayKey {
-    return this.#items.has(k);
+    return this.keys[Number(k)] === k;
   }
   get(k: string): O | undefined {
-    return this.#items.get(k);
+    return this.has(k) ? this.records[Number(k)] : undefined;
   }
   coords(k: string): readonly number[] | undefined {
     return this.has(k) ? [Number(k)] : undefined;
   }
   keyAt(coords: readonly number[]): ArrayKey | undefined {
-    const k = String(coords[0]);
-    return coords.length === 1 && this.has(k) ? k : undefined;
+    const [i] = coords;
+    return coords.length === 1 && i !== undefined ? this.keys[i] : undefined;
   }
 }
 

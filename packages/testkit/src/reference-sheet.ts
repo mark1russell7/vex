@@ -12,61 +12,92 @@ interface Visit {
   result: Result<unknown>;
 }
 
-/** A table of the reference run: its name ("" for the main table without a name), its space and its formulas. */
+/** A table of the reference run: the words for it in a message, its space and its formulas. */
 interface Table {
-  readonly name: string;
+  readonly where: string;
   readonly space: Space;
   readonly columns: ReadonlyMap<string, Expr>;
   readonly cells: CellFormulas;
+  /** The result of each finished cell, by column and key. */
+  readonly done: Map<string, Map<string, Result<unknown>>>;
+  /** The cells on the stack of the search, by column and key. */
+  readonly visits: Map<string, Map<string, Visit>>;
 }
+
+/** This function gives the entry of a cell in a map of the column and then the key. */
+const entryOf = <T>(m: ReadonlyMap<string, ReadonlyMap<string, T>>, column: string, key: string): T | undefined => m.get(column)?.get(key);
+
+/** This function sets the entry of a cell in a map of the column and then the key. */
+function setEntry<T>(m: Map<string, Map<string, T>>, column: string, key: string, value: T): void {
+  let inner = m.get(column);
+  if (inner === undefined) {
+    inner = new Map();
+    m.set(column, inner);
+  }
+  inner.set(key, value);
+}
+
+/** This function gives the state of a table at the start of a run. */
+const tableOf = (where: string, space: Space, columns: ReadonlyMap<string, Expr>, cells: CellFormulas | undefined): Table => ({ where, space, columns, cells: cells ?? new Map(), done: new Map(), visits: new Map() });
 
 const cycleError = (column: string, key: string): Result<never> =>
   fail(vexError("cycle", `the cell "${column}" at "${key}" is on a cycle of cell references`, { origin: key, focus: key }));
 
-const isCellRef = (u: unknown): u is { readonly column: string; readonly at: Addr } =>
-  typeof u === "object" && u !== null && typeof (u as { column?: unknown }).column === "string" && Array.isArray((u as { at?: unknown }).at) && (u as { at: readonly unknown[] }).at.every(isMove);
+const isCellRef = (u: unknown): u is { readonly column: string; readonly at: Addr } => {
+  const r = u as { readonly column?: unknown; readonly at?: unknown } | null | undefined;
+  return typeof r?.column === "string" && Array.isArray(r.at) && (r.at as readonly unknown[]).every(isMove);
+};
 
 /** A sheet run with recursion: the depth-first search of Tarjan, one recursive call for each read of a cell. */
 export class ReferenceSheetRun {
   readonly #main: Table;
-  readonly #tables: readonly Table[];
+  readonly #byName = new Map<string, Table>();
+  // The table of each space. The first table of a space keeps it.
+  readonly #bySpace = new Map<Space, Table>();
   readonly #opts: Omit<EvalOptions, "origin" | "trace" | "space">;
-  readonly #done = new Map<string, Result<unknown>>();
-  readonly #visits = new Map<string, Visit>();
-  readonly #stack: { readonly id: string; readonly column: string; readonly key: string; readonly visit: Visit }[] = [];
+  // Stryker disable next-line ArrayDeclaration: the search never reads below the root of a component
+  readonly #stack: { readonly table: Table; readonly column: string; readonly key: string; readonly visit: Visit }[] = [];
+  // Stryker disable next-line all: the placeholder at the top is not a cell, so the search reads none of its fields
   #top: Visit = { index: -1, low: -1, reread: false, result: cycleError("", "") };
   #next = 0;
 
   constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions) {
     const { cells, name, tables, space, ...rest } = opts;
-    this.#main = { name: name ?? "", space, columns, cells: cells ?? new Map() };
+    this.#main = tableOf("the sheet", space, columns, cells);
     // The first table of a name wins, and the main table comes first.
-    const all: Table[] = [this.#main];
-    for (const [n, t] of tables ?? []) if (!all.some((x) => x.name === n)) all.push({ name: n, space: t.space, columns: t.columns, cells: t.cells ?? new Map() });
-    this.#tables = all;
+    this.#bySpace.set(space, this.#main);
+    if (name !== undefined) this.#byName.set(name, this.#main);
+    if (tables !== undefined) {
+      for (const [n, t] of tables) {
+        if (this.#byName.has(n)) continue;
+        const table = tableOf(`the table "${n}"`, t.space, t.columns, t.cells);
+        this.#byName.set(n, table);
+        if (!this.#bySpace.has(t.space)) this.#bySpace.set(t.space, table);
+      }
+    }
     const handler: ExtHandler = (data, ctx) => {
       if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address", { path: ctx.path }));
       const where = resolveAddr(ctx.space, ctx.position, data.at);
-      const table = this.#tables.find((t) => t.space === ctx.space) ?? this.#main;
+      // Each space of an evaluation is the space of a table, so the main table is a default that no read takes.
+      const table = this.#bySpace.get(ctx.space) ?? this.#main;
       return where.ok ? this.#read(table, data.column, where.value) : fail({ ...where.error, path: ctx.path });
     };
-    const named = this.#tables.filter((t) => t.name !== "");
-    this.#opts = { ...rest, tables: Object.fromEntries(named.map((t) => [t.name, t.space])), extensions: { ...rest.extensions, "vex.cell": handler } };
+    this.#opts = { ...rest, tables: Object.fromEntries([...this.#byName].map(([n, t]) => [n, t.space])), extensions: { ...rest.extensions, "vex.cell": handler } };
   }
 
   /** This method gives the result of the column `column` at the key `key` of the main table, or of the table `table`. */
   cell(column: string, key: string, table?: string): Result<unknown> {
-    const t = table === undefined ? this.#main : this.#tables.find((x) => x.name === table);
-    if (t === undefined) return fail(vexError("no-table", `the run has no table "${table ?? ""}"`, { origin: key, focus: key }));
+    if (table === undefined) return this.#read(this.#main, column, key);
+    const t = this.#byName.get(table);
+    if (t === undefined) return fail(vexError("no-table", `the run has no table "${table}"`, { origin: key, focus: key }));
     return this.#read(t, column, key);
   }
 
   #read(t: Table, column: string, key: string): Result<unknown> {
-    const id = `${this.#tables.indexOf(t)}\u0001${column}\u0000${key}`;
-    const done = this.#done.get(id);
+    const done = entryOf(t.done, column, key);
     if (done !== undefined) return done;
     const caller = this.#top;
-    const seen = this.#visits.get(id);
+    const seen = entryOf(t.visits, column, key);
     if (seen !== undefined) {
       caller.low = Math.min(caller.low, seen.index);
       seen.reread = true;
@@ -75,27 +106,29 @@ export class ReferenceSheetRun {
     // A cell with its own formula takes that formula, and the other cells take the formula of the column.
     const program = t.cells.get(column)?.get(key) ?? t.columns.get(column);
     if (program === undefined) {
-      const where = t === this.#main ? "the sheet" : `the table "${t.name}"`;
-      const message = t.cells.has(column) ? `the cell "${column}" at "${key}" has no formula` : `${where} has no column "${column}"`;
+      const message = t.cells.has(column) ? `the cell "${column}" at "${key}" has no formula` : `${t.where} has no column "${column}"`;
       return fail(vexError("unbound", message, { origin: key, focus: key }));
     }
     const n = this.#next++;
     const visit: Visit = { index: n, low: n, reread: false, result: cycleError(column, key) };
-    this.#visits.set(id, visit);
-    this.#stack.push({ id, column, key, visit });
+    setEntry(t.visits, column, key, visit);
+    this.#stack.push({ table: t, column, key, visit });
     this.#top = visit;
     visit.result = evaluate(program, { ...this.#opts, space: t.space, origin: key });
     this.#top = caller;
     if (visit.low === visit.index) {
       const members = this.#stack.splice(this.#stack.findIndex((m) => m.visit === visit));
+      // A component of two or more cells reads its root again, so visit.reread alone decides. The length test is a guard.
+      // Stryker disable next-line ConditionalExpression,LogicalOperator: members.length > 1 implies visit.reread
       const cyclic = members.length > 1 || visit.reread;
       for (const m of members) {
-        this.#visits.delete(m.id);
-        this.#done.set(m.id, cyclic ? cycleError(m.column, m.key) : m.visit.result);
+        // Stryker disable next-line CallExpression,OptionalChaining: a finished cell has a result, and a read looks for the result first
+        m.table.visits.get(m.column)?.delete(m.key);
+        setEntry(m.table.done, m.column, m.key, cyclic ? cycleError(m.column, m.key) : m.visit.result);
       }
     } else {
       caller.low = Math.min(caller.low, visit.low);
     }
-    return this.#done.get(id) ?? cycleError(column, key);
+    return entryOf(t.done, column, key) ?? cycleError(column, key);
   }
 }

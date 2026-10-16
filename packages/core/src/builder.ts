@@ -797,6 +797,8 @@ class SheetImpl {
   }
   table(): readonly SheetRow<string, Record<string, unknown>>[] {
     const run = this.#run();
+    // The table reads each cell, so a fill evaluates them in the order of their reads first (SHEET.FILL).
+    run.fill();
     const names = [...this.#columns.keys()];
     return this.#env.space.keys.map((key) => ({ key, cells: Object.fromEntries(names.map((c) => [c, run.cell(c, key)])) }));
   }

@@ -96,6 +96,13 @@ const AllBare = defineDomain({ name: "AllBare", is: (u: unknown): u is object =>
 // Things with declared ops only: a method of the value is not an op.
 const DeclaredThing = defineDomain({ name: "DeclaredThing", is: (u: unknown): u is Thing => u instanceof Thing, ops: {} });
 const callable = Object.assign((): number => 1, { ping: (): number => 2 });
+// A value with its own toString, in a domain with declared ops only. The ops object inherits toString too.
+class Named {
+  toString(): string {
+    return "named";
+  }
+}
+const DeclaredNamed = defineDomain({ name: "DeclaredNamed", is: (u: unknown): u is Named => u instanceof Named, ops: {} });
 const Nan = defineDomain({ name: "Nan", is: (u: unknown): u is number => typeof u === "number", ops: { nan: { fn: (): number => Number.NaN } } });
 const Throws = defineDomain({
   name: "Throws",
@@ -286,6 +293,15 @@ const CASES: readonly Case[] = [
   { name: "an own method of a function value", expr: app("ping", ref("callable")), domains: [AllFns] },
   { name: "reduce with a free function, not an op", expr: app("reduce", each(axes.where(axes.all, ref("b")), ref("t")), lit("twice")), domains: [DeclaredThing], fns: { twice: (a: unknown): unknown => a } },
   { name: "reduce with an op name that only a free function has", expr: app("reduce", ns, lit("plus")), fns: { plus: (a: unknown): unknown => a } },
+  { name: "reduce in a methods-all domain with a name that only a free function has", expr: app("reduce", each(axes.all, ref("t")), lit("plus")), domains: [AllMethods], fns: { plus: (a: unknown): unknown => a } },
+  { name: "reduce of two values with a free function, not an op", expr: app("reduce", each(axes.all, ref("t")), lit("twice")), domains: [DeclaredThing], fns: { twice: (a: unknown): unknown => a } },
+  { name: "reduce with an op of a domain that does not accept the values", expr: app("reduce", ns, lit("double")), domains: [Strings, NumDomain], fns: { double: (a: unknown): unknown => a } },
+  { name: "reduce of nothing with null as the option", expr: app("reduce", nothing, lit("add"), lit(null)) },
+  { name: "a method of a value in a domain with declared ops only", expr: app("twice", ref("t")), domains: [DeclaredThing] },
+  { name: "a name that the ops object inherits, in a domain with declared ops only", expr: app("toString", lit(new Named())), domains: [DeclaredNamed] },
+  { name: "any of a list with booleans and a number", expr: app("any", each(axes.all, app("if", ref("b"), lit(true), lit(1)))) },
+  { name: "the origin in the body of an axis that is not a table", expr: app("sum", each(axes.others, ref("n", [{ t: "origin" }]))) },
+  { name: "the origin in the test of an axis that is not a table", expr: app("count", each(axes.where(axes.others, app("eq", ref("n", [{ t: "origin" }]), lit(2))), ref("n"))) },
   { name: "the name constructor in a methods-all domain", expr: app("constructor", ref("t")), domains: [AllMethods] },
   { name: "the name prototype in a methods-all domain", expr: app("prototype", ref("t")), domains: [AllMethods] },
   { name: "the name __proto__ in a methods-all domain", expr: app("__proto__", ref("t")), domains: [AllMethods] },

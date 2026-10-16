@@ -38,6 +38,10 @@ describe("SHEET.COMPILE: a sheet run with the compiler", () => {
           const { compile, programs } = keeping();
           const run = new SheetRun(columns, { ...opts, compile }, budget);
           expect(reads.map(([c, k]) => plain(run.cell(c, k)))).toEqual(expected);
+          // A fill with the compiler gives the same results (SHEET.FILL).
+          const filled = new SheetRun(columns, { ...opts, compile }, budget);
+          filled.fill();
+          expect(reads.map(([c, k]) => plain(filled.cell(c, k)))).toEqual(expected);
           for (const p of programs) {
             runs += p.stats.runs;
             fast += p.stats.runs - p.stats.fallbacks;
@@ -59,6 +63,10 @@ describe("SHEET.COMPILE: a sheet run with the compiler", () => {
         for (const budget of [undefined, 1, 40]) {
           const run = new SheetRun(sheetColumnsOf(t.main), { ...opts, compile: tiered }, budget);
           expect(t.reads.map(([table, c, k]) => plain(run.cell(c, k, table)))).toEqual(expected);
+          const filled = new SheetRun(sheetColumnsOf(t.main), { ...opts, compile: tiered }, budget);
+          filled.fill("other");
+          filled.fill("main");
+          expect(t.reads.map(([table, c, k]) => plain(filled.cell(c, k, table)))).toEqual(expected);
         }
       }),
     );
@@ -90,6 +98,12 @@ describe("SHEET.COMPILE SHEET.DEEP: deep sheets with the compiler", { timeout: 3
     const run = new SheetRun(new Map([["total", total]]), { space: space.tree(records, parents), domains: [NumDomain], compile: tiered });
     expect(plain(run.cell("total", "k0"))).toBe(n);
     expect(plain(run.cell("total", "k99999"))).toBe(1);
+    // A fill goes up from the leaf, so each read finds a finished cell (SHEET.FILL).
+    const { compile, programs } = keeping();
+    const filled = new SheetRun(new Map([["total", total]]), { space: space.tree(records, parents), domains: [NumDomain], compile });
+    filled.fill();
+    expect(plain(filled.cell("total", "k0"))).toBe(n);
+    expect(programs[0]?.stats).toEqual({ runs: n, fallbacks: 0 });
   });
 
   it("SHEET.DEEP: a chain that reads the next row, read at the first row, gives the length of the chain", () => {
@@ -97,5 +111,11 @@ describe("SHEET.COMPILE SHEET.DEEP: deep sheets with the compiler", { timeout: 3
     const chain = app("add", ref("v"), app("ifError", cell("c", [offset(1)]), lit(0)));
     const run = new SheetRun(new Map([["c", chain]]), { space: sheetRowsOf(Array.from({ length: n }, () => 1)), domains: [NumDomain], compile: tiered });
     expect(plain(run.cell("c", "0"))).toBe(n);
+    // A fill goes from the last row up. The last row reads a row that does not exist, so tier 1 gives its result.
+    const { compile, programs } = keeping();
+    const filled = new SheetRun(new Map([["c", chain]]), { space: sheetRowsOf(Array.from({ length: n }, () => 1)), domains: [NumDomain], compile });
+    filled.fill();
+    expect(plain(filled.cell("c", "0"))).toBe(n);
+    expect(programs[0]?.stats).toEqual({ runs: n, fallbacks: 1 });
   });
 });

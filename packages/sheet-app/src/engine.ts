@@ -263,6 +263,8 @@ export function evaluateBook(book: Book, compiler: Compiler): Evaluation {
     tables: others,
     ...(compiler.compileProgram === undefined ? {} : { compile: compiler.compileProgram }),
   });
+  // The app shows each cell of the table, so a fill evaluates them in the order of their reads first (SHEET.FILL).
+  run.fill();
   const byId = new Map(doc.columns.map((c) => [c.id, c]));
   const cache = new Map<string, Result<unknown> | undefined>();
 

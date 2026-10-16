@@ -563,7 +563,8 @@ class Printer {
     // Stryker disable next-line ConditionalExpression: a check of a kind is always the same, so the map only saves time
     if (!this.top.has(name)) {
       const d = this.#facts.checkOf(kind);
-      if (d === undefined) throw new NotStandalone(`a domain without a primitive type comes before the domain of ${primitiveOf(kind) === undefined ? `a value of the domain ${kind.slice("domain:".length)}` : `a ${kind}`}`);
+      // The kind is primitive here. A static site on a value of a domain has no domain without a primitive type before it.
+      if (d === undefined) throw new NotStandalone(`a domain without a primitive type comes before the domain of a ${kind}`);
       const domain = this.#domains[d];
       const valid = domain?.valid === undefined ? undefined : this.#valid(d, domain.name, kind, domain.valid);
       const conds = [...(kind === "number" ? ["Number.isFinite(x)"] : []), ...(valid === undefined ? [] : [`${valid}(x)`])];
@@ -673,9 +674,11 @@ class Printer {
     if (key !== undefined) return bare(this.#read(key));
     const keys = this.#memo.get(e);
     const c = keys !== undefined && this.#inside !== e ? this.#memoized(e, keys, ctx) : this.#node(e, ctx);
-    // A constant of the run with the structure of an earlier one is that constant.
-    if (c.v.deps.size === 0 && !(c.v.plain === true && c.s.length === 0)) this.#keyOf.set(c, this.#constKey(e, ctx));
-    if (c.v.deps.size === 0) this.#constant.add(e);
+    if (c.v.deps.size === 0) {
+      // A constant of the run with the structure of an earlier one is that constant.
+      this.#keyOf.set(c, this.#constKey(e, ctx));
+      this.#constant.add(e);
+    }
     return this.#columnar(e, c, ctx) ? this.#column(e, c, ctx) : c;
   }
 
@@ -830,17 +833,18 @@ class Printer {
   #addressDeps(at: readonly Move[], ctx: Ctx, values: readonly Code[]): ReadonlySet<number> {
     let deps: ReadonlySet<number> = new Set([ctx.level]);
     let next = 0;
-    // A move from an index that can fail, or a move from the focus, keeps the levels of that index (V-052).
+    // A move that can fail keeps the levels of its index when a later move replaces the index (V-052). An offset and
+    // other keep the index, so their levels stay.
     let fails = false;
     const kept = new Set<number>();
     for (const m of at) {
-      if (fails || m.t === "offset" || m.t === "other") for (const d of deps) kept.add(d);
+      if (fails) for (const d of deps) kept.add(d);
       if (moveExpr(m) !== undefined) deps = (values[next++] as Code).v.deps;
       else if (m.t === "origin") deps = new Set([1]);
       else if (m.t === "key" || m.t === "index" || m.t === "parent") deps = NO_DEPS;
       fails = m.t !== "origin";
     }
-    return kept.size === 0 ? deps : new Set([...deps, ...kept]);
+    return new Set([...deps, ...kept]);
   }
 
   #var(name: string, ctx: Ctx): Value {

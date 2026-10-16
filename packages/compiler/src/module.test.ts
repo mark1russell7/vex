@@ -427,7 +427,7 @@ describe("COMPILE.MODULE: the text of a module", () => {
     await expectGolden("lists", e);
   });
 
-  it("COMPILE.MODULE V-052: a move before a fixed key or the origin can fail, so the module evaluates it", () => {
+  it("COMPILE.MODULE V-052: a move before a fixed key or the origin can fail, so the module evaluates it", async () => {
     // V-052: the printer kept only the code of the last fixed move, so the module read a record where the interpreter
     // gives #REF!. A move from the focus that fails makes the read fail too.
     const safe = (at: Parameters<typeof ref>[1]): Expr => op("ifError", ref("n", at), lit(99));
@@ -441,6 +441,16 @@ describe("COMPILE.MODULE: the text of a module", () => {
     });
     expectSame(make(sourceOf(e)), e);
     expectSame(make(sourceOf(e)), e, MANY);
+    // An offset or other after a move that can fail reads the index of that move, so it needs no other check. The origin cannot
+    // fail, so a fixed key after it needs no check, and the read is a constant of the run.
+    const checks = rec({
+      offsets: safe([offset(1), offset(1)]),
+      computed: safe([index(n), offset(-1)]),
+      origin: safe([{ t: "origin" }, key("1")]),
+      last: safe([key("0"), offset(1)]),
+      other: safe([offset(1), { t: "other" }]),
+    });
+    await expectGolden("checks", checks);
   });
 
   it("LOOP.NAMES: fold and iterate are for loops with a variable for each name", async () => {
@@ -466,6 +476,20 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(reasonOf(fold(axes.children, { x: lit(0) }, {}, v("x")))).toBe('the axis "children"');
   });
 
+  it("two constants of the run with one structure share one value, and a constant that can fail keeps its error", async () => {
+    // With the variable a = 2, the quotient 1 / (a - 2) is not finite, so its constant holds the error.
+    const e = rec({
+      x: op("multiply", op("add", v("a"), lit(1)), n),
+      y: op("subtract", n, op("add", v("a"), lit(1))),
+      z: op("subtract", n, op("add", v("a"), lit(2))),
+      q: op("add", n, op("divide", lit(1), op("subtract", v("a"), lit(2)))),
+      r: op("ifError", op("add", n, op("divide", lit(1), op("subtract", v("a"), lit(2)))), lit(-1)),
+    });
+    const source = sourceOf(e);
+    expect(source.match(/const c\d+ = /g)).toHaveLength(3);
+    await expectGolden("constants", e);
+  });
+
   it("a part of a loop over the targets that depends only on the target is a column of the run", async () => {
     // The part has enough work, so each run computes it once for each record. Two loops share the column.
     const heavy = op("max", op("abs", op("subtract", w, op("divide", n, lit(2)))), op("abs", op("add", w, op("multiply", n, lit(3)))));
@@ -479,9 +503,23 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const source = sourceOf(e);
     expect(source.match(/= Q\(/g)).toHaveLength(1);
     await expectGolden("columns", e);
+    // The edges of the decision. A part with a work of 10 is a column, and a part with a work of 9 is not. A node of the
+    // memo and a constant of the run count as one read. A name from the origin, and a node of the memo with keys, stop a
+    // column.
+    const nine = op("add", op("multiply", w, n), op("subtract", w, op("divide", n, lit(2))));
+    const constant = op("multiply", op("add", v("a"), lit(1)), op("subtract", op("multiply", v("a"), lit(3)), lit(2)));
+    const edges = rec({
+      ten: op("sum", each(axes.all, op("abs", nine))),
+      nine: op("sum", each(axes.all, nine)),
+      memo: op("sum", each(axes.all, op("add", w, op("sum", each(axes.all, heavy))))),
+      constant: op("sum", each(axes.all, op("add", w, constant))),
+      outside: let_({ o: n }, op("sum", each(axes.all, op("add", heavy, v("o"))))),
+      keyed: op("sum", each(axes.all, op("add", heavy, let_({ t: n }, op("count", each(axes.where(axes.all, op("eq", n, v("t"))), n)))))),
+    });
+    await expectGolden("columns-edges", edges);
   });
 
-  it("KIND.DOMAIN: a value of a domain without a primitive type has the kind of its domain, so a kernel is in a module", () => {
+  it("KIND.DOMAIN: a value of a domain without a primitive type has the kind of its domain, so a kernel is in a module", async () => {
     type Span = { readonly lo: number; readonly hi: number };
     const Interval = defineDomain({
       name: "Interval",
@@ -523,6 +561,25 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const mv = make(sourceOf(grown, withVar));
     expectSame(mv, grown, [...rows, { iv: { lo: 0, hi: 1 }, n: -2 }], { base: { lo: 10, hi: 11 } }, withVar);
     expect(() => mv.run(rows, { base: 3 })).toThrow(mv.VexContractError);
+    await expect(sourceOf(grown, withVar)).toMatchFileSnapshot("./__golden__/module-kernel.js");
+    // The copy of an op must give the same structure at each sample: not another prototype, not null for a record, not a
+    // record for null, not other fields, not another function, and not an object for a text. OUTSIDE is a name of the
+    // original only.
+    const copies = [
+      "(i, d) => (typeof OUTSIDE === 'undefined' ? { lo: i.lo, hi: i.hi } : Object.assign(Object.create(null), { lo: i.lo, hi: i.hi }))",
+      "(i, d) => (typeof OUTSIDE === 'undefined' ? { lo: i.lo, hi: i.hi } : null)",
+      "(i, d) => (typeof OUTSIDE === 'undefined' ? null : { lo: i.lo, hi: i.hi })",
+      "(i, d) => ({ lo: typeof OUTSIDE === 'undefined' ? i.lo : i.hi, hi: i.hi })",
+      "(i, d) => () => i",
+      // A text and a text object have the same prototype and the same JSON text.
+      "(i, d) => (typeof OUTSIDE === 'undefined' ? Object('x') : 'x')",
+    ];
+    // A domain without a primitive type before the domain of booleans can accept a boolean result, so its check is not known.
+    expect(reasonOf(op("gt", n, lit(1)), { domains: [NumDomain, Vec2Domain, BoolDomain], schema: SCHEMA })).toBe("a domain without a primitive type comes before the domain of a boolean");
+    for (const src of copies) {
+      const other = defineDomain({ ...Interval, ops: { ...Interval.ops, grow: { fn: fnOf(src, 1) as (i: Span, d: number) => Span, params: ["number"], returns: "domain" } } });
+      expect(reasonOf(op("span", op("grow", iv, ref("n"))), { ...options, domains: [NumDomain, other] })).toBe('the op "grow" of the domain Interval reads a name outside itself, so a module cannot copy it');
+    }
   });
 
   it("NAV.COMPUTED: the moves with a position or a key from an expression", async () => {

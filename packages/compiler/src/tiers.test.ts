@@ -218,6 +218,17 @@ describe("the tiers", () => {
     expect(p.stats.fallbacks).toBeLessThan(p.stats.runs);
   });
 
+  it("COMPILE.FALLBACK: an exception in the lowering gives a reason, not an exception", () => {
+    // A host domain whose op table throws when the compiler reads it.
+    const broken = Object.defineProperty({ ...NumDomain }, "ops", {
+      get: () => {
+        throw new Error("the op table is not ready");
+      },
+    }) as typeof NumDomain;
+    const g = generate(app("add", ref("n"), lit(1)), { domains: [broken] });
+    expect(g.ok ? "" : g.reason).toBe("the lowering threw an exception");
+  });
+
   it("EVAL.SHAPE V-053: an expression that is not valid goes to tier 1, and a module gives the reason", () => {
     // V-053: a node with a tag of a newer version of Vex made the walks of the compiler throw a TypeError.
     const s = space.array([{ n: 1 }]);

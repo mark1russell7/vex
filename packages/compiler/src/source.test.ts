@@ -5,7 +5,7 @@
 import { app, axes, each, ext, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, vex, type CompileOptions, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
-import { generate } from "./tiers.ts";
+import { generate, type GenerateOptions } from "./tiers.ts";
 
 // The programs of the speed lane (packages/core/bench/programs.ts). Their IR does not depend on the domain.
 const NEAREST = vex(Vec2Domain)
@@ -19,12 +19,12 @@ const LIFE = vex(Vec2Domain)
   .neighbors(8, (c) => c.from("alive"), { where: (c) => c.from("alive") })
   .count().program;
 
-const sourceOf = (e: Expr, options?: CompileOptions): string => {
+const sourceOf = (e: Expr, options?: GenerateOptions): string => {
   const g = generate(e, options);
   return g.ok ? g.source : `no source: ${g.reason}\n`;
 };
 
-const expectGolden = async (name: string, e: Expr, options?: CompileOptions): Promise<void> => {
+const expectGolden = async (name: string, e: Expr, options?: GenerateOptions): Promise<void> => {
   await expect(sourceOf(e, options)).toMatchFileSnapshot(`./__golden__/${name}.js`);
 };
 
@@ -76,6 +76,23 @@ describe("COMPILE.SOURCE: the generated source", () => {
       computed: ref("n", [key(ref("k")), offset(1)]),
     });
     await expectGolden("loops", e, { domains: [NumDomain, TextDomain, BoolDomain] });
+  });
+
+  it("KIND.STATIC: the static sites of a schema, with the checks of the kind and of the domain of each result", async () => {
+    const schema = { fields: { n: "number", s: "string", b: "boolean" } } as const;
+    const e = rec({
+      // A result of the kind number, of a domain with a check, and a result of the kind boolean, of a domain without one.
+      number: app("add", ref("n"), lit(1)),
+      boolean: app("gt", ref("n"), lit(1)),
+      text: app("upper", ref("s")),
+      // An op without the kind of its result, an argument of a kind that the op does not accept, and a free function.
+      vector: app("vec2", ref("n"), lit(2)),
+      bad: app("add", ref("b"), lit(1)),
+      free: app("twice", ref("n")),
+    });
+    await expectGolden("static", e, { domains: [NumDomain, TextDomain, BoolDomain, Vec2Domain], schema, fns: { twice: (x: unknown) => x } });
+    // A domain without a primitive type comes before the domain of booleans, so the check of a boolean result is not known.
+    await expectGolden("static-first", rec({ number: app("add", ref("n"), lit(1)), boolean: app("gt", ref("n"), lit(1)) }), { domains: [NumDomain, Vec2Domain, BoolDomain], schema });
   });
 
   it("a list and an extension stop the program at an error", async () => {

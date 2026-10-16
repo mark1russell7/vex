@@ -1,4 +1,4 @@
-import { SheetRun, type Addr, type Expr, type Move } from "@mark1russell7/vex";
+import { SheetRun, type Addr, type Expr, type Move, type Names } from "@mark1russell7/vex";
 import { fromCore, fromReference, referenceEvaluate } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -56,14 +56,22 @@ function inline(e: Expr, name: string, by: Expr): Expr {
       return { ...e, bind: Object.fromEntries(Object.entries(e.bind).map(([k, v]) => [k, inline(v, name, by)])), body: inline(e.body, name, by) };
     case "rec":
       return { ...e, fields: Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, inline(v, name, by)])) };
-    // A formula has no loop.
-    case "fold":
-    case "iterate":
+    case "fold": {
+      const moves = at(e.at);
+      const names = { init: inlineNames(e.init, name, by), step: inlineNames(e.step, name, by) };
+      const axis = e.axis.t === "where" ? { ...e.axis, test: inline(e.axis.test, name, by) } : e.axis;
+      return { ...e, ...names, axis, result: inline(e.result, name, by), ...(moves === undefined ? {} : { at: moves }) };
+    }
+    case "iterate": {
+      const loop = { ...e, init: inlineNames(e.init, name, by), step: inlineNames(e.step, name, by), result: inline(e.result, name, by) };
+      return e.until === undefined ? loop : { ...loop, until: inline(e.until, name, by) };
+    }
     case "lit":
     case "var":
       return e;
   }
 }
+const inlineNames = (names: Names, name: string, by: Expr): Names => Object.fromEntries(Object.entries(names).map(([n, x]) => [n, inline(x, name, by)]));
 const hasCellWithAddress = (e: Expr): boolean => JSON.stringify(e).includes('"kind":"vex.cell"') && /"column":"f1","at":\[[^\]]/.test(JSON.stringify(e));
 
 describe("the sheet evaluation of compiled formulas", () => {

@@ -5,7 +5,7 @@
  * Each part of the text starts at `root`. A field reference of `root` reads at the focus when the chain evaluates,
  * so a body of an axis can also start at `root`. A cell reference is the argument `root.ext("vex.cell", ...)`.
  */
-import { isListOp, type Axis, type Expr, type Move } from "@mark1russell7/vex";
+import { isListOp, type Axis, type Expr, type Move, type Names } from "@mark1russell7/vex";
 
 /** This function gives the text of a string in double quotes, for the Lab reader. */
 const quote = (s: string): string => `"${s.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n").replaceAll("\t", "\\t")}"`;
@@ -62,9 +62,16 @@ function inline(e: Expr, env: ReadonlyMap<string, Expr>): Expr {
       return { ...e, fields: Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, inline(v, env)])) };
     case "each":
       return { ...e, body: inline(e.body, env), axis: inlineAxis(e.axis, env) };
-    // A formula has no loop, and the view has no text for one.
-    case "fold":
-    case "iterate":
+    // The names of a loop hide a binding outside it with the same name, in the steps and in the result.
+    case "fold": {
+      const inside = without(env, Object.keys(e.init));
+      return { ...e, axis: inlineAxis(e.axis, env), init: inlineNames(e.init, env), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
+    }
+    case "iterate": {
+      const inside = without(env, Object.keys(e.init));
+      const inlined = { ...e, init: inlineNames(e.init, env), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
+      return e.until === undefined ? inlined : { ...inlined, until: inline(e.until, inside) };
+    }
     case "lit":
     case "ref":
     case "ext":
@@ -72,6 +79,47 @@ function inline(e: Expr, env: ReadonlyMap<string, Expr>): Expr {
   }
 }
 const inlineAxis = (a: Axis, env: ReadonlyMap<string, Expr>): Axis => (a.t === "where" ? { t: "where", axis: inlineAxis(a.axis, env), test: inline(a.test, env) } : a);
+const inlineNames = (names: Names, env: ReadonlyMap<string, Expr>): Names => Object.fromEntries(Object.entries(names).map(([n, x]) => [n, inline(x, env)]));
+const without = (env: ReadonlyMap<string, Expr>, names: readonly string[]): ReadonlyMap<string, Expr> => new Map([...env].filter(([n]) => !names.includes(n)));
+
+/** The text of each name of the loops around a part of the view, for example "v0.x". */
+let loopText: ReadonlyMap<string, string> = new Map();
+/** The number of loops around a part of the view. The parameter of a loop is "v" and this number. */
+let loopDepth = 0;
+
+/** This function gives the field of a name of a loop. A name of a formula has the form "@x", and its field is "x". */
+const fieldOf = (name: string, i: number): string => (IDENT.test(name.replace(/^@/, "")) ? name.replace(/^@/, "") : `n${String(i)}`);
+
+/** This function gives the text of the parts of a loop, with the text of its names in their scope. */
+function inLoop(fields: ReadonlyMap<string, string>, parts: (param: string) => string): string {
+  const param = `v${String(loopDepth)}`;
+  const outer = loopText;
+  loopText = new Map([...outer, ...[...fields].map(([n, f]): [string, string] => [n, `${param}.${f}`])]);
+  loopDepth++;
+  try {
+    return parts(param);
+  } finally {
+    loopText = outer;
+    loopDepth--;
+  }
+}
+
+/** The text of a record of the names of a loop: each field and the text of its value. */
+const namesText = (fields: ReadonlyMap<string, string>, names: Names): string => `{ ${Object.entries(names).map(([n, x]) => `${fields.get(n) ?? n}: ${arg(x)}`).join(", ")} }`;
+
+/**
+ * The text of a loop: an iteration of a chain, or a fold of a list chain. The first values and the tests of a fold
+ * have the text outside the loop, because they cannot read its names.
+ */
+function loop(e: Extract<Expr, { tag: "fold" | "iterate" }>): string {
+  const fields = new Map(Object.keys(e.init).map((n, i) => [n, fieldOf(n, i)] as const));
+  const first = namesText(fields, e.init);
+  const head = e.tag === "iterate" ? `root.start(0).iterate(${String(e.limit)}, ` : `${list({ tag: "each", axis: e.axis, body: { tag: "lit", value: 0 }, ...(e.at === undefined ? {} : { at: e.at }) })}.fold(`;
+  return inLoop(fields, (p) => {
+    const until = e.tag === "iterate" && e.until !== undefined ? `, { until: (${p}) => ${arg(e.until)} }` : "";
+    return `${head}${first}, (${p}) => (${namesText(fields, e.step)}), (${p}) => ${arg(e.result)}${until})`;
+  });
+}
 
 /** The text of an argument of an op: a number or a boolean as it is, and another expression as a chain. */
 function arg(e: Expr): string {
@@ -138,10 +186,10 @@ function chain(e: Expr): string {
     case "let":
       return chain(inline(e, new Map()));
     case "var":
-      return "root.start(null)";
+      return loopText.get(e.name) ?? "root.start(null)";
     case "fold":
     case "iterate":
-      throw new TypeError(`the Vex view has no text for the loop "${e.tag}"`);
+      return loop(e);
   }
 }
 

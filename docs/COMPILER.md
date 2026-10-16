@@ -220,7 +220,7 @@ A step is a function of the values before it. Thus a step that gives the same va
 
 These constructs give the full ring of `radial`. The code of ireko adds the angles one after another, so a fold gives the same bits. It finds the radius with a loop that doubles it until a test is true, and then with 50 steps of a bisection. These are an iteration with `until`, and an iteration with the limit 50.
 
-Each stage has the loops, except the formulas. Tier 2 has a local for each name and a labeled loop. A new value of another kind stops the program, and tier 1 evaluates it. A module has a `let` for each name and a `for` loop. Each name has a level of its own, so a part of a step that reads a name stays in the loop. A loop that reads no key of the run is a constant of the run. Thus the bisection of a ring evaluates once for each run, not once for each child.
+Each stage has the loops. The formulas have `ITERATE(limit, name, first, step, ..., result, UNTIL test)` and `FOLD(axis WHERE test, name, first, step, ..., result)` (FORMULA.ITERATE, FORMULA.FOLD), and the Vex view of a formula shows them as calls of the builder. Tier 2 has a local for each name and a labeled loop. A new value of another kind stops the program, and tier 1 evaluates it. A module has a `let` for each name and a `for` loop. Each name has a level of its own, so a part of a step that reads a name stays in the loop. A loop that reads no key of the run is a constant of the run. Thus the bisection of a ring evaluates once for each run, not once for each child.
 
 ## 9. Packages
 

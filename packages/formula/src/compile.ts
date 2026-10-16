@@ -3,10 +3,10 @@
  * A value column is a field of the row records, so a read of it is a `ref`. A formula column is a column of a
  * sheet, so a read of it is a cell reference. Thus a cycle of formula columns gives `#CYCLE!`.
  */
-import { app, axes, cell, each, index, isFixedAddr, key, let_, lit, offset, origin, parent, ref, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
+import { app, axes, cell, each, fold, index, isFixedAddr, iterate, key, let_, lit, offset, origin, parent, ref, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { BUILT_IN_NAMES, OP_NAMES } from "./functions.ts";
-import { ADDRESS, AGGREGATES, axisText, FormulaSyntaxError, parseFormula, type AggAxis, type AggregateName, type Ast, type AxisName, type BinaryOp, type Nav, type Span } from "./syntax.ts";
+import { ADDRESS, AGGREGATES, axisText, FormulaSyntaxError, parseFormula, type AggAxis, type AggregateName, type Ast, type AxisName, type BinaryOp, type LoopName, type Nav, type Span } from "./syntax.ts";
 
 /** The columns that a formula can read. */
 export interface FormulaContext {
@@ -123,6 +123,12 @@ function balanced(op: string, values: readonly Expr[]): Expr {
 }
 const STRICT = lit({ strict: true });
 
+/** This function gives the variable of a name of a loop. A column is a field, not a variable, so the two do not meet. */
+const loopVar = (name: string): string => `@${name}`;
+
+/** This function gives the names of the loops of a scope, and the names of one more loop. */
+const withNames = (s: { readonly loops?: ReadonlySet<string> }, names: readonly LoopName[]): ReadonlySet<string> => new Set([...(s.loops ?? []), ...names.map((n) => n.name)]);
+
 /**
  * This function reads a cell of a formula column at an address. A cell reference has only fixed moves. Thus a computed
  * move goes in the address of the window from 0 to 0. The one target of that window is the key of the address.
@@ -133,6 +139,8 @@ const cellAt = (column: string, at: readonly Move[]): Expr => (isFixedAddr(at) ?
 interface Scope {
   readonly base: readonly Move[];
   readonly inAggregate: boolean;
+  /** The names of the loops around the node. A name of a loop comes before a column with the same name. */
+  readonly loops?: ReadonlySet<string>;
   /**
    * Inside the axis of another table: the name and the columns of that table. A read of the row of the formula
    * (`this.name`) goes into `hoist`. The outermost axis of a table binds it in a let before the axis.
@@ -274,6 +282,7 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       case "bool":
         return lit(a.v);
       case "name": {
+        if (a.nav.length === 0 && s.loops?.has(a.name) === true) return v(loopVar(a.name));
         const head = a.nav[0];
         if (head?.t === "table") return lookup(a, head);
         const inTable = s.table;
@@ -325,7 +334,31 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       }
       case "call":
         return call(a, s);
+      case "iterate": {
+        const inner: Scope = { ...s, loops: withNames(s, a.names) };
+        const names = loopNames(a.names, s, inner);
+        return iterate(a.limit, names.first, names.step, go(a.result, inner), a.until === undefined ? undefined : go(a.until, inner));
+      }
+      case "fold": {
+        if (typeof a.axis === "object" && !("from" in a.axis)) throw new FormulaSyntaxError("FOLD takes an axis of this table, for example children or rows(-1, 0)", a.fnSpan);
+        // The steps evaluate at each row of the axis, as the body of an aggregate. The tests do not read the names.
+        const rows: Scope = { base: [], inAggregate: true, ...(s.table === undefined ? {} : { table: s.table }), ...(s.loops === undefined ? {} : { loops: s.loops }) };
+        const axis = a.where === undefined ? axisOf(a.axis) : axes.where(axisOf(a.axis), go(a.where, rows));
+        const names = loopNames(a.names, s, { ...rows, loops: withNames(s, a.names) });
+        return fold(axis, names.first, names.step, go(a.result, { ...s, loops: withNames(s, a.names) }), [...s.base, ...a.nav.map((n) => navMove(n, s))]);
+      }
     }
+  };
+
+  // The names of a loop: each first value at the row of the formula, and each step in the scope of the steps.
+  const loopNames = (names: readonly LoopName[], outside: Scope, steps: Scope): { readonly first: Record<string, Expr>; readonly step: Record<string, Expr> } => {
+    const first: Record<string, Expr> = {};
+    const step: Record<string, Expr> = {};
+    for (const n of names) {
+      first[loopVar(n.name)] = go(n.first, outside);
+      step[loopVar(n.name)] = go(n.step, steps);
+    }
+    return { first, step };
   };
 
   // An aggregate over the rows of another table. The axis table moves the evaluation to that table, so a value of

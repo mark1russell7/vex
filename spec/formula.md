@@ -53,6 +53,8 @@ A function name has no difference between capital and small letters.
 - **[FORMULA.AGGREGATE.ADDRESS]** Navigation before the axis is the address of the axis: `SUM(parent.children.cost)` sums the costs of the children of the parent.
 - **[FORMULA.AGGREGATE.WINDOW]** `rows(from, to)` as the axis of an aggregate is the axis `window(from, to)`. Its rows are at the offsets from `from` to `to` of the row, among its siblings. For example, `AVERAGE(rows(-2, 0).Sales)` is the mean of the sales of this row and of the two rows before it. The offsets must be whole numbers.
 - **[FORMULA.AGGREGATE.OP]** Without an axis, `MIN`, `MAX` and `SUM` are ops of the domains, for example `MIN(a, b)` of two numbers. `AVERAGE`, `COUNT`, `ANY` and `ALL` without an axis are errors.
+- **[FORMULA.ITERATE]** `ITERATE(limit, name, first, step, ..., result)` is the loop `iterate` (spec `ITERATE.LIMIT`). Each name has a first value and a step, and in a step or in the result the name reads its value. A last argument `UNTIL test` is the test `until`. `limit` is a whole number from 0 to 100000 in the formula.
+- **[FORMULA.FOLD]** `FOLD(axis WHERE test, name, first, step, ..., result)` is the loop `fold` (spec `FOLD.ORDER`). The axis is an axis of an aggregate of this table. Each step evaluates at a row of the axis, and the test cannot read the names.
 - **[FORMULA.RANK]** `RANK(value)` is 1 plus the number of other rows with a larger value. An error at another row makes the rank an error. `RANK` is not valid inside an aggregate.
 
 ## 7. Grids

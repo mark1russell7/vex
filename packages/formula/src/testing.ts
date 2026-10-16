@@ -5,7 +5,7 @@
  */
 import { space, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
-import { AGGREGATES, AXES, axisText, quoteText, type AggAxis, type AggregateName, type Ast, type BinaryOp, type Nav } from "./syntax.ts";
+import { AGGREGATES, AXES, axisText, quoteText, type AggAxis, type AggregateName, type Ast, type BinaryOp, type LoopName, type Nav } from "./syntax.ts";
 
 const NO_SPAN = { start: 0, end: 0 } as const;
 const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/", "^", "&", "=", "<>", "<", "<=", ">", ">="];
@@ -54,6 +54,10 @@ const arbNameNav: fc.Arbitrary<readonly Nav[]> = fc.oneof(
   ]),
 );
 
+/** The read of the name x of a loop. */
+const LOOP_X: Ast = { k: "name", nav: [], name: "x", span: NO_SPAN };
+const plus = (left: Ast, right: Ast): Ast => ({ k: "binary", op: "+", left, right, span: NO_SPAN });
+
 /** A random syntax tree that reads the columns `names`. The spans of the nodes are empty. */
 export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
   fc.letrec<{ ast: Ast }>((tie) => ({
@@ -68,6 +72,36 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
         .tuple(fc.oneof(fc.integer({ min: 0, max: 5 }).map((v): Ast => ({ k: "num", v, span: NO_SPAN })), tie("ast")), fc.array(arbRowNav, { maxLength: 1 }), fc.constantFrom(...names))
         .map(([e, after, name]): Ast => ({ k: "name", nav: [{ t: "index", e, span: NO_SPAN }, ...after], name, span: NO_SPAN })),
       tie("ast").map((arg): Ast => ({ k: "neg", arg, span: NO_SPAN })),
+      // The loops: the names x and y. A step adds a value to its name, or gives a value.
+      fc
+        .tuple(fc.integer({ min: 0, max: 3 }), fc.boolean(), tie("ast"), tie("ast"), fc.boolean(), tie("ast"), fc.option(tie("ast"), { nil: undefined }))
+        .map(([limit, two, first, step, grow, result, until]): Ast => ({
+          k: "iterate",
+          fnSpan: NO_SPAN,
+          limit,
+          names: [{ name: "x", span: NO_SPAN, first, step: grow ? plus(LOOP_X, step) : step }, ...(two ? [{ name: "y", span: NO_SPAN, first: step, step: LOOP_X }] : [])],
+          result: two ? plus(result, LOOP_X) : result,
+          ...(until === undefined ? {} : { until }),
+          span: NO_SPAN,
+        })),
+      fc
+        .tuple(
+          fc.array(arbRowNav, { maxLength: 1 }),
+          fc.oneof(fc.constantFrom<AggAxis>(...AXES), fc.tuple(fc.integer({ min: -2, max: 0 }), fc.integer({ min: 0, max: 2 })).map(([from, to]): AggAxis => ({ from, to }))),
+          fc.option(tie("ast"), { nil: undefined }),
+          tie("ast"),
+          tie("ast"),
+        )
+        .map(([nav, axis, where, first, step]): Ast => ({
+          k: "fold",
+          fnSpan: NO_SPAN,
+          nav,
+          axis,
+          ...(where === undefined ? {} : { where }),
+          names: [{ name: "x", span: NO_SPAN, first, step: plus(LOOP_X, step) }],
+          result: LOOP_X,
+          span: NO_SPAN,
+        })),
       fc.tuple(fc.constantFrom(...BINARY), tie("ast"), tie("ast")).map(([op, left, right]): Ast => ({ k: "binary", op, left, right, span: NO_SPAN })),
       fc
         .constantFrom(...CALLS)
@@ -124,8 +158,15 @@ export function printAst(a: Ast): string {
       return `${a.fn}(${a.args.map(printAst).join(", ")})`;
     case "agg":
       return `${a.fn}(${navText(a.nav)}${axisText(a.axis)}${a.where === undefined ? "" : ` WHERE ${printAst(a.where)}`}${a.body === undefined ? "" : `, ${printAst(a.body)}`})`;
+    case "iterate":
+      return `ITERATE(${a.limit}, ${namesText(a.names)}, ${printAst(a.result)}${a.until === undefined ? "" : `, UNTIL ${printAst(a.until)}`})`;
+    case "fold":
+      return `FOLD(${navText(a.nav)}${axisText(a.axis)}${a.where === undefined ? "" : ` WHERE ${printAst(a.where)}`}, ${namesText(a.names)}, ${printAst(a.result)})`;
   }
 }
+
+/** This function gives the text of the names of a loop: the name, the first value and the step of each. */
+const namesText = (names: readonly LoopName[]): string => names.map((n) => `[${n.name}], ${printAst(n.first)}, ${printAst(n.step)}`).join(", ");
 
 /** The value columns of `arbTable`: `a` (a number, or sometimes the text "x"), `b` (a number), `label` and `on`. */
 export const TABLE_COLUMNS = ["a", "b", "label", "on"] as const;

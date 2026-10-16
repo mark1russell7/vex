@@ -41,6 +41,15 @@ describe("the chain reader of the Lab", () => {
     expect(valueAt(`root.from("position").others(e => e._.distance("position")).min()`, "B")).toBe(5);
   });
 
+  it("LOOP.NAMES: reads the loops iterate and fold, and a field of the names of a loop is a chain", () => {
+    expect(valueAt(`root.start(0).iterate(4, { x: 1 }, (v) => ({ x: v.x._.multiply(2) }), (v) => v.x)`, "A")).toBe(16);
+    expect(valueAt(`root.start(0).each((c) => root.start(0)).fold({ s: 0 }, (v) => ({ s: v.s._.add(root.from("weight")) }), (v) => v.s)`, "B")).toBe(10);
+    expect(valueAt(`root.start(0).iterate(9, { x: 1 }, (v) => ({ x: v.x._.multiply(3) }), (v) => v.x, { until: (v) => v.x._.gt(root.from("weight")) })`, "C")).toBe(9);
+    // A field that is not a chain, or a field from the prototype, is not a member.
+    expect(fails(`root.start(0).iterate(1, { x: 1 }, (v) => ({ x: v.toString }), (v) => v.x)`).message).toBe('".toString" needs a root, a chain or a list chain before it');
+    expect(fails(`root.start(0).iterate(1, { x: 1 }, (v) => ({ x: v.y }), (v) => v.x)`).message).toBe('".y" needs a root, a chain or a list chain before it');
+  });
+
   it("reads a number with an exponent and a sign, like TypeScript", () => {
     expect(valueAt(`root.start(1e-7)`, "A")).toBe(1e-7);
     expect(valueAt(`root.start(2.5E+3)`, "A")).toBe(2500);

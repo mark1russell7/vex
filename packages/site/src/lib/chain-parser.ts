@@ -289,10 +289,10 @@ export function parseChain(src: string): ChainProgram {
 /** The members that the reader permits on each kind of builder object. */
 const ROOT_MEMBERS = new Set(["from", "start", "of", "ofPath", "field", "lit", "rec", "ext"]);
 const CHAIN_MEMBERS = new Set([
-  "_", "from", "to", "index", "offset", "origin", "other", "parent", "ifError", "fork", "with",
+  "_", "from", "to", "index", "offset", "origin", "other", "parent", "ifError", "fork", "with", "iterate",
   "others", "neighbors", "each", "children", "ancestors", "descendants", "siblings", "window", "table", "successors", "predecessors", "reachable",
 ]);
-const LIST_MEMBERS = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "values", "keys", "errors", "first", "reduce"]);
+const LIST_MEMBERS = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "values", "keys", "errors", "first", "reduce", "fold"]);
 // An op name of the ops section can be any name, except the names of JavaScript objects.
 const FORBIDDEN = new Set([
   "constructor", "__proto__", "prototype", "call", "apply", "bind", "caller", "arguments", "toString", "valueOf",
@@ -354,6 +354,11 @@ export function runChain(program: ChainProgram, scope: Readonly<Record<string, u
       case "member": {
         const obj = ev(n.obj, env);
         const kind = kindOf(obj, roots, ops);
+        // The names of a loop of the builder: a record of chains. A field of it is one of the chains.
+        if (kind === undefined && typeof obj === "object" && obj !== null && !FORBIDDEN.has(n.name) && Object.hasOwn(obj, n.name)) {
+          const field = (obj as Readonly<Record<string, unknown>>)[n.name];
+          if (kindOf(field, roots, ops) === "chain") return field;
+        }
         if (kind === undefined) throw new ChainError(`".${n.name}" needs a root, a chain or a list chain before it`, n.nameSpan);
         if (kind === "ops") {
           if (FORBIDDEN.has(n.name)) throw new ChainError(`"${n.name}" is not an op name that the Lab permits`, n.nameSpan);

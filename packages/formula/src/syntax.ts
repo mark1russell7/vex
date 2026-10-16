@@ -162,6 +162,17 @@ export type AggregateName = keyof typeof AGGREGATES;
 
 export type BinaryOp = "+" | "-" | "*" | "/" | "^" | "&" | "=" | "<>" | "<" | "<=" | ">" | ">=";
 
+/** A name of a loop: its first value at the row of the formula, and its value after a step. */
+export interface LoopName {
+  readonly name: string;
+  readonly span: Span;
+  readonly first: Ast;
+  readonly step: Ast;
+}
+
+/** The largest limit of `ITERATE`. */
+export const MAX_ITERATE = 100_000;
+
 /** The syntax tree of a formula. */
 export type Ast =
   | { readonly k: "num"; readonly v: number; readonly span: Span }
@@ -179,6 +190,19 @@ export type Ast =
       readonly axis: AggAxis;
       readonly where?: Ast;
       readonly body?: Ast;
+      readonly span: Span;
+    }
+  /** `ITERATE(limit, name, first, step, ..., result, UNTIL test)`: an iteration with names (FORMULA.ITERATE). */
+  | { readonly k: "iterate"; readonly fnSpan: Span; readonly limit: number; readonly names: readonly LoopName[]; readonly until?: Ast; readonly result: Ast; readonly span: Span }
+  /** `FOLD(axis WHERE test, name, first, step, ..., result)`: a fold over the rows of an axis (FORMULA.FOLD). */
+  | {
+      readonly k: "fold";
+      readonly fnSpan: Span;
+      readonly nav: readonly Nav[];
+      readonly axis: AggAxis;
+      readonly where?: Ast;
+      readonly names: readonly LoopName[];
+      readonly result: Ast;
       readonly span: Span;
     };
 
@@ -309,7 +333,8 @@ export function parseFormula(src: string): Ast {
     return v;
   };
 
-  const parseAggregate = (fn: AggregateName, fnTok: Token): Ast => {
+  /** This function reads the axis of an aggregate or of a fold: the navigation, then a named axis, rows(from, to) or table("name"). */
+  const parseAxis = (): { readonly nav: readonly Nav[]; readonly axis: AggAxis } => {
     // The axis table("name") has no navigation before it: the rows of a table do not depend on the row of the formula.
     const tableAxis = isWord(peek(), "table");
     const nav = tableAxis ? [] : parseNav();
@@ -328,6 +353,62 @@ export function parseFormula(src: string): Ast {
       expect(")", `")" after the offsets of rows(from, to)`);
       axis = { from, to };
     }
+    return { nav, axis };
+  };
+
+  /**
+   * This function reads the names of a loop and its result: `name, first, step` for each name, and then the result.
+   * `until` permits a last argument `UNTIL test`.
+   */
+  const parseLoop = (fn: string, until: boolean): { readonly names: readonly LoopName[]; readonly result: Ast; readonly until?: Ast; readonly close: Token } => {
+    const args: Ast[] = [];
+    let test: Ast | undefined;
+    for (;;) {
+      expect(",", `"," before the next argument of ${fn}`);
+      // UNTIL before a value is the test of the loop, and it is the last argument.
+      if (until && isWord(peek(), "until") && !isPunct(peek(1), ",") && !isPunct(peek(1), ")")) {
+        next();
+        test = parseExpr(0);
+        break;
+      }
+      args.push(parseExpr(0));
+      if (!isPunct(peek(), ",")) break;
+    }
+    const close = expect(")", `")" after the arguments of ${fn}`);
+    const result = args.at(-1);
+    if (result === undefined || args.length % 3 !== 1) throw new FormulaSyntaxError(`${fn} needs a name, a first value and a step for each name, and then a result`, { start: args[0]?.span.start ?? close.span.start, end: close.span.end });
+    const names: LoopName[] = [];
+    for (let k = 0; k + 1 < args.length; k += 3) {
+      const [name, first, step] = [args[k], args[k + 1], args[k + 2]] as [Ast, Ast, Ast];
+      if (name.k !== "name" || name.nav.length > 0 || !/^[A-Za-z_]\w*$/.test(name.name)) throw new FormulaSyntaxError(`a name of ${fn} must be a word, for example x`, name.span);
+      if (names.some((n) => n.name === name.name)) throw new FormulaSyntaxError(`the name "${name.name}" is already a name of this ${fn}`, name.span);
+      names.push({ name: name.name, span: name.span, first, step });
+    }
+    return { names, result, ...(test === undefined ? {} : { until: test }), close };
+  };
+
+  const parseIterate = (fnTok: Token): Ast => {
+    const limit = parseExpr(0);
+    if (limit.k !== "num" || !Number.isInteger(limit.v) || limit.v < 0 || limit.v > MAX_ITERATE) throw new FormulaSyntaxError(`the limit of ITERATE must be a whole number from 0 to ${MAX_ITERATE}`, limit.span);
+    const { names, result, until, close } = parseLoop("ITERATE", true);
+    return { k: "iterate", fnSpan: fnTok.span, limit: limit.v, names, ...(until === undefined ? {} : { until }), result, span: { start: fnTok.span.start, end: close.span.end } };
+  };
+
+  const parseFold = (fnTok: Token): Ast => {
+    const at = i;
+    if (!isAxis(toks[at + navLength(at)]) && !isWord(toks[at + navLength(at)], "rows") && !isWord(toks[at], "table")) throw new FormulaSyntaxError("the first argument of FOLD is an axis, for example children", peek().span);
+    const { nav, axis } = parseAxis();
+    let where: Ast | undefined;
+    if (isWord(peek(), "where")) {
+      next();
+      where = parseExpr(0);
+    }
+    const { names, result, close } = parseLoop("FOLD", false);
+    return { k: "fold", fnSpan: fnTok.span, nav, axis, ...(where === undefined ? {} : { where }), names, result, span: { start: fnTok.span.start, end: close.span.end } };
+  };
+
+  const parseAggregate = (fn: AggregateName, fnTok: Token): Ast => {
+    const { nav, axis } = parseAxis();
     let body: Ast | undefined;
     if (isPunct(peek(), ".")) {
       next();
@@ -360,6 +441,8 @@ export function parseFormula(src: string): Ast {
     next(); // the function name
     next(); // "("
     const upper = fnTok.v.toUpperCase();
+    if (upper === "ITERATE") return parseIterate(fnTok);
+    if (upper === "FOLD") return parseFold(fnTok);
     // The axis "all" and the function ALL have one name. An axis name before "(" is a function, not an axis. The
     // axis rows(from, to) is the exception: it has its offsets in parentheses.
     const axisAt = i + navLength(i);

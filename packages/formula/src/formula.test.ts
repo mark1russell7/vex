@@ -1,4 +1,4 @@
-import { app, axes, cell, each, index, key, lit, offset, origin, parent, ref, SheetRun, space, type Expr, type Result } from "@mark1russell7/vex";
+import { app, axes, cell, each, fold, index, iterate, key, lit, offset, origin, parent, ref, SheetRun, space, v, type Expr, type Result } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { BUILT_IN_NAMES, compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, MAX_LENGTH, OP_NAMES, type FormulaContext, type GridCellKind, type GridContext } from "./index.ts";
@@ -182,6 +182,37 @@ describe("names and navigation", () => {
     expect(error("index(qty.cost").message).toMatch(/necessary/);
     expect(error('SUM(table("Products"), this.index(0).Qty)', productsContext()).message).toBe("index(...). after this. is not valid in the axis of another table");
     expect(highlightFormula("index(1).cost").find((p) => p.text === "index")?.kind).toBe("keyword");
+  });
+
+  it("FORMULA.ITERATE: ITERATE has names with a first value and a step, a result, and a test UNTIL", () => {
+    expect(value("ITERATE(5, x, 1, x * 2, x)")).toBe(32);
+    expect(column("ITERATE(50, x, 1, x * 2, x, UNTIL x > cost)", ["apple", "pear"])).toEqual([4, 8]);
+    // Each step reads the values before it, so two names swap their values.
+    expect(value("ITERATE(3, a, 1, b, b, 2, a, a - b)")).toBe(1);
+    // A name of the loop hides the column in the steps and in the result. The first value reads the column.
+    expect(value("ITERATE(1, cost, cost, cost * 10, cost + qty)")).toBe(23);
+    expect(value("ITERATE(2, x, 1, x * 2, x, UNTIL x > 9)")).toBe("#NUM!");
+    expect(value("ITERATE(2, x, 1, x, x, UNTIL x)")).toBe("#VALUE!");
+    expect(compile("iterate(0, x, 1, x, x)")).toEqual(iterate(0, { "@x": lit(1) }, { "@x": v("@x") }, v("@x")));
+    expect(error("ITERATE(1.5, x, 1, x, x)").message).toBe("the limit of ITERATE must be a whole number from 0 to 100000");
+    expect(error("ITERATE(qty, x, 1, x, x)").message).toBe("the limit of ITERATE must be a whole number from 0 to 100000");
+    expect(error("ITERATE(3, x, 1, x)").message).toBe("ITERATE needs a name, a first value and a step for each name, and then a result");
+    expect(error("ITERATE(3, [x y], 1, 2, 3)").message).toBe("a name of ITERATE must be a word, for example x");
+    expect(error("ITERATE(3, x, 1, 2, x, 1, 2, 3)").message).toBe('the name "x" is already a name of this ITERATE');
+    expect(error("ITERATE(3, x, 1, x, x UNTIL x > 2)").message).toMatch(/necessary here/);
+    expect(highlightFormula("ITERATE(2, x, 1, x, x, UNTIL x > 1)").find((p) => p.text === "UNTIL")?.kind).toBe("keyword");
+  });
+
+  it("FORMULA.FOLD: FOLD steps at each row of an axis, in order, with names, and a result at the row of the formula", () => {
+    expect(at('FOLD(children, s, "", s & name, s)', "fruit")).toBe("applepear");
+    expect(at("FOLD(children WHERE cost > 2, s, 0, s + cost, s)", "fruit")).toBe(5);
+    // The result evaluates at the row of the formula, and a test cannot read the names.
+    expect(at("FOLD(children, s, 0, s + cost, s + cost)", "fruit")).toBe(8);
+    expect(at("FOLD(parent.children, n, 0, n + 1, n)", "apple")).toBe(2);
+    expect(at("FOLD(rows(-1, 0), s, 0, s + qty, s)", "pear")).toBe(4);
+    expect(compile("FOLD(children, s, 0, s + cost, s)")).toEqual(fold(axes.children, { "@s": lit(0) }, { "@s": app("add", v("@s"), ref(["cost"])) }, v("@s")));
+    expect(error('FOLD(table("T"), s, 0, s, s)', productsContext()).message).toBe("FOLD takes an axis of this table, for example children or rows(-1, 0)");
+    expect(error("FOLD(cost, s, 0, s, s)").message).toBe("the first argument of FOLD is an axis, for example children");
   });
 
   it("FORMULA.NAV.NAME: row(\"name\") moves to the one row with the name, and a name of no row or of two rows is an error", () => {

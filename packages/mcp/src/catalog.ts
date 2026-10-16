@@ -1,16 +1,25 @@
 /**
- * The catalog of the skill of Vex (`plugins/vex/skills/vex/reference/catalog.md`). This test makes the catalog from
- * the domain objects, so the catalog and the code cannot differ. After a change of a domain, start `vitest run -u`.
+ * The catalog of the domains, for the skill of Vex and for its MCP server. It gives each domain, and for each op its call,
+ * its result, its lifting, its laws and its identity. The catalog comes from the domain objects, so the catalog and the
+ * code cannot differ.
  *
- * The result of an op comes from its declaration `returns`. Without it, the test calls the op with a sample of each
+ * The result of an op comes from its declaration `returns`. Without it, the catalog uses the op with a sample of each
  * argument, and it gives the kind of the value.
  */
 import { domainOf, type AnyDomain, type OpSpec, type ParamKind } from "@mark1russell7/vex";
 import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, LiftedNDVectorDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
-import { expect, it } from "vitest";
 
-/** Each domain of the catalog: its import name, the type of its values, a sample value and a short description. */
-const DOMAINS: readonly { readonly name: string; readonly d: AnyDomain; readonly type: string; readonly sample: unknown; readonly about: string }[] = [
+/** A domain of the catalog: its import name, the domain, the type of its values, a sample value and a short description. */
+export interface Entry {
+  readonly name: string;
+  readonly d: AnyDomain;
+  readonly type: string;
+  readonly sample: unknown;
+  readonly about: string;
+}
+
+/** The domains of the catalog, in the order of the catalog. */
+export const CATALOG: readonly Entry[] = [
   { name: "NumDomain", d: NumDomain, type: "number", sample: 2, about: "Numbers. A result that is not finite gives `#NUM!`." },
   { name: "BoolDomain", d: BoolDomain, type: "boolean", sample: true, about: "Booleans." },
   { name: "TextDomain", d: TextDomain, type: "string", sample: "ab", about: "Texts." },
@@ -23,18 +32,18 @@ const DOMAINS: readonly { readonly name: string; readonly d: AnyDomain; readonly
   { name: "DateDomain", d: DateDomain, type: "LocalDate", sample: LocalDate.of(2026, 10, 16), about: "Days of the calendar, without a time. `date` of `NumDomain` makes a date." },
 ];
 
-const ALL = DOMAINS.map((x) => x.d);
+const ALL = CATALOG.map((x) => x.d);
 
 /** This function gives the type of a value: the type of its domain, or its JavaScript type. */
 function typeOf(u: unknown): string {
   const d = domainOf(ALL, u);
-  const entry = DOMAINS.find((x) => x.d === d);
+  const entry = CATALOG.find((x) => x.d === d);
   if (entry !== undefined) return entry.type;
   return Array.isArray(u) ? "list" : typeof u;
 }
 
 /** This function gives a sample of a parameter. */
-function sampleOf(kind: ParamKind, self: (typeof DOMAINS)[number]): unknown {
+function sampleOf(kind: ParamKind, self: Entry): unknown {
   if (kind === "domain") return self.sample;
   if (kind === "number") return 1;
   if (kind === "boolean") return true;
@@ -43,11 +52,11 @@ function sampleOf(kind: ParamKind, self: (typeof DOMAINS)[number]): unknown {
 }
 
 /** This function gives the function of an op: its `fn`, or the method of the sample value. */
-const functionOf = (self: (typeof DOMAINS)[number], name: string, spec: OpSpec<unknown>): ((...a: unknown[]) => unknown) | undefined =>
+const functionOf = (self: Entry, name: string, spec: OpSpec<unknown>): ((...a: unknown[]) => unknown) | undefined =>
   (spec.fn as ((...a: unknown[]) => unknown) | undefined) ?? (self.sample as Readonly<Record<string, ((...a: unknown[]) => unknown) | undefined>>)[name];
 
 /** This function gives the parameters of an op: its declaration, or none for a function without parameters. */
-function paramsOf(self: (typeof DOMAINS)[number], name: string, spec: OpSpec<unknown>): readonly ParamKind[] | undefined {
+function paramsOf(self: Entry, name: string, spec: OpSpec<unknown>): readonly ParamKind[] | undefined {
   if (spec.params !== undefined) return spec.params;
   const f = functionOf(self, name, spec);
   const arity = f === undefined ? undefined : spec.fn === undefined ? f.length : f.length - 1;
@@ -55,7 +64,7 @@ function paramsOf(self: (typeof DOMAINS)[number], name: string, spec: OpSpec<unk
 }
 
 /** This function gives the result of an op: its declaration, or the type of the value of a call with samples. */
-function resultOf(self: (typeof DOMAINS)[number], name: string, spec: OpSpec<unknown>): string {
+function resultOf(self: Entry, name: string, spec: OpSpec<unknown>): string {
   if (spec.returns === "domain") return self.type;
   if (spec.returns !== undefined && spec.returns !== "any") return spec.returns;
   const params = paramsOf(self, name, spec);
@@ -72,7 +81,8 @@ function resultOf(self: (typeof DOMAINS)[number], name: string, spec: OpSpec<unk
 /** This function gives the text of a parameter kind for a domain. */
 const paramText = (kind: ParamKind, type: string): string => (kind === "domain" ? type : kind === "any" ? "value" : kind);
 
-function domainText(self: (typeof DOMAINS)[number]): string {
+/** This function gives the section of the catalog of one domain. */
+export function domainText(self: Entry): string {
   const { d, type } = self;
   const rows = Object.entries(d.ops).map(([name, raw]) => {
     const spec = raw as OpSpec<unknown>;
@@ -95,7 +105,7 @@ function domainText(self: (typeof DOMAINS)[number]): string {
 
 const HEADER = `# The catalog of the domains
 
-The test \`packages/site/src/skill-catalog.test.ts\` makes this file from the domain objects of \`@mark1russell7/vex-domains\`. Do not change it by hand.
+The function \`catalogText\` of \`packages/mcp\` makes this file from the domain objects of \`@mark1russell7/vex-domains\`, and its test writes it. The MCP tool \`vex_catalog\` gives the same text. Do not change it by hand.
 
 - An op applies to a receiver, the first argument. The first domain in \`vex(...)\` whose \`is\` accepts the receiver gives the op.
 - In the builder, write \`value._.op(...rest)\`. In the IR, write \`app("op", receiver, ...rest)\`.
@@ -121,6 +131,7 @@ These ops apply to each value. They are not ops of a domain.
 A list op skips error items. The option \`{ strict: true }\` gives the first error.
 `;
 
-it("the catalog of the skill: the domains, their ops, and the result of each op", async () => {
-  await expect(`${HEADER}\n${DOMAINS.map(domainText).join("\n\n")}\n`).toMatchFileSnapshot("../../../plugins/vex/skills/vex/reference/catalog.md");
-});
+/** This function gives the text of the catalog: the header and the section of each domain. */
+export function catalogText(): string {
+  return `${HEADER}\n${CATALOG.map(domainText).join("\n\n")}\n`;
+}

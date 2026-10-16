@@ -14,6 +14,19 @@ Vex is a TypeScript library for typed spreadsheet formulas over records. A progr
 3. Find the shape of the data: named items, a list, a grid, a tree or a graph. Each shape is a space.
 4. Write the math once, for one item. Then evaluate it at each key.
 5. Look for a [recipe](reference/recipes.md) of the same task.
+6. Test the program on sample records with the MCP tools of the plugin before you write it into the code. `vex_evaluate` gives the value or the error at each key, and `vex_explain` gives the trace.
+
+## The MCP tools
+
+| Tool | What it gives |
+|---|---|
+| `vex_catalog` | The catalog of the domains, or the section of one domain |
+| `vex_check` | The size, the nesting and the reads of a program, and if the compiler gives it generated code |
+| `vex_evaluate` | The value or the error at each key of a space of records |
+| `vex_explain` | The trace at one key: each node, with its focus, its reads and its result |
+| `vex_module` | The source of a standalone ES module, or the reason that the program cannot be one |
+
+A program is the JSON form of the IR. A value of a domain has the form `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`, in the program, in the records and in the results.
 
 ## The model
 

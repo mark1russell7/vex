@@ -48,6 +48,8 @@ The repository has a plugin for Claude Code with the skill `vex`. The skill give
 /plugin install vex@vex
 ```
 
+The plugin also starts the MCP server of [`packages/mcp`](./packages/mcp). Its tools give the catalog of the domains, and they check, evaluate, explain and compile a program as JSON.
+
 Another agent can read [`plugins/vex/skills/vex/SKILL.md`](./plugins/vex/skills/vex/SKILL.md) and [`llms.txt`](https://mark1russell7.github.io/vex/llms.txt).
 
 ## Status

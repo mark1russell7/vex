@@ -1,6 +1,6 @@
 # The catalog of the domains
 
-The test `packages/site/src/skill-catalog.test.ts` makes this file from the domain objects of `@mark1russell7/vex-domains`. Do not change it by hand.
+The function `catalogText` of `packages/mcp` makes this file from the domain objects of `@mark1russell7/vex-domains`, and its test writes it. The MCP tool `vex_catalog` gives the same text. Do not change it by hand.
 
 - An op applies to a receiver, the first argument. The first domain in `vex(...)` whose `is` accepts the receiver gives the op.
 - In the builder, write `value._.op(...rest)`. In the IR, write `app("op", receiver, ...rest)`.

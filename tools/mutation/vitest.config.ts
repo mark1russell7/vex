@@ -6,11 +6,22 @@ const work = (p: string): string => fileURLToPath(new URL(`./work/${p}`, import.
 // The tests of the four packages in work/, run by Vitest 4.1. The aliases make "vitest" the Vitest of this
 // lane, and "@mark1russell7/vex" the copy that Stryker mutates.
 export default defineConfig({
+  plugins: [
+    {
+      // This plugin gives "@mark1russell7/vex-domains" to each test. A standalone module copies the text of each op
+      // function, so the tests of the modules get the copy that Stryker does not mutate (prepare.mjs).
+      name: "vex-domains",
+      enforce: "pre",
+      resolveId(source, importer) {
+        if (source !== "@mark1russell7/vex-domains") return null;
+        return (importer ?? "").replaceAll("\\", "/").endsWith("/work/compiler/module.test.ts") ? work("domains-plain/index.ts") : work("domains/index.ts");
+      },
+    },
+  ],
   resolve: {
     alias: {
       vitest: fileURLToPath(import.meta.resolve("vitest")),
       "@mark1russell7/vex": work("core/index.ts"),
-      "@mark1russell7/vex-domains": work("domains/index.ts"),
       "@mark1russell7/vex-testkit": work("testkit/index.ts"),
     },
   },

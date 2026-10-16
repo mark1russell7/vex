@@ -8,3 +8,6 @@ rmSync(`${here}work`, { recursive: true, force: true });
 for (const p of ["core", "domains", "testkit", "compiler"]) {
   cpSync(`${here}../../packages/${p}/src`, `${here}work/${p}`, { recursive: true });
 }
+// A standalone module copies the text of each op function. Stryker adds its counters to the functions of
+// work/domains, so the tests of the modules read a copy of the domains that Stryker does not mutate.
+cpSync(`${here}../../packages/domains/src`, `${here}work/domains-plain`, { recursive: true, filter: (f) => !f.endsWith(".test.ts") });

@@ -36,12 +36,16 @@ jobs:
           FC_NUM_RUNS: "10000"
 
   mutation:
-    name: mutation (Stryker)
+    name: mutation (${{ matrix.package }})
     runs-on: ubuntu-latest
-    # The lane mutates the three published packages, about 4500 mutants.
+    # The lane mutates the four published packages, one package on each runner (tools/mutation/stryker.config.mjs).
     timeout-minutes: 150
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [core, domains, testkit, compiler]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,10 +58,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Stryker with Vitest 4.1, in tools/mutation, until Stryker supports Vitest 5
       - run: pnpm --filter @vex/mutation run mutation
+        env:
+          VEX_MUTATE: ${{ matrix.package }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: mutation-report
+          name: mutation-report-${{ matrix.package }}
           path: reports/mutation/
           if-no-files-found: ignore
 

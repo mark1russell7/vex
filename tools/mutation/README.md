@@ -6,7 +6,11 @@ The lane runs Stryker on the four published packages: `@mark1russell7/vex` (`cor
 
 Each package must have a mutation score of 95 % or more. Stryker has one threshold for all files, so its own break is off. The script `scores.mjs` gives the score of each package, and it fails when a package is under 95 %.
 
-A run with `--mutate` mutates only some packages. Then `scores.mjs` applies the gate to those packages only.
+The variable `VEX_MUTATE` names the packages of a run, for example `compiler` or `core,domains`. Without it, a run mutates the four packages. Then `scores.mjs` applies the gate to the packages of the run only.
+
+## The nightly job
+
+The nightly job has one runner for each package. Each runner has a time limit of 150 minutes, and it keeps its report as the artifact `mutation-report-<package>`.
 
 ## Type checks
 
@@ -28,6 +32,6 @@ This machine has little memory, so a local run mutates one package at a time, wi
 ```sh
 cd tools/mutation
 node prepare.mjs
-npx stryker run stryker.config.json --mutate "work/domains/**/*.ts,!work/**/*.test.ts,!work/*/index.ts" --concurrency 2
+VEX_MUTATE=domains npx stryker run stryker.config.mjs --concurrency 2
 node scores.mjs
 ```

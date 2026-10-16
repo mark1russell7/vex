@@ -16,7 +16,7 @@ A program is the JSON form of the IR, as `serialize` gives it. A value of a doma
 
 ## Start the server
 
-The plugin of Vex for Claude Code starts the server (`plugins/vex/.mcp.json`). To start it by hand:
+The plugin of Vex for Claude Code starts the server: refer to the field `mcpServers` of `plugins/vex/.claude-plugin/plugin.json`. To start it by hand:
 
 ```sh
 cd packages/mcp

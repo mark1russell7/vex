@@ -14,7 +14,7 @@ export interface FormulaPiece {
   readonly text: string;
 }
 
-const KEYWORDS: ReadonlySet<string> = new Set(["true", "false", "where", "this", "parent", "row", "rows", ...AXES]);
+const KEYWORDS: ReadonlySet<string> = new Set(["true", "false", "where", "this", "parent", "row", "rows", "index", ...AXES]);
 const ID_START = /[\p{L}_]/u;
 const ID_PART = /[\p{L}\p{N}_]/u;
 

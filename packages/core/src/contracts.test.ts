@@ -48,11 +48,13 @@ describe("the contracts of sheets", () => {
 
   it("SHEET.CELL: a cell reference that is not valid data gives #VALUE! with its message", () => {
     const fnData = Object.assign(() => 1, { column: "v", at: [] });
-    for (const data of [fnData, { column: 7, at: [] }, null]) {
+    // The data of an extension is not an expression, so a cell reference takes only fixed moves.
+    const computed = { column: "v", at: [{ t: "index", i: lit(0) }] };
+    for (const data of [fnData, { column: 7, at: [] }, null, computed]) {
       expect(error(run({ v: lit(1), c: ext("vex.cell", data) }).cell("c", "A"))).toMatchObject({
         code: "#VALUE!",
         kind: "bad-expression",
-        message: "a cell reference needs a column name and an address",
+        message: "a cell reference needs a column name and an address of fixed moves",
         path: [],
       });
     }

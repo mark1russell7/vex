@@ -34,6 +34,7 @@ A move changes the key where a reference reads.
 
 - **[NAV.KEY]** The move `key(k)` goes to the key `k`. If the space has no key `k`, the result is the error `#REF!`.
 - **[NAV.INDEX]** The move `index(i)` goes to the key at position `i` in the key order. A position outside the keys gives `#REF!`.
+- **[NAV.COMPUTED]** The key of `key` and the position of `index` can be an expression. These expressions evaluate first, in order, at the position of the node of the address. The first error is the result. A key that is not a text, or a position that is not a number, gives `#VALUE!`. Then the moves apply.
 - **[NAV.OTHER.PAIR]** The move `other` goes to the other key of a space with two keys. In a space with a different number of keys, it gives `#REF!`.
 - **[NAV.OFFSET]** The move `offset(d)` adds `d` to the position of the focus: one number in an array space, two numbers in a grid space. A position outside the space, or an offset in a record space, gives `#REF!`.
 - **[NAV.OFFSET.TREE]** In a tree space, the move `offset(d)` with one number goes to the sibling at distance `d` in key order. The roots are the siblings of a root. A position outside the siblings gives `#REF!`.
@@ -138,6 +139,7 @@ An expression is plain JSON data. It has one of these kinds.
 - **[TRACE.EVENTS]** `explain` records one event for each node evaluation, in the order that the nodes finish. A reference event records its reads.
 - **[TRACE.AXIS]** Inside an axis, the focus of each event is the target.
 - **[DEPS.READS]** `deps` gives each reference of an expression, with its address, the axes around it and the address of each axis.
+- **[DEPS.COMPUTED]** A computed move keeps its expression in the address that `deps` gives. Only a run knows its key. `deps` also gives the references of that expression, with the axes around its node.
 
 ## 7. Domains
 
@@ -168,7 +170,7 @@ An expression is plain JSON data. It has one of these kinds.
 
 A sheet has named columns of formulas over a space. A cell is one column at one key. A formula reads a cell with a cell reference: the extension node `ext("vex.cell", { column, at })`.
 
-- **[SHEET.CELL]** A cell reference resolves its address from the focus, then gives the result of that cell. An unknown column gives `#NAME?`, and an address outside the space gives `#REF!`.
+- **[SHEET.CELL]** A cell reference resolves its address from the focus, then gives the result of that cell. An unknown column gives `#NAME?`, and an address outside the space gives `#REF!`. The address of a cell reference has only fixed moves.
 - **[SHEET.CELL.FORMULA]** A cell can have its own formula. That formula replaces the formula of its column at its key, and the other keys keep the formula of the column. A cell without a formula gives `#NAME?`. In the builder, `cellFormula(k, column, formula)` gives the formula of a cell, and the formula must give a value of the type of the column.
 - **[SHEET.TABLES]** A run can have more tables, each with a name, a space, columns and formulas of cells. A cell reference reads the table of the space where it evaluates, so the body of the axis `table(name)` reads the cells of that table. Each cell of each table evaluates once, and a cycle across tables gives `#CYCLE!`.
 - **[SHEET.RECURRENCE]** A column can read itself at another key. A recurrence over the key order, for example a running total, gives the same result as a loop. The first key that a host reads does not change a result, also at the end of a long recurrence.

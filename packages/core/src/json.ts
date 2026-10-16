@@ -128,6 +128,24 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
     }
     return undefined;
   };
+  // The expression of a computed move is a tree of the expression too (NAV.COMPUTED).
+  const address = (): Result<unknown> | undefined => {
+    const at = u["at"];
+    if (!Array.isArray(at)) return undefined;
+    const moves: unknown[] = [];
+    for (const m of at) {
+      const field = isRecord(m) ? (m["t"] === "key" ? "key" : m["t"] === "index" ? "i" : undefined) : undefined;
+      if (field === undefined || !isRecord(m) || !isRecord(m[field])) {
+        moves.push(m);
+        continue;
+      }
+      const r = mapValues(m[field], f);
+      if (!r.ok) return r;
+      moves.push({ ...m, [field]: r.value });
+    }
+    out["at"] = moves;
+    return undefined;
+  };
   const axis = (a: unknown): Result<unknown> => {
     if (!isRecord(a) || a["t"] !== "where") return ok(a);
     const inner = axis(a["axis"]);
@@ -153,8 +171,10 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
       const a = axis(u["axis"]);
       if (!a.ok) return a;
       out["axis"] = a.value;
-      return child("body") ?? ok(out);
+      return child("body") ?? address() ?? ok(out);
     }
+    case "ref":
+      return address() ?? ok(out);
     default:
       return ok(out);
   }

@@ -16,12 +16,14 @@ import {
   isVexList,
   liftsAt,
   matchesKind,
+  fixAddr,
   resolveAddr,
   safeIs,
   vexList,
   type Addr,
   type AnyDomain,
   type Axis,
+  type FixedMove,
   type FreeFn,
   type Space,
 } from "@mark1russell7/vex";
@@ -86,7 +88,8 @@ const kept = (keys: readonly unknown[]): boolean => keys.every((k) => (typeof k 
 export interface Runtime {
   readonly F: Fallback;
   has(s: Space, key: string): boolean;
-  addr(s: Space, origin: string, focus: string, at: Addr): unknown;
+  /** This function gives the key of an address. `values` has the values of its computed moves (NAV.COMPUTED). */
+  addr(s: Space, origin: string, focus: string, at: Addr, values?: readonly unknown[]): unknown;
   /**
    * This function gives the function of the targets of one base axis. A space does not change, so the targets stay in
    * a cache for each space and focus. Generated code gets it once, when it loads.
@@ -186,8 +189,12 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   return {
     F,
     has: (s, key) => s.has(key),
-    addr(s, origin, focus, at) {
-      const r = resolveAddr(s, { origin, focus }, at);
+    addr(s, origin, focus, at, values) {
+      const pos = { origin, focus };
+      // An address without computed moves has no values, and its moves are fixed.
+      const fixed = values === undefined ? undefined : fixAddr(at, values, pos);
+      if (fixed?.ok === false) return F;
+      const r = resolveAddr(s, pos, fixed === undefined ? (at as readonly FixedMove[]) : fixed.value);
       return r.ok ? r.value : F;
     },
     axis(axis) {

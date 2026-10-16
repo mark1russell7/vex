@@ -198,7 +198,7 @@
       }
     },
     "move": {
-      "description": "One move of an address. The moves apply in order, from the focus.",
+      "description": "One move of an address. The moves apply in order, from the focus. The key of key and the position of index can be an expression, which evaluates before the moves.",
       "oneOf": [
         {
           "type": "object",
@@ -211,7 +211,14 @@
               "const": "key"
             },
             "key": {
-              "type": "string"
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/expr"
+                }
+              ]
             }
           }
         },
@@ -226,7 +233,14 @@
               "const": "index"
             },
             "i": {
-              "type": "integer"
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "$ref": "#/$defs/expr"
+                }
+              ]
             }
           }
         },

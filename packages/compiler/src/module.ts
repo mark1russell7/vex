@@ -19,7 +19,7 @@
  * schema, and the axes `all`, `others` and `window`. The kinds of each op site must decide its op. Another construct
  * gives a reason, not code.
  */
-import { children, isFieldName, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, children, isFieldName, moveExpr, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
@@ -97,7 +97,7 @@ interface Ctx {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "G" | "B" | "U" | "X" | "M" | "M1" | "S";
+type Helper = "F" | "C" | "T" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -110,6 +110,9 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   B: 'function B(x) { return typeof x === "boolean" ? x : F(); }',
   U: 'function U(x) { return typeof x === "number" ? x : F(); }',
   X: "function X(t, n) { return t >= 0 && t < n ? t : F(); }",
+  // The index of a computed position, and of a computed key: a key of an array space is the text of its index.
+  I: "function I(t, n) { return Number.isInteger(t) && t >= 0 && t < n ? t : F(); }",
+  K: 'function K(k, n) { return typeof k === "string" && /^(0|[1-9]\\d*)$/.test(k) && +k < n ? +k : F(); }',
   // The memo of a function of one key, and of more keys. -0 has its own entry, because an op can tell it from 0.
   M1: [
     "function M1(f) {",
@@ -266,7 +269,7 @@ const STEPS: Readonly<Record<string, readonly [string, string]>> = {
 };
 
 /** The helpers that each helper uses. */
-const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"] };
+const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"] };
 
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
@@ -604,7 +607,7 @@ class Printer {
       case "lit":
         return bare(literal(e.value));
       case "ref":
-        return bare(this.#ref(e, ctx));
+        return this.#ref(e, ctx);
       case "var":
         return bare(this.#var(e.name, ctx));
       case "let":
@@ -627,15 +630,24 @@ class Printer {
     }
   }
 
-  /** This method gives the code of the index of an address from the focus. */
-  #address(at: readonly Move[], ctx: Ctx): string {
+  /**
+   * This method gives the code of the index of an address from the focus. `values` has the code of the value of each
+   * computed move, in order (NAV.COMPUTED).
+   */
+  #address(at: readonly Move[], ctx: Ctx, values: readonly Code[]): string {
     let index = ctx.focus;
-    for (const m of at) index = this.#move(m, index, ctx.origin);
+    let next = 0;
+    for (const m of at) index = moveExpr(m) === undefined ? this.#move(m, index, ctx.origin) : this.#computed(m, values[next++] as Code);
     // A node of the memo reads neither its origin nor its focus (memo.ts), so the guards of this method do not fail.
     // Stryker disable next-line ConditionalExpression,StringLiteral: see the comment above
     /* v8 ignore next -- @preserve */
     if (index === undefined) throw new NotStandalone("a node of the memo reads its focus");
     return index;
+  }
+
+  /** This method gives the code of the index of a computed move, from the code of its value. */
+  #computed(m: Move, value: Code): string {
+    return `${this.use(m.t === "key" ? "K" : "I")}(${value.v.code}, n)`;
   }
 
   #move(m: Move, focus: string | undefined, origin: string | undefined): string {
@@ -648,9 +660,9 @@ class Printer {
         return origin;
       case "key":
         // A key of an array space is the text of its index.
-        return /^(0|[1-9]\d*)$/.test(m.key) ? `(${m.key} < n ? ${m.key} : ${F}())` : `${F}()`;
+        return typeof m.key === "string" && /^(0|[1-9]\d*)$/.test(m.key) ? `(${m.key} < n ? ${m.key} : ${F}())` : `${F}()`;
       case "index":
-        return Number.isInteger(m.i) && m.i >= 0 ? `(${m.i} < n ? ${m.i} : ${F}())` : `${F}()`;
+        return typeof m.i === "number" && Number.isInteger(m.i) && m.i >= 0 ? `(${m.i} < n ? ${m.i} : ${F}())` : `${F}()`;
       case "offset": {
         const [d, ...more] = m.d;
         // Stryker disable next-line ConditionalExpression,StringLiteral: see #address
@@ -669,24 +681,37 @@ class Printer {
     }
   }
 
-  #ref(e: ExprOf<"ref">, ctx: Ctx): Value {
+  #ref(e: ExprOf<"ref">, ctx: Ctx): Code {
     const [field, ...more] = e.path;
     const kind = field === undefined ? undefined : this.#schema.fields?.[field];
     if (field === undefined || more.length > 0 || !isFieldName(field) || kind === undefined) throw new NotStandalone(`a read of a field that is not in the schema: "${e.path.join(".")}"`);
     // A move to the origin cannot fail, and the schema has the field in each record.
     const at = e.at ?? [];
     const safe = at.every((m) => m.t === "origin");
-    return { code: `R[${this.#address(at, ctx)}][${JSON.stringify(field)}]`, kind, safe, deps: this.#addressDeps(at, ctx) };
+    const values = this.#addressValues(at, ctx);
+    const deps = this.#addressDeps(at, ctx, values);
+    const parts = this.#settle(values, deps);
+    return { s: stmtsOf(...parts), v: { code: `R[${this.#address(at, ctx, parts)}][${JSON.stringify(field)}]`, kind, safe, deps } };
   }
 
-  /** This method gives the level of the key of an address: the focus, the origin, or no level for a fixed key. */
-  #addressDeps(at: readonly Move[], ctx: Ctx): ReadonlySet<number> {
-    let level: number | undefined = ctx.level;
+  /** This method gives the code of the expressions of the computed moves of an address. They evaluate at the node. */
+  #addressValues(at: readonly Move[], ctx: Ctx): readonly Code[] {
+    return addrExprs(at).map((x) => this.expr(x, ctx));
+  }
+
+  /**
+   * This method gives the levels of the key of an address. The focus and the origin have their level, and a fixed key
+   * has no level. A computed move has the levels of its value.
+   */
+  #addressDeps(at: readonly Move[], ctx: Ctx, values: readonly Code[]): ReadonlySet<number> {
+    let deps: ReadonlySet<number> = new Set([ctx.level]);
+    let next = 0;
     for (const m of at) {
-      if (m.t === "origin") level = 1;
-      else if (m.t === "key" || m.t === "index" || m.t === "parent") level = undefined;
+      if (moveExpr(m) !== undefined) deps = (values[next++] as Code).v.deps;
+      else if (m.t === "origin") deps = new Set([1]);
+      else if (m.t === "key" || m.t === "index" || m.t === "parent") deps = NO_DEPS;
     }
-    return level === undefined ? NO_DEPS : new Set([level]);
+    return deps;
   }
 
   #var(name: string, ctx: Ctx): Value {
@@ -859,8 +884,10 @@ class Printer {
     let start: ReadonlySet<number> = NO_DEPS;
     const f = base.t === "all" && at.length === 0 ? undefined : this.fresh("f");
     if (f !== undefined) {
-      s.push(`const ${f} = ${this.#address(at, ctx)};`);
-      start = this.#addressDeps(at, ctx);
+      const values = this.#addressValues(at, ctx);
+      start = this.#addressDeps(at, ctx, values);
+      const parts = this.#settle(values, start);
+      s.push(...stmtsOf(...parts), `const ${f} = ${this.#address(at, ctx, parts)};`);
     }
     if (base.t === "others") skip = f;
     else if (base.t === "window") {

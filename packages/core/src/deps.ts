@@ -1,4 +1,4 @@
-import { children, type Addr, type Axis, type Expr } from "./ir.ts";
+import { addrExprs, children, type Addr, type Axis, type Expr } from "./ir.ts";
 
 /** One static read of a program: a field path at an address, inside zero or more axes. */
 export interface Dependency {
@@ -14,7 +14,8 @@ export interface Dependency {
 
 /**
  * This function gives the static reads of an expression. A host can use them to recompute a program only
- * when a field that it reads changes.
+ * when a field that it reads changes. A computed move reads a key that only a run knows. Its address keeps the
+ * expression, and the reads of that expression are in the list too (NAV.COMPUTED).
  */
 export function deps(e: Expr): readonly Dependency[] {
   const out: Dependency[] = [];
@@ -23,13 +24,13 @@ export function deps(e: Expr): readonly Dependency[] {
   const todo: { readonly x: Expr; readonly axes: readonly Axis["t"][]; readonly axisAt: readonly Addr[] }[] = [{ x: e, axes: [], axisAt: [] }];
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
     const { x } = item;
-    if (x.tag === "ref") {
-      out.push({ at: x.at ?? [], path: x.path, axes: item.axes, axisAt: item.axisAt });
-      continue;
-    }
+    if (x.tag === "ref") out.push({ at: x.at ?? [], path: x.path, axes: item.axes, axisAt: item.axisAt });
+    const all = children(x);
+    // The expressions of an address come last, and they evaluate at the node, outside its axis.
+    const outside = all.length - addrExprs(x.tag === "ref" || x.tag === "each" ? x.at : undefined).length;
     const axes = x.tag === "each" ? [...item.axes, x.axis.t] : item.axes;
     const axisAt = x.tag === "each" ? [...item.axisAt, x.at ?? []] : item.axisAt;
-    for (const child of children(x).toReversed()) todo.push({ x: child, axes, axisAt });
+    for (let i = all.length - 1; i >= 0; i--) todo.push(i < outside ? { x: all[i] as Expr, axes, axisAt } : { ...item, x: all[i] as Expr });
   }
   return out;
 }

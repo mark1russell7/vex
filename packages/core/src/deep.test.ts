@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { evaluate, MAX_NESTING, nestingOf } from "./evaluate.ts";
-import { app, axes, each, ext, isExpr, lit, offset, ref, type Expr } from "./ir.ts";
+import { app, axes, each, ext, index, isExpr, lit, offset, ref, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { cell, SheetRun } from "./sheet.ts";
 import { space } from "./space.ts";
@@ -64,6 +64,12 @@ describe("evaluations that do not depend on the call stack", { timeout: 30_000 }
     expect(isExpr(e)).toBe(true);
     expect(nestingOf(e)).toBe(200_000);
     expect(deps(app("add", e, ref("x")))).toEqual([{ at: [], path: ["x"], axes: [], axisAt: [] }]);
+    // The expressions of computed moves are a part of the tree too.
+    let moves: Expr = ref("x");
+    for (let i = 0; i < 200_000; i++) moves = ref("x", [index(moves)]);
+    expect(isExpr(moves)).toBe(true);
+    expect(nestingOf(moves)).toBe(200_001);
+    expect(deps(moves)).toHaveLength(200_001);
   });
 
   it("EVAL.DEPTH V-050: a full call stack in host code gives #DEPTH!, and ifError, a sum and #ARGS do not hide it", () => {

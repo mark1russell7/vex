@@ -32,6 +32,8 @@ describe("the JSON Schema of the IR (IR.JSON)", () => {
       fc.record({ tag: fc.constant("each"), axis: fc.record({ t: fc.constant("table"), name: fc.oneof(fc.string(), fc.integer()) }, { requiredKeys: ["t"] }), body: fc.constant({ tag: "lit", value: 1 }) }),
       fc.record({ tag: fc.constant("each"), axis: fc.record({ t: fc.constant("window"), from: fc.oneof(fc.integer(), fc.double(), fc.constant(2 ** 53), fc.string()), to: fc.oneof(fc.integer(), fc.double()) }, { requiredKeys: ["t"] }), body: fc.constant({ tag: "lit", value: 1 }) }),
       fc.record({ tag: fc.constant("ref"), path: fc.array(fc.string()), at: fc.array(fc.record({ t: fc.constantFrom("key", "index", "other", "offset", "origin", "parent", "jump"), key: fc.jsonValue(), i: fc.double(), d: fc.jsonValue() })) }),
+      // A computed move: its expression is valid or broken.
+      fc.record({ tag: fc.constant("ref"), path: fc.constant(["x"]), at: fc.array(fc.record({ t: fc.constantFrom("key", "index"), key: fc.constantFrom({ tag: "lit", value: "A" }, { tag: "nope" }, []), i: fc.constantFrom({ tag: "var", name: "n" }, { tag: "var" }, [1]) })) }),
     );
     fc.assert(
       fc.property(broken, (u) => {

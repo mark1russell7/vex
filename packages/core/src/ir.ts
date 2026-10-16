@@ -3,14 +3,20 @@
  * shape as the expressions of `render`.
  */
 
-/** One move of an address. The moves of an address apply in order, from the focus of the evaluation. */
+/**
+ * One move of an address. The moves of an address apply in order, from the focus of the evaluation. The key of `key`
+ * and the position of `index` can be an expression, which evaluates before the moves (NAV.COMPUTED).
+ */
 export type Move =
-  | { readonly t: "key"; readonly key: string }
-  | { readonly t: "index"; readonly i: number }
+  | { readonly t: "key"; readonly key: string | Expr }
+  | { readonly t: "index"; readonly i: number | Expr }
   | { readonly t: "other" }
   | { readonly t: "offset"; readonly d: readonly number[] }
   | { readonly t: "origin" }
   | { readonly t: "parent" };
+
+/** A move with a fixed key or position: a move with no expression. */
+export type FixedMove = Exclude<Move, { readonly t: "key" | "index" }> | { readonly t: "key"; readonly key: string } | { readonly t: "index"; readonly i: number };
 
 /** An address: a list of moves. The empty list is the focus. */
 export type Addr = readonly Move[];
@@ -89,18 +95,38 @@ export const ext = (kind: string, data: unknown): ExprOf<"ext"> => ({ tag: "ext"
 
 // ---------------------------------------------------------------- moves and axes
 
-/** The move to an absolute key. */
-export const key = (k: string): Move => ({ t: "key", key: k });
-/** The move to a position in the key order. */
-export const index = (i: number): Move => ({ t: "index", i });
+/** The move to an absolute key. The key can be an expression that gives a text. */
+export function key(k: string): FixedMove;
+export function key(k: string | Expr): Move;
+export function key(k: string | Expr): Move {
+  return { t: "key", key: k };
+}
+/** The move to a position in the key order. The position can be an expression that gives a number. */
+export function index(i: number): FixedMove;
+export function index(i: number | Expr): Move;
+export function index(i: number | Expr): Move {
+  return { t: "index", i };
+}
+
+/** This function gives the expression of a move with a computed key or position, or `undefined`. */
+export function moveExpr(m: Move): Expr | undefined {
+  if (m.t === "key") return typeof m.key === "string" ? undefined : m.key;
+  return m.t === "index" && typeof m.i !== "number" ? m.i : undefined;
+}
+
+/** This function gives the expressions of the computed moves of an address, in the order of the moves. */
+export const addrExprs = (at: Addr | undefined): readonly Expr[] => (at ?? []).flatMap((m) => moveExpr(m) ?? []);
+
+/** This function tells if each move of an address is fixed. */
+export const isFixedAddr = (at: Addr | undefined): at is readonly FixedMove[] => addrExprs(at).length === 0;
 /** The move to the other key of a space with two keys. */
-export const other: Move = Object.freeze({ t: "other" });
+export const other: FixedMove = Object.freeze({ t: "other" });
 /** The relative move in an array (one number) or a grid (two numbers). */
-export const offset = (...d: readonly number[]): Move => ({ t: "offset", d });
+export const offset = (...d: readonly number[]): FixedMove => ({ t: "offset", d });
 /** The move back to the origin of the evaluation. */
-export const origin: Move = Object.freeze({ t: "origin" });
+export const origin: FixedMove = Object.freeze({ t: "origin" });
 /** The move to the parent of the focus in a tree space. */
-export const parent: Move = Object.freeze({ t: "parent" });
+export const parent: FixedMove = Object.freeze({ t: "parent" });
 
 /** The axes. */
 export const axes = {
@@ -146,22 +172,28 @@ const isObject = (u: unknown): u is Readonly<Record<string, unknown>> => typeof 
 
 const isStringArray = (u: unknown): u is readonly string[] => Array.isArray(u) && u.every((s) => typeof s === "string");
 
-/** This function tells if a value is a valid move. */
+/** This function tells if a value is a valid move. The expression of a computed move must be valid too. */
 export function isMove(u: unknown): u is Move {
-  if (!isObject(u)) return false;
+  const exprs = moveParts(u);
+  return exprs !== undefined && exprs.every(isExpr);
+}
+
+/** This function checks the fixed parts of a move. It gives the expressions of the move, or `undefined` for a bad move. */
+function moveParts(u: unknown): readonly unknown[] | undefined {
+  if (!isObject(u)) return undefined;
   switch (u["t"]) {
     case "key":
-      return typeof u["key"] === "string";
+      return typeof u["key"] === "string" ? [] : isObject(u["key"]) ? [u["key"]] : undefined;
     case "index":
-      return Number.isInteger(u["i"]);
+      return Number.isInteger(u["i"]) ? [] : isObject(u["i"]) ? [u["i"]] : undefined;
     case "offset":
-      return Array.isArray(u["d"]) && u["d"].every((n) => Number.isInteger(n));
+      return Array.isArray(u["d"]) && u["d"].every((n) => Number.isInteger(n)) ? [] : undefined;
     case "other":
     case "origin":
     case "parent":
-      return true;
+      return [];
     default:
-      return false;
+      return undefined;
   }
 }
 
@@ -175,7 +207,18 @@ export function isExpr(u: unknown): u is Expr {
   return validTree([{ axis: false, u }]);
 }
 
-const isAddr = (u: unknown): boolean => u === undefined || (Array.isArray(u) && u.every(isMove));
+/** This function checks the fixed parts of an address. It gives the expressions of its moves, or `undefined`. */
+function addrParts(u: unknown): readonly unknown[] | undefined {
+  if (u === undefined) return [];
+  if (!Array.isArray(u)) return undefined;
+  const out: unknown[] = [];
+  for (const m of u) {
+    const parts = moveParts(m);
+    if (parts === undefined) return undefined;
+    out.push(...parts);
+  }
+  return out;
+}
 
 /**
  * This function checks a tree of expressions and axes. It uses a stack, not recursion, so the input can be deep. For
@@ -208,9 +251,12 @@ function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boo
       case "lit":
         if (!("value" in u)) return false;
         break;
-      case "ref":
-        if (!isStringArray(u["path"]) || !isAddr(u["at"])) return false;
+      case "ref": {
+        const at = addrParts(u["at"]);
+        if (!isStringArray(u["path"]) || at === undefined) return false;
+        push(false, at);
         break;
+      }
       case "app":
         if (typeof u["op"] !== "string" || !Array.isArray(u["args"])) return false;
         push(false, u["args"]);
@@ -226,11 +272,13 @@ function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boo
         if (!isObject(u["fields"]) || Array.isArray(u["fields"])) return false;
         push(false, Object.values(u["fields"]));
         break;
-      case "each":
-        if (!isAddr(u["at"])) return false;
+      case "each": {
+        const at = addrParts(u["at"]);
+        if (at === undefined) return false;
         push(true, [u["axis"]]);
-        push(false, [u["body"]]);
+        push(false, [u["body"], ...at]);
         break;
+      }
       case "ext":
         if (typeof u["kind"] !== "string" || !("data" in u)) return false;
         break;
@@ -241,7 +289,10 @@ function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boo
   return true;
 }
 
-/** This function gives the child expressions of an expression, in the order of their child index. */
+/**
+ * This function gives the child expressions of an expression, in the order of their child index. The expressions of
+ * the computed moves of an address come last. They evaluate at the position of their node, also for an axis.
+ */
 export function children(e: Expr): readonly Expr[] {
   switch (e.tag) {
     case "app":
@@ -251,9 +302,10 @@ export function children(e: Expr): readonly Expr[] {
     case "rec":
       return Object.values(e.fields);
     case "each":
-      return [e.body, ...whereTests(e.axis)];
-    case "lit":
+      return [e.body, ...whereTests(e.axis), ...addrExprs(e.at)];
     case "ref":
+      return addrExprs(e.at);
+    case "lit":
     case "var":
     case "ext":
       return [];

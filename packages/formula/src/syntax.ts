@@ -123,13 +123,15 @@ export function tokenize(src: string): readonly Token[] {
 }
 
 /**
- * A step of navigation before a column name: `this.`, `parent.`, `row(n).`, `row("name").` or `table("name").`. A step
- * `table("name").` moves to another table of the document.
+ * A step of navigation before a column name: `this.`, `parent.`, `row(n).`, `row("name").`, `index(e).` or
+ * `table("name").`. A step `table("name").` moves to another table of the document. A step `index(e).` moves to the
+ * row at the position that the value of `e` gives.
  */
 export type Nav =
   | { readonly t: "this" }
   | { readonly t: "parent" }
   | { readonly t: "row"; readonly n: number }
+  | { readonly t: "index"; readonly e: Ast; readonly span: Span }
   | { readonly t: "key"; readonly name: string; readonly span: Span }
   | { readonly t: "table"; readonly name: string; readonly span: Span };
 
@@ -205,7 +207,16 @@ export function parseFormula(src: string): Ast {
   };
   const describe = (t: Token): string => (t.t === "end" ? "the end of the formula" : `"${src.slice(t.span.start, t.span.end)}"`);
 
-  // The navigation steps before a name or an axis: this., parent., row(n). and row("name").
+  // The index of the ")" that closes the "(" at `open`, or -1.
+  const closing = (open: number): number => {
+    let depth = 0;
+    for (let k = open; k < toks.length; k++) {
+      if (isPunct(toks[k], "(")) depth++;
+      else if (isPunct(toks[k], ")") && --depth === 0) return k;
+    }
+    return -1;
+  };
+  // The navigation steps before a name or an axis: this., parent., row(n)., row("name"). and index(e).
   const navLength = (from: number): number => {
     let j = from;
     for (;;) {
@@ -213,6 +224,13 @@ export function parseFormula(src: string): Ast {
       if ((isWord(t, "this") || isWord(t, "parent")) && isPunct(toks[j + 1], ".")) {
         j += 2;
         continue;
+      }
+      if (isWord(t, "index") && isPunct(toks[j + 1], "(")) {
+        const close = closing(j + 1);
+        if (close > 0 && isPunct(toks[close + 1], ".")) {
+          j = close + 2;
+          continue;
+        }
       }
       if (isWord(t, "table") && isPunct(toks[j + 1], "(") && toks[j + 2]?.t === "str" && isPunct(toks[j + 3], ")") && isPunct(toks[j + 4], ".")) {
         j += 5;
@@ -241,7 +259,12 @@ export function parseFormula(src: string): Ast {
       const t = next();
       if (isWord(t, "this")) out.push({ t: "this" });
       else if (isWord(t, "parent")) out.push({ t: "parent" });
-      else if (isWord(t, "table")) {
+      else if (isWord(t, "index")) {
+        next(); // "("
+        const e = parseExpr(0);
+        const close = expect(")", '")" after the position of "index"');
+        out.push({ t: "index", e, span: { start: t.span.start, end: close.span.end } });
+      } else if (isWord(t, "table")) {
         next(); // "("
         const name = next() as Extract<Token, { t: "str" }>;
         next(); // ")"

@@ -3,7 +3,7 @@
  * cell with a recursive call, so it needs a deep call stack for a long chain of cells. The tests compare `SheetRun`
  * with it on small random sheets, where the depth is not a problem. It has the tables of SHEET.TABLES too.
  */
-import { evaluate, fail, isMove, resolveAddr, vexError, type Addr, type CellFormulas, type EvalOptions, type Expr, type ExtHandler, type Result, type SheetOptions, type Space } from "@mark1russell7/vex";
+import { evaluate, fail, isMove, resolveAddr, vexError, type CellFormulas, type EvalOptions, type Expr, type ExtHandler, type FixedMove, type Result, type SheetOptions, type Space } from "@mark1russell7/vex";
 
 interface Visit {
   readonly index: number;
@@ -43,9 +43,13 @@ const tableOf = (where: string, space: Space, columns: ReadonlyMap<string, Expr>
 const cycleError = (column: string, key: string): Result<never> =>
   fail(vexError("cycle", `the cell "${column}" at "${key}" is on a cycle of cell references`, { origin: key, focus: key }));
 
-const isCellRef = (u: unknown): u is { readonly column: string; readonly at: Addr } => {
+/** This function tells if a value is a move with no expression. */
+const isFixed = (m: unknown): boolean => isMove(m) && (m.t === "key" ? typeof m.key === "string" : m.t !== "index" || typeof m.i === "number");
+
+/** A cell reference has a column and an address of fixed moves: a computed move is an expression, not data. */
+const isCellRef = (u: unknown): u is { readonly column: string; readonly at: readonly FixedMove[] } => {
   const r = u as { readonly column?: unknown; readonly at?: unknown } | null | undefined;
-  return typeof r?.column === "string" && Array.isArray(r.at) && (r.at as readonly unknown[]).every(isMove);
+  return typeof r?.column === "string" && Array.isArray(r.at) && (r.at as readonly unknown[]).every(isFixed);
 };
 
 /** A sheet run with recursion: the depth-first search of Tarjan, one recursive call for each read of a cell. */
@@ -77,7 +81,7 @@ export class ReferenceSheetRun {
     }
     const handler: ExtHandler = (data, ctx) => {
       // The interpreter gives an error without an origin the path and the position of its node.
-      if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address"));
+      if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address of fixed moves"));
       const where = resolveAddr(ctx.space, ctx.position, data.at);
       // Each space of an evaluation is the space of a table, so the main table is a default that no read takes.
       const table = this.#bySpace.get(ctx.space) ?? this.#main;

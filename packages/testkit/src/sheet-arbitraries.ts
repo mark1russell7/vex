@@ -2,14 +2,14 @@
  * The fast-check arbitraries of random sheets. A differential test evaluates a sheet with `SheetRun` and with
  * `ReferenceSheetRun`, and it compares the results of each read.
  */
-import { app, axes, cell, each, index, lit, offset, ref, space, type Addr, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axes, cell, each, index, lit, offset, ref, space, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The columns of a random sheet. */
 export const SHEET_COLUMNS = ["A", "B", "C"] as const;
 
 /** The addresses of the cell references of a random sheet: the focus, the rows near it, and the first row. */
-const ADDRESSES: readonly Addr[] = [[], [offset(-1)], [offset(1)], [offset(-2)], [index(0)]];
+const ADDRESSES: readonly (readonly FixedMove[])[] = [[], [offset(-1)], [offset(1)], [offset(-2)], [index(0)]];
 
 /**
  * A formula of a random sheet: numbers, the field v, cell references, add, ifError and a sum over the other rows.

@@ -20,6 +20,7 @@ A table is a tree space. Each row is a record, and a row without a parent is a r
 - **[FORMULA.NAME.VALUE]** A name of a value column reads the field at the focus: `ref(name)`.
 - **[FORMULA.NAME.FORMULA]** A name of a formula column reads the cell at the focus: the cell reference `cell(name)`. Thus a cycle of formula columns gives `#CYCLE!`, and the other cells stay correct.
 - **[FORMULA.NAV]** `this.`, `parent.`, `row(n).` and `row("name").` before a name are moves of the address of the read. They are `origin`, `parent`, `offset(n)` and `key(k)`, and they apply in sequence. In a tree space, `row(-1)` is the previous sibling (spec `NAV.OFFSET.TREE`). `n` must be a whole number.
+- **[FORMULA.NAV.INDEX]** `index(e).` before a name moves to the row at the position that `e` gives, in key order (spec `NAV.COMPUTED`). `e` evaluates at the row of the read. A cell reference has only fixed moves, so a formula column at that row is the one item of the axis `window(0, 0)` from that row. In the axis of another table, `index(e).` after `this.` is an error.
 - **[FORMULA.NAV.NAME]** `row("name").` moves to the row with the name `name`. The context gives the keys of the rows of each name. A name of no row, or of two or more rows, is an error with its span. Without the names in the context, the name is the key of the row. The sheet app gives each row the text of its first column as its name, when that column is a text column.
 
 ## 4. Operators

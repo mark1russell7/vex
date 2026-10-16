@@ -1,9 +1,9 @@
 import { liftsAt, resolveOp, type AnyDomain, type ParamKind, type ResolvedOp } from "./domain.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
-import { children, type Axis, type Expr, type ExprOf, type Move } from "./ir.ts";
+import { addrExprs, children, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type Move } from "./ir.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
 import { fail, ok, type Result } from "./result.ts";
-import { axisTargets, resolveAddr, type Position, type Space } from "./space.ts";
+import { axisTargets, fixAddr, resolveAddr, type Position, type Space } from "./space.ts";
 import type { Read, Trace, TraceEvent, TraceSink } from "./trace.ts";
 
 /** A free function op. The interpreter gives it the values of all arguments. */
@@ -274,10 +274,32 @@ class Compiler {
     return isStackOverflow(thrown) ? this.#err("depth", DEPTH_MESSAGE, f, path, { ...extra, thrown }) : this.#err("threw", message, f, path, { ...extra, thrown });
   }
 
+  /**
+   * This method compiles an address. Its function gives the key where the address points. The expressions of the
+   * computed moves evaluate first, at the position of the node, and their child indexes start at `first`. An error of
+   * an expression keeps its path, and an error of a move gets the path of the node.
+   */
+  #address(at: Addr, path: readonly number[], first: number): (f: Frame, c: Ctx) => Result<string> {
+    const nodes = addrExprs(at).map((x, i) => this.node(x, [...path, first + i]));
+    const moved = (r: Result<string>): Result<string> => (r.ok ? r : fail({ ...r.error, path }));
+    if (nodes.length === 0) return (f, c) => moved(resolveAddr(c.space, f.pos, at as readonly FixedMove[]));
+    return (f, c) => {
+      const values: unknown[] = [];
+      for (const n of nodes) {
+        const r = n(f, c);
+        if (!r.ok) return r;
+        values.push(r.value);
+      }
+      const fixed = fixAddr(at, values, f.pos);
+      return fixed.ok ? moved(resolveAddr(c.space, f.pos, fixed.value)) : moved(fixed);
+    };
+  }
+
   #ref(e: ExprOf<"ref">, info: Info): Node {
     const { path } = info;
     const segs = e.path;
     const at = e.at ?? [];
+    const address = this.#address(at, path, 0);
     const label = segs.join(".");
     const steps = segs.map((seg, i) => ({ seg, where: segs.slice(0, i + 1).join("."), valid: isFieldName(seg) }));
     return (f, c) => {
@@ -285,8 +307,8 @@ class Compiler {
       // The empty address resolves to the focus, so this fast path changes no result.
       // Stryker disable next-line ConditionalExpression,EqualityOperator: resolveAddr of [] gives the focus too
       if (at.length > 0) {
-        const where = resolveAddr(c.space, f.pos, at);
-        if (!where.ok) return this.#emit(c, info, f, fail({ ...where.error, path }));
+        const where = address(f, c);
+        if (!where.ok) return this.#emit(c, info, f, where);
         key = where.value;
       }
       const failed = (r: Result<unknown>): Result<unknown> => this.#emit(c, info, f, r, [{ key, path: segs, ok: false }]);
@@ -327,15 +349,17 @@ class Compiler {
   #each(e: ExprOf<"each">, info: Info): Node {
     const { path } = info;
     const at = e.at ?? [];
-    const targets = this.#targets(e.axis, path, { next: 1 });
+    const counter = { next: 1 };
+    const targets = this.#targets(e.axis, path, counter);
     const body = this.node(e.body, [...path, 0]);
+    const address = this.#address(at, path, counter.next);
     return (f, c) => {
       // An axis with an address finds its targets from the key of the address. The origin does not change.
       let from = f;
       // Stryker disable next-line ConditionalExpression,EqualityOperator: resolveAddr of [] gives the focus too
       if (at.length > 0) {
-        const where = resolveAddr(c.space, f.pos, at);
-        if (!where.ok) return this.#emit(c, info, f, fail({ ...where.error, path }));
+        const where = address(f, c);
+        if (!where.ok) return this.#emit(c, info, f, where);
         from = { pos: { origin: f.pos.origin, focus: where.value }, env: f.env };
       }
       // The axis table moves the evaluation to the space of its table, where the origin of this space is not a key.
@@ -671,9 +695,9 @@ export function labelOf(e: Expr): string {
 function moveText(m: Move): string {
   switch (m.t) {
     case "key":
-      return `key(${m.key})`;
+      return `key(${typeof m.key === "string" ? m.key : labelOf(m.key)})`;
     case "index":
-      return `index(${m.i})`;
+      return `index(${typeof m.i === "number" ? String(m.i) : labelOf(m.i)})`;
     case "offset":
       return `offset(${m.d.join(", ")})`;
     case "other":

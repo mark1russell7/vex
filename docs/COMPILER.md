@@ -229,6 +229,12 @@ The owner made these decisions on 2026-10-13:
 3. Vex is the source of the strategies of ireko, compiled at the build of ireko.
 4. Vex has only bounded iteration (§8), so each program ends.
 
+The owner made these decisions on 2026-10-16:
+
+5. The moves `key` and `index` take an expression (NAV.COMPUTED). Thus `deps` knows only that such a read goes to some key.
+6. The size budget of the core of ireko can go up for the generated strategies.
+7. Phase C4 comes after the computed moves.
+
 ## 12. Roadmap
 
 | Phase | Deliverables | Done when |
@@ -440,11 +446,24 @@ After a layout, the audit of ireko gives two checks. `ESCAPE` finds each node th
 
 `ESCAPE_PROGRAM` evaluates at each node, and `escapes` copies the code of ireko. A property compares the two in the interpreter, in tier 2 and in the module. The results are the same. `OVERLAP` is a sweep over the sorted boxes, in O(n log n). A program over the axis `others` costs O(n²). Thus `OVERLAP` waits for the domain kernels of phase C4.
 
-A node of ireko has the index of its container. An address of Vex has only fixed moves, so the program finds the container with the test `i = c` over all the nodes. The module makes a map of the groups for this test, one map for each field of the container.
+A node of ireko has the index of its container. The first program had only fixed moves, so it found the container with the test `i = c` over all the nodes. The module made a map of the groups for this test, one map for each field of the container. The owner then accepted the computed moves (NAV.COMPUTED): `index(e)` and `key(e)` take the position or the key from an expression, as `INDEX` of a spreadsheet. The program reads each field of the container at `index(c)`, and the module reads `R[I(c, n)]`.
 
-| `ESCAPE` for each node | The code of ireko | The module |
-|---|---|---|
-| 111 nodes | 0.6 to 1.0 µs | 43 to 50 µs |
-| 11111 nodes | 63 to 161 µs | 9.2 to 11.5 ms |
+| `ESCAPE` for each node | The code of ireko | The module, the test `i = c` | The module, `index(c)` |
+|---|---|---|---|
+| 111 nodes | 0.6 to 1.0 µs | 43 to 50 µs | 6.4 to 9.0 µs |
+| 11111 nodes | 58 to 161 µs | 9.2 to 11.5 ms | 0.65 to 0.68 ms |
 
-Most of the time goes to the five maps of the groups. One map for all the fields is approximately five times faster. A move to a position that a value gives, as `INDEX` of a spreadsheet, makes the lookup direct. That move is a change of the language, so the owner decides.
+The module is still approximately ten times slower than ireko. It reads the container five times, and it checks the schema of each record. A layout of 11111 nodes takes approximately 150 ms, so the check adds less than 1 % to it.
+
+#### Computed moves
+
+The key of `key` and the position of `index` can be an expression. The expressions of an address evaluate first, at the node, and then the moves apply. Each stage has them:
+
+- The interpreter, `explain` and the reference interpreter of the test kit evaluate them. The random programs of the test kit have them.
+- `deps` keeps the expression in the address, and it gives the reads of the expression too. Only a run knows the key.
+- JSON keeps the literals of the expression in their JSON form.
+- The builder takes a chain in `.index()` and `.to()`. The formulas have `index(e).` before a name.
+- Tier 2 evaluates the expressions and gives their values to `addr` of the runtime. The memo counts their reads as reads of the node.
+- A module uses the helpers `I` and `K`, which check the position or the key.
+
+A cell reference is data of an extension, not an expression, so it takes only fixed moves. A formula reads a formula column at a computed row as the one item of the axis `window(0, 0)`, whose address has the computed move.

@@ -1,5 +1,5 @@
 import { vexError } from "./errors.ts";
-import type { Addr, Axis, Move } from "./ir.ts";
+import { moveExpr, type Addr, type Axis, type FixedMove } from "./ir.ts";
 import { fail, ok, type Result } from "./result.ts";
 
 /** The kind of a space. The kind sets which moves and axes are valid. */
@@ -296,7 +296,7 @@ export interface Position {
 }
 
 /** This function applies one move to the focus. It gives the new focus, or a `#REF!` error. */
-export function applyMove(s: Space, at: Position, m: Move): Result<string> {
+export function applyMove(s: Space, at: Position, m: FixedMove): Result<string> {
   const refError = (kind: "unknown-key" | "not-a-pair" | "out-of-bounds" | "no-offset" | "no-tree", message: string): Result<string> =>
     fail(vexError(kind, message, { origin: at.origin, focus: at.focus }));
   switch (m.t) {
@@ -344,8 +344,28 @@ export function applyMove(s: Space, at: Position, m: Move): Result<string> {
   }
 }
 
+/**
+ * This function gives the fixed moves of an address. `values` has the value of the expression of each computed move,
+ * in order (NAV.COMPUTED). A key that is not a text, or a position that is not a number, gives `#VALUE!`.
+ */
+export function fixAddr(addr: Addr, values: readonly unknown[], at: Position): Result<readonly FixedMove[]> {
+  const out: FixedMove[] = [];
+  let next = 0;
+  for (const m of addr) {
+    if (moveExpr(m) === undefined) {
+      out.push(m as FixedMove);
+      continue;
+    }
+    const u = values[next++];
+    if (m.t === "key" && typeof u === "string") out.push({ t: "key", key: u });
+    else if (m.t === "index" && typeof u === "number") out.push({ t: "index", i: u });
+    else return fail(vexError("kind-mismatch", m.t === "key" ? `the key of a move is a ${typeof u}, not a text` : `the position of a move is a ${typeof u}, not a number`, at));
+  }
+  return ok(out);
+}
+
 /** This function applies the moves of an address in order. It gives the key where the address points. */
-export function resolveAddr(s: Space, at: Position, addr: Addr | undefined): Result<string> {
+export function resolveAddr(s: Space, at: Position, addr: readonly FixedMove[] | undefined): Result<string> {
   let focus = at.focus;
   for (const m of addr ?? []) {
     const r = applyMove(s, { origin: at.origin, focus }, m);

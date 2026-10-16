@@ -47,6 +47,9 @@ describe("the Vex view of a formula", () => {
     expect(chain('IF(cost > 1e-7, name & "!", "say ""hi""")')).toBe('root.from("cost")._.gt(1e-7)._.if(root.start(root.lit(""))._.concat(root.from("name"))._.concat(root.lit("!")), root.lit("say \\"hi\\""))');
     // String(-0) is "0". The chain keeps the sign of -0.
     expect(chain("-0")).toBe("root.start(-0)");
+    // NAV.COMPUTED: a computed position is a chain, and a formula column at that row is the one item of a window.
+    expect(chain("index(qty).cost")).toBe('root.start(0).index(root.from("qty")).from("cost")');
+    expect(chain("index(1).total")).toBe('root.start(0).index(root.start(1)).window(0, 0, (c) => root.start(root.ext("vex.cell", { column: "total", at: [] }))).first({ strict: true })');
     expect(chain("RANK(qty)")).toBe('root.start(0).others((c) => root.start(true), { where: (c) => root.from("qty")._.gt(root.start(0).origin().from("qty")) }).count({ strict: true })._.add(1)');
   });
 });

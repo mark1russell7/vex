@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
-import { axes, each, ref } from "./ir.ts";
+import { axes, each, index, parent, ref } from "./ir.ts";
 import { ok } from "./result.ts";
 import { isSome, type Optional, type Result } from "./result.ts";
 import { space } from "./space.ts";
@@ -228,6 +228,11 @@ describe("the other members of the builder", () => {
 
   it("index() and offset() move the address of the later references", () => {
     expect(optionalValue(four.start(0).index(2).from("weight").at("A"))).toBe(5);
+    // NAV.COMPUTED: a chain gives the position or the key, and it evaluates at the focus before the moves.
+    const linked = vex(Num).over(space.record({ A: { next: "B", at: 2, n: 1 }, B: { next: "A", at: 0, n: 2 }, C: { next: "B", at: 1, n: 4 } }));
+    expect(linked.start(0).to(linked.from("next")).from("n").all().values()).toEqual([2, 1, 2]);
+    expect(linked.start(0).parent().index(linked.from("at")).from("n").program).toEqual(ref("n", [parent, index(ref("at"))]));
+    expect(linked.start(0).index(linked.from("at")).from("n").all().values()).toEqual([4, 1, 2]);
     const row = vex(Num).over(space.array([{ n: 1 }, { n: 2 }, { n: 4 }]));
     expect(row.start(0).offset(1).from("n").all().values()).toEqual([2, 4]);
   });

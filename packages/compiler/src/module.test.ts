@@ -204,6 +204,16 @@ describe("COMPILE.MODULE: a standalone module", () => {
       other: at([{ t: "other" }]),
       parent: at([{ t: "parent" }]),
       sum: op("sum", each(axes.others, n, [offset(1)])),
+      // NAV.COMPUTED: a position or a key from an expression. A position that is not whole, or a key that is not the
+      // text of an index, has no record.
+      byN: at([index(n)]),
+      byW: at([index(w)]),
+      byText: at([key(ref("s"))]),
+      byNumber: at([key(n)]),
+      keyOne: at([key(lit("1"))]),
+      keyZero: at([key(op("if", ref("b"), lit("0"), lit("01")))]),
+      afterIndex: at([index(lit(0)), offset(1)]),
+      fromN: op("ifError", op("sum", each(axes.others, n, [index(op("add", n, lit(1)))])), lit(-1)),
     });
     const m = make(sourceOf(e));
     expectSame(m, e);
@@ -416,6 +426,19 @@ describe("COMPILE.MODULE: the text of a module", () => {
     await expectGolden("lists", e);
   });
 
+  it("NAV.COMPUTED: the moves with a position or a key from an expression", async () => {
+    const safe = (x: Expr): Expr => op("ifError", x, lit(-1));
+    const e = rec({
+      position: safe(ref("w", [index(n)])),
+      key: safe(ref("w", [key(ref("s"))])),
+      origin: safe(ref("w", [index(op("add", K, lit(1)))])),
+      run: safe(ref("w", [index(v("a"))])),
+      list: safe(op("sum", each(axes.window(0, 1), w, [index(n)]))),
+      body: op("sum", each(axes.all, safe(ref("w", [index(n)])))),
+    });
+    await expectGolden("computed", e);
+  });
+
   it("the nodes of the memo: a group, a prefix, a scan, one key, two keys and no key", async () => {
     const e = rec({
       group: where(op("eq", op("mod", n, lit(2)), column), w, "max"),
@@ -535,12 +558,13 @@ const program = fc.letrec<{ num: Expr; bool: Expr }>((tie) => ({
   num: fc.oneof(
     { maxDepth: 4, depthSize: "small" },
     fc.integer({ min: -3, max: 3 }).map((x) => lit(x)),
-    fc.constantFrom(n, w, v("a"), ref("n", [{ t: "origin" }]), ref("w", [offset(-1)]), ref("n", [offset(1)])),
+    fc.constantFrom(n, w, v("a"), ref("n", [{ t: "origin" }]), ref("w", [offset(-1)]), ref("n", [offset(1)]), ref("w", [index(n)]), ref("n", [index(v("a"))])),
+    tie("num").map((x) => ref("w", [index(x)])),
     fc.tuple(fc.constantFrom("add", "subtract", "multiply", "divide", "max", "min", "mod"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
     fc.tuple(tie("bool"), tie("num"), tie("num")).map(([c, a, b]) => op("if", c, a, b)),
     fc.tuple(tie("num"), tie("num")).map(([a, b]) => op("ifError", a, b)),
     fc
-      .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(axes.all, axes.others, axes.window(-1, 0)), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(undefined, [offset(1)], [index(1)], [{ t: "origin" as const }]))
+      .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(axes.all, axes.others, axes.window(-1, 0)), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(undefined, [offset(1)], [index(1)], [{ t: "origin" as const }], [index(n)], [index(v("a"))]))
       .map(([o, a, body, test, strict, at]) => op(o, each(test === undefined ? a : axes.where(a, test), body, at), ...(strict ? [lit({ strict: true })] : []))),
     fc.tuple(tie("num"), tie("num")).map(([a, b]) => let_({ x: a }, op("add", v("x"), b))),
     fc.constant(op("length", ref("s"))),

@@ -10,7 +10,7 @@
  * A key reads the origin or a name from outside the node, and nothing that the node changes. Inside the node, the
  * value of the key replaces the key. Thus the value of the node depends only on the space and the values of the keys.
  */
-import { isListOp, type Addr, type Axis, type Expr } from "@mark1russell7/vex";
+import { addrExprs, isListOp, type Addr, type Axis, type Expr } from "@mark1russell7/vex";
 
 /** A read of the focus of the expression, outside its own loops. */
 const FOCUS = 1;
@@ -65,7 +65,8 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
     case "ext":
       return OPAQUE;
     case "ref":
-      return addressReads(e.at, top);
+      // The expressions of computed moves evaluate at the position of the node (NAV.COMPUTED).
+      return addrExprs(e.at).reduce((r, x) => r | reads(x, outer, inner, top), addressReads(e.at, top));
     case "app":
       return e.args.reduce((r, x) => r | reads(x, outer, inner, top), 0);
     case "rec":
@@ -79,7 +80,8 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
       // The targets of `all` do not depend on the focus, but its address can fail (V-051). Each other axis starts at its
       // address.
       const targets = base.t === "table" ? OPAQUE : base.t === "all" && (e.at ?? []).length === 0 ? 0 : addressReads(e.at, top);
-      return [e.body, ...tests].reduce((r, x) => r | reads(x, outer, inner, false), targets);
+      const at = addrExprs(e.at).reduce((r, x) => r | reads(x, outer, inner, top), targets);
+      return [e.body, ...tests].reduce((r, x) => r | reads(x, outer, inner, false), at);
     }
   }
 }
@@ -119,6 +121,8 @@ function keysOf(e: Expr, top: boolean, outer: ReadonlySet<string>, pure: Set<Exp
       // The targets of a loop must not depend on the origin: a set of targets is not a value of a key. The address of
       // `all` can fail, so it must not depend on the origin either.
       if (base.t === "table" || ((base.t !== "all" || (e.at ?? []).length > 0) && addressReads(e.at, top) !== 0)) return undefined;
+      // The expressions of computed moves give the targets too, so they must read nothing.
+      if (addrExprs(e.at).some((x) => reads(x, outer, new Set(), top) !== 0)) return undefined;
       return all([e.body, ...tests].map((x) => keysOf(x, false, outer, pure)));
     }
     // A leaf here reads the focus or a name of the node, so it is not a key, and the part cannot be in the memo. A
@@ -145,10 +149,11 @@ function loopOutside(e: Expr, keys: ReadonlySet<Expr>): boolean {
       return Object.values(e.fields).some((x) => loopOutside(x, keys));
     case "let":
       return [...Object.values(e.bind), e.body].some((x) => loopOutside(x, keys));
+    case "ref":
+      return addrExprs(e.at).some((x) => loopOutside(x, keys));
     // A missing case gives undefined, which is false too.
     // Stryker disable StringLiteral,ConditionalExpression: see the comment above
     case "lit":
-    case "ref":
     case "var":
     case "ext":
       return false;
@@ -187,7 +192,7 @@ export function memoNodes(expr: Expr): ReadonlyMap<Expr, readonly Expr[]> {
         if (first !== undefined) visit(first);
       } else {
         for (const l of fused.lets) Object.values(l.bind).forEach(visit);
-        [fused.each.body, ...parts(fused.each.axis).tests].forEach(visit);
+        [fused.each.body, ...parts(fused.each.axis).tests, ...addrExprs(fused.each.at)].forEach(visit);
       }
       rest.forEach(visit);
     } else if (e.tag === "rec") {
@@ -196,7 +201,9 @@ export function memoNodes(expr: Expr): ReadonlyMap<Expr, readonly Expr[]> {
       Object.values(e.bind).forEach(visit);
       visit(e.body);
     } else if (e.tag === "each") {
-      [e.body, ...parts(e.axis).tests].forEach(visit);
+      [e.body, ...parts(e.axis).tests, ...addrExprs(e.at)].forEach(visit);
+    } else if (e.tag === "ref") {
+      addrExprs(e.at).forEach(visit);
     }
   };
   visit(expr);

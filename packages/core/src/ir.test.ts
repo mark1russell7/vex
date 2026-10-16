@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { codeOf, formatError, vexError } from "./errors.ts";
 import { describeType, labelOf, previewValue, sizeOf } from "./evaluate.ts";
-import { app, axes, children, each, ext, isAxis, isExpr, isMove, let_, lit, ref, rec, v, type Expr } from "./ir.ts";
+import { app, axes, children, each, ext, index, isAxis, isExpr, isMove, key, let_, lit, parent, ref, rec, v, type Expr } from "./ir.ts";
 import { vexList } from "./list.ts";
 import { chainResult, fail, getOr, isNone, mapResult, none, ok, some } from "./result.ts";
 import { Pt } from "./test-support.ts";
 
 describe("the validation of the IR (IR.JSON)", () => {
   it("isMove accepts each move kind and rejects other values", () => {
-    for (const m of [{ t: "key", key: "A" }, { t: "index", i: 2 }, { t: "offset", d: [1, -1] }, { t: "other" }, { t: "origin" }]) {
+    for (const m of [{ t: "key", key: "A" }, { t: "index", i: 2 }, { t: "offset", d: [1, -1] }, { t: "other" }, { t: "origin" }, { t: "index", i: ref("c") }, { t: "key", key: lit("A") }]) {
       expect(isMove(m)).toBe(true);
     }
-    for (const m of [null, 3, "key", { t: "key", key: 1 }, { t: "index", i: 1.5 }, { t: "offset", d: [0.5] }, { t: "jump" }]) {
-      expect(isMove(m)).toBe(false);
-    }
+    const bad = [null, 3, "key", { t: "key", key: 1 }, { t: "index", i: 1.5 }, { t: "offset", d: [0.5] }, { t: "jump" }, { t: "index", i: "c" }, { t: "index", i: { tag: "nope" } }, { t: "key", key: [] }];
+    for (const m of bad) expect(isMove(m)).toBe(false);
   });
 
   it("isAxis accepts each axis kind, also a nested where, and rejects other values", () => {
@@ -48,6 +47,9 @@ describe("the validation of the IR (IR.JSON)", () => {
       { tag: "each", axis: { t: "up" }, body: lit(1) },
       { tag: "ext", kind: "k" },
       { tag: "loop" },
+      // The expression of a computed move is a part of the tree.
+      { tag: "ref", path: ["a"], at: [{ t: "index", i: { tag: "var" } }] },
+      { tag: "each", axis: axes.all, body: lit(1), at: [{ t: "key", key: { tag: "lit" } }] },
     ];
     for (const e of badExprs) expect(isExpr(e)).toBe(false);
   });
@@ -60,6 +62,10 @@ describe("the folds over the IR", () => {
     expect(children(rec({ a: lit(1), b: lit(2) }))).toEqual([lit(1), lit(2)]);
     expect(children(let_({ x: lit(1) }, v("x")))).toEqual([lit(1), v("x")]);
     expect(children(ext("k", null))).toEqual([]);
+    // The expressions of computed moves come last: after the body and the tests of an axis.
+    expect(children(ref("a", [index(ref("c")), parent, key(lit("B"))]))).toEqual([ref("c"), lit("B")]);
+    expect(children(each(axes.where(axes.all, lit(true)), ref("a"), [index(ref("c"))]))).toEqual([ref("a"), lit(true), ref("c")]);
+    expect(sizeOf(ref("a", [index(ref("c"))]))).toBe(2);
     expect(sizeOf(e)).toBe(4);
     expect(sizeOf(app("add", lit(1), rec({ a: lit(2) })))).toBe(4);
   });

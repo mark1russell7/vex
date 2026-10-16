@@ -30,10 +30,12 @@ function literal(u: unknown): string {
 
 const move = (m: Move): string => {
   switch (m.t) {
+    // A computed key or position is a chain that evaluates at the focus before the moves. A number would be a fixed
+    // position, which must be whole.
     case "key":
-      return `.to(${quote(m.key)})`;
+      return `.to(${typeof m.key === "string" ? quote(m.key) : chain(m.key)})`;
     case "index":
-      return `.index(${m.i})`;
+      return `.index(${typeof m.i === "number" ? String(m.i) : chain(m.i)})`;
     case "offset":
       return `.offset(${m.d.join(", ")})`;
     case "other":

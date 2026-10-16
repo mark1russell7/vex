@@ -56,11 +56,24 @@ At the origin B, the result is the size of B: the far corner of B minus the posi
 |---|---|---|---|
 | `key(k)` | `.to(k)`, `root.of(k, field)` | the key `k` | the space has no key `k` |
 | `index(i)` | `.index(i)` | the key at position `i` in the key order | `i` is outside the keys |
+| `key(e)`, `index(e)` | `.to(chain)`, `.index(chain)` | the key or the position that the value of `e` gives | the value is not a key or a position of the space |
 | `other` | `.other()` | the other key of a pair | the space does not have two keys |
 | `offset(d)` | `.offset(...d)` | the focus position plus `d` | the target is outside the space, or the space is a record space |
 | `origin` | `.origin()` | the origin of the evaluation | not applicable |
 
 The moves of an address apply in order. If one move fails, the address fails. Vex does not simplify an address, because a simplification can hide a failure.
+
+A computed move gets its key or its position from an expression, for example a field that holds the position of a parent. The expression evaluates at the focus, before the moves. A key that is not a text, or a position that is not a number, gives `#VALUE!`.
+
+```ts doctest
+import { space, vex } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+// Each row holds the position of its parent, and -1 for the root.
+const rows = vex(NumDomain).over(space.array([{ parent: -1, w: 100 }, { parent: 0, w: 40 }, { parent: 1, w: 10 }]));
+const share = rows.from("w")._.divide(rows.start(0).index(rows.from("parent")).from("w"));
+share.all().values(); // => [0.4, 0.25]
+```
 
 <Aside type="note">
 The builder puts each move into the references when it builds the expression. After `.to("C")`, each later field name reads at C. At run time, nothing changes in place: the interpreter resolves each address against the space.

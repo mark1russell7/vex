@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { compile, evaluate, explain, type EvalOptions } from "./evaluate.ts";
-import { app, axes, each, ext, key, let_, lit, origin as toOrigin, other, parent, ref, rec, v, type Expr } from "./ir.ts";
+import { app, axes, each, ext, index, key, let_, lit, offset as offsetMove, origin as toOrigin, other, parent, ref, rec, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { isVexList } from "./list.ts";
 import { fail, ok } from "./result.ts";
@@ -351,6 +351,68 @@ describe("folds: explain, deps, JSON", () => {
     ]);
     const nested = each(axes.children, each(axes.all, ref("w")), [parent]);
     expect(deps(nested)).toEqual([{ at: [], path: ["w"], axes: ["children", "all"], axisAt: [[{ t: "parent" }], []] }]);
+  });
+
+  it("DEPS.COMPUTED: a computed move keeps its expression, and deps gives the reads of that expression", () => {
+    const e = each(axes.window(0, 1), ref("w"), [index(ref("c"))]);
+    expect(deps(e)).toEqual([
+      { at: [], path: ["w"], axes: ["window"], axisAt: [[{ t: "index", i: ref("c") }]] },
+      // The expression of the address evaluates at the axis, so it is outside the axis.
+      { at: [], path: ["c"], axes: [], axisAt: [] },
+    ]);
+    expect(deps(ref("w", [index(ref("c", [parent]))]))).toEqual([
+      { at: [{ t: "index", i: ref("c", [parent]) }], path: ["w"], axes: [], axisAt: [] },
+      { at: [{ t: "parent" }], path: ["c"], axes: [], axisAt: [] },
+    ]);
+  });
+
+  it("NAV.COMPUTED: the key or the position of a move can be an expression, which evaluates before the moves", () => {
+    const rows = space.array([
+      { c: 2, x: 10, s: "x" },
+      { c: 0, x: 11, s: 1.5 },
+      { c: 1, x: 12, s: null },
+    ]);
+    const x = (e: Expr, origin: string): unknown => {
+      const r = evaluate(e, { space: rows, origin, domains: [] });
+      return r.ok ? r.value : r.error;
+    };
+    // The position comes from the field c of the focus.
+    expect(["0", "1", "2"].map((k) => x(ref("x", [index(ref("c"))]), k))).toEqual([12, 10, 11]);
+    // The expression evaluates at the position of the node, not at the key of the moves before it.
+    expect(x(ref("x", [offsetMove(1), index(ref("c"))]), "0")).toBe(12);
+    // A position that is not a number gives #VALUE!, and a position outside the keys gives #REF!.
+    expect(x(ref("x", [index(ref("s"))]), "0")).toMatchObject({ code: "#VALUE!", kind: "kind-mismatch", message: "the position of a move is a string, not a number", path: [] });
+    expect(x(ref("x", [index(ref("s"))]), "1")).toMatchObject({ code: "#REF!", kind: "out-of-bounds", path: [] });
+    expect(x(ref("x", [index(lit(3))]), "0")).toMatchObject({ code: "#REF!", kind: "out-of-bounds" });
+    // The expressions evaluate first, so their error comes before the error of a move. It keeps its own path.
+    expect(x(ref("x", [offsetMove(-1), index(ref("s"))]), "2")).toMatchObject({ code: "#N/A", path: [0] });
+    expect(x(ref("x", [offsetMove(-1), index(ref("c"))]), "0")).toMatchObject({ code: "#REF!", kind: "out-of-bounds", path: [] });
+    // A computed key is a text.
+    const ring = space.record({ A: { next: "B", v: 1 }, B: { next: "A", v: 2 }, C: { next: 7, v: 3 } });
+    const r = (k: string): unknown => {
+      const out = evaluate(ref("v", [key(ref("next"))]), { space: ring, origin: k, domains: [] });
+      return out.ok ? out.value : out.error.code;
+    };
+    expect([r("A"), r("B"), r("C")]).toEqual([2, 1, "#VALUE!"]);
+    // An axis evaluates the expressions of its address at its own position. Their child indexes come after the tests.
+    const w = each(axes.where(axes.window(0, 1), app("gt", ref("x"), lit(0))), ref("x"), [index(ref("missing"))]);
+    expect(x(w, "0")).toMatchObject({ code: "#N/A", path: [2] });
+    const list = evaluate(each(axes.window(0, 1), ref("x"), [index(ref("c"))]), { space: rows, origin: "1", domains: [] });
+    expect(list.ok && isVexList(list.value) ? list.value.items.map((i) => i.key) : list).toEqual(["0", "1"]);
+  });
+
+  it("NAV.COMPUTED: a trace shows the expression of a computed move, and JSON keeps it", () => {
+    const rows = space.array([{ c: 1, x: 10 }, { c: 0, x: 11 }]);
+    const e = each(axes.window(0, 0), ref("x"), [index(app("negate", ref("c")))]);
+    // At the origin 1, the position is -0, which is the position 0.
+    const labels = explain(e, { space: rows, origin: "1", domains: [], fns: { negate: (a: unknown) => -(a as number) } }).events.map((ev) => ev.label);
+    expect(labels).toEqual(["c", "negate", "x", "each window from index(negate)"]);
+    // A literal in an address has the JSON form of a literal.
+    const minus = ref("x", [index(lit(-0))]);
+    const text = serialize(minus);
+    expect(text.ok ? text.value : text).toContain('"$vex":"number"');
+    expect(text.ok ? parse(text.value) : text).toEqual(ok(minus));
+    expect(value(evaluate(minus, { space: rows, origin: "1", domains: [] }))).toBe(10);
   });
 
   it("AXIS.ADDRESS: an axis with an address finds its targets from the key of the address, and the origin stays", () => {

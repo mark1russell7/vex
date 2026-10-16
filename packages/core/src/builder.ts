@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { app, each, ext, index as indexMove, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Addr, type Axis, type Expr, type Move } from "./ir.ts";
+import { app, each, ext, index as indexMove, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -178,10 +178,16 @@ export interface ChainBase<Ctx extends ChainContext, T> {
   all(): Traversal<Ctx["keys"], T>;
   /** This method gives a chain whose value is a field of the record at the current address. */
   from<P extends keyof Ctx["record"] & string>(field: P): ChainOf<Ctx, NonNullable<Ctx["record"][P]>>;
-  /** Navigation: later field references read at the key `k`. */
-  to(k: Ctx["keys"]): ChainOf<Ctx, T>;
-  /** Navigation: later field references read at the key with this position in the key order. */
-  index(i: number): ChainOf<Ctx, T>;
+  /**
+   * Navigation: later field references read at the key `k`. A chain of a text gives the key, and it evaluates at the
+   * focus before the moves (NAV.COMPUTED).
+   */
+  to(k: Ctx["keys"] | ChainBase<Ctx, string>): ChainOf<Ctx, T>;
+  /**
+   * Navigation: later field references read at the key with this position in the key order. A chain of a number gives
+   * the position, and it evaluates at the focus before the moves (NAV.COMPUTED).
+   */
+  index(i: number | ChainBase<Ctx, number>): ChainOf<Ctx, T>;
   /** Navigation: later field references read at a relative position in an array or a grid. */
   offset(...d: readonly number[]): ChainOf<Ctx, T>;
   /** Navigation: later field references read at the origin again. */
@@ -344,11 +350,12 @@ export interface Root<Ctx extends ChainContext> {
 export interface SheetRoot<Ctx extends ChainContext, Cols> extends Root<Ctx> {
   /**
    * This method makes a cell reference: the column `column` at the key `at`, or at the address `at` from the focus.
-   * Without `at`, it reads at the focus. The type is the type of a column before this one.
+   * The address has only fixed moves. Without `at`, it reads at the focus. The type is the type of a column before
+   * this one.
    */
-  cell<N extends keyof Cols & string>(column: N, at?: Ctx["keys"] | Addr): Arg<Cols[N]>;
+  cell<N extends keyof Cols & string>(column: N, at?: Ctx["keys"] | readonly FixedMove[]): Arg<Cols[N]>;
   /** This method makes a cell reference to any column, also this column or a later one. The caller gives the type. */
-  cell<T>(column: string, at?: Ctx["keys"] | Addr): Arg<T>;
+  cell<T>(column: string, at?: Ctx["keys"] | readonly FixedMove[]): Arg<T>;
 }
 
 /** One row of a sheet: the key and the result of each column. */
@@ -515,11 +522,11 @@ class ChainImpl {
   #move(m: Move): ChainImpl {
     return new ChainImpl({ ...this.#s, addr: [...this.#s.addr, m] });
   }
-  to(k: string): ChainImpl {
-    return this.#move(keyMove(k));
+  to(k: string | { readonly program: Expr }): ChainImpl {
+    return this.#move(keyMove(typeof k === "string" ? k : k.program));
   }
-  index(i: number): ChainImpl {
-    return this.#move(indexMove(i));
+  index(i: number | { readonly program: Expr }): ChainImpl {
+    return this.#move(indexMove(typeof i === "number" ? i : i.program));
   }
   offset(...d: readonly number[]): ChainImpl {
     return this.#move(offsetMove(...d));
@@ -738,7 +745,7 @@ class RootImpl {
 }
 
 class SheetRootImpl extends RootImpl {
-  cell(column: string, at?: string | Addr): Arg<unknown> {
+  cell(column: string, at?: string | readonly FixedMove[]): Arg<unknown> {
     return argToken(cellRef(column, typeof at === "string" ? [keyMove(at)] : at));
   }
 }

@@ -6,7 +6,7 @@
  * (`Fail`). A list op skips an error item, and an error in the first argument of `ifError` gives the second argument.
  * Each other error stops the program with `FALLBACK`.
  */
-import { isFieldName, isListOp, MAX_NESTING, nestingOf, type Axis, type Expr, type ExprOf, type ListOp, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, isFieldName, isListOp, MAX_NESTING, nestingOf, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
@@ -211,7 +211,7 @@ class Lowerer {
       case "lit":
         return this.constant(e.value);
       case "ref":
-        return this.#ref(e, s, b);
+        return this.#ref(e, s, path, b);
       case "var": {
         const bound = s.env.get(e.name);
         if (bound === undefined) {
@@ -294,8 +294,8 @@ class Lowerer {
    * This method reads a field, as `ref` of the interpreter: the record of the key, and then each segment of the path.
    * A segment that cannot name a field always gives an error.
    */
-  #ref(e: ExprOf<"ref">, s: Scope, b: Block): LExpr {
-    const record = e.at === undefined || e.at.length === 0 ? s.rec : prim("get", s.space, this.checked(b, call("addr", s.space, s.origin, s.focus, this.constant(e.at)), "an address"));
+  #ref(e: ExprOf<"ref">, s: Scope, path: readonly number[], b: Block): LExpr {
+    const record = e.at === undefined || e.at.length === 0 ? s.rec : prim("get", s.space, this.#address(e.at, s, path, 0, b));
     if (!e.path.every(isFieldName)) return this.fail(b);
     const n = this.locals++;
     const x = local(n);
@@ -518,8 +518,18 @@ class Lowerer {
    * This method lowers the loop over the targets of an axis. The tests of `where` and the body evaluate at each target
    * in a block whose failure is `items(label)`. Then `onItem` adds the statements for the value of the body.
    */
+  /**
+   * This method gives the key of an address. The expressions of its computed moves evaluate first, at the position of
+   * the node, and their child indexes start at `first` (NAV.COMPUTED).
+   */
+  #address(at: Addr, s: Scope, path: readonly number[], first: number, b: Block): LExpr {
+    const values = addrExprs(at).map((x, i) => this.expr(x, s, [...path, first + i], b));
+    const args = [s.space, s.origin, s.focus, this.constant(at), ...(values.length === 0 ? [] : [array(...values)])];
+    return this.checked(b, call("addr", ...args), "an address");
+  }
+
   #loop(e: ExprOf<"each">, s: Scope, path: readonly number[], b: Block, items: (label: number) => Fail, onItem: (body: Block, key: LExpr, value: LExpr) => void): void {
-    const from = e.at === undefined || e.at.length === 0 ? s.focus : this.checked(b, call("addr", s.space, s.origin, s.focus, this.constant(e.at)), "an address");
+    const from = e.at === undefined || e.at.length === 0 ? s.focus : this.#address(e.at, s, path, 1 + whereTests(e.axis).length, b);
     const base = baseAxis(e.axis);
     let space = s.space;
     let over: LExpr;

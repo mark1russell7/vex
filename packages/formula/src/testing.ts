@@ -63,6 +63,10 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
       fc.string({ maxLength: 4 }).map((v): Ast => ({ k: "str", v, span: NO_SPAN })),
       fc.boolean().map((v): Ast => ({ k: "bool", v, span: NO_SPAN })),
       fc.tuple(arbNameNav, fc.constantFrom(...names)).map(([nav, name]): Ast => ({ k: "name", nav, name, span: NO_SPAN })),
+      // A name at a computed position: a small whole number, or any value.
+      fc
+        .tuple(fc.oneof(fc.integer({ min: 0, max: 5 }).map((v): Ast => ({ k: "num", v, span: NO_SPAN })), tie("ast")), fc.array(arbRowNav, { maxLength: 1 }), fc.constantFrom(...names))
+        .map(([e, after, name]): Ast => ({ k: "name", nav: [{ t: "index", e, span: NO_SPAN }, ...after], name, span: NO_SPAN })),
       tie("ast").map((arg): Ast => ({ k: "neg", arg, span: NO_SPAN })),
       fc.tuple(fc.constantFrom(...BINARY), tie("ast"), tie("ast")).map(([op, left, right]): Ast => ({ k: "binary", op, left, right, span: NO_SPAN })),
       fc
@@ -97,7 +101,9 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
   })).ast;
 
 const navText = (ns: readonly Nav[]): string =>
-  ns.map((n) => (n.t === "row" ? `row(${n.n}).` : n.t === "key" ? `row(${quoteText(n.name)}).` : n.t === "table" ? `table(${quoteText(n.name)}).` : `${n.t}.`)).join("");
+  ns
+    .map((n) => (n.t === "row" ? `row(${n.n}).` : n.t === "key" ? `row(${quoteText(n.name)}).` : n.t === "table" ? `table(${quoteText(n.name)}).` : n.t === "index" ? `index(${printAst(n.e)}).` : `${n.t}.`))
+    .join("");
 
 /** This function gives the text of a syntax tree. Each operator has parentheses, so the text has the structure of the tree. */
 export function printAst(a: Ast): string {

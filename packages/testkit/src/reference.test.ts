@@ -182,6 +182,18 @@ const CASES: readonly Case[] = [
   { name: "parent in a tree", expr: ref("n", [parent]), space: tree, origin: "leaf" },
   { name: "the parent of a root", expr: ref("n", [parent]), space: tree, origin: "top" },
   { name: "parent outside a tree", expr: ref("p", [parent]) },
+  // Computed moves (NAV.COMPUTED)
+  { name: "a computed index", expr: ref("p", [index(ref("n"))]) },
+  { name: "a computed index that is not a number", expr: ref("p", [index(ref("name"))]) },
+  { name: "a computed index outside the keys", expr: ref("p", [index(lit(9))]) },
+  { name: "a computed index that is not whole", expr: ref("p", [index(lit(1.5))]) },
+  { name: "a computed key", expr: ref("n", [key(lit("B"))]) },
+  { name: "a computed key that is not a text", expr: ref("n", [key(ref("n"))]) },
+  { name: "two computed moves, in order", expr: ref("p", [key(lit("B")), index(ref("n"))]) },
+  { name: "the error of a computed move before a failed move", expr: ref("p", [other, index(ref("mass"))]) },
+  { name: "a failed move after a computed move", expr: ref("p", [other, index(lit(0))]) },
+  { name: "an axis with a computed address", expr: app("sum", each(axes.window(0, 1), ref("v"), [index(lit(0))])), space: row, origin: "1" },
+  { name: "an axis with a computed address that fails", expr: each(axes.all, ref("n"), [index(ref("mass"))]) },
   // Bindings, records and extensions
   { name: "an unbound name", expr: v("nope") },
   { name: "a let binding", expr: let_({ x: ref("n") }, app("add", v("x"), lit(1))) },

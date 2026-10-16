@@ -3,7 +3,7 @@
  * purpose: they make prototype names, missing fields, non-finite numbers, records that throw, and ops that do
  * not exist.
  */
-import { space, type Axis, type Expr, type Move, type Space } from "@mark1russell7/vex";
+import { space, type Axis, type Expr, type FixedMove, type Move, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The options of the arbitraries. */
@@ -107,14 +107,14 @@ export const arbSpace = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<Space
     { weight: 1, arbitrary: arbGraphInput(domainValue).map((g) => space.graph(g.records, g.edges)) },
   );
 
-/** A move of an address. */
-export const arbMove: fc.Arbitrary<Move> = fc.oneof(
-  fc.constantFrom(...RECORD_KEYS, "Z", "0", "1", "0,0", "1,1").map((key): Move => ({ t: "key", key })),
-  fc.integer({ min: -1, max: 4 }).map((i): Move => ({ t: "index", i })),
-  fc.constant<Move>({ t: "other" }),
-  fc.constant<Move>({ t: "origin" }),
-  fc.constant<Move>({ t: "parent" }),
-  fc.oneof(fc.tuple(fc.integer({ min: -1, max: 1 })), fc.tuple(fc.integer({ min: -1, max: 1 }), fc.integer({ min: -1, max: 1 }))).map((d): Move => ({ t: "offset", d })),
+/** A fixed move of an address: a move with no expression. */
+export const arbMove: fc.Arbitrary<FixedMove> = fc.oneof(
+  fc.constantFrom(...RECORD_KEYS, "Z", "0", "1", "0,0", "1,1").map((key): FixedMove => ({ t: "key", key })),
+  fc.integer({ min: -1, max: 4 }).map((i): FixedMove => ({ t: "index", i })),
+  fc.constant<FixedMove>({ t: "other" }),
+  fc.constant<FixedMove>({ t: "origin" }),
+  fc.constant<FixedMove>({ t: "parent" }),
+  fc.oneof(fc.tuple(fc.integer({ min: -1, max: 1 })), fc.tuple(fc.integer({ min: -1, max: 1 }), fc.integer({ min: -1, max: 1 }))).map((d): FixedMove => ({ t: "offset", d })),
 );
 
 /** A literal value: numbers (also non-finite), strings, booleans, null, small arrays and records, and domain values. */
@@ -137,11 +137,11 @@ const NAMES = ["a", "b"];
 /** An expression of the IR, from the whole grammar. */
 export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
   const ops = [...opts.ops, ...LIST_OPS, ...FORMS, "nope", "toString", "constructor"];
-  const { expr } = fc.letrec<{ expr: Expr; axis: Axis }>((tie) => ({
+  const { expr } = fc.letrec<{ expr: Expr; axis: Axis; move: Move }>((tie) => ({
     expr: fc.oneof(
       { depthSize: "small", withCrossShrink: true, maxDepth: opts.maxDepth ?? 4 },
       arbLiteral(opts.domainValue).map((value): Expr => ({ tag: "lit", value })),
-      fc.tuple(fc.constantFrom(...PATHS), fc.option(fc.array(arbMove, { maxLength: 2 }), { nil: undefined })).map(([path, at]): Expr =>
+      fc.tuple(fc.constantFrom(...PATHS), fc.option(fc.array(tie("move"), { maxLength: 2 }), { nil: undefined })).map(([path, at]): Expr =>
         at === undefined || at.length === 0 ? { tag: "ref", path } : { tag: "ref", path, at },
       ),
       fc.constantFrom(...NAMES, "c").map((name): Expr => ({ tag: "var", name })),
@@ -152,7 +152,7 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
         body,
       })),
       fc.tuple(tie("expr"), tie("expr")).map(([x, y]): Expr => ({ tag: "rec", fields: { x, y } })),
-      fc.tuple(tie("axis"), tie("expr"), fc.option(fc.array(arbMove, { maxLength: 2 }), { nil: undefined })).map(([axis, body, at]): Expr =>
+      fc.tuple(tie("axis"), tie("expr"), fc.option(fc.array(tie("move"), { maxLength: 2 }), { nil: undefined })).map(([axis, body, at]): Expr =>
         at === undefined || at.length === 0 ? { tag: "each", axis, body } : { tag: "each", axis, body, at },
       ),
     ),
@@ -177,6 +177,14 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
         { t: "reachable" },
       ),
       fc.tuple(tie("axis"), tie("expr")).map(([axis, test]): Axis => ({ t: "where", axis, test })),
+    ),
+    // A fixed move, or a computed move (NAV.COMPUTED): a literal key or position, or any expression.
+    move: fc.oneof(
+      { weight: 4, arbitrary: arbMove },
+      { weight: 1, arbitrary: fc.integer({ min: -1, max: 4 }).map((i): Move => ({ t: "index", i: { tag: "lit", value: i } })) },
+      { weight: 1, arbitrary: fc.constantFrom(...RECORD_KEYS, "0", "Z").map((k): Move => ({ t: "key", key: { tag: "lit", value: k } })) },
+      { weight: 1, arbitrary: tie("expr").map((i): Move => ({ t: "index", i })) },
+      { weight: 1, arbitrary: tie("expr").map((key): Move => ({ t: "key", key })) },
     ),
   }));
   return expr;

@@ -3,7 +3,7 @@
  * `docs/REVIEW.md` §6.7 without the code of `@mark1russell7/vex`. Property tests compare the two interpreters: the
  * same value, or the same error code.
  */
-import { axisTargets, isVexList, resolveAddr, type AnyDomain, type Axis, type ErrorCode, type Expr, type Space } from "@mark1russell7/vex";
+import { axisTargets, isVexList, resolveAddr, type Addr, type AnyDomain, type Axis, type ErrorCode, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
 
 /** The outcome of the reference interpreter: a value, or an error code. */
 export type RefOutcome = { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly code: ErrorCode };
@@ -97,6 +97,36 @@ function targets(a: Axis, c: Ctx): { ok: true; keys: { key: string; bad?: ErrorC
   return { ok: true, keys };
 }
 
+/**
+ * This function gives the key of an address. The key or the position of a computed move is an expression. These
+ * expressions evaluate first, at the position of the node, and the first error is the result. A key must be a text,
+ * and a position must be a number. Then the moves apply in order.
+ */
+function keyOf(at: Addr | undefined, c: Ctx): { readonly ok: true; readonly key: string } | { readonly ok: false; readonly code: ErrorCode } {
+  const values: unknown[] = [];
+  for (const m of at ?? []) {
+    const x = m.t === "key" && typeof m.key !== "string" ? m.key : m.t === "index" && typeof m.i !== "number" ? m.i : undefined;
+    if (x === undefined) continue;
+    const r = run(x, c);
+    if (!r.ok) return r;
+    values.push(r.value);
+  }
+  const fixed: FixedMove[] = [];
+  for (const m of at ?? []) {
+    if (m.t === "key" && typeof m.key !== "string") {
+      const u = values.shift();
+      if (typeof u !== "string") return { ok: false, code: "#VALUE!" };
+      fixed.push({ t: "key", key: u });
+    } else if (m.t === "index" && typeof m.i !== "number") {
+      const u = values.shift();
+      if (typeof u !== "number") return { ok: false, code: "#VALUE!" };
+      fixed.push({ t: "index", i: u });
+    } else fixed.push(m as FixedMove);
+  }
+  const r = resolveAddr(c.space, { origin: c.origin, focus: c.focus }, fixed);
+  return r.ok ? { ok: true, key: r.value } : { ok: false, code: r.error.code };
+}
+
 function run(e: Expr, c: Ctx): RefOutcome {
   switch (e.tag) {
     case "lit":
@@ -106,9 +136,9 @@ function run(e: Expr, c: Ctx): RefOutcome {
     case "ext":
       return err("#NAME?");
     case "ref": {
-      const at = resolveAddr(c.space, { origin: c.origin, focus: c.focus }, e.at);
-      if (!at.ok) return err(at.error.code);
-      let x: unknown = c.space.get(at.value);
+      const at = keyOf(e.at, c);
+      if (!at.ok) return at;
+      let x: unknown = c.space.get(at.key);
       if (x === undefined || x === null) return err("#N/A");
       for (const seg of e.path) {
         // x is not undefined and not null here: the checks before the loop and after each step give #N/A for them.
@@ -136,14 +166,14 @@ function run(e: Expr, c: Ctx): RefOutcome {
     }
     case "each": {
       // An axis with an address finds its targets from the key of the address.
-      const from = resolveAddr(c.space, { origin: c.origin, focus: c.focus }, e.at);
-      if (!from.ok) return err(from.error.code);
+      const from = keyOf(e.at, c);
+      if (!from.ok) return from;
       // The axis table moves to the space of its table, where the origin is the target.
       const base = baseOf(e.axis);
       const space = base.t === "table" ? (Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined) : c.space;
       if (space === undefined) return err("#REF!");
       const inner: Ctx = { ...c, space };
-      const t = targets(e.axis, { ...inner, focus: from.value });
+      const t = targets(e.axis, { ...inner, focus: from.key });
       if (!t.ok) return err(t.code);
       const at = (key: string): Ctx => ({ ...inner, focus: key, ...(base.t === "table" ? { origin: key } : {}) });
       return val({

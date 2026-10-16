@@ -1,4 +1,4 @@
-import { app, cell, key, lit, offset, origin, parent, ref, SheetRun, space, type Expr, type Result } from "@mark1russell7/vex";
+import { app, axes, cell, each, index, key, lit, offset, origin, parent, ref, SheetRun, space, type Expr, type Result } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { BUILT_IN_NAMES, compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, MAX_LENGTH, OP_NAMES, type FormulaContext, type GridCellKind, type GridContext } from "./index.ts";
@@ -164,6 +164,24 @@ describe("names and navigation", () => {
     // A running total over the roots and in each group: row(-1) is the previous sibling. The first row has none.
     expect(column("IFERROR(row(-1).f, 0) + cost", ["fruit", "tools", "extra", "apple", "pear", "saw"])).toEqual([1, 5, "#VALUE!", 2, 7, 3]);
     expect(column("parent.name", ["apple", "saw", "fruit"])).toEqual(["fruit", "tools", "#REF!"]);
+  });
+
+  it("FORMULA.NAV.INDEX: index(e) moves to the row at the position that e gives, also for a formula column", () => {
+    expect(compile("index(qty).cost")).toEqual(ref(["cost"], [index(ref(["qty"]))]));
+    expect(compile("index((qty + 1) - 1).parent.cost")).toEqual(ref(["cost"], [index(app("subtract", app("add", ref(["qty"]), lit(1)), lit(1))), parent]));
+    // A cell reference has only fixed moves, so a formula column at a computed row is the one item of a window.
+    expect(compile("index(qty).total", ["total"])).toEqual(app("first", each(axes.window(0, 0), cell("total"), [index(ref(["qty"]))]), lit({ strict: true })));
+    // The rows in key order: fruit, apple, pear, tools, saw, extra.
+    expect(column("index(qty).name")).toEqual(["apple", "tools", "apple", "pear", "apple"]);
+    expect(table({ total: "cost * qty", f: "index(qty).total" })["fruit"]).toEqual({ total: 1, f: 6 });
+    // At fruit the row 5 is extra, whose total is an error: a text has no op multiply. At apple the row 7 does not exist.
+    const outside = table({ total: "cost * qty", f: "index(qty + 4).total" });
+    expect([outside["fruit"]?.["f"], outside["apple"]?.["f"]]).toEqual(["#NAME?", "#REF!"]);
+    expect([value("index(9).cost"), value("index(name).cost"), value("index(0.5).cost")]).toEqual(["#REF!", "#VALUE!", "#REF!"]);
+    expect(at("SUM(index(0).children.cost)", "saw")).toBe(7);
+    expect(error("index(qty.cost").message).toMatch(/necessary/);
+    expect(error('SUM(table("Products"), this.index(0).Qty)', productsContext()).message).toBe("index(...). after this. is not valid in the axis of another table");
+    expect(highlightFormula("index(1).cost").find((p) => p.text === "index")?.kind).toBe("keyword");
   });
 
   it("FORMULA.NAV.NAME: row(\"name\") moves to the one row with the name, and a name of no row or of two rows is an error", () => {

@@ -7,6 +7,7 @@ import {
   explain,
   ext,
   fail,
+  index,
   key,
   let_,
   lit,
@@ -243,6 +244,17 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
     ["a missing field", ref("s", [key("B")]), false],
     ["an address that does not exist", ref("n", [key("Z")]), false],
     ["a path through a number", ref("n.x"), false],
+    // NAV.COMPUTED: the expressions of an address evaluate in tier 2, and a bad key or position falls back.
+    ["a field at a computed key", ref("n", [key(ref("s"))]), false],
+    ["a field at a computed key that exists", ref("n", [key(lit("C"))]), true],
+    ["a field at a computed position", ref("n", [index(app("double", n))]), true],
+    ["a computed key that is not a text", ref("n", [key(n)]), false],
+    ["a computed position outside the keys", ref("n", [index(lit(3))]), false],
+    ["a computed position that is not whole", ref("n", [index(lit(0.5))]), false],
+    ["a computed move whose expression fails", ref("n", [index(ref("missing"))]), false],
+    ["two computed moves", ref("n", [key(lit("B")), index(n)]), true],
+    ["a list from a computed position", all(ref("n", [index(lit(2))])), true],
+    ["a list op from a computed position", app("sum", each(axes.where(axes.all, ref("b")), n, [index(lit(1))])), true],
     ["a name that is not a field", ref("__proto__"), false],
     ["a variable of the run", v("c"), true],
     ["a name without a binding", v("nope"), false],
@@ -724,6 +736,7 @@ describe("COMPILE.MEMO: the nodes of the memo and their keys", () => {
   const boundKey = let_({ y: atOrigin }, v("y"));
   const recordKey = rec({ a: atOrigin });
   const loopKey = app("add", atOrigin, app("sum", loop));
+  const computedAtOrigin = ref("x", [index(ref("i", [{ t: "origin" }]))]);
   // Each case: the expression, and the keys of its node in the memo, or undefined for a node without a memo.
   const cases: readonly (readonly [string, Expr, readonly Expr[] | undefined])[] = [
     ["a loop over all", app("sum", loop), []],
@@ -757,6 +770,14 @@ describe("COMPILE.MEMO: the nodes of the memo and their keys", () => {
     ["a record with a key in it", app("count", each(axes.all, rec({ a: ref("x"), b: atOrigin }))), [atOrigin]],
     ["a key with a loop of its own", app("count", each(axes.where(axes.all, app("eq", ref("x"), loopKey)), ref("x"))), [loopKey]],
     ["a loop from a key, with a key in it", app("sum", each(axes.others, app("add", ref("x"), atOrigin), [key("A")])), [atOrigin]],
+    // NAV.COMPUTED: the expressions of an address are a part of the node.
+    ["a loop from a computed position of a literal", app("sum", each(axes.others, ref("x"), [index(lit(0))])), []],
+    ["a loop from a computed position of the origin", app("sum", each(axes.others, ref("x"), [index(ref("i", [{ t: "origin" }]))])), undefined],
+    ["a loop from a computed position of a name of the run", app("sum", each(axes.others, ref("x"), [index(run)])), undefined],
+    ["a computed read at the target", app("sum", each(axes.all, ref("x", [index(ref("p"))]))), []],
+    ["a computed read from the origin is a key", app("sum", each(axes.all, app("add", ref("x"), computedAtOrigin))), [computedAtOrigin]],
+    ["a loop in a computed move", ref("x", [index(app("count", loop))]), []],
+    ["a computed move at the focus", ref("x", [index(ref("p"))]), undefined],
   ];
   it.each(cases)("%s", (_title, e, keys) => {
     const got = memoNodes(e).get(e);

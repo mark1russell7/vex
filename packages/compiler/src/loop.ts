@@ -19,7 +19,7 @@ export const FIXED_LOCALS = 4;
 /** The functions of the runtime that generated code calls. Each one gives `FALLBACK` for a value it cannot give. */
 export type RuntimeFn =
   | "has" // has(space, key): boolean
-  | "addr" // addr(space, origin, focus, address): the key of an address
+  | "addr" // addr(space, origin, focus, address, values?): the key of an address, with the values of its computed moves
   | "table" // table(tables, name): the space of a table
   | "keys" // keys(space): the keys of a space
   | "step" // step(name, acc, value): one step of reduce

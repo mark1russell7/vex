@@ -73,11 +73,12 @@ describe("the reference of a sheet run", () => {
   });
 
   it("SHEET.CELL: a cell reference without a column name or a valid address gives #VALUE!", () => {
-    const bad: readonly unknown[] = [null, "A", { column: 1, at: [] }, { column: "A" }, { column: "A", at: [{ t: "nope" }] }, { at: [] }];
+    // A computed move is an expression, not data, so a cell reference takes only fixed moves.
+    const bad: readonly unknown[] = [null, "A", { column: 1, at: [] }, { column: "A" }, { column: "A", at: [{ t: "nope" }] }, { at: [] }, { column: "A", at: [{ t: "index", i: lit(0) }] }];
     // Each reference is in the body of a let, so its error has a path that is not empty.
     const columns = new Map<string, Expr>([["ok", lit(1)], ...bad.map((data, i): [string, Expr] => [`bad${i}`, let_({}, ext("vex.cell", data))])]);
     const got = expectSame(columns, { space: sheetRowsOf([1]) }, [["ok", "0"], ...bad.map((_d, i) => [`bad${i}`, "0"] as const)]);
-    expect(got.map(problem)).toEqual([undefined, ...bad.map(() => ["#VALUE!", "a cell reference needs a column name and an address"])]);
+    expect(got.map(problem)).toEqual([undefined, ...bad.map(() => ["#VALUE!", "a cell reference needs a column name and an address of fixed moves"])]);
     expect(got.map((r) => (r.ok ? undefined : r.error.path))).toEqual([undefined, ...bad.map(() => [0])]);
   });
 

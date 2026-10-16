@@ -11,7 +11,7 @@
  */
 import { vexError } from "./errors.ts";
 import { evaluate, explain, nestingOf, type CompileOptions, type EvalOptions, type ExtHandler, type Program } from "./evaluate.ts";
-import { children, ext, isMove, type Addr, type Axis, type Expr, type Move } from "./ir.ts";
+import { addrExprs, children, ext, isMove, moveExpr, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
 import { fail, type Result } from "./result.ts";
 import { resolveAddr, type Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
@@ -19,21 +19,24 @@ import type { Trace } from "./trace.ts";
 /** The extension kind of a cell reference. */
 export const CELL_KIND = "vex.cell";
 
-/** The data of a cell reference: the column, and the address from the focus. */
+/**
+ * The data of a cell reference: the column, and the address from the focus. The data of an extension is not an
+ * expression, so the address has only fixed moves.
+ */
 export interface CellRef {
   readonly column: string;
-  readonly at: Addr;
+  readonly at: readonly FixedMove[];
 }
 
 /** This function makes a cell reference: the column `column` at the address `at` from the focus. */
-export const cell = (column: string, at: Addr = []): Expr => ext(CELL_KIND, { column, at } satisfies CellRef);
+export const cell = (column: string, at: readonly FixedMove[] = []): Expr => ext(CELL_KIND, { column, at } satisfies CellRef);
 
 const isCellRef = (u: unknown): u is CellRef =>
   typeof u === "object" &&
   u !== null &&
   typeof (u as { column?: unknown }).column === "string" &&
   Array.isArray((u as { at?: unknown }).at) &&
-  (u as { at: readonly unknown[] }).at.every(isMove);
+  (u as { at: readonly unknown[] }).at.every((m) => isMove(m) && moveExpr(m) === undefined);
 
 /** The formulas of single cells: for each column, the formula of each key that has its own formula. */
 export type CellFormulas = ReadonlyMap<string, ReadonlyMap<string, Expr>>;
@@ -154,6 +157,8 @@ function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string
     if (e.tag === "each") {
       const { base, tests } = partsOf(e.axis);
       for (const x of [e.body, ...tests]) todo.push([x, base]);
+      // The expressions of the address of an axis evaluate at the axis, so they keep the outer direction.
+      for (const x of addrExprs(e.at)) todo.push([x, axis]);
     } else if (e.tag !== "ext") {
       for (const child of children(e)) todo.push([child, axis]);
       // The data of an extension of another kind can look like a cell reference. It only changes the order of a fill.
@@ -345,7 +350,7 @@ export class SheetRun {
 
   readonly #handler: ExtHandler = (data, ctx) => {
     // The interpreter gives an error without an origin the path and the position of its node.
-    if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address"));
+    if (!isCellRef(data)) return fail(vexError("bad-expression", "a cell reference needs a column name and an address of fixed moves"));
     const where = resolveAddr(ctx.space, ctx.position, data.at);
     if (!where.ok) return fail({ ...where.error, path: ctx.path });
     // The evaluation of a cell has the space of its table, and the body of the axis table has the space of that table.

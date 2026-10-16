@@ -381,8 +381,10 @@ The printer takes a part of the language. It takes an array space, the fields an
 
 | The strategy `grid` | Bytes | Gzip |
 |---|---|---|
-| The module of `GRID_PROGRAM` | 8841 | 2660 |
-| The module, minified | 4976 | 1861 |
+| The module of `GRID_PROGRAM` | 8273 | 2551 |
+| The module, minified | 4316 | 1773 |
 | `grid.ts` of ireko, minified | 2615 | 1186 |
 
-The options and the descriptions of `grid.ts` stay in ireko, so the module adds approximately 1.0 to 1.4 kB to its core. The core of ireko has 1.28 kB of room. A build of ireko with the module and its size check decide it. That is the next step.
+Four changes made the module smaller. The list helper has only the branches of the list ops of the program. A name that holds the error sentinel goes to a key as it is. The keys of a function of the memo can always hold the sentinel, so more nodes share a function. A call of the list helper has no empty arguments at its end.
+
+A branch of ireko (`vex/grid-module`, not merged) uses the module in the strategy `grid`. The 213 tests of ireko pass, also its golden SVG files. The size check of its core gives 14.93 kB of 15 kB. Before the module, it gave 13.72 kB.

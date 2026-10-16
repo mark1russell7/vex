@@ -167,10 +167,12 @@ const height = op(
   op("sum", each(axes.where(axes.all, op("eq", columnOf(ref("i")), lit(0))), let_({ $r: rowOf(ref("i")) }, rowH("$r")))),
   op("multiply", v("gap"), op("subtract", v("$rows"), lit(1))),
 );
-const placeIn = (where: Expr, free: Expr): Expr => op("if", op("eq", where, lit("start")), lit(0), op("if", op("eq", where, lit("center")), op("divide", free, lit(2)), free));
+/** The place of a child in its cell, from the free space in the variable `free`. */
+const placeIn = (where: Expr, free: string): Expr => op("if", op("eq", where, lit("start")), lit(0), op("if", op("eq", where, lit("center")), op("divide", v(free), lit(2)), v(free)));
 const half = (a: Expr): Expr => op("divide", a, lit(2));
+/** The choice of the side of the box where the children go. The variables `$bottom`, `$top` and `$right` tell the side. */
 const side = (choices: Readonly<Record<GridOptions["side"], Expr>>): Expr =>
-  op("if", is("side", "bottom"), choices.bottom, op("if", is("side", "top"), choices.top, op("if", is("side", "right"), choices.right, choices.left)));
+  op("if", v("$bottom"), choices.bottom, op("if", v("$top"), choices.top, op("if", v("$right"), choices.right, choices.left)));
 
 /**
  * The program of the strategy `grid`. It evaluates at each child, and it gives the offset of the child and the size of
@@ -195,11 +197,14 @@ export const GRID_PROGRAM: Expr = let_(
         $row: rowOf(ref("i", ORIGIN)),
         $align: op("if", is("align", "auto"), op("if", v("$linked"), lit("start"), lit("center")), v("align")),
         $dist: op("if", op("gt", v("distance"), lit(0)), v("distance"), op("multiply", v("gap"), lit(1.5))),
+        $bottom: is("side", "bottom"),
+        $top: is("side", "top"),
+        $right: is("side", "right"),
       },
       let_(
         {
-          $x: op("subtract", op("add", colX(v("$col")), placeIn(v("justify"), op("subtract", colW("$col"), ref("w")))), ref("x")),
-          $y: op("subtract", op("add", rowY(v("$row")), placeIn(v("$align"), op("subtract", rowH("$row"), ref("h")))), ref("y")),
+          $x: let_({ $free: op("subtract", colW("$col"), ref("w")) }, op("subtract", op("add", colX(v("$col")), placeIn(v("justify"), "$free")), ref("x"))),
+          $y: let_({ $free: op("subtract", rowH("$row"), ref("h")) }, op("subtract", op("add", rowY(v("$row")), placeIn(v("$align"), "$free")), ref("y"))),
           $w: width,
           $h: height,
         },

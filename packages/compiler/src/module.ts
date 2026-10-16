@@ -42,6 +42,8 @@ interface Value {
   readonly code: string;
   readonly kind: PrimitiveKind | undefined;
   readonly safe: boolean;
+  /** For the read of a name that can hold the error sentinel: the name itself, which holds the value or the sentinel. */
+  readonly held?: string;
 }
 
 /** A name of the program in the code: its variable, its kind, and true when it can hold the error sentinel. */
@@ -90,7 +92,17 @@ const HELPERS: Readonly<Record<Helper, string>> = {
     "  };",
     "}",
   ].join("\n"),
-  L: [
+  // The list helper has only the branches of the list ops that the module uses (listHelper).
+  L: "",
+};
+
+/**
+ * This function gives the source of the list helper with the branches of the list ops `ops` only. The helper collects
+ * the values of the items, and it skips each item with an error. With `strict`, an item with an error is an error.
+ */
+function listHelper(ops: ReadonlySet<string>): string {
+  const has = (...names: string[]): boolean => names.some((x) => ops.has(x));
+  return [
     "function L(op, lo, hi, skip, body, test, strict, num) {",
     "  const vs = [];",
     "  for (let j = lo; j < hi; j++) {",
@@ -106,23 +118,30 @@ const HELPERS: Readonly<Record<Helper, string>> = {
     "    }",
     "    vs.push(v);",
     "  }",
-    '  if (op === "count") return vs.length;',
-    '  if (op === "first") return vs.length > 0 ? vs[0] : F();',
-    '  if (op === "any" || op === "all" || op === "none") {',
-    '    if (!vs.every((x) => typeof x === "boolean")) F();',
-    '    return op === "any" ? vs.some((x) => x) : op === "all" ? vs.every((x) => x) : !vs.some((x) => x);',
-    "  }",
-    '  if (!vs.every((x) => typeof x === "number")) F();',
-    '  if (op === "sum" || op === "mean") {',
-    '    if (op === "mean" && vs.length === 0) F();',
-    "    const s = vs.reduce((a, x) => a + x, 0);",
-    '    return num(op === "sum" ? s : s / vs.length);',
-    "  }",
-    "  if (vs.length === 0) F();",
-    '  return vs.reduce((a, x) => (op === "min" ? Math.min(a, x) : Math.max(a, x)));',
+    ...(has("count") ? ['  if (op === "count") return vs.length;'] : []),
+    ...(has("first") ? ['  if (op === "first") return vs.length > 0 ? vs[0] : F();'] : []),
+    ...(has("any", "all", "none")
+      ? [
+          '  if (op === "any" || op === "all" || op === "none") {',
+          '    if (!vs.every((x) => typeof x === "boolean")) F();',
+          '    return op === "any" ? vs.some((x) => x) : op === "all" ? vs.every((x) => x) : !vs.some((x) => x);',
+          "  }",
+        ]
+      : []),
+    ...(has("sum", "mean", "min", "max") ? ['  if (!vs.every((x) => typeof x === "number")) F();'] : []),
+    ...(has("sum", "mean")
+      ? [
+          '  if (op === "sum" || op === "mean") {',
+          '    if (op === "mean" && vs.length === 0) F();',
+          "    const s = vs.reduce((a, x) => a + x, 0);",
+          '    return num(op === "sum" ? s : s / vs.length);',
+          "  }",
+        ]
+      : []),
+    ...(has("min", "max") ? ["  if (vs.length === 0) F();", '  return vs.reduce((a, x) => (op === "min" ? Math.min(a, x) : Math.max(a, x)));'] : []),
     "}",
-  ].join("\n"),
-};
+  ].join("\n");
+}
 
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
@@ -212,6 +231,8 @@ class Printer {
   readonly #schema: Schema;
   readonly #memo: ReadonlyMap<Expr, readonly Expr[]>;
   readonly helpers = new Set<Helper>();
+  /** The list ops that the program uses. */
+  readonly lists = new Set<string>();
   /** The declarations at the top of the module: the functions of the domains and the checks of the results. */
   readonly top = new Map<string, string>();
   /** The declarations at the start of a run: the variables and the functions of the memo. */
@@ -263,11 +284,15 @@ class Printer {
 
   /** This method gives the code of a name: a read that throws the error of its value, if it can hold an error. */
   #read(name: Name): Value {
-    return name.lazy ? { code: `${this.use("G")}(${name.code})`, kind: name.kind, safe: false } : { code: name.code, kind: name.kind, safe: true };
+    return name.lazy ? { code: `${this.use("G")}(${name.code})`, kind: name.kind, safe: false, held: name.code } : { code: name.code, kind: name.kind, safe: true };
   }
 
-  /** This method gives the code that evaluates a value, with the error sentinel for its error. */
+  /**
+   * This method gives the code that evaluates a value, with the error sentinel for its error. A name that holds the
+   * sentinel already gives it as it is.
+   */
   #attempt(v: Value): string {
+    if (v.held !== undefined) return v.held;
     return v.safe ? v.code : `${this.use("T")}(() => ${v.code})`;
   }
 
@@ -470,14 +495,19 @@ class Printer {
     const body = this.expr(target.body, inner);
     const num = op === "sum" || op === "mean" ? this.check("number") : "undefined";
     const kind = NUMBER_LIST_OPS.has(op) ? "number" : op === "first" ? body.kind : "boolean";
-    return { code: `${this.use("L")}(${JSON.stringify(op)}, ${range}, (${j}) => ${body.code}, ${test}, ${String(strict)}, ${num})`, kind, safe: false };
+    this.lists.add(op);
+    // The arguments at the end with no effect go away: an absent test, false and an absent check.
+    const args = [JSON.stringify(op), range, `(${j}) => ${body.code}`, test, String(strict), num];
+    while (["undefined", "false"].includes(args.at(-1) ?? "")) args.pop();
+    return { code: `${this.use("L")}(${args.join(", ")})`, kind, safe: false };
   }
 
   /** A node of the memo: one function of its keys for each structure, with an entry for each value of the keys. */
   #memoized(e: Expr, keys: readonly Expr[], ctx: Ctx): Value {
     const values = keys.map((k) => this.expr(k, ctx));
-    // The kinds of the keys decide the ops in the node, and a safe key needs no check, so both are a part of the structure.
-    const structure = canonical([e, values.map((x) => `${String(x.kind)} ${String(x.safe)}`)], new Map(keys.map((k, i) => [k, i])));
+    // The kinds of the keys decide the ops in the node, so they are a part of the structure. Each key can hold the error
+    // sentinel in the function, so the nodes with a safe key and the nodes without one share it.
+    const structure = canonical([e, values.map((x) => String(x.kind))], new Map(keys.map((k, i) => [k, i])));
     let fn = this.#structures.get(structure);
     if (fn === undefined) {
       fn = this.fresh("m");
@@ -485,7 +515,7 @@ class Printer {
       const params = keys.map(() => this.fresh("q"));
       const outer = this.#inside;
       this.#inside = e;
-      const names = values.map((x, i): Name => ({ code: params[i] as string, kind: x.kind, lazy: !x.safe }));
+      const names = values.map((x, i): Name => ({ code: params[i] as string, kind: x.kind, lazy: true }));
       const body = this.expr(e, { origin: undefined, focus: undefined, env: new Map(), keys: new Map(keys.map((k, i): [Expr, Name] => [k, names[i] as Name])) });
       this.#inside = outer;
       this.#kinds.set(fn, body.kind);
@@ -539,7 +569,7 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
     "export const VEX_ERROR = Object.freeze({ vexError: true });",
     "const E = {};",
     ...(helpers.has("M") ? ["const Z = {};"] : []),
-    ...[...helpers].map((h) => HELPERS[h]),
+    ...[...helpers].map((h) => (h === "L" ? listHelper(p.lists) : HELPERS[h])),
     ...p.top.values(),
     `export function ${name}(records, vars) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',

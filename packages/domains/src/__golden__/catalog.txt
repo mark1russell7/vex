@@ -14,6 +14,10 @@ Num (fromScalar -, valid yes, encode -, methods -)
   ln(?) | no lift | no laws | no identity | fn
   exp(?) | no lift | no laws | no identity | fn
   log10(?) | no lift | no laws | no identity | fn
+  sin(?) | no lift | no laws | no identity | fn
+  cos(?) | no lift | no laws | no identity | fn
+  asin(?) | no lift | no laws | no identity | fn
+  hypot(number) | no lift | laws [commutative] | no identity | fn
   date(number, number) | no lift | no laws | no identity | fn
   floor(?) | no lift | no laws | no identity | fn
   ceil(?) | no lift | no laws | no identity | fn

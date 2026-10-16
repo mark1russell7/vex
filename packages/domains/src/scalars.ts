@@ -23,6 +23,10 @@ export type NumOps = {
   readonly ln: FnOp<number, NumFn1>;
   readonly exp: FnOp<number, NumFn1>;
   readonly log10: FnOp<number, NumFn1>;
+  readonly sin: FnOp<number, NumFn1>;
+  readonly cos: FnOp<number, NumFn1>;
+  readonly asin: FnOp<number, NumFn1>;
+  readonly hypot: FnOp<number, NumFn2>;
   readonly date: FnOp<number, (year: number, month: number, day: number) => LocalDate>;
   readonly floor: FnOp<number, NumFn1>;
   readonly ceil: FnOp<number, NumFn1>;
@@ -57,6 +61,11 @@ export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", numb
     ln: { fn: (a: number): number => Math.log(a), returns: "number" },
     exp: { fn: (a: number): number => Math.exp(a), returns: "number" },
     log10: { fn: (a: number): number => Math.log10(a), returns: "number" },
+    // The angles of sin, cos and asin are in radians.
+    sin: { fn: (a: number): number => Math.sin(a), returns: "number" },
+    cos: { fn: (a: number): number => Math.cos(a), returns: "number" },
+    asin: { fn: (a: number): number => Math.asin(a), returns: "number" },
+    hypot: { fn: (a: number, b: number): number => Math.hypot(a, b), laws: ["commutative"], params: ["number"], returns: "number" },
     // The year is the receiver: date(year, month, day). The result is a LocalDate, so a chain continues in DateDomain.
     date: { fn: (year: number, month: number, day: number): LocalDate => LocalDate.of(year, month, day), params: ["number", "number"] },
     floor: { fn: (a: number): number => Math.floor(a), returns: "number" },

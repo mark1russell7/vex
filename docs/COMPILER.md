@@ -411,3 +411,40 @@ A run of the module is still slower than the code of ireko. Each lookup of a nod
 | 11111 nodes, nested | 4.7 and 6.5 | 7.7 and 5.8 |
 
 Thus the benchmarks of ireko hold. The branch of ireko waits for a decision of the owner.
+
+#### The radial pilot
+
+The strategy `radial` of ireko puts the children on a ring. Three cases have a closed form: one child, a part of a ring, and a full ring of more than 256 children. A full ring of 2 to 256 children finds its smallest radius with a bisection. That search needs `iterate`, so it comes in phase C4.
+
+`radialArrange` copies the closed form of ireko, and `RADIAL_PROGRAM` is one Vex program that evaluates at each child. `radialClosed` tells if an input has a closed form. A property compares the program with the copy in the interpreter, in tier 2 and in the module. The bits are the same. For this pilot, `NumDomain` has the ops `sin`, `cos`, `asin` and `hypot`.
+
+| The strategy `radial` | Bytes | Gzip |
+|---|---|---|
+| The module of `RADIAL_PROGRAM` | 3996 | 1291 |
+| The module, minified | 2054 | 931 |
+| The module, minified, after the module of `grid` | | 637 more |
+| `radial.ts` of ireko, minified, after the module of `grid` | 2527 | 1144 more |
+
+The module has no search, so ireko keeps its own code for most rings. The module adds approximately 600 bytes to the core, and the core has 30 bytes free. Thus ireko does not use the module before phase C4. Then one module can replace all of `radial.ts`.
+
+| One run of `radial` | The code of ireko | The module |
+|---|---|---|
+| 10 children, a half ring | 0.6 to 1.1 µs | 1.3 to 1.8 µs |
+| 300 children, a full ring | 17 to 50 µs | 37 to 93 µs |
+
+The module is approximately two times slower. A module without the checks of finite numbers and without the `try` blocks in its loops has the same speed. Thus the cause is elsewhere.
+
+#### The audit pilot
+
+After a layout, the audit of ireko gives two checks. `ESCAPE` finds each node that is not inside its container, the nearest ancestor in the nested mode. `OVERLAP` finds each pair of boxes that overlap.
+
+`ESCAPE_PROGRAM` evaluates at each node, and `escapes` copies the code of ireko. A property compares the two in the interpreter, in tier 2 and in the module. The results are the same. `OVERLAP` is a sweep over the sorted boxes, in O(n log n). A program over the axis `others` costs O(n²). Thus `OVERLAP` waits for the domain kernels of phase C4.
+
+A node of ireko has the index of its container. An address of Vex has only fixed moves, so the program finds the container with the test `i = c` over all the nodes. The module makes a map of the groups for this test, one map for each field of the container.
+
+| `ESCAPE` for each node | The code of ireko | The module |
+|---|---|---|
+| 111 nodes | 0.6 to 1.0 µs | 43 to 50 µs |
+| 11111 nodes | 63 to 161 µs | 9.2 to 11.5 ms |
+
+Most of the time goes to the five maps of the groups. One map for all the fields is approximately five times faster. A move to a position that a value gives, as `INDEX` of a spreadsheet, makes the lookup direct. That move is a change of the language, so the owner decides.

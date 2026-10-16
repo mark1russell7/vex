@@ -274,6 +274,8 @@ describe("functions", () => {
     expect(column("ABS(-3) + ROUND(2.6) + SQRT(cost * 8)", ["apple"])).toEqual([10]);
     expect(column("UPPER(name) & LENGTH(name)", ["pear"])).toEqual(["PEAR4"]);
     expect(column("LENGTH(size)", ["fruit"])).toEqual([5]);
+    // The trigonometry of the number domain is in radians.
+    expect([value("SIN(0)"), value("COS(0)"), value("ASIN(1)"), value("HYPOT(3, 4)"), value("ASIN(2)")]).toEqual([0, 1, Math.PI / 2, 5, "#NUM!"]);
     expect(error("NOPE(1)").message).toBe('the function "NOPE" does not exist');
     expect(error("ABS()").message).toBe("ABS needs 1 or more arguments, not 0");
   });

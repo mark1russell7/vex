@@ -61,7 +61,7 @@ export default defineConfig({
       components: { Hero: "./src/components/Hero.astro" },
       expressiveCode: { plugins: [focusablePre] },
       sidebar: [
-        { label: "Learn", items: ["learn/tour", "learn/concepts", "learn/spreadsheet", "learn/sheets", "learn/axes", "learn/errors"] },
+        { label: "Learn", items: ["learn/tour", "learn/concepts", "learn/spreadsheet", "learn/sheets", "learn/axes", "learn/vectors", "learn/errors"] },
         { label: "Lab", items: ["lab"] },
         { label: "Spec", items: ["spec", "spec/regressions"] },
         { label: "Why none?", items: [{ autogenerate: { directory: "errors" } }] },

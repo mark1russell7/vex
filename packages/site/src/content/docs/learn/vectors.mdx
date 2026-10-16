@@ -1,0 +1,80 @@
+---
+title: Vectors
+description: When a program calculates the same value for x and y, one vector does the two calculations. This page shows how to make, use and read vectors.
+---
+
+A layout calculates a width and a height, a left and a top, a column and a row. Often the math of the two dimensions is the same. Then write it once, with a vector. Two expressions for the two dimensions double the code, and the two copies can become different.
+
+## The rule
+
+- When you calculate the same value for x and y, use one `Vec2`, not two numbers.
+- Keep a dimension separate only where its math is different. For example, the number of columns of a grid comes from the width only.
+- When the components have names, or when there are more than two, use an `NDVector`.
+
+The [grid pilot](../../gallery/grid/) shows the rule in a real layout.
+
+## Make and read a vector
+
+| Need | Builder | IR |
+|---|---|---|
+| A vector from two numbers | `x._.vec2(y)` | `app("vec2", x, y)` |
+| A component of a vector | `v._.x()` and `v._.y()` | `app("x", v)` and `app("y", v)` |
+| A vector of the data | a field with a `Vec2` value | `ref("size")` |
+| A literal | `new Vec2(1, 2)` | `lit(new Vec2(1, 2))` |
+
+The op `vec2` is an op of `NumDomain`, and its receiver is the x component. Put `Vec2Domain` in the domains of the program too. It has the ops of the result, and it checks the result. A component that is not finite gives `#NUM!`.
+
+In the JSON form of a program, a literal vector is `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`.
+
+## Component-wise ops
+
+The ops `add`, `subtract`, `multiply`, `divide`, `min` and `max` of `Vec2Domain` work on each component. A number argument of these ops becomes a vector with that number twice. Thus `size._.max(1)` makes a size of at least 1 by 1, and `cell._.add(gap)` adds the gap in the two dimensions.
+
+`floor`, `ceil`, `round`, `abs`, `clamp`, `scale` and `negate` work on each component too. `dot`, `length`, `distance`, `area`, `sum`, `minComponent` and `maxComponent` give a number. The [domains page](../../reference/domains/) lists each op.
+
+## Reduce a list of vectors
+
+The reductions `sum()`, `mean()`, `min()` and `max()` of a list take only numbers. A list of vectors needs `reduce` with an op of the domain. The op of each item comes from the domain of that item.
+
+- `reduce("max")` gives the component-wise maximum, and `reduce("min")` gives the component-wise minimum.
+- `reduce("add")` gives the sum. An empty list gives the identity of the op, for example (0, 0) for `add`.
+- `max` has no identity, so an empty list gives an error.
+
+The cell of a grid is the component-wise maximum of the sizes of the items, at least 1 by 1:
+
+```ts doctest
+const items = vex(NumDomain, Vec2Domain).over(space.array([{ w: 10, h: 20 }, { w: 30, h: 5 }]));
+const cell = items.start(0).each((t) => t.from("w")._.vec2(t.from("h"))).reduce("max")._.max(1);
+
+cell.at("0"); // => some(new Vec2(30, 20))
+```
+
+The corner of the item in column 1 and row 0 is the vector (1, 0) times the cell and the gap:
+
+```ts doctest
+const items = vex(NumDomain, Vec2Domain).over(space.array([{ w: 10, h: 20 }, { w: 30, h: 5 }]));
+const cell = items.start(0).each((t) => t.from("w")._.vec2(t.from("h"))).reduce("max")._.max(1);
+const corner = items.start(1)._.vec2(0)._.multiply(cell._.add(10));
+
+corner.at("0");        // => some(new Vec2(40, 0))
+corner._.x().at("0"); // => some(40)
+```
+
+## Named components
+
+An `NDVector` has a name for each component, for example `width` and `height`. Its ops work on the union of the names, and a component that one vector does not have counts as 0.
+
+- `NumRecordDomain` makes a vector from a record of numbers: `toNDVector`.
+- `get` gives a component. In the builder, a bare text argument is the name of a field, so write `get(root.lit("width"))`.
+- `add`, `subtract`, `multiply`, `min`, `max`, `scale` and `dot` work on each component.
+
+```ts doctest
+const sizes = vex(NumDomain, NDVectorDomain, NumRecordDomain).over(space.array([{ w: 10, h: 20 }, { w: 30, h: 5 }]));
+const largest = sizes.start(0).each((t) => sizes.start(sizes.rec({ width: t.from("w"), height: t.from("h") }))._.toNDVector()).reduce("max");
+
+largest._.get(sizes.lit("width")).at("0"); // => some(30)
+```
+
+## A domain of your own
+
+A vector is one example of a value with its own ops. When a program uses a value with its own ops and laws, a domain gives the value one name. Examples are a rectangle with `union` and `intersect`, an interval, or an amount of money with a currency. The law checker of `@mark1russell7/vex-testkit` tests the laws that each op claims. Refer to [the law arena](../../gallery/laws/).

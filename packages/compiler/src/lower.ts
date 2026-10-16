@@ -6,7 +6,7 @@
  * (`Fail`). A list op skips an error item, and an error in the first argument of `ifError` gives the second argument.
  * Each other error stops the program with `FALLBACK`.
  */
-import { addrExprs, isFieldName, isListOp, MAX_NESTING, nestingOf, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, isFieldName, isListOp, MAX_NESTING, nestingOf, shapeError, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, primitiveOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
@@ -88,7 +88,9 @@ const join = (a: PrimitiveKind | undefined, b: PrimitiveKind | undefined): Primi
  * lower. The facts of the options decide the op of a site whose values have known kinds (KIND.STATIC).
  */
 export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {}): LoopProgram {
-  // EVAL.NESTING: tier 1 gives the error of a program that is nested too deep.
+  // EVAL.SHAPE and EVAL.NESTING: tier 1 gives the error of a program that is not valid or that is nested too deep.
+  const shape = shapeError(expr);
+  if (shape !== undefined) throw new Unsupported(shape);
   if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
   const l = new Lowerer(memoNodes(expr), facts, schema);
   const b = block(RETURN);

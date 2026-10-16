@@ -3,6 +3,7 @@ import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russe
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, modelChain, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { emitModule } from "./module.ts";
 import { generate, tiered, type GenerateOptions } from "./tiers.ts";
 
 const DOMAINS = [Vec2Domain, NumDomain, BoolDomain] as const;
@@ -190,6 +191,18 @@ describe("the tiers", () => {
         for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(x, { domains: DOMAINS, space: s, origin: k })));
       }
     }
+  });
+
+  it("EVAL.SHAPE V-053: an expression that is not valid goes to tier 1, and a module gives the reason", () => {
+    // V-053: a node with a tag of a newer version of Vex made the walks of the compiler throw a TypeError.
+    const s = space.array([{ n: 1 }]);
+    const reason = 'the expression has a node with the tag "loop", and this version of Vex does not know it';
+    const newer = { tag: "app", op: "add", args: [{ tag: "lit", value: 1 }, { tag: "loop" }] } as unknown as Expr;
+    expect(generate(newer, { domains: DOMAINS })).toEqual({ ok: false, reason });
+    expect(emitModule(newer, { domains: DOMAINS, schema: {} })).toEqual({ ok: false, reason });
+    const r = tiered(newer, { domains: DOMAINS }).run({ space: s, origin: "0" });
+    expect(fromCore(r)).toStrictEqual(fromCore(evaluate(newer, { domains: DOMAINS, space: s, origin: "0" })));
+    expect(r.ok ? undefined : r.error.message).toBe(reason);
   });
 
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {

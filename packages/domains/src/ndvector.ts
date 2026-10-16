@@ -70,6 +70,14 @@ export class NDVector<K extends string = string> {
   multiply<K2 extends string>(o: NDVector<K2>): NDVector<K | K2> {
     return this.#combine(o, (a, b) => a * b);
   }
+  /** The component-wise minimum. A component that one vector does not have counts as 0. */
+  min<K2 extends string>(o: NDVector<K2>): NDVector<K | K2> {
+    return this.#combine(o, (a, b) => Math.min(a, b));
+  }
+  /** The component-wise maximum. A component that one vector does not have counts as 0. */
+  max<K2 extends string>(o: NDVector<K2>): NDVector<K | K2> {
+    return this.#combine(o, (a, b) => Math.max(a, b));
+  }
   /** Of each component, the value of this vector if it is not 0, else the value of `o`. */
   mergePreferNonZero<K2 extends string>(o: NDVector<K2>): NDVector<K | K2> {
     return this.#combine(o, (a, b) => (a !== 0 ? a : b));
@@ -115,7 +123,7 @@ export class NDVector<K extends string = string> {
 }
 
 type NDOpNames =
-  | "add" | "subtract" | "multiply" | "mergePreferNonZero" | "scale" | "clamp" | "dot" | "length" | "norm1" | "normInf"
+  | "add" | "subtract" | "multiply" | "min" | "max" | "mergePreferNonZero" | "scale" | "clamp" | "dot" | "length" | "norm1" | "normInf"
   | "equals" | "pick" | "withKeys" | "get" | "set";
 
 /** The ops of `NDVectorDomain`. No op lifts numbers. */
@@ -128,6 +136,8 @@ const ndOps = {
   add: { laws: ["commutative", "associative"], identity: (): NDVector => NDVector.zero(), params: ["domain"] },
   subtract: { params: ["domain"] },
   multiply: { laws: ["commutative", "associative"], params: ["domain"] },
+  min: { laws: ["commutative", "associative", "idempotent"], params: ["domain"] },
+  max: { laws: ["commutative", "associative", "idempotent"], params: ["domain"] },
   mergePreferNonZero: { laws: ["associative", "idempotent"], params: ["domain"] },
   scale: { params: ["number"] },
   clamp: { params: ["number", "number"] },

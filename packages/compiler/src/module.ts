@@ -19,7 +19,7 @@
  * schema, and the axes `all`, `others` and `window`. The kinds of each op site must decide its op. Another construct
  * gives a reason, not code.
  */
-import { addrExprs, children, isFieldName, moveExpr, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, children, isFieldName, moveExpr, shapeError, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
@@ -1360,6 +1360,9 @@ class Printer {
 export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
   const name = options.name ?? "run";
   if (!/^[A-Za-z_$][\w$]*$/.test(name)) return { ok: false, reason: `the name "${name}" is not a JavaScript name` };
+  // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
+  const shape = shapeError(expr);
+  if (shape !== undefined) return { ok: false, reason: shape };
   const p = new Printer(expr, options);
   let value: Code;
   try {

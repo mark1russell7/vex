@@ -1,4 +1,4 @@
-import { defineDomain, type Domain, type OpTable } from "@mark1russell7/vex";
+import { defineDomain, type Domain, type FnOp, type OpTable } from "@mark1russell7/vex";
 
 /**
  * An immutable 2D vector. The methods live on the prototype, so a vector costs two numbers. Division is real
@@ -172,8 +172,11 @@ type Vec2OpNames =
   | "anyNegative" | "allNonNegative" | "anyZero" | "allZero" | "anyLessThan" | "allLessThan" | "anyGreaterThan"
   | "allGreaterThan";
 
-/** The ops of `Vec2Domain`. */
-export type Vec2Ops = OpTable<Vec2, Vec2OpNames, "add" | "subtract" | "multiply" | "divide" | "min" | "max">;
+/** The ops of `Vec2Domain`. The ops `x` and `y` give a component. */
+export type Vec2Ops = OpTable<Vec2, Vec2OpNames, "add" | "subtract" | "multiply" | "divide" | "min" | "max"> & {
+  readonly x: FnOp<Vec2, (v: Vec2) => number>;
+  readonly y: FnOp<Vec2, (v: Vec2) => number>;
+};
 
 /** The domain of 2D vectors. A number argument of a component-wise op lifts to a vector with that value twice. */
 export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Vec2, Vec2Ops>({
@@ -189,6 +192,9 @@ export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Ve
     return new Vec2(typeof x === "number" ? x : Number.NaN, typeof y === "number" ? y : Number.NaN);
   },
   ops: {
+    // The components are fields of a vector, not methods, so these two ops are functions.
+    x: { fn: (v: Vec2): number => v.x, params: [], returns: "number" },
+    y: { fn: (v: Vec2): number => v.y, params: [], returns: "number" },
     add: { laws: ["commutative", "associative"], identity: () => Vec2.zero, liftScalar: true, params: ["domain"] },
     subtract: { liftScalar: true, params: ["domain"] },
     multiply: { laws: ["commutative", "associative"], identity: () => Vec2.one, liftScalar: true, params: ["domain"] },

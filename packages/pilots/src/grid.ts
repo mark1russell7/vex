@@ -8,7 +8,7 @@
  * of the Graph strategy, step by step.
  */
 import { fail, ok, space, vex, vexError, type ArrayKey, type ChainOf, type ExtHandler, type Merge, type Root } from "@mark1russell7/vex";
-import { NumDomain } from "@mark1russell7/vex-domains";
+import { NumDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 
 /** An item of the layout: its intended size. A missing size counts as 0 for the cell size. */
 export interface GridItem {
@@ -71,8 +71,8 @@ export const slot: ExtHandler = (_data, ctx) => {
   return c?.[0] === undefined ? fail(vexError("no-offset", `the key "${ctx.position.focus}" has no slot`, { path: ctx.path })) : ok(c[0]);
 };
 
-/** The context of the grid programs: the domain of numbers, an array space and the fields of `GridItem`. */
-export type GridContext = { readonly domains: readonly [typeof NumDomain]; readonly keys: ArrayKey; readonly record: Merge<GridItem> };
+/** The context of the grid programs: the domains of numbers and of 2D vectors, an array space and the fields of `GridItem`. */
+export type GridContext = { readonly domains: readonly [typeof NumDomain, typeof Vec2Domain]; readonly keys: ArrayKey; readonly record: Merge<GridItem> };
 
 /** The root of the grid programs. */
 export type GridRoot = Root<GridContext>;
@@ -81,17 +81,26 @@ export type GridRoot = Root<GridContext>;
 export type GridChain = ChainOf<GridContext, { readonly left: number; readonly top: number; readonly width: number; readonly height: number }>;
 
 /** This function makes the root of the grid programs over a list of items. */
-export const gridRoot = (items: readonly GridItem[]): GridRoot => vex(NumDomain).withOptions({ extensions: { slot } }).over(space.array(items));
+export const gridRoot = (items: readonly GridItem[]): GridRoot => vex(NumDomain, Vec2Domain).withOptions({ extensions: { slot } }).over(space.array(items));
 
 /**
  * This function makes the Vex program of the grid layout. The bounds and the configuration are constants of the
  * program. The sizes of the items are fields of the space.
+ *
+ * The math of the two dimensions is the same, so the program calculates it once, with vectors of `Vec2Domain`. The op
+ * `vec2` makes a vector from two numbers, and the ops `x` and `y` give its components.
  */
 export function gridProgram(root: GridRoot, bounds: Bounds, config: GridConfig = {}): GridChain {
   const gap = config.gap ?? 12;
-  // The cell: the largest item of the space. A missing size counts as 0, and the cell is at least 1.
-  const cellW = root.start(0).each((t) => t.from("width").ifError(0)).max()._.max(1);
-  const cellH = root.start(0).each((t) => t.from("height").ifError(0)).max()._.max(1);
+  // The cell: the component-wise maximum of the sizes of the items. A missing size counts as 0, and the cell is at
+  // least 1 by 1. The op max of Vec2 lifts the number 1 to the vector (1, 1).
+  const cell = root
+    .start(0)
+    .each((t) => t.from("width").ifError(0)._.vec2(t.from("height").ifError(0)))
+    .reduce("max")
+    ._.max(1);
+  // The step from one cell to the next, in the two dimensions: the cell and the gap.
+  const pitch = cell._.add(gap);
   const count = root.start(0).each((t) => t).count();
   const configured = config.columns ?? 0;
   const cols =
@@ -99,18 +108,20 @@ export function gridProgram(root: GridRoot, bounds: Bounds, config: GridConfig =
       ? root.start(configured)
       : root
           .start(bounds.width + gap)
-          ._.divide(cellW._.add(gap))
+          ._.divide(pitch._.x())
           ._.floor()
           ._.max(1)
           ._.min(count._.sqrt()._.ceil())
           ._.max(1);
   const i = root.start(root.ext<number>("slot"));
+  // The corner of the item: its column and its row, as one vector, times the pitch.
+  const corner = i._.mod(cols)._.vec2(i._.divide(cols)._.floor())._.multiply(pitch);
   return root.start(
     root.rec({
-      left: i._.mod(cols)._.multiply(cellW._.add(gap)),
-      top: i._.divide(cols)._.floor()._.multiply(cellH._.add(gap)),
-      width: root.from("width").ifError(cellW),
-      height: root.from("height").ifError(cellH),
+      left: corner._.x(),
+      top: corner._.y(),
+      width: root.from("width").ifError(cell._.x()),
+      height: root.from("height").ifError(cell._.y()),
     }),
   );
 }

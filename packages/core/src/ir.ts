@@ -202,16 +202,24 @@ export function isMove(u: unknown): u is Move {
   return exprs !== undefined && exprs.every(isExpr);
 }
 
+/**
+ * A test of a number of a move or of a window. The JSON form needs a whole number. An expression in code can have any
+ * number, and a number that is not whole has a meaning at run time (EVAL.SHAPE).
+ */
+type NumberTest = (x: unknown) => boolean;
+
+const anyNumber: NumberTest = (x) => typeof x === "number";
+
 /** This function checks the fixed parts of a move. It gives the expressions of the move, or `undefined` for a bad move. */
-function moveParts(u: unknown): readonly unknown[] | undefined {
+function moveParts(u: unknown, isNumber: NumberTest = Number.isInteger): readonly unknown[] | undefined {
   if (!isObject(u)) return undefined;
   switch (u["t"]) {
     case "key":
       return typeof u["key"] === "string" ? [] : isObject(u["key"]) ? [u["key"]] : undefined;
     case "index":
-      return Number.isInteger(u["i"]) ? [] : isObject(u["i"]) ? [u["i"]] : undefined;
+      return isNumber(u["i"]) ? [] : isObject(u["i"]) ? [u["i"]] : undefined;
     case "offset":
-      return Array.isArray(u["d"]) && u["d"].every((n) => Number.isInteger(n)) ? [] : undefined;
+      return Array.isArray(u["d"]) && u["d"].every((n) => isNumber(n)) ? [] : undefined;
     case "other":
     case "origin":
     case "parent":
@@ -223,12 +231,29 @@ function moveParts(u: unknown): readonly unknown[] | undefined {
 
 /** This function tells if a value is a valid axis. It checks the tests of `where` too. */
 export function isAxis(u: unknown): u is Axis {
-  return validTree([{ axis: true, u }]);
+  return badPart([{ axis: true, u }], true) === undefined;
 }
 
 /** This function tells if a value is a valid expression. It checks the whole tree. */
 export function isExpr(u: unknown): u is Expr {
-  return validTree([{ axis: false, u }]);
+  return badPart([{ axis: false, u }], true) === undefined;
+}
+
+/** The tags of the expressions of this version of Vex. */
+const TAGS: ReadonlySet<unknown> = new Set(["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "ext"]);
+
+/**
+ * This function gives the reason that a value is not a valid expression, or `undefined` for a valid expression
+ * (EVAL.SHAPE). An expression from a newer version of Vex can have a tag that this version does not know. Unlike
+ * `isExpr`, it accepts a number that is not whole in a move or in a window, because it has a meaning at run time.
+ */
+export function shapeError(u: unknown): string | undefined {
+  const bad = badPart([{ axis: false, u }], false);
+  if (bad === undefined) return undefined;
+  const tag = isObject(bad.u) ? bad.u["tag"] : undefined;
+  if (bad.axis) return "the expression has an axis that is not valid";
+  if (typeof tag === "string" && !TAGS.has(tag)) return `the expression has a node with the tag "${tag}", and this version of Vex does not know it`;
+  return typeof tag === "string" ? `the expression has a node "${tag}" with parts that are not valid` : "the expression has a part that is not a node";
 }
 
 /**
@@ -243,12 +268,12 @@ function loopParts(u: Readonly<Record<string, unknown>>): readonly unknown[] | u
 }
 
 /** This function checks the fixed parts of an address. It gives the expressions of its moves, or `undefined`. */
-function addrParts(u: unknown): readonly unknown[] | undefined {
+function addrParts(u: unknown, isNumber: NumberTest): readonly unknown[] | undefined {
   if (u === undefined) return [];
   if (!Array.isArray(u)) return undefined;
   const out: unknown[] = [];
   for (const m of u) {
-    const parts = moveParts(m);
+    const parts = moveParts(m, isNumber);
     if (parts === undefined) return undefined;
     out.push(...parts);
   }
@@ -256,68 +281,71 @@ function addrParts(u: unknown): readonly unknown[] | undefined {
 }
 
 /**
- * This function checks a tree of expressions and axes. It uses a stack, not recursion, so the input can be deep. For
- * example, a deep JSON file from a stranger does not need a deep call stack (EVAL.NESTING).
+ * This function checks a tree of expressions and axes, and it gives the first part that is not valid. It uses a stack,
+ * not recursion, so the input can be deep. For example, a deep JSON file from a stranger does not need a deep call
+ * stack (EVAL.NESTING). With `whole`, the numbers of the moves and of the windows must be whole, as the JSON form needs.
  */
-function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boolean {
+function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole: boolean): { readonly axis: boolean; readonly u: unknown } | undefined {
+  const moveNumber = whole ? Number.isInteger : anyNumber;
+  const windowNumber = whole ? Number.isSafeInteger : anyNumber;
   const push = (axis: boolean, values: readonly unknown[]): void => {
     for (const u of values) todo.push({ axis, u });
   };
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
     const { u } = item;
-    if (!isObject(u)) return false;
+    if (!isObject(u)) return item;
     if (item.axis) {
       const t = u["t"];
       if (t === "neighbors") {
-        if (u["n"] !== 4 && u["n"] !== 8) return false;
+        if (u["n"] !== 4 && u["n"] !== 8) return item;
       } else if (t === "window") {
-        if (!Number.isSafeInteger(u["from"]) || !Number.isSafeInteger(u["to"])) return false;
+        if (!windowNumber(u["from"]) || !windowNumber(u["to"])) return item;
       } else if (t === "table") {
-        if (typeof u["name"] !== "string") return false;
+        if (typeof u["name"] !== "string") return item;
       } else if (t === "where") {
         push(true, [u["axis"]]);
         push(false, [u["test"]]);
       } else if (!["all", "others", "other", "children", "ancestors", "descendants", "siblings", "successors", "predecessors", "reachable"].includes(t as string)) {
-        return false;
+        return item;
       }
       continue;
     }
     switch (u["tag"]) {
       case "lit":
-        if (!("value" in u)) return false;
+        if (!("value" in u)) return item;
         break;
       case "ref": {
-        const at = addrParts(u["at"]);
-        if (!isStringArray(u["path"]) || at === undefined) return false;
+        const at = addrParts(u["at"], moveNumber);
+        if (!isStringArray(u["path"]) || at === undefined) return item;
         push(false, at);
         break;
       }
       case "app":
-        if (typeof u["op"] !== "string" || !Array.isArray(u["args"])) return false;
+        if (typeof u["op"] !== "string" || !Array.isArray(u["args"])) return item;
         push(false, u["args"]);
         break;
       case "let":
-        if (!isObject(u["bind"]) || Array.isArray(u["bind"])) return false;
+        if (!isObject(u["bind"]) || Array.isArray(u["bind"])) return item;
         push(false, [...Object.values(u["bind"]), u["body"]]);
         break;
       case "var":
-        if (typeof u["name"] !== "string") return false;
+        if (typeof u["name"] !== "string") return item;
         break;
       case "rec":
-        if (!isObject(u["fields"]) || Array.isArray(u["fields"])) return false;
+        if (!isObject(u["fields"]) || Array.isArray(u["fields"])) return item;
         push(false, Object.values(u["fields"]));
         break;
       case "each": {
-        const at = addrParts(u["at"]);
-        if (at === undefined) return false;
+        const at = addrParts(u["at"], moveNumber);
+        if (at === undefined) return item;
         push(true, [u["axis"]]);
         push(false, [u["body"], ...at]);
         break;
       }
       case "fold": {
-        const at = addrParts(u["at"]);
+        const at = addrParts(u["at"], moveNumber);
         const names = loopParts(u);
-        if (at === undefined || names === undefined) return false;
+        if (at === undefined || names === undefined) return item;
         push(true, [u["axis"]]);
         push(false, [...names, ...at]);
         break;
@@ -325,18 +353,18 @@ function validTree(todo: { readonly axis: boolean; readonly u: unknown }[]): boo
       case "iterate": {
         const limit = u["limit"];
         const names = loopParts(u);
-        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 0 || limit > MAX_ITERATIONS || names === undefined) return false;
+        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 0 || limit > MAX_ITERATIONS || names === undefined) return item;
         push(false, [...names, ...(u["until"] === undefined ? [] : [u["until"]])]);
         break;
       }
       case "ext":
-        if (typeof u["kind"] !== "string" || !("data" in u)) return false;
+        if (typeof u["kind"] !== "string" || !("data" in u)) return item;
         break;
       default:
-        return false;
+        return item;
     }
   }
-  return true;
+  return undefined;
 }
 
 /**

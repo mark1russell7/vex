@@ -67,6 +67,7 @@ An expression is plain JSON data. It has one of these kinds.
 
 - **[EVAL.TOTAL]** The interpreter does not throw. It gives a value or an error value. A value is not `undefined`.
 - **[EVAL.PURE]** An evaluation does not change any state. Two evaluations of the same expression at the same key give the same result.
+- **[EVAL.SHAPE]** `compile` and `evaluate` check the shape of the expression first, as `isExpr` does. An expression that is not valid gives `#VALUE!` with the reason, and the evaluation does not start. For example, a node of a newer version of Vex has a tag that an older version does not know. `shapeError` gives the reason, and a sheet and the compiler give the same error.
 - **[EVAL.NESTING]** `compile` and `evaluate` accept an expression nested up to 500 levels deep. A deeper expression gives `#VALUE!` before the evaluation. `isExpr` and `deps` use a stack, not recursion, so they accept an expression of any depth.
 - **[EVAL.DEPTH]** An evaluation in the limit of EVAL.NESTING does not fill the call stack of the engine. If host code fills the call stack, for example an extension or an op, the error is `#DEPTH!`. `ifError`, a reduction that skips errors and `#ARGS` do not hide `#DEPTH!`, because the engine failed, not the data.
 - **[EVAL.ORIGIN]** An origin that is not a key of the space gives `#REF!`.

@@ -25,6 +25,8 @@ const v = (x: number, y: number): Vec2 => new Vec2(x, y);
 describe("the ops of Vec2Domain", () => {
   const a = v(3, -4);
   const rows: readonly Row[] = [
+    ["x", [], 3],
+    ["y", [], -4],
     ["add", [v(1, 1)], v(4, -3)],
     ["add", [2], v(5, -2)],
     ["subtract", [v(1, 1)], v(2, -5)],
@@ -257,6 +259,9 @@ describe("the ops of NumDomain and BoolDomain", () => {
     expect(value(run([BoolDomain], true, "not"))).toBe(false);
     expect(value(run([BoolDomain], true, "eq", true))).toBe(true);
     expect(BoolDomain.show?.(true)).toBe("true");
+    expect(value(run([NumDomain, Vec2Domain], 3, "vec2", -4))).toEqual(v(3, -4));
+    expect(value(run([NumDomain, Vec2Domain], 3, "vec2", "4"))).toBe("#VALUE! kind-mismatch");
+    expect(value(run([NumDomain, Vec2Domain], 3, "vec2", Number.POSITIVE_INFINITY))).toBe("#NUM! invalid-value");
     expect(NumDomain.show?.(1.5)).toBe("1.5");
   });
 });
@@ -268,6 +273,8 @@ describe("the ops of NDVectorDomain, LiftedNDVectorDomain and NumRecordDomain", 
     expect(value(run([NDVectorDomain], p, "add", q))).toEqual(new NDVector({ x: 1, y: 1, z: 4 }));
     expect(value(run([NDVectorDomain], p, "subtract", q))).toEqual(new NDVector({ x: 1, y: -5, z: -4 }));
     expect(value(run([NDVectorDomain], p, "multiply", q))).toEqual(new NDVector({ x: 0, y: -6, z: 0 }));
+    expect(value(run([NDVectorDomain], p, "min", q))).toEqual(new NDVector({ x: 0, y: -2, z: 0 }));
+    expect(value(run([NDVectorDomain], p, "max", q))).toEqual(new NDVector({ x: 1, y: 3, z: 4 }));
     expect(value(run([NDVectorDomain], new NDVector({ x: 0, y: 2 }), "mergePreferNonZero", new NDVector({ x: 5, y: 9 })))).toEqual(new NDVector({ x: 5, y: 2 }));
     expect(value(run([NDVectorDomain], p, "dot", q))).toBe(-6);
     expect(value(run([NDVectorDomain], p, "equals", new NDVector({ x: 1, y: -2, z: 0 })))).toBe(true);

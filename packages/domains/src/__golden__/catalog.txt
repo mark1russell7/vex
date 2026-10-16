@@ -19,6 +19,7 @@ Num (fromScalar -, valid yes, encode -, methods -)
   asin(?) | no lift | no laws | no identity | fn
   hypot(number) | no lift | laws [commutative] | no identity | fn
   date(number, number) | no lift | no laws | no identity | fn
+  vec2(number) | no lift | no laws | no identity | fn
   floor(?) | no lift | no laws | no identity | fn
   ceil(?) | no lift | no laws | no identity | fn
   round(?) | no lift | no laws | no identity | fn
@@ -45,6 +46,8 @@ Text (fromScalar -, valid -, encode -, methods -)
   eq(string) | no lift | laws [commutative] | no identity | fn
 
 Vec2 (fromScalar (2, 2), valid yes, encode yes, methods -)
+  x() | no lift | no laws | no identity | fn
+  y() | no lift | no laws | no identity | fn
   add(domain) | lift true | laws [commutative, associative] | identity (0, 0) | method
   subtract(domain) | lift true | no laws | no identity | method
   multiply(domain) | lift true | laws [commutative, associative] | identity (1, 1) | method
@@ -124,6 +127,8 @@ NDVector (fromScalar -, valid yes, encode yes, methods -)
   add(domain) | no lift | laws [commutative, associative] | identity NDVector({}) | method
   subtract(domain) | no lift | no laws | no identity | method
   multiply(domain) | no lift | laws [commutative, associative] | no identity | method
+  min(domain) | no lift | laws [commutative, associative, idempotent] | no identity | method
+  max(domain) | no lift | laws [commutative, associative, idempotent] | no identity | method
   mergePreferNonZero(domain) | no lift | laws [associative, idempotent] | no identity | method
   scale(number) | no lift | no laws | no identity | method
   clamp(number, number) | no lift | no laws | no identity | method
@@ -141,6 +146,8 @@ NDVector(lifted) (fromScalar NDVector({"scalar":2}), valid yes, encode -, method
   add(domain) | lift true | laws [commutative, associative] | identity NDVector({}) | method
   subtract(domain) | lift true | no laws | no identity | method
   multiply(domain) | lift true | laws [commutative, associative] | no identity | method
+  min(domain) | no lift | laws [commutative, associative, idempotent] | no identity | method
+  max(domain) | no lift | laws [commutative, associative, idempotent] | no identity | method
   mergePreferNonZero(domain) | no lift | laws [associative, idempotent] | no identity | method
   scale(number) | no lift | no laws | no identity | method
   clamp(number, number) | no lift | no laws | no identity | method

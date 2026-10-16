@@ -1,5 +1,6 @@
 import { defineDomain, type Domain, type FnOp } from "@mark1russell7/vex";
 import { LocalDate } from "./date.ts";
+import { Vec2 } from "./vec2.ts";
 
 type NumFn1 = (a: number) => number;
 type NumFn2 = (a: number, b: number) => number;
@@ -28,6 +29,7 @@ export type NumOps = {
   readonly asin: FnOp<number, NumFn1>;
   readonly hypot: FnOp<number, NumFn2>;
   readonly date: FnOp<number, (year: number, month: number, day: number) => LocalDate>;
+  readonly vec2: FnOp<number, (x: number, y: number) => Vec2>;
   readonly floor: FnOp<number, NumFn1>;
   readonly ceil: FnOp<number, NumFn1>;
   readonly round: FnOp<number, NumFn1>;
@@ -68,6 +70,8 @@ export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", numb
     hypot: { fn: (a: number, b: number): number => Math.hypot(a, b), laws: ["commutative"], params: ["number"], returns: "number" },
     // The year is the receiver: date(year, month, day). The result is a LocalDate, so a chain continues in DateDomain.
     date: { fn: (year: number, month: number, day: number): LocalDate => LocalDate.of(year, month, day), params: ["number", "number"] },
+    // The x component is the receiver: vec2(x, y). The result is a Vec2, so a chain continues in Vec2Domain.
+    vec2: { fn: (x: number, y: number): Vec2 => new Vec2(x, y), params: ["number"] },
     floor: { fn: (a: number): number => Math.floor(a), returns: "number" },
     ceil: { fn: (a: number): number => Math.ceil(a), returns: "number" },
     round: { fn: (a: number): number => Math.round(a), returns: "number" },

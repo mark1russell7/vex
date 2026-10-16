@@ -14,9 +14,9 @@ npm install @mark1russell7/vex @mark1russell7/vex-domains
 
 | Domain | Values | Example ops |
 |---|---|---|
-| `Vec2Domain` | `Vec2`: a 2D vector | `add`, `subtract`, `scale`, `length`, `distance`, `dot`, `rotate`, `allPositive` |
-| `NDVectorDomain` | `NDVector`: a vector with named components | `add`, `subtract`, `scale`, `dot` |
-| `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt` |
+| `Vec2Domain` | `Vec2`: a 2D vector | `x`, `y`, `add`, `max`, `multiply`, `floor`, `length`, `dot`, `rotate` |
+| `NDVectorDomain` | `NDVector`: a vector with named components | `add`, `subtract`, `min`, `max`, `scale`, `dot`, `get` |
+| `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt`, `vec2`, `date` |
 | `BoolDomain` | booleans | `and`, `or`, `xor`, `not` |
 | `TextDomain` | texts | `concat`, `length`, `upper`, `lower`, `trim`, `contains` |
 | `ColorDomain` | `Color`: an RGB color | `mix`, `add`, `multiply`, `luminance`, `relativeLuminance`, `contrast` |
@@ -35,7 +35,20 @@ const root = vex(Vec2Domain).over(space.record({ A: { position: new Vec2(2, 2), 
 root.from("position")._.add("size").at("A"); // => { tag: "some", value: new Vec2(7, 6) }
 ```
 
-The [domains page](https://mark1russell7.github.io/vex/reference/domains/) lists each op with its laws.
+## Two dimensions in one value
+
+When a program calculates the same value for x and y, use one `Vec2`, not two numbers. The op `vec2` of `NumDomain` makes a vector, and the ops `x` and `y` give its components. The ops `add`, `subtract`, `multiply`, `divide`, `min` and `max` work on each component, and they lift a number to a vector. A list of vectors needs `reduce("max")`, because the list op `max` takes only numbers.
+
+```ts doctest
+import { space, vex } from "@mark1russell7/vex";
+import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
+
+const items = vex(NumDomain, Vec2Domain).over(space.array([{ w: 10, h: 20 }, { w: 30, h: 5 }]));
+const cell = items.start(0).each((t) => t.from("w")._.vec2(t.from("h"))).reduce("max")._.max(1);
+cell.at("0"); // => { tag: "some", value: new Vec2(30, 20) }
+```
+
+The page [Vectors](https://mark1russell7.github.io/vex/learn/vectors/) tells more. The [domains page](https://mark1russell7.github.io/vex/reference/domains/) lists each op with its laws.
 
 ## License
 

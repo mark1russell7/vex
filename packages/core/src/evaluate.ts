@@ -1,6 +1,6 @@
 import { liftsAt, resolveOp, type AnyDomain, type ParamKind, type ResolvedOp } from "./domain.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
-import { addrExprs, children, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type Move } from "./ir.ts";
+import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type Move } from "./ir.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { axisTargets, fixAddr, resolveAddr, type Position, type Space } from "./space.ts";
@@ -95,12 +95,12 @@ export function nestingOf(e: Expr): number {
 }
 
 export function compile(expr: Expr, opts: CompileOptions = {}): Program {
+  // EVAL.SHAPE: an expression that is not valid, for example from a newer version of Vex, gives an error before a walk.
   // EVAL.NESTING: a program nested too deep gives an error before the compiler walks it with recursion.
-  const nesting = nestingOf(expr);
-  const root: Node =
-    nesting > MAX_NESTING
-      ? (f) => fail(vexError("bad-expression", `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}`, { path: [], origin: f.pos.origin, focus: f.pos.focus }))
-      : new Compiler(opts).node(expr, []);
+  const shape = shapeError(expr);
+  const nesting = shape === undefined ? nestingOf(expr) : 0;
+  const bad = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}` : undefined);
+  const root: Node = bad === undefined ? new Compiler(opts).node(expr, []) : (f) => fail(vexError("bad-expression", bad, { path: [], origin: f.pos.origin, focus: f.pos.focus }));
   const run = (r: RunOptions): Result<unknown> => {
     const { space, origin } = r;
     if (!space.has(origin)) return fail(vexError("unknown-key", `the space has no key "${origin}"`, { origin, focus: origin }));

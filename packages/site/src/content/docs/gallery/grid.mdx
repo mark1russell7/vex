@@ -17,23 +17,33 @@ The grid layout puts the items in rows, from left to right:
 
 ## One formula for each item
 
-The Vex program evaluates at each item. Three values come from all the items: the largest width, the largest height and the number of items. The axis `each` reads them. The slot of the item comes from an extension, like `ROW()` in a spreadsheet.
+The Vex program evaluates at each item. Two values come from all the items: the cell and the number of items. The axis `each` reads them. The slot of the item comes from an extension, like `ROW()` in a spreadsheet.
+
+The math of the width and the math of the height are the same. Thus the program calculates them once, with a vector of `Vec2Domain`:
+
+- The op `vec2` makes a vector from two numbers, and the ops `x` and `y` give its components.
+- `reduce("max")` gives the component-wise maximum of the vectors. The op `max` of a list takes only numbers.
+- An op of `Vec2` lifts a number to a vector with that number twice. Thus `max(1)` makes the cell at least 1 by 1.
 
 ```ts
-const cellW = root.start(0).each((t) => t.from("width").ifError(0)).max()._.max(1);
-const cellH = root.start(0).each((t) => t.from("height").ifError(0)).max()._.max(1);
+const cell = root.start(0).each((t) => t.from("width").ifError(0)._.vec2(t.from("height").ifError(0)))
+  .reduce("max")._.max(1);
+const pitch = cell._.add(gap);
 const count = root.start(0).each((t) => t).count();
-const cols = root.start(bounds.width + gap)._.divide(cellW._.add(gap))._.floor()._.max(1)
+const cols = root.start(bounds.width + gap)._.divide(pitch._.x())._.floor()._.max(1)
   ._.min(count._.sqrt()._.ceil())._.max(1);
 const i = root.start(root.ext<number>("slot"));
+const corner = i._.mod(cols)._.vec2(i._.divide(cols)._.floor())._.multiply(pitch);
 
 root.start(root.rec({
-  left: i._.mod(cols)._.multiply(cellW._.add(gap)),
-  top: i._.divide(cols)._.floor()._.multiply(cellH._.add(gap)),
-  width: root.from("width").ifError(cellW),
-  height: root.from("height").ifError(cellH),
+  left: corner._.x(),
+  top: corner._.y(),
+  width: root.from("width").ifError(cell._.x()),
+  height: root.from("height").ifError(cell._.y()),
 }));
 ```
+
+The corner of an item is its column and its row, as one vector, times the pitch. Only the number of columns uses one dimension: it comes from the width of the bounds. [Vectors](../../learn/vectors/) tells more about this style.
 
 The test of Graph for this strategy has four items of 100 by 100, in bounds of 400 by 400, with a gap of 10:
 
@@ -52,9 +62,9 @@ Change the sliders. The chip compares the rectangles of the Vex program with the
 
 ## What the pilot shows
 
-- **It fits.** The grid layout is three reductions and one formula for each item. The axes and the domain of numbers express it without new parts. The only addition is the extension `slot`.
+- **It fits.** The grid layout is two reductions and one formula for each item. The axes and the domains of numbers and vectors express it without new parts. The only addition is the extension `slot`.
 - **It is equal.** A property test gives random items, bounds and configurations to both implementations, and compares the rectangles.
-- **It is slower.** The program evaluates the three reductions again at each item, so its cost grows with the square of the number of items. A sheet with one column for each reduction, or the `compile` step of the plan, removes this cost.
+- **It is slower.** The program evaluates the two reductions again at each item, so its cost grows with the square of the number of items. A sheet with one column for each reduction, or the `compile` step of the plan, removes this cost.
 - **Not each layout fits.** The packed layout of Graph places each item after the items before it. That is an ordered fold with a state, not a formula for each item. Vex does not try to express it.
 
 Graph is a private repository. Thus the pilot compares the program with a new implementation of the same rules, not with a copy of the Graph code.

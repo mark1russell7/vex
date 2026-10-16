@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain, findMethod, resolveOp } from "./domain.ts";
 import { vexError } from "./errors.ts";
-import { describeType, evaluate, explain, formatTrace, previewValue } from "./evaluate.ts";
-import { app, axes, each, ext, index, isExpr, isMove, key, lit, offset, ref, toPath, type Expr } from "./ir.ts";
+import { compile, describeType, evaluate, explain, formatTrace, previewValue } from "./evaluate.ts";
+import { app, axes, each, ext, index, isExpr, isMove, key, lit, offset, ref, shapeError, toPath, type Axis, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { isVexList } from "./list.ts";
 import { isSome, none, ok } from "./result.ts";
@@ -16,6 +16,9 @@ import { cell, SheetRun } from "./sheet.ts";
 import { applyMove, axisTargets, space, type Space } from "./space.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
 import { monoids, traversal } from "./traversal.ts";
+
+/** This function gives a value with the type of an expression, for a test of a value that is not valid. */
+const bad = (u: unknown): Expr => u as Expr;
 
 class Thing {
   readonly n: number;
@@ -177,6 +180,32 @@ describe("the contracts of op lookup", () => {
 });
 
 describe("the contracts of the interpreter", () => {
+  it("EVAL.SHAPE V-053: an expression that is not valid gives #VALUE! with its reason, and compile does not throw", () => {
+    // V-053: a node with a tag of a newer version of Vex (fold, in 0.6.0) made compile throw a TypeError.
+    const rows = space.array([{ a: 1 }]);
+    const run = (e: Expr): unknown => {
+      const r = error(evaluate(e, { space: rows, origin: "0", domains: [Num] }));
+      return [r.code, r.kind, r.message];
+    };
+    const newer = bad({ tag: "loop", body: lit(1) });
+    const unknown = ["#VALUE!", "bad-expression", 'the expression has a node with the tag "loop", and this version of Vex does not know it'];
+    expect(() => compile(newer)).not.toThrow();
+    expect(run(newer)).toEqual(unknown);
+    expect(run(app("add", lit(1), newer))).toEqual(unknown);
+    expect(run(bad({ tag: "app", op: "add" }))).toEqual(["#VALUE!", "bad-expression", 'the expression has a node "app" with parts that are not valid']);
+    expect(run(each({ t: "diagonal" } as unknown as Axis, lit(1)))).toEqual(["#VALUE!", "bad-expression", "the expression has an axis that is not valid"]);
+    expect(run(app("add", lit(1), bad(5)))).toEqual(["#VALUE!", "bad-expression", "the expression has a part that is not a node"]);
+    expect(run(bad({ value: 1 }))).toEqual(["#VALUE!", "bad-expression", "the expression has a part that is not a node"]);
+    expect(run(app("add", lit(1), bad(null)))).toEqual(["#VALUE!", "bad-expression", "the expression has a part that is not a node"]);
+    expect(shapeError(app("add", lit(1), lit(2)))).toBeUndefined();
+    // A node of a known tag with a missing part is not a node of a newer version.
+    for (const tag of ["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "ext"]) expect(shapeError({ tag })).not.toMatch(/does not know/);
+    // A sheet gives the same error for its column, and the other columns work.
+    const sheetRun = new SheetRun(new Map([["bad", newer], ["good", lit(2)]]), { space: rows, domains: [Num] });
+    expect(error(sheetRun.cell("bad", "0")).message).toBe(unknown[2]);
+    expect(value(sheetRun.cell("good", "0"))).toBe(2);
+  });
+
   it("EVAL.TOTAL: a host space that throws gives the message of the evaluation", () => {
     const broken: Space = {
       kind: "record",

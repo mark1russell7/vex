@@ -1,4 +1,4 @@
-import { app, axisTargets, cell, compile, each, evaluate, explain, lit, parse, ref, resolveAddr, serialize, SheetRun, space, vex, type Axis, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axisTargets, cell, compile, each, evaluate, explain, isExpr, lit, parse, ref, resolveAddr, serialize, shapeError, SheetRun, space, vex, type Axis, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -29,6 +29,26 @@ describe("properties of the interpreter", () => {
       fc.property(program, ([s, e, k, tables]) => {
         const r = run(e, s, k, tables);
         expect(r.ok ? r.value !== undefined : r.error.code.startsWith("#")).toBe(true);
+      }),
+    );
+  });
+
+  it("EVAL.SHAPE V-053: an expression with a part that is not valid gives #VALUE! with its reason, and does not throw", () => {
+    // The class of V-053: a walk of the IR trusts the types. This generator gives a part that is not valid: a node of a
+    // newer version of Vex, a node with a missing part, an axis that is not valid, or any other value.
+    const badPart = fc.oneof(
+      fc.string().map((tag) => ({ tag })),
+      fc.constantFrom({ tag: "app", op: "add" }, { tag: "let", bind: [] }, { tag: "ref" }, { tag: "each", axis: { t: "diagonal" }, body: lit(1) }),
+      fc.anything().filter((u) => !isExpr(u)),
+    );
+    fc.assert(
+      fc.property(program, badPart, fc.boolean(), ([s, e, k, tables], part, first) => {
+        const bad = app("add", ...(first ? [part as Expr, e] : [e, part as Expr]));
+        const reason = shapeError(bad);
+        expect(reason).toBeDefined();
+        const r = run(bad, s, k, tables);
+        const expected = s.has(k) ? ["#VALUE!", "bad-expression", reason] : ["#REF!", "unknown-key", `the space has no key "${k}"`];
+        expect(r.ok ? r : [r.error.code, r.error.kind, r.error.message]).toEqual(expected);
       }),
     );
   });

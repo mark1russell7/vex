@@ -601,7 +601,7 @@ describe("COMPILE.FALLBACK: a program that tier 2 cannot give operates in tier 1
   it("an expression that is not an expression of the IR", () => {
     const e = { tag: "nope" } as unknown as Expr;
     const g = generate(e);
-    expect(g.ok ? "" : g.reason).toBe("the lowering threw an exception");
+    expect(g.ok ? "" : g.reason).toBe('the expression has a node with the tag "nope", and this version of Vex does not know it');
   });
 
   it("a page that does not permit new Function", () => {

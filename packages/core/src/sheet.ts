@@ -11,7 +11,7 @@
  */
 import { vexError } from "./errors.ts";
 import { evaluate, explain, nestingOf, type CompileOptions, type EvalOptions, type ExtHandler, type Program } from "./evaluate.ts";
-import { addrExprs, children, ext, isMove, moveExpr, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
+import { addrExprs, children, ext, isMove, moveExpr, shapeError, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
 import { fail, type Result } from "./result.ts";
 import { resolveAddr, type Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
@@ -151,7 +151,8 @@ function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string
   const columns = new Set<string>();
   const directions = new Set<Direction>();
   const formula = t.columns.get(self);
-  const todo: [Expr, Axis | undefined][] = [...(formula === undefined ? [] : [formula]), ...(t.cells.get(self)?.values() ?? [])].map((e) => [e, undefined]);
+  // An expression that is not valid reads no column. Its evaluation gives the error (EVAL.SHAPE).
+  const todo: [Expr, Axis | undefined][] = [...(formula === undefined ? [] : [formula]), ...(t.cells.get(self)?.values() ?? [])].filter((e) => shapeError(e) === undefined).map((e) => [e, undefined]);
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
     const [e, axis] = item;
     if (e.tag === "each" || e.tag === "fold") {
@@ -391,7 +392,7 @@ export class SheetRun {
   #costOf(program: Expr): number {
     let cost = this.#cost.get(program);
     if (cost === undefined) {
-      cost = 3 * nestingOf(program) + 16;
+      cost = 3 * (shapeError(program) === undefined ? nestingOf(program) : 1) + 16;
       this.#cost.set(program, cost);
     }
     return cost;

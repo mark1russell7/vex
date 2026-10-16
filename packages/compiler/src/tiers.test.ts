@@ -11,6 +11,12 @@ const DOMAINS = [Vec2Domain, NumDomain, BoolDomain] as const;
 /** An extension handler that gives the path of its node, as a text. */
 const pathOf: ExtHandler = (_data, ctx) => ok(ctx.path.join("."));
 
+/** An extension handler that gives the last number of the path of its node: the index of the node in its parent. */
+const lastOf: ExtHandler = (_data, ctx) => ok(ctx.path.at(-1) ?? -1);
+
+/** An extension handler that gives the length of the path of its node: its depth. */
+const depthOf: ExtHandler = (_data, ctx) => ok(ctx.path.length);
+
 /** A position from the text of a path: its length, modulo 3, the number of keys of the test. */
 const positionOf = (x: Expr): Expr => app("mod", app("length", x), lit(3));
 const vec = fc.tuple(fc.integer({ min: -5, max: 5 }), fc.integer({ min: -5, max: 5 })).map(([x, y]) => new Vec2(x, y));
@@ -202,20 +208,31 @@ describe("the tiers", () => {
   it("COMPILE.TIERED: an extension in each part of a loop and of an address gets the path of its node", () => {
     // The handler "where" gives the path of its node, so a wrong path in tier 2 gives another value than the interpreter.
     const w = ext("where", null);
+    const last = ext("last", null);
     const s = space.array([{ n: 1 }, { n: 2 }, { n: 3 }]);
     const e = rec({
-      iterate: iterate(2, { a: w, b: lit("") }, { a: app("concat", variable("a"), w) }, app("concat", app("concat", variable("a"), w), variable("b"))),
-      until: iterate(3, { a: lit("") }, { a: app("concat", variable("a"), w) }, app("concat", variable("a"), w), app("gt", app("length", variable("a")), lit(4))),
+      iterate: iterate(2, { a: w, b: w }, { a: app("concat", variable("a"), w) }, app("concat", app("concat", variable("a"), w), variable("b"))),
+      until: iterate(3, { a: lit("") }, { a: app("concat", variable("a"), w) }, app("concat", variable("a"), w), app("gt", app("length", app("concat", variable("a"), w)), lit(4))),
       fold: fold(axes.where(axes.all, app("eq", app("length", w), lit(1))), { a: w }, { a: app("concat", variable("a"), w) }, app("concat", variable("a"), w), [index(positionOf(w))]),
       each: app("values", each(axes.all, w, [index(positionOf(w))])),
       ref: ref("n", [key(app("concat", lit(""), positionOf(w))), offset(0)]),
       keyed: ref("n", [index(positionOf(w))]),
+      // Two computed moves in one address, and a where test before a computed address.
+      twice: ref("n", [index(positionOf(w)), index(positionOf(w))]),
+      tested: app("values", each(axes.where(axes.all, app("gt", app("length", w), lit(0))), w, [index(positionOf(w))])),
+      // The index of a node in its parent: the steps of two names, and an address after a where test.
+      steps: iterate(2, { a: lit(0), b: lit(0) }, { a: last, b: last }, app("add", variable("a"), app("multiply", variable("b"), lit(100)))),
+      // The test until is at the depth 2 of the part, or deeper: then the iteration makes no step.
+      stop: iterate(3, { a: lit(0) }, { a: app("add", variable("a"), lit(1)) }, variable("a"), app("gte", ext("depth", null), lit(2))),
+      after: app("values", each(axes.where(axes.others, app("gt", ref("n"), lit(0))), ref("n"), [index(last)])),
     });
-    const options = { domains: [NumDomain, TextDomain, BoolDomain], extensions: { where: pathOf } };
-    const p = tiered(e, options);
-    expect(p.tier).toBe(2);
-    for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { ...options, space: s, origin: k })));
-    expect(p.stats.fallbacks).toBeLessThan(p.stats.runs);
+    const options = { domains: [NumDomain, TextDomain, BoolDomain], extensions: { where: pathOf, last: lastOf, depth: depthOf } };
+    // Each part alone: tier 2 gives each value, so a fallback does not hide a wrong path.
+    for (const part of [e, ...Object.values(e.fields)]) {
+      const p = tiered(part, options);
+      for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(part, { ...options, space: s, origin: k })));
+      expect([p.tier, p.stats.fallbacks]).toEqual([2, 0]);
+    }
   });
 
   it("COMPILE.FALLBACK: an exception in the lowering gives a reason, not an exception", () => {

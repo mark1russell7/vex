@@ -225,7 +225,7 @@ const program = fc.letrec<{ num: Expr; bool: Expr }>((tie) => ({
 }));
 
 const records = fc.array(
-  fc.record({ n: fc.integer({ min: -4, max: 4 }), w: fc.oneof(fc.integer({ min: -3, max: 3 }), fc.double({ noNaN: true, min: -10, max: 10 })), s: fc.constantFrom("", "x", "abc"), b: fc.boolean() }),
+  fc.record({ n: fc.integer({ min: -4, max: 4 }), w: fc.oneof(fc.integer({ min: -3, max: 3 }), fc.double({ noNaN: true, min: -10, max: 10 }), fc.constantFrom(Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY)), s: fc.constantFrom("", "x", "abc"), b: fc.boolean() }),
   { maxLength: 6 },
 );
 
@@ -260,12 +260,21 @@ describe("COMPILE.MODULE: random programs", () => {
     fc.assert(
       fc.property(keyed, records, (e, rs) => {
         const source = sourceOf(e);
-        if (source.includes("reach = 0")) cached++;
+        if (source.includes("= S(n, ")) cached++;
         expectSame(make(source), e, rs, VARS);
       }),
     );
     // Most of these programs have a node that keeps its items.
     expect(cached).toBeGreaterThan(50);
+  });
+
+  it("P17 COMPILE.MODULE: two nodes that keep their items share the helper, with the parts of each node", () => {
+    fc.assert(
+      fc.property(keyed, keyed, records, (a, b, rs) => {
+        const e = rec({ a, b });
+        expectSame(make(sourceOf(e)), e, rs, VARS);
+      }),
+    );
   });
 
   it("P17 COMPILE.MODULE: a module gives the value of the interpreter at each key, or VEX_ERROR", () => {

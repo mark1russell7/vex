@@ -23,6 +23,9 @@
           "$ref": "#/$defs/var"
         },
         {
+          "$ref": "#/$defs/call"
+        },
+        {
           "$ref": "#/$defs/rec"
         },
         {
@@ -102,7 +105,7 @@
       }
     },
     "let": {
-      "description": "The body, with names bound to the values of the bindings.",
+      "description": "The body, with names bound to the values of the bindings. A binding can be a function (FN.BIND).",
       "type": "object",
       "required": [
         "tag",
@@ -116,7 +119,14 @@
         "bind": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/expr"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/expr"
+              },
+              {
+                "$ref": "#/$defs/fn"
+              }
+            ]
           }
         },
         "body": {
@@ -137,6 +147,53 @@
         },
         "name": {
           "type": "string"
+        }
+      }
+    },
+    "fn": {
+      "description": "A function with parameters: only a binding of let. Its body evaluates at each call. A function cannot call itself.",
+      "type": "object",
+      "required": [
+        "tag",
+        "params",
+        "body"
+      ],
+      "properties": {
+        "tag": {
+          "const": "fn"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "body": {
+          "$ref": "#/$defs/expr"
+        }
+      }
+    },
+    "call": {
+      "description": "The body of the bound function 'fn' at this position, with the values of the arguments for its parameters.",
+      "type": "object",
+      "required": [
+        "tag",
+        "fn",
+        "args"
+      ],
+      "properties": {
+        "tag": {
+          "const": "call"
+        },
+        "fn": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/expr"
+          }
         }
       }
     },

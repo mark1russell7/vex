@@ -68,9 +68,12 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
     case "var":
       return inner.has(e.name) ? 0 : outer.has(e.name) ? INTERNAL : inLoop(FREE, top);
     case "ext":
-    // A loop of names is not in the memo yet, so a node with one is not either.
+    // A loop of names is not in the memo yet, so a node with one is not either. A call reads what its body reads, and a
+    // function reads nothing where it is bound, but the memo does not follow them yet (FN.CALL).
     case "fold":
     case "iterate":
+    case "fn":
+    case "call":
       return OPAQUE;
     case "ref":
       // The expressions of computed moves evaluate at the position of the node (NAV.COMPUTED).
@@ -142,6 +145,8 @@ function keysOf(e: Expr, top: boolean, outer: ReadonlySet<string>, pure: Set<Exp
     case "ext":
     case "fold":
     case "iterate":
+    case "fn":
+    case "call":
       return undefined;
     // Stryker restore StringLiteral,ConditionalExpression
   }
@@ -168,6 +173,9 @@ function loopOutside(e: Expr, keys: ReadonlySet<Expr>): boolean {
     case "lit":
     case "var":
     case "ext":
+    // A node with a function or a call is opaque (reads), so it is not a node of the memo.
+    case "fn":
+    case "call":
       return false;
     // Stryker restore StringLiteral,ConditionalExpression
   }

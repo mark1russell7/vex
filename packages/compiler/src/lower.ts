@@ -7,7 +7,7 @@
  * Each other error stops the program with `FALLBACK`.
  */
 import { addrExprs, isFieldName, isListOp, MAX_NESTING, nestingOf, shapeError, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
-import { factsOf, primitiveOf, type Facts, type Schema } from "./facts.ts";
+import { factsOf, MAX_CALLS, primitiveOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
   array,
@@ -39,12 +39,21 @@ interface Bound {
   readonly ok?: LExpr;
 }
 
+/** A bound function: its node, the path of its node, and the scope of its binding. */
+interface BoundFn {
+  readonly fn: ExprOf<"fn">;
+  readonly path: readonly number[];
+  readonly scope: Scope;
+}
+
 /** The facts of the lexical position of a node: its space, its origin, its focus and its bound names. */
 interface Scope {
   readonly space: LExpr;
   readonly origin: LExpr;
   readonly focus: LExpr;
   readonly env: ReadonlyMap<string, Bound>;
+  /** The bound functions (FN.BIND): a call puts the body of its function at the place of the call. */
+  readonly fns: ReadonlyMap<string, BoundFn>;
   /** The record at the focus. In a loop, it reads the record by its index (SPACE.RECORDS). */
   readonly rec: LExpr;
 }
@@ -95,7 +104,7 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   const l = new Lowerer(memoNodes(expr), facts, schema);
   const b = block(RETURN);
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space");
-  const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
+  const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
   const value = l.expr(expr, top, [], b);
   b.stmts.push({ t: "return", value });
   return { body: b.stmts, locals: l.locals, constants: l.constants };
@@ -105,6 +114,8 @@ class Lowerer {
   locals = FIXED_LOCALS;
   labels = 0;
   memos = 0;
+  /** The number of bodies of functions that the lowering put at calls (MAX_CALLS). */
+  #calls = 0;
   readonly #memo: ReadonlyMap<Expr, readonly Expr[]>;
   /** The keys of the nodes of the memo whose code the lowering makes, with their values. */
   #keys: ReadonlyMap<Expr, Bound> = new Map();
@@ -216,6 +227,8 @@ class Lowerer {
         return this.#ref(e, s, path, b);
       case "var": {
         const bound = s.env.get(e.name);
+        // A function is not a value (FN.VALUE): tier 1 gives the error. A name of a loop hides a function with its name.
+        if (bound === undefined && s.fns.has(e.name)) return this.fail(b);
         if (bound === undefined) {
           const x = this.checked(b, call("var", local(VARS), this.constant(e.name)), "a variable");
           return this.#declared(b, x, primitiveOf(this.#schema.vars?.[e.name]), "a variable of the schema");
@@ -223,10 +236,13 @@ class Lowerer {
         if (bound.ok !== undefined) this.check(b, bound.ok, "a binding with a value");
         return bound.value;
       }
-      case "let": {
-        const env = this.#bind(e, s, path, b);
-        return this.expr(e.body, { ...s, env }, [...path, Object.keys(e.bind).length], b);
-      }
+      case "let":
+        return this.expr(e.body, { ...s, ...this.#bind(e, s, path, b) }, [...path, Object.keys(e.bind).length], b);
+      // A function is only a binding of let, so the check of the shape stops this node first.
+      case "fn":
+        return this.fail(b);
+      case "call":
+        return this.#call(e, s, path, b);
       case "rec": {
         const values = Object.values(e.fields).map((x, i) => this.expr(x, s, [...path, i], b));
         return this.value(b, call("rec", this.constant(Object.keys(e.fields)), array(...values)));
@@ -322,12 +338,38 @@ class Lowerer {
    * error of a binding is an error only where the body reads the name. Thus an error ends the block of the binding, and
    * a flag tells each read of the name that the binding has no value.
    */
-  #bind(e: ExprOf<"let">, s: Scope, path: readonly number[], b: Block): ReadonlyMap<string, Bound> {
+  #bind(e: ExprOf<"let">, s: Scope, path: readonly number[], b: Block): Pick<Scope, "env" | "fns"> {
     const env = new Map(s.env);
+    const fns = new Map(s.fns);
     Object.entries(e.bind).forEach(([name, x], i) => {
-      env.set(name, this.#attempt(b, (inner) => this.expr(x, s, [...path, i], inner)));
+      // A function evaluates at each call. A binding sees the scope of the let, so a function cannot call itself.
+      if (x.tag === "fn") {
+        fns.set(name, { fn: x, path: [...path, i], scope: s });
+        env.delete(name);
+      } else {
+        env.set(name, this.#attempt(b, (inner) => this.expr(x, s, [...path, i], inner)));
+        fns.delete(name);
+      }
     });
-    return env;
+    return { env, fns };
+  }
+
+  /**
+   * This method lowers a call (FN.CALL). The body of the function goes at the place of the call, with the values of the
+   * arguments for its parameters. The body sees the names of the place of its binding. A call that is not valid goes
+   * to tier 1.
+   */
+  #call(e: ExprOf<"call">, s: Scope, path: readonly number[], b: Block): LExpr {
+    const bound = s.env.has(e.fn) ? undefined : s.fns.get(e.fn);
+    if (bound?.fn.params.length !== e.args.length) return this.fail(b);
+    if (++this.#calls > MAX_CALLS) throw new Unsupported(`the calls put the bodies of functions in more than ${String(MAX_CALLS)} places`);
+    const env = new Map(bound.scope.env);
+    const fns = new Map(bound.scope.fns);
+    bound.fn.params.forEach((p, i) => {
+      env.set(p, this.#attempt(b, (inner) => this.expr(e.args[i] as Expr, s, [...path, i], inner)));
+      fns.delete(p);
+    });
+    return this.expr(bound.fn.body, { ...s, env, fns }, [...bound.path, 0], b);
   }
 
   #app(e: ExprOf<"app">, s: Scope, path: readonly number[], b: Block): LExpr {
@@ -427,7 +469,7 @@ class Lowerer {
     let inner = s;
     let at = [...path, 0];
     for (let x = e.args[0] as Expr; x.tag === "let"; x = x.body) {
-      inner = { ...inner, env: this.#bind(x, inner, at, b) };
+      inner = { ...inner, ...this.#bind(x, inner, at, b) };
       at = [...at, Object.keys(x.bind).length];
     }
     const rest = e.args.slice(1).map((x, i) => this.expr(x, s, [...path, i + 1], b));
@@ -583,7 +625,7 @@ class Lowerer {
     const body = block(items(label));
     if (skip !== undefined) body.stmts.push({ t: "if", cond: prim("===", key, skip), yes: [{ t: "next" }], no: [] });
     const slot = idx === undefined ? local(index) : prim("member", idx, local(index));
-    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, rec: prim("recordAt", records, slot, space, key) };
+    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec: prim("recordAt", records, slot, space, key) };
     whereTests(axis).forEach((test, i) => {
       const ok = this.#boolean(this.expr(test, at, [...path, firstTest + i], body), body);
       body.stmts.push({ t: "if", cond: prim("!", ok), yes: [{ t: "next" }], no: [] });

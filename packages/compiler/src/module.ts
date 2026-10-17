@@ -20,7 +20,7 @@
  * gives a reason, not code.
  */
 import { addrExprs, children, isFieldName, moveExpr, shapeError, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
-import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
+import { factsOf, kindOfDomain, MAX_CALLS, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
 /** The options of a standalone module. */
@@ -94,6 +94,8 @@ interface Ctx {
   readonly level: number;
   readonly env: ReadonlyMap<string, Name>;
   readonly keys: ReadonlyMap<Expr, Name>;
+  /** The bound functions (FN.BIND), with the context of their binding. A call prints the body at its place. */
+  readonly fns: ReadonlyMap<string, { readonly fn: ExprOf<"fn">; readonly ctx: Ctx }>;
 }
 
 /** The name of a helper of the generated code. */
@@ -525,6 +527,8 @@ class Printer {
   /** The parts of the helper S that the nodes of the memo that keep their items need (helperS). */
   readonly features = new Set<Feature>();
   #names = 0;
+  /** The number of bodies of functions that the printer put at calls (MAX_CALLS). */
+  #calls = 0;
   /** The level of the names of the next loop. It is far above the levels of the axes, so the two do not meet. */
   #loops = 1_000_000;
   /** The node of the memo whose function the printer prints, so it prints the node itself. */
@@ -730,6 +734,10 @@ class Printer {
         return bare(this.#var(e.name, ctx));
       case "let":
         return this.#let(e, ctx);
+      case "fn":
+        throw new NotStandalone("a function outside the bindings of a let");
+      case "call":
+        return this.#call(e, ctx);
       case "rec": {
         const names = Object.keys(e.fields);
         const raw = Object.values(e.fields).map((x) => this.expr(x, ctx));
@@ -853,6 +861,8 @@ class Printer {
   #var(name: string, ctx: Ctx): Value {
     const bound = ctx.env.get(name);
     if (bound !== undefined) return this.#read(bound);
+    // A name of a loop hides a function with its name, so this check comes after the names of the scope.
+    if (ctx.fns.has(name)) throw new NotStandalone(`the name "${name}" is a function, not a value`);
     const kind = this.#schema.vars?.[name];
     if (kind === undefined) throw new NotStandalone(`a variable that is not in the schema: "${name}"`);
     let code = this.vars.get(name);
@@ -869,9 +879,17 @@ class Printer {
    */
   #let(e: ExprOf<"let">, ctx: Ctx): Code {
     const env = new Map(ctx.env);
+    const fns = new Map(ctx.fns);
     const s: string[] = [];
     let deps = new Set<number>();
     for (const [name, x] of Object.entries(e.bind)) {
+      // A function prints its body at each call. A binding sees the context of the let, so a function cannot call itself.
+      if (x.tag === "fn") {
+        fns.set(name, { fn: x, ctx });
+        env.delete(name);
+        continue;
+      }
+      fns.delete(name);
       const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
       if (c.v.deps.size === 0) {
         env.set(name, this.#nameOf(c.v));
@@ -883,7 +901,37 @@ class Printer {
       // The statements of the binding read its keys, so the let is not a constant of the run.
       deps = new Set([...deps, ...c.v.deps]);
     }
-    const body = this.expr(e.body, { ...ctx, env });
+    const body = this.expr(e.body, { ...ctx, env, fns });
+    return { s: [...s, ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
+  }
+
+  /**
+   * This method prints a call (FN.CALL): the body of the function at the place of the call. Each parameter gets the
+   * value of its argument, as a binding of a let. The body sees the names of the place of the binding.
+   */
+  #call(e: ExprOf<"call">, ctx: Ctx): Code {
+    const bound = ctx.env.has(e.fn) ? undefined : ctx.fns.get(e.fn);
+    if (bound === undefined) throw new NotStandalone(`a call of "${e.fn}", which is not a function`);
+    if (bound.fn.params.length !== e.args.length) throw new NotStandalone(`a call of "${e.fn}" with ${String(e.args.length)} arguments, not ${String(bound.fn.params.length)}`);
+    if (++this.#calls > MAX_CALLS) throw new NotStandalone(`the calls put the bodies of functions in more than ${String(MAX_CALLS)} places`);
+    const env = new Map(bound.ctx.env);
+    const fns = new Map(bound.ctx.fns);
+    const s: string[] = [];
+    let deps = new Set<number>();
+    bound.fn.params.forEach((p, i) => {
+      const x = e.args[i] as Expr;
+      fns.delete(p);
+      const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
+      if (c.v.deps.size === 0) {
+        env.set(p, this.#nameOf(c.v));
+        return;
+      }
+      const b = this.fresh("b");
+      s.push(...this.#store(b, c));
+      env.set(p, { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps });
+      deps = new Set([...deps, ...c.v.deps]);
+    });
+    const body = this.expr(bound.fn.body, { ...ctx, env, fns });
     return { s: [...s, ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
   }
 
@@ -1221,7 +1269,7 @@ class Printer {
     );
     const outer = this.#inside;
     this.#inside = e;
-    const bodyCtx: Ctx = { origin: undefined, focus: undefined, level: 1, env: new Map(), keys: names };
+    const bodyCtx: Ctx = { origin: undefined, focus: undefined, level: 1, env: new Map(), fns: new Map(), keys: names };
     if (varying.length === 0) {
       const body = this.#hoist(this.expr(e, bodyCtx));
       this.#inside = outer;
@@ -1345,7 +1393,7 @@ class Printer {
 
   /** This method gives the code of the program at the key of the run. A constant of the run evaluates once. */
   root(expr: Expr): Code {
-    const c = this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, env: new Map(), keys: new Map() }));
+    const c = this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, env: new Map(), fns: new Map(), keys: new Map() }));
     // A function of an op with an inline form at each of its sites needs no declaration.
     for (const [name, form] of this.#forms) if (form !== undefined && !this.#called.has(name)) this.top.delete(name);
     return c;

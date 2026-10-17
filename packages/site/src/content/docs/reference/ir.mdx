@@ -1,6 +1,6 @@
 ---
 title: The IR
-description: A Vex program is JSON data. The kinds of expression, the moves of an address, the axes, and the folds over the tree.
+description: A Vex program is JSON data. The kinds of expression, the functions, the moves of an address, the axes, and the folds over the tree.
 ---
 
 import ProgramIR from "../../../components/ProgramIR.tsx";
@@ -22,6 +22,8 @@ The chain `others(...)` binds the current value to a fresh name (`$0`), and the 
 | `app` | `op`, `args` | the op applied to the values of the arguments. For a method op, the first argument is the receiver. |
 | `let` | `bind`, `body` | the body, with names bound to the values of the bindings |
 | `var` | `name` | the value of a bound name |
+| `fn` | `params`, `body` | a function. It is only a binding of `let`. |
+| `call` | `fn`, `args` | the body of the bound function `fn` at this position, with the values of `args` for its parameters |
 | `rec` | `fields` | a record of the values of the fields |
 | `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address `at` |
 | `fold` | `axis`, `init`, `step`, `result`, `at` | a loop over the targets of the axis, in order. `init` gives the names and their first values, and `step` gives the next values at each target. |
@@ -31,6 +33,31 @@ The chain `others(...)` binds the current value to a fresh name (`$0`), and the 
 The first three kinds have the same shape as the expressions of the `render` project. Thus a `render` expression is also a Vex expression.
 
 The special forms `if`, `and`, `or` and `ifError` are `app` nodes. The interpreter evaluates their arguments only when it needs them.
+
+## Functions
+
+A binding of `let` can be a function: `fn(params, body)`. `call(name, ...args)` applies it. Write a calculation once, and call it where you need it.
+
+```ts doctest
+import { app, axes, call, each, evaluate, fn, let_, lit, ref, space, v } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+const rows = space.array([{ w: 10 }, { w: 20 }, { w: 30 }]);
+// The body reads the field w at the position of the call: here, at each target of the axis.
+const weight = fn(["k"], app("multiply", ref("w"), v("k")));
+const total = let_({ weight }, app("sum", each(axes.all, call("weight", lit(2)))));
+
+evaluate(total, { space: rows, origin: "0", domains: [NumDomain] }); // => { ok: true, value: 120 }
+```
+
+- The body evaluates at the position of the call. Thus a field reference of the body reads at the focus of the call.
+- The body sees the names of the place of its binding, not the names of the place of the call.
+- Each parameter gets the value of its argument. An argument that fails has an effect only where the body reads it.
+- A function cannot call itself or another binding of its `let`. Thus each call ends. A function of an outer `let` is in the scope.
+- A parameter, a binding or a name of a loop with the name of a function hides the function.
+- A function is not a value. `v` of a function, a call of a value and a call with the wrong number of arguments give `#VALUE!`.
+
+The compiler puts the body at each call, in tier 2 and in a module. One program puts the bodies in at most 10000 places. Refer to the rules `FN.*` of [the specification](../../spec/).
 
 ## Addresses
 

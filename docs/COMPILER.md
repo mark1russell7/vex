@@ -251,6 +251,35 @@ Each proposal keeps the programs total: each evaluation ends, and it gives a val
 
 The recommended order is the reverse axis first, because it is small. Then the functions, because the module of each strategy gets smaller. Then the lists, because only `OVERLAP` and the angles need them.
 
+The status on 2026-10-17:
+
+- The reverse axis is done (AXIS.REVERSE). A module prints a loop from the end.
+- Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 and a module put the body at each call. A module does not print one JavaScript function yet, so the radial module does not get smaller yet. That printer is the next step.
+- Lists as values are the next proposal.
+
+One program puts the bodies of functions in at most 10000 places (`MAX_CALLS`). A function that calls another function twice doubles its body. Thus a chain of 15 such functions puts the first body in 16384 places. Over the limit, tier 1 evaluates the program, and a module gives a reason.
+
+### 8.4 Recursion: a decision for the owner
+
+A function cannot call itself (FN.TOTAL). Thus each call ends, and each program stays total. This section gives the options for a function that calls itself. The owner decides.
+
+The current language already has two forms of recursion:
+
+| Recursion | The form of Vex | Why it ends |
+|---|---|---|
+| A loop: a function that calls itself as its last step | `iterate` with a limit and `until` | The limit. At the limit, a test `until` that is not true gives `#NUM!`. |
+| A calculation over the levels of a tree: the size of a node from the sizes of its children | A sheet: a formula column that reads the same column at the children | A tree is finite, and a cycle of cells gives `#CYCLE!`. |
+
+The options for more:
+
+| Option | The design | Cost | Risk |
+|---|---|---|---|
+| A. No recursion | Keep FN.TOTAL. The docs show the translation to `iterate` and to a sheet. | None | A calculation that needs a stack has no form, for example a walk of a nested value. |
+| B. Recursion with a depth limit | The new node `letrec` binds functions that see each other. Each call counts a depth, and a depth over a limit gives `#NUM!`, as `iterate` does. | Medium. Tier 2 and a module cannot put the body at each call, so they need real functions with a counter. | A limit in the program is a number that the author must choose. A deep tree gives `#NUM!`, not a value. |
+| C. Recursion over the structure | A function can call itself only at a key of an axis that goes down: `children` or `descendants` of a tree. The call moves the focus to the child. | Large. It needs a check that each recursive call goes down. | A graph has no direction that always goes down, so a graph needs `#CYCLE!` as a sheet does. |
+
+The recommendation is A at this time, and C only when a program of ireko needs it. The strategies of ireko calculate one container from its children, and the engine of ireko walks the tree. Thus no strategy needs recursion. Option C keeps the idea of Vex: a value at a position from the values at other positions. Option B adds a limit that the data does not decide.
+
 ## 9. Packages
 
 - `@mark1russell7/vex-compiler` is a new published package. It has the analysis, the lowering, the back end of JavaScript source, the tiers, and `emitModule` for builds. The core stays small, because a page that does not compile does not load the compiler.

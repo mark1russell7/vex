@@ -50,6 +50,8 @@ export type Expr =
   | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr; readonly at?: Addr }
   | { readonly tag: "fold"; readonly axis: Axis; readonly init: Names; readonly step: Names; readonly result: Expr; readonly at?: Addr }
   | { readonly tag: "iterate"; readonly limit: number; readonly init: Names; readonly step: Names; readonly until?: Expr; readonly result: Expr }
+  | { readonly tag: "fn"; readonly params: readonly string[]; readonly body: Expr }
+  | { readonly tag: "call"; readonly fn: string; readonly args: readonly Expr[] }
   | { readonly tag: "ext"; readonly kind: string; readonly data: unknown };
 
 /** The names of a loop and an expression for each (LOOP.NAMES). */
@@ -114,6 +116,15 @@ export function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Ad
 export function iterate(limit: number, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate"> {
   return until === undefined ? { tag: "iterate", limit, init, step, result } : { tag: "iterate", limit, init, step, until, result };
 }
+
+/**
+ * This function makes a function (FN.BIND): the names of its parameters and its body. A function is only the value of
+ * a binding of `let`. The body sees the names of the place of that `let`, so a function cannot call itself.
+ */
+export const fn = (params: readonly string[], body: Expr): ExprOf<"fn"> => ({ tag: "fn", params, body });
+
+/** This function makes a call of a bound function (FN.CALL). The body evaluates at the position of the call. */
+export const call = (name: string, ...args: Expr[]): ExprOf<"call"> => ({ tag: "call", fn: name, args });
 
 /** This function makes an expression of an extension kind. */
 export const ext = (kind: string, data: unknown): ExprOf<"ext"> => ({ tag: "ext", kind, data });
@@ -246,7 +257,7 @@ export function isExpr(u: unknown): u is Expr {
 }
 
 /** The tags of the expressions of this version of Vex. */
-const TAGS: ReadonlySet<unknown> = new Set(["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "ext"]);
+const TAGS: ReadonlySet<unknown> = new Set(["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "fn", "call", "ext"]);
 
 /**
  * This function gives the reason that a value is not a valid expression, or `undefined` for a valid expression
@@ -259,6 +270,7 @@ export function shapeError(u: unknown): string | undefined {
   const tag = isObject(bad.u) ? bad.u["tag"] : undefined;
   if (bad.axis) return "the expression has an axis that is not valid";
   if (typeof tag === "string" && !TAGS.has(tag)) return `the expression has a node with the tag "${tag}", and this version of Vex does not know it`;
+  if (tag === "fn") return "the expression has a function outside the bindings of a let, or a function with parameters that are not distinct names";
   return typeof tag === "string" ? `the expression has a node "${tag}" with parts that are not valid` : "the expression has a part that is not a node";
 }
 
@@ -335,9 +347,16 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
         if (typeof u["op"] !== "string" || !Array.isArray(u["args"])) return item;
         push(false, u["args"]);
         break;
-      case "let":
+      case "let": {
         if (!isObject(u["bind"]) || Array.isArray(u["bind"])) return item;
-        push(false, [...Object.values(u["bind"]), u["body"]]);
+        // A binding can be a function (FN.BIND): its parameters are distinct names, and its body is an expression.
+        const values = Object.values(u["bind"]).map((b) => (isObject(b) && b["tag"] === "fn" && isStringArray(b["params"]) && new Set(b["params"]).size === b["params"].length ? b["body"] : b));
+        push(false, [...values, u["body"]]);
+        break;
+      }
+      case "call":
+        if (typeof u["fn"] !== "string" || !Array.isArray(u["args"])) return item;
+        push(false, u["args"]);
         break;
       case "var":
         if (typeof u["name"] !== "string") return item;
@@ -385,7 +404,10 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
 export function children(e: Expr): readonly Expr[] {
   switch (e.tag) {
     case "app":
+    case "call":
       return e.args;
+    case "fn":
+      return [e.body];
     case "let":
       return [...Object.values(e.bind), e.body];
     case "rec":

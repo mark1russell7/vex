@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, defineDomain, each, evaluate, ext, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
+import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
@@ -666,6 +666,33 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expectSame(make(source), e, MANY);
   });
 
+  it("FN.CALL: a module prints the body of a function at each call, with the names of the place of its binding", () => {
+    const bind = { plus: fn(["x", "y"], op("add", v("x"), op("multiply", v("y"), n))), k: lit(10) };
+    const parts: Readonly<Record<string, Expr>> = {
+      once: call("plus", w, v("a")),
+      loop: op("sum", each(axes.all, call("plus", n, v("k")))),
+      fold: fold(axes.reverse(axes.all), { s: lit(0) }, { s: call("plus", v("s"), lit(1)) }, v("s")),
+      // The body of g sees k of the place of its binding. The name a of the call does not change the variable a of the body.
+      nested: let_({ g: fn(["z"], call("plus", v("z"), op("add", v("k"), v("a")))) }, let_({ k: lit(1000), a: lit(5) }, call("g", lit(2)))),
+      // A name of a loop hides the function plus.
+      hidden: iterate(2, { plus: lit(1) }, { plus: op("add", v("plus"), lit(1)) }, v("plus")),
+    };
+    const e = let_(bind, rec(parts));
+    const m = make(sourceOf(e));
+    expectSame(m, e);
+    expectSame(m, e, MANY);
+    // A call that is not valid is not a module.
+    expect(reasonOf(let_(bind, call("plus", lit(1))))).toBe('a call of "plus" with 1 arguments, not 2');
+    expect(reasonOf(let_(bind, call("k")))).toBe('a call of "k", which is not a function');
+    expect(reasonOf(let_(bind, iterate(1, { plus: lit(0) }, { plus: lit(1) }, call("plus", lit(1), lit(2)))))).toBe('a call of "plus", which is not a function');
+    expect(reasonOf(let_(bind, v("plus")))).toBe('the name "plus" is a function, not a value');
+    expect(reasonOf(op("add", lit(1), fn(["x"], v("x"))))).toBe("the expression has a function outside the bindings of a let, or a function with parameters that are not distinct names");
+    // The printer puts the bodies of functions in at most 10000 places.
+    const calls = (count: number): Expr => let_({ f: fn(["x"], op("add", v("x"), n)) }, rec(Object.fromEntries(Array.from({ length: count }, (_x, i) => [`c${String(i)}`, call("f", lit(i))]))));
+    expect(reasonOf(calls(10_000))).toBe("");
+    expect(reasonOf(calls(10_001))).toBe("the calls put the bodies of functions in more than 10000 places");
+  });
+
   it("KIND.RETURNS: the grid in 2D with vectors as plain data is a standalone module", async () => {
     // The op xy of NumDomain gives a value of XYDomain (returns: "domain:XY"), so each op on the vectors has a static site.
     const xy = (a: Expr, b: Expr): Expr => op("xy", a, b);
@@ -949,6 +976,27 @@ describe("COMPILE.MODULE: random programs", () => {
       fc.property(keyed, keyed, records, (a, b, rs) => {
         const e = rec({ a, b });
         expectSame(make(sourceOf(e)), e, rs, VARS);
+      }),
+    );
+  });
+
+  it("P17 COMPILE.MODULE FN.CALL: a module with functions gives the value of the interpreter at each key", () => {
+    // A function f with a body that reads the record at the call, and a function g that calls f. The forms call them at
+    // the node, in a list op, in the step of a fold, under a name a of the call, and under a name of a loop that hides f.
+    const forms: readonly ((arg: Expr, other: Expr) => Expr)[] = [
+      (arg) => call("f", arg),
+      (arg) => op("sum", each(axes.all, call("f", arg))),
+      (arg) => fold(axes.reverse(axes.all), { s: arg }, { s: call("f", v("s")) }, v("s")),
+      (_arg, other) => let_({ a: other }, call("g", v("a"))),
+      (arg, other) => iterate(2, { f: arg }, { f: op("add", v("f"), other) }, v("f")),
+      (arg) => call("g", call("f", arg)),
+    ];
+    const withFns = fc
+      .tuple(program.num, program.num, program.num, fc.constantFrom("add", "subtract", "multiply", "max"), fc.constantFrom(...forms))
+      .map(([body, arg, other, o, form]) => let_({ f: fn(["x"], op(o, v("x"), body)), k: other }, let_({ g: fn(["y"], call("f", op("add", v("y"), v("k")))) }, form(arg, other))));
+    fc.assert(
+      fc.property(withFns, records, fc.integer({ min: -3, max: 3 }), (e, rs, a) => {
+        expectSame(make(sourceOf(e)), e, rs, { a, t: "x" });
       }),
     );
   });

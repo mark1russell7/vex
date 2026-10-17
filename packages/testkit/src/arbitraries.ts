@@ -164,13 +164,19 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
       fc.tuple(fc.constantFrom(...PATHS), fc.option(fc.array(tie("move"), { maxLength: 2 }), { nil: undefined })).map(([path, at]): Expr =>
         at === undefined || at.length === 0 ? { tag: "ref", path } : { tag: "ref", path, at },
       ),
-      fc.constantFrom(...NAMES, "c").map((name): Expr => ({ tag: "var", name })),
+      fc.constantFrom(...NAMES, "c", "f").map((name): Expr => ({ tag: "var", name })),
       fc.tuple(fc.constantFrom(...ops), fc.array(tie("expr"), { maxLength: 3 })).map(([op, args]): Expr => ({ tag: "app", op, args })),
       fc.tuple(fc.subarray([...NAMES], { minLength: 1 }), tie("expr"), tie("expr"), tie("expr")).map(([names, first, second, body]): Expr => ({
         tag: "let",
         bind: Object.fromEntries(names.map((n, i) => [n, i === 0 ? first : second])),
         body,
       })),
+      // Functions (FN.*): a binding f, g or b with parameters from a and b, beside a value a, and calls with zero to two
+      // arguments. A function b has the name of a parameter and of a name of a loop, which hide it.
+      fc
+        .tuple(fc.constantFrom("f", "g", "b"), fc.subarray([...NAMES]), tie("expr"), fc.option(tie("expr"), { nil: undefined }), tie("expr"))
+        .map(([name, params, fnBody, other, body]): Expr => ({ tag: "let", bind: { [name]: { tag: "fn", params, body: fnBody }, ...(other === undefined ? {} : { a: other }) }, body })),
+      fc.tuple(fc.constantFrom("f", "g", "a", "b"), fc.array(tie("expr"), { maxLength: 2 })).map(([fn, args]): Expr => ({ tag: "call", fn, args })),
       fc.tuple(tie("expr"), tie("expr")).map(([x, y]): Expr => ({ tag: "rec", fields: { x, y } })),
       fc.tuple(tie("axis"), tie("expr"), fc.option(fc.array(tie("move"), { maxLength: 2 }), { nil: undefined })).map(([axis, body, at]): Expr =>
         at === undefined || at.length === 0 ? { tag: "each", axis, body } : { tag: "each", axis, body, at },

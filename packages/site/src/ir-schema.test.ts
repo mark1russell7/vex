@@ -35,7 +35,13 @@ describe("the JSON Schema of the IR (IR.JSON)", () => {
   it("IR.JSON: the schema and isExpr agree on random JSON values and on broken expressions", () => {
     const broken = fc.oneof(
       fc.jsonValue(),
-      fc.record({ tag: fc.constantFrom("lit", "ref", "app", "let", "var", "rec", "each", "ext", "loop"), path: fc.jsonValue(), args: fc.jsonValue(), name: fc.jsonValue() }),
+      fc.record({ tag: fc.constantFrom("lit", "ref", "app", "let", "var", "rec", "each", "ext", "fn", "call", "loop"), path: fc.jsonValue(), args: fc.jsonValue(), name: fc.jsonValue() }),
+      // FN.BIND: a function is only a binding of let, with distinct names of parameters.
+      fc.record({
+        tag: fc.constant("let"),
+        bind: fc.record({ f: fc.record({ tag: fc.constantFrom("fn", "lit"), params: fc.constantFrom(["x"], [], ["x", "x"], [1], "x"), body: fc.constantFrom({ tag: "var", name: "x" }, { tag: "nope" }), value: fc.constant(1) }, { requiredKeys: ["tag"] }) }),
+        body: fc.constantFrom({ tag: "call", fn: "f", args: [] }, { tag: "call", fn: 1, args: [] }, { tag: "call", fn: "f" }, { tag: "fn", params: [], body: { tag: "lit", value: 1 } }),
+      }),
       fc.record({ tag: fc.constant("each"), axis: fc.record({ t: fc.constantFrom("all", "neighbors", "where", "children", "ancestors", "descendants", "siblings", "up"), n: fc.integer({ min: 3, max: 9 }) }), body: fc.constant({ tag: "lit", value: 1 }) }),
       fc.record({ tag: fc.constant("each"), axis: fc.record({ t: fc.constant("table"), name: fc.oneof(fc.string(), fc.integer()) }, { requiredKeys: ["t"] }), body: fc.constant({ tag: "lit", value: 1 }) }),
       fc.record({ tag: fc.constant("each"), axis: fc.record({ t: fc.constant("window"), from: fc.oneof(fc.integer(), fc.double(), fc.constant(2 ** 53), fc.string()), to: fc.oneof(fc.integer(), fc.double()) }, { requiredKeys: ["t"] }), body: fc.constant({ tag: "lit", value: 1 }) }),

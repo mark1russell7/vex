@@ -23,6 +23,15 @@ interface Ctx {
   readonly fns: Readonly<Record<string, (...a: readonly unknown[]) => unknown>>;
   /** The other spaces of the evaluation, for the axis table. */
   readonly tables: Readonly<Record<string, Space>>;
+  /** The bound functions of the scope (FN.BIND), apart from the values. */
+  readonly closures: ReadonlyMap<string, RefClosure>;
+}
+
+/** A bound function: its node, and the values and the functions of the place of its binding. */
+interface RefClosure {
+  readonly fn: Extract<Expr, { tag: "fn" }>;
+  readonly env: ReadonlyMap<string, RefOutcome>;
+  readonly closures: ReadonlyMap<string, RefClosure>;
 }
 
 /** The axis inside the `where` axes of an axis. */
@@ -137,7 +146,26 @@ function run(e: Expr, c: Ctx): RefOutcome {
     case "lit":
       return val(e.value);
     case "var":
-      return c.env.get(e.name) ?? err("#NAME?");
+      // A function is not a value (FN.VALUE). A name of a loop hides a function with its name.
+      return c.env.get(e.name) ?? (c.closures.has(e.name) ? err("#VALUE!") : err("#NAME?"));
+    case "fn":
+      // A function is only a binding of let, and the check of the shape gives the error first.
+      return err("#VALUE!");
+    case "call": {
+      const bound = c.env.get(e.fn);
+      if (bound !== undefined) return bound.ok ? err("#VALUE!") : bound;
+      const callee = c.closures.get(e.fn);
+      if (callee === undefined) return err("#NAME?");
+      if (callee.fn.params.length !== e.args.length) return err("#VALUE!");
+      // The body sees the names of the place of the binding, and the parameters hide its functions with their names.
+      const env = new Map(callee.env);
+      const closures = new Map(callee.closures);
+      callee.fn.params.forEach((p, i) => {
+        env.set(p, run(e.args[i] as Expr, c));
+        closures.delete(p);
+      });
+      return run(callee.fn.body, { ...c, env, closures });
+    }
     case "ext":
       return err("#NAME?");
     case "ref": {
@@ -158,9 +186,19 @@ function run(e: Expr, c: Ctx): RefOutcome {
       return val(x);
     }
     case "let": {
+      // A binding sees only the names of the place of the let, so a function cannot call itself (FN.TOTAL).
       const env = new Map(c.env);
-      for (const [n, b] of Object.entries(e.bind)) env.set(n, run(b, c));
-      return run(e.body, { ...c, env });
+      const closures = new Map(c.closures);
+      for (const [n, b] of Object.entries(e.bind)) {
+        if (b.tag === "fn") {
+          closures.set(n, { fn: b, env: c.env, closures: c.closures });
+          env.delete(n);
+        } else {
+          env.set(n, run(b, c));
+          closures.delete(n);
+        }
+      }
+      return run(e.body, { ...c, env, closures });
     }
     case "rec": {
       const names = Object.keys(e.fields);
@@ -423,7 +461,7 @@ export function referenceEvaluate(
   if (!opts.space.has(opts.origin)) return err("#REF!");
   try {
     // Stryker disable next-line ArrayDeclaration: a list with a text accepts no value, like the empty list
-    return run(e, { space: opts.space, origin: opts.origin, focus: opts.origin, env: new Map(), domains: opts.domains ?? [], fns: opts.fns ?? {}, tables: opts.tables ?? {} });
+    return run(e, { space: opts.space, origin: opts.origin, focus: opts.origin, env: new Map(), domains: opts.domains ?? [], fns: opts.fns ?? {}, tables: opts.tables ?? {}, closures: new Map() });
   } catch {
     return err("#CALC!");
   }

@@ -46,41 +46,76 @@ const move = (m: Move): string => {
 };
 const moves = (at: readonly Move[] | undefined): string => (at ?? []).map(move).join("");
 
-/** This function replaces each bound name of `e` with its expression. A pure expression keeps its result. */
-function inline(e: Expr, env: ReadonlyMap<string, Expr>): Expr {
+/** The names of a place in an expression: the bound values, and the bound functions with the names of their place. */
+interface Scope {
+  readonly env: ReadonlyMap<string, Expr>;
+  readonly fns: ReadonlyMap<string, { readonly fn: Extract<Expr, { tag: "fn" }>; readonly scope: Scope }>;
+}
+
+/**
+ * This function replaces each bound name of `e` with its expression, and each call with the body of its function
+ * (FN.CALL). A pure expression keeps its result.
+ */
+function inline(e: Expr, s: Scope): Expr {
   switch (e.tag) {
     case "var":
-      return env.get(e.name) ?? e;
+      return s.env.get(e.name) ?? e;
     case "let": {
-      const inner = new Map(env);
-      for (const [n, b] of Object.entries(e.bind)) inner.set(n, inline(b, env));
-      return inline(e.body, inner);
+      const env = new Map(s.env);
+      const fns = new Map(s.fns);
+      for (const [n, b] of Object.entries(e.bind)) {
+        if (b.tag === "fn") {
+          fns.set(n, { fn: b, scope: s });
+          env.delete(n);
+        } else {
+          env.set(n, inline(b, s));
+          fns.delete(n);
+        }
+      }
+      return inline(e.body, { env, fns });
+    }
+    // The body takes the place of the call, with the names of the place of its binding and an argument for each parameter.
+    case "call": {
+      const args = e.args.map((a) => inline(a, s));
+      const bound = s.env.has(e.fn) ? undefined : s.fns.get(e.fn);
+      if (bound?.fn.params.length !== args.length) return { ...e, args };
+      const env = new Map(bound.scope.env);
+      const fns = new Map(bound.scope.fns);
+      bound.fn.params.forEach((p, i) => {
+        env.set(p, args[i] as Expr);
+        fns.delete(p);
+      });
+      return inline(bound.fn.body, { env, fns });
     }
     case "app":
-      return { ...e, args: e.args.map((a) => inline(a, env)) };
+      return { ...e, args: e.args.map((a) => inline(a, s)) };
     case "rec":
-      return { ...e, fields: Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, inline(v, env)])) };
+      return { ...e, fields: Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, inline(v, s)])) };
     case "each":
-      return { ...e, body: inline(e.body, env), axis: inlineAxis(e.axis, env) };
+      return { ...e, body: inline(e.body, s), axis: inlineAxis(e.axis, s) };
     // The names of a loop hide a binding outside it with the same name, in the steps and in the result.
     case "fold": {
-      const inside = without(env, Object.keys(e.init));
-      return { ...e, axis: inlineAxis(e.axis, env), init: inlineNames(e.init, env), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
+      const inside = without(s, Object.keys(e.init));
+      return { ...e, axis: inlineAxis(e.axis, s), init: inlineNames(e.init, s), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
     }
     case "iterate": {
-      const inside = without(env, Object.keys(e.init));
-      const inlined = { ...e, init: inlineNames(e.init, env), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
+      const inside = without(s, Object.keys(e.init));
+      const inlined = { ...e, init: inlineNames(e.init, s), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
       return e.until === undefined ? inlined : { ...inlined, until: inline(e.until, inside) };
     }
+    case "fn":
     case "lit":
     case "ref":
     case "ext":
       return e;
   }
 }
-const inlineAxis = (a: Axis, env: ReadonlyMap<string, Expr>): Axis => (a.t === "where" ? { t: "where", axis: inlineAxis(a.axis, env), test: inline(a.test, env) } : a);
-const inlineNames = (names: Names, env: ReadonlyMap<string, Expr>): Names => Object.fromEntries(Object.entries(names).map(([n, x]) => [n, inline(x, env)]));
-const without = (env: ReadonlyMap<string, Expr>, names: readonly string[]): ReadonlyMap<string, Expr> => new Map([...env].filter(([n]) => !names.includes(n)));
+const inlineAxis = (a: Axis, s: Scope): Axis => (a.t === "where" ? { t: "where", axis: inlineAxis(a.axis, s), test: inline(a.test, s) } : a);
+const inlineNames = (names: Names, s: Scope): Names => Object.fromEntries(Object.entries(names).map(([n, x]) => [n, inline(x, s)]));
+const without = (s: Scope, names: readonly string[]): Scope => ({
+  env: new Map([...s.env].filter(([n]) => !names.includes(n))),
+  fns: new Map([...s.fns].filter(([n]) => !names.includes(n))),
+});
 
 /** The text of each name of the loops around a part of the view, for example "v0.x". */
 let loopText: ReadonlyMap<string, string> = new Map();
@@ -189,9 +224,13 @@ function chain(e: Expr): string {
       return `${first === undefined ? "root.start(null)" : chain(first)}._.${e.op}(${rest.map(arg).join(", ")})`;
     }
     case "let":
-      return chain(inline(e, new Map()));
+      return chain(inline(e, { env: new Map(), fns: new Map() }));
     case "var":
       return loopText.get(e.name) ?? "root.start(null)";
+    // A call without a function in its scope, or with a wrong number of arguments, has no chain.
+    case "fn":
+    case "call":
+      return "root.start(null)";
     case "fold":
     case "iterate":
       return loop(e);

@@ -5,6 +5,12 @@
  */
 import { isListOp, isOpName, liftsAt, type AnyDomain, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
+/**
+ * The most bodies of functions that tier 2 and a module put at the calls of one program. A function that calls another
+ * function twice doubles its body, so a chain of such functions grows fast.
+ */
+export const MAX_CALLS = 10_000;
+
 /** The function of an op of a domain, or a method. */
 export type Method = (...args: unknown[]) => unknown;
 

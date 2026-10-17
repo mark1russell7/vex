@@ -23,6 +23,7 @@ The four packages have one version. The `CHANGELOG.md` of each package lists the
 | `XYDomain` and `xy`: vectors as plain data, for a standalone module | 0.7.0 |
 | `returns: "domain:Name"`: an op that gives a value of another domain | 0.7.0 |
 | The axis `reverse(axis)` and the option `reverse` of an axis | the next release |
+| Functions: `fn` as a binding of `let`, and `call` | the next release |
 | `sin`, `cos`, `asin` and `hypot` of `NumDomain` | 0.7.0 |
 | The kinds of domains and ops: `primitive`, `returns` and `samples` | 0.7.0 |
 | `SheetRun` with the option `compile`, and `SheetRun.fill` | 0.7.0 |

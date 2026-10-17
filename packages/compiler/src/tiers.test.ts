@@ -1,4 +1,4 @@
-import { app, axes, each, evaluate, ext, fold, index, isVexList, iterate, key, lit, offset, ok, rec, ref, space, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
+import { app, axes, call, each, evaluate, ext, fn, fold, index, isVexList, iterate, key, let_, lit, offset, ok, rec, ref, space, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, modelChain, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -16,6 +16,9 @@ const lastOf: ExtHandler = (_data, ctx) => ok(ctx.path.at(-1) ?? -1);
 
 /** An extension handler that gives the length of the path of its node: its depth. */
 const depthOf: ExtHandler = (_data, ctx) => ok(ctx.path.length);
+
+/** A program with `count` calls of one function. */
+const calls = (count: number): Expr => let_({ f: fn(["x"], app("add", variable("x"), ref("n"))) }, rec(Object.fromEntries(Array.from({ length: count }, (_x, i) => [`c${String(i)}`, call("f", lit(i))]))));
 
 /** A position from the text of a path: its length, modulo 3, the number of keys of the test. */
 const positionOf = (x: Expr): Expr => app("mod", app("length", x), lit(3));
@@ -233,6 +236,56 @@ describe("the tiers", () => {
       for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(part, { ...options, space: s, origin: k })));
       expect([p.tier, p.stats.fallbacks]).toEqual([2, 0]);
     }
+  });
+
+  it("FN.CALL: tier 2 puts the body of a function at each call, and an extension in the body gets the path of the body", () => {
+    const s = space.array([
+      { n: 1, w: "a" },
+      { n: -2, w: "bc" },
+      { n: 3, w: "" },
+    ]);
+    const options = { domains: [NumDomain, TextDomain, BoolDomain], extensions: { where: pathOf } };
+    const bind = {
+      tag: fn(["x"], app("concat", variable("x"), ext("where", null))),
+      plus: fn(["x", "y"], app("add", variable("x"), app("multiply", variable("y"), ref("n")))),
+      k: lit(10),
+    };
+    const parts: Readonly<Record<string, Expr>> = {
+      once: call("tag", ref("w")),
+      loop: app("sum", each(axes.all, call("plus", ref("n"), variable("k")))),
+      fold: fold(axes.reverse(axes.all), { a: lit(0) }, { a: call("plus", variable("a"), lit(1)) }, variable("a")),
+      // The body of g sees k of the place of its binding, not k of the place of the call.
+      nested: let_({ g: fn(["z"], call("plus", variable("z"), variable("k"))) }, let_({ k: lit(1000) }, call("g", lit(2)))),
+      // A name of a loop hides the function plus.
+      hidden: iterate(2, { plus: lit(1) }, { plus: app("add", variable("plus"), lit(1)) }, variable("plus")),
+    };
+    for (const part of Object.values(parts)) {
+      const e = let_(bind, part);
+      const p = tiered(e, options);
+      for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { ...options, space: s, origin: k })));
+      expect([p.tier, p.stats.fallbacks]).toEqual([2, 0]);
+    }
+    // A call with the wrong number of arguments, a call of a value, a function as a value and a call of a hidden function go to tier 1.
+    for (const part of [call("plus", lit(1)), call("k"), variable("tag"), iterate(1, { tag: lit(0) }, { tag: lit(1) }, call("tag", lit(1)))]) {
+      const e = let_(bind, part);
+      const r = tiered(e, options).run({ space: s, origin: "0" });
+      expect(fromCore(r)).toStrictEqual(fromCore(evaluate(e, { ...options, space: s, origin: "0" })));
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it("FN.CALL: tier 2 puts the bodies of functions in at most 10000 places, and tier 1 evaluates a program with more", () => {
+    const s = space.array([{ n: 1 }]);
+    const reason = "the calls put the bodies of functions in more than 10000 places";
+    expect(generate(calls(10_000), { domains: DOMAINS }).ok).toBe(true);
+    expect(generate(calls(10_001), { domains: DOMAINS })).toEqual({ ok: false, reason });
+    // Each function calls the one before it twice, so the program puts the body of f1 in 2 ** 14 places.
+    let chain: Expr = call("f15", lit(0));
+    for (let i = 15; i >= 1; i--) chain = let_({ [`f${String(i)}`]: fn(["x"], i === 1 ? app("add", variable("x"), lit(1)) : call(`f${String(i - 1)}`, call(`f${String(i - 1)}`, variable("x")))) }, chain);
+    const p = tiered(chain, { domains: DOMAINS });
+    expect([p.tier, p.reason]).toEqual([1, reason]);
+    expect(fromCore(p.run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 2 ** 14 });
+    expect(emitModule(chain, { domains: [NumDomain], schema: {} })).toEqual({ ok: false, reason });
   });
 
   it("COMPILE.FALLBACK: an exception in the lowering gives a reason, not an exception", () => {

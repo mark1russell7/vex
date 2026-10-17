@@ -77,6 +77,19 @@ export interface Program {
  * This function compiles an expression. The result gives the same results and the same traces as `evaluate`,
  * because `evaluate` uses it too.
  */
+/** A bound function (FN.BIND): its parameters, its compiled body and the names of the place of its binding. */
+class Closure {
+  readonly params: readonly string[];
+  readonly body: Node;
+  readonly env: ReadonlyMap<string, Result<unknown>>;
+
+  constructor(params: readonly string[], body: Node, env: ReadonlyMap<string, Result<unknown>>) {
+    this.params = params;
+    this.body = body;
+    this.env = env;
+  }
+}
+
 /** The deepest nesting of an expression that `compile` accepts (EVAL.NESTING). */
 export const MAX_NESTING = 500;
 
@@ -212,10 +225,19 @@ class Compiler {
         return this.#ref(e, info);
       case "var": {
         const name = e.name;
-        return (f, c) => this.#emit(c, info, f, f.env.get(name) ?? this.#err("unbound", `the name "${name}" has no binding`, f, path));
+        return (f, c) => {
+          const bound = f.env.get(name);
+          // A function is not a value (FN.VALUE).
+          if (bound?.ok === true && bound.value instanceof Closure) return this.#emit(c, info, f, this.#err("kind-mismatch", `the name "${name}" is a function, not a value`, f, path));
+          return this.#emit(c, info, f, bound ?? this.#err("unbound", `the name "${name}" has no binding`, f, path));
+        };
       }
+      case "fn":
+        return this.#fn(e, path);
+      case "call":
+        return this.#callFn(e, info);
       case "let": {
-        const binds = Object.entries(e.bind).map(([name, be], i): readonly [string, Node] => [name, this.node(be, [...path, i])]);
+        const binds = Object.entries(e.bind).map(([name, be], i): readonly [string, Node] => [name, be.tag === "fn" ? this.#fn(be, [...path, i]) : this.node(be, [...path, i])]);
         const body = this.node(e.body, [...path, binds.length]);
         return (f, c) => {
           const env = new Map(f.env);
@@ -257,6 +279,35 @@ class Compiler {
 
   #nodes(es: readonly Expr[], path: readonly number[]): readonly Node[] {
     return es.map((x, i) => this.node(x, [...path, i]));
+  }
+
+  /**
+   * This method compiles a function (FN.BIND). Its value is a closure: the parameters, the body, and the names of the
+   * place of its binding. A binding of `let` does not see the other bindings, so a function cannot call itself.
+   */
+  #fn(e: ExprOf<"fn">, path: readonly number[]): Node {
+    const body = this.node(e.body, [...path, 0]);
+    return (f) => ok(new Closure(e.params, body, f.env));
+  }
+
+  /**
+   * This method compiles a call (FN.CALL, FN.ARGS). Each parameter gets the result of its argument at the call, so an
+   * argument that fails has an effect only where the body reads it. The body evaluates at the position of the call.
+   */
+  #callFn(e: ExprOf<"call">, info: Info): Node {
+    const { path } = info;
+    const args = this.#nodes(e.args, path);
+    return (f, c) => {
+      const bound = f.env.get(e.fn);
+      if (bound === undefined) return this.#emit(c, info, f, this.#err("unbound", `the function "${e.fn}" has no binding`, f, path));
+      if (!bound.ok) return this.#emit(c, info, f, bound);
+      const callee = bound.value;
+      if (!(callee instanceof Closure)) return this.#emit(c, info, f, this.#err("kind-mismatch", `the name "${e.fn}" is a value, not a function`, f, path));
+      if (callee.params.length !== args.length) return this.#emit(c, info, f, this.#err("bad-expression", `the function "${e.fn}" takes ${String(callee.params.length)} arguments, not ${String(args.length)}`, f, path));
+      const env = new Map(callee.env);
+      callee.params.forEach((p, i) => env.set(p, (args[i] as Node)(f, c)));
+      return this.#emit(c, info, f, callee.body({ pos: f.pos, env }, c));
+    };
   }
 
   /** This method gives an error of a handler the path, the origin and the focus of its node, if it has no origin. */
@@ -797,6 +848,10 @@ export function labelOf(e: Expr): string {
       return e.op;
     case "let":
       return `let ${Object.keys(e.bind).join(", ")}`;
+    case "fn":
+      return `fn (${e.params.join(", ")})`;
+    case "call":
+      return `call ${e.fn}`;
     case "var":
       return e.name;
     case "rec":

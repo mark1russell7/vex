@@ -103,6 +103,11 @@ An expression is plain JSON data. It has one of these kinds.
 - **[LET.LAZY-ERROR]** A binding that fails has an effect only where a `var` reads it.
 - **[LET.UNBOUND]** A name without a binding gives `#NAME?`.
 - **[LET.VARS]** The caller of the interpreter can give variables.
+- **[FN.BIND]** A binding of `let` can be a function: the node `fn` with the names of its parameters and a body. The names of the parameters are distinct. A function is only the value of a binding of `let`.
+- **[FN.CALL]** The node `call` applies a bound function to arguments. Each parameter gets the result of its argument at the call, and an argument that fails has an effect only where the body reads it. The body evaluates at the position of the call, with the names of the place of the binding. A parameter, a binding or a name of a loop with the name of a function hides the function.
+- **[FN.TOTAL]** A binding of `let` does not see the other bindings of that `let`. Thus a function cannot call itself or another binding of its `let`, and each call ends.
+- **[FN.ARGS]** A call with another number of arguments than the parameters gives `#VALUE!`. A call of a name without a binding gives `#NAME?`, and a call of a value gives `#VALUE!`.
+- **[FN.VALUE]** A function is not a value: a `var` of its name gives `#VALUE!`.
 - **[REC.FIELDS]** `rec` makes a record of its fields. Two or more failed fields give `#ARGS`.
 
 ### 5.4 Axes

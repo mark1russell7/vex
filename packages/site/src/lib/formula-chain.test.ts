@@ -1,4 +1,4 @@
-import { SheetRun, vex, type AnyDomain, type Expr, type Space } from "@mark1russell7/vex";
+import { app, call, fn, iterate, let_, lit, ref, SheetRun, v, vex, type AnyDomain, type Expr, type Space } from "@mark1russell7/vex";
 import { fromCore } from "@mark1russell7/vex-testkit";
 import { compileAst, compileFormula, FORMULA_DOMAINS, toVexChain, type FormulaContext } from "@vex/formula";
 import { arbAst, arbTable, TABLE_COLUMNS } from "@vex/formula/testing";
@@ -61,5 +61,16 @@ describe("the Vex view of a formula", () => {
       "root.start(0).iterate(1, { x: root.start(0).iterate(2, { x: 1 }, (v0) => ({ x: v0.x._.add(1) }), (v0) => v0.x) }, (v0) => ({ x: v0.x._.multiply(2) }), (v0) => v0.x)",
     );
     expect(chain("RANK(qty)")).toBe('root.start(0).others((c) => root.start(true), { where: (c) => root.from("qty")._.gt(root.start(0).origin().from("qty")) }).count({ strict: true })._.add(1)');
+  });
+
+  it("FN.CALL: the view puts the body of a function at each call, and a call without a function has no chain", () => {
+    const twice = fn(["x"], app("multiply", v("x"), lit(2)));
+    expect(toVexChain(let_({ twice }, call("twice", ref("cost"))))).toBe('root.from("cost")._.multiply(2)');
+    // The body sees k of the place of its binding, and a name of a loop hides the function.
+    const plusK = fn(["x"], app("add", v("x"), v("k")));
+    expect(toVexChain(let_({ k: lit(1) }, let_({ plusK }, let_({ k: lit(100) }, call("plusK", lit(5))))))).toBe("root.start(5)._.add(1)");
+    expect(toVexChain(let_({ twice }, iterate(1, { twice: lit(1) }, { twice: call("twice", lit(3)) }, v("twice"))))).toBe("root.start(0).iterate(1, { twice: 1 }, (v0) => ({ twice: root.start(null) }), (v0) => v0.twice)");
+    expect(toVexChain(call("twice", lit(1)))).toBe("root.start(null)");
+    expect(toVexChain(let_({ twice }, call("twice")))).toBe("root.start(null)");
   });
 });

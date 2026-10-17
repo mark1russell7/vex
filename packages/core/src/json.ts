@@ -181,6 +181,10 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
     }
     case "iterate":
       return each("init") ?? each("step") ?? (u["until"] === undefined ? undefined : child("until")) ?? child("result") ?? ok(out);
+    case "fn":
+      return child("body") ?? ok(out);
+    case "call":
+      return each("args") ?? ok(out);
     case "ref":
       return address() ?? ok(out);
     default:

@@ -68,6 +68,7 @@ nearest.all().values(); // => [5, 5, 5]
 8. A program is JSON data. Use `serialize` and `parse` to keep it or send it. Follow `ir.schema.json` to write it by hand.
 9. Do not copy the math of a program into TypeScript. One program is the source of truth, and `explain` shows each step.
 10. For speed, compile the program with `tiered` of `@mark1russell7/vex-compiler`. It gives the results of the interpreter.
+11. Write a calculation that repeats as a function in a `let`, with `fn` and `call`. Do not copy the same expression twice.
 
 ## Two dimensions in one value
 
@@ -99,6 +100,7 @@ The builder makes an expression: a tree of plain data. Code can make the same tr
 | `ref(path, at?)` | The field at `path`, in the record at the address `at` |
 | `app(op, ...args)` | An op. The first argument is the receiver. `if`, `and`, `or` and `ifError` are `app` nodes too. |
 | `let_(bind, body)` and `v(name)` | Names and their values |
+| `fn(params, body)` and `call(name, ...args)` | A function as a binding of `let`, and a call of it. The body evaluates at the position of the call. |
 | `rec(fields)` | A record of values |
 | `each(axis, body, at?)` | A list: `body` at each target of `axis` |
 | `fold(axis, init, step, result, at?)` | A loop over the targets of `axis`, in order |
@@ -115,6 +117,19 @@ const sizes = space.array([{ size: new Vec2(10, 20) }, { size: new Vec2(30, 5) }
 const cell = app("max", app("reduce", each(axes.all, ref("size")), lit("max")), lit(1));
 
 evaluate(cell, { space: sizes, origin: "0", domains: [NumDomain, Vec2Domain] }); // => { ok: true, value: new Vec2(30, 20) }
+```
+
+A function cannot call itself, so each call ends. Use `iterate` for a loop, and a sheet for a calculation over the levels of a tree.
+
+```ts doctest
+import { app, call, evaluate, fn, let_, lit, ref, space, v } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+// The clamp of a value between 0 and the field max of the record, written once and called twice.
+const clamp = fn(["x"], app("min", app("max", v("x"), lit(0)), ref("max")));
+const spread = let_({ clamp }, app("subtract", call("clamp", ref("hi")), call("clamp", ref("lo"))));
+
+evaluate(spread, { space: space.array([{ lo: -5, hi: 50, max: 40 }]), origin: "0", domains: [NumDomain] }); // => { ok: true, value: 40 }
 ```
 
 ## Make Vex better

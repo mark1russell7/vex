@@ -43,7 +43,10 @@ function inline(e: Expr, name: string, by: Expr): Expr {
       return e.kind === "vex.cell" && d.column === name && d.at?.length === 0 ? by : e;
     }
     case "app":
+    case "call":
       return { ...e, args: e.args.map((x) => inline(x, name, by)) };
+    case "fn":
+      return { ...e, body: inline(e.body, name, by) };
     case "each": {
       const moves = at(e.at);
       return { ...e, body: inline(e.body, name, by), axis: e.axis.t === "where" ? { ...e.axis, test: inline(e.axis.test, name, by) } : e.axis, ...(moves === undefined ? {} : { at: moves }) };

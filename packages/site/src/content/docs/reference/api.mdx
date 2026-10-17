@@ -63,6 +63,7 @@ withHalf.from("weight").call("half").at("A"); // : Optional<number>
 | `children`, `ancestors`, `descendants`, `siblings` (each with `(body, { where })`) | The axes of a tree space |
 | `each(body, { where })` | The all axis inside the expression |
 | `with(binds, body)` | Binds names. The body gets a typed argument for each name. |
+| `functions(fns, body)` | Binds functions of `root.fn` (FN.BIND). The body gets a typed call of each function. |
 | `fork(branches)` | Evaluates each branch with the current value, and gives a record |
 | `ifError(fallback)` | Gives `fallback` when the chain gives an error |
 | `if(then, otherwise)` | For a boolean value: gives `then` or `otherwise`. Only the selected branch evaluates. |
@@ -80,6 +81,25 @@ org.start(0).parent().children((c) => c.from("pay")).sum().at("cto"); // => some
 ```
 
 An axis gives a list chain. `result(key)`, `at(key)` and `explain(key)` give the list at an origin: one item for each target, with its key and its result. A list chain has the reductions `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `values`, `keys`, `first` and `reduce(op)`. `sum`, `mean`, `min` and `max` take only numbers, and `reduce("max")` takes the values of a domain, for example vectors. `fold(init, step, result)` is a loop over the items, in order. Each reduction takes `{ strict: true }`. By default, a reduction skips error items. `keys()` gives the keys of the items with a value, and `errors()` gives the error of each item that failed.
+
+A list chain also has the ops on its order: `sortBy()`, `take(n)` and `nth(i)`. Its method `each(body)` goes over the items of the list, in their order. The body reads the fields of the record of each item.
+
+```ts doctest
+const rows = vex(NumDomain).over(space.array([{ w: 3, n: 30 }, { w: 1, n: 10 }, { w: 2, n: 20 }]));
+const byW = rows.start(0).each((c) => c.from("w")).sortBy();
+
+byW.each((t) => t.from("n")).values().at("0"); // => some([10, 20, 30])
+byW.nth(0).at("0"); // => some(1)
+```
+
+`root.fn(kinds, body)` makes a function, and `functions(fns, body)` of a chain binds it (FN.BIND). Each kind is `"number"`, `"string"`, `"boolean"` or `"any"`, and it gives the type of the chain of a parameter. The body of a function evaluates at the focus of each call.
+
+```ts doctest
+const rows = vex(NumDomain).over(space.array([{ w: 3, n: 30 }, { w: 1, n: 10 }]));
+const scaled = rows.fn(["number"], (x) => x._.multiply(rows.start(0).from("w")));
+
+rows.from("n").functions({ scaled }, (c, call) => call.scaled(c)).at("1"); // => some(10)
+```
 
 ### The traversal
 

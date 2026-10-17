@@ -109,7 +109,7 @@ The builder makes an expression: a tree of plain data. Code can make the same tr
 
 The moves are `key(k)`, `index(i)`, `offset(...d)`, `other`, `origin` and `parent`. `key` and `index` also take an expression. The axes are in `axes`, for example `axes.all`, `axes.others`, `axes.window(from, to)`, `axes.reverse(axis)`, `axes.list(expr)` and `axes.where(axis, test)`. In the builder, the option `reverse: true` of an axis gives the reverse order.
 
-A list is a value. Bind it with `let_`, sort it with `sortBy`, and loop over its items in their order with `axes.list(v(name))`. `take(list, n)` gives the first items, and `nth(list, i)` gives one value.
+A list is a value. Bind it with `let_`, sort it with `sortBy`, and loop over its items in their order with `axes.list(v(name))`. `take(list, n)` gives the first items, and `nth(list, i)` gives one value. In the builder, a list chain has `sortBy()`, `take(n)`, `nth(i)` and `each(body)`, and `root.fn(kinds, body)` with `functions(fns, body)` makes and binds functions.
 
 ```ts doctest
 import { app, axes, each, evaluate, lit, ref, space } from "@mark1russell7/vex";

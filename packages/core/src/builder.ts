@@ -2,10 +2,10 @@
  * The typed builder. Method calls make an expression of the IR. The builder has no other job: it does not
  * evaluate anything until a caller asks for a value.
  */
-import type { AnyDomain, Domain, OpSpec } from "./domain.ts";
+import type { AnyDomain, Domain, OpSpec, PrimitiveKind } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { app, each, ext, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type ExprOf, type FixedMove, type Move } from "./ir.ts";
+import { app, call as callExpr, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -17,6 +17,7 @@ import { traversal, type Traversal } from "./traversal.ts";
 
 declare const ARG_TYPE: unique symbol;
 declare const CHAIN_VALUE: unique symbol;
+declare const FN_RESULT: unique symbol;
 
 /** An argument token: an expression with the static type `T` of its value. */
 export interface Arg<T> {
@@ -224,6 +225,11 @@ export interface ChainBase<Ctx extends ChainContext, T> {
     binds: B,
     body: (c: ChainOf<Ctx, T>, vars: { readonly [N in keyof B]: Arg<ArgValue<Ctx, B[N]>> }) => ChainBase<Ctx, U>,
   ): ChainOf<Ctx, U>;
+  /**
+   * This method binds functions of `root.fn` (BUILD.FN) and gives the value of `body`. `call` gives a chain of a call of
+   * each function. A function cannot call another function of the same `functions`, so it uses an outer one (FN.TOTAL).
+   */
+  functions<const F extends Readonly<Record<string, FnDef<readonly FnParamKind[], unknown>>>, U>(fns: F, body: (c: ChainOf<Ctx, T>, call: FnCalls<Ctx, F>) => ChainBase<Ctx, U>): ChainOf<Ctx, U>;
   /** The others axis: the body evaluates at each key except the focus. Its start value is the current value. */
   others<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The neighbors axis of a grid. */
@@ -262,6 +268,13 @@ export interface AxisOpts<Ctx extends ChainContext, T> {
   readonly where?: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, boolean>;
   /** With `true`, the targets come in the reverse order (AXIS.REVERSE). The axis table has no reverse order. */
   readonly reverse?: boolean;
+}
+
+/** A function of the builder in its implementation: the kinds of its parameters, and the function that gives its body. */
+interface FnDefImpl {
+  readonly kind: "vex.fn";
+  readonly params: readonly string[];
+  readonly build: (...params: ChainImpl[]) => { readonly program: Expr };
 }
 
 /** The options of an axis in the implementation of the builder. */
@@ -306,6 +319,28 @@ export type LoopVars<Ctx extends ChainContext, I> = { readonly [N in keyof I]: C
 /** The next values of a step of a loop: a value for some of the names of `init`. */
 export type LoopStep<Ctx extends ChainContext, I> = { readonly [N in keyof I]?: ArgInput<LoopValue<Ctx, I[N]>, Ctx, false> };
 
+/** The kind of a parameter of a function of the builder (BUILD.FN): a primitive type, or `any`. */
+export type FnParamKind = PrimitiveKind | "any";
+
+/** The type of a value of a kind of a parameter. */
+export type KindValue<K> = K extends "number" ? number : K extends "string" ? string : K extends "boolean" ? boolean : unknown;
+
+/** A chain of each parameter of a function of the builder. */
+export type ParamChains<Ctx extends ChainContext, P extends readonly FnParamKind[]> = { readonly [I in keyof P]: ChainOf<Ctx, KindValue<P[I]>> };
+
+/** A function of the builder (BUILD.FN): the kinds of its parameters and its body. `functions` binds it. */
+export interface FnDef<P extends readonly FnParamKind[], R> {
+  readonly kind: "vex.fn";
+  readonly params: P;
+  /** This phantom member carries the type of the result. It is not present at run time. */
+  readonly [FN_RESULT]?: R;
+}
+
+/** The calls of the functions of `functions`: each gives a chain of a call (FN.CALL). */
+export type FnCalls<Ctx extends ChainContext, F> = {
+  readonly [N in keyof F]: F[N] extends FnDef<infer P, infer R> ? (...args: { readonly [I in keyof P]: ArgInput<KindValue<P[I]>, Ctx, false> }) => ChainOf<Ctx, R> : never;
+};
+
 export interface ListChain<Ctx extends ChainContext, U> {
   readonly kind: "vex.list-chain";
   /** The expression of the chain, as plain data. */
@@ -334,6 +369,17 @@ export interface ListChain<Ctx extends ChainContext, U> {
   errors(): ChainOf<Ctx, readonly VexError[]>;
   first(opts?: ListOpts): ChainOf<Ctx, U>;
   reduce(op: OpNames<DomainFor<Ctx["domains"], U>>, opts?: ReduceOpts<Ctx>): ChainOf<Ctx, U>;
+  /** The items in the order of their values, from the smallest (LIST.SORT). The values are numbers or texts of one kind. */
+  sortBy(opts?: ListOpts): ListChain<Ctx, U>;
+  /** The first `n` items (LIST.TAKE). */
+  take(n: number, opts?: ListOpts): ListChain<Ctx, U>;
+  /** The value of the item at the position `i`, from 0 (LIST.NTH). */
+  nth(i: number, opts?: ListOpts): ChainOf<Ctx, U>;
+  /**
+   * The axis list (AXIS.LIST): the body evaluates at the key of each item, in the order of the list. The body reads the
+   * fields of the record of the item. The chain of the body has no value of its own.
+   */
+  each<V>(body: (c: ChainOf<Ctx, null>) => ChainBase<Ctx, V>, opts?: AxisOpts<Ctx, null>): ListChain<Ctx, V>;
   /** The list at the origin `k`: one item for each target of the axis, with its key and its result. */
   result(k: Ctx["keys"]): Result<VexList<U>>;
   /** The list at the origin `k`, as an `Optional`. */
@@ -376,6 +422,11 @@ export interface Root<Ctx extends ChainContext> {
   ext<T>(kind: string, data?: unknown): Arg<T>;
   /** This method starts a sheet over the space: named columns of formulas. Refer to `Sheet`. */
   sheet(): Sheet<Ctx, object>;
+  /**
+   * This method makes a function (BUILD.FN) with the kinds of its parameters. The body gets a chain of each parameter,
+   * and it evaluates at the focus of each call. The method `functions` of a chain binds the function.
+   */
+  fn<const P extends readonly FnParamKind[], R>(params: P, body: (...params: ParamChains<Ctx, P>) => ChainBase<Ctx, R>): FnDef<P, R>;
   /** The space of the root. */
   readonly space: Space<Ctx["keys"], Ctx["record"]>;
 }
@@ -622,6 +673,22 @@ class ChainImpl {
     return new ChainImpl({ ...this.#s, expr: let_(bindExprs, inner.program) });
   }
 
+  functions(fns: Readonly<Record<string, FnDefImpl>>, body: (c: ChainImpl, call: Readonly<Record<string, (...args: readonly unknown[]) => ChainImpl>>) => { readonly program: Expr }): ChainImpl {
+    const depth = this.#s.depth;
+    const binds: Record<string, Expr> = {};
+    const calls: Record<string, (...args: readonly unknown[]) => ChainImpl> = {};
+    for (const [n, def] of Object.entries(fns)) {
+      const unique = `${n}$${depth}`;
+      const params = def.params.map((_k, i) => `${unique}$${i}`);
+      // A parameter is a chain at the focus of the call, so a field of the body reads at the call.
+      const chains = params.map((p) => new ChainImpl({ ...this.#s, expr: v(p), addr: [], depth: depth + 1 }));
+      binds[unique] = fnExpr(params, def.build(...chains).program);
+      calls[n] = (...args) => new ChainImpl({ ...this.#s, expr: callExpr(unique, ...args.map((a) => toExpr(a, []))), addr: [], depth: depth + 1 });
+    }
+    const inner = body(new ChainImpl({ ...this.#s, depth: depth + 1 }), calls);
+    return new ChainImpl({ ...this.#s, expr: let_(binds, inner.program) });
+  }
+
   /**
    * This method gives the names of a loop. Each name of `init` gets a name that is unique at the depth of the chain.
    * It also gets its first value at the address of the chain, and a chain of its value.
@@ -729,13 +796,16 @@ class ListChainImpl {
     step: (vars: Readonly<Record<string, ChainImpl>>, item: ChainImpl) => Readonly<Record<string, unknown>>,
     result: (vars: Readonly<Record<string, ChainImpl>>) => unknown,
   ): ChainImpl {
-    // The list of an axis is a let of the start value around the axis. The fold keeps the let, and the body of the
-    // axis is the item of each step.
-    const { bind, body: loop } = this.#s.expr as ExprOf<"let"> & { readonly body: ExprOf<"each"> };
+    // The list of an axis is a let of the start value around the axis, and the list of `each` of a list is the axis
+    // alone. The fold keeps the let, and the body of the axis is the item of each step.
+    const e = this.#s.expr;
+    const loop = e.tag === "let" && e.body.tag === "each" ? e.body : e.tag === "each" ? e : undefined;
+    if (loop === undefined) throw new TypeError("fold needs the list of an axis: go over the items of the list with each first");
     const names = new ChainImpl({ ...this.#s, expr: lit(null) }).loopNames(init);
     const item = new ChainImpl({ ...this.#s, expr: loop.body, addr: [] });
     const next = stepExprs(step(names.vars, item), names.unique, []);
-    return new ChainImpl({ ...this.#s, expr: let_(bind, foldExpr(loop.axis, names.first, next, toExpr(result(names.vars), this.#s.addr), loop.at)) });
+    const folded = foldExpr(loop.axis, names.first, next, toExpr(result(names.vars), this.#s.addr), loop.at);
+    return new ChainImpl({ ...this.#s, expr: e.tag === "let" ? let_(e.bind, folded) : folded });
   }
 
   #op(op: string, extra: readonly Expr[], opts?: ListOpts & { readonly domain?: string }): ChainImpl {
@@ -782,6 +852,26 @@ class ListChainImpl {
   reduce(op: string, opts?: ListOpts & { readonly domain?: string }): ChainImpl {
     return this.#op("reduce", [lit(op)], opts);
   }
+  #list(op: string, extra: readonly Expr[], opts?: ListOpts): ListChainImpl {
+    return new ListChainImpl({ ...this.#s, expr: this.#op(op, extra, opts).program });
+  }
+  sortBy(opts?: ListOpts): ListChainImpl {
+    return this.#list("sortBy", [], opts);
+  }
+  take(n: number, opts?: ListOpts): ListChainImpl {
+    return this.#list("take", [lit(n)], opts);
+  }
+  nth(i: number, opts?: ListOpts): ChainImpl {
+    return this.#op("nth", [lit(i)], opts);
+  }
+  each(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
+    // The chain of the body is at the key of the item, and it has no value of its own.
+    const start = new ChainImpl({ ...this.#s, expr: lit(null), addr: [], depth: this.#s.depth + 1 });
+    const list: Axis = { t: "list", list: this.#s.expr };
+    const ordered: Axis = opts?.reverse === true ? { t: "reverse", axis: list } : list;
+    const axis: Axis = opts?.where === undefined ? ordered : { t: "where", axis: ordered, test: opts.where(start).program };
+    return new ListChainImpl({ ...this.#s, expr: each(axis, body(start).program) });
+  }
   result(k: string): Result<unknown> {
     return evaluate(this.#s.expr, evalOptions(this.#s, k));
   }
@@ -827,6 +917,9 @@ class RootImpl {
   }
   sheet(): SheetImpl {
     return new SheetImpl(this.#env, new Map());
+  }
+  fn(params: readonly string[], build: (...params: ChainImpl[]) => { readonly program: Expr }): FnDefImpl {
+    return { kind: "vex.fn", params, build };
   }
   rec(fields: Readonly<Record<string, unknown>>): Arg<unknown> {
     const out: Record<string, Expr> = {};

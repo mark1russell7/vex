@@ -463,3 +463,40 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     expect(error(rows.start(0).offset(-1).others((o) => o.from("v")).sum().result("0")).code).toBe("#REF!");
   });
 });
+
+describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER)", () => {
+  const rows = vex(Num).over(space.array([{ w: 3, n: 30 }, { w: 1, n: 10 }, { w: 2, n: 20 }]));
+
+  it("BUILD.FN: root.fn makes a function with typed parameters, functions binds it, and call gives a typed chain", () => {
+    const scaled = rows.fn(["number"], (x) => x._.times(rows.start(0).from("w")));
+    const plus = rows.fn(["number", "number"], (a, b) => a._.plus(b));
+    const e = rows.from("n").functions({ scaled, plus }, (c, call) => call.plus(call.scaled(c), 1));
+    expectTypeOf(e.result("0")).toEqualTypeOf<Result<number>>();
+    // The body of scaled reads w at the focus of the call: here the origin.
+    expect(e.all().values()).toEqual([91, 11, 41]);
+    // Inside an axis, the body reads w at each target.
+    const total = rows.start(0).functions({ scaled }, (c, call) => c.each((t) => call.scaled(t.from("n"))).sum());
+    expect(total.all().values()).toEqual([140, 140, 140]);
+    // A function of an outer functions is in the scope of an inner one (FN.TOTAL).
+    const twice = rows.from("n").functions({ scaled }, (c, outer) => c.functions({ again: rows.fn(["number"], (x) => outer.scaled(outer.scaled(x))) }, (d, inner) => inner.again(d)));
+    expect(twice.all().values()).toEqual([270, 10, 80]);
+    const program = e.program;
+    expect(program.tag).toBe("let");
+    expect(Object.values((program as { bind: Readonly<Record<string, { tag: string }>> }).bind).map((x) => x.tag)).toEqual(["fn", "fn"]);
+  });
+
+  it("BUILD.LIST.ORDER: sortBy, take and nth on a list chain, and each over the items of a list", () => {
+    const byW = rows.start(0).each((c) => c.from("w")).sortBy();
+    expect(optionalValue(byW.keys().at("0"))).toEqual(["1", "2", "0"]);
+    expect(optionalValue(byW.take(2).keys().at("0"))).toEqual(["1", "2"]);
+    expectTypeOf(byW.nth(1).result("0")).toEqualTypeOf<Result<number>>();
+    expect(optionalValue(byW.nth(1).at("0"))).toBe(2);
+    // each goes over the items in the order of the list, also from its end and with a test.
+    expect(optionalValue(byW.each((t) => t.from("n")).values().at("0"))).toEqual([10, 20, 30]);
+    expect(optionalValue(byW.each((t) => t.from("n"), { reverse: true, where: (t) => t.from("w")._.gt(1) }).values().at("0"))).toEqual([30, 20]);
+    // fold goes over the list of each, and it needs the list of an axis.
+    expect(optionalValue(byW.each((t) => t.from("n")).fold({ s: 0 }, (vars, item) => ({ s: vars.s._.plus(item) }), (vars) => vars.s).at("0"))).toBe(60);
+    expect(() => byW.fold({ s: 0 }, (vars) => ({ s: vars.s }), (vars) => vars.s)).toThrow("fold needs the list of an axis");
+    expect(error(byW.take(2, { strict: true }).nth(5).result("0")).code).toBe("#N/A");
+  });
+});

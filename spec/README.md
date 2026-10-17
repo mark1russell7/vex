@@ -178,6 +178,8 @@ An expression is plain JSON data. It has one of these kinds.
 - **[BUILD.LIST.KEYS]** A list chain has `keys()` and `errors()`. `keys()` gives the keys of the items with a value, in the order of the axis. `errors()` gives the error of each item that failed.
 - **[BUILD.IF]** `if(then, otherwise)` on a boolean chain gives the form `if`: the expression is `app("if", value, then, otherwise)`.
 - **[BUILD.LIST.READ]** A list chain gives its list at an origin with `result`, `at` and `explain`, like a chain. Each item has the key of its target and its result.
+- **[BUILD.FN]** `root.fn(kinds, body)` makes a function with the kinds of its parameters. `functions(fns, body)` of a chain binds the functions, and `call` gives a chain of a call of each function.
+- **[BUILD.LIST.ORDER]** A list chain has `sortBy`, `take` and `nth`. Its method `each(body)` is the axis list over its items. `fold` needs the list of an axis.
 - **[BUILD.CALL]** `call(name, ...args)` applies a free function of `withOptions`: the expression is `app(name, value, ...args)`. A domain op with the same name for the value comes first at run time.
 - **[TYPE.FROM]** `from(p)` accepts only the fields of the record type, and the chain value has the type of the field.
 - **[TYPE.OPS]** `._` has only the ops of the domain of the current value, with the parameter types of each op.

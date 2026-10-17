@@ -199,7 +199,8 @@ describe("the contracts of the interpreter", () => {
     expect(run(app("add", lit(1), bad(null)))).toEqual(["#VALUE!", "bad-expression", "the expression has a part that is not a node"]);
     expect(shapeError(app("add", lit(1), lit(2)))).toBeUndefined();
     // A node of a known tag with a missing part is not a node of a newer version.
-    for (const tag of ["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "ext"]) expect(shapeError({ tag })).not.toMatch(/does not know/);
+    for (const tag of ["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "fn", "call", "ext"]) expect(shapeError({ tag })).not.toMatch(/does not know/);
+    expect(shapeError({ tag: "each", axis: axes.all, body: lit(1), at: 5 })).toBe('the expression has a node "each" with parts that are not valid');
     // A sheet gives the same error for its column, and the other columns work.
     const sheetRun = new SheetRun(new Map([["bad", newer], ["good", lit(2)]]), { space: rows, domains: [Num] });
     expect(error(sheetRun.cell("bad", "0")).message).toBe(unknown[2]);

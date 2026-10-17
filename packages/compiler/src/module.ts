@@ -338,7 +338,13 @@ const STEPS: Readonly<Record<string, readonly [string, string]>> = {
 };
 
 /** The helpers that each helper uses. */
-const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"], V: ["F"], SB: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"] };
+const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
+  F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"],
+  // Only SB, TK and NT use V, and they need F too, so the need of V only completes the list.
+  // Stryker disable next-line ArrayDeclaration: see the comment above
+  V: ["F"],
+  SB: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"],
+};
 
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
@@ -828,8 +834,10 @@ class Printer {
         return bare(this.#var(e.name, ctx));
       case "let":
         return this.#let(e, ctx);
-      case "fn":
-        throw new NotStandalone("a function outside the bindings of a let");
+      // A function is only a binding of let, so the check of the shape stops this node first.
+      // Stryker disable next-line all: see the comment above
+      /* v8 ignore next -- @preserve */
+      case "fn": throw new NotStandalone("a function outside the bindings of a let");
       case "call":
         return this.#call(e, ctx);
       case "rec": {
@@ -1021,6 +1029,7 @@ class Printer {
         s.push(...c.s);
         return { code: c.v.code, kind: c.v.kind, deps: c.v.deps };
       }
+      // Stryker disable next-line ConditionalExpression: the statements with a read of a name bind other names and do not throw, so the read alone has the same value
       if (c.s.length === 0 && c.v.held !== undefined) return { code: c.v.held, kind: c.v.kind, deps: c.v.deps };
       const b = this.fresh("b");
       s.push(...this.#store(b, c));

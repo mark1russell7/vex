@@ -732,6 +732,10 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const deeper = op("sum", each(axes.all, let_({ k: w }, let_({ f: fn(["x"], op("add", v("x"), v("k"))) }, op("multiply", call("f", big), lit(2))))));
     expectSame(make(sourceOf(deeper)), deeper);
     expectSame(make(sourceOf(deeper)), deeper, MANY);
+    // A part of a loop that calls a function at the start of a run is a column, also when its arguments are not columns.
+    const atStart = let_({ f: fn(["x", "y", "z"], op("add", op("multiply", v("x"), v("y")), v("z"))) }, op("sum", each(axes.all, call("f", op("add", w, n), op("multiply", w, n), op("subtract", w, n)))));
+    expect(sourceOf(atStart)).toMatch(/const col\d+ = /);
+    expectSame(make(sourceOf(atStart)), atStart);
     // A function is printed once for each signature of its arguments, also for many calls.
     const calls = let_({ f: fn(["x"], op("add", v("x"), n)) }, rec(Object.fromEntries(Array.from({ length: 300 }, (_x, i) => [`c${String(i)}`, call("f", lit(i))]))));
     const many = sourceOf(calls);
@@ -820,6 +824,14 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const memo = let_({ xs: each(axes.window(-1, 1), n) }, op("sum", each(axes.all, op("count", each(axes.list(v("xs")), w)))));
     expectSame(make(sourceOf(memo)), memo);
     expectSame(make(sourceOf(memo)), memo, MANY);
+    // A node of the memo with a list as its value keeps the list: here the sorted values of each group of b.
+    const grouped = op("sum", each(axes.all, op("nth", op("sortBy", each(axes.where(axes.all, op("eq", ref("b"), ref("b", [{ t: "origin" }]))), w)), lit(0))));
+    expectSame(make(sourceOf(grouped)), grouped);
+    expectSame(make(sourceOf(grouped)), grouped, MANY);
+    // nth over the items of an axis, and an op on the order of a list without a list.
+    const nthOfItems = op("nth", each(axes.all, w), lit(1));
+    expectSame(make(sourceOf(nthOfItems)), nthOfItems);
+    expect(reasonOf(op("count", app("sortBy")))).toBe(undecided("sortBy"));
     expect(reasonOf(op("sum", each(axes.list(sorted), n, [offset(1)])))).toBe('the axis "list" with an address');
   });
 

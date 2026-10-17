@@ -227,6 +227,7 @@ const CASES: readonly Case[] = [
   { name: "a parameter that hides a function", expr: let_({ f: fn(["x"], v("x")) }, let_({ g: fn(["f"], call("f")) }, call("g", lit(1)))) },
   { name: "a name of a loop that hides a function", expr: let_({ f: fn([], lit(1)) }, iterate(1, { f: lit(2) }, { f: v("f") }, call("f"))) },
   { name: "an argument that fails and that the body does not read", expr: let_({ f: fn(["x", "y"], v("x")) }, call("f", lit(1), ref("mass"))) },
+  { name: "a function that hides a value of an outer let", expr: let_({ f: lit(5) }, let_({ f: fn(["x"], app("add", v("x"), lit(1))) }, call("f", lit(1)))) },
   // Lists as values (LIST.VALUE, AXIS.LIST)
   { name: "a list axis over a sorted list", expr: app("values", each(axes.list(app("sortBy", each(axes.all, app("negate", ref("n"))))), ref("name"))) },
   { name: "a list axis in the reverse order", expr: app("values", each(axes.reverse(axes.list(ns)), ref("name"))) },
@@ -237,6 +238,7 @@ const CASES: readonly Case[] = [
   { name: "sortBy of texts", expr: app("keys", app("sortBy", each(axes.all, ref("name")))) },
   { name: "sortBy of two kinds", expr: app("sortBy", each(axes.all, app("if", ref("b"), ref("n"), ref("name")))) },
   { name: "sortBy with strict and an error item", expr: app("sortBy", each(axes.all, ref("deep.x")), lit({ strict: true })) },
+  { name: "sortBy without strict skips the error items", expr: app("errors", app("sortBy", each(axes.all, ref("deep.x")))) },
   { name: "take", expr: app("keys", app("take", ns, lit(2))) },
   { name: "sortBy that keeps the order of equal values", expr: app("keys", app("sortBy", each(axes.all, app("if", ref("b"), lit(1), lit(0))))) },
   { name: "sortBy of booleans", expr: app("sortBy", bs) },

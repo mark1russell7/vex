@@ -109,7 +109,7 @@ describe("lists as values", () => {
     expect(keysOf(run(app("take", sorted, lit(9))))).toEqual(["1", "3", "2", "0"]);
     expect(value(run(app("nth", sorted, lit(2))))).toBe(20);
     expect(value(run(app("nth", sorted, lit(0))))).toBe(10);
-    expect(error(run(app("nth", sorted, lit(4))))).toMatchObject({ code: "#N/A", message: '"nth" has no item at the position 4, and the list has 4 items' });
+    expect(error(run(app("nth", sorted, lit(4))))).toMatchObject({ code: "#N/A", op: "nth", message: '"nth" has no item at the position 4, and the list has 4 items' });
     for (const bad of [lit(-1), lit(1.5), lit("1"), lit(Number.MAX_SAFE_INTEGER + 1)]) {
       expect(error(run(app("take", sorted, bad))).code).toBe("#VALUE!");
       expect(error(run(app("nth", sorted, bad))).code).toBe("#VALUE!");

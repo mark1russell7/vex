@@ -6,11 +6,11 @@ import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { defineDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
-import { app, axes, axisExprs, children, each, fold, isExpr, let_, lit, ref, v, type Expr } from "./ir.ts";
+import { app, axes, axisExprs, call, children, each, fn, fold, isExpr, let_, lit, rec, ref, v, type Expr } from "./ir.ts";
 import { isVexList } from "./list.ts";
 import { parse, serialize } from "./json.ts";
 import { axisTargets, space } from "./space.ts";
-import { error, value } from "./test-support.ts";
+import { error, Pt, PtDomain, value } from "./test-support.ts";
 
 const Num = defineDomain({
   name: "Num",
@@ -66,7 +66,11 @@ describe("lists as values", () => {
     const keys = { kind: "vex.list", items: [{ key: "7", result: { ok: true, value: 1 } }] };
     expect(error(evaluate(app("first", each(axes.list(v("k")), ref("w")), lit({ strict: true })), { space: boxes, origin: "0", domains: [Num], vars: { k: keys } }))).toMatchObject({ code: "#N/A", focus: "7" });
     // A space alone cannot give the targets of the axis list.
-    expect(axisTargets(boxes, { origin: "0", focus: "0" }, { t: "list", list: xs })).toMatchObject({ ok: false, error: { code: "#VALUE!" } });
+    expect(axisTargets(boxes, { origin: "0", focus: "0" }, { t: "list", list: xs })).toMatchObject({ ok: false, error: { code: "#VALUE!", message: 'the axis "list" needs the evaluator, which gives the value of its list' } });
+    // An error of the list has the path of the list, and an error of a test has the path of the test.
+    expect(error(run(each(axes.list(ref("nope")), ref("w")))).path).toEqual([1]);
+    const tested = value(run(each(axes.where(axes.list(xs), ref("nope")), ref("w")))) as { items: readonly { result: { ok: boolean; error?: { path: readonly number[] } } }[] };
+    expect(tested.items[0]?.result.error?.path).toEqual([2]);
   });
 
   it("LIST.SORT: sortBy orders the items by their values, from the smallest, and keeps the order of equal values", () => {
@@ -82,13 +86,21 @@ describe("lists as values", () => {
     expect(keysOf(run(app("sortBy", partial)))).toEqual(["1", "3", "0"]);
   });
 
+  it("LIST.SORT: a long list with equal values gets the order of the values, and equal values keep their order", () => {
+    // A long list goes through the merges of the sort of the engine, so each part of the comparison counts.
+    const many = space.array(Array.from({ length: 300 }, (_x, i) => ({ v: (i * 7919) % 101 })));
+    const r = evaluate(app("keys", app("sortBy", each(axes.all, ref("v")))), { space: many, origin: "0" });
+    const expected = many.keys.toSorted((a, b) => ((Number(a) * 7919) % 101) - ((Number(b) * 7919) % 101) || Number(a) - Number(b));
+    expect(value(r)).toEqual(expected);
+  });
+
   it("LIST.SORT: values of two kinds, NaN and other values give #VALUE!", () => {
     const mixed = space.array([{ v: 1 }, { v: "a" }]);
     const sortV = app("sortBy", each(axes.all, ref("v")));
     expect(error(evaluate(sortV, { space: mixed, origin: "0" }))).toMatchObject({ code: "#VALUE!", message: '"sortBy" needs numbers without NaN or texts, all of one kind, but an item is a string' });
     expect(error(evaluate(sortV, { space: space.array([{ v: 2 }, { v: Number.NaN }]), origin: "0" })).message).toBe('"sortBy" needs numbers without NaN or texts, all of one kind, but an item is NaN');
     expect(error(evaluate(sortV, { space: space.array([{ v: true }]), origin: "0" })).message).toBe('"sortBy" needs numbers without NaN or texts, all of one kind, but an item is a boolean');
-    expect(error(evaluate(app("sortBy", each(axes.all, lit(null))), { space: mixed, origin: "0" })).message).toBe('"sortBy" needs numbers without NaN or texts, all of one kind, but an item is a null');
+    expect(error(evaluate(app("sortBy", each(axes.all, lit(null))), { space: mixed, origin: "0" }))).toMatchObject({ op: "sortBy", message: '"sortBy" needs numbers without NaN or texts, all of one kind, but an item is a null' });
   });
 
   it("LIST.TAKE LIST.NTH: the first items of a list, and the value at a position", () => {
@@ -102,7 +114,7 @@ describe("lists as values", () => {
       expect(error(run(app("take", sorted, bad))).code).toBe("#VALUE!");
       expect(error(run(app("nth", sorted, bad))).code).toBe("#VALUE!");
     }
-    expect(error(run(app("nth", sorted))).message).toBe('"nth" needs a whole number from 0, not undefined');
+    expect(error(run(app("nth", sorted)))).toMatchObject({ op: "nth", message: '"nth" needs a whole number from 0, not undefined' });
     // The options come after the number. Strict gives the first error item.
     const gaps = each(axes.all, ref("x", [{ t: "offset", d: [1] }]));
     expect(value(run(app("nth", gaps, lit(2))))).toBe(10);
@@ -118,6 +130,15 @@ describe("lists as values", () => {
     expect(isExpr(e)).toBe(true);
     expect(isExpr({ tag: "each", axis: { t: "list" }, body: lit(1) })).toBe(false);
     expect(value(parse(value(serialize(let_({ xs }, e))), []))).toEqual(let_({ xs }, e));
+    // JSON encodes a value of a domain in the list of an axis, also inside reverse, and in a function and a call.
+    const pt = lit(new Pt(1, 2));
+    const encoded = rec({
+      list: each(axes.list(each(axes.all, pt)), lit(1)),
+      reverse: each(axes.reverse(axes.list(each(axes.all, pt))), lit(1)),
+      fn: let_({ f: fn(["x"], app("add", v("x"), pt)) }, call("f", pt)),
+    });
+    expect(value(parse(value(serialize(encoded, [PtDomain])), [PtDomain]))).toStrictEqual(encoded);
+    expect(error(parse('{"tag":"each","axis":null,"body":{"tag":"lit","value":1}}', [])).code).toBe("#VALUE!");
     // The read of the list is outside the axis, and the reads of the body and the test are inside it.
     expect(deps(each(axes.where(axes.list(xs), test), ref("w")))).toEqual([
       { at: [], path: ["w"], axes: ["where"], axisAt: [[]] },

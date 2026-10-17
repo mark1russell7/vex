@@ -678,6 +678,7 @@ class ChainImpl {
     const binds: Record<string, Expr> = {};
     const calls: Record<string, (...args: readonly unknown[]) => ChainImpl> = {};
     for (const [n, def] of Object.entries(fns)) {
+      if ((def as { readonly kind?: unknown }).kind !== "vex.fn") throw new TypeError(`the function "${n}" is not a function of root.fn`);
       const unique = `${n}$${depth}`;
       const params = def.params.map((_k, i) => `${unique}$${i}`);
       // A parameter is a chain at the focus of the call, so a field of the body reads at the call.
@@ -799,8 +800,8 @@ class ListChainImpl {
     // The list of an axis is a let of the start value around the axis, and the list of `each` of a list is the axis
     // alone. The fold keeps the let, and the body of the axis is the item of each step.
     const e = this.#s.expr;
-    const loop = e.tag === "let" && e.body.tag === "each" ? e.body : e.tag === "each" ? e : undefined;
-    if (loop === undefined) throw new TypeError("fold needs the list of an axis: go over the items of the list with each first");
+    const loop = e.tag === "let" ? e.body : e;
+    if (loop.tag !== "each") throw new TypeError("fold needs the list of an axis: go over the items of the list with each first");
     const names = new ChainImpl({ ...this.#s, expr: lit(null) }).loopNames(init);
     const item = new ChainImpl({ ...this.#s, expr: loop.body, addr: [] });
     const next = stepExprs(step(names.vars, item), names.unique, []);

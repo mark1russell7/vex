@@ -80,6 +80,9 @@ describe("functions", () => {
     expect(shapeError(let_({ f: fn(["x", "x"], v("x")) }, lit(1)))).toBe("the expression has a function outside the bindings of a let, or a function with parameters that are not distinct names");
     expect(isExpr({ tag: "call", fn: 1, args: [] })).toBe(false);
     expect(isExpr({ tag: "call", fn: "f", args: {} })).toBe(false);
+    // A binding with the field params is a function only if its tag is fn.
+    expect(isExpr({ tag: "let", bind: { f: { tag: "lit", value: 1, params: ["x"] } }, body: { tag: "lit", value: 2 } })).toBe(true);
+    expect(isExpr({ tag: "let", bind: { f: 5 }, body: { tag: "lit", value: 2 } })).toBe(false);
   });
 
   it("DEPS.READS: the reads of a call are the reads of the body at the call, inside the axes of the call", () => {
@@ -90,8 +93,9 @@ describe("functions", () => {
       { at: [], path: ["n"], axes: ["all"], axisAt: [[]] },
       { at: [], path: ["w"], axes: ["all"], axisAt: [[]] },
     ]);
-    // A parameter or a binding with the name of a function hides it.
+    // A parameter or a binding with the name of a function hides it, and a binding with another name does not.
     expect(deps(let_({ weight }, let_({ weight: lit(1) }, call("weight", lit(1)))))).toEqual([]);
+    expect(deps(let_({ weight }, let_({ k: lit(1) }, call("weight", lit(1)))))).toEqual([{ at: [], path: ["w"], axes: [], axisAt: [] }]);
     expect(deps(call("weight", ref("n")))).toEqual([{ at: [], path: ["n"], axes: [], axisAt: [] }]);
   });
 
@@ -104,8 +108,9 @@ describe("functions", () => {
     // The step, the result and the test of until do not read the body of the function.
     expect(deps(let_({ weight }, fold(axes.all, { weight: lit(0) }, { weight: call("weight", lit(1)) }, call("weight", lit(1)))))).toEqual([]);
     expect(deps(let_({ weight }, iterate(1, { weight: lit(0) }, { weight: call("weight", lit(1)) }, call("weight", lit(1)), call("weight", lit(1)))))).toEqual([]);
-    // The value of init and a test of where see the function.
+    // The value of init and a test of where see the function, also a value of init with the name of the function.
     expect(deps(let_({ weight }, iterate(1, { k: call("weight", lit(1)) }, { k: v("k") }, v("k"))))).toEqual([read([])]);
+    expect(deps(let_({ weight }, iterate(1, { weight: call("weight", lit(1)) }, { weight: lit(0) }, lit(0))))).toEqual([read([])]);
     expect(deps(let_({ weight }, fold(axes.where(axes.all, app("gt", call("weight", lit(1)), lit(0))), { weight: lit(0) }, { weight: lit(1) }, v("weight"))))).toEqual([read(["where"])]);
   });
 

@@ -72,6 +72,9 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
     // function reads nothing where it is bound, but the memo does not follow them yet (FN.CALL).
     case "fold":
     case "iterate":
+    // A let with a function and no call has the value of its body, and a call is opaque, so this case only keeps the
+    // memo simple.
+    // Stryker disable next-line StringLiteral: see the comment above
     case "fn":
     case "call":
       return OPAQUE;
@@ -130,8 +133,9 @@ function keysOf(e: Expr, top: boolean, outer: ReadonlySet<string>, pure: Set<Exp
     case "each": {
       const { base, tests } = parts(e.axis);
       // The targets of a loop must not depend on the origin: a set of targets is not a value of a key. The address of
-      // `all` can fail, so it must not depend on the origin either.
-      if (base.t === "table" || ((base.t !== "all" || (e.at ?? []).length > 0) && addressReads(e.at, top) !== 0)) return undefined;
+      // `all` can fail, so it must not depend on the origin either. The targets of the axis list are the items of a
+      // value, and the memo does not follow them yet (AXIS.LIST).
+      if (base.t === "table" || listOf(e.axis) !== undefined || ((base.t !== "all" || (e.at ?? []).length > 0) && addressReads(e.at, top) !== 0)) return undefined;
       // The expressions of computed moves give the targets too, so they must read nothing.
       if (addrExprs(e.at).some((x) => reads(x, outer, new Set(), top) !== 0)) return undefined;
       return all([e.body, ...tests].map((x) => keysOf(x, false, outer, pure)));

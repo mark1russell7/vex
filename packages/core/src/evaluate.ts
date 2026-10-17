@@ -237,7 +237,7 @@ class Compiler {
       case "call":
         return this.#callFn(e, info);
       case "let": {
-        const binds = Object.entries(e.bind).map(([name, be], i): readonly [string, Node] => [name, be.tag === "fn" ? this.#fn(be, [...path, i]) : this.node(be, [...path, i])]);
+        const binds = Object.entries(e.bind).map(([name, be], i): readonly [string, Node] => [name, this.node(be, [...path, i])]);
         const body = this.node(e.body, [...path, binds.length]);
         return (f, c) => {
           const env = new Map(f.env);
@@ -739,8 +739,8 @@ class Compiler {
     const empty = (): Result<never> => this.#err("empty", `"${op}" has no values to work with`, f, path, { op });
     // A count or a position of take and nth is a whole number from 0.
     const whole = (): Result<number> => {
-      const n = rest[0];
-      return typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? ok(n) : this.#err("kind-mismatch", `"${op}" needs a whole number from 0, not ${describeType(n)}`, f, path, { op });
+      const n = rest[0] as number;
+      return Number.isSafeInteger(n) && n >= 0 ? ok(n) : this.#err("kind-mismatch", `"${op}" needs a whole number from 0, not ${describeType(n)}`, f, path, { op });
     };
     const okItems = list.items.filter((it) => it.result.ok);
     switch (op) {
@@ -806,6 +806,8 @@ class Compiler {
     const order = values.map((_x, i) => i).toSorted((i, j) => {
       const a = values[i] as number | string;
       const b = values[j] as number | string;
+      // The sort of Node reads only a negative result, and the sort of another engine needs the whole comparison.
+      // Stryker disable next-line ConditionalExpression,EqualityOperator: see the comment above
       return a < b ? -1 : a > b ? 1 : 0;
     });
     return ok(vexList(order.map((i) => items[i] as ListItem)));
@@ -899,8 +901,9 @@ export function labelOf(e: Expr): string {
       return e.op;
     case "let":
       return `let ${Object.keys(e.bind).join(", ")}`;
-    case "fn":
-      return `fn (${e.params.join(", ")})`;
+    // A function makes no event of the trace, so its label only completes the switch.
+    // Stryker disable next-line all: see the comment above
+    case "fn": return `fn (${e.params.join(", ")})`;
     case "call":
       return `call ${e.fn}`;
     case "var":

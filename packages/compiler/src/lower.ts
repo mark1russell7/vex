@@ -241,8 +241,9 @@ class Lowerer {
       case "let":
         return this.expr(e.body, { ...s, ...this.#bind(e, s, path, b) }, [...path, Object.keys(e.bind).length], b);
       // A function is only a binding of let, so the check of the shape stops this node first.
-      case "fn":
-        return this.fail(b);
+      // Stryker disable next-line all: see the comment above
+      /* v8 ignore next -- @preserve */
+      case "fn": return this.fail(b);
       case "call":
         return this.#call(e, s, path, b);
       case "rec": {
@@ -345,12 +346,12 @@ class Lowerer {
     const fns = new Map(s.fns);
     Object.entries(e.bind).forEach(([name, x], i) => {
       // A function evaluates at each call. A binding sees the scope of the let, so a function cannot call itself.
+      // A value hides a function of its name, because a read looks at the values first.
       if (x.tag === "fn") {
         fns.set(name, { fn: x, path: [...path, i], scope: s });
         env.delete(name);
       } else {
         env.set(name, this.#attempt(b, (inner) => this.expr(x, s, [...path, i], inner)));
-        fns.delete(name);
       }
     });
     return { env, fns };
@@ -366,12 +367,8 @@ class Lowerer {
     if (bound?.fn.params.length !== e.args.length) return this.fail(b);
     if (++this.#calls > MAX_CALLS) throw new Unsupported(`the calls put the bodies of functions in more than ${String(MAX_CALLS)} places`);
     const env = new Map(bound.scope.env);
-    const fns = new Map(bound.scope.fns);
-    bound.fn.params.forEach((p, i) => {
-      env.set(p, this.#attempt(b, (inner) => this.expr(e.args[i] as Expr, s, [...path, i], inner)));
-      fns.delete(p);
-    });
-    return this.expr(bound.fn.body, { ...s, env, fns }, [...bound.path, 0], b);
+    bound.fn.params.forEach((p, i) => env.set(p, this.#attempt(b, (inner) => this.expr(e.args[i] as Expr, s, [...path, i], inner))));
+    return this.expr(bound.fn.body, { ...s, env, fns: bound.scope.fns }, [...bound.path, 0], b);
   }
 
   #app(e: ExprOf<"app">, s: Scope, path: readonly number[], b: Block): LExpr {

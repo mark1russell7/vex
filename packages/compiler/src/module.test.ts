@@ -700,6 +700,38 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const inner = op("sum", each(axes.all, let_({ k: w }, let_({ f: fn(["x"], op("add", v("x"), v("k"))) }, call("f", big)))));
     expectSame(make(sourceOf(inner)), inner);
     expectSame(make(sourceOf(inner)), inner, MANY);
+    // The levels of a call: of each argument, of the focus and the origin that the body reads, and of the names of the
+    // binding. Each of these calls depends on the key, so none is a constant of the run.
+    const levels = let_(
+      { one: fn(["x"], lit(1)), here: fn([], n), there: fn([], ref("n", [{ t: "origin" }])), m: w },
+      let_(
+        { local: fn(["x"], op("add", v("x"), v("m"))) },
+        rec({ arg: call("one", n), focus: call("here"), origin: call("there"), binding: call("local", lit(1)) }),
+      ),
+    );
+    expectSame(make(sourceOf(levels)), levels);
+    expectSame(make(sourceOf(levels)), levels, MANY);
+    // The arguments: a safe value with statements, a value with statements that can fail, and one function for each
+    // kind of its arguments. A function of a let hides a value of an outer let with its name.
+    const args = let_(
+      { id: fn(["x"], v("x")), f: lit(1) },
+      let_(
+        { f: fn(["x"], op("add", v("x"), lit(1))) },
+        rec({
+          safe: call("f", op("count", each(axes.where(axes.window(-1, 1), ref("b")), n))),
+          unsafe: op("ifError", call("f", op("sum", each(axes.window(-1, 1), op("divide", lit(1), w)))), lit(-1)),
+          number: op("add", call("id", n), lit(1)),
+          text: op("length", call("id", ref("s"))),
+          hidden: call("f", lit(1)),
+        }),
+      ),
+    );
+    expectSame(make(sourceOf(args)), args);
+    expectSame(make(sourceOf(args)), args, MANY);
+    // A part of a loop that calls a function at its binding is not a column, also when the call is deeper in the part.
+    const deeper = op("sum", each(axes.all, let_({ k: w }, let_({ f: fn(["x"], op("add", v("x"), v("k"))) }, op("multiply", call("f", big), lit(2))))));
+    expectSame(make(sourceOf(deeper)), deeper);
+    expectSame(make(sourceOf(deeper)), deeper, MANY);
     // A function is printed once for each signature of its arguments, also for many calls.
     const calls = let_({ f: fn(["x"], op("add", v("x"), n)) }, rec(Object.fromEntries(Array.from({ length: 300 }, (_x, i) => [`c${String(i)}`, call("f", lit(i))]))));
     const many = sourceOf(calls);
@@ -760,6 +792,20 @@ describe("COMPILE.MODULE: the text of a module", () => {
         // A value that is not a list, a wrong count and values of two kinds give an error.
         badCount: op("ifError", op("count", op("take", v("xs"), lit(-1))), lit(-1)),
         badKind: op("ifError", op("count", op("sortBy", each(axes.all, ref("b")))), lit(-1)),
+        noCount: op("ifError", op("count", op("take", v("xs"))), lit(-1)),
+        noPosition: op("ifError", op("nth", v("xs")), lit(-1)),
+        strictCount: op("ifError", op("count", v("inv"), strict), lit(-1)),
+        // A count or a position with statements, and the axis list over fewer items than the records.
+        counted: op("count", op("take", v("xs"), op("count", each(axes.window(-1, 0), n)))),
+        positioned: op("nth", v("xs"), op("count", each(axes.window(0, 1), n))),
+        listCount: op("count", each(axes.list(op("take", v("xs"), lit(2))), n)),
+        records: op("add", op("count", each(axes.all, n)), lit(1)),
+        // A list of each key, a list with error items of the axis list, a list with a safe test, and a list of others.
+        // A call is opaque to the memo, so the list of each key gets its levels from its body.
+        perKey: let_({ o: fn([], ref("n", [{ t: "origin" }])) }, let_({ ps: each(axes.all, op("add", n, call("o"))) }, op("sum", v("ps")))),
+        withErrors: let_({ ys: each(axes.list(v("inv")), n) }, op("count", v("ys"))),
+        safeTest: let_({ zs: each(axes.where(axes.all, ref("b")), n) }, op("sum", v("zs"))),
+        others: let_({ os: each(axes.others, n) }, op("sum", v("os"))),
       }),
     );
     await expectGolden("list-values", e);
@@ -769,6 +815,11 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(reasonOf(op("add", lit(1), op("take", sorted, lit(1))))).toBe("a list is a value of the program");
     expect(reasonOf(op("nth", let_({ a: lit(1) }, sorted), lit(0)))).toBe("a list is a value of the program");
     expect(reasonOf(op("count", op("sortBy", lit(5))))).toBe("a list op on a value that is not a list");
+    expect(reasonOf(op("count", v("a")))).toBe('the kinds of the values of "count" do not decide its op');
+    // A list of each key in a loop: the memo does not follow the axis list, so each key has its own list.
+    const memo = let_({ xs: each(axes.window(-1, 1), n) }, op("sum", each(axes.all, op("count", each(axes.list(v("xs")), w)))));
+    expectSame(make(sourceOf(memo)), memo);
+    expectSame(make(sourceOf(memo)), memo, MANY);
     expect(reasonOf(op("sum", each(axes.list(sorted), n, [offset(1)])))).toBe('the axis "list" with an address');
   });
 

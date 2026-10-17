@@ -256,8 +256,11 @@ describe("the tiers", () => {
       fold: fold(axes.reverse(axes.all), { a: lit(0) }, { a: call("plus", variable("a"), lit(1)) }, variable("a")),
       // The body of g sees k of the place of its binding, not k of the place of the call.
       nested: let_({ g: fn(["z"], call("plus", variable("z"), variable("k"))) }, let_({ k: lit(1000) }, call("g", lit(2)))),
-      // A name of a loop hides the function plus.
+      // A name of a loop hides the function plus, and a function of an inner let hides the value k.
       hidden: iterate(2, { plus: lit(1) }, { plus: app("add", variable("plus"), lit(1)) }, variable("plus")),
+      shadow: let_({ k: fn([], lit(7)) }, call("k")),
+      // An extension in an argument gets the path of the argument.
+      path: call("tag", ext("where", null)),
     };
     for (const part of Object.values(parts)) {
       const e = let_(bind, part);
@@ -266,10 +269,13 @@ describe("the tiers", () => {
       expect([p.tier, p.stats.fallbacks]).toEqual([2, 0]);
     }
     // A call with the wrong number of arguments, a call of a value, a function as a value and a call of a hidden function go to tier 1.
+    // Tier 2 has code for each of them: the code goes to tier 1 at the call. A variable with the name of a function does
+    // not hide the function.
     for (const part of [call("plus", lit(1)), call("k"), variable("tag"), iterate(1, { tag: lit(0) }, { tag: lit(1) }, call("tag", lit(1)))]) {
       const e = let_(bind, part);
-      const r = tiered(e, options).run({ space: s, origin: "0" });
-      expect(fromCore(r)).toStrictEqual(fromCore(evaluate(e, { ...options, space: s, origin: "0" })));
+      expect(generate(e, options).ok).toBe(true);
+      const r = tiered(e, options).run({ space: s, origin: "0", vars: { tag: 5 } });
+      expect(fromCore(r)).toStrictEqual(fromCore(evaluate(e, { ...options, space: s, origin: "0", vars: { tag: 5 } })));
       expect(r.ok).toBe(false);
     }
   });
@@ -299,6 +305,7 @@ describe("the tiers", () => {
       [fold(axes.reverse(axes.list(sorted)), { a: lit(0) }, { a: ref("n") }, variable("a")), axis],
       [app("nth", sorted, lit(1)), 'the program has the list op "nth", and tier 2 does not have lists as values yet'],
       [app("count", app("take", sorted, lit(2))), 'the program has the list op "take", and tier 2 does not have lists as values yet'],
+      [app("first", sorted), 'the program has the list op "sortBy", and tier 2 does not have lists as values yet'],
     ];
     for (const [e, reason] of cases) {
       expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason });

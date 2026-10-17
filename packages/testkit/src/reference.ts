@@ -166,12 +166,9 @@ function run(e: Expr, c: Ctx): RefOutcome {
       if (callee.fn.params.length !== e.args.length) return err("#VALUE!");
       // The body sees the names of the place of the binding, and the parameters hide its functions with their names.
       const env = new Map(callee.env);
-      const closures = new Map(callee.closures);
-      callee.fn.params.forEach((p, i) => {
-        env.set(p, run(e.args[i] as Expr, c));
-        closures.delete(p);
-      });
-      return run(callee.fn.body, { ...c, env, closures });
+      // A parameter hides a function of its name, because a read looks at the values first.
+      callee.fn.params.forEach((p, i) => env.set(p, run(e.args[i] as Expr, c)));
+      return run(callee.fn.body, { ...c, env, closures: callee.closures });
     }
     case "ext":
       return err("#NAME?");
@@ -202,7 +199,6 @@ function run(e: Expr, c: Ctx): RefOutcome {
           env.delete(n);
         } else {
           env.set(n, run(b, c));
-          closures.delete(n);
         }
       }
       return run(e.body, { ...c, env, closures });
@@ -352,17 +348,16 @@ function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[],
     case "first":
       return vs.length > 0 ? val(vs[0]) : err("#N/A");
     case "sortBy": {
-      // All numbers without NaN, or all texts. Equal values keep their order.
+      // All numbers without NaN, or all texts. toSorted is stable, so equal values keep their order.
       const kinds = new Set(vs.map((x) => typeof x));
       if (kinds.size > 1 || vs.some((x) => (typeof x !== "number" && typeof x !== "string") || Number.isNaN(x))) return err("#VALUE!");
-      const good = items.filter((it) => it.result.ok).map((it, i) => ({ it, i }));
-      const order = good.toSorted((a, b) => (before(a.it.result.value, b.it.result.value) ? -1 : before(b.it.result.value, a.it.result.value) ? 1 : a.i - b.i));
-      return val({ kind: "vex.list", items: order.map((x) => x.it) });
+      const good = items.filter((it) => it.result.ok);
+      return val({ kind: "vex.list", items: good.toSorted((a, b) => Number(before(b.result.value, a.result.value)) - Number(before(a.result.value, b.result.value))) });
     }
     case "take":
     case "nth": {
-      const n = rest[0];
-      if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) return err("#VALUE!");
+      const n = rest[0] as number;
+      if (!Number.isSafeInteger(n) || n < 0) return err("#VALUE!");
       if (op === "nth") return n < vs.length ? val(vs[n]) : err("#N/A");
       return val({ kind: "vex.list", items: items.filter((it) => it.result.ok).slice(0, n) });
     }

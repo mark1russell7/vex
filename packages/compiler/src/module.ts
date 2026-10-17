@@ -19,7 +19,7 @@
  * schema, and the axes `all`, `others` and `window`. The kinds of each op site must decide its op. Another construct
  * gives a reason, not code.
  */
-import { addrExprs, children, isFieldName, moveExpr, shapeError, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, children, isFieldName, lit, moveExpr, shapeError, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
@@ -56,7 +56,7 @@ interface Value {
   /** True for a literal and for the read of a name: a constant of the run with such code needs no variable of its own. */
   readonly plain?: boolean;
   /** For a list (LIST.VALUE): the kind of its items. The code is an array of pairs of a key and a value or the sentinel. */
-  readonly list?: ListInfo;
+  readonly list?: ListInfo | undefined;
 }
 
 /** The facts of a list of the code: the kind of the values of its items, if the printer knows it. */
@@ -76,7 +76,14 @@ interface Name {
   readonly kind: Kind | undefined;
   readonly lazy: boolean;
   readonly deps: ReadonlySet<number>;
-  readonly list?: ListInfo;
+  readonly list?: ListInfo | undefined;
+}
+
+/** An argument of a call: its code, its kind and its levels. */
+interface Arg {
+  readonly code: string;
+  readonly kind: Kind | undefined;
+  readonly deps: ReadonlySet<number>;
 }
 
 /** The levels of a constant of the run. */
@@ -121,6 +128,8 @@ interface BoundFn {
   readonly specs: Map<string, Spec>;
   /** The declarations of the printed functions that read names of the place of the binding. The let prints them. */
   readonly decls: string[];
+  /** True when a printed function of the binding is at the place of the binding, not at the start of a run. */
+  local: boolean;
 }
 
 /**
@@ -134,7 +143,7 @@ interface Spec {
   readonly deps: ReadonlySet<number>;
   readonly origin: number;
   readonly focus: number;
-  readonly params: readonly number[];
+  readonly param: number;
   /** True when the body reads only constants of the run, its parameters and its position, so it is at the start of a run. */
   readonly global: boolean;
 }
@@ -690,13 +699,13 @@ class Printer {
 
   /** This method gives the code of a name: a read that throws the error of its value, if it can hold an error. */
   #read(name: Name): Value {
-    const base = { kind: name.kind, deps: name.deps, plain: true, ...(name.list === undefined ? {} : { list: name.list }) };
+    const base = { kind: name.kind, deps: name.deps, plain: true, list: name.list };
     return name.lazy ? { ...base, code: `${this.use("G")}(${name.code})`, safe: false, held: name.code } : { ...base, code: name.code, safe: true };
   }
 
   /** This method gives the name of a constant of the run, from the read of its value. */
   #nameOf(v: Value): Name {
-    return { code: v.held ?? v.code, kind: v.kind, lazy: v.held !== undefined, deps: NO_DEPS, ...(v.list === undefined ? {} : { list: v.list }) };
+    return { code: v.held ?? v.code, kind: v.kind, lazy: v.held !== undefined, deps: NO_DEPS, list: v.list };
   }
 
   /**
@@ -722,8 +731,8 @@ class Printer {
     const name = this.fresh("c");
     if (lazy) this.run.push(`const ${name} = ${this.use("L")}(() => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
     else this.run.push(...this.#store(name, c, true));
-    const list = c.v.list === undefined ? {} : { list: c.v.list };
-    const read = bare(this.#read(lazy ? { code: `${name}()`, kind: c.v.kind, lazy: true, deps: NO_DEPS, ...list } : { code: name, kind: c.v.kind, lazy: !c.v.safe, deps: NO_DEPS, ...list }));
+    const { list } = c.v;
+    const read = bare(this.#read(lazy ? { code: `${name}()`, kind: c.v.kind, lazy: true, deps: NO_DEPS, list } : { code: name, kind: c.v.kind, lazy: !c.v.safe, deps: NO_DEPS, list }));
     if (key !== undefined) this.#constants.set(key, read);
     return read;
   }
@@ -772,7 +781,8 @@ class Printer {
    * from outside is a constant of the run, so its code can be outside the loop.
    */
   #columnar(e: Expr, c: Code, ctx: Ctx): boolean {
-    if (ctx.level < 2 || ctx.focus === undefined || c.v.deps.size !== 1 || !c.v.deps.has(ctx.level) || this.#work(e) < COLUMN_WORK) return false;
+    // A node of the memo has the level 1, so a column has a focus.
+    if (ctx.level < 2 || c.v.deps.size !== 1 || !c.v.deps.has(ctx.level) || this.#work(e) < COLUMN_WORK) return false;
     // A node of the memo with keys keeps its costly part for each value of its keys already.
     if (this.#keyed(e)) return false;
     return [...namesOf(e)].every((name) => (ctx.env.get(name)?.deps.size ?? 0) === 0) && !this.#callsLocal(e, ctx);
@@ -780,8 +790,8 @@ class Printer {
 
   /** This method tells if an expression calls a function that is at the place of its binding, not at the start of a run. */
   #callsLocal(e: Expr, ctx: Ctx): boolean {
-    const bound = e.tag === "call" ? ctx.fns.get(e.fn) : undefined;
-    if (bound !== undefined && [...bound.specs.values()].some((x) => !x.global)) return true;
+    // Stryker disable next-line ConditionalExpression: a node that is not a call has no field fn, so the map gives undefined
+    if (e.tag === "call" && ctx.fns.get(e.fn)?.local === true) return true;
     return children(e).some((x) => this.#callsLocal(x, ctx));
   }
 
@@ -805,7 +815,7 @@ class Printer {
       this.run.push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
       this.#columns.set(key, name);
     }
-    return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps, ...(c.v.list === undefined ? {} : { list: c.v.list }) });
+    return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps, list: c.v.list });
   }
 
   #node(e: Expr, ctx: Ctx): Code {
@@ -970,15 +980,15 @@ class Printer {
     for (const [name, x] of Object.entries(e.bind)) {
       // A binding sees the context of the let, so a function cannot call itself.
       if (x.tag === "fn") {
-        const b: BoundFn = { id: this.#fnIds++, fn: x, ctx, specs: new Map(), decls: [] };
+        // Stryker disable next-line UpdateOperator: the numbers of the bindings only need to be distinct
+        const b: BoundFn = { id: this.#fnIds++, fn: x, ctx, specs: new Map(), decls: [], local: false };
         bound.push(b);
         fns.set(name, b);
         env.delete(name);
         continue;
       }
-      fns.delete(name);
-      // A binding takes a list (LIST.VALUE).
-      if (this.#isList(x, ctx)) this.#wantList.add(x);
+      // A binding takes a list (LIST.VALUE). A value hides a function of its name, because a read looks at the values first.
+      this.#wantList.add(x);
       const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
       if (c.v.deps.size === 0) {
         env.set(name, this.#nameOf(c.v));
@@ -986,7 +996,7 @@ class Printer {
       }
       const b = this.fresh("b");
       s.push(...this.#store(b, c));
-      env.set(name, { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps, ...(c.v.list === undefined ? {} : { list: c.v.list }) });
+      env.set(name, { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps, list: c.v.list });
       // The statements of the binding read its keys, so the let is not a constant of the run.
       deps = new Set([...deps, ...c.v.deps]);
     }
@@ -1004,26 +1014,25 @@ class Printer {
     if (bound === undefined) throw new NotStandalone(`a call of "${e.fn}", which is not a function`);
     if (bound.fn.params.length !== e.args.length) throw new NotStandalone(`a call of "${e.fn}" with ${String(e.args.length)} arguments, not ${String(bound.fn.params.length)}`);
     const s: string[] = [];
-    const args = e.args.map((x): Name => {
+    const args = e.args.map((x): Arg => {
       const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
-      if (c.v.deps.size === 0) return this.#nameOf(c.v);
       // A value that cannot throw is the argument itself. A read of a name that can hold the error passes the name.
       if (c.v.safe) {
         s.push(...c.s);
-        return { code: c.v.code, kind: c.v.kind, lazy: false, deps: c.v.deps };
+        return { code: c.v.code, kind: c.v.kind, deps: c.v.deps };
       }
-      if (c.s.length === 0 && c.v.held !== undefined) return { code: c.v.held, kind: c.v.kind, lazy: true, deps: c.v.deps };
+      if (c.s.length === 0 && c.v.held !== undefined) return { code: c.v.held, kind: c.v.kind, deps: c.v.deps };
       const b = this.fresh("b");
       s.push(...this.#store(b, c));
-      return { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps };
+      return { code: b, kind: c.v.kind, deps: c.v.deps };
     });
     // Each parameter can hold the error of its argument, so one function serves the arguments of one kind.
     const sig = JSON.stringify(args.map((a) => a.kind ?? null));
     const spec = bound.specs.get(sig) ?? this.#printFn(bound, args, sig);
-    // Each marker becomes the levels at the call. The statements of the arguments read their keys, so they count too.
-    const at = new Map<number, ReadonlySet<number>>([[spec.origin, new Set([ctx.originLevel])], [spec.focus, new Set([ctx.level])]]);
-    spec.params.forEach((m, i) => at.set(m, (args[i] as Name).deps));
-    const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap((d) => [...(at.get(d) ?? [d])])]);
+    // Each marker becomes the levels at the call. The levels of the arguments count for each call, because their
+    // statements read their keys, so the marker of the parameters gives no level.
+    const levels = (d: number): readonly number[] => (d === spec.origin ? [ctx.originLevel] : d === spec.focus ? [ctx.level] : d === spec.param ? [] : [d]);
+    const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap(levels)]);
     const position = spec.deps.has(spec.origin) ? [ctx.focus, ctx.origin] : spec.deps.has(spec.focus) ? [ctx.focus] : [];
     return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps } };
   }
@@ -1033,30 +1042,29 @@ class Printer {
    * are the arguments, then the focus and the origin, if the body reads them. A function that reads a name of the place
    * of its binding is at that place. Each other function is at the start of a run, so a constant of the run can call it.
    */
-  #printFn(bound: BoundFn, args: readonly Name[], sig: string): Spec {
-    // The markers are far from the levels of the axes and of the loops, so they do not meet them.
+  #printFn(bound: BoundFn, args: readonly Arg[], sig: string): Spec {
+    // The markers are far from the levels of the axes and of the loops, so they do not meet them. They only need to be
+    // distinct.
+    // Stryker disable next-line ArithmeticOperator,UpdateOperator: see the comment above
     const origin = 2_000_000 + 1000 * this.#printed++;
     const focus = origin + 1;
-    const params = args.map((_a, i) => -(origin + i + 1));
+    const param = -origin;
     const names = args.map(() => this.fresh("p"));
     const k = this.fresh("k");
     const o = this.fresh("o");
     const env = new Map(bound.ctx.env);
-    const fns = new Map(bound.ctx.fns);
-    bound.fn.params.forEach((p, i) => {
-      const a = args[i] as Name;
-      env.set(p, { code: names[i] as string, kind: a.kind, lazy: true, deps: new Set([params[i] as number]) });
-      fns.delete(p);
-    });
-    const body = this.expr(bound.fn.body, { origin: o, focus: k, level: focus, originLevel: origin, env, fns, keys: new Map() });
-    const markers = new Set([origin, focus, ...params]);
+    // A parameter hides a function of its name, because a read looks at the values first.
+    bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]) }));
+    const body = this.expr(bound.fn.body, { origin: o, focus: k, level: focus, originLevel: origin, env, fns: bound.ctx.fns, keys: new Map() });
+    const markers = new Set([origin, focus, param]);
     const global = [...body.v.deps].every((d) => markers.has(d));
     const name = this.fresh("fn");
     const position = body.v.deps.has(origin) ? [k, o] : body.v.deps.has(focus) ? [k] : [];
     const head = `const ${name} = (${[...names, ...position].join(", ")}) =>`;
     const decl = body.s.length === 0 ? [`${head} ${body.v.code};`] : [`${head} {`, ...ind(body.s), `  return ${body.v.code};`, "};"];
     (global ? this.run : bound.decls).push(...decl);
-    const spec: Spec = { name, kind: body.v.kind, safe: body.v.safe, deps: body.v.deps, origin, focus, params, global };
+    if (!global) bound.local = true;
+    const spec: Spec = { name, kind: body.v.kind, safe: body.v.safe, deps: body.v.deps, origin, focus, param, global };
     bound.specs.set(sig, spec);
     return spec;
   }
@@ -1346,28 +1354,28 @@ class Printer {
    */
   #order(op: "sortBy" | "take", head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
     const list = this.#listOf(head, ctx);
-    const count = op === "take" ? rest[0] : undefined;
-    const strict = this.#strict(op, op === "take" ? rest.slice(1) : rest);
-    const raw = [list, ...(count === undefined ? [] : [this.expr(count, ctx)])];
+    // A missing count is the literal null, which is not a whole number, so take gives its error.
+    const exprs = [head, ...(op === "take" ? [rest[0] ?? lit(null)] : [])];
+    const strict = this.#strict(op, rest.slice(exprs.length - 1));
+    const raw = [list, ...exprs.slice(1).map((x) => this.expr(x, ctx))];
     const deps = depsOf(...raw);
-    const [l, n] = this.#settle(raw, deps, [head, ...(count === undefined ? [] : [count])]) as [Code, Code | undefined];
-    const args = [l.v.code, ...(op === "take" ? [n === undefined ? "undefined" : n.v.code] : []), String(strict)];
-    const item = (l.v.list as ListInfo).item;
-    return { s: stmtsOf(l, ...(n === undefined ? [] : [n])), v: { code: `${this.use(op === "sortBy" ? "SB" : "TK")}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: { item } } };
+    const parts = this.#settle(raw, deps, exprs);
+    const item = (list.v.list as ListInfo).item;
+    return { s: stmtsOf(...parts), v: { code: `${this.use(op === "sortBy" ? "SB" : "TK")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: undefined, safe: false, deps, list: { item } } };
   }
 
   /** This method prints a list op over a list that is not an each: a loop over its array, and nth (LIST.NTH). */
   #overList(op: string, head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
     const list = this.#listOf(head, ctx);
-    const position = op === "nth" ? rest[0] : undefined;
-    const strict = this.#strict(op, op === "nth" ? rest.slice(1) : rest);
-    const raw = [list, ...(position === undefined ? [] : [this.expr(position, ctx)])];
+    // A missing position is the literal null, which is not a whole number, so nth gives its error.
+    const exprs = [head, ...(op === "nth" ? [rest[0] ?? lit(null)] : [])];
+    const strict = this.#strict(op, rest.slice(exprs.length - 1));
+    const raw = [list, ...exprs.slice(1).map((x) => this.expr(x, ctx))];
     const deps = depsOf(...raw);
-    const [l, i] = this.#settle(raw, deps, [head, ...(position === undefined ? [] : [position])]) as [Code, Code | undefined];
-    const item = (l.v.list as ListInfo).item;
-    if (op === "nth") {
-      return { s: stmtsOf(l, ...(i === undefined ? [] : [i])), v: { code: `${this.use("NT")}(${l.v.code}, ${i === undefined ? "undefined" : i.v.code}, ${String(strict)})`, kind: item, safe: false, deps } };
-    }
+    const parts = this.#settle(raw, deps, exprs);
+    const [l] = parts as [Code];
+    const item = (list.v.list as ListInfo).item;
+    if (op === "nth") return { s: stmtsOf(...parts), v: { code: `${this.use("NT")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: item, safe: false, deps } };
     const r = this.#reduction(op, item);
     const { v } = r;
     const s = [...l.s, r.init, `for (const [, ${v}] of ${l.v.code}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
@@ -1517,8 +1525,7 @@ class Printer {
       s.push(...this.#store(t, c));
       return t;
     });
-    const list = this.#lists.get(fn);
-    return { s, v: { code: `${fn}(${args.join(", ")})`, kind: this.#kinds.get(fn), safe: false, deps: depsOf(...values), ...(list === undefined ? {} : { list }) } };
+    return { s, v: { code: `${fn}(${args.join(", ")})`, kind: this.#kinds.get(fn), safe: false, deps: depsOf(...values), list: this.#lists.get(fn) } };
   }
 
   /**
@@ -1624,7 +1631,7 @@ class Printer {
       const node = x as Expr | undefined;
       if (node?.tag === "var") return { $: ctx.env.get(node.name)?.code ?? node.name };
       // A call gives the number of the binding of its function, so two functions with one name give two keys.
-      return node?.tag === "call" ? { "()": node.fn, of: ctx.fns.get(node.fn)?.id ?? -1, args: node.args } : undefined;
+      return node?.tag === "call" ? { "()": node.fn, of: ctx.fns.get(node.fn)?.id ?? null, args: node.args } : undefined;
     });
   }
 }

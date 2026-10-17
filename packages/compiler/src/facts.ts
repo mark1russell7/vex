@@ -22,6 +22,7 @@ export function listReason(expr: Expr): string | undefined {
   const todo: Expr[] = [expr];
   for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
     if ((x.tag === "each" || x.tag === "fold") && listOf(x.axis) !== undefined) return 'the program has the axis "list", and tier 2 does not have lists as values yet';
+    // Stryker disable next-line ConditionalExpression: a node that is not an app has no field op, so the set does not have it
     if (x.tag === "app" && ORDER_OPS.has(x.op)) return `the program has the list op "${x.op}", and tier 2 does not have lists as values yet`;
     todo.push(...children(x));
   }

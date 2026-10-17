@@ -480,6 +480,32 @@ describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER)", () =
     // A function of an outer functions is in the scope of an inner one (FN.TOTAL).
     const twice = rows.from("n").functions({ scaled }, (c, outer) => c.functions({ again: rows.fn(["number"], (x) => outer.scaled(outer.scaled(x))) }, (d, inner) => inner.again(d)));
     expect(twice.all().values()).toEqual([270, 10, 80]);
+    // A value that is not a function of root.fn gives a TypeError.
+    expect(() => rows.from("n").functions({ f: ((x: unknown) => x) as never }, (c) => c)).toThrow('the function "f" is not a function of root.fn');
+    // The names of the builder stay unique: in an axis, the start value keeps its value in a function, in the body of
+    // functions, in a call and in each of a list. The same program without functions gives the same values.
+    // Each value differs from the start value c, so a name that hid c would give another result.
+    const withFns = rows.from("n").each((c) =>
+      c._.times(3).functions({ twice: rows.fn(["number"], (x) => x._.times(2)), inFn: rows.fn(["number"], (x) => x.others((o) => o._.plus(c)).sum()) }, (d, call) =>
+        call
+          .inFn(d._.times(5))
+          ._.plus(d.others((o) => o._.plus(c)).sum())
+          ._.plus(call.twice(d).others((o) => o._.plus(c)).sum())
+          ._.plus(c.each((t) => t.from("w")).sortBy().each((t) => t.others((o) => o.from("n")._.plus(c)).sum()).sum()),
+      ),
+    );
+    const inline = rows.from("n").each((c) =>
+      c._.times(15)
+        .others((o) => o._.plus(c))
+        .sum()
+        ._.plus(c._.times(3).others((o) => o._.plus(c)).sum())
+        ._.plus(c._.times(6).others((o) => o._.plus(c)).sum())
+        ._.plus(c.each((t) => t.from("w")).sortBy().each((t) => t.others((o) => o.from("n")._.plus(c)).sum()).sum()),
+    );
+    for (const k of rows.space.keys) expect(withFns.values().result(k)).toEqual(inline.values().result(k));
+    // In each of a list, the start value c keeps its value: each item adds the others and two times c, 120 + 6c in all.
+    const keep = rows.from("n").each((c) => c.each((t) => t.from("w")).sortBy().each((t) => t.others((o) => o.from("n")._.plus(c)).sum()).sum());
+    expect(optionalValue(keep.values().at("0"))).toEqual([300, 300, 300]);
     const program = e.program;
     expect(program.tag).toBe("let");
     expect(Object.values((program as { bind: Readonly<Record<string, { tag: string }>> }).bind).map((x) => x.tag)).toEqual(["fn", "fn"]);
@@ -497,6 +523,8 @@ describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER)", () =
     // fold goes over the list of each, and it needs the list of an axis.
     expect(optionalValue(byW.each((t) => t.from("n")).fold({ s: 0 }, (vars, item) => ({ s: vars.s._.plus(item) }), (vars) => vars.s).at("0"))).toBe(60);
     expect(() => byW.fold({ s: 0 }, (vars) => ({ s: vars.s }), (vars) => vars.s)).toThrow("fold needs the list of an axis");
+    // The fold of an axis keeps the let of the start value: here the body adds the start value.
+    expect(optionalValue(rows.from("w").each((c) => c._.plus("n")).fold({ s: 0 }, (vars, item) => ({ s: vars.s._.plus(item) }), (vars) => vars.s).at("1"))).toBe(63);
     expect(error(byW.take(2, { strict: true }).nth(5).result("0")).code).toBe("#N/A");
   });
 });

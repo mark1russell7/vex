@@ -239,6 +239,18 @@ The kinds of domains are done (KIND.DOMAIN): a module holds the values of a kern
 - **Lists as values.** A test of a radius needs the angle of each child. Without a list, a fold over the pairs computes each angle again for each pair. The sweep of `OVERLAP` also needs all the boxes as one value.
 - **The reverse order.** The strategy `tree` packs the row from the last child to the first, too. An axis of Vex has one order, so that packing is not a fold.
 
+### 8.3 Proposals for the three needs
+
+Each proposal keeps the programs total: each evaluation ends, and it gives a value or an error value. The owner decides each one.
+
+| Need | Proposal | Size | It unblocks |
+|---|---|---|---|
+| Functions | A `let` binds a function: the new node `fn` with names of parameters and a body. The new node `call` applies a bound function to arguments. A function cannot call itself, so each call ends. `deps` reads the body with the arguments. A module prints one JavaScript function, and tier 2 puts the body at each call. | Large | The radial module prints its test of a radius once, so it gets smaller than 2.6 kB. |
+| Lists as values | A `let` binds a list of `each`, and the new axis `axes.list(v(name))` has the items of that list as targets, in their order. The list ops `sortBy`, `take` and `at` give new lists. A module keeps a list as an array. | Large | The sweep of `OVERLAP`: the boxes in one sorted list. The angles of the children once for each node. |
+| The reverse order | The new axis `axes.reverse(axis)` has the targets of an axis in the reverse order. A fold over it starts at the last target. A module prints a loop from the end. | Small | The packing of `tree` from the last child. |
+
+The recommended order is the reverse axis first, because it is small. Then the functions, because the module of each strategy gets smaller. Then the lists, because only `OVERLAP` and the angles need them.
+
 ## 9. Packages
 
 - `@mark1russell7/vex-compiler` is a new published package. It has the analysis, the lowering, the back end of JavaScript source, the tiers, and `emitModule` for builds. The core stays small, because a page that does not compile does not load the compiler.

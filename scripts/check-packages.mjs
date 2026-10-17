@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const PACKAGES = ["core", "domains", "testkit", "compiler"];
+const PACKAGES = ["core", "domains", "testkit", "compiler", "mcp"];
 const work = mkdtempSync(join(tmpdir(), "vex-pack-"));
 // One command line with quoted arguments: pnpm and npm are scripts on Windows, so they need a shell.
 /** @type {(cmd: string, args: readonly string[], cwd: string) => void} */
@@ -36,6 +36,7 @@ try {
 import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { checkLaws } from "@mark1russell7/vex-testkit";
 import { tiered } from "@mark1russell7/vex-compiler";
+import { catalogText, evaluateAll } from "@mark1russell7/vex-mcp";
 import * as fc from "fast-check";
 
 const box = (x, y) => ({ position: new Vec2(x, y) });
@@ -48,6 +49,9 @@ const fast = compiled.run({ space: root.space, origin: "A" });
 if (compiled.tier !== 2 || !fast.ok || fast.value !== 5) throw new Error("the compiled program gave " + JSON.stringify(fast));
 const failed = checkLaws(NumDomain, { arb: fc.integer({ min: -100, max: 100 }), numRuns: 50 }).filter((r) => !r.ok);
 if (failed.length > 0) throw new Error("law failures: " + JSON.stringify(failed));
+if (!catalogText().includes("## \`XYDomain\`")) throw new Error("the catalog of the MCP server has no XYDomain");
+const evaluated = evaluateAll({ program: { tag: "app", op: "add", args: [{ tag: "ref", path: ["n"] }, { tag: "lit", value: 1 }] }, space: { kind: "array", records: [{ n: 2 }] } });
+if (JSON.stringify(evaluated) !== JSON.stringify([{ key: "0", ok: true, value: 3 }])) throw new Error("the MCP tool vex_evaluate gave " + JSON.stringify(evaluated));
 console.info("package check: the tarballs install, import and run");
 `,
   );

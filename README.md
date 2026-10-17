@@ -62,6 +62,7 @@ The packages are on npm (see the badge for the version). The specification (Vex 
 | [`@mark1russell7/vex-domains`](./packages/domains) | Domains for 2D vectors, named-component vectors, colors and angles |
 | [`@mark1russell7/vex-testkit`](./packages/testkit) | Arbitraries, law checks and the reference interpreter for property tests |
 | [`@mark1russell7/vex-compiler`](./packages/compiler) | Generated JavaScript for programs, with the results of the interpreter |
+| [`@mark1russell7/vex-mcp`](./packages/mcp) | The MCP server: the catalog of the domains, and tools that check, evaluate and explain a program |
 | [`@vex/pilots`](./packages/pilots) | Programs of other projects in Vex: the grid layout of Graph |
 | [`@vex/cli`](./packages/cli) | The workspace commands of the template |
 

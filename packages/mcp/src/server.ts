@@ -3,6 +3,7 @@
  * program as JSON. An agent can test a program with them before it writes the program into the code of a project.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { readFileSync } from "node:fs";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Schema } from "@mark1russell7/vex-compiler";
 import { z } from "zod";
@@ -21,6 +22,9 @@ const spaceInput = z
   .describe("The space: the records and their keys");
 const vars = z.record(z.string(), z.unknown()).optional().describe("The values of the variables of the run");
 
+/** The version of the package. The file package.json is one folder above the source and above the build. */
+const VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { readonly version: string }).version;
+
 /** This function gives the result of a tool as JSON text, or the message of a ToolError as an error of the tool. */
 function run(f: () => unknown): CallToolResult {
   try {
@@ -34,7 +38,7 @@ function run(f: () => unknown): CallToolResult {
 
 /** This function makes the server with its tools. The caller connects it to a transport. */
 export function createServer(): McpServer {
-  const server = new McpServer({ name: "vex", version: "0.1.0" });
+  const server = new McpServer({ name: "vex", version: VERSION });
   server.registerTool(
     "vex_catalog",
     {

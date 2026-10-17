@@ -3,7 +3,7 @@
   "baseBranch": "main",
   "access": "public",
   "ignore": ["@vex/site", "@vex/cli", "@vex/mutation", "@vex/pilots"],
-  "fixed": [["@mark1russell7/vex", "@mark1russell7/vex-domains", "@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler"]],
+  "fixed": [["@mark1russell7/vex", "@mark1russell7/vex-domains", "@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@mark1russell7/vex-mcp"]],
   "linked": [],
   "format": "auto",
   "updateInternalDependencies": "patch",

@@ -16,12 +16,10 @@
   ],
   "mcpServers": {
     "vex": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "tsx",
-        "${CLAUDE_PLUGIN_ROOT}/../../packages/mcp/src/main.ts"
-      ],
-      "cwd": "${CLAUDE_PLUGIN_ROOT}/../../packages/mcp"
+        "${CLAUDE_PLUGIN_ROOT}/mcp.mjs"
+      ]
     }
   }
 }

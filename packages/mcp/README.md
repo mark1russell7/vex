@@ -1,4 +1,4 @@
-# @vex/mcp
+# @mark1russell7/vex-mcp
 
 The MCP server of [Vex](https://mark1russell7.github.io/vex/). Its tools give the catalog of the domains, and they check, evaluate, explain and compile a program as JSON. An agent can test a program with these tools before it writes the program into the code of a project.
 
@@ -16,11 +16,17 @@ A program is the JSON form of the IR, as `serialize` gives it. A value of a doma
 
 ## Start the server
 
-The plugin of Vex for Claude Code starts the server: refer to the field `mcpServers` of `plugins/vex/.claude-plugin/plugin.json`. To start it by hand:
+The plugin of Vex for Claude Code starts the server with `plugins/vex/mcp.mjs`. In a working copy of this repository, the server starts from its source, so its tools have the features of the copy. In another install, it starts from npm.
+
+To add the server to Claude Code without the plugin:
+
+```sh
+claude mcp add vex -- npx -y @mark1russell7/vex-mcp
+```
+
+To start it from the source of this repository:
 
 ```sh
 cd packages/mcp
 npx tsx src/main.ts
 ```
-
-The server reads the packages of this repository, so its tools have the features of the main branch.

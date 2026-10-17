@@ -6,6 +6,9 @@
     "emitDeclarationOnly": true,
     "allowImportingTsExtensions": true,
     "composite": false,
-    "incremental": false
+    "incremental": false,
+    "types": [
+      "node"
+    ]
   }
 }

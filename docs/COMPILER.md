@@ -254,14 +254,21 @@ The recommended order is the reverse axis first, because it is small. Then the f
 The status on 2026-10-17:
 
 - The reverse axis is done (AXIS.REVERSE). A module prints a loop from the end.
-- Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 and a module put the body at each call. A module does not print one JavaScript function yet, so the radial module does not get smaller yet. That printer is the next step.
+- Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
 - Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 and a module give a reason for a program with lists, and tier 1 evaluates it. A module that keeps a list as an array is the next step.
 
-One program puts the bodies of functions in at most 10000 places (`MAX_CALLS`). A function that calls another function twice doubles its body. Thus a chain of 15 such functions puts the first body in 16384 places. Over the limit, tier 1 evaluates the program, and a module gives a reason.
+Tier 2 puts the bodies of functions in at most 10000 places in one program (`MAX_CALLS`). A function that calls another function twice doubles its body. Thus a chain of 15 such functions puts the first body in 16384 places. Over the limit, tier 1 evaluates the program. A module prints each function once, so it has no limit.
 
-### 8.4 Recursion: a decision for the owner
+The printed functions of a module:
 
-A function cannot call itself (FN.TOTAL). Thus each call ends, and each program stays total. This section gives the options for a function that calls itself. The owner decides.
+- A parameter can hold the error of its argument, as a name of a let can. A read of it checks for the error. Thus one function serves each call with arguments of the same kinds.
+- The function takes the focus and the origin of the call only if its body reads them.
+- A function that reads a name of the place of its binding is at that place in the code. Each other function is at the start of a run, so a constant of the run and a column of the run can call it.
+- A key of a constant of the run has the number of the binding of each function that it calls. Before, two functions with one name made two calls with the same text. The calls shared one constant, and the second call gave the value of the first.
+
+### 8.4 Recursion: open
+
+A function cannot call itself (FN.TOTAL). Thus each call ends, and each program stays total. This section gives the first options for a function that calls itself. The owner keeps the decision for later. The three options below are possibly not the only ones, and the cost of each option in the compiler needs a study first.
 
 The current language already has two forms of recursion:
 
@@ -275,10 +282,10 @@ The options for more:
 | Option | The design | Cost | Risk |
 |---|---|---|---|
 | A. No recursion | Keep FN.TOTAL. The docs show the translation to `iterate` and to a sheet. | None | A calculation that needs a stack has no form, for example a walk of a nested value. |
-| B. Recursion with a depth limit | The new node `letrec` binds functions that see each other. Each call counts a depth, and a depth over a limit gives `#NUM!`, as `iterate` does. | Medium. Tier 2 and a module cannot put the body at each call, so they need real functions with a counter. | A limit in the program is a number that the author must choose. A deep tree gives `#NUM!`, not a value. |
+| B. Recursion with a depth limit | The new node `letrec` binds functions that see each other. Each call counts a depth, and a depth over a limit gives `#NUM!`, as `iterate` does. | Medium. Tier 2 cannot put the body at each call, so it needs real functions with a counter, as a module has. | A limit in the program is a number that the author must choose. A deep tree gives `#NUM!`, not a value. |
 | C. Recursion over the structure | A function can call itself only at a key of an axis that goes down: `children` or `descendants` of a tree. The call moves the focus to the child. | Large. It needs a check that each recursive call goes down. | A graph has no direction that always goes down, so a graph needs `#CYCLE!` as a sheet does. |
 
-The recommendation is A at this time, and C only when a program of ireko needs it. The strategies of ireko calculate one container from its children, and the engine of ireko walks the tree. Thus no strategy needs recursion. Option C keeps the idea of Vex: a value at a position from the values at other positions. Option B adds a limit that the data does not decide.
+The first recommendation was A at this time, and C only when a program of ireko needs it. The strategies of ireko calculate one container from its children, and the engine of ireko walks the tree. Thus no strategy needs recursion. Option C keeps the idea of Vex: a value at a position from the values at other positions. Option B adds a limit that the data does not decide.
 
 ## 9. Packages
 
@@ -539,6 +546,7 @@ A part with little work is not a column. Its work counts its nodes, and a node o
 | With the columns | 23124 | 4914 |
 | With the columns, minified | 8433 | 2939 |
 | With the columns, minified, after the module of `grid` | | 2628 more |
+| With functions (FN.*), minified | 4691 | 1960 |
 
 | A full ring, one run | The code of ireko | Before the columns | With the columns |
 |---|---|---|---|
@@ -547,6 +555,8 @@ A part with little work is not a column. Its work counts its nodes, and a node o
 | 120 children | 141 to 372 µs | 11.6 to 15.1 ms | 1.05 to 1.11 ms |
 
 The module is approximately five times slower than ireko, and approximately 1.5 kB larger. Vex has no functions, so the test of a radius is in the program four times. Each copy of the fold over the pairs is a loop of its own. The angle of a child depends on the radius under test, so it is not a column. Thus the fold over the pairs computes it again for each pair. A column with keys keeps a value for the last values of some names. It made the module slower, because most of its keys change at almost each read. Functions or lists in Vex are the better fix.
+
+With functions, `RADIAL_PROGRAM` binds the test of a radius and its parts once, and the module prints each of them once: nine JavaScript functions. The bits stay the same in each stage. The speed of this module has no measurement yet.
 
 A local branch of ireko (`vex/radial-module`, after `vex/grid-module`) uses the module in the strategy `radial`. The 213 tests of ireko pass, also its golden SVG files. The core is 16.58 kB, so the branch sets the limit to 17 kB. The benchmark of the engine alternated between ireko and the branch, two times each:
 

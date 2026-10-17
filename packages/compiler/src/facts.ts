@@ -6,8 +6,8 @@
 import { children, isListOp, isOpName, liftsAt, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
 /**
- * The most bodies of functions that tier 2 and a module put at the calls of one program. A function that calls another
- * function twice doubles its body, so a chain of such functions grows fast.
+ * The most bodies of functions that tier 2 puts at the calls of one program. A function that calls another function
+ * twice doubles its body, so a chain of such functions grows fast. A module prints each function once.
  */
 export const MAX_CALLS = 10_000;
 

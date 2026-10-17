@@ -57,7 +57,7 @@ evaluate(total, { space: rows, origin: "0", domains: [NumDomain] }); // => { ok:
 - A parameter, a binding or a name of a loop with the name of a function hides the function.
 - A function is not a value. `v` of a function, a call of a value and a call with the wrong number of arguments give `#VALUE!`.
 
-The compiler puts the body at each call, in tier 2 and in a module. One program puts the bodies in at most 10000 places. Refer to the rules `FN.*` of [the specification](../../spec/).
+Tier 2 puts the body at each call, in at most 10000 places of one program. A module prints one JavaScript function for each function. Refer to the rules `FN.*` of [the specification](../../spec/).
 
 ## Addresses
 

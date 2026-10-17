@@ -8,7 +8,7 @@
  * child, with the loops `fold` and `iterate` for the search. The tests compare the two, with the same bits. ireko has
  * the MIT license and the same author.
  */
-import { app, axes, each, fold, index, iterate, let_, lit, rec, ref, space, v, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axes, call, each, fn, fold, index, iterate, let_, lit, rec, ref, space, v, type Expr, type Space } from "@mark1russell7/vex";
 import type { Schema } from "@mark1russell7/vex-compiler";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import type { Extent } from "./ireko-grid.ts";
@@ -166,81 +166,110 @@ const RHO = op("hypot", corner("ex", "ew", "bw"), corner("ey", "eh", "bh"));
 /** An angle in degrees, in radians. */
 const radians = (degrees: Expr): Expr => op("divide", op("multiply", degrees, lit(Math.PI)), lit(180));
 
-// The search of a full ring. A radius is always a name, so each use of it reads a value.
+// The search of a full ring is a set of functions (FN.BIND). A function cannot call another binding of its let, so
+// each let binds the functions that the next let calls. A radius is always a name, so each use of it reads a value.
+/** The functions of the radius of a child. The body of a function evaluates at the place of its call. */
+const RHO_FNS = {
+  rho: fn([], RHO),
+};
 /** The radius of the next child on the ring: after the last child comes the first child. */
-const RHO_NEXT = op("ifError", op("first", each(axes.window(1, 1), RHO)), op("first", each(axes.window(0, 0), RHO, [index(0)])));
+const NEXT_FNS = {
+  rhoNext: fn([], op("ifError", op("first", each(axes.window(1, 1), call("rho"))), op("first", each(axes.window(0, 0), call("rho"), [index(0)])))),
+};
 /** The chord that a child and the next child need: their radii and the gap. */
-const NEED = op("add", op("add", RHO, RHO_NEXT), v("gap"));
+const NEED_FNS = {
+  need: fn([], op("add", op("add", call("rho"), call("rhoNext")), v("gap"))),
+};
 /** The angle of the chord of a child at the radius `r`. */
-const stepAt = (r: Expr): Expr => op("multiply", lit(2), op("asin", op("min", lit(1), op("divide", NEED, op("multiply", lit(2), r)))));
-/** The sum of the angles of the chords at the radius `r`, in the order of the children. */
-const angleSum = (r: Expr): Expr => op("sum", each(axes.all, stepAt(r)));
-/** The angle from a child to the next child at the radius `r`, with the spare angle in the name `$spare`. */
-const advance = (r: Expr): Expr => op("multiply", v("$dir"), op("add", stepAt(r), op("max", lit(0), v("$spare"))));
-/** The spare angle of each child at the radius `r`. */
-const spareAt = (r: Expr): Expr => op("divide", op("subtract", TWO_PI, angleSum(r)), v("$n"));
-
-/** True when two circles at the angles `a` and `b` of a ring of radius `r` are closer than the gap. */
-const tooClose = (a: Expr, b: Expr, rhoA: Expr, rhoB: Expr, r: Expr): Expr =>
-  let_(
-    { $d: op("mod", op("abs", op("subtract", a, b)), TWO_PI) },
-    op("lt", op("multiply", op("multiply", lit(2), r), op("sin", half(op("min", v("$d"), op("subtract", TWO_PI, v("$d")))))), op("subtract", op("add", op("add", rhoA, rhoB), v("gap")), lit(1e-7))),
-  );
+const STEP_FNS = {
+  stepAt: fn(["r"], op("multiply", lit(2), op("asin", op("min", lit(1), op("divide", call("need"), op("multiply", lit(2), v("r"))))))),
+};
+const SUM_FNS = {
+  /** The sum of the angles of the chords at the radius `r`, in the order of the children. */
+  angleSum: fn(["r"], op("sum", each(axes.all, call("stepAt", v("r"))))),
+  /** The angle from a child to the next child at the radius `r`, with the spare angle `spare`. */
+  advance: fn(["r", "spare"], op("multiply", v("$dir"), op("add", call("stepAt", v("r")), op("max", lit(0), v("spare"))))),
+};
+const RING_FNS = {
+  /** The spare angle of each child at the radius `r`. */
+  spareAt: fn(["r"], op("divide", op("subtract", TWO_PI, call("angleSum", v("r"))), v("$n"))),
+  /** True when two circles at the angles `a` and `b` of a ring of radius `r` are closer than the gap. */
+  tooClose: fn(
+    ["a", "b", "rhoA", "rhoB", "r"],
+    let_(
+      { $d: op("mod", op("abs", op("subtract", v("a"), v("b"))), TWO_PI) },
+      op(
+        "lt",
+        op("multiply", op("multiply", lit(2), v("r")), op("sin", half(op("min", v("$d"), op("subtract", TWO_PI, v("$d")))))),
+        op("subtract", op("add", op("add", v("rhoA"), v("rhoB")), v("gap")), lit(1e-7)),
+      ),
+    ),
+  ),
+};
 
 /**
  * True when the angles fit in the ring at the radius `r`, and the circles of each pair keep apart by the gap. A fold
  * over the children gives each angle, from the same sums as ireko. For each child, a fold over the later children
  * gives their angles from its angle.
  */
-const fits = (r: Expr): Expr =>
-  let_(
-    { $spare: spareAt(r) },
-    op(
-      "and",
-      op("not", op("lt", v("$spare"), lit(-1e-9))),
-      fold(
-        axes.all,
-        { ang: v("$start"), ok: lit(true) },
-        {
-          ang: op("add", v("ang"), advance(r)),
-          ok: op(
-            "and",
-            v("ok"),
-            let_(
-              { $ai: advance(r), $rhoI: RHO },
-              // The later children: a ring of a search has at most PAIRWISE_LIMIT children.
-              fold(
-                axes.window(1, PAIRWISE_LIMIT),
-                { angJ: op("add", v("ang"), v("$ai")), apart: lit(true) },
-                { angJ: op("add", v("angJ"), advance(r)), apart: op("and", v("apart"), op("not", tooClose(v("ang"), v("angJ"), v("$rhoI"), RHO, r))) },
-                v("apart"),
+const FITS_FNS = {
+  fits: fn(
+    ["r"],
+    let_(
+      { $spare: call("spareAt", v("r")) },
+      op(
+        "and",
+        op("not", op("lt", v("$spare"), lit(-1e-9))),
+        fold(
+          axes.all,
+          { ang: v("$start"), ok: lit(true) },
+          {
+            ang: op("add", v("ang"), call("advance", v("r"), v("$spare"))),
+            ok: op(
+              "and",
+              v("ok"),
+              let_(
+                { $ai: call("advance", v("r"), v("$spare")), $rhoI: call("rho") },
+                // The later children: a ring of a search has at most PAIRWISE_LIMIT children.
+                fold(
+                  axes.window(1, PAIRWISE_LIMIT),
+                  { angJ: op("add", v("ang"), v("$ai")), apart: lit(true) },
+                  {
+                    angJ: op("add", v("angJ"), call("advance", v("r"), v("$spare"))),
+                    apart: op("and", v("apart"), op("not", call("tooClose", v("ang"), v("angJ"), v("$rhoI"), call("rho"), v("r")))),
+                  },
+                  v("apart"),
+                ),
               ),
             ),
-          ),
-        },
-        v("ok"),
+          },
+          v("ok"),
+        ),
       ),
     ),
-  );
+  ),
+};
 
 /** The middle of the names `lo` and `hi`. */
 const MID = half(op("add", v("lo"), v("hi")));
+/** The test of a radius `r` of the search of the smallest radius. */
+const tooSmall = (r: Expr): Expr => op("gt", call("angleSum", r), TWO_PI);
 
 /** The smallest radius at which the chords fit in the ring, as `smallestRadius` of ireko. */
 const SMALLEST = let_(
-  { $lo0: half(op("max", each(axes.all, NEED))) },
+  { $lo0: half(op("max", each(axes.all, call("need")))) },
   op(
     "if",
-    op("lte", angleSum(v("$lo0")), TWO_PI),
+    op("lte", call("angleSum", v("$lo0")), TWO_PI),
     v("$lo0"),
     let_(
-      { $hi0: iterate(DOUBLINGS, { h: op("multiply", v("$lo0"), lit(2)) }, { h: op("multiply", v("h"), lit(2)) }, v("h"), op("not", op("gt", angleSum(v("h")), TWO_PI))) },
+      { $hi0: iterate(DOUBLINGS, { h: op("multiply", v("$lo0"), lit(2)) }, { h: op("multiply", v("h"), lit(2)) }, v("h"), op("not", tooSmall(v("h")))) },
       iterate(
         64,
         { lo: v("$lo0"), hi: v("$hi0") },
         {
-          lo: let_({ $m: MID }, op("if", op("gt", angleSum(v("$m")), TWO_PI), v("$m"), v("lo"))),
-          hi: let_({ $m: MID }, op("if", op("gt", angleSum(v("$m")), TWO_PI), v("hi"), v("$m"))),
+          lo: let_({ $m: MID }, op("if", tooSmall(v("$m")), v("$m"), v("lo"))),
+          hi: let_({ $m: MID }, op("if", tooSmall(v("$m")), v("hi"), v("$m"))),
         },
         v("hi"),
       ),
@@ -257,17 +286,17 @@ const SEARCHED = let_(
   { $lo: op("max", v("$floor"), SMALLEST) },
   op(
     "if",
-    fits(v("$lo")),
+    call("fits", v("$lo")),
     v("$lo"),
     let_(
-      { $hi: iterate(DOUBLINGS, { h: op("multiply", v("$lo"), lit(2)) }, { h: op("multiply", v("h"), lit(2)) }, v("h"), fits(v("h"))) },
+      { $hi: iterate(DOUBLINGS, { h: op("multiply", v("$lo"), lit(2)) }, { h: op("multiply", v("h"), lit(2)) }, v("h"), call("fits", v("h"))) },
       iterate(
         50,
-        { lo: v("$lo"), hi: v("$hi"), good: let_({ $m: half(op("add", v("$lo"), v("$hi"))) }, fits(v("$m"))) },
+        { lo: v("$lo"), hi: v("$hi"), good: let_({ $m: half(op("add", v("$lo"), v("$hi"))) }, call("fits", v("$m"))) },
         {
           lo: op("if", v("good"), v("lo"), MID),
           hi: op("if", v("good"), MID, v("hi")),
-          good: let_({ $m: half(op("add", op("if", v("good"), v("lo"), MID), op("if", v("good"), MID, v("hi")))) }, fits(v("$m"))),
+          good: let_({ $m: half(op("add", op("if", v("good"), v("lo"), MID), op("if", v("good"), MID, v("hi")))) }, call("fits", v("$m"))),
         },
         v("hi"),
       ),
@@ -277,24 +306,34 @@ const SEARCHED = let_(
 
 /** The angle of the child at the origin on a searched ring: the sum of the angles of the children before it. */
 const SEARCHED_ANGLE = let_(
-  { $spare: spareAt(v("$r")) },
-  fold(axes.where(axes.all, op("lt", ref("i"), ref("i", [{ t: "origin" }]))), { a: v("$start") }, { a: op("add", v("a"), advance(v("$r"))) }, v("a")),
+  { $spare: call("spareAt", v("$r")) },
+  fold(axes.where(axes.all, op("lt", ref("i"), ref("i", [{ t: "origin" }]))), { a: v("$start") }, { a: op("add", v("a"), call("advance", v("$r"), v("$spare"))) }, v("a")),
 );
+
+/** This function binds the sets of functions in order, around `body`: each set sees the sets before it. */
+const bindAll = (sets: readonly Readonly<Record<string, Expr>>[], body: Expr): Expr => sets.reduceRight((inner, set) => let_(set, inner), body);
 
 /**
  * The program of the strategy `radial`. It evaluates at each child, and it gives the offset of the child. The variables
  * are the options, `mode`, `gap`, `selfW` and `selfH`.
  */
-export const RADIAL_PROGRAM: Expr = let_(
-  {
-    $n: op("count", each(axes.all, ref("i"))),
-    $rhoMax: op("max", each(axes.all, RHO)),
-    $dir: op("if", v("clockwise"), lit(1), lit(-1)),
-    $start: radians(v("startAngle")),
-    $full: op("gte", v("sweep"), lit(360)),
-    $linked: op("eq", v("mode"), lit("linked")),
-  },
-  let_(
+export const RADIAL_PROGRAM: Expr = bindAll(
+  [
+    RHO_FNS,
+    NEXT_FNS,
+    NEED_FNS,
+    {
+      $n: op("count", each(axes.all, ref("i"))),
+      $rhoMax: op("max", each(axes.all, call("rho"))),
+      $dir: op("if", v("clockwise"), lit(1), lit(-1)),
+      $start: radians(v("startAngle")),
+      $full: op("gte", v("sweep"), lit(360)),
+      $linked: op("eq", v("mode"), lit("linked")),
+    },
+    STEP_FNS,
+    SUM_FNS,
+    RING_FNS,
+    FITS_FNS,
     {
       // In the linked mode, no child circle can touch the circle of the node.
       $floor: op("if", v("$linked"), op("add", op("add", half(op("hypot", v("selfW"), v("selfH"))), v("$rhoMax")), op("if", op("gt", v("distance"), lit(0)), v("distance"), v("gap"))), lit(0)),
@@ -303,38 +342,34 @@ export const RADIAL_PROGRAM: Expr = let_(
       // A full ring has equal angles. A part of a ring has equal parts of the arc, and each child is at the middle of its part.
       $step: op("if", v("$full"), op("divide", op("multiply", lit(2), lit(Math.PI)), v("$n")), op("divide", radians(v("sweep")), v("$n"))),
     },
-    let_(
-      {
-        $r: op(
-          "if",
-          v("$one"),
-          v("$floor"),
-          op("if", v("$search"), SEARCHED, op("max", v("$floor"), op("divide", op("add", op("multiply", lit(2), v("$rhoMax")), v("gap")), op("multiply", lit(2), op("sin", half(v("$step"))))))),
-        ),
-        $cx: op("if", v("$linked"), half(v("selfW")), lit(0)),
-        $cy: op("if", v("$linked"), half(v("selfH")), lit(0)),
-      },
-      let_(
-        {
-          $angle: op(
-            "if",
-            v("$one"),
-            op("if", v("$full"), v("$start"), op("add", v("$start"), half(op("divide", op("multiply", v("$dir"), op("multiply", v("sweep"), lit(Math.PI))), lit(180))))),
-            op(
-              "if",
-              v("$search"),
-              SEARCHED_ANGLE,
-              op("add", v("$start"), op("multiply", op("multiply", v("$dir"), op("if", v("$full"), ref("i"), op("add", ref("i"), lit(0.5)))), v("$step"))),
-            ),
-          ),
-        },
-        rec({
-          x: op("subtract", op("add", v("$cx"), op("multiply", v("$r"), op("cos", v("$angle")))), half(ref("bw"))),
-          y: op("subtract", op("add", v("$cy"), op("multiply", v("$r"), op("sin", v("$angle")))), half(ref("bh"))),
-        }),
+    {
+      $r: op(
+        "if",
+        v("$one"),
+        v("$floor"),
+        op("if", v("$search"), SEARCHED, op("max", v("$floor"), op("divide", op("add", op("multiply", lit(2), v("$rhoMax")), v("gap")), op("multiply", lit(2), op("sin", half(v("$step"))))))),
       ),
-    ),
-  ),
+      $cx: op("if", v("$linked"), half(v("selfW")), lit(0)),
+      $cy: op("if", v("$linked"), half(v("selfH")), lit(0)),
+    },
+    {
+      $angle: op(
+        "if",
+        v("$one"),
+        op("if", v("$full"), v("$start"), op("add", v("$start"), half(op("divide", op("multiply", v("$dir"), op("multiply", v("sweep"), lit(Math.PI))), lit(180))))),
+        op(
+          "if",
+          v("$search"),
+          SEARCHED_ANGLE,
+          op("add", v("$start"), op("multiply", op("multiply", v("$dir"), op("if", v("$full"), ref("i"), op("add", ref("i"), lit(0.5)))), v("$step"))),
+        ),
+      ),
+    },
+  ],
+  rec({
+    x: op("subtract", op("add", v("$cx"), op("multiply", v("$r"), op("cos", v("$angle")))), half(ref("bw"))),
+    y: op("subtract", op("add", v("$cy"), op("multiply", v("$r"), op("sin", v("$angle")))), half(ref("bh"))),
+  }),
 );
 
 /** The kinds of the fields of a child and of the variables, for the compiler (docs/COMPILER.md §3.2). */

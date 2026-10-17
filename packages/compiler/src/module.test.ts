@@ -666,7 +666,7 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expectSame(make(source), e, MANY);
   });
 
-  it("FN.CALL: a module prints the body of a function at each call, with the names of the place of its binding", () => {
+  it("FN.CALL: a module calls a printed function, with the names of the place of its binding", () => {
     const bind = { plus: fn(["x", "y"], op("add", v("x"), op("multiply", v("y"), n))), k: lit(10) };
     const parts: Readonly<Record<string, Expr>> = {
       once: call("plus", w, v("a")),
@@ -687,10 +687,51 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(reasonOf(let_(bind, iterate(1, { plus: lit(0) }, { plus: lit(1) }, call("plus", lit(1), lit(2)))))).toBe('a call of "plus", which is not a function');
     expect(reasonOf(let_(bind, v("plus")))).toBe('the name "plus" is a function, not a value');
     expect(reasonOf(op("add", lit(1), fn(["x"], v("x"))))).toBe("the expression has a function outside the bindings of a let, or a function with parameters that are not distinct names");
-    // The printer puts the bodies of functions in at most 10000 places.
-    const calls = (count: number): Expr => let_({ f: fn(["x"], op("add", v("x"), n)) }, rec(Object.fromEntries(Array.from({ length: count }, (_x, i) => [`c${String(i)}`, call("f", lit(i))]))));
-    expect(reasonOf(calls(10_000))).toBe("");
-    expect(reasonOf(calls(10_001))).toBe("the calls put the bodies of functions in more than 10000 places");
+    // Two functions with one name are two functions, so two calls with the same text do not share one constant.
+    const named = rec({
+      a: let_({ f: fn(["x"], op("add", v("x"), lit(10))) }, op("add", n, call("f", lit(1)))),
+      b: let_({ f: fn(["x"], op("multiply", v("x"), lit(10))) }, op("add", n, call("f", lit(1)))),
+      c: let_({ k: lit(2) }, let_({ f: fn(["x"], op("add", v("x"), v("k"))) }, op("add", n, call("f", lit(1))))),
+      d: let_({ k: lit(3) }, let_({ f: fn(["x"], op("add", v("x"), v("k"))) }, op("add", n, call("f", lit(1))))),
+    });
+    expectSame(make(sourceOf(named)), named);
+    // A part of a loop with a call is a column of the run only if the names that the function reads are constants.
+    const big = op("add", op("multiply", w, w), op("subtract", op("multiply", n, w), op("add", n, lit(1))));
+    const inner = op("sum", each(axes.all, let_({ k: w }, let_({ f: fn(["x"], op("add", v("x"), v("k"))) }, call("f", big)))));
+    expectSame(make(sourceOf(inner)), inner);
+    expectSame(make(sourceOf(inner)), inner, MANY);
+    // A function is printed once for each signature of its arguments, also for many calls.
+    const calls = let_({ f: fn(["x"], op("add", v("x"), n)) }, rec(Object.fromEntries(Array.from({ length: 300 }, (_x, i) => [`c${String(i)}`, call("f", lit(i))]))));
+    const many = sourceOf(calls);
+    expect(many.match(/const fn\d+ =/g)).toHaveLength(1);
+    expectSame(make(many), calls);
+  });
+
+  it("FN.CALL: the text of a module with functions: one function for each signature, at the start of a run or at its binding", async () => {
+    const e = let_(
+      { k: lit(3), f: fn(["x"], op("add", v("x"), n)), g: fn(["x", "y"], op("multiply", v("x"), v("y"))), first: fn(["x"], v("x")) },
+      let_(
+        // h calls f, reads k of its binding and the field n at the origin. The function of the name m reads w at the key of the run, so it is at its binding.
+        { h: fn(["x"], op("add", call("f", v("x")), op("add", v("k"), ref("n", [{ t: "origin" }])))), m: w },
+        let_(
+          { local: fn(["x"], op("subtract", v("x"), v("m"))) },
+          rec({
+            // The calls of f with numbers share one function, also a call with a value that can hold an error.
+            a: op("add", call("f", lit(1)), call("f", n)),
+            b: call("f", op("divide", lit(1), w)),
+            // g reads no position, so its calls with constants are a constant of the run.
+            c: call("g", lit(2), lit(5)),
+            d: op("sum", each(axes.all, call("h", w))),
+            e: call("local", call("first", w)),
+          }),
+        ),
+      ),
+    );
+    await expectGolden("functions", e);
+    const source = sourceOf(e);
+    // The function of local reads m, a name of the key of the run, so it comes after the binding of m.
+    expect(source.indexOf("const fn")).toBeLessThan(source.indexOf("for (let o = 0"));
+    expect(source.lastIndexOf("const fn")).toBeGreaterThan(source.indexOf("for (let o = 0"));
   });
 
   it("KIND.RETURNS: the grid in 2D with vectors as plain data is a standalone module", async () => {

@@ -20,7 +20,7 @@
  * gives a reason, not code.
  */
 import { addrExprs, children, isFieldName, moveExpr, shapeError, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
-import { factsOf, kindOfDomain, listReason, MAX_CALLS, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
+import { factsOf, kindOfDomain, listReason, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
 /** The options of a standalone module. */
@@ -92,10 +92,43 @@ interface Ctx {
   readonly focus: string | undefined;
   /** The level of the focus: 1 at the key of the run, and one more in each axis. */
   readonly level: number;
+  /** The level of the origin: 1 at the key of the run, and the marker of the origin in the body of a function. */
+  readonly originLevel: number;
   readonly env: ReadonlyMap<string, Name>;
   readonly keys: ReadonlyMap<Expr, Name>;
-  /** The bound functions (FN.BIND), with the context of their binding. A call prints the body at its place. */
-  readonly fns: ReadonlyMap<string, { readonly fn: ExprOf<"fn">; readonly ctx: Ctx }>;
+  /** The bound functions (FN.BIND), with the context of their binding. */
+  readonly fns: ReadonlyMap<string, BoundFn>;
+}
+
+/**
+ * A bound function of the printer (FN.BIND): its node and the context of its binding. It also has one printed
+ * JavaScript function for each signature of the arguments of its calls.
+ */
+interface BoundFn {
+  /** The number of the binding. Two functions with one name are two functions, so a key of a constant needs it. */
+  readonly id: number;
+  readonly fn: ExprOf<"fn">;
+  readonly ctx: Ctx;
+  /** The printed function for each signature: the kind of each argument. */
+  readonly specs: Map<string, Spec>;
+  /** The declarations of the printed functions that read names of the place of the binding. The let prints them. */
+  readonly decls: string[];
+}
+
+/**
+ * A printed function. The levels of the value of its body have a marker for the origin, for the focus and for each
+ * parameter. A call replaces each marker with the levels at the call.
+ */
+interface Spec {
+  readonly name: string;
+  readonly kind: Kind | undefined;
+  readonly safe: boolean;
+  readonly deps: ReadonlySet<number>;
+  readonly origin: number;
+  readonly focus: number;
+  readonly params: readonly number[];
+  /** True when the body reads only constants of the run, its parameters and its position, so it is at the start of a run. */
+  readonly global: boolean;
 }
 
 /** The name of a helper of the generated code. */
@@ -527,8 +560,9 @@ class Printer {
   /** The parts of the helper S that the nodes of the memo that keep their items need (helperS). */
   readonly features = new Set<Feature>();
   #names = 0;
-  /** The number of bodies of functions that the printer put at calls (MAX_CALLS). */
-  #calls = 0;
+  /** The number of the next bound function, and of the next printed function. */
+  #fnIds = 0;
+  #printed = 0;
   /** The level of the names of the next loop. It is far above the levels of the axes, so the two do not meet. */
   #loops = 1_000_000;
   /** The node of the memo whose function the printer prints, so it prints the node itself. */
@@ -698,7 +732,14 @@ class Printer {
     if (ctx.level < 2 || ctx.focus === undefined || c.v.deps.size !== 1 || !c.v.deps.has(ctx.level) || this.#work(e) < COLUMN_WORK) return false;
     // A node of the memo with keys keeps its costly part for each value of its keys already.
     if (this.#keyed(e)) return false;
-    return [...namesOf(e)].every((name) => (ctx.env.get(name)?.deps.size ?? 0) === 0);
+    return [...namesOf(e)].every((name) => (ctx.env.get(name)?.deps.size ?? 0) === 0) && !this.#callsLocal(e, ctx);
+  }
+
+  /** This method tells if an expression calls a function that is at the place of its binding, not at the start of a run. */
+  #callsLocal(e: Expr, ctx: Ctx): boolean {
+    const bound = e.tag === "call" ? ctx.fns.get(e.fn) : undefined;
+    if (bound !== undefined && [...bound.specs.values()].some((x) => !x.global)) return true;
+    return children(e).some((x) => this.#callsLocal(x, ctx));
   }
 
   /** This method tells if an expression has a node of the memo with keys in it. */
@@ -851,7 +892,7 @@ class Printer {
     for (const m of at) {
       if (fails) for (const d of deps) kept.add(d);
       if (moveExpr(m) !== undefined) deps = (values[next++] as Code).v.deps;
-      else if (m.t === "origin") deps = new Set([1]);
+      else if (m.t === "origin") deps = new Set([ctx.originLevel]);
       else if (m.t === "key" || m.t === "index" || m.t === "parent") deps = NO_DEPS;
       fails = m.t !== "origin";
     }
@@ -882,10 +923,13 @@ class Printer {
     const fns = new Map(ctx.fns);
     const s: string[] = [];
     let deps = new Set<number>();
+    const bound: BoundFn[] = [];
     for (const [name, x] of Object.entries(e.bind)) {
-      // A function prints its body at each call. A binding sees the context of the let, so a function cannot call itself.
+      // A binding sees the context of the let, so a function cannot call itself.
       if (x.tag === "fn") {
-        fns.set(name, { fn: x, ctx });
+        const b: BoundFn = { id: this.#fnIds++, fn: x, ctx, specs: new Map(), decls: [] };
+        bound.push(b);
+        fns.set(name, b);
         env.delete(name);
         continue;
       }
@@ -902,37 +946,74 @@ class Printer {
       deps = new Set([...deps, ...c.v.deps]);
     }
     const body = this.expr(e.body, { ...ctx, env, fns });
-    return { s: [...s, ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
+    // A function that reads names of the place of the binding comes after them, before the body.
+    return { s: [...s, ...bound.flatMap((b) => b.decls), ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
   }
 
   /**
-   * This method prints a call (FN.CALL): the body of the function at the place of the call. Each parameter gets the
-   * value of its argument, as a binding of a let. The body sees the names of the place of the binding.
+   * This method prints a call (FN.CALL). Each argument evaluates at the place of the call, as a binding of a let. The
+   * call goes to the printed function of the signature of its arguments, with the focus and the origin if it reads them.
    */
   #call(e: ExprOf<"call">, ctx: Ctx): Code {
     const bound = ctx.env.has(e.fn) ? undefined : ctx.fns.get(e.fn);
     if (bound === undefined) throw new NotStandalone(`a call of "${e.fn}", which is not a function`);
     if (bound.fn.params.length !== e.args.length) throw new NotStandalone(`a call of "${e.fn}" with ${String(e.args.length)} arguments, not ${String(bound.fn.params.length)}`);
-    if (++this.#calls > MAX_CALLS) throw new NotStandalone(`the calls put the bodies of functions in more than ${String(MAX_CALLS)} places`);
-    const env = new Map(bound.ctx.env);
-    const fns = new Map(bound.ctx.fns);
     const s: string[] = [];
-    let deps = new Set<number>();
-    bound.fn.params.forEach((p, i) => {
-      const x = e.args[i] as Expr;
-      fns.delete(p);
+    const args = e.args.map((x): Name => {
       const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
-      if (c.v.deps.size === 0) {
-        env.set(p, this.#nameOf(c.v));
-        return;
+      if (c.v.deps.size === 0) return this.#nameOf(c.v);
+      // A value that cannot throw is the argument itself. A read of a name that can hold the error passes the name.
+      if (c.v.safe) {
+        s.push(...c.s);
+        return { code: c.v.code, kind: c.v.kind, lazy: false, deps: c.v.deps };
       }
+      if (c.s.length === 0 && c.v.held !== undefined) return { code: c.v.held, kind: c.v.kind, lazy: true, deps: c.v.deps };
       const b = this.fresh("b");
       s.push(...this.#store(b, c));
-      env.set(p, { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps });
-      deps = new Set([...deps, ...c.v.deps]);
+      return { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps };
     });
-    const body = this.expr(bound.fn.body, { ...ctx, env, fns });
-    return { s: [...s, ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
+    // Each parameter can hold the error of its argument, so one function serves the arguments of one kind.
+    const sig = JSON.stringify(args.map((a) => a.kind ?? null));
+    const spec = bound.specs.get(sig) ?? this.#printFn(bound, args, sig);
+    // Each marker becomes the levels at the call. The statements of the arguments read their keys, so they count too.
+    const at = new Map<number, ReadonlySet<number>>([[spec.origin, new Set([ctx.originLevel])], [spec.focus, new Set([ctx.level])]]);
+    spec.params.forEach((m, i) => at.set(m, (args[i] as Name).deps));
+    const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap((d) => [...(at.get(d) ?? [d])])]);
+    const position = spec.deps.has(spec.origin) ? [ctx.focus, ctx.origin] : spec.deps.has(spec.focus) ? [ctx.focus] : [];
+    return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps } };
+  }
+
+  /**
+   * This method prints a bound function for one signature of its arguments, as one JavaScript function. Its parameters
+   * are the arguments, then the focus and the origin, if the body reads them. A function that reads a name of the place
+   * of its binding is at that place. Each other function is at the start of a run, so a constant of the run can call it.
+   */
+  #printFn(bound: BoundFn, args: readonly Name[], sig: string): Spec {
+    // The markers are far from the levels of the axes and of the loops, so they do not meet them.
+    const origin = 2_000_000 + 1000 * this.#printed++;
+    const focus = origin + 1;
+    const params = args.map((_a, i) => -(origin + i + 1));
+    const names = args.map(() => this.fresh("p"));
+    const k = this.fresh("k");
+    const o = this.fresh("o");
+    const env = new Map(bound.ctx.env);
+    const fns = new Map(bound.ctx.fns);
+    bound.fn.params.forEach((p, i) => {
+      const a = args[i] as Name;
+      env.set(p, { code: names[i] as string, kind: a.kind, lazy: true, deps: new Set([params[i] as number]) });
+      fns.delete(p);
+    });
+    const body = this.expr(bound.fn.body, { origin: o, focus: k, level: focus, originLevel: origin, env, fns, keys: new Map() });
+    const markers = new Set([origin, focus, ...params]);
+    const global = [...body.v.deps].every((d) => markers.has(d));
+    const name = this.fresh("fn");
+    const position = body.v.deps.has(origin) ? [k, o] : body.v.deps.has(focus) ? [k] : [];
+    const head = `const ${name} = (${[...names, ...position].join(", ")}) =>`;
+    const decl = body.s.length === 0 ? [`${head} ${body.v.code};`] : [`${head} {`, ...ind(body.s), `  return ${body.v.code};`, "};"];
+    (global ? this.run : bound.decls).push(...decl);
+    const spec: Spec = { name, kind: body.v.kind, safe: body.v.safe, deps: body.v.deps, origin, focus, params, global };
+    bound.specs.set(sig, spec);
+    return spec;
   }
 
   #boolean(v: Value): string {
@@ -1269,7 +1350,7 @@ class Printer {
     );
     const outer = this.#inside;
     this.#inside = e;
-    const bodyCtx: Ctx = { origin: undefined, focus: undefined, level: 1, env: new Map(), fns: new Map(), keys: names };
+    const bodyCtx: Ctx = { origin: undefined, focus: undefined, level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: names };
     if (varying.length === 0) {
       const body = this.#hoist(this.expr(e, bodyCtx));
       this.#inside = outer;
@@ -1393,7 +1474,7 @@ class Printer {
 
   /** This method gives the code of the program at the key of the run. A constant of the run evaluates once. */
   root(expr: Expr): Code {
-    const c = this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, env: new Map(), fns: new Map(), keys: new Map() }));
+    const c = this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: new Map() }));
     // A function of an op with an inline form at each of its sites needs no declaration.
     for (const [name, form] of this.#forms) if (form !== undefined && !this.#called.has(name)) this.top.delete(name);
     return c;
@@ -1409,7 +1490,10 @@ class Printer {
     return canonical(e, (x) => {
       const key = ctx.keys.get(x as Expr);
       if (key !== undefined) return { "@": key.code };
-      return (x as Expr | undefined)?.tag === "var" ? { $: ctx.env.get((x as ExprOf<"var">).name)?.code ?? (x as ExprOf<"var">).name } : undefined;
+      const node = x as Expr | undefined;
+      if (node?.tag === "var") return { $: ctx.env.get(node.name)?.code ?? node.name };
+      // A call gives the number of the binding of its function, so two functions with one name give two keys.
+      return node?.tag === "call" ? { "()": node.fn, of: ctx.fns.get(node.fn)?.id ?? -1, args: node.args } : undefined;
     });
   }
 }

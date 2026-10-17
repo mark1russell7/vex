@@ -402,6 +402,8 @@ describe("sheets (SHEET.*)", () => {
     expect(fill(new Map([["last", plus(cell("last", [index(5)]), lit(1))]]), rows, { cells: own })).toBe(6);
     // Two columns that read each other at different keys. The fill keeps their order, and the search gives each value.
     expect(fill(new Map([["x", plus(cell("y"), lit(1))], ["y", orZero(cell("x", [offset(-1)]))]]), rows)).toBeGreaterThan(12);
+    // AXIS.LIST: the list of an axis reads the column y, so y comes first, and each read of x finds finished cells.
+    expect(fill(new Map<string, Expr>([["x", app("count", each(axes.list(each(axes.all, cell("y"))), lit(1)))], ["y", ref("v")]]), rows)).toBe(12);
     // A cycle gives #CYCLE!, and a column with formulas of cells only is filled too.
     expect(fill(new Map([["p", cell("q")], ["q", cell("p")]]), rows, { cells: new Map([["only", new Map([["1", lit(5)]])]]) })).toBeGreaterThan(0);
   });

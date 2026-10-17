@@ -612,6 +612,21 @@
           "type": "object",
           "required": [
             "t",
+            "list"
+          ],
+          "properties": {
+            "t": {
+              "const": "list"
+            },
+            "list": {
+              "$ref": "#/$defs/expr"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
             "axis"
           ],
           "properties": {

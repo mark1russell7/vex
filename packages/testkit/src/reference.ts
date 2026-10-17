@@ -12,7 +12,7 @@ const err = (code: ErrorCode): RefOutcome => ({ ok: false, code });
 const val = (value: unknown): RefOutcome => ({ ok: true, value });
 
 const BAD_NAMES = new Set(["__proto__", "constructor", "prototype"]);
-const LIST_OPS = new Set(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors"]);
+const LIST_OPS = new Set(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth"]);
 
 interface Ctx {
   readonly space: Space;
@@ -85,6 +85,13 @@ function all(xs: readonly Expr[], c: Ctx): RefOutcome {
 function targets(a: Axis, c: Ctx): { ok: true; keys: { key: string; bad?: ErrorCode }[] } | { ok: false; code: ErrorCode } {
   // The context of the axis table already has the space of the table, and each key of it is a target.
   if (a.t === "table") return { ok: true, keys: c.space.keys.map((key) => ({ key })) };
+  // The axis list has the keys of the items of its list. The list evaluates at the focus, before the targets.
+  if (a.t === "list") {
+    const r = run(a.list, c);
+    if (!r.ok) return r;
+    if (!isVexList(r.value)) return { ok: false, code: "#VALUE!" };
+    return { ok: true, keys: r.value.items.map(({ key, result }) => (result.ok ? { key } : { key, bad: result.error.code })) };
+  }
   // The reverse order has the targets of its axis from the last to the first.
   if (a.t === "reverse") {
     const inner = targets(a.axis, c);
@@ -318,8 +325,11 @@ function special(e: Extract<Expr, { tag: "app" }>, c: Ctx): RefOutcome {
 
 type RefItem = { readonly key: string; readonly result: { readonly ok: boolean; readonly value?: unknown; readonly error?: { readonly code: ErrorCode } } };
 
+/** This function compares two numbers or two texts, for the order of sortBy. */
+const before = (a: unknown, b: unknown): boolean => (a as number) < (b as number);
+
 function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[], c: Ctx): RefOutcome {
-  const o = op === "reduce" ? rest[1] : rest[0];
+  const o = op === "reduce" || op === "take" || op === "nth" ? rest[1] : rest[0];
   const strict = typeof o === "object" && o !== null && (o as { strict?: unknown }).strict === true;
   const firstBad = items.find((it) => !it.result.ok);
   // An item that is not ok has an error, so the fallback code is defensive.
@@ -341,6 +351,21 @@ function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[],
       return val(items.filter((it) => !it.result.ok).map((it) => it.result.error));
     case "first":
       return vs.length > 0 ? val(vs[0]) : err("#N/A");
+    case "sortBy": {
+      // All numbers without NaN, or all texts. Equal values keep their order.
+      const kinds = new Set(vs.map((x) => typeof x));
+      if (kinds.size > 1 || vs.some((x) => (typeof x !== "number" && typeof x !== "string") || Number.isNaN(x))) return err("#VALUE!");
+      const good = items.filter((it) => it.result.ok).map((it, i) => ({ it, i }));
+      const order = good.toSorted((a, b) => (before(a.it.result.value, b.it.result.value) ? -1 : before(b.it.result.value, a.it.result.value) ? 1 : a.i - b.i));
+      return val({ kind: "vex.list", items: order.map((x) => x.it) });
+    }
+    case "take":
+    case "nth": {
+      const n = rest[0];
+      if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) return err("#VALUE!");
+      if (op === "nth") return n < vs.length ? val(vs[n]) : err("#N/A");
+      return val({ kind: "vex.list", items: items.filter((it) => it.result.ok).slice(0, n) });
+    }
     case "sum":
       // Stryker disable next-line ArrayDeclaration: a sum needs no domain, and a list with a text accepts no value either
       return nums ? checkOut(nums.reduce((s, x) => s + x, 0), []) : err("#VALUE!");

@@ -22,6 +22,9 @@ These ops apply to each value. They are not ops of a domain.
 | `sum`, `mean`, `min`, `max` | A number from a list of numbers. Other items give an error. |
 | `any`, `all`, `none` | A boolean from a list of booleans |
 | `reduce(list, op)` | The left fold of the list with the op of the domain of the items, for example `reduce(sizes, "max")` |
+| `sortBy(list)` | A list with the items in the order of their values, from the smallest. The values are numbers or texts. |
+| `take(list, n)` | A list of the first `n` items |
+| `nth(list, i)` | The value of the item at the position `i`, from 0 |
 
 A list op skips error items. The option `{ strict: true }` gives the first error.
 

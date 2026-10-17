@@ -146,8 +146,18 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
     out["at"] = moves;
     return undefined;
   };
+  // The test of where and the list of the axis list are expressions, also inside reverse.
   const axis = (a: unknown): Result<unknown> => {
-    if (!isRecord(a) || a["t"] !== "where") return ok(a);
+    if (!isRecord(a)) return ok(a);
+    if (a["t"] === "list") {
+      const list = mapValues(a["list"], f);
+      return list.ok ? ok({ ...a, list: list.value }) : list;
+    }
+    if (a["t"] === "reverse") {
+      const inner = axis(a["axis"]);
+      return inner.ok ? ok({ ...a, axis: inner.value }) : inner;
+    }
+    if (a["t"] !== "where") return ok(a);
     const inner = axis(a["axis"]);
     if (!inner.ok) return inner;
     const test = mapValues(a["test"], f);

@@ -255,7 +255,7 @@ The status on 2026-10-17:
 
 - The reverse axis is done (AXIS.REVERSE). A module prints a loop from the end.
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 and a module put the body at each call. A module does not print one JavaScript function yet, so the radial module does not get smaller yet. That printer is the next step.
-- Lists as values are the next proposal.
+- Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 and a module give a reason for a program with lists, and tier 1 evaluates it. A module that keeps a list as an array is the next step.
 
 One program puts the bodies of functions in at most 10000 places (`MAX_CALLS`). A function that calls another function twice doubles its body. Thus a chain of 15 such functions puts the first body in 16384 places. Over the limit, tier 1 evaluates the program, and a module gives a reason.
 

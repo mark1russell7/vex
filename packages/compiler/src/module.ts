@@ -20,7 +20,7 @@
  * gives a reason, not code.
  */
 import { addrExprs, children, isFieldName, moveExpr, shapeError, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
-import { factsOf, kindOfDomain, MAX_CALLS, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
+import { factsOf, kindOfDomain, listReason, MAX_CALLS, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
 /** The options of a standalone module. */
@@ -1424,6 +1424,8 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
+  const lists = listReason(expr);
+  if (lists !== undefined) return { ok: false, reason: lists };
   const p = new Printer(expr, options);
   let value: Code;
   try {

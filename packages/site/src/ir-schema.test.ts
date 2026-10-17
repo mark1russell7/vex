@@ -36,6 +36,15 @@ describe("the JSON Schema of the IR (IR.JSON)", () => {
     const broken = fc.oneof(
       fc.jsonValue(),
       fc.record({ tag: fc.constantFrom("lit", "ref", "app", "let", "var", "rec", "each", "ext", "fn", "call", "loop"), path: fc.jsonValue(), args: fc.jsonValue(), name: fc.jsonValue() }),
+      // AXIS.LIST: the list is an expression, also inside reverse.
+      fc.record({
+        tag: fc.constant("each"),
+        axis: fc.oneof(
+          fc.record({ t: fc.constant("list"), list: fc.constantFrom({ tag: "var", name: "xs" }, { tag: "nope" }, 5) }, { requiredKeys: ["t"] }),
+          fc.record({ t: fc.constant("reverse"), axis: fc.record({ t: fc.constant("list"), list: fc.constantFrom({ tag: "var", name: "xs" }, [1]) }, { requiredKeys: ["t"] }) }),
+        ),
+        body: fc.constant({ tag: "lit", value: 1 }),
+      }),
       // FN.BIND: a function is only a binding of let, with distinct names of parameters.
       fc.record({
         tag: fc.constant("let"),

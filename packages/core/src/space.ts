@@ -458,6 +458,9 @@ export function axisTargets(s: Space, at: Position, a: Exclude<Axis, { readonly 
     case "table":
       // The evaluator gives the axis table the space of its table. Here, without the tables, it has no targets.
       return fail(vexError("no-table", `the axis "table" needs the tables of the evaluation, and "${a.name}" is not one of them`, at));
+    case "list":
+      // The evaluator gives the targets of the axis list from the value of its expression. A space alone has no list.
+      return fail(vexError("bad-expression", 'the axis "list" needs the evaluator, which gives the value of its list', at));
   }
 }
 

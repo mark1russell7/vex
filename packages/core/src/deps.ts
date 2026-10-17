@@ -1,4 +1,4 @@
-import { addrExprs, children, type Addr, type Axis, type Expr, type ExprOf } from "./ir.ts";
+import { addrExprs, children, listOf, type Addr, type Axis, type Expr, type ExprOf } from "./ir.ts";
 
 /** A bound function: its node, and the functions of the place of its binding. */
 interface Bound {
@@ -68,13 +68,15 @@ export function deps(e: Expr): readonly Dependency[] {
     const fnsOf = childFns(x, item.fns, all.length);
     const axial = x.tag === "each" || x.tag === "fold";
     // Inside the axis: the body or the values of the step, and the tests of where. The values of init, the result of a
-    // fold and the expressions of an address evaluate at the node, outside the axis.
+    // fold, the list of the axis list and the expressions of an address evaluate at the node, outside the axis.
     const first = x.tag === "fold" ? Object.keys(x.init).length : 0;
     const last = axial ? all.length - addrExprs(x.at).length - (x.tag === "fold" ? 1 : 0) : 0;
+    // The list of the axis list comes after the body or the values of the step, before the tests of where.
+    const listAt = axial && listOf(x.axis) !== undefined ? (x.tag === "fold" ? first + Object.keys(x.step).length : 1) : -1;
     const axes = axial ? [...item.axes, x.axis.t] : item.axes;
     const axisAt = axial ? [...item.axisAt, x.at ?? []] : item.axisAt;
     for (let i = all.length - 1; i >= 0; i--) {
-      const inside = i >= first && i < last;
+      const inside = i >= first && i < last && i !== listAt;
       todo.push({ x: all[i] as Expr, axes: inside ? axes : item.axes, axisAt: inside ? axisAt : item.axisAt, fns: fnsOf(i) });
     }
   }

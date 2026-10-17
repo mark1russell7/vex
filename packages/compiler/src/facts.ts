@@ -3,13 +3,30 @@
  * whose op the interpreter takes first, and the kinds and the lifts of its parameters. The facts come from the op
  * tables, so the same options always give the same facts, and the same source.
  */
-import { isListOp, isOpName, liftsAt, type AnyDomain, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
+import { children, isListOp, isOpName, liftsAt, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
 /**
  * The most bodies of functions that tier 2 and a module put at the calls of one program. A function that calls another
  * function twice doubles its body, so a chain of such functions grows fast.
  */
 export const MAX_CALLS = 10_000;
+
+/** The list ops that give a list or read a position of a list (LIST.SORT, LIST.TAKE, LIST.NTH). */
+const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth"]);
+
+/**
+ * This function gives the reason that the compiler cannot take a program with lists as values. The reason is the axis
+ * `list` or an op on the order of a list. Tier 1 evaluates such a program. It uses a stack, not recursion.
+ */
+export function listReason(expr: Expr): string | undefined {
+  const todo: Expr[] = [expr];
+  for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
+    if ((x.tag === "each" || x.tag === "fold") && listOf(x.axis) !== undefined) return 'the program has the axis "list", and the compiler does not have lists as values yet';
+    if (x.tag === "app" && ORDER_OPS.has(x.op)) return `the program has the list op "${x.op}", and the compiler does not have lists as values yet`;
+    todo.push(...children(x));
+  }
+  return undefined;
+}
 
 /** The function of an op of a domain, or a method. */
 export type Method = (...args: unknown[]) => unknown;

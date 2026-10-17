@@ -7,7 +7,7 @@
  * Each other error stops the program with `FALLBACK`.
  */
 import { addrExprs, isFieldName, isListOp, MAX_NESTING, nestingOf, shapeError, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
-import { factsOf, MAX_CALLS, primitiveOf, type Facts, type Schema } from "./facts.ts";
+import { factsOf, listReason, MAX_CALLS, primitiveOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
   array,
@@ -101,6 +101,8 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   const shape = shapeError(expr);
   if (shape !== undefined) throw new Unsupported(shape);
   if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
+  const lists = listReason(expr);
+  if (lists !== undefined) throw new Unsupported(lists);
   const l = new Lowerer(memoNodes(expr), facts, schema);
   const b = block(RETURN);
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space");
@@ -560,6 +562,13 @@ class Lowerer {
         });
         nonEmpty();
         return local(acc);
+      // listReason stops a program with these ops before the lowering, so this case is defensive.
+      case "sortBy":
+      case "take":
+      case "nth":
+        /* v8 ignore next -- @preserve */
+        // Stryker disable next-line all: listReason stops these ops before the lowering
+        throw new Unsupported(`the list op "${op}"`);
     }
   }
 

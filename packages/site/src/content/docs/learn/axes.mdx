@@ -25,6 +25,7 @@ Select an origin, an axis and a reduction below. The matrix shows the relation f
 | `window` | `.window(from, to, body)` | the keys at the offsets from `from` to `to`, in an array or among siblings | `#REF!` outside an array or a tree |
 | `where` | the option `where` of an axis | the targets of the inner axis where the test gives `true` | an error item for a test that fails |
 | `reverse` | the option `reverse: true` of an axis | the targets of the inner axis, from the last to the first | the error of the inner axis |
+| `list` | `each(axes.list(expr), body)` in the IR | the keys of the items of a list, in the order of the list. Refer to [lists as values](../../reference/ir/#lists-as-values). | `#VALUE!` for a value that is not a list |
 
 Each axis method of the builder takes a body function and the options `{ where, reverse }`. The result is a list chain, with the reductions in the [last section](#reduce-the-list). With `reverse: true`, a fold over the list starts at the last target:
 

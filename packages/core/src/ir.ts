@@ -36,6 +36,7 @@ export type Axis =
   | { readonly t: "successors" }
   | { readonly t: "predecessors" }
   | { readonly t: "reachable" }
+  | { readonly t: "list"; readonly list: Expr }
   | { readonly t: "reverse"; readonly axis: Axis }
   | { readonly t: "where"; readonly axis: Axis; readonly test: Expr };
 
@@ -203,6 +204,11 @@ export const axes = {
    * `table`. A test goes outside: `where(reverse(axis), test)`.
    */
   reverse: (axis: Axis): Axis => ({ t: "reverse", axis }),
+  /**
+   * The keys of the items of the list that `list` gives, in the order of the list (AXIS.LIST). The expression evaluates
+   * before the targets. An error item gives an error item for its target.
+   */
+  list: (list: Expr): Axis => ({ t: "list", list }),
   /** The targets of `axis` where `test` gives `true`. */
   where: (axis: Axis, test: Expr): Axis => ({ t: "where", axis, test }),
 } as const;
@@ -323,6 +329,8 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
       } else if (t === "where") {
         push(true, [u["axis"]]);
         push(false, [u["test"]]);
+      } else if (t === "list") {
+        push(false, [u["list"]]);
       } else if (t === "reverse") {
         // The inner axis of reverse is a base axis.
         const inner = u["axis"];
@@ -413,9 +421,9 @@ export function children(e: Expr): readonly Expr[] {
     case "rec":
       return Object.values(e.fields);
     case "each":
-      return [e.body, ...whereTests(e.axis), ...addrExprs(e.at)];
+      return [e.body, ...axisExprs(e.axis), ...addrExprs(e.at)];
     case "fold":
-      return [...Object.values(e.init), ...Object.values(e.step), ...whereTests(e.axis), ...addrExprs(e.at), e.result];
+      return [...Object.values(e.init), ...Object.values(e.step), ...axisExprs(e.axis), ...addrExprs(e.at), e.result];
     case "iterate":
       return [...Object.values(e.init), ...Object.values(e.step), ...(e.until === undefined ? [] : [e.until]), e.result];
     case "ref":
@@ -427,9 +435,21 @@ export function children(e: Expr): readonly Expr[] {
   }
 }
 
-/** This function gives the tests of the `where` axes of an axis, from the inside out. It uses a loop, not recursion. */
-function whereTests(a: Axis): readonly Expr[] {
+/**
+ * This function gives the expressions of an axis, in the order of their child indexes. The expression of the axis
+ * `list` comes first, and then the tests of the `where` axes from the inside out. It uses a loop, not recursion.
+ */
+export function axisExprs(a: Axis): readonly Expr[] {
   const out: Expr[] = [];
-  for (let x: Axis = a; x.t === "where"; x = x.axis) out.unshift(x.test);
-  return out;
+  for (let x = a; x.t === "where"; x = x.axis) out.unshift(x.test);
+  const list = listOf(a);
+  return list === undefined ? out : [list, ...out];
+}
+
+/** This function gives the expression of the axis `list` inside an axis, through `where` and `reverse`, if it has one. */
+export function listOf(a: Axis): Expr | undefined {
+  let x = a;
+  while (x.t === "where") x = x.axis;
+  const base = x.t === "reverse" ? x.axis : x;
+  return base.t === "list" ? base.list : undefined;
 }

@@ -130,7 +130,7 @@ export const arbLiteral = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<unk
     domainValue,
   );
 
-const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors"];
+const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth"];
 const FORMS = ["if", "and", "or", "ifError"];
 const NAMES = ["a", "b"];
 
@@ -157,7 +157,7 @@ const BASE_AXES: readonly Axis[] = [
 
 export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
   const ops = [...opts.ops, ...LIST_OPS, ...FORMS, "nope", "toString", "constructor"];
-  const { expr } = fc.letrec<{ expr: Expr; axis: Axis; move: Move }>((tie) => ({
+  const { expr } = fc.letrec<{ expr: Expr; axis: Axis; move: Move; list: Expr }>((tie) => ({
     expr: fc.oneof(
       { depthSize: "small", withCrossShrink: true, maxDepth: opts.maxDepth ?? 4 },
       arbLiteral(opts.domainValue).map((value): Expr => ({ tag: "lit", value })),
@@ -178,6 +178,10 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
         .map(([name, params, fnBody, other, body]): Expr => ({ tag: "let", bind: { [name]: { tag: "fn", params, body: fnBody }, ...(other === undefined ? {} : { a: other }) }, body })),
       fc.tuple(fc.constantFrom("f", "g", "a", "b"), fc.array(tie("expr"), { maxLength: 2 })).map(([fn, args]): Expr => ({ tag: "call", fn, args })),
       fc.tuple(tie("expr"), tie("expr")).map(([x, y]): Expr => ({ tag: "rec", fields: { x, y } })),
+      // The ops on the order of a list (LIST.TAKE, LIST.NTH), with a position that can be wrong.
+      fc
+        .tuple(fc.constantFrom("take", "nth", "values"), tie("list"), fc.integer({ min: -1, max: 3 }))
+        .map(([op, list, n]): Expr => ({ tag: "app", op, args: [list, { tag: "lit", value: n }] })),
       fc.tuple(tie("axis"), tie("expr"), fc.option(fc.array(tie("move"), { maxLength: 2 }), { nil: undefined })).map(([axis, body, at]): Expr =>
         at === undefined || at.length === 0 ? { tag: "each", axis, body } : { tag: "each", axis, body, at },
       ),
@@ -203,6 +207,17 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
       // The reverse order of a base axis (AXIS.REVERSE). The axis table has no reverse order.
       fc.constantFrom(...BASE_AXES.filter((a) => a.t !== "table")).map((axis): Axis => ({ t: "reverse", axis })),
       fc.tuple(tie("axis"), tie("expr")).map(([axis, test]): Axis => ({ t: "where", axis, test })),
+      // The items of a list as targets (AXIS.LIST), in its order or in the reverse order.
+      tie("list").map((list): Axis => ({ t: "list", list })),
+      tie("list").map((list): Axis => ({ t: "reverse", axis: { t: "list", list } })),
+    ),
+    // A list (LIST.VALUE): an each, a sorted list, the first items of a list, or any expression.
+    list: fc.oneof(
+      { depthSize: "small", maxDepth: 2 },
+      fc.tuple(tie("axis"), tie("expr")).map(([axis, body]): Expr => ({ tag: "each", axis, body })),
+      tie("list").map((list): Expr => ({ tag: "app", op: "sortBy", args: [list] })),
+      fc.tuple(tie("list"), fc.integer({ min: -1, max: 3 })).map(([list, n]): Expr => ({ tag: "app", op: "take", args: [list, { tag: "lit", value: n }] })),
+      tie("expr"),
     ),
     // A fixed move, or a computed move (NAV.COMPUTED): a literal key or position, or any expression.
     move: fc.oneof(

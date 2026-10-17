@@ -201,6 +201,9 @@ function list(e: Extract<Expr, { tag: "each" }>): string {
       return `${head}.window(${base.from}, ${base.to}, ${body}${where})`;
     case "table":
       return `${head}.table(${quote(base.name)}, ${body}${where})`;
+    // The builder has no axis list, so the view has no chain for it.
+    case "list":
+      return "root.start(null)";
   }
 }
 

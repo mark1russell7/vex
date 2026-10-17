@@ -552,6 +552,8 @@ class Compiler {
   /** This method compiles the targets of an axis. For `where`, a failed test keeps the target with its error. */
   #targets(a: Axis, path: readonly number[], counter: { next: number }): (f: Frame, c: Ctx) => Result<readonly { readonly key: string; readonly test?: Result<unknown> }[]> {
     if (a.t === "table") return (_f, c) => ok(c.space.keys.map((key) => ({ key })));
+    const base = a.t === "reverse" ? a.axis : a;
+    if (base.t === "list") return this.#listTargets(base.list, a.t === "reverse", path, counter);
     if (a.t !== "where") {
       return (f, c) => {
         const keys = axisTargets(c.space, f.pos, a);
@@ -581,6 +583,21 @@ class Compiler {
         }
       }
       return ok(out);
+    };
+  }
+
+  /**
+   * This method compiles the targets of the axis list (AXIS.LIST): the keys of the items of a list, in its order. The
+   * expression evaluates at the key of the address. An error item keeps its target with its error.
+   */
+  #listTargets(list: Expr, reverse: boolean, path: readonly number[], counter: { next: number }): (f: Frame, c: Ctx) => Result<readonly { readonly key: string; readonly test?: Result<unknown> }[]> {
+    const node = this.node(list, [...path, counter.next++]);
+    return (f, c) => {
+      const r = node(f, c);
+      if (!r.ok) return r;
+      if (!isVexList(r.value)) return this.#err("kind-mismatch", `the axis "list" needs a list, not a ${describeType(r.value)}`, f, path);
+      const items = r.value.items.map(({ key, result }) => (result.ok ? { key } : { key, test: result }));
+      return ok(reverse ? items.toReversed() : items);
     };
   }
 
@@ -702,7 +719,8 @@ class Compiler {
   }
 
   #listOp(op: ListOp, list: VexList, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
-    const optsArg = op === "reduce" ? rest[1] : rest[0];
+    // The options come after the first argument of reduce, take and nth.
+    const optsArg = op === "reduce" || op === "take" || op === "nth" ? rest[1] : rest[0];
     // A reduction that skips error items does not skip #DEPTH! (EVAL.DEPTH).
     const depth = list.items.find((it) => !it.result.ok && isDepthError(it.result.error))?.result;
     if (depth !== undefined && !depth.ok) return fail(depth.error);
@@ -719,7 +737,24 @@ class Compiler {
       return bad === undefined ? ok(okValues as readonly boolean[]) : this.#err("kind-mismatch", `"${op}" needs booleans, but an item is a ${describeType(bad)}`, f, path, { op });
     };
     const empty = (): Result<never> => this.#err("empty", `"${op}" has no values to work with`, f, path, { op });
+    // A count or a position of take and nth is a whole number from 0.
+    const whole = (): Result<number> => {
+      const n = rest[0];
+      return typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? ok(n) : this.#err("kind-mismatch", `"${op}" needs a whole number from 0, not ${describeType(n)}`, f, path, { op });
+    };
+    const okItems = list.items.filter((it) => it.result.ok);
     switch (op) {
+      case "sortBy":
+        return this.#sortBy(okItems, okValues, f, path);
+      case "take": {
+        const n = whole();
+        return n.ok ? ok(vexList(okItems.slice(0, n.value))) : n;
+      }
+      case "nth": {
+        const i = whole();
+        if (!i.ok) return i;
+        return i.value < okValues.length ? ok(okValues[i.value]) : this.#err("empty", `"nth" has no item at the position ${String(i.value)}, and the list has ${String(okValues.length)} items`, f, path, { op });
+      }
       case "count":
         return ok(okValues.length);
       case "values":
@@ -758,6 +793,22 @@ class Compiler {
       case "reduce":
         return this.#reduce(rest[0], okValues, f, path, optsArg);
     }
+  }
+
+  /**
+   * This method sorts the items of a list by their values, from the smallest (LIST.SORT). The sort is stable. The values
+   * are all numbers without NaN, or all texts. Texts compare by their UTF-16 code units.
+   */
+  #sortBy(items: readonly ListItem[], values: readonly unknown[], f: Frame, path: readonly number[]): Result<VexList> {
+    const kind = typeof values[0];
+    const bad = values.findIndex((x) => typeof x !== kind || (kind !== "number" && kind !== "string") || Number.isNaN(x));
+    if (bad >= 0) return this.#err("kind-mismatch", `"sortBy" needs numbers without NaN or texts, all of one kind, but an item is ${Number.isNaN(values[bad]) ? "NaN" : `a ${describeType(values[bad])}`}`, f, path, { op: "sortBy" });
+    const order = values.map((_x, i) => i).toSorted((i, j) => {
+      const a = values[i] as number | string;
+      const b = values[j] as number | string;
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+    return ok(vexList(order.map((i) => items[i] as ListItem)));
   }
 
   /**

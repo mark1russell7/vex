@@ -255,7 +255,7 @@ The status on 2026-10-17:
 
 - The reverse axis is done (AXIS.REVERSE). A module prints a loop from the end.
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
-- Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 and a module give a reason for a program with lists, and tier 1 evaluates it. A module that keeps a list as an array is the next step.
+- Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 gives a reason for a program with lists, and tier 1 evaluates it. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
 
 Tier 2 puts the bodies of functions in at most 10000 places in one program (`MAX_CALLS`). A function that calls another function twice doubles its body. Thus a chain of 15 such functions puts the first body in 16384 places. Over the limit, tier 1 evaluates the program. A module prints each function once, so it has no limit.
 

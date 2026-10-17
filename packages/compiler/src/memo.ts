@@ -10,7 +10,7 @@
  * A key reads the origin or a name from outside the node, and nothing that the node changes. Inside the node, the
  * value of the key replaces the key. Thus the value of the node depends only on the space and the values of the keys.
  */
-import { addrExprs, isListOp, type Addr, type Axis, type Expr } from "@mark1russell7/vex";
+import { addrExprs, isListOp, listOf, type Addr, type Axis, type Expr } from "@mark1russell7/vex";
 
 /** A read of the focus of the expression, outside its own loops. */
 const FOCUS = 1;
@@ -89,8 +89,8 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
     case "each": {
       const { base, tests } = parts(e.axis);
       // The targets of `all` do not depend on the focus, but its address can fail (V-051). Each other axis starts at its
-      // address.
-      const targets = base.t === "table" ? OPAQUE : base.t === "all" && (e.at ?? []).length === 0 ? 0 : addressReads(e.at, top);
+      // address. The targets of the axis list are the items of a value, and the memo does not follow them yet (AXIS.LIST).
+      const targets = base.t === "table" || listOf(e.axis) !== undefined ? OPAQUE : base.t === "all" && (e.at ?? []).length === 0 ? 0 : addressReads(e.at, top);
       const at = addrExprs(e.at).reduce((r, x) => r | reads(x, outer, inner, top), targets);
       return [e.body, ...tests].reduce((r, x) => r | reads(x, outer, inner, false), at);
     }

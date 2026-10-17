@@ -173,9 +173,14 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
       })),
       // Functions (FN.*): a binding f, g or b with parameters from a and b, beside a value a, and calls with zero to two
       // arguments. A function b has the name of a parameter and of a name of a loop, which hide it.
+      // The body of the let is often a call of the function with the right number of arguments.
       fc
-        .tuple(fc.constantFrom("f", "g", "b"), fc.subarray([...NAMES]), tie("expr"), fc.option(tie("expr"), { nil: undefined }), tie("expr"))
-        .map(([name, params, fnBody, other, body]): Expr => ({ tag: "let", bind: { [name]: { tag: "fn", params, body: fnBody }, ...(other === undefined ? {} : { a: other }) }, body })),
+        .tuple(fc.constantFrom("f", "g", "b"), fc.subarray([...NAMES]), tie("expr"), fc.option(tie("expr"), { nil: undefined }), tie("expr"), fc.boolean(), tie("expr"), tie("expr"))
+        .map(([name, params, fnBody, other, body, exact, x, y]): Expr => ({
+          tag: "let",
+          bind: { [name]: { tag: "fn", params, body: fnBody }, ...(other === undefined ? {} : { a: other }) },
+          body: exact ? { tag: "call", fn: name, args: [x, y].slice(0, params.length) } : body,
+        })),
       fc.tuple(fc.constantFrom("f", "g", "a", "b"), fc.array(tie("expr"), { maxLength: 2 })).map(([fn, args]): Expr => ({ tag: "call", fn, args })),
       fc.tuple(tie("expr"), tie("expr")).map(([x, y]): Expr => ({ tag: "rec", fields: { x, y } })),
       // The ops on the order of a list (LIST.TAKE, LIST.NTH), with a position that can be wrong.

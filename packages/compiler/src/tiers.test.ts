@@ -290,19 +290,19 @@ describe("the tiers", () => {
     expect(m.ok ? m.source.match(/const fn\d+ =/g) : []).toHaveLength(15);
   });
 
-  it("AXIS.LIST LIST.SORT: a program with lists as values goes to tier 1, and a module gives the reason", () => {
+  it("AXIS.LIST LIST.SORT: a program with lists as values goes to tier 1, and a module keeps each list as an array", () => {
     const s = space.array([{ n: 3 }, { n: 1 }, { n: 2 }]);
     const sorted = app("sortBy", each(axes.all, ref("n")));
-    const axis = 'the program has the axis "list", and the compiler does not have lists as values yet';
+    const axis = 'the program has the axis "list", and tier 2 does not have lists as values yet';
     const cases: readonly (readonly [Expr, string])[] = [
-      [app("values", each(axes.list(sorted), ref("n"))), axis],
+      [app("sum", each(axes.list(sorted), ref("n"))), axis],
       [fold(axes.reverse(axes.list(sorted)), { a: lit(0) }, { a: ref("n") }, variable("a")), axis],
-      [app("nth", sorted, lit(1)), 'the program has the list op "nth", and the compiler does not have lists as values yet'],
-      [app("count", app("take", sorted, lit(2))), 'the program has the list op "take", and the compiler does not have lists as values yet'],
+      [app("nth", sorted, lit(1)), 'the program has the list op "nth", and tier 2 does not have lists as values yet'],
+      [app("count", app("take", sorted, lit(2))), 'the program has the list op "take", and tier 2 does not have lists as values yet'],
     ];
     for (const [e, reason] of cases) {
       expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason });
-      expect(emitModule(e, { domains: [NumDomain], schema: { fields: { n: "number" } } })).toEqual({ ok: false, reason });
+      expect(emitModule(e, { domains: [NumDomain], schema: { fields: { n: "number" } } }).ok).toBe(true);
       const p = tiered(e, { domains: [NumDomain] });
       expect(p.tier).toBe(1);
       for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));

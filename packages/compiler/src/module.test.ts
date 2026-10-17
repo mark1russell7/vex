@@ -734,6 +734,44 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(source.lastIndexOf("const fn")).toBeGreaterThan(source.indexOf("for (let o = 0"));
   });
 
+  it("LIST.VALUE AXIS.LIST: a module keeps a list as an array, with the order and the errors of the interpreter", async () => {
+    const strict = lit({ strict: true });
+    const sorted = op("sortBy", each(axes.all, n));
+    const e = let_(
+      // A list of the run evaluates once, before the keys. A list of a window depends on the key.
+      { xs: sorted, near: each(axes.window(-1, 1), w), inv: each(axes.all, op("divide", lit(1), w)) },
+      rec({
+        // The axis list goes over the order of the list, also from its end and with a test.
+        firstW: op("first", each(axes.list(v("xs")), w)),
+        lastW: op("first", each(axes.reverse(axes.list(v("xs"))), w)),
+        digits: fold(axes.list(v("xs")), { d: lit(0) }, { d: op("add", op("multiply", v("d"), lit(10)), n) }, v("d")),
+        tested: op("count", each(axes.where(axes.list(v("xs")), op("gt", w, lit(0))), n)),
+        // The list ops over a name of a list, and over sortBy and take.
+        sum: op("sum", v("near")),
+        mean: op("mean", v("near")),
+        top: op("max", op("take", v("xs"), lit(2))),
+        second: op("nth", v("xs"), lit(1)),
+        texts: op("first", op("sortBy", each(axes.all, ref("s")))),
+        // An error item: 1 / 0 is not finite. A lenient op skips it, and strict gives the error.
+        lenient: op("count", op("sortBy", v("inv"))),
+        strict: op("ifError", op("count", op("sortBy", v("inv"), strict)), lit(-1)),
+        nth: op("ifError", op("nth", v("inv"), lit(0), strict), lit(-1)),
+        errorItem: op("ifError", fold(axes.list(v("inv")), { c: lit(0) }, { c: op("add", v("c"), lit(1)) }, v("c")), lit(-1)),
+        // A value that is not a list, a wrong count and values of two kinds give an error.
+        badCount: op("ifError", op("count", op("take", v("xs"), lit(-1))), lit(-1)),
+        badKind: op("ifError", op("count", op("sortBy", each(axes.all, ref("b")))), lit(-1)),
+      }),
+    );
+    await expectGolden("list-values", e);
+    // A list is a value only at a place that takes one.
+    expect(reasonOf(each(axes.all, n))).toBe("a list is a value of the program");
+    expect(reasonOf(let_({ xs: sorted }, v("xs")))).toBe("a list is a value of the program");
+    expect(reasonOf(op("add", lit(1), op("take", sorted, lit(1))))).toBe("a list is a value of the program");
+    expect(reasonOf(op("nth", let_({ a: lit(1) }, sorted), lit(0)))).toBe("a list is a value of the program");
+    expect(reasonOf(op("count", op("sortBy", lit(5))))).toBe("a list op on a value that is not a list");
+    expect(reasonOf(op("sum", each(axes.list(sorted), n, [offset(1)])))).toBe('the axis "list" with an address');
+  });
+
   it("KIND.RETURNS: the grid in 2D with vectors as plain data is a standalone module", async () => {
     // The op xy of NumDomain gives a value of XYDomain (returns: "domain:XY"), so each op on the vectors has a static site.
     const xy = (a: Expr, b: Expr): Expr => op("xy", a, b);
@@ -1016,6 +1054,29 @@ describe("COMPILE.MODULE: random programs", () => {
     fc.assert(
       fc.property(keyed, keyed, records, (a, b, rs) => {
         const e = rec({ a, b });
+        expectSame(make(sourceOf(e)), e, rs, VARS);
+      }),
+    );
+  });
+
+  it("P17 COMPILE.MODULE LIST.VALUE: a module with lists gives the value of the interpreter at each key", () => {
+    // A list from an axis, sorted or not, and the first items of a list. Some lists have error items, texts or NaN.
+    const base = fc.constantFrom(each(axes.all, n), each(axes.all, w), each(axes.all, ref("s")), each(axes.where(axes.all, ref("b")), w), each(axes.window(-1, 1), n), each(axes.all, op("divide", lit(1), w)), each(axes.reverse(axes.all), n));
+    const list: fc.Arbitrary<Expr> = fc.oneof(
+      base,
+      fc.tuple(base, fc.boolean()).map(([l, strict]) => op("sortBy", l, ...(strict ? [lit({ strict: true })] : []))),
+      fc.tuple(base, fc.integer({ min: -1, max: 3 }), fc.boolean()).map(([l, k, sort]) => op("take", sort ? op("sortBy", l) : l, lit(k))),
+    );
+    const uses: readonly ((l: Expr, i: number, opts: readonly Expr[]) => Expr)[] = [
+      ...["count", "sum", "first", "max", "mean"].map((o) => (l: Expr, _i: number, opts: readonly Expr[]) => op(o, l, ...opts)),
+      (l, i, opts) => let_({ xs: l }, op("nth", v("xs"), lit(i), ...opts)),
+      (l, _i, opts) => let_({ xs: l }, op("sum", each(axes.where(axes.list(v("xs")), op("gt", w, lit(-1))), w), ...opts)),
+      (l) => let_({ xs: l }, fold(axes.list(v("xs")), { d: lit(0) }, { d: op("subtract", n, v("d")) }, v("d"))),
+      (l, _i, opts) => let_({ xs: l }, op("first", each(axes.reverse(axes.list(v("xs"))), op("add", n, w)), ...opts)),
+    ];
+    const lists = fc.tuple(list, fc.constantFrom(...uses), fc.integer({ min: -1, max: 3 }), fc.boolean()).map(([l, use, i, strict]) => use(l, i, strict ? [lit({ strict: true })] : []));
+    fc.assert(
+      fc.property(lists, records, (e, rs) => {
         expectSame(make(sourceOf(e)), e, rs, VARS);
       }),
     );

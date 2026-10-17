@@ -15,14 +15,14 @@ export const MAX_CALLS = 10_000;
 const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth"]);
 
 /**
- * This function gives the reason that the compiler cannot take a program with lists as values. The reason is the axis
- * `list` or an op on the order of a list. Tier 1 evaluates such a program. It uses a stack, not recursion.
+ * This function gives the reason that tier 2 cannot take a program with lists as values. The reason is the axis `list`
+ * or an op on the order of a list. Tier 1 evaluates such a program. It uses a stack, not recursion.
  */
 export function listReason(expr: Expr): string | undefined {
   const todo: Expr[] = [expr];
   for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
-    if ((x.tag === "each" || x.tag === "fold") && listOf(x.axis) !== undefined) return 'the program has the axis "list", and the compiler does not have lists as values yet';
-    if (x.tag === "app" && ORDER_OPS.has(x.op)) return `the program has the list op "${x.op}", and the compiler does not have lists as values yet`;
+    if ((x.tag === "each" || x.tag === "fold") && listOf(x.axis) !== undefined) return 'the program has the axis "list", and tier 2 does not have lists as values yet';
+    if (x.tag === "app" && ORDER_OPS.has(x.op)) return `the program has the list op "${x.op}", and tier 2 does not have lists as values yet`;
     todo.push(...children(x));
   }
   return undefined;

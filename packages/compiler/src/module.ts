@@ -20,7 +20,7 @@
  * gives a reason, not code.
  */
 import { addrExprs, children, isFieldName, moveExpr, shapeError, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
-import { factsOf, kindOfDomain, listReason, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
+import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
 /** The options of a standalone module. */
@@ -55,6 +55,13 @@ interface Value {
   readonly deps: ReadonlySet<number>;
   /** True for a literal and for the read of a name: a constant of the run with such code needs no variable of its own. */
   readonly plain?: boolean;
+  /** For a list (LIST.VALUE): the kind of its items. The code is an array of pairs of a key and a value or the sentinel. */
+  readonly list?: ListInfo;
+}
+
+/** The facts of a list of the code: the kind of the values of its items, if the printer knows it. */
+interface ListInfo {
+  readonly item: Kind | undefined;
 }
 
 /** The code of a node: the statements before its value, and its value. `safe` covers the statements too. */
@@ -69,6 +76,7 @@ interface Name {
   readonly kind: Kind | undefined;
   readonly lazy: boolean;
   readonly deps: ReadonlySet<number>;
+  readonly list?: ListInfo;
 }
 
 /** The levels of a constant of the run. */
@@ -132,7 +140,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -152,6 +160,19 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // The index of a computed position, and of a computed key: a key of an array space is the text of its index.
   I: "function I(t, n) { return Number.isInteger(t) && t >= 0 && t < n ? t : F(); }",
   K: 'function K(k, n) { return typeof k === "string" && /^(0|[1-9]\\d*)$/.test(k) && +k < n ? +k : F(); }',
+  // The ops on the order of a list (LIST.SORT, LIST.TAKE, LIST.NTH) work on the items with values. With strict, an
+  // error item is the error of the op. A sort is stable, and the values are numbers without NaN or texts of one kind.
+  V: "function V(l, s) { if (s && l.some((x) => x[1] === E)) F(); return l.filter((x) => x[1] !== E); }",
+  SB: [
+    "function SB(l, s) {",
+    "  const o = V(l, s);",
+    "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
+    "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "}",
+  ].join("\n"),
+  TK: "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
+  NT: "function NT(l, i, s) { const o = V(l, s); return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F(); }",
   // The memo of a function of one key, and of more keys. -0 has its own entry, because an op can tell it from 0.
   M1: [
     "function M1(f) {",
@@ -308,7 +329,7 @@ const STEPS: Readonly<Record<string, readonly [string, string]>> = {
 };
 
 /** The helpers that each helper uses. */
-const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"] };
+const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = { F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"], V: ["F"], SB: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"] };
 
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
@@ -581,6 +602,10 @@ class Printer {
   readonly #columns = new Map<string, string>();
   /** The expressions whose code is a constant of the run. */
   readonly #constant = new WeakSet<Expr>();
+  /** The expressions at a place that takes a list: a binding, the head of a list op and the list of an axis. */
+  readonly #wantList = new WeakSet<Expr>();
+  /** The facts of the list of each function of the memo whose value is a list. */
+  readonly #lists = new Map<string, ListInfo | undefined>();
 
   constructor(expr: Expr, options: ModuleOptions) {
     this.#domains = options.domains ?? [];
@@ -665,13 +690,13 @@ class Printer {
 
   /** This method gives the code of a name: a read that throws the error of its value, if it can hold an error. */
   #read(name: Name): Value {
-    const base = { kind: name.kind, deps: name.deps, plain: true };
+    const base = { kind: name.kind, deps: name.deps, plain: true, ...(name.list === undefined ? {} : { list: name.list }) };
     return name.lazy ? { ...base, code: `${this.use("G")}(${name.code})`, safe: false, held: name.code } : { ...base, code: name.code, safe: true };
   }
 
   /** This method gives the name of a constant of the run, from the read of its value. */
   #nameOf(v: Value): Name {
-    return { code: v.held ?? v.code, kind: v.kind, lazy: v.held !== undefined, deps: NO_DEPS };
+    return { code: v.held ?? v.code, kind: v.kind, lazy: v.held !== undefined, deps: NO_DEPS, ...(v.list === undefined ? {} : { list: v.list }) };
   }
 
   /**
@@ -697,7 +722,8 @@ class Printer {
     const name = this.fresh("c");
     if (lazy) this.run.push(`const ${name} = ${this.use("L")}(() => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
     else this.run.push(...this.#store(name, c, true));
-    const read = bare(this.#read(lazy ? { code: `${name}()`, kind: c.v.kind, lazy: true, deps: NO_DEPS } : { code: name, kind: c.v.kind, lazy: !c.v.safe, deps: NO_DEPS }));
+    const list = c.v.list === undefined ? {} : { list: c.v.list };
+    const read = bare(this.#read(lazy ? { code: `${name}()`, kind: c.v.kind, lazy: true, deps: NO_DEPS, ...list } : { code: name, kind: c.v.kind, lazy: !c.v.safe, deps: NO_DEPS, ...list }));
     if (key !== undefined) this.#constants.set(key, read);
     return read;
   }
@@ -720,7 +746,24 @@ class Printer {
       this.#keyOf.set(c, this.#constKey(e, ctx));
       this.#constant.add(e);
     }
+    // A list is a value only at a place that takes a list. A result, an argument and a field take no list.
+    if (c.v.list !== undefined && !this.#wantList.has(e)) throw new NotStandalone("a list is a value of the program");
     return this.#columnar(e, c, ctx) ? this.#column(e, c, ctx) : c;
+  }
+
+  /** This method gives the code of a list at a place that takes a list (LIST.VALUE): an each, a name, sortBy or take. */
+  #listOf(e: Expr, ctx: Ctx): Code {
+    this.#wantList.add(e);
+    const c = this.expr(e, ctx);
+    if (c.v.list === undefined) throw new NotStandalone("a list op on a value that is not a list");
+    return c;
+  }
+
+  /** This method tells if an expression gives a list at a place that takes one: an each, sortBy, take or a name of a list. */
+  #isList(e: Expr, ctx: Ctx): boolean {
+    if (e.tag === "each") return true;
+    if (e.tag === "app") return e.op === "sortBy" || e.op === "take";
+    return e.tag === "var" && ctx.env.get(e.name)?.list !== undefined;
   }
 
   /**
@@ -762,7 +805,7 @@ class Printer {
       this.run.push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
       this.#columns.set(key, name);
     }
-    return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps });
+    return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps, ...(c.v.list === undefined ? {} : { list: c.v.list }) });
   }
 
   #node(e: Expr, ctx: Ctx): Code {
@@ -791,7 +834,7 @@ class Printer {
       case "app":
         return this.#app(e, ctx);
       case "each":
-        throw new NotStandalone("a list is a value of the program");
+        return this.#eachList(e, ctx);
       case "fold":
         return this.#fold(e, ctx);
       case "iterate":
@@ -934,6 +977,8 @@ class Printer {
         continue;
       }
       fns.delete(name);
+      // A binding takes a list (LIST.VALUE).
+      if (this.#isList(x, ctx)) this.#wantList.add(x);
       const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
       if (c.v.deps.size === 0) {
         env.set(name, this.#nameOf(c.v));
@@ -941,7 +986,7 @@ class Printer {
       }
       const b = this.fresh("b");
       s.push(...this.#store(b, c));
-      env.set(name, { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps });
+      env.set(name, { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps, ...(c.v.list === undefined ? {} : { list: c.v.list }) });
       // The statements of the binding read its keys, so the let is not a constant of the run.
       deps = new Set([...deps, ...c.v.deps]);
     }
@@ -1032,6 +1077,8 @@ class Printer {
     if (op === "ifError") return this.#ifError(args, ctx);
     const [head] = args;
     if (LIST_OPS.has(op) && head?.tag === "each") return this.#list(op, head, args.slice(1), ctx);
+    if (head !== undefined && (op === "sortBy" || op === "take")) return this.#order(op, head, args.slice(1), ctx);
+    if (head !== undefined && (LIST_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, args.slice(1), ctx);
     const raw = args.map((x) => this.expr(x, ctx));
     const deps = depsOf(...raw);
     const values = this.#settle(raw, deps, args);
@@ -1142,14 +1189,17 @@ class Printer {
   #targetLoop(axis: Axis, at: readonly Move[], ctx: Ctx): {
     readonly s: string[];
     readonly j: string;
-    readonly lo: string;
-    readonly hi: string;
+    /** The head of the loop, and the statements at the start of each item before the try and inside it. */
+    readonly head: string;
+    readonly key: readonly string[];
+    readonly check: readonly string[];
     readonly skip: string | undefined;
     readonly fixed: boolean;
     readonly start: ReadonlySet<number>;
+    /** True when the statements before the loop cannot throw. */
+    readonly startSafe: boolean;
     readonly tests: readonly Expr[];
     readonly inner: Ctx;
-    readonly reverse: boolean;
   } {
     const { base: outer, tests } = testsOf(axis);
     // The reverse order of an axis is a loop from its end (AXIS.REVERSE). The validation keeps a base axis inside.
@@ -1157,6 +1207,18 @@ class Printer {
     const base = outer.t === "reverse" ? outer.axis : outer;
     const j = this.fresh("j");
     const inner: Ctx = { ...ctx, focus: j, level: ctx.level + 1 };
+    // The axis list goes over the array of its list (AXIS.LIST). The list evaluates at the node, before the loop, and an
+    // error item is an item that fails.
+    if (base.t === "list") {
+      if (at.length > 0) throw new NotStandalone('the axis "list" with an address');
+      const list = this.#hoist(this.#listOf(base.list, ctx), hasLoop(base.list));
+      const a = this.fresh("A");
+      const q = this.fresh("q");
+      const head = reverse ? `for (let ${q} = ${a}.length - 1; ${q} >= 0; ${q}--) {` : `for (let ${q} = 0; ${q} < ${a}.length; ${q}++) {`;
+      const key = [`const ${j} = ${a}[${q}][0];`];
+      const check = [`if (${a}[${q}][1] === E) ${this.use("F")}();`];
+      return { s: [...list.s, `const ${a} = ${list.v.code};`], j, head, key, check, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner };
+    }
     const s: string[] = [];
     let lo = "0";
     let hi = "n";
@@ -1179,13 +1241,14 @@ class Printer {
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
-    return { s, j, lo, hi, skip, fixed: f === undefined, start, tests, inner, reverse };
+    const startSafe = at.every((m) => m.t === "origin");
+    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], skip, fixed: f === undefined, start, startSafe, tests, inner };
   }
 
   #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
     const strict = this.#strict(op, rest);
     const at = target.at ?? [];
-    const { s, j, lo, hi, skip, fixed, start, tests, inner, reverse } = this.#targetLoop(target.axis, at, ctx);
+    const { s, j, head, key, check, skip, fixed, start, startSafe, tests, inner } = this.#targetLoop(target.axis, at, ctx);
     const { level } = inner;
     // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run.
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
@@ -1193,12 +1256,37 @@ class Printer {
     // A count of all the items, whose body cannot fail, is the count of the records. A safe body covers its statements.
     if (op === "count" && fixed && tests.length === 0 && body.v.safe) return bare(plainValue("n", "number"));
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== level));
+    const r = this.#reduction(op, body.v.kind);
+    const { v } = r;
+    s.push(r.init);
+    const item = [...check, ...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
+    // An item whose tests and body cannot fail needs no try.
+    const safeItem = check.length === 0 && body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
+    const loop = [
+      ...key,
+      ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
+      ...(safeItem
+        ? [...item, `const ${v} = ${body.v.code};`]
+        : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", strict ? `  ${this.use("F")}();` : "  continue;", "}"]),
+      r.step,
+    ];
+    s.push(head, ...ind(loop), "}");
+    // A count without strict, and any, all and none over booleans without strict, cannot fail. The address of the axis
+    // can fail, except at the focus or at the origin.
+    const safe = startSafe && !strict && (op === "count" || (BOOLEAN_LIST_OPS.has(op) && body.v.kind === "boolean"));
+    return { s, v: { code: r.result, kind: listKind(op, body.v.kind), safe, deps } };
+  }
+
+  /**
+   * This method gives the parts of a list op that reduces the values of its items. The parts are the variable `v` of
+   * the value of an item, the first statement, the step and the result. A value of the wrong kind is an error of the op.
+   */
+  #reduction(op: string, kind: Kind | undefined): { readonly v: string; readonly init: string; readonly step: string; readonly result: string } {
     const a = this.fresh("a");
     const n = this.fresh("n");
     const v = this.fresh("x");
-    const num = body.v.kind === "number" ? v : `${this.use("U")}(${v})`;
-    const bool = body.v.kind === "boolean" ? v : `${this.use("B")}(${v})`;
-    const F = this.use("F");
+    const num = kind === "number" ? v : `${this.use("U")}(${v})`;
+    const bool = kind === "boolean" ? v : `${this.use("B")}(${v})`;
     const inits: Readonly<Record<string, string>> = {
       count: `let ${n} = 0;`,
       sum: `let ${a} = 0;`,
@@ -1207,7 +1295,6 @@ class Printer {
       none: `let ${a} = false;`,
       all: `let ${a} = true;`,
     };
-    s.push(inits[op] ?? `let ${a}, ${n} = 0;`);
     const steps: Readonly<Record<string, string>> = {
       count: `${n}++;`,
       sum: `${a} += ${num};`,
@@ -1219,17 +1306,7 @@ class Printer {
       all: `if (!${bool}) ${a} = false;`,
       first: `if (${n}++ === 0) ${a} = ${v};`,
     };
-    const item = [...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
-    // An item whose tests and body cannot fail needs no try.
-    const safeItem = body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
-    const loop = [
-      ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
-      ...(safeItem
-        ? [...item, `const ${v} = ${body.v.code};`]
-        : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", strict ? `  ${F}();` : "  continue;", "}"]),
-      steps[op] as string,
-    ];
-    s.push(forHead(j, lo, hi, reverse), ...ind(loop), "}");
+    const F = this.use("F");
     const results: Readonly<Record<string, string>> = {
       count: n,
       sum: this.#checked("number", a),
@@ -1238,12 +1315,63 @@ class Printer {
       all: a,
       none: `!${a}`,
     };
-    const code = results[op] ?? `(${n} === 0 ? ${F}() : ${a})`;
-    // A count without strict, and any, all and none over booleans without strict, cannot fail. The address of the axis
-    // can fail, except at the focus or at the origin.
-    const startSafe = at.every((m) => m.t === "origin");
-    const safe = startSafe && !strict && (op === "count" || (BOOLEAN_LIST_OPS.has(op) && body.v.kind === "boolean"));
-    return { s, v: { code, kind: listKind(op, body.v.kind), safe, deps } };
+    return { v, init: inits[op] ?? `let ${a}, ${n} = 0;`, step: steps[op] as string, result: results[op] ?? `(${n} === 0 ? ${F}() : ${a})` };
+  }
+
+  /**
+   * This method prints a list as an array (LIST.VALUE): a pair of the key and the value of each item. A test that
+   * fails, a body that fails and an error item of the axis list give the error sentinel as the value.
+   */
+  #eachList(e: ExprOf<"each">, ctx: Ctx): Code {
+    const at = e.at ?? [];
+    const { s, j, head, key, check, skip, start, startSafe, tests, inner } = this.#targetLoop(e.axis, at, ctx);
+    const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
+    const body = this.#hoist(this.expr(e.body, inner), hasLoop(e.body));
+    const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== inner.level));
+    const list = this.fresh("L");
+    const v = this.fresh("x");
+    const item = [...check, ...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
+    const safeItem = check.length === 0 && body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
+    const loop = [
+      ...key,
+      ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
+      ...(safeItem ? [...item, `${list}.push([${j}, ${body.v.code}]);`] : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", `  ${v} = E;`, "}", `${list}.push([${j}, ${v}]);`]),
+    ];
+    return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: { item: body.v.kind } } };
+  }
+
+  /**
+   * This method prints sortBy and take (LIST.SORT, LIST.TAKE): a new array from the array of a list. An error item is
+   * not in the new list, and with strict it is the error of the op.
+   */
+  #order(op: "sortBy" | "take", head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
+    const list = this.#listOf(head, ctx);
+    const count = op === "take" ? rest[0] : undefined;
+    const strict = this.#strict(op, op === "take" ? rest.slice(1) : rest);
+    const raw = [list, ...(count === undefined ? [] : [this.expr(count, ctx)])];
+    const deps = depsOf(...raw);
+    const [l, n] = this.#settle(raw, deps, [head, ...(count === undefined ? [] : [count])]) as [Code, Code | undefined];
+    const args = [l.v.code, ...(op === "take" ? [n === undefined ? "undefined" : n.v.code] : []), String(strict)];
+    const item = (l.v.list as ListInfo).item;
+    return { s: stmtsOf(l, ...(n === undefined ? [] : [n])), v: { code: `${this.use(op === "sortBy" ? "SB" : "TK")}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: { item } } };
+  }
+
+  /** This method prints a list op over a list that is not an each: a loop over its array, and nth (LIST.NTH). */
+  #overList(op: string, head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
+    const list = this.#listOf(head, ctx);
+    const position = op === "nth" ? rest[0] : undefined;
+    const strict = this.#strict(op, op === "nth" ? rest.slice(1) : rest);
+    const raw = [list, ...(position === undefined ? [] : [this.expr(position, ctx)])];
+    const deps = depsOf(...raw);
+    const [l, i] = this.#settle(raw, deps, [head, ...(position === undefined ? [] : [position])]) as [Code, Code | undefined];
+    const item = (l.v.list as ListInfo).item;
+    if (op === "nth") {
+      return { s: stmtsOf(l, ...(i === undefined ? [] : [i])), v: { code: `${this.use("NT")}(${l.v.code}, ${i === undefined ? "undefined" : i.v.code}, ${String(strict)})`, kind: item, safe: false, deps } };
+    }
+    const r = this.#reduction(op, item);
+    const { v } = r;
+    const s = [...l.s, r.init, `for (const [, ${v}] of ${l.v.code}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
+    return { s, v: { code: r.result, kind: listKind(op, item), safe: false, deps } };
   }
 
   /**
@@ -1322,14 +1450,15 @@ class Printer {
     const step = this.#loopStep(e.step, { ...t.inner, env: names.env }, names.vars);
     const result = this.expr(e.result, { ...ctx, env: names.env });
     const body = [
+      ...t.key,
       ...(t.skip === undefined ? [] : [`if (${t.j} === ${t.skip}) continue;`]),
+      ...t.check,
       ...tests.flatMap((c) => [...c.s, `if (!${this.#boolean(c.v)}) continue;`]),
       ...step.s,
     ];
     const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level);
     const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
-    const head = forHead(t.j, t.lo, t.hi, t.reverse);
-    return { s: [...names.s, ...t.s, head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps } };
+    return { s: [...names.s, ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps } };
   }
 
   /**
@@ -1373,6 +1502,7 @@ class Printer {
         // The loop of the node gives statements.
         const body = this.expr(e, bodyCtx);
         this.#kinds.set(fn, body.v.kind);
+        this.#lists.set(fn, body.v.list);
         this.run.push(`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});");
       }
     }
@@ -1387,7 +1517,8 @@ class Printer {
       s.push(...this.#store(t, c));
       return t;
     });
-    return { s, v: { code: `${fn}(${args.join(", ")})`, kind: this.#kinds.get(fn), safe: false, deps: depsOf(...values) } };
+    const list = this.#lists.get(fn);
+    return { s, v: { code: `${fn}(${args.join(", ")})`, kind: this.#kinds.get(fn), safe: false, deps: depsOf(...values), ...(list === undefined ? {} : { list }) } };
   }
 
   /**
@@ -1508,8 +1639,6 @@ export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
-  const lists = listReason(expr);
-  if (lists !== undefined) return { ok: false, reason: lists };
   const p = new Printer(expr, options);
   let value: Code;
   try {

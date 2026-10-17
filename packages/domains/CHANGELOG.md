@@ -1,5 +1,28 @@
 # @mark1russell7/vex-domains
 
+## 0.7.0
+
+### Minor Changes
+
+- e6a565f: The kinds (KIND.PRIMITIVE, KIND.RETURNS, KIND.STATIC). A domain can declare `primitive`, the JavaScript type of its values, and an op can declare `returns`, the kind of its result. The scalar domains declare both, and the law checker of the test kit checks both. `generate` and `tiered` take a `schema` with the kinds of the fields and the variables. An op site whose values have known kinds calls its op with no guard, and a value against the schema goes to tier 1.
+- da04054: `NumDomain` has the ops `sin`, `cos`, `asin` and `hypot`. The angles are in radians. A result that is not finite, for example `asin(2)`, gives `#NUM!`. The formula language has them as `SIN`, `COS`, `ASIN` and `HYPOT`.
+- 159c1ab: The vectors have ops to make them and to read them. The op `vec2` of `NumDomain` makes a `Vec2` from two numbers: `vec2(x, y)`. The ops `x` and `y` of `Vec2Domain` give the components. `NDVectorDomain` has the component-wise ops `min` and `max`. Thus one expression can calculate a size or a position in two dimensions.
+  
+  Each op of `Vec2Domain` declares the kinds of its parameters and of its result. The law checker of the test kit checks each declaration, and the compiler knows the kind of each result.
+- 2383c3b: Vectors as plain data, for a standalone module. `XYDomain` has the component-wise ops of `Vec2Domain` for `{ x, y }` objects, and each op is a function, so `emitModule` can copy the domain. The op `xy` of `NumDomain` makes a value of it. An op can declare a result of another domain with `returns: "domain:Name"` (KIND.RETURNS): the compiler knows the kind of the result, and the law checker of the test kit checks such a result when its new option `domains` has that domain.
+
+### Patch Changes
+
+- Updated dependencies [344f306]
+- Updated dependencies [6a9728e]
+- Updated dependencies [e6a565f]
+- Updated dependencies [7c2d0c3]
+- Updated dependencies [9987fb6]
+- Updated dependencies [159c1ab]
+- Updated dependencies [124a3d4]
+- Updated dependencies [2383c3b]
+  - @mark1russell7/vex@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes

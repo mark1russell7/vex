@@ -1,5 +1,31 @@
 # @mark1russell7/vex-testkit
 
+## 0.7.0
+
+### Minor Changes
+
+- 344f306: The moves `key` and `index` take an expression for the key or the position (NAV.COMPUTED), as `INDEX` of a spreadsheet. The expressions of an address evaluate first, at the node, and then the moves apply. A key that is not a text, or a position that is not a number, gives `#VALUE!`. `deps` keeps the expression in the address and gives its reads (DEPS.COMPUTED). The builder takes a chain in `.index()` and `.to()`.
+  
+  The type `Move` now has `key: string | Expr` and `i: number | Expr`. The new type `FixedMove` has only fixed values: `applyMove`, `resolveAddr` and a cell reference take it, and `fixAddr` gives it. A cell reference takes only fixed moves. The reference interpreter and the random programs of the test kit have computed moves. Tier 2 and the standalone modules evaluate them with no fallback.
+- e6a565f: The kinds (KIND.PRIMITIVE, KIND.RETURNS, KIND.STATIC). A domain can declare `primitive`, the JavaScript type of its values, and an op can declare `returns`, the kind of its result. The scalar domains declare both, and the law checker of the test kit checks both. `generate` and `tiered` take a `schema` with the kinds of the fields and the variables. An op site whose values have known kinds calls its op with no guard, and a value against the schema goes to tier 1.
+- 7c2d0c3: Bounded loops: the expressions `fold` and `iterate` (LOOP.NAMES, FOLD.ORDER, FOLD.ERROR, ITERATE.LIMIT, ITERATE.UNTIL, ITERATE.ERROR). `init` gives the names of a loop and their first values, and `step` gives the next values. A fold makes one step at each target of an axis, in order. An iteration makes up to `limit` steps, a whole number from 0 to 100000, and a true `until` stops it. `result` gives the value. The builder has `fold` on a list chain and `iterate` on a chain. The reference interpreter and the random programs of the test kit have the loops. Tier 2 and the standalone modules compile them to loops with a variable for each name, and a loop that reads no key of the run evaluates once for each run.
+- 9987fb6: A `SheetRun` takes the option `compile`, for example `tiered` of `@mark1russell7/vex-compiler` (SHEET.COMPILE). The run evaluates each formula of a column with its compiled program, and the results stay the results of the interpreter. A formula compiles once for each compiler and its options, also across runs. The test kit exports the arbitraries of random sheets: `arbSheet`, `arbTwoTables` and `arbSheetFormula`.
+  
+  `SheetRun.fill(table)` evaluates each cell of a table in a static order (SHEET.FILL): each column after the columns that it reads, and the keys in the order of its reads from itself. A fill of 20000 rows takes 13 to 26 ms, and the search before took 160 ms. The results of a run are in a map for each column, so the search is faster too. A key of an array space finds its record by its position.
+- 2383c3b: Vectors as plain data, for a standalone module. `XYDomain` has the component-wise ops of `Vec2Domain` for `{ x, y }` objects, and each op is a function, so `emitModule` can copy the domain. The op `xy` of `NumDomain` makes a value of it. An op can declare a result of another domain with `returns: "domain:Name"` (KIND.RETURNS): the compiler knows the kind of the result, and the law checker of the test kit checks such a result when its new option `domains` has that domain.
+
+### Patch Changes
+
+- Updated dependencies [344f306]
+- Updated dependencies [6a9728e]
+- Updated dependencies [e6a565f]
+- Updated dependencies [7c2d0c3]
+- Updated dependencies [9987fb6]
+- Updated dependencies [159c1ab]
+- Updated dependencies [124a3d4]
+- Updated dependencies [2383c3b]
+  - @mark1russell7/vex@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes

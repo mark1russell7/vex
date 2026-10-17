@@ -1,5 +1,22 @@
 # @vex/formula
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [344f306]
+- Updated dependencies [6a9728e]
+- Updated dependencies [e6a565f]
+- Updated dependencies [7c2d0c3]
+- Updated dependencies [da04054]
+- Updated dependencies [9987fb6]
+- Updated dependencies [159c1ab]
+- Updated dependencies [159c1ab]
+- Updated dependencies [124a3d4]
+- Updated dependencies [2383c3b]
+  - @mark1russell7/vex@0.7.0
+  - @mark1russell7/vex-domains@0.7.0
+
 ## 0.2.0
 
 ### Minor Changes

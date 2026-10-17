@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/vex-mcp",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "The MCP server of Vex: the catalog of the domains, and tools that check, evaluate, explain and compile a program as JSON.",
   "type": "module",
   "main": "./src/index.ts",

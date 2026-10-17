@@ -9,6 +9,9 @@ export type Law = "commutative" | "associative" | "idempotent";
 /** The kind of a parameter. The interpreter checks the arguments of an op that declares its parameters. */
 export type ParamKind = "domain" | "number" | "boolean" | "string" | "any";
 
+/** The kind of the result of an op: a kind of a parameter, or `domain:Name` for a value of the domain `Name`. */
+export type ReturnKind = ParamKind | `domain:${string}`;
+
 /** The description of one op of a domain. */
 export interface OpSpec<D = never> {
   /**
@@ -25,10 +28,11 @@ export interface OpSpec<D = never> {
   /** The kinds of the parameters after the receiver. When set, the interpreter checks the arguments. */
   readonly params?: readonly ParamKind[];
   /**
-   * The kind of the result: `domain` for a value of this domain. A compiler reads it to know the kinds of the values
-   * of a program (KIND.RETURNS). The interpreter does not check it, and the law checker of the test kit does.
+   * The kind of the result: `domain` for a value of this domain, and `domain:Name` for a value of the domain `Name`. A
+   * compiler reads it to know the kinds of the values of a program (KIND.RETURNS). The interpreter does not check it,
+   * and the law checker of the test kit does.
    */
-  readonly returns?: ParamKind;
+  readonly returns?: ReturnKind;
 }
 
 /** A JavaScript type of primitive values that a domain can accept. */

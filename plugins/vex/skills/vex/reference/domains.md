@@ -72,7 +72,9 @@ checkLaws(IntervalDomain, { arb: intervals }).every((r) => r.ok); // => true
 - Use plain data for the values. A test with `instanceof` reads the name of a class, so the module cannot copy it.
 - Give `samples`. The compiler compares each op with its copy on the samples.
 
-`Vec2Domain` uses a class, so a program with vectors operates in the interpreter and in `tiered`, but not in a standalone module.
+`Vec2Domain` uses a class, so a program with `Vec2` values operates in the interpreter and in `tiered`, but not in a standalone module. `XYDomain` has the same ops for plain `{ x, y }` data, and the op `xy` of `NumDomain` makes its values. Use it for a 2D program in a module.
+
+An op can give a value of another domain: declare `returns: "domain:Name"`. Then the compiler knows the kind of the result. The law checker checks the result when its option `domains` has that domain.
 
 ## Where the domain goes
 

@@ -87,6 +87,8 @@ cell.at("0");          // => { tag: "some", value: new Vec2(30, 20) }
 corner._.x().at("0"); // => { tag: "some", value: 40 }
 ```
 
+For a standalone module, use `XYDomain` and the op `xy` instead: their vectors are plain `{ x, y }` data. Refer to [make a domain](reference/domains.md#a-domain-for-a-standalone-module).
+
 ## The IR
 
 The builder makes an expression: a tree of plain data. Code can make the same tree with the functions of `@mark1russell7/vex`.

@@ -409,10 +409,10 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
       }
       case "X":
       case "Y": {
-        // X(v) and Y(v) are dot products with the unit vectors, so they use only the ops of Vec2.
+        // X(v) and Y(v) are the ops x and y of Vec2.
         arity(1, 1);
         const [vec] = args();
-        return app("dot", vec ?? lit(0), lit(name === "X" ? new Vec2(1, 0) : new Vec2(0, 1)));
+        return app(name === "X" ? "x" : "y", vec ?? lit(0));
       }
       case "DATE":
         arity(3, 3);

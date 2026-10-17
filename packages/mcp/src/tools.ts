@@ -5,19 +5,20 @@
  */
 import { deps, domainOf, evaluate, explain, formatTrace, isVexList, lit, nestingOf, parse, serialize, shapeError, sizeOf, space, type AnyDomain, type Expr, type Result, type Space, type VexError } from "@mark1russell7/vex";
 import { emitModule, generate, type Schema } from "@mark1russell7/vex-compiler";
-import { AngleDomain, BoolDomain, ColorDomain, DateDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
+import { AngleDomain, BoolDomain, ColorDomain, DateDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
 /** The error of a tool for an input that is not valid. The server gives its message to the caller. */
 export class ToolError extends Error {}
 
 /** The domains that a tool uses without the input `domains`, in this order. */
-export const DEFAULT_DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, ColorDomain, AngleDomain, DateDomain, NDVectorDomain, NumRecordDomain];
+export const DEFAULT_DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, XYDomain, ColorDomain, AngleDomain, DateDomain, NDVectorDomain, NumRecordDomain];
 
 const KNOWN: readonly (readonly [string, AnyDomain])[] = [
   ["NumDomain", NumDomain],
   ["BoolDomain", BoolDomain],
   ["TextDomain", TextDomain],
   ["Vec2Domain", Vec2Domain],
+  ["XYDomain", XYDomain],
   ["ColorDomain", ColorDomain],
   ["AngleDomain", AngleDomain],
   ["DateDomain", DateDomain],

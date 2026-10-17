@@ -1,10 +1,13 @@
 import { defineDomain, type OpTable } from "@mark1russell7/vex";
-import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
+import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { assertLaws, checkLaws, structuralEqual } from "./laws.ts";
 
 const small = fc.integer({ min: -20, max: 20 });
+
+/** This function gives the names of the checks of the op xy of NumDomain. */
+const xyChecks = (opts: Parameters<typeof checkLaws>[1]): readonly string[] => checkLaws(NumDomain, opts).map((r) => r.name).filter((n) => n.startsWith("Num.xy"));
 
 describe("P4 DOMAIN.LAWS: each declared law of each domain holds", () => {
   it("Vec2", () => {
@@ -24,8 +27,19 @@ describe("P4 DOMAIN.LAWS: each declared law of each domain holds", () => {
   it("Date", () => {
     expect(checkLaws(DateDomain, { arb: fc.integer({ min: -1000, max: 1000 }).map((n) => new LocalDate(n)) }).filter((r) => !r.ok)).toEqual([]);
   });
+  it("XY", () => {
+    expect(checkLaws(XYDomain, { arb: fc.tuple(small, small).map(([x, y]) => ({ x, y })) }).filter((r) => !r.ok)).toEqual([]);
+  });
+  it("KIND.RETURNS: a result of the kind domain:Name is a value of the domain Name of the option domains", () => {
+    // With the domain XY, the checker checks the op xy of NumDomain. Without it, the checker cannot check that op.
+    expect(xyChecks({ arb: small, numRuns: 5, domains: [XYDomain] })).toEqual(["Num.xy returns domain:XY"]);
+    expect(xyChecks({ arb: small, numRuns: 5 })).toEqual([]);
+    // A false claim fails: Vec2 is not the domain of the result of xy.
+    const wrong = defineDomain({ name: "W", is: (u: unknown): u is number => typeof u === "number", ops: { pair: { fn: (a: number): unknown => ({ x: a, y: a }), params: [], returns: "domain:Vec2" } } });
+    expect(checkLaws(wrong, { arb: small, numRuns: 5, domains: [Vec2Domain] }).filter((r) => !r.ok).map((r) => r.name)).toEqual(["W.pair returns domain:Vec2"]);
+  });
   it("Num and Bool", () => {
-    expect(checkLaws(NumDomain, { arb: small }).filter((r) => !r.ok)).toEqual([]);
+    expect(checkLaws(NumDomain, { arb: small, domains: [XYDomain] }).filter((r) => !r.ok)).toEqual([]);
     expect(checkLaws(BoolDomain, { arb: fc.boolean() }).filter((r) => !r.ok)).toEqual([]);
     expect(checkLaws(TextDomain, { arb: fc.string({ maxLength: 6 }) }).filter((r) => !r.ok)).toEqual([]);
   });
@@ -100,7 +114,7 @@ describe("the law checker finds a false claim (V-016)", () => {
       ops: { minus: { fn: (a: number, b: number): number => a - b, laws: ["commutative"] } },
     });
     expect(() => assertLaws(Bad, { arb: fc.integer({ min: -9, max: 9 }), numRuns: 50 })).toThrow(/minus commutative/);
-    expect(() => assertLaws(NumDomain, { arb: fc.integer({ min: -9, max: 9 }), numRuns: 20 })).not.toThrow();
+    expect(() => assertLaws(NumDomain, { arb: fc.integer({ min: -9, max: 9 }), numRuns: 20, domains: [XYDomain] })).not.toThrow();
   });
 
   it("commutative fails with a counterexample, and associative holds", () => {

@@ -11,6 +11,7 @@ import { LiftedNDVectorDomain, NDVector, NDVectorDomain, NumRecordDomain } from 
 import { BoolDomain, NumDomain } from "./scalars.ts";
 import { TextDomain } from "./text.ts";
 import { Vec2, Vec2Domain } from "./vec2.ts";
+import { XYDomain } from "./xy.ts";
 import { Fn, FnDomain, Maybe, MaybeDomain } from "./wrappers.ts";
 
 const ONE = space.record({ A: {} });
@@ -125,6 +126,47 @@ describe("the ops of Vec2Domain", () => {
     expect(Vec2Domain.fromScalar?.(2)).toEqual(v(2, 2));
     expect(Vec2Domain.is(a)).toBe(true);
     expect(Vec2Domain.is({ x: 1, y: 2 })).toBe(false);
+  });
+});
+
+describe("the ops of XYDomain", () => {
+  const p = { x: 3, y: -4 };
+  const rows: readonly Row[] = [
+    ["x", [], 3],
+    ["y", [], -4],
+    ["add", [{ x: 1, y: 1 }], { x: 4, y: -3 }],
+    ["subtract", [{ x: 1, y: 1 }], { x: 2, y: -5 }],
+    ["multiply", [{ x: 2, y: 3 }], { x: 6, y: -12 }],
+    ["divide", [{ x: 3, y: -2 }], { x: 1, y: 2 }],
+    ["min", [{ x: 0, y: 0 }], { x: 0, y: -4 }],
+    ["max", [{ x: 0, y: 0 }], { x: 3, y: 0 }],
+    ["scale", [2], { x: 6, y: -8 }],
+    ["negate", [], { x: -3, y: 4 }],
+    ["abs", [], { x: 3, y: 4 }],
+    ["floor", [], { x: 3, y: -4 }],
+    ["ceil", [], { x: 3, y: -4 }],
+    ["round", [], { x: 3, y: -4 }],
+    ["dot", [{ x: 1, y: 2 }], -5],
+    ["length", [], 5],
+    ["distance", [{ x: 0, y: 0 }], 5],
+    ["area", [], -12],
+    ["sum", [], -1],
+    ["equals", [{ x: 3, y: -4 }], true],
+    ["equals", [{ x: 3, y: 4 }], false],
+  ];
+  it.each(rows)("XY %s", (op, args, expected) => {
+    expect(value(run([XYDomain], p, op, ...args))).toEqual(expected);
+  });
+
+  it("accepts plain objects with the numbers x and y only, and xy of NumDomain makes one", () => {
+    expect([{ x: 1, y: 2 }, Object.assign(Object.create(null) as object, { x: 1, y: 2 })].map((u) => XYDomain.is(u))).toEqual([true, true]);
+    expect([new Vec2(1, 2), { x: 1, y: 2, z: 3 }, { x: 1 }, { x: "1", y: 2 }, { x: 1, y: "2" }, [1, 2], null, 1].map((u) => XYDomain.is(u))).toEqual([false, false, false, false, false, false, false, false]);
+    expect(value(run([NumDomain, XYDomain], 3, "xy", -4))).toEqual({ x: 3, y: -4 });
+    // A component that is not finite is not valid.
+    expect(value(run([NumDomain, XYDomain], 3, "xy", Number.POSITIVE_INFINITY))).toBe("#NUM! invalid-value");
+    expect(value(run([XYDomain], p, "divide", { x: 0, y: 1 }))).toBe("#NUM! invalid-value");
+    expect(XYDomain.show?.(p)).toBe("(3, -4)");
+    expect(XYDomain.samples?.()).toHaveLength(3);
   });
 });
 

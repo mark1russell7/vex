@@ -15,8 +15,9 @@ npm install @mark1russell7/vex @mark1russell7/vex-domains
 | Domain | Values | Example ops |
 |---|---|---|
 | `Vec2Domain` | `Vec2`: a 2D vector | `x`, `y`, `add`, `max`, `multiply`, `floor`, `length`, `dot`, `rotate` |
+| `XYDomain` | `{ x, y }`: a 2D vector as plain data, for a standalone module | `x`, `y`, `add`, `max`, `multiply`, `floor`, `dot`, `length` |
 | `NDVectorDomain` | `NDVector`: a vector with named components | `add`, `subtract`, `min`, `max`, `scale`, `dot`, `get` |
-| `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt`, `vec2`, `date` |
+| `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt`, `vec2`, `xy`, `date` |
 | `BoolDomain` | booleans | `and`, `or`, `xor`, `not` |
 | `TextDomain` | texts | `concat`, `length`, `upper`, `lower`, `trim`, `contains` |
 | `ColorDomain` | `Color`: an RGB color | `mix`, `add`, `multiply`, `luminance`, `relativeLuminance`, `contrast` |

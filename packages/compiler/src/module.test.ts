@@ -3,7 +3,7 @@
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
 import { app, axes, defineDomain, each, evaluate, ext, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
-import { BoolDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
+import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -651,6 +651,33 @@ describe("COMPILE.MODULE: the text of a module", () => {
       const other = defineDomain({ ...Interval, ops: { ...Interval.ops, grow: { fn: fnOf(src, 1) as (i: Span, d: number) => Span, params: ["number"], returns: "domain" } } });
       expect(reasonOf(op("span", op("grow", iv, ref("n"))), { ...options, domains: [NumDomain, other] })).toBe('the op "grow" of the domain Interval reads a name outside itself, so a module cannot copy it');
     }
+  });
+
+  it("KIND.RETURNS: the grid in 2D with vectors as plain data is a standalone module", async () => {
+    // The op xy of NumDomain gives a value of XYDomain (returns: "domain:XY"), so each op on the vectors has a static site.
+    const xy = (a: Expr, b: Expr): Expr => op("xy", a, b);
+    const e = let_(
+      // The cell: the component-wise maximum of the sizes, at least 1 by 1. The module has no reduce, so a fold gives it.
+      { cell: op("max", fold(axes.all, { c: xy(lit(0), lit(0)) }, { c: op("max", v("c"), xy(ref("w"), ref("h"))) }, v("c")), xy(lit(1), lit(1))) },
+      let_(
+        { pitch: op("add", v("cell"), xy(v("gap"), v("gap"))) },
+        let_(
+          { corner: op("multiply", xy(op("mod", ref("i"), v("cols")), op("floor", op("divide", ref("i"), v("cols")))), v("pitch")) },
+          rec({ left: op("x", v("corner")), top: op("y", v("corner")), width: ref("w"), height: ref("h") }),
+        ),
+      ),
+    );
+    const options: ModuleOptions = { domains: [NumDomain, XYDomain, BoolDomain], schema: { fields: { w: "number", h: "number", i: "number" }, vars: { gap: "number", cols: "number" } } };
+    const source = sourceOf(e, options);
+    await expect(source).toMatchFileSnapshot("./__golden__/module-grid-xy.js");
+    const m = make(source);
+    expectSame(m, e, [{ w: 10, h: 20, i: 0 }, { w: 30, h: 5, i: 1 }, { w: 7, h: 7, i: 2 }], { gap: 12, cols: 2 }, options);
+    const items = fc.array(fc.record({ w: fc.integer({ min: 0, max: 400 }), h: fc.double({ min: 0, max: 400, noNaN: true }) }), { maxLength: 12 });
+    fc.assert(
+      fc.property(items, fc.integer({ min: 1, max: 5 }), fc.integer({ min: 0, max: 40 }), (rs, cols, gap) => {
+        expectSame(m, e, rs.map((r, i) => ({ ...r, i })), { gap, cols }, options);
+      }),
+    );
   });
 
   it("NAV.COMPUTED: the moves with a position or a key from an expression", async () => {

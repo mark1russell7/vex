@@ -60,6 +60,27 @@ corner.at("0");        // => some(new Vec2(40, 0))
 corner._.x().at("0"); // => some(40)
 ```
 
+## Vectors in a standalone module
+
+`emitModule` of `@mark1russell7/vex-compiler` prints a program as a module without Vex. It copies the text of the functions of each domain, so it cannot copy the class `Vec2`. `XYDomain` has the same ops for plain `{ x, y }` data:
+
+- The op `xy` of `NumDomain` makes a value of `XYDomain`. Its declaration `returns: "domain:XY"` gives the module the kind of each vector.
+- No op of `XYDomain` lifts a number. Write `max(xy(1, 1))`, not `max(1)`.
+- A module has no `reduce`. A `fold` over the items gives the component-wise maximum.
+- Put `XYDomain` before `NumRecordDomain`, because a record of numbers accepts the same objects.
+
+```ts doctest
+import { app, axes, fold, lit, ref, v } from "@mark1russell7/vex";
+import { emitModule } from "@mark1russell7/vex-compiler";
+import { BoolDomain, NumDomain, XYDomain } from "@mark1russell7/vex-domains";
+
+const size = app("xy", ref("w"), ref("h"));
+const cell = app("max", fold(axes.all, { c: app("xy", lit(0), lit(0)) }, { c: app("max", v("c"), size) }, v("c")), app("xy", lit(1), lit(1)));
+const m = emitModule(cell, { domains: [NumDomain, XYDomain, BoolDomain], schema: { fields: { w: "number", h: "number" } } });
+
+m.ok; // => true
+```
+
 ## Named components
 
 An `NDVector` has a name for each component, for example `width` and `height`. Its ops work on the union of the names, and a component that one vector does not have counts as 0.

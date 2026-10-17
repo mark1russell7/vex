@@ -4,7 +4,7 @@
  * counterexample. It also checks the kinds that a domain declares for a compiler. These are the primitive type of its
  * values (KIND.PRIMITIVE) and the kind of the result of each op (KIND.RETURNS).
  */
-import { resolveOp, type AnyDomain, type Law, type OpSpec, type ParamKind } from "@mark1russell7/vex";
+import { resolveOp, type AnyDomain, type Law, type OpSpec, type ParamKind, type ReturnKind } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The options of the law checker. */
@@ -15,6 +15,11 @@ export interface LawOptions<D> {
   readonly eq?: (a: unknown, b: unknown) => boolean;
   /** The number of runs of each property. The default is 200. */
   readonly numRuns?: number;
+  /**
+   * The domains of the kinds `domain:Name` of `returns`. The checker checks such a result only when this list has the
+   * domain with that name.
+   */
+  readonly domains?: readonly AnyDomain[];
 }
 
 /** The result of one law check. */
@@ -69,9 +74,18 @@ function call(domain: AnyDomain, name: string, self: unknown, args: readonly unk
 
 const lawsOf = (domain: AnyDomain, name: string): readonly Law[] => (domain.ops[name] as { laws?: readonly Law[] } | undefined)?.laws ?? [];
 
-/** This function tells if a value has a kind. A value of the kind `domain` is a value of the domain. */
-function hasKind(domain: AnyDomain, kind: ParamKind, u: unknown): boolean {
-  switch (kind) {
+/** This function gives the domain of a kind `domain:Name`: the domain itself, or the domain of `others` with that name. */
+const domainOfKind = (domain: AnyDomain, kind: ReturnKind, others: readonly AnyDomain[]): AnyDomain | undefined =>
+  [domain, ...others].find((d) => kind === `domain:${d.name}`);
+
+/**
+ * This function tells if a value has a kind. A value of the kind `domain` is a value of the domain. A value of the kind
+ * `domain:Name` is a value of the domain `Name` of `others`.
+ */
+function hasKind(domain: AnyDomain, kind: ReturnKind, u: unknown, others: readonly AnyDomain[]): boolean {
+  const named = domainOfKind(domain, kind, others);
+  if (named !== undefined) return named.is(u);
+  switch (kind as ParamKind) {
     case "domain":
       return domain.is(u);
     case "any":
@@ -104,7 +118,7 @@ function argsOf<D>(kind: ParamKind, arb: fc.Arbitrary<D>): fc.Arbitrary<unknown>
  * not accept some results, for example `undefined` or a number that is not finite. Such a result is an error of Vex,
  * so it does not count. An exception is the error `#CALC!`, so it does not count either.
  */
-function returnsProperty<D>(domain: AnyDomain, name: string, spec: OpSpec<unknown>, kind: ParamKind, arb: fc.Arbitrary<D>): LawProperty {
+function returnsProperty<D>(domain: AnyDomain, name: string, spec: OpSpec<unknown>, kind: ReturnKind, arb: fc.Arbitrary<D>, others: readonly AnyDomain[]): LawProperty {
   // Without params, each argument is a value of the domain, one for each parameter of the function after the receiver.
   const kinds: readonly ParamKind[] = spec.params ?? Array.from({ length: Math.max(0, (spec.fn?.length ?? 1) - 1) }, (): ParamKind => "domain");
   const args = fc.tuple(...kinds.map((k) => argsOf(k, arb)));
@@ -117,7 +131,7 @@ function returnsProperty<D>(domain: AnyDomain, name: string, spec: OpSpec<unknow
       } catch {
         return true;
       }
-      return r === undefined || r === null || (typeof r === "number" && !Number.isFinite(r)) || hasKind(domain, kind, r);
+      return r === undefined || r === null || (typeof r === "number" && !Number.isFinite(r)) || hasKind(domain, kind, r, others);
     }),
   );
 }
@@ -135,7 +149,9 @@ export function lawProperties<D>(domain: AnyDomain, opts: LawOptions<D>): readon
   for (const name of Object.keys(domain.ops)) {
     // An entry of the op table can be undefined. It declares nothing.
     const spec = domain.ops[name] as OpSpec<unknown> | undefined;
-    if (spec?.returns !== undefined) out.push(returnsProperty(domain, name, spec, spec.returns, opts.arb));
+    // A result of another domain needs that domain in the option domains.
+    const others = opts.domains ?? [];
+    if (spec?.returns !== undefined && (!spec.returns.startsWith("domain:") || domainOfKind(domain, spec.returns, others) !== undefined)) out.push(returnsProperty(domain, name, spec, spec.returns, opts.arb, others));
     const laws = lawsOf(domain, name);
     const label = `${domain.name}.${name}`;
     for (const law of laws) {

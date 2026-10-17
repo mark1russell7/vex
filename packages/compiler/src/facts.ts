@@ -3,7 +3,7 @@
  * whose op the interpreter takes first, and the kinds and the lifts of its parameters. The facts come from the op
  * tables, so the same options always give the same facts, and the same source.
  */
-import { isListOp, isOpName, liftsAt, type AnyDomain, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind } from "@mark1russell7/vex";
+import { isListOp, isOpName, liftsAt, type AnyDomain, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
 /** The function of an op of a domain, or a method. */
 export type Method = (...args: unknown[]) => unknown;
@@ -90,7 +90,7 @@ export type StaticSite =
 const STATIC_FREE: StaticSite = Object.freeze({ t: "free" });
 
 /** This function gives the kind of the result of an op of a domain, if the op declares it. */
-function returnsOf(domain: AnyDomain, kind: ParamKind | undefined): Kind | undefined {
+function returnsOf(domain: AnyDomain, kind: ReturnKind | undefined): Kind | undefined {
   if (kind === "domain") return kindOfDomain(domain);
   return kind === "any" ? undefined : kind;
 }

@@ -268,7 +268,7 @@ describe("operators", () => {
   });
 
   it("FORMULA.VEC: X(v) and Y(v) give the components of a vector", () => {
-    expect(compile("X(pos)")).toEqual(app("dot", ref(["pos"]), lit(new Vec2(1, 0))));
+    expect(compile("X(pos)")).toEqual(app("x", ref(["pos"])));
     expect(column("X(pos) + Y(size) * 10", ["apple", "tools"])).toEqual([11, 25]);
     expect(column("y(VEC(cost, -qty))", ["apple"])).toEqual([-3]);
     expect(error("Y()").message).toMatch(/Y needs 1 argument, not 0/);

@@ -158,7 +158,7 @@ An expression is plain JSON data. It has one of these kinds.
 - **[DOMAIN.OWNED]** A domain owns its op table. `defineDomain` does not change a class or a prototype, and an import has no side effects.
 - **[DOMAIN.LAWS]** Each law that a domain declares holds for the values of the domain. `@mark1russell7/vex-testkit` checks each law with property tests.
 - **[KIND.PRIMITIVE]** A domain with `primitive` accepts each value of that JavaScript type, and no other value. The law checker of the test kit checks it.
-- **[KIND.RETURNS]** An op with `returns` gives a result of that kind, or an error. The law checker checks each such op on random values.
+- **[KIND.RETURNS]** An op with `returns` gives a result of that kind, or an error. The law checker checks each such op on random values. The kind `domain:Name` is a value of the domain `Name`, for example the op `xy` of `NumDomain` gives a value of `XYDomain`. The law checker checks such an op when its option `domains` has that domain.
 
 ## 8. The builder
 

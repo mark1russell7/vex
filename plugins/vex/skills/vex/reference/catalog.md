@@ -52,6 +52,7 @@ Numbers. A result that is not finite gives `#NUM!`. The values are of the type `
 | `hypot` | `hypot(number, number)` | number |  | commutative |  |
 | `date` | `date(number, number, number)` | LocalDate |  |  |  |
 | `vec2` | `vec2(number, number)` | Vec2 |  |  |  |
+| `xy` | `xy(number, number)` | XY |  |  |  |
 | `floor` | `floor(number)` | number |  |  |  |
 | `ceil` | `ceil(number)` | number |  |  |  |
 | `round` | `round(number)` | number |  |  |  |
@@ -134,6 +135,33 @@ Texts. The values are of the type `string`.
 | `allLessThan` | `allLessThan(Vec2, number)` | boolean |  |  |  |
 | `anyGreaterThan` | `anyGreaterThan(Vec2, number)` | boolean |  |  |  |
 | `allGreaterThan` | `allGreaterThan(Vec2, number)` | boolean |  |  |  |
+
+## `XYDomain`
+
+2D vectors as plain data: `{ x, y }`, or `xy` of `NumDomain`. Each op is a function, so a standalone module can copy the domain. No op lifts a number. Put it before `NumRecordDomain`. The values are of the type `XY`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `x` | `x(XY)` | number |  |  |  |
+| `y` | `y(XY)` | number |  |  |  |
+| `add` | `add(XY, XY)` | XY |  | commutative, associative | (0, 0) |
+| `subtract` | `subtract(XY, XY)` | XY |  |  |  |
+| `multiply` | `multiply(XY, XY)` | XY |  | commutative, associative | (1, 1) |
+| `divide` | `divide(XY, XY)` | XY |  |  |  |
+| `min` | `min(XY, XY)` | XY |  | commutative, associative, idempotent |  |
+| `max` | `max(XY, XY)` | XY |  | commutative, associative, idempotent |  |
+| `scale` | `scale(XY, number)` | XY |  |  |  |
+| `negate` | `negate(XY)` | XY |  |  |  |
+| `abs` | `abs(XY)` | XY |  |  |  |
+| `floor` | `floor(XY)` | XY |  |  |  |
+| `ceil` | `ceil(XY)` | XY |  |  |  |
+| `round` | `round(XY)` | XY |  |  |  |
+| `dot` | `dot(XY, XY)` | number |  | commutative |  |
+| `length` | `length(XY)` | number |  |  |  |
+| `distance` | `distance(XY, XY)` | number |  | commutative |  |
+| `area` | `area(XY)` | number |  |  |  |
+| `sum` | `sum(XY)` | number |  |  |  |
+| `equals` | `equals(XY, XY)` | boolean |  | commutative |  |
 
 ## `NDVectorDomain`
 

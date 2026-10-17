@@ -13,9 +13,10 @@ import { LiftedNDVectorDomain, NDVectorDomain, NumRecordDomain } from "./ndvecto
 import { BoolDomain, NumDomain } from "./scalars.ts";
 import { TextDomain } from "./text.ts";
 import { Vec2Domain } from "./vec2.ts";
+import { XYDomain } from "./xy.ts";
 import { FnDomain, MaybeDomain } from "./wrappers.ts";
 
-const DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, ColorDomain, AngleDomain, DateDomain, NDVectorDomain, LiftedNDVectorDomain, NumRecordDomain, FnDomain, MaybeDomain];
+const DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, XYDomain, ColorDomain, AngleDomain, DateDomain, NDVectorDomain, LiftedNDVectorDomain, NumRecordDomain, FnDomain, MaybeDomain];
 
 /** This function gives the text of a value with the `show` of the domain, or its JSON text. */
 const shown = (d: AnyDomain, u: unknown): string => (d.show === undefined ? JSON.stringify(u) : d.show(u));

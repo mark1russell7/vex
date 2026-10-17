@@ -20,6 +20,7 @@ Num (fromScalar -, valid yes, encode -, methods -)
   hypot(number) | no lift | laws [commutative] | no identity | fn
   date(number, number) | no lift | no laws | no identity | fn
   vec2(number) | no lift | no laws | no identity | fn
+  xy(number) | no lift | no laws | no identity | fn
   floor(?) | no lift | no laws | no identity | fn
   ceil(?) | no lift | no laws | no identity | fn
   round(?) | no lift | no laws | no identity | fn
@@ -87,6 +88,28 @@ Vec2 (fromScalar (2, 2), valid yes, encode yes, methods -)
   allLessThan(number) | no lift | no laws | no identity | method
   anyGreaterThan(number) | no lift | no laws | no identity | method
   allGreaterThan(number) | no lift | no laws | no identity | method
+
+XY (fromScalar -, valid yes, encode -, methods -)
+  x() | no lift | no laws | no identity | fn
+  y() | no lift | no laws | no identity | fn
+  add(domain) | no lift | laws [commutative, associative] | identity (0, 0) | fn
+  subtract(domain) | no lift | no laws | no identity | fn
+  multiply(domain) | no lift | laws [commutative, associative] | identity (1, 1) | fn
+  divide(domain) | no lift | no laws | no identity | fn
+  min(domain) | no lift | laws [commutative, associative, idempotent] | no identity | fn
+  max(domain) | no lift | laws [commutative, associative, idempotent] | no identity | fn
+  scale(number) | no lift | no laws | no identity | fn
+  negate() | no lift | no laws | no identity | fn
+  abs() | no lift | no laws | no identity | fn
+  floor() | no lift | no laws | no identity | fn
+  ceil() | no lift | no laws | no identity | fn
+  round() | no lift | no laws | no identity | fn
+  dot(domain) | no lift | laws [commutative] | no identity | fn
+  length() | no lift | no laws | no identity | fn
+  distance(domain) | no lift | laws [commutative] | no identity | fn
+  area() | no lift | no laws | no identity | fn
+  sum() | no lift | no laws | no identity | fn
+  equals(domain) | no lift | laws [commutative] | no identity | fn
 
 Color (fromScalar rgba(2, 2, 2, 1), valid yes, encode yes, methods -)
   add(domain) | no lift | laws [commutative, associative] | identity rgba(0, 0, 0, 0) | method

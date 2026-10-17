@@ -4,7 +4,7 @@
  * function of its op with no guard (KIND.STATIC). Each case compares the tiered program with the interpreter.
  */
 import { app, axes, defineDomain, each, evaluate, ext, let_, lit, ref, space, v, type Expr, type FreeFn } from "@mark1russell7/vex";
-import { BoolDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
+import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import { fromCore } from "@mark1russell7/vex-testkit";
 import { describe, expect, it } from "vitest";
 import { factsOf } from "./facts.ts";
@@ -150,6 +150,11 @@ describe("KIND.STATIC: the facts of a static site", () => {
     const facts = factsOf({ domains: [Lifted] });
     expect(facts.staticSite("mix", ["domain:Lifted", "domain:Lifted", "number"])).toBeUndefined();
     expect(facts.staticSite("mix", ["domain:Lifted", "domain:Lifted", "boolean"])).toEqual({ t: "fn", domain: 0, bad: true, returns: "domain:Lifted" });
+  });
+
+  it("KIND.RETURNS: an op that declares a result of another domain gives the kind of that domain", () => {
+    expect(factsOf({ domains: [NumDomain, XYDomain] }).staticSite("xy", ["number", "number"])).toEqual({ t: "fn", domain: 0, bad: false, returns: "domain:XY" });
+    expect(factsOf({ domains: [NumDomain, XYDomain] }).checkOf("domain:XY")).toBe(1);
   });
 });
 

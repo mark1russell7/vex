@@ -137,15 +137,20 @@ function list(e: Extract<Expr, { tag: "each" }>): string {
     tests.unshift(axis.test);
     axis = axis.axis;
   }
+  // The reverse order is the option reverse of the axis inside it.
+  const reverse = axis.t === "reverse";
+  // The validation of the IR keeps a base axis inside reverse.
+  const base = (axis.t === "reverse" ? axis.axis : axis) as Exclude<Axis, { readonly t: "where" | "reverse" }>;
   const body = `(c) => ${chain(e.body)}`;
   const [first, ...more] = tests;
-  const where = first === undefined ? "" : `, { where: (c) => ${chain(first)}${more.length === 0 ? "" : `._.and(${more.map(arg).join(", ")})`} }`;
+  const opts = [...(first === undefined ? [] : [`where: (c) => ${chain(first)}${more.length === 0 ? "" : `._.and(${more.map(arg).join(", ")})`}`]), ...(reverse ? ["reverse: true"] : [])];
+  const where = opts.length === 0 ? "" : `, { ${opts.join(", ")} }`;
   const head = `root.start(0)${moves(e.at)}`;
-  switch (axis.t) {
+  switch (base.t) {
     case "all":
       return `${head}.each(${body}${where})`;
     case "neighbors":
-      return `${head}.neighbors(${axis.n}, ${body}${where})`;
+      return `${head}.neighbors(${base.n}, ${body}${where})`;
     case "other":
     case "others":
       return `${head}.others(${body}${where})`;
@@ -156,11 +161,11 @@ function list(e: Extract<Expr, { tag: "each" }>): string {
     case "successors":
     case "predecessors":
     case "reachable":
-      return `${head}.${axis.t}(${body}${where})`;
+      return `${head}.${base.t}(${body}${where})`;
     case "window":
-      return `${head}.window(${axis.from}, ${axis.to}, ${body}${where})`;
+      return `${head}.window(${base.from}, ${base.to}, ${body}${where})`;
     case "table":
-      return `${head}.table(${quote(axis.name)}, ${body}${where})`;
+      return `${head}.table(${quote(base.name)}, ${body}${where})`;
   }
 }
 

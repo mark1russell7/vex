@@ -98,6 +98,15 @@ describe("the edges of the address of an axis and of a tree offset", () => {
     expect(value(parse(value(serialize(e)), []))).toEqual(e);
   });
 
+  it("AXIS.REVERSE: isExpr accepts the reverse order of a base axis, and JSON keeps it", () => {
+    expect(isExpr(eachOf({ t: "reverse", axis: { t: "all" } }))).toBe(true);
+    expect(isExpr(eachOf({ t: "where", axis: { t: "reverse", axis: { t: "children" } }, test: lit(true) }))).toBe(true);
+    // The axis inside is a base axis: not where, reverse or table, and not missing.
+    for (const inner of [{ t: "where", axis: { t: "all" }, test: lit(true) }, { t: "reverse", axis: { t: "all" } }, { t: "table", name: "T" }, { t: "bogus" }, undefined]) expect(isExpr(eachOf({ t: "reverse", axis: inner }))).toBe(false);
+    const e = each(axes.reverse(axes.window(-1, 1)), lit(1));
+    expect(value(parse(value(serialize(e)), []))).toEqual(e);
+  });
+
   it("AXIS.GRAPH: isExpr accepts the axes of a graph", () => {
     expect(["successors", "predecessors", "reachable", "edges"].map((t) => isExpr(eachOf({ t })))).toEqual([true, true, true, false]);
   });

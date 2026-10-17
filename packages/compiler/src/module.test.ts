@@ -653,6 +653,19 @@ describe("COMPILE.MODULE: the text of a module", () => {
     }
   });
 
+  it("AXIS.REVERSE: a module loops over the reverse order of all and of a window from the end", () => {
+    const e = rec({
+      // A step that depends on the order, a list op with a test, and the first item of the reverse order.
+      digits: fold(axes.reverse(axes.all), { s: lit(0) }, { s: op("add", op("multiply", v("s"), lit(10)), n) }, v("s")),
+      window: op("sum", each(axes.where(axes.reverse(axes.window(-1, 1)), op("gt", w, lit(0))), w)),
+      first: op("first", each(axes.reverse(axes.all), n)),
+    });
+    const source = sourceOf(e);
+    expect(source).toContain("--) {");
+    expectSame(make(source), e);
+    expectSame(make(source), e, MANY);
+  });
+
   it("KIND.RETURNS: the grid in 2D with vectors as plain data is a standalone module", async () => {
     // The op xy of NumDomain gives a value of XYDomain (returns: "domain:XY"), so each op on the vectors has a static site.
     const xy = (a: Expr, b: Expr): Expr => op("xy", a, b);
@@ -832,15 +845,16 @@ const program = fc.letrec<{ num: Expr; bool: Expr }>((tie) => ({
     fc.tuple(tie("bool"), tie("num"), tie("num")).map(([c, a, b]) => op("if", c, a, b)),
     fc.tuple(tie("num"), tie("num")).map(([a, b]) => op("ifError", a, b)),
     fc
-      .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(axes.all, axes.others, axes.window(-1, 0)), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(undefined, [offset(1)], [index(1)], [{ t: "origin" as const }], [index(n)], [index(v("a"))], [offset(1), index(0)]))
+      .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.reverse(axes.window(-1, 0))), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(undefined, [offset(1)], [index(1)], [{ t: "origin" as const }], [index(n)], [index(v("a"))], [offset(1), index(0)]))
       .map(([o, a, body, test, strict, at]) => op(o, each(test === undefined ? a : axes.where(a, test), body, at), ...(strict ? [lit({ strict: true })] : []))),
     fc.tuple(tie("num"), tie("num")).map(([a, b]) => let_({ x: a }, op("add", v("x"), b))),
     fc.constant(op("length", ref("s"))),
     // The loops: a name s with a first value and a step, as an iteration or as a fold over an axis.
     fc.tuple(fc.integer({ min: 0, max: 3 }), tie("num"), tie("num")).map(([k, init, step]) => iterate(k, { s: init }, { s: op("add", v("s"), step) }, v("s"))),
     fc
-      .tuple(fc.constantFrom(axes.all, axes.others, axes.window(-1, 0)), tie("num"), tie("num"), fc.constantFrom(undefined, [offset(1)]))
-      .map(([a, init, step, at]) => fold(a, { s: init }, { s: op("max", v("s"), step) }, v("s"), at)),
+      .tuple(fc.constantFrom(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.reverse(axes.window(-1, 0))), tie("num"), tie("num"), fc.constantFrom(undefined, [offset(1)]))
+      // The step depends on the order of the targets, so a loop in the wrong order gives another value.
+      .map(([a, init, step, at]) => fold(a, { s: init }, { s: op("subtract", step, v("s")) }, v("s"), at)),
   ),
   bool: fc.oneof(
     { maxDepth: 4, depthSize: "small" },

@@ -298,6 +298,9 @@ function namesOf(e: Expr, out = new Set<string>()): Set<string> {
  */
 const COLUMN_WORK = 10;
 
+/** This function gives the head of a loop over targets: from `lo` up to `hi`, or from `hi` down to `lo` in the reverse order. */
+const forHead = (j: string, lo: string, hi: string, reverse: boolean): string => (reverse ? `for (let ${j} = ${hi} - 1; ${j} >= ${lo}; ${j}--) {` : `for (let ${j} = ${lo}; ${j} < ${hi}; ${j}++) {`);
+
 /** This function tells if an expression has a loop of names: a fold or an iteration. */
 function hasLoop(e: Expr): boolean {
   let found = LOOPS.get(e);
@@ -1017,8 +1020,12 @@ class Printer {
     readonly start: ReadonlySet<number>;
     readonly tests: readonly Expr[];
     readonly inner: Ctx;
+    readonly reverse: boolean;
   } {
-    const { base, tests } = testsOf(axis);
+    const { base: outer, tests } = testsOf(axis);
+    // The reverse order of an axis is a loop from its end (AXIS.REVERSE). The validation keeps a base axis inside.
+    const reverse = outer.t === "reverse";
+    const base = outer.t === "reverse" ? outer.axis : outer;
     const j = this.fresh("j");
     const inner: Ctx = { ...ctx, focus: j, level: ctx.level + 1 };
     const s: string[] = [];
@@ -1043,13 +1050,13 @@ class Printer {
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
-    return { s, j, lo, hi, skip, fixed: f === undefined, start, tests, inner };
+    return { s, j, lo, hi, skip, fixed: f === undefined, start, tests, inner, reverse };
   }
 
   #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
     const strict = this.#strict(op, rest);
     const at = target.at ?? [];
-    const { s, j, lo, hi, skip, fixed, start, tests, inner } = this.#targetLoop(target.axis, at, ctx);
+    const { s, j, lo, hi, skip, fixed, start, tests, inner, reverse } = this.#targetLoop(target.axis, at, ctx);
     const { level } = inner;
     // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run.
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
@@ -1093,7 +1100,7 @@ class Printer {
         : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", strict ? `  ${F}();` : "  continue;", "}"]),
       steps[op] as string,
     ];
-    s.push(`for (let ${j} = ${lo}; ${j} < ${hi}; ${j}++) {`, ...ind(loop), "}");
+    s.push(forHead(j, lo, hi, reverse), ...ind(loop), "}");
     const results: Readonly<Record<string, string>> = {
       count: n,
       sum: this.#checked("number", a),
@@ -1192,7 +1199,7 @@ class Printer {
     ];
     const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level);
     const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
-    const head = `for (let ${t.j} = ${t.lo}; ${t.j} < ${t.hi}; ${t.j}++) {`;
+    const head = forHead(t.j, t.lo, t.hi, t.reverse);
     return { s: [...names.s, ...t.s, head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps } };
   }
 

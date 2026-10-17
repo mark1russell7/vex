@@ -135,6 +135,26 @@ const FORMS = ["if", "and", "or", "ifError"];
 const NAMES = ["a", "b"];
 
 /** An expression of the IR, from the whole grammar. */
+/** The base axes of the random programs: each axis but where and reverse. */
+const BASE_AXES: readonly Axis[] = [
+  { t: "all" },
+  { t: "others" },
+  { t: "other" },
+  { t: "neighbors", n: 4 },
+  { t: "neighbors", n: 8 },
+  { t: "children" },
+  { t: "ancestors" },
+  { t: "descendants" },
+  { t: "siblings" },
+  { t: "window", from: -1, to: 0 },
+  { t: "window", from: -2, to: 2 },
+  { t: "table", name: "T" },
+  { t: "table", name: "missing" },
+  { t: "successors" },
+  { t: "predecessors" },
+  { t: "reachable" },
+];
+
 export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
   const ops = [...opts.ops, ...LIST_OPS, ...FORMS, "nope", "toString", "constructor"];
   const { expr } = fc.letrec<{ expr: Expr; axis: Axis; move: Move }>((tie) => ({
@@ -173,24 +193,9 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
     ),
     axis: fc.oneof(
       { depthSize: "small", maxDepth: 2 },
-      fc.constantFrom<Axis>(
-        { t: "all" },
-        { t: "others" },
-        { t: "other" },
-        { t: "neighbors", n: 4 },
-        { t: "neighbors", n: 8 },
-        { t: "children" },
-        { t: "ancestors" },
-        { t: "descendants" },
-        { t: "siblings" },
-        { t: "window", from: -1, to: 0 },
-        { t: "window", from: -2, to: 2 },
-        { t: "table", name: "T" },
-        { t: "table", name: "missing" },
-        { t: "successors" },
-        { t: "predecessors" },
-        { t: "reachable" },
-      ),
+      fc.constantFrom(...BASE_AXES),
+      // The reverse order of a base axis (AXIS.REVERSE). The axis table has no reverse order.
+      fc.constantFrom(...BASE_AXES.filter((a) => a.t !== "table")).map((axis): Axis => ({ t: "reverse", axis })),
       fc.tuple(tie("axis"), tie("expr")).map(([axis, test]): Axis => ({ t: "where", axis, test })),
     ),
     // A fixed move, or a computed move (NAV.COMPUTED): a literal key or position, or any expression.

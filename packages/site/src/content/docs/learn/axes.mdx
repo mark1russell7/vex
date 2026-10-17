@@ -24,8 +24,16 @@ Select an origin, an axis and a reduction below. The matrix shows the relation f
 | `neighbors` | `.neighbors(4, body)` or `.neighbors(8, body)` | the cells next to the focus in a grid | `#REF!` outside a grid |
 | `window` | `.window(from, to, body)` | the keys at the offsets from `from` to `to`, in an array or among siblings | `#REF!` outside an array or a tree |
 | `where` | the option `where` of an axis | the targets of the inner axis where the test gives `true` | an error item for a test that fails |
+| `reverse` | the option `reverse: true` of an axis | the targets of the inner axis, from the last to the first | the error of the inner axis |
 
-Each axis method of the builder takes a body function and an optional `{ where }` test. The result is a list chain, with the reductions in the [last section](#reduce-the-list).
+Each axis method of the builder takes a body function and the options `{ where, reverse }`. The result is a list chain, with the reductions in the [last section](#reduce-the-list). With `reverse: true`, a fold over the list starts at the last target:
+
+```ts doctest
+const rows = vex(NumDomain).over(space.array([{ d: 1 }, { d: 2 }, { d: 3 }]));
+const digits = rows.start(0).each((t) => t.from("d"), { reverse: true }).fold({ n: 0 }, (x, d) => ({ n: x.n._.multiply(10)._.add(d) }), (x) => x.n);
+
+digits.at("0"); // => some(321)
+```
 
 ## Origin and target
 

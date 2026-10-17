@@ -120,6 +120,11 @@ type Direction = "before" | "after" | "down";
 
 /** This function adds the direction of one move or one axis of a read of a column from itself. */
 function addDirection(d: Set<Direction>, m: Move | Axis): void {
+  // The reverse order reads the same keys as its axis.
+  if (m.t === "reverse") {
+    addDirection(d, m.axis);
+    return;
+  }
   if (m.t === "offset" || m.t === "window") {
     // An offset moves by its first step that is not 0. A window reads the keys from `from` to `to`.
     const steps = m.t === "offset" ? [m.d.find((x) => x !== 0) ?? 0] : [m.from, m.to];

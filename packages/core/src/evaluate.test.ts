@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { compile, evaluate, explain, type EvalOptions } from "./evaluate.ts";
-import { app, axes, each, ext, index, key, let_, lit, offset as offsetMove, origin as toOrigin, other, parent, ref, rec, v, type Expr } from "./ir.ts";
+import { app, axes, each, ext, fold, index, key, let_, lit, offset as offsetMove, origin as toOrigin, other, parent, ref, rec, v, type Axis, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { isVexList } from "./list.ts";
 import { fail, ok } from "./result.ts";
@@ -275,6 +275,31 @@ describe("axes (AXIS.*) and list ops (LIST.*)", () => {
     // A record space and a grid have no offsets with one number.
     expect(error(evaluate(moving, { space: space.record({ A: { v: 1 } }), origin: "A" }))).toMatchObject({ code: "#REF!", message: '"window" needs an array space or a tree space, but this space is a record' });
     expect(error(evaluate(moving, { space: space.grid([[{ v: 1 }]]), origin: "0,0" })).code).toBe("#REF!");
+  });
+
+  it("AXIS.REVERSE: the targets of an axis from the last to the first, in a fold too, and a test keeps that order", () => {
+    const Digits = defineDomain({
+      name: "Num",
+      is: (u: unknown): u is number => typeof u === "number",
+      ops: { next: { fn: (n: number, d: number): number => n * 10 + d, params: ["number"] }, gt: { fn: (a: number, b: number): boolean => a > b, params: ["number"] } },
+    });
+    const rows = space.array([{ v: 1 }, { v: 2 }, { v: 4 }, { v: 8 }]);
+    const run = (e: Expr, origin = "1"): unknown => value(evaluate(e, { space: rows, origin, domains: [Digits] }));
+    const values = (a: Axis): unknown => run(app("values", each(a, ref("v"))));
+    expect(values(axes.reverse(axes.all))).toEqual([8, 4, 2, 1]);
+    expect(values(axes.reverse(axes.window(-1, 1)))).toEqual([4, 2, 1]);
+    expect(values(axes.reverse(axes.others))).toEqual([8, 4, 1]);
+    // A test outside the reverse order keeps the order of the targets that pass it.
+    expect(values(axes.where(axes.reverse(axes.all), app("gt", ref("v"), lit(1))))).toEqual([8, 4, 2]);
+    // A fold over the reverse order starts at the last target: the digits make the number 8421.
+    expect(run(fold(axes.reverse(axes.all), { n: lit(0) }, { n: app("next", v("n"), ref("v")) }, v("n")))).toBe(8421);
+    // In a tree, the children from the last to the first.
+    const tree = space.tree({ r: { v: 0 }, a: { v: 1 }, b: { v: 2 }, c: { v: 3 } }, { a: "r", b: "r", c: "r" });
+    expect(value(evaluate(app("values", each(axes.reverse(axes.children), ref("v"))), { space: tree, origin: "r" }))).toEqual([3, 2, 1]);
+    // The error of the axis inside stays: an array has no neighbors.
+    expect(error(evaluate(each(axes.reverse(axes.neighbors(4)), lit(1)), { space: rows, origin: "0" })).code).toBe("#REF!");
+    const r = axisTargets(rows, { origin: "0", focus: "0" }, { t: "reverse", axis: { t: "window", from: 0, to: 2 } });
+    expect(r.ok ? r.value : r.error.code).toEqual(["2", "1", "0"]);
   });
 });
 

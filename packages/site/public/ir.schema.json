@@ -555,6 +555,42 @@
           "type": "object",
           "required": [
             "t",
+            "axis"
+          ],
+          "properties": {
+            "t": {
+              "const": "reverse"
+            },
+            "axis": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/axis"
+                },
+                {
+                  "not": {
+                    "type": "object",
+                    "required": [
+                      "t"
+                    ],
+                    "properties": {
+                      "t": {
+                        "enum": [
+                          "where",
+                          "reverse",
+                          "table"
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "t",
             "axis",
             "test"
           ],

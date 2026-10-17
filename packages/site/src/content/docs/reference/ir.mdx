@@ -59,6 +59,7 @@ Vex does not simplify an address. For example, `[other, other]` in a space with 
 | `{ t: "window", from, to }` | the keys at the offsets from `from` to `to`, in an array or among siblings |
 | `{ t: "successors" }`, `{ t: "predecessors" }`, `{ t: "reachable" }` | the edges of a graph space |
 | `{ t: "table", name }` | each key of another table of the evaluation |
+| `{ t: "reverse", axis }` | the targets of `axis` from the last to the first. The inner axis is not `where`, `reverse` or `table`. |
 | `{ t: "where", axis, test }` | the targets of `axis` where `test` gives `true` |
 
 ## Programs are data

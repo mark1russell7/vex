@@ -450,6 +450,11 @@ export function axisTargets(s: Space, at: Position, a: Exclude<Axis, { readonly 
     case "predecessors":
     case "reachable":
       return graphTargets(s, at, a.t);
+    case "reverse": {
+      // The validation of the IR keeps a base axis inside reverse: not where, reverse or table.
+      const r = axisTargets(s, at, a.axis as Exclude<Axis, { readonly t: "where" }>);
+      return r.ok ? ok(r.value.toReversed()) : r;
+    }
     case "table":
       // The evaluator gives the axis table the space of its table. Here, without the tables, it has no targets.
       return fail(vexError("no-table", `the axis "table" needs the tables of the evaluation, and "${a.name}" is not one of them`, at));

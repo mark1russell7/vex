@@ -376,6 +376,8 @@ describe("sheets (SHEET.*)", () => {
     // A window of the rows above, and a window of the rows below.
     expect(fill(new Map([["up", plus(app("sum", each(axes.window(-2, -1), cell("up"))), ref("v"))]]), rows)).toBe(6);
     expect(fill(new Map([["down", plus(app("sum", each(axes.window(1, 2), cell("down"))), ref("v"))]]), rows)).toBe(6);
+    // AXIS.REVERSE: the reverse order of a window reads the same rows below, so the fill goes from the last row up too.
+    expect(fill(new Map([["back", plus(app("sum", each(axes.reverse(axes.window(1, 2)), cell("back"))), ref("v"))]]), rows)).toBe(6);
     // In a tree whose keys have each child before its parent: a roll-up goes up from the leaves, and a depth goes down from the root.
     const tree = space.tree({ c: { v: 1 }, b: { v: 2 }, d: { v: 4 }, a: { v: 8 } }, { c: "b", b: "a", d: "a" });
     expect(fill(new Map([["size", plus(ref("v"), app("sum", each(axes.children, cell("size"))))]]), tree)).toBe(4);

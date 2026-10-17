@@ -260,7 +260,12 @@ export interface ChainBase<Ctx extends ChainContext, T> {
 export interface AxisOpts<Ctx extends ChainContext, T> {
   /** A test at each target. The body evaluates only at the targets where the test gives `true`. */
   readonly where?: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, boolean>;
+  /** With `true`, the targets come in the reverse order (AXIS.REVERSE). The axis table has no reverse order. */
+  readonly reverse?: boolean;
 }
+
+/** The options of an axis in the implementation of the builder. */
+type AxisOptsImpl = { readonly where?: (c: ChainImpl) => { readonly program: Expr }; readonly reverse?: boolean };
 
 /** The members of a chain whose value has a domain. */
 export interface DomainMembers<Ctx extends ChainContext, Dm> {
@@ -648,49 +653,50 @@ class ChainImpl {
     return new ChainImpl({ ...this.#s, expr: iterateExpr(limit, first, next, toExpr(result(vars), this.#s.addr), until) });
   }
 
-  #axis(a: Axis, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  #axis(a: Axis, body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     const { name, start } = this.#bound();
     // Inside the axis, the focus is the target, so the address of the body starts empty.
     const inTarget = new ChainImpl({ ...start.#s, addr: [] });
     const inner = body(inTarget);
-    const axis: Axis = opts?.where === undefined ? a : { t: "where", axis: a, test: opts.where(inTarget).program };
+    const ordered: Axis = opts?.reverse === true ? { t: "reverse", axis: a } : a;
+    const axis: Axis = opts?.where === undefined ? ordered : { t: "where", axis: ordered, test: opts.where(inTarget).program };
     // The moves before the axis are its address: parent().children(f) gives f at each child of the parent.
     return new ListChainImpl({ ...this.#s, expr: let_({ [name]: this.#s.expr }, each(axis, inner.program, this.#s.addr)) });
   }
-  others(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  others(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "others" }, body, opts);
   }
-  neighbors(n: 4 | 8, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  neighbors(n: 4 | 8, body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "neighbors", n }, body, opts);
   }
-  each(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  each(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "all" }, body, opts);
   }
-  children(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  children(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "children" }, body, opts);
   }
-  ancestors(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  ancestors(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "ancestors" }, body, opts);
   }
-  descendants(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  descendants(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "descendants" }, body, opts);
   }
-  siblings(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  siblings(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "siblings" }, body, opts);
   }
-  window(from: number, to: number, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  window(from: number, to: number, body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "window", from, to }, body, opts);
   }
-  table(name: string, body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  table(name: string, body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "table", name }, body, opts);
   }
-  successors(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  successors(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "successors" }, body, opts);
   }
-  predecessors(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  predecessors(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "predecessors" }, body, opts);
   }
-  reachable(body: (c: ChainImpl) => { readonly program: Expr }, opts?: { readonly where?: (c: ChainImpl) => { readonly program: Expr } }): ListChainImpl {
+  reachable(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     return this.#axis({ t: "reachable" }, body, opts);
   }
 }

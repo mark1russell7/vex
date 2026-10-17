@@ -387,6 +387,14 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
     expect(optionalValue(rows.start(0).window(-1, 1, (c) => c.from("weight"), { where: (c) => c.from("weight")._.gt(1) }).values().at("1"))).toEqual([2, 4]);
   });
 
+  it("AXIS.REVERSE: the option reverse of an axis gives its targets from the last to the first, also with a test", () => {
+    const rows = vex(Num).over(space.array([{ weight: 1 }, { weight: 2 }, { weight: 4 }]));
+    const back = rows.start(0).each((c) => c.from("weight"), { reverse: true });
+    expect(back.program).toMatchObject({ tag: "let", body: { tag: "each", axis: { t: "reverse", axis: { t: "all" } } } });
+    expect(optionalValue(back.values().at("0"))).toEqual([4, 2, 1]);
+    expect(optionalValue(rows.start(0).window(-1, 1, (c) => c.from("weight"), { reverse: true, where: (c) => c.from("weight")._.gt(1) }).values().at("1"))).toEqual([4, 2]);
+  });
+
   it("AXIS.GRAPH: successors, predecessors and reachable follow the edges of a graph", () => {
     const g = vex(Num).over(space.graph({ A: { weight: 1 }, B: { weight: 2 }, C: { weight: 4 } }, { A: ["B"], B: ["C"], C: ["A"] }));
     expect(optionalValue(g.start(0).successors((c) => c.from("weight")).values().at("A"))).toEqual([2]);

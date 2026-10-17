@@ -76,6 +76,11 @@ function all(xs: readonly Expr[], c: Ctx): RefOutcome {
 function targets(a: Axis, c: Ctx): { ok: true; keys: { key: string; bad?: ErrorCode }[] } | { ok: false; code: ErrorCode } {
   // The context of the axis table already has the space of the table, and each key of it is a target.
   if (a.t === "table") return { ok: true, keys: c.space.keys.map((key) => ({ key })) };
+  // The reverse order has the targets of its axis from the last to the first.
+  if (a.t === "reverse") {
+    const inner = targets(a.axis, c);
+    return inner.ok ? { ok: true, keys: inner.keys.toReversed() } : inner;
+  }
   if (a.t !== "where") {
     const r = axisTargets(c.space, { origin: c.origin, focus: c.focus }, a);
     return r.ok ? { ok: true, keys: r.value.map((key) => ({ key })) } : { ok: false, code: r.error.code };

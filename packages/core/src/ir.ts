@@ -36,6 +36,7 @@ export type Axis =
   | { readonly t: "successors" }
   | { readonly t: "predecessors" }
   | { readonly t: "reachable" }
+  | { readonly t: "reverse"; readonly axis: Axis }
   | { readonly t: "where"; readonly axis: Axis; readonly test: Expr };
 
 /** A Vex expression. */
@@ -186,6 +187,11 @@ export const axes = {
   predecessors: Object.freeze({ t: "predecessors" }) as Axis,
   /** Each key that a path of edges reaches from the focus, in breadth-first order, without the focus. */
   reachable: Object.freeze({ t: "reachable" }) as Axis,
+  /**
+   * The targets of `axis` in the reverse order (AXIS.REVERSE). The inner axis is a base axis: not `where`, `reverse` or
+   * `table`. A test goes outside: `where(reverse(axis), test)`.
+   */
+  reverse: (axis: Axis): Axis => ({ t: "reverse", axis }),
   /** The targets of `axis` where `test` gives `true`. */
   where: (axis: Axis, test: Expr): Axis => ({ t: "where", axis, test }),
 } as const;
@@ -305,6 +311,11 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
       } else if (t === "where") {
         push(true, [u["axis"]]);
         push(false, [u["test"]]);
+      } else if (t === "reverse") {
+        // The inner axis of reverse is a base axis.
+        const inner = u["axis"];
+        if (!isObject(inner) || ["where", "reverse", "table"].includes(inner["t"] as string)) return item;
+        push(true, [inner]);
       } else if (!["all", "others", "other", "children", "ancestors", "descendants", "siblings", "successors", "predecessors", "reachable"].includes(t as string)) {
         return item;
       }

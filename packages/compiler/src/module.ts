@@ -133,6 +133,25 @@ interface BoundFn {
 }
 
 /**
+ * A function that the printer prints at this time. Its parameters, and the bindings at the root of its body, keep their
+ * values for the whole call. Thus a part of a loop that reads only them and its target is a column of the call.
+ */
+interface CallScope {
+  /** The marker of the parameters. */
+  readonly param: number;
+  /** The level of the focus of the function. A part at a higher level is in a loop of the function. */
+  readonly focus: number;
+  /** True when the body has a loop in a loop, so a call can read a part of a loop more than once. */
+  readonly repeats: boolean;
+  /** The variables that the start of the body can read: the parameters, and the bindings at the root of the body. */
+  readonly names: Set<string>;
+  /** The declarations of the columns of the call. The function prints them at the start of its body. */
+  readonly decls: string[];
+  /** The root of the body. A let at the root moves it to its body, because its bindings are at the start of the body. */
+  root: Expr;
+}
+
+/**
  * A printed function. The levels of the value of its body have a marker for the origin, for the focus and for each
  * parameter. A call replaces each marker with the levels at the call.
  */
@@ -371,6 +390,12 @@ const COLUMN_WORK = 10;
 
 /** This function gives the head of a loop over targets: from `lo` up to `hi`, or from `hi` down to `lo` in the reverse order. */
 const forHead = (j: string, lo: string, hi: string, reverse: boolean): string => (reverse ? `for (let ${j} = ${hi} - 1; ${j} >= ${lo}; ${j}--) {` : `for (let ${j} = ${lo}; ${j} < ${hi}; ${j}++) {`);
+
+/** This function tells if an expression has a loop in a loop: an axis, a fold or an iteration in another one. */
+function nestsLoops(e: Expr, inLoop = false): boolean {
+  const loop = e.tag === "each" || e.tag === "fold" || e.tag === "iterate";
+  return (loop && inLoop) || children(e).some((x) => nestsLoops(x, inLoop || loop));
+}
 
 /** This function tells if an expression has a loop of names: a fold or an iteration. */
 function hasLoop(e: Expr): boolean {
@@ -619,6 +644,8 @@ class Printer {
   readonly #columned = new WeakSet<Expr>();
   /** The lazy constants of the run, and the printed functions that have a loop: code that reads one waits for its read. */
   readonly #deferred = new Set<string>();
+  /** The functions that the printer prints at this time, the innermost last. */
+  readonly #scopes: CallScope[] = [];
   /** The work of the body of each bound function, by the number of its binding. */
   readonly #fnWork = new Map<number, number>();
   /** The expressions whose code is a constant of the run. */
@@ -803,10 +830,27 @@ class Printer {
    */
   #columnar(e: Expr, c: Code, ctx: Ctx): boolean {
     // A node of the memo has the level 1, so a column has a focus.
-    if (ctx.level < 2 || c.v.deps.size !== 1 || !c.v.deps.has(ctx.level) || this.#work(e, ctx.fns) < COLUMN_WORK) return false;
+    if (ctx.level < 2 || !c.v.deps.has(ctx.level) || this.#work(e, ctx.fns) < COLUMN_WORK) return false;
+    const scope = c.v.deps.size === 1 ? undefined : this.#callScope(c, ctx);
+    if (c.v.deps.size !== 1 && scope === undefined) return false;
     // A node of the memo with keys keeps its costly part for each value of its keys already.
     if (this.#keyed(e)) return false;
-    return [...namesOf(e)].every((name) => (ctx.env.get(name)?.deps.size ?? 0) === 0) && !this.#callsLocal(e, ctx);
+    const visible = (name: string): boolean => {
+      const bound = ctx.env.get(name);
+      return (bound?.deps.size ?? 0) === 0 || (scope?.names.has((bound as Name).code) ?? false);
+    };
+    return [...namesOf(e)].every(visible) && !this.#callsLocal(e, ctx);
+  }
+
+  /**
+   * This method gives the function whose call can hold a column of a part. The part is in a loop of the function, and it
+   * depends only on its target and on the parameters. The body of the function has a loop in a loop, so a call can read
+   * the part more than once.
+   */
+  #callScope(c: Code, ctx: Ctx): CallScope | undefined {
+    const scope = this.#scopes.at(-1);
+    if (scope === undefined || !scope.repeats || this.#inside !== undefined || ctx.level <= scope.focus) return undefined;
+    return c.v.deps.size === 2 && c.v.deps.has(scope.param) ? scope : undefined;
   }
 
   /** This method tells if an expression calls a function that is at the place of its binding, not at the start of a run. */
@@ -852,7 +896,9 @@ class Printer {
     let name = this.#columns.get(key);
     if (name === undefined) {
       name = this.fresh("col");
-      this.run.push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
+      // A column of a call is at the start of the body of its function, so each call has its own.
+      const scope = c.v.deps.size === 1 ? undefined : this.#callScope(c, ctx);
+      (scope?.decls ?? this.run).push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
       this.#columns.set(key, name);
     }
     this.#columned.add(e);
@@ -1020,6 +1066,10 @@ class Printer {
     const s: string[] = [];
     let deps = new Set<number>();
     const bound: BoundFn[] = [];
+    // The bindings of a let at the root of the body of a function are at the start of the body, so a column of the
+    // call can read them.
+    const scope = this.#scopes.at(-1);
+    const root = scope !== undefined && scope.root === e && this.#inside === undefined ? scope : undefined;
     for (const [name, x] of Object.entries(e.bind)) {
       // A binding sees the context of the let, so a function cannot call itself.
       if (x.tag === "fn") {
@@ -1040,9 +1090,11 @@ class Printer {
       const b = this.fresh("b");
       s.push(...this.#store(b, c));
       env.set(name, { code: b, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps, list: c.v.list });
+      root?.names.add(b);
       // The statements of the binding read its keys, so the let is not a constant of the run.
       deps = new Set([...deps, ...c.v.deps]);
     }
+    if (root !== undefined) root.root = e.body;
     const body = this.expr(e.body, { ...ctx, env, fns });
     // A function that reads names of the place of the binding comes after them, before the body.
     return { s: [...s, ...bound.flatMap((b) => b.decls), ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
@@ -1099,14 +1151,19 @@ class Printer {
     const env = new Map(bound.ctx.env);
     // A parameter hides a function of its name, because a read looks at the values first.
     bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]) }));
+    const scope: CallScope = { param, focus, repeats: nestsLoops(bound.fn.body), names: new Set(names), decls: [], root: bound.fn.body };
+    this.#scopes.push(scope);
     const body = this.expr(bound.fn.body, { origin: o, focus: k, level: focus, originLevel: origin, env, fns: bound.ctx.fns, keys: new Map() });
+    this.#scopes.pop();
     const markers = new Set([origin, focus, param]);
     const global = [...body.v.deps].every((d) => markers.has(d));
     const name = this.fresh("fn");
     if (hasLoop(bound.fn.body) || this.#defers(body)) this.#deferred.add(name);
     const position = body.v.deps.has(origin) ? [k, o] : body.v.deps.has(focus) ? [k] : [];
     const head = `const ${name} = (${[...names, ...position].join(", ")}) =>`;
-    const decl = body.s.length === 0 ? [`${head} ${body.v.code};`] : [`${head} {`, ...ind(body.s), `  return ${body.v.code};`, "};"];
+    // The columns of the call come first. Each one reads a binding of the root only after the binding has its value.
+    const s = [...scope.decls, ...body.s];
+    const decl = s.length === 0 ? [`${head} ${body.v.code};`] : [`${head} {`, ...ind(s), `  return ${body.v.code};`, "};"];
     (global ? this.run : bound.decls).push(...decl);
     if (!global) bound.local = true;
     const spec: Spec = { name, kind: body.v.kind, safe: body.v.safe, deps: body.v.deps, origin, focus, param, global };

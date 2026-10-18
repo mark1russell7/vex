@@ -11,9 +11,10 @@
 import type { Space } from "@mark1russell7/vex";
 import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
+import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, radialArrange, radialRun, type RadialInput } from "../../pilots/src/ireko-radial.ts";
 import { app, axes, each, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
-import { tiered } from "../src/index.ts";
+import { emitModule, tiered } from "../src/index.ts";
 
 /** This function gives the time of one call of `f` in one sample of 30 ms, in microseconds. */
 function sample(f: () => void): number {
@@ -67,10 +68,38 @@ const share = (n: number): ReturnType<typeof atEachKey> =>
   atEachKey({ program: app("divide", ref("x"), app("sum", each(axes.all, ref("x")))) }, space.array(Array.from({ length: n }, (_, i) => ({ x: (i % 7) + 1 }))), { domains: [NumDomain] });
 const [small, large] = [share(500), share(1000)];
 
+// The strategy radial of ireko as a standalone module (§13.3), against the copy of the code of ireko in the pilot. A full
+// ring of children of mixed sizes needs the search of the radius, with the test of all pairs at each step. V-054 made
+// this module two times slower in the engine benchmark of ireko. The limit 4 catches such a loss of its columns.
+const radialModule = ((): ((records: unknown, vars: unknown) => unknown) => {
+  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
+  if (!m.ok) throw new Error(m.reason);
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
+  const load = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn radial;`) as () => (records: unknown, vars: unknown) => unknown;
+  return load();
+})();
+const ringOf = (n: number, mode: "nested" | "linked"): RadialInput => ({
+  mode,
+  self: { width: 40, height: 30 },
+  gap: 8,
+  options: { startAngle: -90, sweep: 360, clockwise: true, distance: 0 },
+  children: Array.from({ length: n }, (_, i) => {
+    const width = 10 + ((i * 37) % 90);
+    const height = 10 + ((i * 53) % 70);
+    return { box: { width, height }, extent: { x: 0, y: 0, width, height } };
+  }),
+});
+const radialCase = (n: number, mode: "nested" | "linked"): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limit: number } => {
+  const input = ringOf(n, mode);
+  const { space: s, vars } = radialRun(input);
+  return { title: `the radial module of ireko, a full ring of ${String(n)} children, ${mode}`, compiled: { run: () => radialModule(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limit: 4 };
+};
+
 const CASES = [
   { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limit: 1.5 },
   { title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limit: 1.5 },
-
+  radialCase(12, "linked"),
+  radialCase(60, "nested"),
 ] as const;
 
 let failed = false;

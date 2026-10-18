@@ -743,6 +743,31 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expectSame(make(many), calls);
   });
 
+  it("COMPILE.MODULE: a part of a loop in a loop of a function that reads only its target and the parameters is a column of the call", () => {
+    // The part reads the parameter r and the target of the inner loop. The body has a loop in a loop, so each call keeps
+    // the part for each target, at the start of the body.
+    const part = (r: Expr): Expr => op("add", op("multiply", r, w), op("subtract", op("multiply", n, r), op("add", w, lit(1))));
+    const nested = let_({ f: fn(["r"], op("sum", each(axes.all, op("sum", each(axes.all, op("add", part(v("r")), n)))))) }, call("f", v("a")));
+    const nestedSource = sourceOf(nested);
+    expect(nestedSource).toMatch(/const fn\d+ = \(p\d+\) => \{\n\s*const col\d+ = Q\(/);
+    expectSame(make(nestedSource), nested);
+    expectSame(make(nestedSource), nested, MANY);
+    // A body with one loop reads each part once in a call, so the part is no column of the call.
+    const single = let_({ f: fn(["r"], op("sum", each(axes.all, op("add", part(v("r")), n)))) }, call("f", v("a")));
+    expect(sourceOf(single)).not.toMatch(/=> \{\n\s*const col\d+ = Q\(/);
+    expectSame(make(sourceOf(single)), single);
+    // A binding at the root of the body is at the start of the body, so a column of the call reads it.
+    const root = let_({ f: fn(["r"], let_({ s: op("multiply", v("r"), lit(2)) }, op("sum", each(axes.all, op("sum", each(axes.all, part(v("s")))))))) }, call("f", v("a")));
+    expect(sourceOf(root)).toMatch(/const col\d+ = Q\(/);
+    expectSame(make(sourceOf(root)), root);
+    expectSame(make(sourceOf(root)), root, MANY);
+    // A binding in a branch is in a block of the body, so a column at the start of the body cannot read it.
+    const branch = let_({ f: fn(["r"], op("if", op("gt", v("r"), lit(0)), let_({ s: op("multiply", v("r"), lit(2)) }, op("sum", each(axes.all, op("sum", each(axes.all, part(v("s"))))))), lit(0))) }, call("f", v("a")));
+    expectSame(make(sourceOf(branch)), branch);
+    expectSame(make(sourceOf(branch)), branch, MANY);
+    expectSame(make(sourceOf(branch)), branch, RECORDS, { a: -1, t: "x" });
+  });
+
   it("V-055: a constant that reads a lazy constant or calls a function with a loop is lazy too", () => {
     // The name $x holds a loop, so it is lazy. The sum reads it, so it waits for its first read too, and a run that takes
     // the other branch starts no loop.

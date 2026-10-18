@@ -255,7 +255,10 @@ const MID = half(op("add", v("lo"), v("hi")));
 /** The test of a radius `r` of the search of the smallest radius. */
 const tooSmall = (r: Expr): Expr => op("gt", call("angleSum", r), TWO_PI);
 
-/** The smallest radius at which the chords fit in the ring, as `smallestRadius` of ireko. */
+/**
+ * The smallest radius at which the chords fit in the ring, as `smallestRadius` of ireko. The name `small` holds the test
+ * of the middle, so each step of the bisection tests once.
+ */
 const SMALLEST = let_(
   { $lo0: half(op("max", each(axes.all, call("need")))) },
   op(
@@ -266,10 +269,11 @@ const SMALLEST = let_(
       { $hi0: iterate(DOUBLINGS, { h: op("multiply", v("$lo0"), lit(2)) }, { h: op("multiply", v("h"), lit(2)) }, v("h"), op("not", tooSmall(v("h")))) },
       iterate(
         64,
-        { lo: v("$lo0"), hi: v("$hi0") },
+        { lo: v("$lo0"), hi: v("$hi0"), small: tooSmall(half(op("add", v("$lo0"), v("$hi0")))) },
         {
-          lo: let_({ $m: MID }, op("if", tooSmall(v("$m")), v("$m"), v("lo"))),
-          hi: let_({ $m: MID }, op("if", tooSmall(v("$m")), v("hi"), v("$m"))),
+          lo: op("if", v("small"), MID, v("lo")),
+          hi: op("if", v("small"), v("hi"), MID),
+          small: tooSmall(half(op("add", op("if", v("small"), MID, v("lo")), op("if", v("small"), v("hi"), MID)))),
         },
         v("hi"),
       ),

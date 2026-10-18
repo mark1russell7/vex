@@ -562,6 +562,8 @@ The engine benchmark of ireko in CI (2026-10-18, the nightly runs 39154433914 an
 
 After the fix, the nightly runs 39155509334 and 39155511159 measured radial at 1.06 to 1.17 times the time of ireko. In the same runs, grid and tree took 0.73 to 0.91 of their time on main. Thus the machine of the branch was faster, and radial is approximately 1.3 times slower. The angle of a child is a running sum, so the test of a radius still computes each step again for each pair. The code of ireko computes all the angles once for each radius.
 
+Two more changes make the module faster. First, a part of a loop in a loop of a function can read only its target and the parameters. It can also read the bindings at the root of the body. Then it is a column of the call. The function keeps it for each target, from the start of each call. Thus the test of a radius computes the step of each child once for each radius. A body with one loop reads each part once in a call, so its parts are no columns of the call. Second, the bisection of the smallest radius computed its test of the middle in two names, so each step tested twice. The name `small` holds the test, as the name `good` does in the search of the radius.
+
 A local branch of ireko (`vex/radial-module`, after `vex/grid-module`) uses the module in the strategy `radial`. The 213 tests of ireko pass, also its golden SVG files. The core is 16.58 kB, so the branch sets the limit to 17 kB. The benchmark of the engine alternated between ireko and the branch, two times each:
 
 | The benchmark of the engine, layouts each second | ireko | The branch |

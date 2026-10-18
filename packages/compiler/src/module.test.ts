@@ -741,6 +741,10 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const many = sourceOf(calls);
     expect(many.match(/const fn\d+ =/g)).toHaveLength(1);
     expectSame(make(many), calls);
+  });
+
+  it("V-054: the work of a call counts the body of its function, so a costly call is a column of the run", () => {
+    const big = op("add", op("multiply", w, w), op("subtract", op("multiply", n, w), op("add", n, lit(1))));
     // The work of a call adds the work of the body. A body of nine nodes is not a column itself, but its call is, so the
     // body evaluates once for each record.
     const nine = let_({ f: fn([], op("add", op("multiply", w, w), op("subtract", op("multiply", n, w), lit(1)))) }, op("sum", each(axes.all, op("add", call("f"), n))));

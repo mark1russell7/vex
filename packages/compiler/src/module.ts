@@ -617,6 +617,8 @@ class Printer {
   readonly #columns = new Map<string, string>();
   /** The expressions whose code is the read of a column of the run. */
   readonly #columned = new WeakSet<Expr>();
+  /** The lazy constants of the run, and the printed functions that have a loop: code that reads one waits for its read. */
+  readonly #deferred = new Set<string>();
   /** The work of the body of each bound function, by the number of its binding. */
   readonly #fnWork = new Map<number, number>();
   /** The expressions whose code is a constant of the run. */
@@ -707,6 +709,11 @@ class Printer {
     return `${prefix}${this.#names++}`;
   }
 
+  /** This method tells if code reads a lazy constant of the run, or calls a printed function that has a loop. */
+  #defers(c: Code): boolean {
+    return [c.v.code, ...c.s].some((line) => [...line.matchAll(/\b(c\d+|fn\d+)\(/g)].some((m) => this.#deferred.has(m[1] as string)));
+  }
+
   /** This method gives the code of a name: a read that throws the error of its value, if it can hold an error. */
   #read(name: Name): Value {
     const base = { kind: name.kind, deps: name.deps, plain: true, list: name.list };
@@ -731,7 +738,8 @@ class Printer {
 
   /**
    * This method evaluates a constant of the run once, before the loop over the keys, and gives the read of its value. A
-   * constant with a loop (`lazy`) evaluates on its first read instead, as a branch of the interpreter does.
+   * constant with a loop (`lazy`) evaluates on its first read instead, as a branch of the interpreter does. So does a
+   * constant that reads a lazy constant or calls a function with a loop. Else it starts that loop before the run.
    */
   #hoist(c: Code, lazy = false): Code {
     if (c.v.deps.size > 0 || (c.v.plain === true && c.s.length === 0)) return c;
@@ -739,10 +747,13 @@ class Printer {
     const hit = key === undefined ? undefined : this.#constants.get(key);
     if (hit !== undefined) return hit;
     const name = this.fresh("c");
-    if (lazy) this.run.push(`const ${name} = ${this.use("L")}(() => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
-    else this.run.push(...this.#store(name, c, true));
+    const deferred = lazy || this.#defers(c);
+    if (deferred) {
+      this.#deferred.add(name);
+      this.run.push(`const ${name} = ${this.use("L")}(() => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
+    } else this.run.push(...this.#store(name, c, true));
     const { list } = c.v;
-    const read = bare(this.#read(lazy ? { code: `${name}()`, kind: c.v.kind, lazy: true, deps: NO_DEPS, list } : { code: name, kind: c.v.kind, lazy: !c.v.safe, deps: NO_DEPS, list }));
+    const read = bare(this.#read(deferred ? { code: `${name}()`, kind: c.v.kind, lazy: true, deps: NO_DEPS, list } : { code: name, kind: c.v.kind, lazy: !c.v.safe, deps: NO_DEPS, list }));
     if (key !== undefined) this.#constants.set(key, read);
     return read;
   }
@@ -1092,6 +1103,7 @@ class Printer {
     const markers = new Set([origin, focus, param]);
     const global = [...body.v.deps].every((d) => markers.has(d));
     const name = this.fresh("fn");
+    if (hasLoop(bound.fn.body) || this.#defers(body)) this.#deferred.add(name);
     const position = body.v.deps.has(origin) ? [k, o] : body.v.deps.has(focus) ? [k] : [];
     const head = `const ${name} = (${[...names, ...position].join(", ")}) =>`;
     const decl = body.s.length === 0 ? [`${head} ${body.v.code};`] : [`${head} {`, ...ind(body.s), `  return ${body.v.code};`, "};"];

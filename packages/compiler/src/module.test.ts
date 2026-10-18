@@ -743,6 +743,27 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expectSame(make(many), calls);
   });
 
+  it("V-055: a constant that reads a lazy constant or calls a function with a loop is lazy too", () => {
+    // The name $x holds a loop, so it is lazy. The sum reads it, so it waits for its first read too, and a run that takes
+    // the other branch starts no loop.
+    const reads = let_({ $x: iterate(10, { x: lit(1) }, { x: op("multiply", v("x"), lit(2)) }, v("x")) }, op("if", op("gt", n, lit(100)), op("add", v("$x"), v("a")), n));
+    const readsSource = sourceOf(reads);
+    expect(readsSource).toMatch(/const c\d+ = L\(\(\) => \{\n\s*return [^\n]*c\d+\(\)/);
+    expect(readsSource).not.toMatch(/= T\(\(\) => [^\n]*\bc\d+\(\)/);
+    expectSame(make(readsSource), reads);
+    expectSame(make(readsSource), reads, MANY);
+    // A call of a function with a loop in its body is lazy, also when the call itself has no loop.
+    const calls = let_({ f: fn(["y"], iterate(10, { x: v("y") }, { x: op("add", v("x"), lit(1)) }, v("x"))) }, op("if", op("gt", n, lit(100)), call("f", v("a")), n));
+    const callsSource = sourceOf(calls);
+    expect(callsSource).toMatch(/const c\d+ = L\(\(\) => \{\n\s*return fn\d+\(/);
+    expect(callsSource).not.toMatch(/= T\(\(\) => [^\n]*fn\d+\(/);
+    expectSame(make(callsSource), calls);
+    // A constant that reads neither stays eager.
+    const plain = op("if", op("gt", n, lit(100)), op("multiply", v("a"), op("add", v("a"), lit(1))), n);
+    expect(sourceOf(plain)).not.toMatch(/= L\(/);
+    expectSame(make(sourceOf(plain)), plain);
+  });
+
   it("V-054: the work of a call counts the body of its function, so a costly call is a column of the run", () => {
     const big = op("add", op("multiply", w, w), op("subtract", op("multiply", n, w), op("add", n, lit(1))));
     // The work of a call adds the work of the body. A body of nine nodes is not a column itself, but its call is, so the

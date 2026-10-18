@@ -534,7 +534,7 @@ The module is approximately two times slower. A module without the checks of fin
 
 With `fold` and `iterate`, `RADIAL_PROGRAM` has each case of `radial`, also the search. The test of a radius is a fold over the children, with a fold over the later children in each step. Thus each angle comes from the same sums as in ireko. The bisection holds the test of the middle in the name `good`, so each step tests once. The bits are the same in the interpreter, in tier 2 and in the module.
 
-A constant of the run with a loop is lazy in a module: it evaluates on its first read. Before, the module evaluated each constant before the run, also a loop in a branch that the run does not take.
+A constant of the run with a loop is lazy in a module: it evaluates on its first read. Before, the module evaluated each constant before the run, also a loop in a branch that the run does not take. A constant that reads a lazy constant, or calls a function with a loop, is lazy too (V-055). Before, the midpoint of the bisection of `radial` read the two ends of the search, so each run did the search.
 
 A part of a loop over the targets can depend only on the target and on the constants of the run. Then it is a column of the run. The module computes it once for each record, on its first read, with the helper `Q`. Two parts with the same structure share one column.
 

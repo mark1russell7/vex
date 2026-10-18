@@ -741,6 +741,27 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const many = sourceOf(calls);
     expect(many.match(/const fn\d+ =/g)).toHaveLength(1);
     expectSame(make(many), calls);
+    // The work of a call adds the work of the body. A body of nine nodes is not a column itself, but its call is, so the
+    // body evaluates once for each record.
+    const nine = let_({ f: fn([], op("add", op("multiply", w, w), op("subtract", op("multiply", n, w), lit(1)))) }, op("sum", each(axes.all, op("add", call("f"), n))));
+    const nineSource = sourceOf(nine);
+    expect(nineSource).toMatch(/const col\d+ = Q\(\((\w+)\) => \{\n\s*return fn\d+\(\1\);/);
+    expectSame(make(nineSource), nine);
+    expectSame(make(nineSource), nine, MANY);
+    // A body that is a column of the run is one read, so its call is not a second column of the same value.
+    const columned = let_({ f: fn([], big) }, op("sum", each(axes.all, op("add", call("f"), n))));
+    const columnedSource = sourceOf(columned);
+    expect(columnedSource).toMatch(/const col\d+ = /);
+    expect(columnedSource).not.toMatch(/return fn\d+\(\w+\);/);
+    expectSame(make(columnedSource), columned);
+    // A light body costs less than the read of a column, so its call stays a call.
+    const light = let_({ f: fn([], op("add", n, lit(1))) }, op("sum", each(axes.all, op("add", call("f"), w))));
+    expect(sourceOf(light)).not.toMatch(/const col\d+ = /);
+    expectSame(make(sourceOf(light)), light);
+    // The work of each body counts once, so a chain of functions that each call the one before twice prints at once.
+    let chain: Expr = op("sum", each(axes.all, call("f40")));
+    for (let i = 40; i >= 1; i--) chain = let_({ [`f${String(i)}`]: fn([], op("add", call(`f${String(i - 1)}`), call(`f${String(i - 1)}`))) }, chain);
+    expect(sourceOf(let_({ f0: fn([], n) }, chain))).toMatch(/const col\d+ = /);
   });
 
   it("FN.CALL: the text of a module with functions: one function for each signature, at the start of a run or at its binding", async () => {

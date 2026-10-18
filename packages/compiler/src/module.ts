@@ -615,6 +615,10 @@ class Printer {
   readonly #constants = new Map<string, Code>();
   /** The columns of the run, by the structure of their expression. */
   readonly #columns = new Map<string, string>();
+  /** The expressions whose code is the read of a column of the run. */
+  readonly #columned = new WeakSet<Expr>();
+  /** The work of the body of each bound function, by the number of its binding. */
+  readonly #fnWork = new Map<number, number>();
   /** The expressions whose code is a constant of the run. */
   readonly #constant = new WeakSet<Expr>();
   /** The expressions at a place that takes a list: a binding, the head of a list op and the list of an axis. */
@@ -788,7 +792,7 @@ class Printer {
    */
   #columnar(e: Expr, c: Code, ctx: Ctx): boolean {
     // A node of the memo has the level 1, so a column has a focus.
-    if (ctx.level < 2 || c.v.deps.size !== 1 || !c.v.deps.has(ctx.level) || this.#work(e) < COLUMN_WORK) return false;
+    if (ctx.level < 2 || c.v.deps.size !== 1 || !c.v.deps.has(ctx.level) || this.#work(e, ctx.fns) < COLUMN_WORK) return false;
     // A node of the memo with keys keeps its costly part for each value of its keys already.
     if (this.#keyed(e)) return false;
     return [...namesOf(e)].every((name) => (ctx.env.get(name)?.deps.size ?? 0) === 0) && !this.#callsLocal(e, ctx);
@@ -806,10 +810,29 @@ class Printer {
     return (this.#memo.get(e)?.length ?? 0) > 0 || children(e).some((x) => this.#keyed(x));
   }
 
-  /** This method gives the work of an expression: a node of the memo and a constant of the run are one read each. */
-  #work(e: Expr): number {
+  /**
+   * This method gives the work of an expression: a node of the memo and a constant of the run are one read each. A call
+   * adds the work of the body of its function, because the body evaluates at each call.
+   */
+  #work(e: Expr, fns: ReadonlyMap<string, BoundFn>): number {
     if (this.#memo.has(e) || this.#constant.has(e)) return 1;
-    return children(e).reduce((sum, x) => sum + this.#work(x), 1);
+    const body = e.tag === "call" ? this.#bodyWork(fns.get(e.fn)) : 0;
+    return children(e).reduce((sum, x) => sum + this.#work(x, fns), 1 + body);
+  }
+
+  /**
+   * This method gives the work of the body of a function, once for each function. Thus a chain of calls costs no more
+   * than its functions. A body that is a column of the run is one read. A body sees the functions of the place of its
+   * binding, and no function calls itself (FN.TOTAL).
+   */
+  #bodyWork(bound: BoundFn | undefined): number {
+    if (bound === undefined) return 0;
+    let work = this.#fnWork.get(bound.id);
+    if (work === undefined) {
+      work = this.#columned.has(bound.fn.body) ? 1 : this.#work(bound.fn.body, bound.ctx.fns);
+      this.#fnWork.set(bound.id, work);
+    }
+    return work;
   }
 
   /** This method gives the read of a column of the run. Two parts with the same structure share one column. */
@@ -821,6 +844,7 @@ class Printer {
       this.run.push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
       this.#columns.set(key, name);
     }
+    this.#columned.add(e);
     return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps, list: c.v.list });
   }
 

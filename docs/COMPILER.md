@@ -538,7 +538,7 @@ A constant of the run with a loop is lazy in a module: it evaluates on its first
 
 A part of a loop over the targets can depend only on the target and on the constants of the run. Then it is a column of the run. The module computes it once for each record, on its first read, with the helper `Q`. Two parts with the same structure share one column.
 
-A part with little work is not a column. Its work counts its nodes, and a node of the memo or a constant of the run counts as one node. A node of the memo with keys keeps its costly part for each key already, so a part with one is not a column. Thus the module of `grid` is the same.
+A part with little work is not a column. Its work counts its nodes, and a node of the memo or a constant of the run counts as one node. A call also counts the nodes of the body of its function, because the body evaluates at each call. A body that is a column itself counts as one node, so its call is not a second column. A node of the memo with keys keeps its costly part for each key already, so a part with one is not a column. Thus the module of `grid` is the same.
 
 | The full module of `radial` | Bytes | Gzip |
 |---|---|---|
@@ -556,7 +556,9 @@ A part with little work is not a column. Its work counts its nodes, and a node o
 
 The module is approximately five times slower than ireko, and approximately 1.5 kB larger. Vex has no functions, so the test of a radius is in the program four times. Each copy of the fold over the pairs is a loop of its own. The angle of a child depends on the radius under test, so it is not a column. Thus the fold over the pairs computes it again for each pair. A column with keys keeps a value for the last values of some names. It made the module slower, because most of its keys change at almost each read. Functions or lists in Vex are the better fix.
 
-With functions, `RADIAL_PROGRAM` binds the test of a radius and its parts once, and the module prints each of them once: nine JavaScript functions. The bits stay the same in each stage. The speed of this module has no measurement yet.
+With functions, `RADIAL_PROGRAM` binds the test of a radius and its parts once, and the module prints each of them once: nine JavaScript functions. The bits stay the same in each stage.
+
+The engine benchmark of ireko in CI (2026-10-18, the nightly runs 39154433914 and 39154435929) measured this module. A layout with the strategy `radial` was 2.0 to 2.2 times slower than ireko. The cause was a defect of the printer. The work of a call counted one node, not the nodes of the body. Thus the call of `need` was not a column. The test of a radius computed `need` again for each pair, with its loop over the next child. The module before functions had the body at each call, so the body was a column. The fix: the work of a call counts the body of its function.
 
 A local branch of ireko (`vex/radial-module`, after `vex/grid-module`) uses the module in the strategy `radial`. The 213 tests of ireko pass, also its golden SVG files. The core is 16.58 kB, so the branch sets the limit to 17 kB. The benchmark of the engine alternated between ireko and the branch, two times each:
 

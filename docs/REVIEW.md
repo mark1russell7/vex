@@ -636,7 +636,7 @@ Each defect from V-001 to V-042 gets one test that names its ID. The July audit 
 | `ci.yml` | push, pull request | `check`: install, typecheck (source and tests), Oxlint, tests with coverage, type tests, doc tests, ste-lint. `site`: build, browser smoke test. `ci-ok`: one aggregate job, the only check that must pass. |
 | `pages.yml` | push to `main` | Build the site with `SITE_BASE`, upload, deploy. Copy the github.io workflow. |
 | `nightly.yml` | schedule | fast-check with 10,000 runs, Stryker, benchmarks, `typescript@next`, a link check. The site reads the reports, as the lag results page does. |
-| `release.yml` | P5 | Changesets, npm publish with trusted publishing (OIDC) and provenance. Since 2026-09-03, a new trusted publisher permits only staged publishing by default. Changesets cannot stage at this time, so set direct publishing. |
+| `release.yml` | push to `main` that changes a `package.json`, or by hand | The standard release of the template (since 2026-10-19). It starts the CI gates, packs each published package and publishes each version that npm does not have. It uses trusted publishing (OIDC) and provenance, with no environment. `RELEASING.md` gives the steps. |
 
 ### 9.2 Sketch of `ci.yml`
 
@@ -861,7 +861,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 
 ### 14.4 Open items
 
-- P5 done: the tsdown build, the package check (publint, attw and a program against the tarballs), Changesets, and a release workflow that the owner starts by hand.
+- P5 done: the tsdown build, the package check (publint, attw and a program against the tarballs), Changesets, and a release workflow that the owner starts by hand. Since 2026-10-19, a version commit on `main` starts the release (§9.1).
 - P5 done: `sheet()` with `#CYCLE!` (spec §9). A cell reference is an `ext` node, so the IR has no new kind. The run uses the algorithm of Tarjan, so each cell on a cycle gives `#CYCLE!` in any order of evaluation (property P9).
 - P5 done: the grid pilot in `@vex/pilots`. One Vex program gives the same rectangles as the grid layout of Graph on random items. Graph is a private repository, so the pilot compares with a new implementation of the same behavior, not with a copy of the Graph code. The owner can do the direct comparison in a local copy.
 - P5 done: `compile`. The interpreter is a closure compiler, so `evaluate` and `compile` have one semantics (spec rule EVAL.COMPILE, property P10).
@@ -901,6 +901,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Done after 0.5.0: the sheet app has date columns, grids, and books of tables with tabs. Its examples show each feature.
 - The compiler of Vex (tier 2: generated JavaScript, at run time and at build time) has its plan in [`COMPILER.md`](./COMPILER.md). Its first user is ireko. Phase C1 is done: `@mark1russell7/vex-compiler` gives the results of the interpreter (P17), 35 to 75 times faster than tier 1. Its record is in §13 of that plan.
 - Done on 2026-10-19: the speed job of the nightly workflow uses the shell `bash`, so a failed gate fails the job (`pipefail`). Before, each gate step sent its output into `tee`, and the job passed with a failed gate. The domains run of the mutation lane failed on a test that emitted a module with the mutated domains. That test moved to `module.test.ts` (`tools/mutation/README.md`).
+- Done on 2026-10-19: 0.8.1 is on npm. It makes the generated modules faster (COMPILE.MODULE), and the API does not change. It is the first release of the standard workflow of the template. A version commit on `main` publishes each new version, and the owner does not approve each release (`RELEASING.md`).
 
 ---
 

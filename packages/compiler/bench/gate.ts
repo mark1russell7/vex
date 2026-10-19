@@ -3,9 +3,10 @@
  * measures the generated code (tier 2) and the hand-written loops on the same machine, and checks the ratio against a
  * limit. The gate also checks that tier 2 gave each result, with no fallback.
  *
- * Phase C2 measured the median ratios 1.1 (NEAREST) and 1.05 (LIFE) on 2026-10-13. Phase C1 measured 2.3 and 1.6, and
- * tier 1 measured 80 and 120. The limit 1.5 keeps a margin for a busy runner, and a loss of the fast paths of the sites
- * fails it.
+ * Phase C2 measured the median ratios 1.1 (NEAREST) and 1.05 (LIFE) on 2026-10-13, on a local machine. Phase C1
+ * measured 2.3 and 1.6, and tier 1 measured 80 and 120. The runners of CI measure 1.5 to 1.66 (NEAREST) and 1.2 to 1.3
+ * (LIFE) since 2026-10-14. The limit 2 for NEAREST and 1.5 for LIFE keep a margin for a busy runner, and a loss of the
+ * fast paths of the sites fails them.
  * Start: node packages/compiler/bench/gate.ts
  */
 import type { Space } from "@mark1russell7/vex";
@@ -96,7 +97,7 @@ const radialCase = (n: number, mode: "nested" | "linked"): { readonly title: str
 };
 
 const CASES = [
-  { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limit: 1.5 },
+  { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limit: 2 },
   { title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limit: 1.5 },
   radialCase(12, "linked"),
   radialCase(60, "nested"),

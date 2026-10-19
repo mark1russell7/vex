@@ -384,6 +384,8 @@ The speed, measured by `bench/gate.ts` with alternate samples on one machine:
 | The nearest other box, 60 boxes | 2.3 | 1.0 to 1.1 |
 | One step of the Game of Life, 16 by 16 | 1.6 | 1.05 to 1.13 |
 
+These figures are from a local machine. The runners of CI measure 1.5 to 1.66 for the nearest box and 1.2 to 1.3 for the Game of Life (2026-10-14 to 2026-10-19). Until 2026-10-19, each step of the gate sent its output into `tee` without `pipefail`, so a failed gate did not fail the nightly job. From that day, the steps use the shell `bash`, which sets `pipefail`. The limit of the nearest box is 2, and the limit of the Game of Life stays 1.5. C1 measured 2.3, so a loss of the fast paths still fails the gate.
+
 The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they moved to phase C5. Later they moved to phase C3, after the kinds: a value in its components needs its kind.
 
 #### The memo of each space
@@ -562,7 +564,7 @@ The engine benchmark of ireko in CI (2026-10-18, the nightly runs 39154433914 an
 
 After the fix, the nightly runs 39155509334 and 39155511159 measured radial at 1.06 to 1.17 times the time of ireko. In the same runs, grid and tree took 0.73 to 0.91 of their time on main. Thus the machine of the branch was faster, and radial is approximately 1.3 times slower. The angle of a child is a running sum, so the test of a radius still computes each step again for each pair. The code of ireko computes all the angles once for each radius.
 
-Two more changes make the module faster. First, a part of a loop in a loop of a function can read only its target and the parameters. It can also read the bindings at the root of the body. Then it is a column of the call. The function keeps it for each target, from the start of each call. Thus the test of a radius computes the step of each child once for each radius. A body with one loop reads each part once in a call, so its parts are no columns of the call. Second, the bisection of the smallest radius computed its test of the middle in two names, so each step tested twice. The name `small` holds the test, as the name `good` does in the search of the radius.
+Two more changes make the module faster. First, take a part of a loop in a loop of a function. It can read its target, the parameters, the origin and the bindings at the root of the body. If it reads a parameter, it is a column of the call. A part without a parameter can have the structure of a part of another function, so it does not get a column of the call. The function keeps the column for each target, from the start of each call. Thus the test of a radius computes the step of each child once for each radius. A body with one loop reads each part once in a call, so its parts are no columns of the call. Second, the bisection of the smallest radius computed its test of the middle in two names, so each step tested twice. The name `small` holds the test, as the name `good` does in the search of the radius.
 
 A local branch of ireko (`vex/radial-module`, after `vex/grid-module`) uses the module in the strategy `radial`. The 213 tests of ireko pass, also its golden SVG files. The core is 16.58 kB, so the branch sets the limit to 17 kB. The benchmark of the engine alternated between ireko and the branch, two times each:
 

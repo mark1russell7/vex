@@ -741,9 +741,15 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const many = sourceOf(calls);
     expect(many.match(/const fn\d+ =/g)).toHaveLength(1);
     expectSame(make(many), calls);
+    // The text grows with the number of functions, not with the calls: each function calls the one before it twice, so
+    // the program puts the body of f1 in 2 ** 14 places, and the module has 15 functions.
+    let chain: Expr = call("f15", lit(0));
+    for (let i = 15; i >= 1; i--) chain = let_({ [`f${String(i)}`]: fn(["x"], i === 1 ? op("add", v("x"), lit(1)) : call(`f${String(i - 1)}`, call(`f${String(i - 1)}`, v("x")))) }, chain);
+    expect(sourceOf(chain).match(/const fn\d+ =/g)).toHaveLength(15);
+    expectSame(make(sourceOf(chain)), chain);
   });
 
-  it("COMPILE.MODULE: a part of a loop in a loop of a function that reads only its target and the parameters is a column of the call", () => {
+  it("COMPILE.MODULE: a part of a loop in a loop of a function that reads a parameter and no name of a loop is a column of the call", () => {
     // The part reads the parameter r and the target of the inner loop. The body has a loop in a loop, so each call keeps
     // the part for each target, at the start of the body.
     const part = (r: Expr): Expr => op("add", op("multiply", r, w), op("subtract", op("multiply", n, r), op("add", w, lit(1))));
@@ -766,6 +772,33 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expectSame(make(sourceOf(branch)), branch);
     expectSame(make(sourceOf(branch)), branch, MANY);
     expectSame(make(sourceOf(branch)), branch, RECORDS, { a: -1, t: "x" });
+    const atStart = /=> \{\n\s*const col\d+ = Q\(/;
+    const loops = (body: Expr): Expr => op("sum", each(axes.all, op("sum", each(axes.all, body))));
+    const check = (e: Expr, atCall: boolean): void => {
+      const source = sourceOf(e);
+      expect(atStart.test(source)).toBe(atCall);
+      expectSame(make(source), e);
+      expectSame(make(source), e, MANY);
+    };
+    // A fold and an iteration are loops too, so an axis in one is a loop in a loop.
+    const step = (r: Expr): Readonly<Record<string, Expr>> => ({ s: op("add", v("s"), op("sum", each(axes.all, part(r)))) });
+    check(let_({ f: fn(["r"], fold(axes.all, { s: lit(0) }, step(v("r")), v("s"))) }, call("f", v("a"))), true);
+    check(let_({ f: fn(["r"], iterate(3, { s: lit(0) }, step(v("r")), v("s"))) }, call("f", v("a"))), true);
+    // A part that also reads the origin is a column of the call: the origin does not change in a call.
+    const withOrigin = op("add", op("multiply", v("r"), K), op("subtract", op("multiply", w, K), op("add", w, lit(1))));
+    check(let_({ f: fn(["r"], loops(withOrigin)) }, call("f", v("a"))), true);
+    // A part at the root of the body evaluates once in a call, so it is no column.
+    check(let_({ f: fn(["r"], op("add", part(v("r")), loops(op("add", v("r"), w)))) }, call("f", v("a"))), false);
+    // A part that reads no parameter is a column of the run, or no column. Two functions with the same part reading the
+    // origin each compute it, because a column of one call is not a variable of the other function.
+    const noParam = op("add", op("multiply", K, w), op("subtract", op("multiply", n, K), op("add", w, lit(1))));
+    check(let_({ f: fn(["r"], op("add", v("r"), loops(part(lit(3))))) }, call("f", v("a"))), false);
+    expect(sourceOf(let_({ f: fn(["r"], op("add", v("r"), loops(part(lit(3))))) }, call("f", v("a"))))).toMatch(/const col\d+ = Q\(/);
+    check(let_({ f: fn(["r"], op("add", v("r"), loops(noParam))), g: fn(["r"], op("multiply", v("r"), loops(noParam))) }, rec({ f: call("f", v("a")), g: call("g", v("a")) })), false);
+    // The bindings of a let at the root of the body of another let at the root are at the start of the body too.
+    check(let_({ f: fn(["r"], let_({ s: op("multiply", v("r"), lit(2)) }, let_({ u: op("add", v("s"), lit(1)) }, loops(part(v("u")))))) }, call("f", v("a"))), true);
+    // A function that the body calls is printed before the loops of the body, and the loops still see their own function.
+    check(let_({ g: fn(["x"], op("add", v("x"), lit(1))) }, let_({ f: fn(["r"], op("add", call("g", v("r")), loops(part(v("r"))))) }, call("f", v("a")))), true);
   });
 
   it("V-055: a constant that reads a lazy constant or calls a function with a loop is lazy too", () => {
@@ -783,6 +816,12 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(callsSource).toMatch(/const c\d+ = L\(\(\) => \{\n\s*return fn\d+\(/);
     expect(callsSource).not.toMatch(/= T\(\(\) => [^\n]*fn\d+\(/);
     expectSame(make(callsSource), calls);
+    // The names of the constants and of the functions can have more than one digit.
+    const pad = (e: Expr): Expr => let_({ id: fn(["x"], v("x")) }, rec({ p1: call("id", lit(1)), p2: call("id", lit("x")), p3: call("id", op("gt", n, lit(1))), x: e }));
+    expect(sourceOf(pad(reads))).toMatch(/const c\d\d = L\(\(\) => \{\n\s*return [^\n]*c\d\d\(\)/);
+    expectSame(make(sourceOf(pad(reads))), pad(reads));
+    expect(sourceOf(pad(calls))).toMatch(/const c\d+ = L\(\(\) => \{\n\s*return fn\d\d\(/);
+    expectSame(make(sourceOf(pad(calls))), pad(calls));
     // A constant that reads neither stays eager.
     const plain = op("if", op("gt", n, lit(100)), op("multiply", v("a"), op("add", v("a"), lit(1))), n);
     expect(sourceOf(plain)).not.toMatch(/= L\(/);
@@ -812,6 +851,10 @@ describe("COMPILE.MODULE: the text of a module", () => {
     let chain: Expr = op("sum", each(axes.all, call("f40")));
     for (let i = 40; i >= 1; i--) chain = let_({ [`f${String(i)}`]: fn([], op("add", call(`f${String(i - 1)}`), call(`f${String(i - 1)}`))) }, chain);
     expect(sourceOf(let_({ f0: fn([], n) }, chain))).toMatch(/const col\d+ = /);
+    // So does a chain of bodies that read only their parameter, which are no columns.
+    let params: Expr = op("sum", each(axes.all, op("add", call("g40", w), n)));
+    for (let i = 40; i >= 1; i--) params = let_({ [`g${String(i)}`]: fn(["x"], op("add", call(`g${String(i - 1)}`, v("x")), call(`g${String(i - 1)}`, v("x")))) }, params);
+    expect(sourceOf(let_({ g0: fn(["x"], op("multiply", v("x"), lit(2))) }, params))).toMatch(/const col\d+ = /);
   });
 
   it("FN.CALL: the text of a module with functions: one function for each signature, at the start of a run or at its binding", async () => {

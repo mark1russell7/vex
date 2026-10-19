@@ -645,6 +645,7 @@ class Printer {
   /** The lazy constants of the run, and the printed functions that have a loop: code that reads one waits for its read. */
   readonly #deferred = new Set<string>();
   /** The functions that the printer prints at this time, the innermost last. */
+  // Stryker disable next-line ArrayDeclaration: a value that is not a scope has no field repeats or root, so it acts as no scope
   readonly #scopes: CallScope[] = [];
   /** The work of the body of each bound function, by the number of its binding. */
   readonly #fnWork = new Map<number, number>();
@@ -831,7 +832,7 @@ class Printer {
   #columnar(e: Expr, c: Code, ctx: Ctx): boolean {
     // A node of the memo has the level 1, so a column has a focus.
     if (ctx.level < 2 || !c.v.deps.has(ctx.level) || this.#work(e, ctx.fns) < COLUMN_WORK) return false;
-    const scope = c.v.deps.size === 1 ? undefined : this.#callScope(c, ctx);
+    const scope = this.#callScope(c, ctx);
     if (c.v.deps.size !== 1 && scope === undefined) return false;
     // A node of the memo with keys keeps its costly part for each value of its keys already.
     if (this.#keyed(e)) return false;
@@ -844,13 +845,16 @@ class Printer {
 
   /**
    * This method gives the function whose call can hold a column of a part. The part is in a loop of the function, and it
-   * depends only on its target and on the parameters. The body of the function has a loop in a loop, so a call can read
-   * the part more than once.
+   * reads a parameter. The body of the function has a loop in a loop, so a call can read the part more than once. Each
+   * name that the part reads is a parameter, a binding at the root of the body or a constant (`#columnar`). So the
+   * part depends only on its target and on values that one call does not change. These are the parameters, the focus
+   * and the origin. The levels in a node of the memo start at 1, far below the focus of a function. So a node of the
+   * memo holds no column of a call.
    */
   #callScope(c: Code, ctx: Ctx): CallScope | undefined {
     const scope = this.#scopes.at(-1);
-    if (scope === undefined || !scope.repeats || this.#inside !== undefined || ctx.level <= scope.focus) return undefined;
-    return c.v.deps.size === 2 && c.v.deps.has(scope.param) ? scope : undefined;
+    // A part that reads a parameter reads a variable of this function, so its structure gives no column of another function.
+    return scope !== undefined && scope.repeats && ctx.level > scope.focus && c.v.deps.has(scope.param) ? scope : undefined;
   }
 
   /** This method tells if an expression calls a function that is at the place of its binding, not at the start of a run. */
@@ -871,6 +875,7 @@ class Printer {
    */
   #work(e: Expr, fns: ReadonlyMap<string, BoundFn>): number {
     if (this.#memo.has(e) || this.#constant.has(e)) return 1;
+    // Stryker disable next-line ConditionalExpression: a node that is not a call has no field fn, so the map gives undefined
     const body = e.tag === "call" ? this.#bodyWork(fns.get(e.fn)) : 0;
     return children(e).reduce((sum, x) => sum + this.#work(x, fns), 1 + body);
   }
@@ -897,7 +902,7 @@ class Printer {
     if (name === undefined) {
       name = this.fresh("col");
       // A column of a call is at the start of the body of its function, so each call has its own.
-      const scope = c.v.deps.size === 1 ? undefined : this.#callScope(c, ctx);
+      const scope = this.#callScope(c, ctx);
       (scope?.decls ?? this.run).push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
       this.#columns.set(key, name);
     }
@@ -1067,9 +1072,10 @@ class Printer {
     let deps = new Set<number>();
     const bound: BoundFn[] = [];
     // The bindings of a let at the root of the body of a function are at the start of the body, so a column of the
-    // call can read them.
+    // call can read them. A let at the root that is a node of the memo binds variables of its function of the memo, but
+    // the memo holds no column of a call (`#callScope`), so these names have no reader.
     const scope = this.#scopes.at(-1);
-    const root = scope !== undefined && scope.root === e && this.#inside === undefined ? scope : undefined;
+    const root = scope !== undefined && scope.root === e ? scope : undefined;
     for (const [name, x] of Object.entries(e.bind)) {
       // A binding sees the context of the let, so a function cannot call itself.
       if (x.tag === "fn") {

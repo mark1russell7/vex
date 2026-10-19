@@ -16,6 +16,10 @@ The nightly job has one runner for each package. Each runner has a time limit of
 
 Stryker adds `// @ts-nocheck` to each file of its sandbox by default. The lane turns this off (`disableTypeChecks: false`), because Vitest does no type check. Also, the golden source files of the compiler must stay as they are.
 
+## The modules of the compiler
+
+A standalone module copies the text of each op function of a domain. A mutated domain has the code of Stryker in that text, so the module refuses the op. Thus only `compiler/module.test.ts` gets `@mark1russell7/vex-domains` from the copy that Stryker does not mutate (`vitest.config.ts`). Put each test that emits a module with ops of the domains in that file. On 2026-10-19, a test in `tiers.test.ts` emitted a module, and the dry run of the domains failed.
+
 ## The files that the lane does not mutate
 
 | File | Reason |

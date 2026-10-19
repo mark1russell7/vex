@@ -384,6 +384,8 @@ The speed, measured by `bench/gate.ts` with alternate samples on one machine:
 | The nearest other box, 60 boxes | 2.3 | 1.0 to 1.1 |
 | One step of the Game of Life, 16 by 16 | 1.6 | 1.05 to 1.13 |
 
+These figures are from a local machine. The runners of CI measure 1.5 to 1.66 for the nearest box and 1.2 to 1.3 for the Game of Life (2026-10-14 to 2026-10-19). Until 2026-10-19, each step of the gate sent its output into `tee` without `pipefail`, so a failed gate did not fail the nightly job. From that day, the steps use the shell `bash`, which sets `pipefail`. The limit of the nearest box is 2, and the limit of the Game of Life stays 1.5. C1 measured 2.3, so a loss of the fast paths still fails the gate.
+
 The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they moved to phase C5. Later they moved to phase C3, after the kinds: a value in its components needs its kind.
 
 #### The memo of each space
@@ -534,11 +536,11 @@ The module is approximately two times slower. A module without the checks of fin
 
 With `fold` and `iterate`, `RADIAL_PROGRAM` has each case of `radial`, also the search. The test of a radius is a fold over the children, with a fold over the later children in each step. Thus each angle comes from the same sums as in ireko. The bisection holds the test of the middle in the name `good`, so each step tests once. The bits are the same in the interpreter, in tier 2 and in the module.
 
-A constant of the run with a loop is lazy in a module: it evaluates on its first read. Before, the module evaluated each constant before the run, also a loop in a branch that the run does not take.
+A constant of the run with a loop is lazy in a module: it evaluates on its first read. Before, the module evaluated each constant before the run, also a loop in a branch that the run does not take. A constant that reads a lazy constant, or calls a function with a loop, is lazy too (V-055). Before, the midpoint of the bisection of `radial` read the two ends of the search, so each run did the search.
 
 A part of a loop over the targets can depend only on the target and on the constants of the run. Then it is a column of the run. The module computes it once for each record, on its first read, with the helper `Q`. Two parts with the same structure share one column.
 
-A part with little work is not a column. Its work counts its nodes, and a node of the memo or a constant of the run counts as one node. A node of the memo with keys keeps its costly part for each key already, so a part with one is not a column. Thus the module of `grid` is the same.
+A part with little work is not a column. Its work counts its nodes, and a node of the memo or a constant of the run counts as one node. A call also counts the nodes of the body of its function, because the body evaluates at each call. A body that is a column itself counts as one node, so its call is not a second column. A node of the memo with keys keeps its costly part for each key already, so a part with one is not a column. Thus the module of `grid` is the same.
 
 | The full module of `radial` | Bytes | Gzip |
 |---|---|---|
@@ -556,7 +558,13 @@ A part with little work is not a column. Its work counts its nodes, and a node o
 
 The module is approximately five times slower than ireko, and approximately 1.5 kB larger. Vex has no functions, so the test of a radius is in the program four times. Each copy of the fold over the pairs is a loop of its own. The angle of a child depends on the radius under test, so it is not a column. Thus the fold over the pairs computes it again for each pair. A column with keys keeps a value for the last values of some names. It made the module slower, because most of its keys change at almost each read. Functions or lists in Vex are the better fix.
 
-With functions, `RADIAL_PROGRAM` binds the test of a radius and its parts once, and the module prints each of them once: nine JavaScript functions. The bits stay the same in each stage. The speed of this module has no measurement yet.
+With functions, `RADIAL_PROGRAM` binds the test of a radius and its parts once, and the module prints each of them once: nine JavaScript functions. The bits stay the same in each stage.
+
+The engine benchmark of ireko in CI (2026-10-18, the nightly runs 39154433914 and 39154435929) measured this module. A layout with the strategy `radial` was 2.0 to 2.2 times slower than ireko. The cause was a defect of the printer. The work of a call counted one node, not the nodes of the body. Thus the call of `need` was not a column. The test of a radius computed `need` again for each pair, with its loop over the next child. The module before functions had the body at each call, so the body was a column. The fix: the work of a call counts the body of its function (V-054).
+
+After the fix, the nightly runs 39155509334 and 39155511159 measured radial at 1.06 to 1.17 times the time of ireko. In the same runs, grid and tree took 0.73 to 0.91 of their time on main. Thus the machine of the branch was faster, and radial is approximately 1.3 times slower. The angle of a child is a running sum, so the test of a radius still computes each step again for each pair. The code of ireko computes all the angles once for each radius.
+
+Two more changes make the module faster. First, take a part of a loop in a loop of a function. It can read its target, the parameters, the origin and the bindings at the root of the body. If it reads a parameter, it is a column of the call. A part without a parameter can have the structure of a part of another function, so it does not get a column of the call. The function keeps the column for each target, from the start of each call. Thus the test of a radius computes the step of each child once for each radius. A body with one loop reads each part once in a call, so its parts are no columns of the call. Second, the bisection of the smallest radius computed its test of the middle in two names, so each step tested twice. The name `small` holds the test, as the name `good` does in the search of the radius.
 
 A local branch of ireko (`vex/radial-module`, after `vex/grid-module`) uses the module in the strategy `radial`. The 213 tests of ireko pass, also its golden SVG files. The core is 16.58 kB, so the branch sets the limit to 17 kB. The benchmark of the engine alternated between ireko and the branch, two times each:
 

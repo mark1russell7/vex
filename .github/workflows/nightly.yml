@@ -78,6 +78,10 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    # The shell bash sets pipefail, so a gate that fails fails its step, also with its output piped into tee.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,9 +95,12 @@ jobs:
       - run: mkdir -p reports && pnpm --filter @mark1russell7/vex run bench | tee reports/bench.txt
       # The gate fails when Vex is much slower than the hand-written loops (bench/gate.ts gives the limits).
       - run: pnpm --filter @mark1russell7/vex run bench:gate | tee -a reports/bench.txt
-      # The gate of the compiler: generated code against the same loops, with no fallback (docs/COMPILER.md §10).
-      - run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a reports/bench.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      # The gate of the compiler: generated code against the same loops, with no fallback (docs/COMPILER.md §10). It runs
+      # also when the first gate fails, and the report keeps the lines of both.
+      - if: ${{ !cancelled() }}
+        run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a reports/bench.txt
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bench-report
           path: reports/bench.txt

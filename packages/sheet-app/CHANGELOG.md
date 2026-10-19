@@ -1,5 +1,12 @@
 # @vex/sheet-app
 
+## 0.2.3
+
+### Patch Changes
+
+- @mark1russell7/vex@0.8.1
+  - @mark1russell7/vex-domains@0.8.1
+
 ## 0.2.2
 
 ### Patch Changes

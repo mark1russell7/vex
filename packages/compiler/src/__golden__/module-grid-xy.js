@@ -8,7 +8,6 @@ function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
 function G(x) { return x === E ? F() : x; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
-function T(f) { try { return f(); } catch { return E; } }
 const op_0_0 = (x, y) => ({
 				x,
 				y
@@ -49,13 +48,15 @@ export function run(records, vars) {
     }
     return k_domain_XY(op_1_1(l0, k_domain_XY(op_0_0(1, 1))));
   });
-  const c4 = T(() => k_domain_XY(op_1_2(G(c3()), k_domain_XY(op_0_0(v0, v0)))));
+  const c4 = L(() => {
+    return k_domain_XY(op_1_2(G(c3()), k_domain_XY(op_0_0(v0, v0))));
+  });
   const out = [];
   for (let o = 0; o < n; o++) {
     try {
       let b5;
       try {
-        b5 = k_domain_XY(op_1_6(k_domain_XY(op_0_0(k_number((R[o]["i"]) % (v1)), k_number(Math.floor((k_number((R[o]["i"]) / (v1))))))), G(c4)));
+        b5 = k_domain_XY(op_1_6(k_domain_XY(op_0_0(k_number((R[o]["i"]) % (v1)), k_number(Math.floor((k_number((R[o]["i"]) / (v1))))))), G(c4())));
       } catch {
         b5 = E;
       }

@@ -291,9 +291,6 @@ describe("the tiers", () => {
     const p = tiered(chain, { domains: DOMAINS });
     expect([p.tier, p.reason]).toEqual([1, reason]);
     expect(fromCore(p.run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 2 ** 14 });
-    // A module prints a function once for each signature, so its text grows with the number of functions, not with the calls.
-    const m = emitModule(chain, { domains: [NumDomain], schema: {} });
-    expect(m.ok ? m.source.match(/const fn\d+ =/g) : []).toHaveLength(15);
   });
 
   it("AXIS.LIST LIST.SORT: a program with lists as values goes to tier 1, and a module keeps each list as an array", () => {

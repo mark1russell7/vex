@@ -741,6 +741,120 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const many = sourceOf(calls);
     expect(many.match(/const fn\d+ =/g)).toHaveLength(1);
     expectSame(make(many), calls);
+    // The text grows with the number of functions, not with the calls: each function calls the one before it twice, so
+    // the program puts the body of f1 in 2 ** 14 places, and the module has 15 functions.
+    let chain: Expr = call("f15", lit(0));
+    for (let i = 15; i >= 1; i--) chain = let_({ [`f${String(i)}`]: fn(["x"], i === 1 ? op("add", v("x"), lit(1)) : call(`f${String(i - 1)}`, call(`f${String(i - 1)}`, v("x")))) }, chain);
+    expect(sourceOf(chain).match(/const fn\d+ =/g)).toHaveLength(15);
+    expectSame(make(sourceOf(chain)), chain);
+  });
+
+  it("COMPILE.MODULE: a part of a loop in a loop of a function that reads a parameter and no name of a loop is a column of the call", () => {
+    // The part reads the parameter r and the target of the inner loop. The body has a loop in a loop, so each call keeps
+    // the part for each target, at the start of the body.
+    const part = (r: Expr): Expr => op("add", op("multiply", r, w), op("subtract", op("multiply", n, r), op("add", w, lit(1))));
+    const nested = let_({ f: fn(["r"], op("sum", each(axes.all, op("sum", each(axes.all, op("add", part(v("r")), n)))))) }, call("f", v("a")));
+    const nestedSource = sourceOf(nested);
+    expect(nestedSource).toMatch(/const fn\d+ = \(p\d+\) => \{\n\s*const col\d+ = Q\(/);
+    expectSame(make(nestedSource), nested);
+    expectSame(make(nestedSource), nested, MANY);
+    // A body with one loop reads each part once in a call, so the part is no column of the call.
+    const single = let_({ f: fn(["r"], op("sum", each(axes.all, op("add", part(v("r")), n)))) }, call("f", v("a")));
+    expect(sourceOf(single)).not.toMatch(/=> \{\n\s*const col\d+ = Q\(/);
+    expectSame(make(sourceOf(single)), single);
+    // A binding at the root of the body is at the start of the body, so a column of the call reads it.
+    const root = let_({ f: fn(["r"], let_({ s: op("multiply", v("r"), lit(2)) }, op("sum", each(axes.all, op("sum", each(axes.all, part(v("s")))))))) }, call("f", v("a")));
+    expect(sourceOf(root)).toMatch(/const col\d+ = Q\(/);
+    expectSame(make(sourceOf(root)), root);
+    expectSame(make(sourceOf(root)), root, MANY);
+    // A binding in a branch is in a block of the body, so a column at the start of the body cannot read it.
+    const branch = let_({ f: fn(["r"], op("if", op("gt", v("r"), lit(0)), let_({ s: op("multiply", v("r"), lit(2)) }, op("sum", each(axes.all, op("sum", each(axes.all, part(v("s"))))))), lit(0))) }, call("f", v("a")));
+    expectSame(make(sourceOf(branch)), branch);
+    expectSame(make(sourceOf(branch)), branch, MANY);
+    expectSame(make(sourceOf(branch)), branch, RECORDS, { a: -1, t: "x" });
+    const atStart = /=> \{\n\s*const col\d+ = Q\(/;
+    const loops = (body: Expr): Expr => op("sum", each(axes.all, op("sum", each(axes.all, body))));
+    const check = (e: Expr, atCall: boolean): void => {
+      const source = sourceOf(e);
+      expect(atStart.test(source)).toBe(atCall);
+      expectSame(make(source), e);
+      expectSame(make(source), e, MANY);
+    };
+    // A fold and an iteration are loops too, so an axis in one is a loop in a loop.
+    const step = (r: Expr): Readonly<Record<string, Expr>> => ({ s: op("add", v("s"), op("sum", each(axes.all, part(r)))) });
+    check(let_({ f: fn(["r"], fold(axes.all, { s: lit(0) }, step(v("r")), v("s"))) }, call("f", v("a"))), true);
+    check(let_({ f: fn(["r"], iterate(3, { s: lit(0) }, step(v("r")), v("s"))) }, call("f", v("a"))), true);
+    // A part that also reads the origin is a column of the call: the origin does not change in a call.
+    const withOrigin = op("add", op("multiply", v("r"), K), op("subtract", op("multiply", w, K), op("add", w, lit(1))));
+    check(let_({ f: fn(["r"], loops(withOrigin)) }, call("f", v("a"))), true);
+    // A part at the root of the body evaluates once in a call, so it is no column.
+    check(let_({ f: fn(["r"], op("add", part(v("r")), loops(op("add", v("r"), w)))) }, call("f", v("a"))), false);
+    // A part that reads no parameter is a column of the run, or no column. Two functions with the same part reading the
+    // origin each compute it, because a column of one call is not a variable of the other function.
+    const noParam = op("add", op("multiply", K, w), op("subtract", op("multiply", n, K), op("add", w, lit(1))));
+    check(let_({ f: fn(["r"], op("add", v("r"), loops(part(lit(3))))) }, call("f", v("a"))), false);
+    expect(sourceOf(let_({ f: fn(["r"], op("add", v("r"), loops(part(lit(3))))) }, call("f", v("a"))))).toMatch(/const col\d+ = Q\(/);
+    check(let_({ f: fn(["r"], op("add", v("r"), loops(noParam))), g: fn(["r"], op("multiply", v("r"), loops(noParam))) }, rec({ f: call("f", v("a")), g: call("g", v("a")) })), false);
+    // The bindings of a let at the root of the body of another let at the root are at the start of the body too.
+    check(let_({ f: fn(["r"], let_({ s: op("multiply", v("r"), lit(2)) }, let_({ u: op("add", v("s"), lit(1)) }, loops(part(v("u")))))) }, call("f", v("a"))), true);
+    // A function that the body calls is printed before the loops of the body, and the loops still see their own function.
+    check(let_({ g: fn(["x"], op("add", v("x"), lit(1))) }, let_({ f: fn(["r"], op("add", call("g", v("r")), loops(part(v("r"))))) }, call("f", v("a")))), true);
+  });
+
+  it("V-055: a constant that reads a lazy constant or calls a function with a loop is lazy too", () => {
+    // The name $x holds a loop, so it is lazy. The sum reads it, so it waits for its first read too, and a run that takes
+    // the other branch starts no loop.
+    const reads = let_({ $x: iterate(10, { x: lit(1) }, { x: op("multiply", v("x"), lit(2)) }, v("x")) }, op("if", op("gt", n, lit(100)), op("add", v("$x"), v("a")), n));
+    const readsSource = sourceOf(reads);
+    expect(readsSource).toMatch(/const c\d+ = L\(\(\) => \{\n\s*return [^\n]*c\d+\(\)/);
+    expect(readsSource).not.toMatch(/= T\(\(\) => [^\n]*\bc\d+\(\)/);
+    expectSame(make(readsSource), reads);
+    expectSame(make(readsSource), reads, MANY);
+    // A call of a function with a loop in its body is lazy, also when the call itself has no loop.
+    const calls = let_({ f: fn(["y"], iterate(10, { x: v("y") }, { x: op("add", v("x"), lit(1)) }, v("x"))) }, op("if", op("gt", n, lit(100)), call("f", v("a")), n));
+    const callsSource = sourceOf(calls);
+    expect(callsSource).toMatch(/const c\d+ = L\(\(\) => \{\n\s*return fn\d+\(/);
+    expect(callsSource).not.toMatch(/= T\(\(\) => [^\n]*fn\d+\(/);
+    expectSame(make(callsSource), calls);
+    // The names of the constants and of the functions can have more than one digit.
+    const pad = (e: Expr): Expr => let_({ id: fn(["x"], v("x")) }, rec({ p1: call("id", lit(1)), p2: call("id", lit("x")), p3: call("id", op("gt", n, lit(1))), x: e }));
+    expect(sourceOf(pad(reads))).toMatch(/const c\d\d = L\(\(\) => \{\n\s*return [^\n]*c\d\d\(\)/);
+    expectSame(make(sourceOf(pad(reads))), pad(reads));
+    expect(sourceOf(pad(calls))).toMatch(/const c\d+ = L\(\(\) => \{\n\s*return fn\d\d\(/);
+    expectSame(make(sourceOf(pad(calls))), pad(calls));
+    // A constant that reads neither stays eager.
+    const plain = op("if", op("gt", n, lit(100)), op("multiply", v("a"), op("add", v("a"), lit(1))), n);
+    expect(sourceOf(plain)).not.toMatch(/= L\(/);
+    expectSame(make(sourceOf(plain)), plain);
+  });
+
+  it("V-054: the work of a call counts the body of its function, so a costly call is a column of the run", () => {
+    const big = op("add", op("multiply", w, w), op("subtract", op("multiply", n, w), op("add", n, lit(1))));
+    // The work of a call adds the work of the body. A body of nine nodes is not a column itself, but its call is, so the
+    // body evaluates once for each record.
+    const nine = let_({ f: fn([], op("add", op("multiply", w, w), op("subtract", op("multiply", n, w), lit(1)))) }, op("sum", each(axes.all, op("add", call("f"), n))));
+    const nineSource = sourceOf(nine);
+    expect(nineSource).toMatch(/const col\d+ = Q\(\((\w+)\) => \{\n\s*return fn\d+\(\1\);/);
+    expectSame(make(nineSource), nine);
+    expectSame(make(nineSource), nine, MANY);
+    // A body that is a column of the run is one read, so its call is not a second column of the same value.
+    const columned = let_({ f: fn([], big) }, op("sum", each(axes.all, op("add", call("f"), n))));
+    const columnedSource = sourceOf(columned);
+    expect(columnedSource).toMatch(/const col\d+ = /);
+    expect(columnedSource).not.toMatch(/return fn\d+\(\w+\);/);
+    expectSame(make(columnedSource), columned);
+    // A light body costs less than the read of a column, so its call stays a call.
+    const light = let_({ f: fn([], op("add", n, lit(1))) }, op("sum", each(axes.all, op("add", call("f"), w))));
+    expect(sourceOf(light)).not.toMatch(/const col\d+ = /);
+    expectSame(make(sourceOf(light)), light);
+    // The work of each body counts once, so a chain of functions that each call the one before twice prints at once.
+    let chain: Expr = op("sum", each(axes.all, call("f40")));
+    for (let i = 40; i >= 1; i--) chain = let_({ [`f${String(i)}`]: fn([], op("add", call(`f${String(i - 1)}`), call(`f${String(i - 1)}`))) }, chain);
+    expect(sourceOf(let_({ f0: fn([], n) }, chain))).toMatch(/const col\d+ = /);
+    // So does a chain of bodies that read only their parameter, which are no columns.
+    let params: Expr = op("sum", each(axes.all, op("add", call("g40", w), n)));
+    for (let i = 40; i >= 1; i--) params = let_({ [`g${String(i)}`]: fn(["x"], op("add", call(`g${String(i - 1)}`, v("x")), call(`g${String(i - 1)}`, v("x")))) }, params);
+    expect(sourceOf(let_({ g0: fn(["x"], op("multiply", v("x"), lit(2))) }, params))).toMatch(/const col\d+ = /);
   });
 
   it("FN.CALL: the text of a module with functions: one function for each signature, at the start of a run or at its binding", async () => {

@@ -61,7 +61,8 @@
     "**/__golden__/**",
     "packages/site/scripts/**",
     "packages/site/src/content.config.ts",
-    "packages/site/.astro/**"
+    "packages/site/.astro/**",
+    "scripts/release/**"
   ],
   "overrides": [
     {

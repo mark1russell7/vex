@@ -30,3 +30,18 @@ To start it from the source of this repository:
 cd packages/mcp
 npx tsx src/main.ts
 ```
+
+## The host
+
+Each tool is a procedure of [`@procedures/client`](https://www.npmjs.com/package/@procedures/client) in the module `vex` (`vexModule`). The function `createHost` serves the module with `createMcpHost` of [`@procedures/mcp-server`](https://www.npmjs.com/package/@procedures/mcp-server), as the other procedure servers of the family do. The path `["vex", "check"]` gives the tool `vex_check`.
+
+Each tool reads and writes nothing outside its input, so it has the effects `{ reads: [], writes: [], idempotent: true }`. The client sees each tool as read-only, idempotent and closed.
+
+```ts
+import { createHost } from "@mark1russell7/vex-mcp";
+
+// The default face is the standard input and output. The host stops when its client closes the standard input.
+const host = createHost();
+await host.start();
+await host.closed;
+```

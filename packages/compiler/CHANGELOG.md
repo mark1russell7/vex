@@ -1,5 +1,14 @@
 # @mark1russell7/vex-compiler
 
+## 0.8.1
+
+### Patch Changes
+
+- 9bad010: In a standalone module, a part of a loop in a loop of a function is a column of the call when it reads a parameter (COMPILE.MODULE). It can also read its target, the origin and the bindings at the root of the body. Each call computes the part once for each target.
+- c22cb83: A standalone module computes a call of a function with a costly body once for each record (COMPILE.MODULE). Before, the printer counted a call as one node. Thus the call was not a column of the run, and the module computed the body again at each read. With this fix, the radial module of ireko computes the distance of each pair of neighbors once for each child.
+- d654627: In a standalone module, a constant of the run that reads a lazy constant, or calls a function with a loop, is lazy too (COMPILE.MODULE). Before, it evaluated before the run and started that loop, also when the run did not need it.
+- @mark1russell7/vex@0.8.1
+
 ## 0.8.0
 
 ### Minor Changes

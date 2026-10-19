@@ -1,12 +1,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { createServer } from "./server.ts";
+import { createHost } from "./server.ts";
 
-/** This function gives a client connected to a new server, through a transport in memory. */
+/** This function gives a client connected to a new host, through a transport in memory. */
 async function connect(): Promise<Client> {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  await createServer().connect(serverSide);
+  await createHost({ sdk: serverSide }).start();
   const client = new Client({ name: "test", version: "0.0.0" });
   await client.connect(clientSide);
   return client;
@@ -16,11 +17,14 @@ async function connect(): Promise<Client> {
 const textOf = (r: Awaited<ReturnType<Client["callTool"]>>): string => (r.content as readonly { readonly text: string }[])[0]?.text ?? "";
 
 describe("the MCP server of Vex", () => {
-  it("lists its tools, each with a description", async () => {
+  it("lists its tools, each with a description, and each tool is read-only, idempotent and closed", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(["vex_catalog", "vex_check", "vex_evaluate", "vex_explain", "vex_module"]);
-    expect(tools.every((t) => (t.description ?? "").length > 40)).toBe(true);
+    expect(tools.every((t) => (t.description ?? "").length > 40 && (t.title ?? "").length > 10)).toBe(true);
+    for (const t of tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, openWorldHint: false });
+    expect(client.getServerVersion()?.name).toBe("vex");
+    expect(client.getInstructions()).toContain("vex_catalog");
   });
 
   it("gives the catalog of one domain, and an error of the tool for an unknown domain", async () => {
@@ -44,5 +48,17 @@ describe("the MCP server of Vex", () => {
     expect(textOf(await client.callTool({ name: "vex_module", arguments: { program, domains: ["NumDomain"], schema: { fields: { n: "number" } } } }))).toContain("export function run(");
     const bad = await client.callTool({ name: "vex_check", arguments: { program: { tag: "loop" } } });
     expect([bad.isError, textOf(bad)]).toEqual([true, expect.stringContaining("this version of Vex does not know it") as unknown]);
+    // The host checks the input against the schema of the tool.
+    const missing = await client.callTool({ name: "vex_explain", arguments: { program, space } });
+    expect(missing.isError).toBe(true);
+  });
+
+  it("stops when its client closes the standard input", async () => {
+    const stdin = new PassThrough();
+    const host = createHost({ stdio: { stdin, stdout: new PassThrough(), redirectConsole: false } });
+    await host.start();
+    stdin.end();
+    await host.closed;
+    expect(host.tools().map((t) => t.name)).toHaveLength(5);
   });
 });

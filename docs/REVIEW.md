@@ -886,7 +886,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Site done: axe-core checks each page in the light and the dark theme with the rules of WCAG 2.1 AA. Each page loads 256 kB gzip or less.
 - Site done: the home page has a live hero, a showcase of the interactive pages, and a sample for your code. The README shows a recording of the hero.
 - Site done: the Lab reads typed chains with a safe reader, in four spaces. The editor highlights the code and marks the position of an error.
-- Owner items: the Renovate app, Google Search Console, and the social preview image of the repository (`packages/site/public/og.png`).
+- Owner items: the Renovate app and Google Search Console. The social preview image of the repository (`packages/site/public/og.png`) is done (checked on 2026-10-19).
 - V-043 fixed: the moves before an axis are its address. The Jqy audit found the defect, and the pilot `layout-audit` keeps the checks.
 - The plan to zero defects is in [`QUALITY-PLAN.md`](./QUALITY-PLAN.md). The proposal of the sheet app is in [`SHEET-APP.md`](./SHEET-APP.md).
 - Phase A of the plan to zero defects is done. It added the builder model test and the property P13 (five paths give one result). It also added the Lab reader against the builder, and `keys()` and `errors()` on a list chain. With the fix of V-043 removed, the builder model test fails at once. It also found V-044: `serialize` lost the class of a domain value with `toJSON`.
@@ -900,6 +900,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Done after 0.5.0: the formula language has `rows(from, to)`, the finance functions `PMT`, `FV`, `PV` and `NPER`, and the dates. It also has grids with A1 addresses and ranges, and `table("name")` (spec `formula.md` §6 to §8). `RATE`, `NPV` and `IRR` are not in it: they need a numeric search or the position of an item in a list.
 - Done after 0.5.0: the sheet app has date columns, grids, and books of tables with tabs. Its examples show each feature.
 - The compiler of Vex (tier 2: generated JavaScript, at run time and at build time) has its plan in [`COMPILER.md`](./COMPILER.md). Its first user is ireko. Phase C1 is done: `@mark1russell7/vex-compiler` gives the results of the interpreter (P17), 35 to 75 times faster than tier 1. Its record is in §13 of that plan.
+- Done on 2026-10-19: the speed job of the nightly workflow uses the shell `bash`, so a failed gate fails the job (`pipefail`). Before, each gate step sent its output into `tee`, and the job passed with a failed gate. The domains run of the mutation lane failed on a test that emitted a module with the mutated domains. That test moved to `module.test.ts` (`tools/mutation/README.md`).
 
 ---
 

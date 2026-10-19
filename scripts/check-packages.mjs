@@ -29,8 +29,8 @@ async function checkCommand(main) {
       for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
         const line = buffer.slice(0, end);
         buffer = buffer.slice(end + 1);
-        const message = JSON.parse(line);
-        if (message.id === 2) done(message.result?.tools?.map((/** @type {{ name: string }} */ t) => t.name));
+        const message = /** @type {{ id?: number, result?: { tools?: readonly { name: string }[] } }} */ (JSON.parse(line));
+        if (message.id === 2) done(message.result?.tools?.map((t) => t.name));
       }
     });
     child.once("exit", () => fail(new Error("vex-mcp exited before it listed its tools")));

@@ -886,7 +886,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Site done: axe-core checks each page in the light and the dark theme with the rules of WCAG 2.1 AA. Each page loads 256 kB gzip or less.
 - Site done: the home page has a live hero, a showcase of the interactive pages, and a sample for your code. The README shows a recording of the hero.
 - Site done: the Lab reads typed chains with a safe reader, in four spaces. The editor highlights the code and marks the position of an error.
-- Owner items: the Renovate app and Google Search Console. The social preview image of the repository (`packages/site/public/og.png`) is done (checked on 2026-10-19).
+- Owner items done on 2026-10-19: the owner installed the Renovate app and finished the check of Google Search Console. The social preview image of the repository (`packages/site/public/og.png`) is done.
 - V-043 fixed: the moves before an axis are its address. The Jqy audit found the defect, and the pilot `layout-audit` keeps the checks.
 - The plan to zero defects is in [`QUALITY-PLAN.md`](./QUALITY-PLAN.md). The proposal of the sheet app is in [`SHEET-APP.md`](./SHEET-APP.md).
 - Phase A of the plan to zero defects is done. It added the builder model test and the property P13 (five paths give one result). It also added the Lab reader against the builder, and `keys()` and `errors()` on a list chain. With the fix of V-043 removed, the builder model test fails at once. It also found V-044: `serialize` lost the class of a domain value with `toJSON`.

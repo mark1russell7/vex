@@ -37,10 +37,19 @@ Each tool is a procedure of [`@procedures/client`](https://www.npmjs.com/package
 
 Each tool reads and writes nothing outside its input, so it has the effects `{ reads: [], writes: [], idempotent: true }`. The client sees each tool as read-only, idempotent and closed.
 
+The command `vex-mcp` gives the host to the runner of [`@mark1russell7/service`](https://www.npmjs.com/package/@mark1russell7/service). The runner starts the host and owns the signals. The end of the standard input, SIGINT and SIGTERM stop the host in stages, and then the process exits.
+
 ```ts
+import { ephemeral, service } from "@mark1russell7/service";
 import { createHost } from "@mark1russell7/vex-mcp";
 
-// The default face is the standard input and output. The host stops when its client closes the standard input.
+// The default face is the standard input and output.
+await createHost().declare(service("vex-mcp").profile(ephemeral)).run();
+```
+
+A test or another program can start the host without the runner. Then the host stops when its client closes the standard input.
+
+```ts
 const host = createHost();
 await host.start();
 await host.closed;

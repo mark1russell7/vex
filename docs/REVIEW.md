@@ -902,6 +902,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - The compiler of Vex (tier 2: generated JavaScript, at run time and at build time) has its plan in [`COMPILER.md`](./COMPILER.md). Its first user is ireko. Phase C1 is done: `@mark1russell7/vex-compiler` gives the results of the interpreter (P17), 35 to 75 times faster than tier 1. Its record is in §13 of that plan.
 - Done on 2026-10-19: the speed job of the nightly workflow uses the shell `bash`, so a failed gate fails the job (`pipefail`). Before, each gate step sent its output into `tee`, and the job passed with a failed gate. The domains run of the mutation lane failed on a test that emitted a module with the mutated domains. That test moved to `module.test.ts` (`tools/mutation/README.md`).
 - Done on 2026-10-19: 0.8.1 is on npm. It makes the generated modules faster (COMPILE.MODULE), and the API does not change. It is the first release of the standard workflow of the template. A version commit on `main` publishes each new version, and the owner does not approve each release (`RELEASING.md`).
+- Done on 2026-10-19: 0.9.0 is on npm. The tools of `@mark1russell7/vex-mcp` are procedures of `@procedures/client` on `createMcpHost`, with the same names. The command starts under `run()` of `@mark1russell7/service`. The package check starts the installed command, lists its tools and closes its input. The command must stop with the code 0.
 
 ---
 

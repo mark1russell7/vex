@@ -1,21 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
-  "minimumReleaseAge": "14 days",
-  "rangeStrategy": "bump",
-  "labels": ["dependencies"],
+  "extends": ["github>mark1russell7/template//renovate/default"],
   "packageRules": [
     {
       "description": "The mutation lane keeps Vitest 4.1 until Stryker supports Vitest 5 (docs/REVIEW.md §8.6).",
       "matchFileNames": ["tools/mutation/package.json"],
       "matchPackageNames": ["vitest"],
       "allowedVersions": "<5"
-    },
-    {
-      "description": "One pull request for the GitHub Actions each week.",
-      "matchManagers": ["github-actions"],
-      "groupName": "GitHub Actions",
-      "schedule": ["before 6am on monday"]
     }
   ]
 }

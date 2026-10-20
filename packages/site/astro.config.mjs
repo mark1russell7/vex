@@ -68,6 +68,8 @@ export default defineConfig({
         { label: "Reference", items: ["reference/api", "reference/domains", "reference/ir"] },
         { label: "Gallery", items: ["gallery/layout", "gallery/audit", "gallery/grid", "gallery/life", "gallery/laws", "gallery/spreadsheets", "gallery/simulations"] },
         { label: "Ideas", items: ["ideas/comonad", "ideas/lineage", "about"] },
+        // The pages of @mark1russell7/site-pages: the Pages workflow writes them at deploy time
+        { label: "Project", items: [{ label: "Releases", link: "https://mark1russell7.github.io/vex/releases/" }, { label: "Status", link: "https://mark1russell7.github.io/vex/status/" }] },
       ],
     }),
     react(),

@@ -322,6 +322,9 @@ describe("the errors of the documents (DOC.ERROR)", () => {
     expect(reason({ type: ["foo", "bar"], value: 1 })).toBe(at("", 'the type "foo.bar" is not a term of Vex'));
     expect(reason({ type: ["ops"], value: [] })).toBe(at("", 'the type "ops" is not a term of Vex'));
     expect(reason({ type: ["axes", "all"], value: {} })).toBe(at("", 'the type "axes.all" is not a term of Vex'));
+    // A construct of Vex with more keys in its type is not that construct.
+    expect(reason({ type: ["let", "x"], value: { bind: {}, body: 1 } })).toBe(at("", 'the type "let.x" is not a term of Vex'));
+    expect(reason({ type: ["lit", "x"], value: 1 })).toBe(at("", 'the type "lit.x" is not a term of Vex'));
     expect(reason({ type: ["ops", 1], value: [] })).toBe(at("/type", "a key of the name is not a text"));
     expect(reason({ type: ["ext", "a", 0], value: [] })).toBe(at("/type", "a key of the name is not a text"));
     expect(reason({ type: "lit", value: 1, name: "x" })).toBe(at("", "a term of Vex has no name and no own entries"));

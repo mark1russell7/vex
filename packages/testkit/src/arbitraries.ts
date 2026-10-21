@@ -3,7 +3,7 @@
  * purpose: they make prototype names, missing fields, non-finite numbers, records that throw, and ops that do
  * not exist.
  */
-import { space, type Axis, type Expr, type FixedMove, type Move, type Space } from "@mark1russell7/vex";
+import { space, toDocument, type AnyDomain, type Axis, type Expr, type FixedMove, type Move, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The options of the arbitraries. */
@@ -238,3 +238,106 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
 
 /** A key of a space, or a key that is not in it. */
 export const arbOrigin = (s: Space): fc.Arbitrary<string> => fc.oneof({ weight: 5, arbitrary: fc.constantFrom(...s.keys) }, { weight: 1, arbitrary: fc.constant("Z") });
+
+/** The keys of each value inside a JSON value, the root first. */
+function pathsOf(u: unknown): (readonly (string | number)[])[] {
+  const out: (readonly (string | number)[])[] = [];
+  const todo: { readonly u: unknown; readonly at: readonly (string | number)[] }[] = [{ u, at: [] }];
+  for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
+    out.push(item.at);
+    const here = item;
+    if (Array.isArray(here.u)) here.u.forEach((x: unknown, i) => todo.push({ u: x, at: [...here.at, i] }));
+    else if (typeof here.u === "object" && here.u !== null) for (const [k, x] of Object.entries(here.u)) todo.push({ u: x, at: [...here.at, k] });
+  }
+  return out;
+}
+
+/** This function gives a copy of a JSON value with another value at a path. */
+function replaced(u: unknown, at: readonly (string | number)[], next: unknown): unknown {
+  const [k, ...rest] = at;
+  if (k === undefined) return next;
+  if (Array.isArray(u)) return u.map((x: unknown, i) => (i === k ? replaced(x, rest, next) : x));
+  return { ...(u as Readonly<Record<string, unknown>>), [k]: replaced((u as Readonly<Record<string, unknown>>)[k], rest, next) };
+}
+
+/** The parts that a changed document can get: JSON data, and documents of each kind of Vex, valid or not. */
+const arbPart: fc.Arbitrary<unknown> = fc.oneof(
+  fc.jsonValue({ maxDepth: 2 }),
+  fc.constantFrom(
+    { type: "ref", value: ["self", "p"] },
+    { type: "ref", value: ["names", "a"] },
+    { type: "ref", value: ["self", { type: ["moves", "key"], value: "A" }, "n"] },
+    { type: ["axes", "all"], value: {} },
+    { type: ["axes", "where"], value: { axis: { type: ["axes", "others"], value: {} }, test: true } },
+    { type: ["moves", "parent"], value: null },
+    { type: ["moves", "index"], value: 1 },
+    { type: "fn", value: { params: ["a"], body: 1 } },
+    { type: "lit", value: { type: "ref", value: ["self"] } },
+    { type: ["ops", "add"], value: [1, 2] },
+    { type: "record", value: { a: 1 } },
+    "A",
+    0,
+    null,
+    [],
+    {},
+  ),
+);
+
+/**
+ * A document of Vex that a random change can make not valid: the document of a random expression, through JSON text,
+ * with one value at a random path replaced. Each literal of the expression needs a JSON form with the domains.
+ */
+export const arbChangedDocument = (opts: ArbOptions, domains: readonly AnyDomain[]): fc.Arbitrary<unknown> =>
+  fc.tuple(arbExpr(opts), fc.nat(), arbPart, fc.boolean()).map(([e, i, part, change]) => {
+    const d = toDocument(e, domains);
+    if (!d.ok) throw new Error(d.error.message);
+    const json: unknown = JSON.parse(JSON.stringify(d.value));
+    if (!change) return json;
+    const paths = pathsOf(json);
+    return replaced(json, paths[i % paths.length] ?? [], part);
+  });
+
+/** A record space of records with a number `n`, with 1 to 4 keys. Some records have no `n`. */
+export const arbNumberSpace: fc.Arbitrary<Space> = fc.uniqueArray(fc.constantFrom(...RECORD_KEYS), { minLength: 1, maxLength: 4 }).chain((keys) =>
+  fc
+    .tuple(...keys.map(() => fc.oneof({ weight: 9, arbitrary: fc.integer({ min: -9, max: 9 }).map((n) => ({ n })) }, { weight: 1, arbitrary: fc.constant({}) })))
+    .map((recs) => space.record(Object.fromEntries(keys.map((k, i) => [k, recs[i]])))),
+);
+
+/**
+ * A program over the numbers of `arbNumberSpace` that most often gives a value, for the differential tests of values:
+ * ops of `NumDomain`, list ops over axes, the special forms, lets, functions and loops. The hostile programs of
+ * `arbExpr` mostly give errors, so they rarely compare two values.
+ */
+export function arbNumberExpr(maxDepth = 4): fc.Arbitrary<Expr> {
+  const num = (value: number): Expr => ({ tag: "lit", value });
+  const { expr } = fc.letrec<{ expr: Expr; axis: Axis; list: Expr }>((tie) => ({
+    expr: fc.oneof(
+      { depthSize: "small", withCrossShrink: true, maxDepth },
+      fc.integer({ min: -5, max: 5 }).map(num),
+      fc.option(fc.constantFrom<FixedMove>({ t: "origin" }, { t: "key", key: "A" }, { t: "index", i: 0 }, { t: "other" }), { nil: undefined }).map((m): Expr => (m === undefined ? { tag: "ref", path: ["n"] } : { tag: "ref", path: ["n"], at: [m] })),
+      fc.tuple(fc.constantFrom("add", "subtract", "multiply", "min", "max"), tie("expr"), tie("expr")).map(([op, a, b]): Expr => ({ tag: "app", op, args: [a, b] })),
+      fc.tuple(fc.constantFrom("sum", "count", "min", "max", "mean", "first"), tie("list")).map(([op, l]): Expr => ({ tag: "app", op, args: [l] })),
+      fc.tuple(tie("list"), fc.integer({ min: 0, max: 2 })).map(([l, i]): Expr => ({ tag: "app", op: "nth", args: [l, num(i)] })),
+      fc.tuple(tie("expr"), tie("expr"), tie("expr")).map(([a, b, c]): Expr => ({ tag: "app", op: "if", args: [{ tag: "app", op: "gt", args: [a, b] }, b, c] })),
+      fc.tuple(tie("expr"), tie("expr")).map(([a, b]): Expr => ({ tag: "app", op: "ifError", args: [a, b] })),
+      fc.tuple(tie("expr"), tie("expr")).map(([a, body]): Expr => ({ tag: "let", bind: { x: a }, body: { tag: "app", op: "add", args: [{ tag: "var", name: "x" }, body] } })),
+      fc.tuple(tie("expr"), tie("expr")).map(([body, a]): Expr => ({ tag: "let", bind: { f: { tag: "fn", params: ["k"], body: { tag: "app", op: "add", args: [{ tag: "var", name: "k" }, body] } } }, body: { tag: "call", fn: "f", args: [a] } })),
+      fc.tuple(tie("axis"), tie("expr")).map(([axis, step]): Expr => ({ tag: "fold", axis, init: { s: num(0) }, step: { s: { tag: "app", op: "add", args: [{ tag: "var", name: "s" }, step] } }, result: { tag: "var", name: "s" } })),
+      fc.tuple(fc.integer({ min: 0, max: 3 }), tie("expr")).map(([limit, start]): Expr => ({ tag: "iterate", limit, init: { x: start }, step: { x: { tag: "app", op: "add", args: [{ tag: "var", name: "x" }, num(1)] } }, result: { tag: "var", name: "x" } })),
+    ),
+    axis: fc.oneof(
+      { depthSize: "small", maxDepth: 2 },
+      fc.constantFrom<Axis>({ t: "all" }, { t: "others" }, { t: "reverse", axis: { t: "all" } }),
+      fc.tuple(tie("axis"), tie("expr")).map(([axis, e]): Axis => ({ t: "where", axis, test: { tag: "app", op: "gt", args: [e, num(0)] } })),
+      tie("list").map((list): Axis => ({ t: "list", list })),
+    ),
+    list: fc.oneof(
+      { depthSize: "small", maxDepth: 2 },
+      fc.tuple(tie("axis"), tie("expr")).map(([axis, body]): Expr => ({ tag: "each", axis, body })),
+      tie("list").map((list): Expr => ({ tag: "app", op: "sortBy", args: [list] })),
+      fc.tuple(tie("list"), fc.integer({ min: 0, max: 3 })).map(([list, n]): Expr => ({ tag: "app", op: "take", args: [list, num(n)] })),
+    ),
+  }));
+  return expr;
+}

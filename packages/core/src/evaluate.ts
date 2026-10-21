@@ -149,6 +149,8 @@ export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Pro
 const CACHE = new WeakMap<Expr | Envelope, { readonly domains: unknown; readonly fns: unknown; readonly extensions: unknown; readonly program: Program }>();
 
 function compiled(expr: Expr | Envelope, opts: CompileOptions): Program {
+  // V-056: a program that is not an object cannot be a key of the cache. Its compilation gives #VALUE! (EVAL.SHAPE).
+  if (typeof expr !== "object" || expr === null) return compile(expr, opts);
   const hit = CACHE.get(expr);
   // Without the cache, each evaluation compiles again: the result is the same, so a mutant that removes a hit is
   // equivalent. A false hit changes results, and the tests find it.

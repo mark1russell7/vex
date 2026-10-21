@@ -6,11 +6,11 @@ export default defineConfig({
   outDir: "build",
   format: "esm",
   platform: "neutral",
-  // The type Optional comes from @mark1russell7/optional, a dev dependency: the declarations get a copy of it. The
-  // helpers and the types of the documents come from @mark1russell7/coeval, also a dev dependency: the build copies the
-  // part that the package uses. Thus the package has no runtime dependency.
-  dts: { resolve: ["@mark1russell7/optional", "@mark1russell7/coeval"] },
-  deps: { onlyBundle: ["@mark1russell7/optional", "@mark1russell7/coeval"] },
+  // The type Optional comes from @mark1russell7/optional, a dev dependency: the declarations get a copy of it.
+  // @mark1russell7/coeval, the kernel of the family, is the one runtime dependency (decision D13 in docs/REVIEW.md). The
+  // build does not copy it, so a program has one kernel and one brand of its host things.
+  dts: { resolve: ["@mark1russell7/optional"] },
+  deps: { onlyBundle: ["@mark1russell7/optional"] },
   sourcemap: true,
   publint: true,
   attw: { profile: "esm-only" },

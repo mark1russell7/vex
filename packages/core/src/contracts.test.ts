@@ -180,6 +180,18 @@ describe("the contracts of op lookup", () => {
 });
 
 describe("the contracts of the interpreter", () => {
+  it("EVAL.TOTAL EVAL.SHAPE V-056: a program that is not an object gives #VALUE!, also in a sheet with a compiler", () => {
+    // V-056: the caches of compiled programs take only objects, so evaluate, explain and a sheet threw a TypeError.
+    const rows = space.array([{ a: 1 }]);
+    for (const program of [0, "A", null, true]) {
+      const e = bad(program);
+      expect(error(evaluate(e, { space: rows, origin: "0" }))).toMatchObject({ code: "#VALUE!", kind: "bad-expression" });
+      expect(error(explain(e, { space: rows, origin: "0" }).result)).toMatchObject({ code: "#VALUE!" });
+      const run = new SheetRun(new Map([["c", e]]), { space: rows, compile: (x, o) => compile(x, o) });
+      expect(error(run.cell("c", "0"))).toMatchObject({ code: "#VALUE!" });
+    }
+  });
+
   it("EVAL.SHAPE V-053: an expression that is not valid gives #VALUE! with its reason, and compile does not throw", () => {
     // V-053: a node with a tag of a newer version of Vex (fold, in 0.6.0) made compile throw a TypeError.
     const rows = space.array([{ a: 1 }]);

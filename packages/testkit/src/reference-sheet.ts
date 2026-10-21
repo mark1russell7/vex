@@ -1,9 +1,10 @@
 /**
  * The reference of a sheet run: the recursive form of the search, as `SheetRun` was before SHEET.DEEP. It reads a
  * cell with a recursive call, so it needs a deep call stack for a long chain of cells. The tests compare `SheetRun`
- * with it on small random sheets, where the depth is not a problem. It has the tables of SHEET.TABLES too.
+ * with it on small random sheets, where the depth is not a problem. It has the tables of SHEET.TABLES too. The kernel of
+ * coeval evaluates each formula (EVAL.REFERENCE), so the reference shares no code of evaluation with `SheetRun`.
  */
-import { evaluate, fail, isMove, resolveAddr, vexError, type CellFormulas, type EvalOptions, type Expr, type ExtHandler, type FixedMove, type Result, type SheetOptions, type Space } from "@mark1russell7/vex";
+import { fail, isMove, kernelPlan, resolveAddr, vexError, type CellFormulas, type CompileOptions, type Expr, type ExtHandler, type FixedMove, type KernelPlan, type Result, type SheetOptions, type Space } from "@mark1russell7/vex";
 
 interface Visit {
   readonly index: number;
@@ -58,7 +59,11 @@ export class ReferenceSheetRun {
   readonly #byName = new Map<string, Table>();
   // The table of each space. The first table of a space keeps it.
   readonly #bySpace = new Map<Space, Table>();
-  readonly #opts: Omit<EvalOptions, "origin" | "trace" | "space">;
+  readonly #compile: CompileOptions;
+  readonly #tables: Readonly<Record<string, Space>>;
+  readonly #vars: Readonly<Record<string, unknown>> | undefined;
+  // The plan of the kernel of each formula, made at its first read.
+  readonly #plans = new Map<Expr, KernelPlan>();
   // Stryker disable next-line ArrayDeclaration: the search never reads below the root of a component
   readonly #stack: { readonly table: Table; readonly column: string; readonly key: string; readonly visit: Visit }[] = [];
   // Stryker disable next-line all: the placeholder at the top is not a cell, so the search reads none of its fields
@@ -66,7 +71,7 @@ export class ReferenceSheetRun {
   #next = 0;
 
   constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions) {
-    const { cells, name, tables, space, ...rest } = opts;
+    const { cells, name, tables, space, vars, ...rest } = opts;
     this.#main = tableOf("the sheet", space, columns, cells);
     // The first table of a name wins, and the main table comes first.
     this.#bySpace.set(space, this.#main);
@@ -87,7 +92,9 @@ export class ReferenceSheetRun {
       const table = this.#bySpace.get(ctx.space) ?? this.#main;
       return where.ok ? this.#read(table, data.column, where.value) : fail({ ...where.error, path: ctx.path });
     };
-    this.#opts = { ...rest, tables: Object.fromEntries([...this.#byName].map(([n, t]) => [n, t.space])), extensions: { ...rest.extensions, "vex.cell": handler } };
+    this.#compile = { ...rest, extensions: { ...rest.extensions, "vex.cell": handler } };
+    this.#tables = Object.fromEntries([...this.#byName].map(([n, t]) => [n, t.space]));
+    this.#vars = vars;
   }
 
   /** This method gives the result of the column `column` at the key `key` of the main table, or of the table `table`. */
@@ -119,7 +126,12 @@ export class ReferenceSheetRun {
     setEntry(t.visits, column, key, visit);
     this.#stack.push({ table: t, column, key, visit });
     this.#top = visit;
-    visit.result = evaluate(program, { ...this.#opts, space: t.space, origin: key });
+    let plan = this.#plans.get(program);
+    if (plan === undefined) {
+      plan = kernelPlan(program, this.#compile);
+      this.#plans.set(program, plan);
+    }
+    visit.result = plan.run({ space: t.space, origin: key, tables: this.#tables, ...(this.#vars === undefined ? {} : { vars: this.#vars }) });
     this.#top = caller;
     if (visit.low === visit.index) {
       const members = this.#stack.splice(this.#stack.findIndex((m) => m.visit === visit));

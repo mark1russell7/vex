@@ -189,7 +189,7 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(m.ok).toBe(true);
     expect(m).toEqual(emitModule(e, OPTIONS));
     const bad = { type: "each", value: { axis: { type: ["axes", "nope"], value: {} }, body: 1 } };
-    expect(emitModule(bad, OPTIONS)).toEqual({ ok: false, reason: 'the document is not valid at "/value/axis": Vex has no axis "nope"' });
+    expect(emitModule(bad, OPTIONS)).toEqual({ ok: false, reason: 'the document is not valid at "/value/axis": The world has no kind axes.nope.' });
   });
 
   it("needs no domains and no schema for a program of literals", () => {

@@ -4,8 +4,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { fromDocument, isDocument, toDocument, type Envelope } from "./document.ts";
+import { MAX_DOCUMENT_DEPTH } from "./kernel.ts";
 import { compile, evaluate, explain } from "./evaluate.ts";
-import { app, axes, call, each, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, other, parent, rec, ref, v, type Axis, type Expr } from "./ir.ts";
+import { app, axes, call, each, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Axis, type Expr } from "./ir.ts";
 import { parse } from "./json.ts";
 import { space } from "./space.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
@@ -297,7 +298,7 @@ describe("the documents of the expressions (DOC.*)", () => {
     const bad = { type: "ref", value: ["world", "x"] };
     const program = compile(bad);
     expect(program.expr).toBe(bad);
-    const message = 'the document is not valid at "/value/0": Vex reads only from the roots "self" and "names", and this reference starts at "world"';
+    const message = 'the document is not valid at "/value/0": The root world is not open here. The open roots are self, names.';
     expect(program.run({ space: s, origin: "A" })).toEqual({ ok: false, error: { code: "#VALUE!", kind: "bad-expression", message, path: [], origin: "A", focus: "A" } });
     expect(error(evaluate(bad, { space: s, origin: "A" }))).toMatchObject({ code: "#VALUE!", message });
     expect(error(parse(JSON.stringify(bad))).message).toBe(message);
@@ -316,101 +317,125 @@ describe("the documents of the expressions (DOC.*)", () => {
 
 describe("the errors of the documents (DOC.ERROR)", () => {
   const all = { type: ["axes", "all"], value: {} };
+  /** The code of the error of a document, and the JSON Pointer of the part that is not valid. */
+  const fault = (d: unknown): readonly [string, string] => {
+    const e = error(fromDocument(d, [PtDomain]));
+    return [e.code, /^the document is not valid at (?:its root|"([^"]*)"): /.exec(e.message)?.[1] ?? ""];
+  };
+  const invalid = (where: string): readonly [string, string] => ["#VALUE!", where];
 
-  it("DOC.ERROR: a type that is not a term of Vex, a header and a computed type give their reasons", () => {
-    expect(reason({ type: "nope", value: 1 })).toBe(at("", 'the type "nope" is not a term of Vex'));
-    expect(reason({ type: ["foo", "bar"], value: 1 })).toBe(at("", 'the type "foo.bar" is not a term of Vex'));
-    expect(reason({ type: ["ops"], value: [] })).toBe(at("", 'the type "ops" is not a term of Vex'));
+  it("DOC.CHECK DOC.ERROR: the kernel checks the kinds by the contracts of VEX_WORLD, at the root and in each position", () => {
+    expect(reason({ type: "nope", value: 1 })).toBe(at("", "The world has no kind nope."));
+    for (const type of [["foo", "bar"], ["ops"], ["let", "x"], ["lit", "x"]]) expect(fault({ type, value: 1 })).toEqual(invalid(""));
+    // An axis or a function is not a term: the root has no position, so the grammar of Vex refuses them there.
     expect(reason({ type: ["axes", "all"], value: {} })).toBe(at("", 'the type "axes.all" is not a term of Vex'));
-    // A construct of Vex with more keys in its type is not that construct.
-    expect(reason({ type: ["let", "x"], value: { bind: {}, body: 1 } })).toBe(at("", 'the type "let.x" is not a term of Vex'));
-    expect(reason({ type: ["lit", "x"], value: 1 })).toBe(at("", 'the type "lit.x" is not a term of Vex'));
+    expect(reason({ type: "fn", value: { params: [], body: 1 } })).toBe(at("", 'the type "fn" is not a term of Vex'));
+    // In a position, the contract permits only the kinds of the terms, and a function only in the bindings of a let.
+    expect(reason({ type: ["ops", "f"], value: [1, { type: "fn", value: { params: [], body: 1 } }] })).toContain('at "/value/1": The kind fn is not permitted here.');
+    expect(fault({ type: ["ops", "f"], value: [1, { type: "nope", value: 0 }] })).toEqual(invalid("/value/1"));
+    expect(fault({ type: "let", value: { bind: { "a/b~c": { type: "nope", value: 1 } }, body: 1 } })).toEqual(invalid("/value/bind/a~1b~0c"));
+    expect(fault({ type: "call", value: { fn: { type: "ref", value: ["names", "f"] }, args: [{ type: "x", value: 1 }] } })).toEqual(invalid("/value/args/0"));
+    expect(fault(eachOf(all, { body: { type: ["moves", "parent"], value: null } }))).toEqual(invalid("/value/body"));
+  });
+
+  it("DOC.ERROR: the grammar of Vex refuses a header, a name of an op with a key that is not a text, and a computed type", () => {
     expect(reason({ type: ["ops", 1], value: [] })).toBe(at("/type", "a key of the name is not a text"));
     expect(reason({ type: ["ext", "a", 0], value: [] })).toBe(at("/type", "a key of the name is not a text"));
     expect(reason({ type: "lit", value: 1, name: "x" })).toBe(at("", "a term of Vex has no name and no own entries"));
     expect(reason({ type: "lit", value: 1, own: {} })).toBe(at("", "a term of Vex has no name and no own entries"));
-    expect(reason({ type: { type: "ref", value: ["world", { type: "x", value: 1 }] }, value: 1 })).toBe(at("/type", "the type has a computed step"));
+    expect(reason(eachOf({ type: ["axes", "all"], value: {}, name: "a" }))).toBe(at("/value/axis", "a term of Vex has no name and no own entries"));
+    expect(reason({ type: "let", value: { bind: { f: { type: "fn", value: { params: [], body: 1 }, own: {} } }, body: 1 } })).toBe(at("/value/bind/f", "a term of Vex has no name and no own entries"));
+    expect(fault({ type: { type: "ref", value: ["world", { type: "x", value: 1 }] }, value: 1 })).toEqual(invalid(""));
   });
 
   it("DOC.ERROR: a reference that Vex cannot read gives its reason and its location", () => {
-    expect(reason({ type: "ref", value: "x" })).toBe(at("/value", "the value is not a list"));
-    expect(reason({ type: "ref", value: ["world", "x"] })).toBe(at("/value/0", 'Vex reads only from the roots "self" and "names", and this reference starts at "world"'));
-    expect(reason({ type: "ref", value: [] })).toBe(at("/value/0", 'Vex reads only from the roots "self" and "names", and this reference starts at nothing'));
+    expect(reason({ type: "ref", value: "x" })).toBe(at("/value", "The value of ref is a path: a list that starts with a root."));
+    expect(reason({ type: "ref", value: ["world", "x"] })).toBe(at("/value/0", "The root world is not open here. The open roots are self, names."));
+    expect(fault({ type: "ref", value: [] })).toEqual(invalid("/value"));
     for (const path of [["names"], ["names", "a", "b"], ["names", 1], ["names", { type: ["moves", "parent"], value: null }]]) {
       expect(reason({ type: "ref", value: path })).toBe(at("/value", "a reference to a name has one step: the name"));
     }
     expect(reason({ type: "ref", value: ["self", 1] })).toBe(at("/value/1", "a step is not a text and not a move"));
     expect(reason({ type: "ref", value: ["self", "x", { type: ["moves", "parent"], value: null }] })).toBe(at("/value/2", "a move comes after a field. Vex reads the fields at the end of the path"));
-    expect(reason({ type: "ref", value: ["self", { type: "lit", value: 1 }] })).toBe(at("/value/1", 'Vex has no step of the type "lit"'));
-    expect(reason({ type: "ref", value: ["self", { type: ["moves"], value: null }] })).toBe(at("/value/1", 'Vex has no step of the type "moves"'));
-    expect(reason({ type: "ref", value: ["self", { type: ["moves", 1], value: null }] })).toBe(at("/value/1", 'Vex has no step of the type "moves.1"'));
-    expect(reason({ type: "ref", value: ["self", { type: ["moves", "key", "x"], value: "A" }] })).toBe(at("/value/1", 'Vex has no step of the type "moves.key.x"'));
-    expect(reason({ type: "ref", value: ["self", { type: ["moves", "jump"], value: null }] })).toBe(at("/value/1", 'Vex has no move "jump"'));
-    expect(reason({ type: "ref", value: ["self", { type: ["moves", "toString"], value: null }] })).toBe(at("/value/1", 'Vex has no move "toString"'));
+    for (const type of ["lit", ["moves"], ["moves", 1], ["moves", "key", "x"], ["moves", "jump"], ["moves", "toString"]]) {
+      expect(reason({ type: "ref", value: ["self", { type, value: null }] })).toBe(at("/value/1", "A step is a key, or a document of a kind with the verb step."));
+    }
   });
 
-  it("DOC.ERROR: a move with a value of the wrong kind gives its reason", () => {
-    expect(reason(move("key", 1))).toBe(at("/value/1/value", "the key is not a text or a term in an envelope"));
-    expect(reason(move("index", "2"))).toBe(at("/value/1/value", "the position is not a number or a term in an envelope"));
-    expect(reason(move("offset", [1, "x"]))).toBe(at("/value/1/value", "the offset is not a list of numbers"));
-    expect(reason(move("offset", 1))).toBe(at("/value/1/value", "the offset is not a list of numbers"));
-    expect(reason(move("parent", {}))).toBe(at("/value/1/value", 'the value of the move "parent" is not null'));
-    expect(reason(move("other", 0))).toBe(at("/value/1/value", 'the value of the move "other" is not null'));
-    expect(reason(move("key", { type: "ref", value: ["caps"] }))).toBe(at("/value/1/value/value/0", 'Vex reads only from the roots "self" and "names", and this reference starts at "caps"'));
+  it("DOC.MOVE DOC.ERROR: a move with a value of the wrong kind gives its reason, and a key or a position is a term", () => {
+    expect(fault(move("offset", [1, "x"]))).toEqual(invalid("/value/1/value/1"));
+    expect(fault(move("offset", 1))).toEqual(invalid("/value/1/value"));
+    expect(fault(move("parent", {}))).toEqual(invalid("/value/1/value"));
+    expect(fault(move("other", 0))).toEqual(invalid("/value/1/value"));
+    expect(fault(move("key", { type: "ref", value: ["caps"] }))).toEqual(invalid("/value/1/value/value/0"));
+    // A key or a position is a term: a bare value of another kind is a literal, which gives #VALUE! at run time.
+    expect(value(fromDocument(move("key", 1)))).toEqual(ref([], [key(lit(1))]));
+    expect(value(fromDocument(move("index", "2")))).toEqual(ref([], [index(lit("2"))]));
+    expect(error(evaluate(move("key", 1) as Envelope, { space: space.record({ A: {} }), origin: "A" })).code).toBe("#VALUE!");
   });
 
-  it("DOC.ERROR: a construct with a missing field, an extra field or a part of the wrong kind gives its reason", () => {
-    expect(reason({ type: "let", value: 1 })).toBe(at("/value", "the value is not a record"));
-    expect(reason({ type: "let", value: [] })).toBe(at("/value", "the value is not a record"));
-    expect(reason({ type: "let", value: { bind: {} } })).toBe(at("/value", 'the value has no field "body"'));
-    expect(reason({ type: "let", value: { bind: {}, body: 1, extra: 2 } })).toBe(at("/value/extra", 'the field "extra" is not a field of this term'));
-    expect(reason({ type: "let", value: { bind: [], body: 1 } })).toBe(at("/value/bind", "the value is not a record"));
-    expect(reason({ type: "let", value: { bind: { "a/b~c": { type: "nope", value: 1 } }, body: 1 } })).toBe(at("/value/bind/a~1b~0c", 'the type "nope" is not a term of Vex'));
-    expect(reason({ type: "record", value: 1 })).toBe(at("/value", "the value is not a record"));
-    expect(reason({ type: "fn", value: { params: "k", body: 1 } })).toBe(at("/value/params", "the value is not a list"));
-    expect(reason({ type: "fn", value: { params: [1], body: 1 } })).toBe(at("/value/params", "a parameter is not a text"));
-    expect(reason({ type: ["ops", "f"], value: { a: 1 } })).toBe(at("/value", "the value is not a list"));
-    expect(reason({ type: ["ops", "f"], value: [1, { type: "nope", value: 0 }] })).toBe(at("/value/1", 'the type "nope" is not a term of Vex'));
+  it("DOC.CONSTRUCT DOC.ERROR: a construct with a missing field, an extra field or a part of the wrong kind gives its reason", () => {
+    expect(reason({ type: "let", value: 1 })).toBe(at("/value", "The value must be a record. The kind is let."));
+    expect(fault({ type: "let", value: [] })).toEqual(invalid("/value"));
+    expect(reason({ type: "let", value: { bind: {} } })).toBe(at("/value", "The field body is missing. The kind is let."));
+    expect(fault({ type: "let", value: { bind: {}, body: 1, extra: 2 } })).toEqual(invalid("/value/extra"));
+    expect(fault({ type: "let", value: { bind: [], body: 1 } })).toEqual(invalid("/value/bind"));
+    expect(fault({ type: "record", value: 1 })).toEqual(invalid("/value"));
+    expect(fault({ type: "fn", value: { params: "k", body: 1 } })).toEqual(invalid("/value/params"));
+    expect(fault({ type: "let", value: { bind: { f: { type: "fn", value: { params: "k", body: 1 } } }, body: 1 } })).toEqual(invalid("/value/bind/f/value/params"));
+    expect(fault({ type: "let", value: { bind: { f: { type: "fn", value: { params: [1], body: 1 } } }, body: 1 } })).toEqual(invalid("/value/bind/f/value/params/0"));
+    expect(fault({ type: "let", value: { bind: { f: { type: "fn", value: { params: ["a", "a"], body: 1 } } }, body: 1 } })).toEqual(invalid("/value/bind/f/value/params/1"));
+    expect(fault({ type: ["ops", "f"], value: { a: 1 } })).toEqual(invalid("/value"));
     const message = 'the function of a call is a reference to a name: { "type": "ref", "value": ["names", name] }';
-    expect(reason(callOf("f"))).toBe(at("/value/body/value/fn", message));
+    expect(fault(callOf("f"))).toEqual(invalid("/value/body/value/fn"));
     expect(reason(callOf({ type: "ref", value: ["self", "f"] }))).toBe(at("/value/body/value/fn", message));
-    expect(reason({ type: "call", value: { fn: { type: "ref", value: ["names", "f"] }, args: 1 } })).toBe(at("/value/args", "the value is not a list"));
-    expect(reason({ type: "call", value: { fn: { type: "ref", value: ["names", "f"] }, args: [{ type: "x", value: 1 }] } })).toBe(at("/value/args/0", 'the type "x" is not a term of Vex'));
+    expect(reason(callOf({ type: "ref", value: ["names", "f", "g"] }))).toBe(at("/value/body/value/fn", message));
+    expect(fault({ type: "call", value: { fn: { type: "ref", value: ["names", "f"] }, args: 1 } })).toEqual(invalid("/value/args"));
+    expect(fault({ type: "call", value: { fn: { type: "ref", value: ["names", "f"] } } })).toEqual(invalid("/value"));
   });
 
-  it("DOC.ERROR: an axis or an address that is not valid gives its reason", () => {
-    expect(reason(eachOf("all"))).toBe(at("/value/axis", "the axis is not an envelope"));
-    expect(reason(eachOf({ type: "lit", value: 1 }))).toBe(at("/value/axis", 'the type "lit" is not an axis'));
-    expect(reason(eachOf({ type: ["axes"], value: {} }))).toBe(at("/value/axis", 'the type "axes" is not an axis'));
-    expect(reason(eachOf({ type: ["axes", 2], value: {} }))).toBe(at("/value/axis", 'the type "axes.2" is not an axis'));
-    expect(reason(eachOf({ type: ["axes", "all", "x"], value: {} }))).toBe(at("/value/axis", 'the type "axes.all.x" is not an axis'));
-    expect(reason(eachOf({ type: ["axes", "nope"], value: {} }))).toBe(at("/value/axis", 'Vex has no axis "nope"'));
-    expect(reason(eachOf({ type: ["axes", "all"], value: { x: 1 } }))).toBe(at("/value/axis/value/x", 'the field "x" is not a field of this term'));
-    expect(reason(eachOf({ type: ["axes", "all"], value: null }))).toBe(at("/value/axis/value", "the value is not a record"));
-    expect(reason(eachOf({ type: ["axes", "neighbors"], value: {} }))).toBe(at("/value/axis/value", 'the value has no field "n"'));
-    expect(reason(eachOf({ type: ["axes", "window"], value: { from: 0 } }))).toBe(at("/value/axis/value", 'the value has no field "to"'));
-    expect(reason(eachOf({ type: ["axes", "table"], value: {} }))).toBe(at("/value/axis/value", 'the value has no field "name"'));
-    expect(reason(eachOf({ type: ["axes", "list"], value: {} }))).toBe(at("/value/axis/value", 'the value has no field "list"'));
-    expect(reason(eachOf({ type: ["axes", "reverse"], value: { axis: 1 } }))).toBe(at("/value/axis/value/axis", "the axis is not an envelope"));
-    expect(reason(eachOf({ type: ["axes", "where"], value: { axis: all, test: { type: "x", value: 1 } } }))).toBe(at("/value/axis/value/test", 'the type "x" is not a term of Vex'));
+  it("DOC.AXIS DOC.ADDRESS DOC.ERROR: an axis or an address that is not valid gives its reason", () => {
+    for (const axis of ["all", { type: "lit", value: 1 }]) expect(fault(eachOf(axis))).toEqual(invalid("/value/axis"));
+    for (const type of [["axes"], ["axes", 2], ["axes", "all", "x"], ["axes", "nope"]]) expect(fault(eachOf({ type, value: {} }))).toEqual(invalid("/value/axis"));
+    expect(fault(eachOf({ type: ["axes", "all"], value: { x: 1 } }))).toEqual(invalid("/value/axis/value/x"));
+    expect(fault(eachOf({ type: ["axes", "all"], value: null }))).toEqual(invalid("/value/axis/value"));
+    for (const name of ["neighbors", "window", "table", "list"]) expect(fault(eachOf({ type: ["axes", name], value: {} }))).toEqual(invalid("/value/axis/value"));
+    expect(fault(eachOf({ type: ["axes", "neighbors"], value: { n: 5 } }))).toEqual(invalid("/value/axis/value/n"));
+    expect(fault(eachOf({ type: ["axes", "window"], value: { from: 0, to: "1" } }))).toEqual(invalid("/value/axis/value/to"));
+    expect(fault(eachOf({ type: ["axes", "table"], value: { name: 1 } }))).toEqual(invalid("/value/axis/value/name"));
+    expect(fault(eachOf({ type: ["axes", "reverse"], value: { axis: 1 } }))).toEqual(invalid("/value/axis/value/axis"));
+    // The inner axis of reverse is a base axis (AXIS.REVERSE).
+    for (const inner of [{ type: ["axes", "table"], value: { name: "T" } }, { type: ["axes", "reverse"], value: { axis: all } }, { type: ["axes", "where"], value: { axis: all, test: true } }]) {
+      expect(fault(eachOf({ type: ["axes", "reverse"], value: { axis: inner } }))).toEqual(invalid("/value/axis/value/axis"));
+    }
+    expect(fault(eachOf({ type: ["axes", "where"], value: { axis: all, test: { type: "x", value: 1 } } }))).toEqual(invalid("/value/axis/value/test"));
     const address = 'the address is a reference from "self" with moves only: { "type": "ref", "value": ["self", ...moves] }';
-    expect(reason(eachOf(all, { at: [] }))).toBe(at("/value/at", address));
-    expect(reason(eachOf(all, { at: { type: "lit", value: 1 } }))).toBe(at("/value/at", address));
+    expect(fault(eachOf(all, { at: [] }))).toEqual(invalid("/value/at"));
+    expect(fault(eachOf(all, { at: { type: "lit", value: 1 } }))).toEqual(invalid("/value/at"));
     expect(reason(eachOf(all, { at: { type: "ref", value: ["self", "x"] } }))).toBe(at("/value/at", address));
     expect(reason(eachOf(all, { at: { type: "ref", value: ["names", "x"] } }))).toBe(at("/value/at", address));
-    expect(reason({ type: "fold", value: { axis: all, init: {}, step: {}, result: 1, at: null } })).toBe(at("/value/at", address));
-    expect(reason({ type: "fold", value: { axis: all, init: 1, step: {}, result: 1 } })).toBe(at("/value/init", "the value is not a record"));
-    expect(reason({ type: "iterate", value: { limit: 1, init: {}, step: 1, result: 1 } })).toBe(at("/value/step", "the value is not a record"));
-    expect(reason({ type: "iterate", value: { limit: 1, init: {}, step: {}, result: 1, until: { type: "x", value: 1 } } })).toBe(at("/value/until", 'the type "x" is not a term of Vex'));
+    expect(fault({ type: "fold", value: { axis: all, init: {}, step: {}, result: 1, at: null } })).toEqual(invalid("/value/at"));
+    expect(fault({ type: "fold", value: { axis: all, init: 1, step: {}, result: 1 } })).toEqual(invalid("/value/init"));
+    expect(fault({ type: "iterate", value: { limit: 1, init: {}, step: 1, result: 1 } })).toEqual(invalid("/value/step"));
+    expect(fault({ type: "iterate", value: { limit: 1, init: {}, step: {}, result: 1, until: { type: "x", value: 1 } } })).toEqual(invalid("/value/until"));
   });
 
-  it("DOC.ERROR: the checks of the expression apply after the reading (EVAL.SHAPE)", () => {
-    const shape = "the document gives an expression that is not valid: ";
-    expect(reason({ type: "each", value: { axis: { type: ["axes", "neighbors"], value: { n: 5 } }, body: 1 } })).toBe(`${shape}the expression has an axis that is not valid`);
-    expect(reason({ type: "fn", value: { params: [], body: 1 } })).toBe(
-      `${shape}the expression has a function outside the bindings of a let, or a function with parameters that are not distinct names`,
-    );
-    expect(reason({ type: "iterate", value: { limit: -1, init: {}, step: {}, result: 1 } })).toBe(`${shape}the expression has a node "iterate" with parts that are not valid`);
+  it("LOOP.NAMES ITERATE.LIMIT DOC.ERROR: the limit of iterate and the names of a loop give their reasons", () => {
+    for (const limit of [-1, 1.5, 100_001, "3"]) expect(fault({ type: "iterate", value: { limit, init: {}, step: {}, result: 1 } })).toEqual(invalid("/value/limit"));
+    expect(reason({ type: "iterate", value: { limit: 1, init: {}, step: { a: 1 }, result: 1 } })).toBe(at("/value/step/a", 'the name "a" of step is not a name of init'));
+    expect(reason({ type: "fold", value: { axis: all, init: { a: 0 }, step: { a: 1, b: 2 }, result: 1 } })).toBe(at("/value/step/b", 'the name "b" of step is not a name of init'));
+  });
+
+  it("EVAL.SHAPE DOC.CHECK: the expression of each document that fromDocument reads is valid", () => {
+    // The contracts and the grammar of Vex check each rule of isExpr for documents, so no expression needs shapeError.
+    const docs: unknown[] = [
+      eachOf({ type: ["axes", "window"], value: { from: 0.5, to: 2 } }),
+      move("index", 1.5),
+      move("offset", [0.5, -1]),
+      { type: "let", value: { bind: { f: { type: "fn", value: { params: ["a", "b"], body: { type: "ref", value: ["names", "a"] } } } }, body: { type: "call", value: { fn: { type: "ref", value: ["names", "f"] }, args: [1, 2] } } } },
+      { type: "iterate", value: { limit: 100_000, init: { n: 0 }, step: { n: 1 }, result: { type: "ref", value: ["names", "n"] } } },
+    ];
+    for (const d of docs) expect(shapeError(value(fromDocument(d)))).toBeUndefined();
   });
 
   it("DOC.ERROR: a literal without a decoder, a decoder that throws and a deep document give their errors", () => {
@@ -422,10 +447,13 @@ describe("the errors of the documents (DOC.ERROR)", () => {
     expect(threw.thrown).toBeInstanceOf(Error);
     let deep: unknown = 1;
     for (let i = 0; i < 100_000; i++) deep = { type: ["ops", "f"], value: [deep] };
-    expect(error(fromDocument(deep))).toMatchObject({ code: "#DEPTH!", kind: "depth", message: "the document is too deep for the call stack of the engine" });
+    expect(error(fromDocument(deep))).toMatchObject({ code: "#DEPTH!", kind: "depth", message: `the document is nested deeper than ${String(MAX_DOCUMENT_DEPTH)} documents` });
+    // A getter of a document that throws stops the check: the error is #CALC!.
+    const getter = Object.defineProperty({ type: "lit" }, "value", { enumerable: true, get: (): never => { throw new Error("getter"); } });
+    expect(error(fromDocument({ type: ["ops", "f"], value: [getter] }))).toMatchObject({ code: "#CALC!", kind: "threw" });
   });
 
-  it("DOC.ERROR: toDocument gives an error for an expression that is not valid, a literal without a JSON form and a deep expression", () => {
+  it("DOC.ERROR: toDocument gives an error for an expression that is not valid and a literal without a JSON form, and a deep expression has a document", () => {
     expect(error(toDocument(asExpr({ tag: "nope" })))).toEqual({ code: "#VALUE!", kind: "bad-expression", message: 'the expression has a node with the tag "nope", and this version of Vex does not know it', path: [] });
     expect(error(toDocument(lit({ f: (): number => 1 })))).toMatchObject({ code: "#VALUE!", kind: "bad-expression", message: "a literal value is not JSON data and no domain encodes it" });
     const throwing = {
@@ -436,8 +464,12 @@ describe("the errors of the documents (DOC.ERROR)", () => {
     const threw = error(toDocument(lit(throwing)));
     expect(threw).toMatchObject({ code: "#CALC!", kind: "threw", message: "the expression has no document" });
     expect(threw.thrown).toBeInstanceOf(Error);
+    // The writer uses a stack, so a deep expression has a document. The kernel takes documents up to its depth.
     let deep: Expr = lit(1);
     for (let i = 0; i < 100_000; i++) deep = app("f", deep);
-    expect(error(toDocument(deep))).toMatchObject({ code: "#DEPTH!", kind: "depth", message: "the expression is too deep for the call stack of the engine" });
+    expect(isDocument(value(toDocument(deep)))).toBe(true);
+    let data: unknown = 1;
+    for (let i = 0; i < 100_000; i++) data = [data];
+    expect(error(toDocument(lit(data)))).toMatchObject({ code: "#DEPTH!", kind: "depth", message: "a literal value is too deep for the call stack of the engine" });
   });
 });

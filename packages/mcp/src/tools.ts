@@ -46,7 +46,9 @@ export function programOf(program: unknown, domains: readonly AnyDomain[]): Expr
   if (r.ok) return r.value;
   // The error of a document has its location, so only a program in the tagged IR gets the reason of shapeError.
   const data = typeof program === "string" ? safeJson(program) : program;
-  throw new ToolError(`the program is not valid: ${r.error.message}. ${isDocument(data) ? "" : (shapeError(data) ?? "")}`.trim());
+  // A reason of the kernel ends with a period already.
+  const reason = r.error.message.endsWith(".") ? r.error.message : `${r.error.message}.`;
+  throw new ToolError(`the program is not valid: ${reason} ${isDocument(data) ? "" : (shapeError(data) ?? "")}`.trim());
 }
 
 const safeJson = (text: string): unknown => {

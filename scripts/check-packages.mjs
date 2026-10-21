@@ -68,7 +68,7 @@ try {
   run("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", ...tarballs], app);
   writeFileSync(
     join(app, "smoke.mjs"),
-    `import { evaluate, fromDocument, space, toDocument, vex } from "@mark1russell7/vex";
+    `import { evaluate, fromDocument, kernelPlan, space, toDocument, vex } from "@mark1russell7/vex";
 import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { checkLaws } from "@mark1russell7/vex-testkit";
 import { tiered } from "@mark1russell7/vex-compiler";
@@ -83,12 +83,14 @@ if (!result.ok || result.value !== 5) throw new Error("the nearest-box program g
 const compiled = tiered(nearest.program, { domains: [Vec2Domain, NumDomain] });
 const fast = compiled.run({ space: root.space, origin: "A" });
 if (compiled.tier !== 2 || !fast.ok || fast.value !== 5) throw new Error("the compiled program gave " + JSON.stringify(fast));
-// The helpers of coeval are in the build of @mark1russell7/vex, so a document works without the package coeval.
+// The kernel of coeval checks the document of a program and evaluates it: the reference tier gives the same value.
 const document = toDocument(nearest.program);
 const back = document.ok ? fromDocument(JSON.parse(JSON.stringify(document.value))) : document;
 if (!back.ok || JSON.stringify(back.value) !== JSON.stringify(nearest.program)) throw new Error("the document of the program gave " + JSON.stringify(back));
 const fromDoc = evaluate(document.value, { space: root.space, origin: "A", domains: [Vec2Domain, NumDomain] });
 if (!fromDoc.ok || fromDoc.value !== 5) throw new Error("the document gave " + JSON.stringify(fromDoc));
+const reference = kernelPlan(document.value, { domains: [Vec2Domain, NumDomain] }).run({ space: root.space, origin: "A" });
+if (!reference.ok || reference.value !== 5) throw new Error("the kernel gave " + JSON.stringify(reference));
 const failed = checkLaws(NumDomain, { arb: fc.integer({ min: -100, max: 100 }), numRuns: 50 }).filter((r) => !r.ok);
 if (failed.length > 0) throw new Error("law failures: " + JSON.stringify(failed));
 if (!catalogText().includes("## \`XYDomain\`")) throw new Error("the catalog of the MCP server has no XYDomain");
@@ -102,8 +104,11 @@ console.info("package check: the tarballs install, import and run");
   // The type Optional comes from a dev dependency, so the declarations must hold a copy of it, not an import.
   const dts = readFileSync(join(app, "node_modules/@mark1russell7/vex/build/index.d.ts"), "utf8");
   if (dts.includes('"@mark1russell7/optional"')) throw new Error("the declarations of @mark1russell7/vex import @mark1russell7/optional");
-  // The types and the helpers of coeval come from a dev dependency too, so the build holds a copy of them, not an import.
-  if (dts.includes('"@mark1russell7/coeval"')) throw new Error("the declarations of @mark1russell7/vex import @mark1russell7/coeval");
+  // The kernel of coeval is the one runtime dependency of @mark1russell7/vex (decision D13 in docs/REVIEW.md).
+  const manifest = JSON.parse(readFileSync(join(app, "node_modules/@mark1russell7/vex/package.json"), "utf8"));
+  if (JSON.stringify(Object.keys(manifest.dependencies ?? {})) !== JSON.stringify(["@mark1russell7/coeval"])) {
+    throw new Error("the runtime dependencies of @mark1russell7/vex are " + JSON.stringify(manifest.dependencies));
+  }
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

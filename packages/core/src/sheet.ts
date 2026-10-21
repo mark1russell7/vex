@@ -447,7 +447,8 @@ export class SheetRun {
   #compiled(t: Table, column: string, program: Expr): Program | undefined {
     const compile = this.#compile;
     // The formula of a cell evaluates once in a run, so the run compiles only the formulas of the columns.
-    if (compile === undefined || t.columns.get(column) !== program) return undefined;
+    // V-056: a formula that is not an object cannot be a key of the cache, so the interpreter gives its error.
+    if (compile === undefined || t.columns.get(column) !== program || typeof program !== "object" || program === null) return undefined;
     const { domains, fns, extensions } = this.#compileOptions;
     const hit = PROGRAMS.get(program);
     if (hit !== undefined && hit.compile === compile && hit.domains === domains && hit.fns === fns && hit.extensions === extensions) return hit.program;

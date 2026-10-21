@@ -347,7 +347,7 @@ describe("the tiers", () => {
     for (const origin of s.keys) expect(fromCore(program.run({ space: s, origin }))).toStrictEqual(fromCore(evaluate(e, { domains: DOMAINS, space: s, origin })));
     // A document that is not valid gives its reason, and tier 1 gives its error at each run.
     const bad = { type: "ref", value: ["world", "n"] };
-    const reason = 'the document is not valid at "/value/0": Vex reads only from the roots "self" and "names", and this reference starts at "world"';
+    const reason = 'the document is not valid at "/value/0": The root world is not open here. The open roots are self, names.';
     expect(generate(bad)).toEqual({ ok: false, reason });
     const slow = tiered(bad);
     expect([slow.tier, slow.reason, slow.expr]).toEqual([1, reason, bad]);

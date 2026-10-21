@@ -1,8 +1,8 @@
-import { app, axisTargets, cell, compile, each, evaluate, explain, fromDocument, isExpr, lit, parse, ref, resolveAddr, serialize, shapeError, SheetRun, space, toDocument, vex, type Axis, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axisTargets, cell, compile, each, evaluate, explain, fromDocument, isDocument, isExpr, kernelPlan, lit, parse, ref, resolveAddr, serialize, shapeError, SheetRun, space, toDocument, vex, type Axis, type Envelope, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { arbExpr, arbGraphInput, arbMove, arbOrigin, arbSpace, arbTreeInput, PATHS } from "./arbitraries.ts";
+import { arbChangedDocument, arbExpr, arbGraphInput, arbNumberExpr, arbNumberSpace, arbMove, arbOrigin, arbSpace, arbTreeInput, PATHS } from "./arbitraries.ts";
 import { fromCore, fromReference } from "./compare.ts";
 import { structuralEqual } from "./laws.ts";
 import { referenceEvaluate } from "./reference.ts";
@@ -114,6 +114,46 @@ describe("properties of the interpreter", () => {
         expect(fromCore(evaluate(d.value, { space: s, origin: k, domains: DOMAINS, tables }))).toEqual(fromCore(run(e, s, k, tables)));
       }),
     );
+  });
+
+  it("P19 EVAL.REFERENCE DOC.ENTRY: the kernel evaluates the JSON document of a program, and gives the result of the closure compiler", () => {
+    fc.assert(
+      fc.property(program, ([s, e, k, tables]) => {
+        const d = toDocument(e, DOMAINS);
+        if (!d.ok) throw new Error(d.error.message);
+        const json = JSON.parse(JSON.stringify(d.value)) as Envelope;
+        expect(fromReference(referenceEvaluate(json, { space: s, origin: k, domains: DOMAINS, tables }))).toEqual(fromCore(run(e, s, k, tables)));
+      }),
+    );
+  });
+
+  it("P20 DOC.CHECK EVAL.SHAPE EVAL.REFERENCE: a changed document gives a valid expression or an error, and both tiers agree on it", () => {
+    const changed = arbSpace(vec).chain((s) => fc.tuple(fc.constant(s), arbChangedDocument(OPTS, DOMAINS), arbOrigin(s), arbSpace(vec).map((t) => ({ T: t }))));
+    fc.assert(
+      fc.property(changed, ([s, d, k, tables]) => {
+        const read = fromDocument(d, DOMAINS);
+        // The contracts of the kernel and the grammar of Vex give only valid expressions (DOC.CHECK).
+        if (read.ok) expect(shapeError(read.value)).toBeUndefined();
+        const core = fromCore(evaluate(d as Envelope, { space: s, origin: k, domains: DOMAINS, tables }));
+        // A bare value at the root is not a document for compile (DOC.ENTRY), so both tiers read it as the tagged IR.
+        if (isDocument(d)) expect(kernelPlan(d, { domains: DOMAINS }).doc === undefined).toBe(!read.ok);
+        expect(fromReference(referenceEvaluate(d as Envelope, { space: s, origin: k, domains: DOMAINS, tables }))).toEqual(core);
+      }),
+    );
+  });
+
+  it("P21 EVAL.REFERENCE: on programs over numbers that most often have a value, the closure compiler and the kernel give the same values", () => {
+    const numbers = arbNumberSpace.chain((s) => fc.tuple(fc.constant(s), arbNumberExpr(), arbOrigin(s)));
+    let values = 0;
+    fc.assert(
+      fc.property(numbers, ([s, e, k]) => {
+        const core = fromCore(run(e, s, k));
+        if (core.ok) values += 1;
+        expect(fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS }))).toEqual(core);
+      }),
+    );
+    // Most programs compare two values, not two error codes.
+    expect(values).toBeGreaterThan(0);
   });
 
   it("P15 AXIS.TABLE: inside the axis table, the origin is the target, in the body and in the test of where", () => {

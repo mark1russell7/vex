@@ -1,4 +1,4 @@
-import { app, axes, cell, each, ext, let_, lit, offset, ref, SheetRun, space, type Expr, type Result, type SheetOptions } from "@mark1russell7/vex";
+import { app, axes, cell, each, ext, let_, lit, offset, ref, SheetRun, space, type Expr, type Result, type SheetOptions, type VexError } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -7,12 +7,24 @@ import { arbSheet, arbTwoTables, sheetCellsOf, sheetColumnsOf, sheetRowsOf } fro
 
 const plain = (r: Result<unknown>): unknown => (r.ok ? r.value : r.error.code);
 
+/**
+ * This function gives an error without its location: the path of a node in the tagged IR, and the origin and the focus
+ * at that node. Only the closure compiler has them (EVAL.LOCATION). The kernel of the reference evaluates the document.
+ */
+const unlocated = (e: VexError): unknown => {
+  const { path: _path, origin: _origin, focus: _focus, causes, ...rest } = e;
+  return causes === undefined ? rest : { ...rest, causes: causes.map(unlocated) };
+};
+
+/** This function gives a result with an error without its location. */
+const located = (r: Result<unknown>): unknown => (r.ok ? r : { ok: false, error: unlocated(r.error) });
+
 /** This function reads each cell with the reference and with `SheetRun`, and it compares the whole results. */
 function expectSame(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, reads: readonly (readonly [string, string, string?])[]): readonly Result<unknown>[] {
   const reference = new ReferenceSheetRun(columns, opts);
   const run = new SheetRun(columns, opts);
   const got = reads.map(([c, k, t]) => reference.cell(c, k, t));
-  expect(got).toEqual(reads.map(([c, k, t]) => run.cell(c, k, t)));
+  expect(got.map(located)).toEqual(reads.map(([c, k, t]) => located(run.cell(c, k, t))));
   return got;
 }
 
@@ -77,9 +89,12 @@ describe("the reference of a sheet run", () => {
     const bad: readonly unknown[] = [null, "A", { column: 1, at: [] }, { column: "A" }, { column: "A", at: [{ t: "nope" }] }, { at: [] }, { column: "A", at: [{ t: "index", i: lit(0) }] }];
     // Each reference is in the body of a let, so its error has a path that is not empty.
     const columns = new Map<string, Expr>([["ok", lit(1)], ...bad.map((data, i): [string, Expr] => [`bad${i}`, let_({}, ext("vex.cell", data))])]);
-    const got = expectSame(columns, { space: sheetRowsOf([1]) }, [["ok", "0"], ...bad.map((_d, i) => [`bad${i}`, "0"] as const)]);
+    const reads = [["ok", "0"], ...bad.map((_d, i) => [`bad${i}`, "0"] as const)] as const;
+    const got = expectSame(columns, { space: sheetRowsOf([1]) }, reads);
     expect(got.map(problem)).toEqual([undefined, ...bad.map(() => ["#VALUE!", "a cell reference needs a column name and an address of fixed moves"])]);
-    expect(got.map((r) => (r.ok ? undefined : r.error.path))).toEqual([undefined, ...bad.map(() => [0])]);
+    // The closure compiler of SheetRun gives the error the path of the node of the extension (EVAL.LOCATION).
+    const run = new SheetRun(columns, { space: sheetRowsOf([1]) });
+    expect(reads.map(([c, k]) => run.cell(c, k)).map((r) => (r.ok ? undefined : r.error.path))).toEqual([undefined, ...bad.map(() => [0])]);
   });
 
   it("SHEET.TABLES: the first table of a name wins, and a run without a name has no table with an empty name", () => {

@@ -3,7 +3,7 @@
  * data. A value of a domain in that data has the JSON form of a literal of the IR, for example
  * `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`. A result has the same form.
  */
-import { deps, domainOf, evaluate, explain, formatTrace, isVexList, lit, nestingOf, parse, serialize, shapeError, sizeOf, space, type AnyDomain, type Expr, type Result, type Space, type VexError } from "@mark1russell7/vex";
+import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, nestingOf, parse, serialize, shapeError, sizeOf, space, type AnyDomain, type Expr, type Result, type Space, type VexError } from "@mark1russell7/vex";
 import { emitModule, generate, type Schema } from "@mark1russell7/vex-compiler";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
@@ -37,11 +37,16 @@ export function domainsOf(names: readonly string[] | undefined): readonly AnyDom
   });
 }
 
-/** This function gives the expression of a program as JSON data. It checks the program as `parse` does. */
+/**
+ * This function gives the expression of a program as JSON data: the tagged IR or a document (DOC.ENTRY). It checks the
+ * program as `parse` does.
+ */
 export function programOf(program: unknown, domains: readonly AnyDomain[]): Expr {
   const r = parse(typeof program === "string" ? program : JSON.stringify(program), domains);
-  if (!r.ok) throw new ToolError(`the program is not valid: ${r.error.message}. ${shapeError(typeof program === "string" ? safeJson(program) : program) ?? ""}`.trim());
-  return r.value;
+  if (r.ok) return r.value;
+  // The error of a document has its location, so only a program in the tagged IR gets the reason of shapeError.
+  const data = typeof program === "string" ? safeJson(program) : program;
+  throw new ToolError(`the program is not valid: ${r.error.message}. ${isDocument(data) ? "" : (shapeError(data) ?? "")}`.trim());
 }
 
 const safeJson = (text: string): unknown => {

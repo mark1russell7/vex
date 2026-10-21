@@ -13,7 +13,7 @@ import { z } from "zod";
 import { catalogText, CATALOG, domainText } from "./catalog.ts";
 import { check, evaluateAll, explainAt, moduleOf, ToolError } from "./tools.ts";
 
-const program = z.unknown().describe('The program as the JSON form of the IR, for example {"tag":"app","op":"add","args":[{"tag":"ref","path":["n"]},{"tag":"lit","value":1}]}');
+const program = z.unknown().describe('The program as the JSON form of the IR, for example {"tag":"app","op":"add","args":[{"tag":"ref","path":["n"]},{"tag":"lit","value":1}]}, or as a document of coeval, for example {"type":["ops","add"],"value":[{"type":"ref","value":["self","n"]},1]}');
 const domains = z.array(z.string()).optional().describe("The domains of the program, in order, by name (for example NumDomain or Vec2). The default is each standard domain.");
 const spaceInput = z
   .object({

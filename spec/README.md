@@ -63,6 +63,41 @@ An expression is plain JSON data. It has one of these kinds.
 - **[IR.JSON.NUMBER]** A literal number that JSON has no text for (`-0`, `NaN`, `Infinity` or `-Infinity`) gets the form `{ "$vex": "number", "value": text }`.
 - **[IR.JSON.ESCAPE]** A record of a literal with the key `$vex` gets the form `{ "$vex": "escape", "value": record }`. Thus `parse` does not read data as a domain value. A record with another form of `$vex` stays data.
 
+### 4.1 Documents
+
+A document is the form of an expression in [coeval](https://github.com/mark1russell7/coeval), the language base of the family. Its rules are the decision D12 of coeval. Each term is an envelope `{ "type": t, "value": v }`. `toDocument` writes a document, and `fromDocument` reads it.
+
+| Expression | Document |
+|---|---|
+| `lit` | the JSON value, or `{ "type": "lit", "value": v }` |
+| `ref` | `{ "type": "ref", "value": ["self", ...moves, ...fields] }` |
+| `var` | `{ "type": "ref", "value": ["names", name] }` |
+| `app` | `{ "type": ["ops", ...keys], "value": [...args] }` |
+| `let` | `{ "type": "let", "value": { "bind": names, "body": term } }` |
+| `fn` | `{ "type": "fn", "value": { "params": texts, "body": term } }` |
+| `call` | `{ "type": "call", "value": { "fn": reference, "args": terms } }` |
+| `rec` | `{ "type": "record", "value": { ...fields } }` |
+| `each` | `{ "type": "each", "value": { "axis", "body", "at" } }` |
+| `fold` | `{ "type": "fold", "value": { "axis", "init", "step", "result", "at" } }` |
+| `iterate` | `{ "type": "iterate", "value": { "limit", "init", "step", "until", "result" } }` |
+| `ext` | `{ "type": ["ext", ...keys], "value": data }` |
+| a move | `{ "type": ["moves", kind], "value": v }` |
+| an axis | `{ "type": ["axes", name], "value": { ...parameters } }` |
+
+- **[DOC.ROUND-TRIP]** `fromDocument(toDocument(e))` gives `e`, if each literal is JSON data or a value of a domain with `encode` and `decode`. A document is JSON data, so it can go through JSON text.
+- **[DOC.TERM]** In a position that holds terms, an envelope is a term, and another JSON value is a literal. A literal with the shape of an envelope is `{ "type": "lit", "value": v }`. The root of a document from `toDocument` is always an envelope. A term has no `name` and no `own` entries. A type can be a text, a list of keys or a reference into the world.
+- **[DOC.LITERAL]** The value of a literal has the JSON form of IR.JSON. Thus a domain value, `-0`, `NaN` and the infinities have the forms with the key `$vex`.
+- **[DOC.OPS]** The type of an op is `["ops", ...keys]`. The keys are the name of the op, split at its dots. The value is the list of the arguments.
+- **[DOC.REF]** A reference is a path from a root. A reference from `self` has the moves of its address and then the segments of its path. A reference from `names` has one step: a name of a `let`, a function, a loop or the caller. Vex reads from no other root.
+- **[DOC.MOVE]** The value of the move `key` is a text, and the value of `index` is a number. A computed key or position is a term in an envelope. The value of `offset` is the list of its numbers. The value of `other`, `origin` and `parent` is `null`.
+- **[DOC.ADDRESS]** The field `at` of `each` and `fold` is a reference from `self` with moves only. An empty address and no address are the same expression, and the document has no field `at` for them.
+- **[DOC.CONSTRUCT]** The constructs `let`, `fn`, `record`, `each`, `fold` and `iterate` have the fields of the table, and no other fields. Only `at` and `until` are optional. `limit` and `params` are data, not terms.
+- **[DOC.CALL]** The field `fn` of `call` is a reference to a name: `{ "type": "ref", "value": ["names", name] }`. Thus a call applies a function that a `let` binds.
+- **[DOC.AXIS]** The value of an axis is a record of its parameters, with the same names as the fields of the axis. An axis without parameters has the value `{}`. `list` and `test` are terms, and `axis` is an axis.
+- **[DOC.EXT]** The type of an extension is `["ext", ...keys]`. The keys are the kind, split at its dots. The value is the data, without a change.
+- **[DOC.ENTRY]** `compile`, `evaluate`, `explain` and `parse` take a document or an expression. For a document, they give the results of its expression. `tiered`, `generate` and `emitModule` of the compiler also take a document.
+- **[DOC.ERROR]** `fromDocument` does not throw. A document that is not valid gives `#VALUE!` with the reason and its location as a JSON Pointer. A document that is too deep gives `#DEPTH!`. Then `fromDocument` checks the expression as EVAL.SHAPE tells. `toDocument` gives `#VALUE!` for an expression that is not valid, or for a literal without a JSON form.
+
 ## 5. Evaluation
 
 - **[EVAL.TOTAL]** The interpreter does not throw. It gives a value or an error value. A value is not `undefined`.

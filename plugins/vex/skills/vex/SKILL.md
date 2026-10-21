@@ -65,7 +65,7 @@ nearest.all().values(); // => [5, 5, 5]
 5. Inside an axis, a field name reads at each target. A value from before the axis keeps its value.
 6. A reduction skips the error items. Give `{ strict: true }` to get the first error.
 7. Use `ifError(fallback)` only for an error that you expect. An unexpected error tells you about a defect in the data.
-8. A program is JSON data. Use `serialize` and `parse` to keep it or send it. Follow `ir.schema.json` to write it by hand.
+8. A program is JSON data. Use `serialize` and `parse` to keep it or send it. Follow `ir.schema.json` to write it by hand. For the shared form of the family, use `toDocument` and `fromDocument`.
 9. Do not copy the math of a program into TypeScript. One program is the source of truth, and `explain` shows each step.
 10. For speed, compile the program with `tiered` of `@mark1russell7/vex-compiler`. It gives the results of the interpreter.
 11. Write a calculation that repeats as a function in a `let`, with `fn` and `call`. Do not copy the same expression twice.

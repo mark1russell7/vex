@@ -62,6 +62,7 @@
     "bench:gate": "node bench/gate.ts"
   },
   "devDependencies": {
+    "@mark1russell7/coeval": "^0.1.0",
     "@mark1russell7/cue": "github:mark1russell7/cue",
     "@mark1russell7/optional": "github:mark1russell7/optional",
     "@types/node": "^26.6.4",

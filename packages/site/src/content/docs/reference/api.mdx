@@ -185,11 +185,12 @@ Under `isolatedDeclarations`, give a domain an explicit type. `OpTable<D, Names,
 
 | Function | What it gives |
 |---|---|
-| `evaluate(expr, { space, origin, domains, fns, extensions, vars })` | A `Result`. It does not throw. |
+| `evaluate(expr, { space, origin, domains, fns, extensions, vars })` | A `Result`. It does not throw. `expr` can also be a document. |
 | `compile(expr, { domains, fns, extensions })` | A program with `run({ space, origin, vars })` and `explain`. One program runs at each origin of each space. `evaluate` uses it too. |
 | `explain(expr, options)` | A trace: one event for each node, with the focus, the reads and the result |
 | `deps(expr)` | Each field read of the expression, with its address and the axes around it |
-| `serialize(expr, domains)`, `parse(text, domains)` | The JSON text of an expression, and the expression of a JSON text |
+| `serialize(expr, domains)`, `parse(text, domains)` | The JSON text of an expression, and the expression of a JSON text. The text can also be a document. |
+| `toDocument(expr, domains)`, `fromDocument(doc, domains)`, `isDocument(value)` | The document of an expression in coeval, the expression of a document, and the test for a document. Refer to [documents](../ir/#documents). |
 
 ## The IR
 

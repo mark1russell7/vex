@@ -41,7 +41,26 @@ The types know the fields of the records and the ops of each domain. `root.from(
 - **Sheets.** Named columns of formulas that read each other, like the columns of a spreadsheet. A cycle of reads gives `#CYCLE!`.
 - **Error values.** Each failure has a code, a kind, a message, the path of its node, the origin and the focus. `ifError` catches an error.
 - **Programs are data.** A program is a JSON tree. `explain` gives a trace, `deps` gives the reads, and `compile` gives a program that evaluates at each record of each space.
+- **Documents.** A program can also be a document of [coeval](https://github.com/mark1russell7/coeval), the shared form of the languages of the family.
 - **No runtime dependencies.** The package is one ES module with its type declarations.
+
+## Documents
+
+`toDocument` gives the document of a program in coeval, and `fromDocument` reads it back. In a document, each term is an envelope `{ type, value }`. A reference is a path from a root: `self` is the record where the program evaluates, and `names` holds the bound names. `compile`, `evaluate`, `explain` and `parse` take a document too.
+
+```ts doctest
+import { app, evaluate, fromDocument, lit, ref, space, toDocument } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+const next = app("add", ref("n"), lit(1));
+const doc = { type: ["ops", "add"], value: [{ type: "ref", value: ["self", "n"] }, 1] };
+
+toDocument(next);   // => { ok: true, value: doc }
+fromDocument(doc);  // => { ok: true, value: next }
+evaluate(doc, { space: space.array([{ n: 2 }]), origin: "0", domains: [NumDomain] }); // => { ok: true, value: 3 }
+```
+
+A document that is not valid gives the error `#VALUE!` with the reason and the location of the part. The rules are in [the specification](https://github.com/mark1russell7/vex/blob/main/spec/README.md#41-documents).
 
 ## Related packages
 

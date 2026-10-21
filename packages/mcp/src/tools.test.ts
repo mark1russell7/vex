@@ -23,6 +23,15 @@ describe("the inputs of the tools", () => {
     expect(() => programOf("not json", DEFAULT_DOMAINS)).toThrow("the program is not valid: the text is not JSON.");
   });
 
+  it("DOC.ENTRY: reads a program as a document, as JSON data or as JSON text, and gives the location of a part that is not valid", () => {
+    const document = { type: ["ops", "add"], value: [{ type: "ref", value: ["self", "n"] }, 1] };
+    expect(programOf(document, DEFAULT_DOMAINS)).toEqual(app("add", ref("n"), lit(1)));
+    expect(programOf(JSON.stringify(document), DEFAULT_DOMAINS)).toEqual(app("add", ref("n"), lit(1)));
+    expect(() => programOf({ type: ["ops", "add"], value: [{ type: "ref", value: ["world", "n"] }] }, DEFAULT_DOMAINS)).toThrow(
+      new ToolError('the program is not valid: the document is not valid at "/value/0/value/0": Vex reads only from the roots "self" and "names", and this reference starts at "world".'),
+    );
+  });
+
   it("reads the values of domains in data, and gives the JSON form of a value", () => {
     expect(dataOf({ size: vec(1, 2) }, DEFAULT_DOMAINS)).toEqual({ size: new Vec2(1, 2) });
     expect(() => dataOf({ $vex: "domain", domain: "Nope", value: 1 }, DEFAULT_DOMAINS)).toThrow('the data is not valid: no domain "Nope" decodes a literal');

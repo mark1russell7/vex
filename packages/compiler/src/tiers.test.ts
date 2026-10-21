@@ -1,4 +1,4 @@
-import { app, axes, call, each, evaluate, ext, fn, fold, index, isVexList, iterate, key, let_, lit, offset, ok, rec, ref, space, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
+import { app, axes, call, each, evaluate, ext, fn, fold, index, isVexList, iterate, key, let_, lit, offset, ok, rec, ref, space, toDocument, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, modelChain, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -333,6 +333,25 @@ describe("the tiers", () => {
     expect(emitModule(newer, { domains: DOMAINS, schema: {} })).toEqual({ ok: false, reason });
     const r = tiered(newer, { domains: DOMAINS }).run({ space: s, origin: "0" });
     expect(fromCore(r)).toStrictEqual(fromCore(evaluate(newer, { domains: DOMAINS, space: s, origin: "0" })));
+    expect(r.ok ? undefined : r.error.message).toBe(reason);
+  });
+
+  it("DOC.ENTRY: tiered and generate take a document, and give the source and the results of its expression", () => {
+    const s = space.array([{ n: 1 }, { n: 2 }, { n: 4 }]);
+    const e = app("add", ref("n"), app("sum", each(axes.others, ref("n"))));
+    const d = toDocument(e);
+    if (!d.ok) throw new Error(d.error.message);
+    expect(generate(d.value, { domains: DOMAINS })).toEqual(generate(e, { domains: DOMAINS }));
+    const program = tiered(d.value, { domains: DOMAINS });
+    expect([program.tier, program.expr]).toEqual([2, e]);
+    for (const origin of s.keys) expect(fromCore(program.run({ space: s, origin }))).toStrictEqual(fromCore(evaluate(e, { domains: DOMAINS, space: s, origin })));
+    // A document that is not valid gives its reason, and tier 1 gives its error at each run.
+    const bad = { type: "ref", value: ["world", "n"] };
+    const reason = 'the document is not valid at "/value/0": Vex reads only from the roots "self" and "names", and this reference starts at "world"';
+    expect(generate(bad)).toEqual({ ok: false, reason });
+    const slow = tiered(bad);
+    expect([slow.tier, slow.reason, slow.expr]).toEqual([1, reason, bad]);
+    const r = slow.run({ space: s, origin: "0" });
     expect(r.ok ? undefined : r.error.message).toBe(reason);
   });
 

@@ -1,3 +1,4 @@
+import { fromDocument, isDocument, type Envelope } from "./document.ts";
 import { liftsAt, resolveOp, type AnyDomain, type ParamKind, type ResolvedOp } from "./domain.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
 import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type Move } from "./ir.ts";
@@ -65,7 +66,10 @@ export type RunOptions = Pick<EvalOptions, "space" | "origin" | "vars" | "trace"
  * and over different spaces, without a new walk of the expression.
  */
 export interface Program {
-  /** The expression of the program. */
+  /**
+   * The expression of the program. For a document, it is the expression of the document. A document that is not valid
+   * stays as it is, as an expression that is not valid stays (DOC.ENTRY).
+   */
   readonly expr: Expr;
   /** This method evaluates the program at an origin. It does not throw. */
   run(opts: RunOptions): Result<unknown>;
@@ -73,10 +77,6 @@ export interface Program {
   explain(opts: Omit<RunOptions, "trace">): Trace;
 }
 
-/**
- * This function compiles an expression. The result gives the same results and the same traces as `evaluate`,
- * because `evaluate` uses it too.
- */
 /** A bound function (FN.BIND): its parameters, its compiled body and the names of the place of its binding. */
 class Closure {
   readonly params: readonly string[];
@@ -107,13 +107,21 @@ export function nestingOf(e: Expr): number {
   return deepest;
 }
 
-export function compile(expr: Expr, opts: CompileOptions = {}): Program {
+/**
+ * This function compiles an expression or a document (DOC.ENTRY). The result gives the same results and the same traces
+ * as `evaluate`, because `evaluate` uses it too.
+ */
+export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Program {
+  // DOC.ENTRY: a document gives its expression first. A document that is not valid gives the error of fromDocument.
+  const read = isDocument(source) ? fromDocument(source, opts.domains) : ok(source);
+  const expr = read.ok ? read.value : (source as unknown as Expr);
   // EVAL.SHAPE: an expression that is not valid, for example from a newer version of Vex, gives an error before a walk.
   // EVAL.NESTING: a program nested too deep gives an error before the compiler walks it with recursion.
-  const shape = shapeError(expr);
+  const shape = read.ok ? shapeError(expr) : read.error.message;
   const nesting = shape === undefined ? nestingOf(expr) : 0;
   const bad = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}` : undefined);
-  const root: Node = bad === undefined ? new Compiler(opts).node(expr, []) : (f) => fail(vexError("bad-expression", bad, { path: [], origin: f.pos.origin, focus: f.pos.focus }));
+  const kind = read.ok ? "bad-expression" : read.error.kind;
+  const root: Node = bad === undefined ? new Compiler(opts).node(expr, []) : (f) => fail(vexError(kind, bad, { path: [], origin: f.pos.origin, focus: f.pos.focus }));
   const run = (r: RunOptions): Result<unknown> => {
     const { space, origin } = r;
     if (!space.has(origin)) return fail(vexError("unknown-key", `the space has no key "${origin}"`, { origin, focus: origin }));
@@ -137,10 +145,10 @@ export function compile(expr: Expr, opts: CompileOptions = {}): Program {
   };
 }
 
-// The cache of compiled programs: one entry for each expression object, for the last options.
-const CACHE = new WeakMap<Expr, { readonly domains: unknown; readonly fns: unknown; readonly extensions: unknown; readonly program: Program }>();
+// The cache of compiled programs: one entry for each expression object or document, for the last options.
+const CACHE = new WeakMap<Expr | Envelope, { readonly domains: unknown; readonly fns: unknown; readonly extensions: unknown; readonly program: Program }>();
 
-function compiled(expr: Expr, opts: CompileOptions): Program {
+function compiled(expr: Expr | Envelope, opts: CompileOptions): Program {
   const hit = CACHE.get(expr);
   // Without the cache, each evaluation compiles again: the result is the same, so a mutant that removes a hit is
   // equivalent. A false hit changes results, and the tests find it.
@@ -151,13 +159,13 @@ function compiled(expr: Expr, opts: CompileOptions): Program {
   return program;
 }
 
-/** This function evaluates an expression at the origin of a space. It does not throw. */
-export function evaluate(expr: Expr, opts: EvalOptions): Result<unknown> {
+/** This function evaluates an expression or a document at the origin of a space. It does not throw. */
+export function evaluate(expr: Expr | Envelope, opts: EvalOptions): Result<unknown> {
   return compiled(expr, opts).run(opts);
 }
 
-/** This function evaluates an expression and records a trace of each node. */
-export function explain(expr: Expr, opts: Omit<EvalOptions, "trace">): Trace {
+/** This function evaluates an expression or a document and records a trace of each node. */
+export function explain(expr: Expr | Envelope, opts: Omit<EvalOptions, "trace">): Trace {
   return compiled(expr, opts).explain(opts);
 }
 

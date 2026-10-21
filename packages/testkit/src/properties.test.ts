@@ -1,4 +1,4 @@
-import { app, axisTargets, cell, compile, each, evaluate, explain, isExpr, lit, parse, ref, resolveAddr, serialize, shapeError, SheetRun, space, vex, type Axis, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axisTargets, cell, compile, each, evaluate, explain, fromDocument, isExpr, lit, parse, ref, resolveAddr, serialize, shapeError, SheetRun, space, toDocument, vex, type Axis, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -99,6 +99,19 @@ describe("properties of the interpreter", () => {
           reference: fromReference(referenceEvaluate(e, { space: s, origin: k, domains: DOMAINS, tables })),
           json,
         }).toEqual({ compile: expected, explain: expected, reference: expected, json: expected });
+      }),
+    );
+  });
+
+  it("P18 DOC.ROUND-TRIP DOC.ENTRY: an expression gives itself after its document, also through JSON text, and its document gives its result", () => {
+    fc.assert(
+      fc.property(program, ([s, e, k, tables]) => {
+        // Each literal of the arbitraries has a JSON form: JSON data, a number that JSON has no text for, or a Vec2.
+        const d = toDocument(e, DOMAINS);
+        if (!d.ok) throw new Error(d.error.message);
+        expect(fromDocument(d.value, DOMAINS)).toEqual({ ok: true, value: e });
+        expect(fromDocument(JSON.parse(JSON.stringify(d.value)), DOMAINS)).toEqual({ ok: true, value: e });
+        expect(fromCore(evaluate(d.value, { space: s, origin: k, domains: DOMAINS, tables }))).toEqual(fromCore(run(e, s, k, tables)));
       }),
     );
   });

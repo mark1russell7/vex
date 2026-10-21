@@ -29,5 +29,6 @@ The five packages have one version. The `CHANGELOG.md` of each package lists the
 | The kinds of domains and ops: `primitive`, `returns` and `samples` | 0.7.0 |
 | `SheetRun` with the option `compile`, and `SheetRun.fill` | 0.7.0 |
 | `shapeError`, and `#VALUE!` for a node that the version does not know | 0.7.0 |
+| Documents of coeval: `toDocument`, `fromDocument` and `isDocument`, and a document in `compile`, `evaluate`, `explain`, `parse` and the compiler | 0.9.1 |
 
 A feature of the main branch that is not on npm yet has the version "the next release". Until it is on npm, a project can use it only from a local copy of the repository, for example with `pnpm link`. Do not write a workaround for a missing feature without a note. Tell the user which version has it.

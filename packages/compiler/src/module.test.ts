@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
+import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
@@ -179,6 +179,17 @@ describe("COMPILE.MODULE: a standalone module", () => {
       const e = op("count", each(axes.all, n, at));
       expectSame(make(sourceOf(e)), e);
     }
+  });
+
+  it("DOC.ENTRY: a document gives the module of its expression, and a document that is not valid gives the reason", () => {
+    const e = op("add", n, op("sum", each(axes.others, w)));
+    const d = toDocument(e);
+    if (!d.ok) throw new Error(d.error.message);
+    const m = emitModule(d.value, OPTIONS);
+    expect(m.ok).toBe(true);
+    expect(m).toEqual(emitModule(e, OPTIONS));
+    const bad = { type: "each", value: { axis: { type: ["axes", "nope"], value: {} }, body: 1 } };
+    expect(emitModule(bad, OPTIONS)).toEqual({ ok: false, reason: 'the document is not valid at "/value/axis": Vex has no axis "nope"' });
   });
 
   it("needs no domains and no schema for a program of literals", () => {

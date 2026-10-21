@@ -131,3 +131,15 @@ const text = serialize(moved, [Vec2Domain]);
 text.ok;                                                                            // => true
 text.ok ? JSON.stringify(parse(text.value, [Vec2Domain])) === JSON.stringify({ ok: true, value: moved }) : false; // => true
 ```
+
+The languages of the family share one form: the documents of [coeval](https://github.com/mark1russell7/coeval). `toDocument` gives the document of a program, and `fromDocument` reads it back. Each term is an envelope `{ type, value }`. A reference is a path from `self` (the record where the program evaluates) or from `names` (a bound name). `compile`, `evaluate`, `explain`, `parse` and the compiler take a document too.
+
+```ts doctest
+import { app, axes, each, fromDocument, ref, toDocument } from "@mark1russell7/vex";
+
+const total = app("sum", each(axes.others, ref("size")));
+const doc = toDocument(total);
+
+doc; // => { ok: true, value: { type: ["ops", "sum"], value: [{ type: "each", value: { axis: { type: ["axes", "others"], value: {} }, body: { type: "ref", value: ["self", "size"] } } }] } }
+fromDocument(doc.ok ? doc.value : null); // => { ok: true, value: total }
+```

@@ -19,7 +19,7 @@
  * schema, and the axes `all`, `others` and `window`. The kinds of each op site must decide its op. Another construct
  * gives a reason, not code.
  */
-import { addrExprs, children, isFieldName, lit, moveExpr, shapeError, type AnyDomain, type Axis, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, children, fromDocument, isDocument, isFieldName, lit, moveExpr, shapeError, type AnyDomain, type Axis, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 
@@ -1747,10 +1747,15 @@ class Printer {
 /**
  * This function prints a program as a standalone ES module. The module exports `VexContractError`, `VEX_ERROR` and a
  * function that takes the records and the variables and gives the value at each key. It is pure, so a build can use it.
+ * The program can be an expression or a document (DOC.ENTRY).
  */
-export function emitModule(expr: Expr, options: ModuleOptions): Emitted {
+export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emitted {
   const name = options.name ?? "run";
   if (!/^[A-Za-z_$][\w$]*$/.test(name)) return { ok: false, reason: `the name "${name}" is not a JavaScript name` };
+  // DOC.ENTRY: a document gives its expression first, or the reason that it is not valid.
+  const read = isDocument(source) ? fromDocument(source, options.domains) : { ok: true as const, value: source };
+  if (!read.ok) return { ok: false, reason: read.error.message };
+  const expr = read.value;
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };

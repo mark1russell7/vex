@@ -48,7 +48,7 @@ The repository has a plugin for Claude Code with the skill `vex`. The skill give
 /plugin install vex@vex
 ```
 
-The plugin also starts the MCP server of [`packages/mcp`](./packages/mcp). Its tools give the catalog of the domains, and they check, evaluate, explain and compile a program as JSON.
+The plugin also starts the MCP server of [`packages/mcp`](./packages/mcp). Its tools give the catalog of the domains, and they check, evaluate, explain and compile a program as JSON. A program can be the tagged IR or a document of [coeval](https://github.com/mark1russell7/coeval).
 
 Another agent can read [`plugins/vex/skills/vex/SKILL.md`](./plugins/vex/skills/vex/SKILL.md) and [`llms.txt`](https://mark1russell7.github.io/vex/llms.txt).
 
@@ -58,7 +58,7 @@ The packages are on npm (see the badge for the version). The specification (Vex 
 
 | Package | Contents |
 |---|---|
-| [`@mark1russell7/vex`](./packages/core) | The kernel: spaces, addresses, the expression IR, domains, the interpreter, traces |
+| [`@mark1russell7/vex`](./packages/core) | The kernel: spaces, addresses, the expression IR and its documents of coeval, domains, the interpreter, traces |
 | [`@mark1russell7/vex-domains`](./packages/domains) | Domains for 2D vectors, named-component vectors, colors and angles |
 | [`@mark1russell7/vex-testkit`](./packages/testkit) | Arbitraries, law checks and the reference interpreter for property tests |
 | [`@mark1russell7/vex-compiler`](./packages/compiler) | Generated JavaScript for programs, with the results of the interpreter |

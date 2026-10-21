@@ -2,7 +2,7 @@
  * The tiers (docs/COMPILER.md §2.1). Tier 2 is generated JavaScript. Tier 1 is the closure compiler of the core, and it
  * gives each result that tier 2 cannot give. Thus a tiered program gives the results of the interpreter.
  */
-import { compile, ok, type CompileOptions, type Expr, type Program, type Space } from "@mark1russell7/vex";
+import { compile, fromDocument, isDocument, ok, type CompileOptions, type Envelope, type Expr, type Program, type Space } from "@mark1russell7/vex";
 import { factsOf, type Schema } from "./facts.ts";
 
 /** The options of the compiler: the options of `compile`, and the schema of the host (docs/COMPILER.md §3.2). */
@@ -24,13 +24,16 @@ export type Generated =
 export type Tier2 = (space: Space, origin: string, vars: Readonly<Record<string, unknown>> | undefined, tables: Readonly<Record<string, Space>> | undefined) => unknown;
 
 /**
- * This function lowers an expression and prints its source for the options. The op tables of the domains give the
- * fast path of each op site. It is pure, so a build can use it.
+ * This function lowers an expression or a document and prints its source for the options (DOC.ENTRY). The op tables of
+ * the domains give the fast path of each op site. It is pure, so a build can use it.
  */
-export function generate(expr: Expr, options: GenerateOptions = {}): Generated {
+export function generate(source: Expr | Envelope, options: GenerateOptions = {}): Generated {
+  // DOC.ENTRY: a document gives its expression first, or the reason that it is not valid.
+  const read = isDocument(source) ? fromDocument(source, options.domains) : ok(source);
+  if (!read.ok) return { ok: false, reason: read.error.message };
   try {
     const facts = factsOf(options);
-    const program = lower(expr, facts, options.schema);
+    const program = lower(read.value, facts, options.schema);
     return { ok: true, program, source: printJs(program, facts), options };
   } catch (thrown) {
     // A stack overflow in the lowering of a deep expression also goes to tier 1.
@@ -66,11 +69,14 @@ export interface TieredProgram extends Program {
 }
 
 /**
- * This function compiles an expression into tier 2 if it can, and else into tier 1. After a failed check of tier 2,
- * tier 1 does that evaluation again. A run with a trace and `explain` always use tier 1, because tier 2 makes no trace.
+ * This function compiles an expression or a document into tier 2 if it can, and else into tier 1 (DOC.ENTRY). After a
+ * failed check of tier 2, tier 1 does that evaluation again. A run with a trace and `explain` always use tier 1, because
+ * tier 2 makes no trace.
  */
-export function tiered(expr: Expr, options: GenerateOptions = {}): TieredProgram {
-  const slow = compile(expr, options);
+export function tiered(source: Expr | Envelope, options: GenerateOptions = {}): TieredProgram {
+  const slow = compile(source, options);
+  // The program of tier 1 has the expression of a document, so tier 2 does not read the document again.
+  const { expr } = slow;
   const generated = generate(expr, options);
   let fast: Tier2 | undefined;
   let reason: string | undefined;

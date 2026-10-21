@@ -1,6 +1,6 @@
 ---
 title: The IR
-description: A Vex program is JSON data. The kinds of expression, the functions, the moves of an address, the axes, and the folds over the tree.
+description: A Vex program is JSON data. The kinds of expression, the functions, the moves of an address, the axes, the documents of coeval, and the folds over the tree.
 ---
 
 import ProgramIR from "../../../components/ProgramIR.tsx";
@@ -122,3 +122,40 @@ A program can go to a file, a database, a worker or another process. The JSON Sc
 `compile(expr, options)` changes the tree into a tree of functions, once. The program then evaluates at each origin of each space without a new walk of the tree. `evaluate` uses `compile` too, so the two cannot give different results.
 
 `deps(expr)` gives each field read of a program, with its address, the axes around it and the address of each axis. A host can use the reads to evaluate a program again only when a field that it reads changes. Refer to [the Lab](../../lab/) to change a program as JSON.
+
+## Documents
+
+A program can also be a document of [coeval](https://github.com/mark1russell7/coeval), the language base of the family. Each language of the family writes its terms in this form. Thus one tool can read, check and show the programs of each language. `toDocument` gives the document of an expression, and `fromDocument` gives the expression of a document. `compile`, `evaluate`, `explain` and `parse` take a document too, and so do `tiered`, `generate` and `emitModule` of the compiler.
+
+```ts doctest
+import { app, evaluate, fromDocument, lit, ref, space, toDocument } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+const next = app("add", ref("n"), lit(1));
+const doc = toDocument(next);
+
+doc; // => { ok: true, value: { type: ["ops", "add"], value: [{ type: "ref", value: ["self", "n"] }, 1] } }
+fromDocument(doc.ok ? doc.value : null); // => { ok: true, value: next }
+evaluate(doc.ok ? doc.value : next, { space: space.array([{ n: 2 }]), origin: "0", domains: [NumDomain] }); // => { ok: true, value: 3 }
+```
+
+Each term is an envelope `{ type, value }`. Another JSON value in the place of a term is a literal.
+
+| Expression | Document |
+|---|---|
+| `lit(v)` | `v`, or `{ type: "lit", value: v }` when `v` has the shape of an envelope. At the root, a literal is always an envelope. |
+| `ref(path, at)` | `{ type: "ref", value: ["self", ...moves, ...path] }`: a path from the position where the program evaluates |
+| `v(name)` | `{ type: "ref", value: ["names", name] }`: a name of a `let`, a function, a loop or the caller |
+| `app(op, ...args)` | `{ type: ["ops", ...keys], value: args }`. The keys are the name of the op, split at its dots. |
+| `let_(bind, body)` | `{ type: "let", value: { bind, body } }` |
+| `fn(params, body)` | `{ type: "fn", value: { params, body } }` |
+| `call(name, ...args)` | `{ type: "call", value: { fn: { type: "ref", value: ["names", name] }, args } }` |
+| `rec(fields)` | `{ type: "record", value: fields }` |
+| `each(axis, body, at)` | `{ type: "each", value: { axis, body, at } }`. `at` is a reference from `self` with moves only. |
+| `fold(axis, init, step, result, at)` | `{ type: "fold", value: { axis, init, step, result, at } }` |
+| `iterate(limit, init, step, result, until)` | `{ type: "iterate", value: { limit, init, step, until, result } }` |
+| `ext(kind, data)` | `{ type: ["ext", ...keys], value: data }` |
+
+A move is `{ type: ["moves", kind], value }`. The value of `key` is a text, and the value of `index` is a number. A computed key or position is a term in an envelope, also a literal. The value of `offset` is its list of numbers, and the value of `other`, `origin` and `parent` is `null`. An axis is `{ type: ["axes", name], value: parameters }`, for example `{ type: ["axes", "window"], value: { from: -1, to: 0 } }`.
+
+A document is JSON data. The value of a literal has the JSON form of `serialize`, so a domain value needs `encode` and `decode`. `fromDocument` does not throw. A document that is not valid gives `#VALUE!` with the reason and the location of the part, as a JSON Pointer. Refer to the rules `DOC.*` of [the specification](../../spec/).

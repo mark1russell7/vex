@@ -133,10 +133,10 @@ describe("properties of the interpreter", () => {
       fc.property(changed, ([s, d, k, tables]) => {
         const read = fromDocument(d, DOMAINS);
         // The contracts of the kernel and the grammar of Vex give only valid expressions (DOC.CHECK).
-        if (read.ok) expect(shapeError(read.value)).toBeUndefined();
+        expect(read.ok ? shapeError(read.value) : undefined).toBeUndefined();
         const core = fromCore(evaluate(d as Envelope, { space: s, origin: k, domains: DOMAINS, tables }));
         // A bare value at the root is not a document for compile (DOC.ENTRY), so both tiers read it as the tagged IR.
-        if (isDocument(d)) expect(kernelPlan(d, { domains: DOMAINS }).doc === undefined).toBe(!read.ok);
+        expect(isDocument(d) ? kernelPlan(d, { domains: DOMAINS }).doc === undefined : !read.ok).toBe(!read.ok);
         expect(fromReference(referenceEvaluate(d as Envelope, { space: s, origin: k, domains: DOMAINS, tables }))).toEqual(core);
       }),
     );

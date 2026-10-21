@@ -3,7 +3,7 @@
  * program, by the contracts of Vex (`refsOf`). Vex adds only what is its own: the axes around a read, and the reads of
  * a function at each of its calls (FN.CALL).
  */
-import { isEnvelope, pathMatches, refsOf, typeName, type DocVisit, type Json, type Key, type RefUse } from "@mark1russell7/coeval";
+import { isEnvelope, pathMatches, refsOf, typeName, type DocVisit, type Key, type RefUse } from "@mark1russell7/coeval";
 import type { Addr, Axis, Expr, ExprOf } from "./ir.ts";
 import { VEX_WORLD } from "./kernel.ts";
 import { writeDocument } from "./write.ts";
@@ -50,7 +50,7 @@ const ROOT: Context = { axes: undefined, axis: undefined, fn: undefined, calls: 
 function itemsUntil<T>(chain: Chain<T> | undefined, end: Chain<T> | undefined): T[] {
   const out: T[] = [];
   for (let c = chain; c !== undefined && c !== end; c = c.up) out.push(c.item);
-  return out.reverse();
+  return out.toReversed();
 }
 
 /** This function gives the kind of a visit, as its keys joined with dots, for example `each` or `axes.where`. */
@@ -75,7 +75,7 @@ export function deps(e: Expr): readonly Dependency[] {
   const functionOf = (call: DocVisit): DocVisit | undefined => {
     const known = functions.get(call);
     if (known !== undefined) return known ?? undefined;
-    const name = String(((call.doc.value as { readonly fn: { readonly value: readonly Json[] } }).fn.value)[1]);
+    const name = (call.doc.value as { readonly fn: { readonly value: readonly [string, string] } }).fn.value[1];
     let found: DocVisit | undefined;
     // The innermost kind that binds the name decides. A parameter, a binding or a name of a loop hides a function.
     search: for (let child: DocVisit = call, around = call.parent; around !== undefined; child = around, around = around.parent) {
@@ -156,7 +156,9 @@ export function deps(e: Expr): readonly Dependency[] {
       return false;
     };
     const flush = (until?: DocVisit): void => {
-      for (let top = pending.at(-1); top !== undefined && (until === undefined || !inCall(until, top.call)); top = pending.at(-1)) {
+      for (;;) {
+        const top = pending.at(-1);
+        if (top === undefined || (until !== undefined && inCall(until, top.call))) return;
         pending.pop();
         emit(groups.get(top.fn) ?? [], top.fn, top.axes);
       }

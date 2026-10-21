@@ -315,14 +315,17 @@ describe("the documents of the expressions (DOC.*)", () => {
   });
 });
 
+/** The code of the error of a document, and the JSON Pointer of the part that is not valid. */
+const fault = (d: unknown): readonly [string, string] => {
+  const e = error(fromDocument(d, [PtDomain]));
+  return [e.code, /^the document is not valid at (?:its root|"([^"]*)"): /.exec(e.message)?.[1] ?? ""];
+};
+
+/** The fault of a document that is not valid at `where`. */
+const invalid = (where: string): readonly [string, string] => ["#VALUE!", where];
+
 describe("the errors of the documents (DOC.ERROR)", () => {
   const all = { type: ["axes", "all"], value: {} };
-  /** The code of the error of a document, and the JSON Pointer of the part that is not valid. */
-  const fault = (d: unknown): readonly [string, string] => {
-    const e = error(fromDocument(d, [PtDomain]));
-    return [e.code, /^the document is not valid at (?:its root|"([^"]*)"): /.exec(e.message)?.[1] ?? ""];
-  };
-  const invalid = (where: string): readonly [string, string] => ["#VALUE!", where];
 
   it("DOC.CHECK DOC.ERROR: the kernel checks the kinds by the contracts of VEX_WORLD, at the root and in each position", () => {
     expect(reason({ type: "nope", value: 1 })).toBe(at("", "The world has no kind nope."));

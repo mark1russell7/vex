@@ -18,6 +18,8 @@ import { error, Pt, PtDomain, value } from "./test-support.ts";
 const s = space.record({ A: { n: 1, p: new Pt(1, 2) }, B: { n: 2, p: new Pt(3, 4) }, N: null });
 const run = (e: Expr | Envelope, origin = "A", opts: Parameters<typeof kernelPlan>[1] = { domains: [PtDomain] }): ReturnType<ReturnType<typeof kernelPlan>["run"]> => kernelPlan(e, opts).run({ space: s, origin });
 const doc = (e: Expr): Envelope => value(toDocument(e, [PtDomain]));
+/** A function: a literal without a JSON form. */
+const one = (): number => 1;
 
 describe("the contracts of Vex (DOC.CHECK)", () => {
   it("DOC.CHECK: the document of each kind of expression has no problem for the static kit of the kernel", () => {
@@ -67,11 +69,10 @@ describe("the reference tier: the kernel of coeval (EVAL.REFERENCE)", () => {
   });
 
   it("DOC.LITERAL: a literal without a JSON form keeps the value of the host in the kernel tier", () => {
-    const f = (): number => 1;
-    expect(value(run(lit(f)))).toBe(f);
+    expect(value(run(lit(one)))).toBe(one);
     const throwing = Object.defineProperty({}, "x", { enumerable: true, get: (): never => { throw new Error("getter"); } });
     expect(value(run(lit(throwing)))).toBe(throwing);
-    expect(kernelPlan(lit(f)).doc).toEqual({ type: "lit", value: f, own: { eval: "vex.host" } });
+    expect(kernelPlan(lit(one)).doc).toEqual({ type: "lit", value: one, own: { eval: "vex.host" } });
     // A decoder that throws gives #CALC! for the literal.
     const Throwing = { ...PtDomain, decode: (): never => { throw new Error("decode"); } };
     const plan = prepare(vexMachine({ domains: [Throwing] }), { type: "lit", value: { $vex: "domain", domain: "Pt", value: [1, 2] } });
@@ -106,7 +107,7 @@ describe("the reference tier: the kernel of coeval (EVAL.REFERENCE)", () => {
     // The body evaluates at the position of the call: inside an axis, at each target.
     const e = let_({ f: fn([], ref("n")) }, each(axes.all, call("f")));
     const items = value(run(e));
-    expect(isVexList(items) ? items.items.map((it) => (it.result.ok ? it.result.value : it.result.error.code)) : items).toEqual([1, 2, "#N/A"]);
+    expect(isVexList(items) ? items.items.map((item) => (item.result.ok ? item.result.value : item.result.error.code)) : items).toEqual([1, 2, "#N/A"]);
   });
 
   it("EVAL.LOCATION SHEET.CELL: an extension gets the position, and an error without an origin gets its position", () => {

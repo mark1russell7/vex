@@ -26,7 +26,7 @@
  * kinds that a position permits (DOC.CHECK). Then `fromDocument` reads the expression, and it checks only the rules that
  * are the grammar of Vex: the steps of a reference, the address, the function of a call and the names of a loop.
  */
-import { check, isEnvelope, typeName, typePath, type Envelope, type Issue, type Json, type Key, type Machine } from "@mark1russell7/coeval";
+import { check, isEnvelope, typeName, typePath, type Envelope, type Issue, type Key, type Machine } from "@mark1russell7/coeval";
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { isStackOverflow, vexError, type VexError } from "./errors.ts";
@@ -76,7 +76,7 @@ function attempt<T>(work: () => T, threw: string, deep: string): Result<T> {
  * envelope, because it has the key `tag`. Thus `compile` and `evaluate` can take either one (DOC.ENTRY).
  */
 export function isDocument(u: unknown): u is Envelope {
-  return isEnvelope(u as Json);
+  return isEnvelope(u);
 }
 
 /**

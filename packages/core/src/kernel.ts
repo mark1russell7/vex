@@ -70,7 +70,7 @@ const PLAIN_AXES = ["all", "others", "other", "children", "ancestors", "descenda
 const BASE_AXES: readonly string[] = [...PLAIN_AXES, "neighbors", "window", "list"];
 
 /** This function gives the kind of an axis with these parameters (DOC.AXIS). */
-const axis = (fields: Readonly<Record<string, PartShape>>): Kind => ({ verbs: { eval: "vex.axis" }, parts: closed(fields, Object.keys(fields)), summary: "An axis of Vex: the targets of a body." });
+const axisKind = (fields: Readonly<Record<string, PartShape>>): Kind => ({ verbs: { eval: "vex.axis" }, parts: closed(fields, Object.keys(fields)), summary: "An axis of Vex: the targets of a body." });
 
 /** This function gives the kind of a move. Its document is a step of a path, and a computed key is its part (DOC.MOVE). */
 const move = (walker: string, parts: PartShape): Kind => ({ verbs: { eval: "formula.step", step: walker }, parts, summary: "A move of Vex: a step to another key of the space." });
@@ -117,13 +117,13 @@ export const VEX_WORLD: World = {
     ext: { kinds: {}, fallback: { verbs: { eval: "formula.ext" }, summary: "An extension: its handler gives the value of its data." } },
     axes: {
       kinds: {
-        ...Object.fromEntries(PLAIN_AXES.map((name) => [name, axis({})])),
-        neighbors: axis({ n: { shape: "one", values: [4, 8] } }),
-        window: axis({ from: { shape: "number" }, to: { shape: "number" } }),
-        table: axis({ name: { shape: "text" } }),
-        list: axis({ list: TERM }),
-        reverse: axis({ axis: { shape: "term", kinds: BASE_AXES.map((name) => ["axes", name]) } }),
-        where: axis({ axis: AXIS, test: TERM }),
+        ...Object.fromEntries(PLAIN_AXES.map((name) => [name, axisKind({})])),
+        neighbors: axisKind({ n: { shape: "one", values: [4, 8] } }),
+        window: axisKind({ from: { shape: "number" }, to: { shape: "number" } }),
+        table: axisKind({ name: { shape: "text" } }),
+        list: axisKind({ list: TERM }),
+        reverse: axisKind({ axis: { shape: "term", kinds: BASE_AXES.map((name) => ["axes", name]) } }),
+        where: axisKind({ axis: AXIS, test: TERM }),
       },
     },
     moves: {
@@ -639,7 +639,6 @@ const optionsOf = (op: string, rest: readonly unknown[]): unknown => (op === "re
 
 /** This function applies a list op (LIST.*). The error items are skipped, except with `{ strict: true }`, and except `#DEPTH!`. */
 function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[], domains: readonly AnyDomain[]): unknown {
-  const bad = (kind: ErrorKind, message: string): never => stop(kind, message);
   const depth = items.find((it) => !it.result.ok && it.result.error.code === "#DEPTH!");
   if (depth !== undefined && !depth.result.ok) throw new Failure(toKernelError(depth.result.error));
   const o = optionsOf(op, rest);
@@ -647,9 +646,9 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
   if ((o as { strict?: unknown } | null | undefined)?.strict === true && firstBad !== undefined && !firstBad.result.ok) throw new Failure(toKernelError(firstBad.result.error));
   const good = items.filter((it) => it.result.ok);
   const vs = good.map((it) => (it.result.ok ? it.result.value : undefined));
-  const nums = (): readonly number[] => (vs.every((x) => typeof x === "number") ? (vs as readonly number[]) : bad("kind-mismatch", `"${op}" needs numbers`));
-  const bools = (): readonly boolean[] => (vs.every((x) => typeof x === "boolean") ? (vs as readonly boolean[]) : bad("kind-mismatch", `"${op}" needs booleans`));
-  const empty = (): never => bad("empty", `"${op}" has no values to work with`);
+  const nums = (): readonly number[] => (vs.every((x) => typeof x === "number") ? vs : stop("kind-mismatch", `"${op}" needs numbers`));
+  const bools = (): readonly boolean[] => (vs.every((x) => typeof x === "boolean") ? vs : stop("kind-mismatch", `"${op}" needs booleans`));
+  const empty = (): never => stop("empty", `"${op}" has no values to work with`);
   switch (op) {
     case "count":
       return vs.length;
@@ -663,15 +662,15 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
       return vs.length > 0 ? vs[0] : empty();
     case "sortBy": {
       const kind = typeof vs[0];
-      if (vs.some((x) => typeof x !== kind || (kind !== "number" && kind !== "string") || Number.isNaN(x))) bad("kind-mismatch", '"sortBy" needs numbers without NaN or texts, all of one kind');
+      if (vs.some((x) => typeof x !== kind || (kind !== "number" && kind !== "string") || Number.isNaN(x))) stop("kind-mismatch", '"sortBy" needs numbers without NaN or texts, all of one kind');
       return vexList(good.map((it, i) => ({ it, i })).toSorted((a, b) => compare(vs[a.i], vs[b.i])).map(({ it }) => it));
     }
     case "take":
     case "nth": {
       const n = rest[0];
-      if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) return bad("kind-mismatch", `"${op}" needs a whole number from 0`);
+      if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) return stop("kind-mismatch", `"${op}" needs a whole number from 0`);
       if (op === "take") return vexList(good.slice(0, n));
-      return n < vs.length ? vs[n] : bad("empty", `"nth" has no item at the position ${String(n)}`);
+      return n < vs.length ? vs[n] : stop("empty", `"nth" has no item at the position ${String(n)}`);
     }
     case "sum":
       return checked(nums().reduce((s, x) => s + x, 0), op, []);

@@ -105,7 +105,7 @@ console.info("package check: the tarballs install, import and run");
   const dts = readFileSync(join(app, "node_modules/@mark1russell7/vex/build/index.d.ts"), "utf8");
   if (dts.includes('"@mark1russell7/optional"')) throw new Error("the declarations of @mark1russell7/vex import @mark1russell7/optional");
   // The kernel of coeval is the one runtime dependency of @mark1russell7/vex (decision D13 in docs/REVIEW.md).
-  const manifest = JSON.parse(readFileSync(join(app, "node_modules/@mark1russell7/vex/package.json"), "utf8"));
+  const manifest = /** @type {{ dependencies?: Record<string, string> }} */ (JSON.parse(readFileSync(join(app, "node_modules/@mark1russell7/vex/package.json"), "utf8")));
   if (JSON.stringify(Object.keys(manifest.dependencies ?? {})) !== JSON.stringify(["@mark1russell7/coeval"])) {
     throw new Error("the runtime dependencies of @mark1russell7/vex are " + JSON.stringify(manifest.dependencies));
   }

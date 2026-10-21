@@ -297,6 +297,9 @@ export const arbChangedDocument = (opts: ArbOptions, domains: readonly AnyDomain
     return replaced(json, paths[i % paths.length] ?? [], part);
   });
 
+/** This function makes a literal number. */
+const num = (value: number): Expr => ({ tag: "lit", value });
+
 /** A record space of records with a number `n`, with 1 to 4 keys. Some records have no `n`. */
 export const arbNumberSpace: fc.Arbitrary<Space> = fc.uniqueArray(fc.constantFrom(...RECORD_KEYS), { minLength: 1, maxLength: 4 }).chain((keys) =>
   fc
@@ -310,7 +313,6 @@ export const arbNumberSpace: fc.Arbitrary<Space> = fc.uniqueArray(fc.constantFro
  * `arbExpr` mostly give errors, so they rarely compare two values.
  */
 export function arbNumberExpr(maxDepth = 4): fc.Arbitrary<Expr> {
-  const num = (value: number): Expr => ({ tag: "lit", value });
   const { expr } = fc.letrec<{ expr: Expr; axis: Axis; list: Expr }>((tie) => ({
     expr: fc.oneof(
       { depthSize: "small", withCrossShrink: true, maxDepth },

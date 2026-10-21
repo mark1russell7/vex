@@ -53,7 +53,7 @@ const envelope = (e: Expr): Job => ({ t: "envelope", e });
 function namesOf(names: readonly string[], docs: readonly Json[], from: number): JsonRecord {
   const out: Record<string, Json> = {};
   names.forEach((name, i) => {
-    Object.defineProperty(out, name, { value: docs[from + i] as Json, enumerable: true, writable: true, configurable: true });
+    Object.defineProperty(out, name, { value: docs[from + i], enumerable: true, writable: true, configurable: true });
   });
   return out;
 }

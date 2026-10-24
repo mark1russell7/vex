@@ -33,7 +33,6 @@ import {
   formulaDefinitions,
   formulaEvaluators,
   ok,
-  thrown,
 } from "@mark1russell7/coeval";
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
@@ -42,6 +41,7 @@ import type { CompileOptions } from "./evaluate.ts";
 import { MAX_ITERATIONS, type Axis, type FixedMove } from "./ir.ts";
 import { isVexList, LIST_OPS, vexList, type ListItem } from "./list.ts";
 import { fail as vexFail, ok as vexOk, type Result } from "./result.ts";
+import { isVexError } from "./same.ts";
 import { applyMove, axisTargets, type Space } from "./space.ts";
 
 // ---------------------------------------------------------------- the contracts
@@ -163,12 +163,6 @@ const KIND_OF: Readonly<Partial<Record<string, ErrorKind>>> = {
   "#ARGS": "args",
   "#CYCLE!": "cycle",
   "#DEPTH!": "depth",
-};
-
-/** This function tells if a value is a Vex error. */
-const isVexError = (u: unknown): u is VexError => {
-  const e = u as Partial<VexError> | null | undefined;
-  return typeof e?.code === "string" && typeof e.kind === "string" && typeof e.message === "string" && Array.isArray(e.path);
 };
 
 /** This function gives the error of the kernel for a Vex error. The Vex error is its cause, so no detail is lost. */
@@ -381,6 +375,7 @@ const axisEvaluator: EvalFn = ({ typePath, value, context }) => {
   }
   if (name === "reverse" || name === "where") {
     const r = (fields["axis"] as Part).evaluate();
+    // Stryker disable next-line ConditionalExpression: an axis document fails only when the call stack of the engine is full
     if (!r.ok) return r;
     const base = r.value as Targets;
     const test = fields["test"];
@@ -428,12 +423,21 @@ function targetsOf(value: unknown, ctx: Context): Outcome<{ readonly axis: Targe
   const start = startOf(partsOf(value)["at"], ctx);
   if (!(start instanceof Place)) return { ok: false, error: start };
   const a = partAt(value, "axis").evaluate();
+  // Stryker disable next-line ConditionalExpression: an axis document fails only when the call stack of the engine is full
   if (!a.ok) return a;
   const axis = a.value as Targets;
   const from = spaceOf(axis, start);
   if (!(from instanceof Place)) return { ok: false, error: from };
   const ts = axis.targets(from);
   return ts.ok ? ok({ axis, from, targets: ts.value }) : ts;
+}
+
+/**
+ * This function sets a name of a new record of names, also a name such as `__proto__`. The record is new and gets each
+ * name one time, so the property needs no other attributes. A later record copies it with a spread, so it is enumerable.
+ */
+function setName(names: Record<string, unknown>, name: string, value: unknown): void {
+  Object.defineProperty(names, name, { value, enumerable: true });
 }
 
 /**
@@ -448,7 +452,7 @@ function bindAll(record: Part | undefined, ctx: Context, names: Readonly<Record<
     values.push([name, r.value]);
   }
   const out: Record<string, unknown> = { ...names };
-  for (const [name, v] of values) Object.defineProperty(out, name, { value: v, enumerable: true, writable: true, configurable: true });
+  for (const [name, v] of values) setName(out, name, v);
   return ok(out);
 }
 
@@ -542,7 +546,7 @@ const FUNCTIONS: Readonly<Record<string, EvalFn>> = {
     const names: Record<string, unknown> = { ...bound.names };
     bound.params.forEach((p, i) => {
       const r = (args[i] as Part).evaluate();
-      Object.defineProperty(names, p, { value: r.ok ? r.value : new Held(r.error), enumerable: true, writable: true, configurable: true });
+      setName(names, p, r.ok ? r.value : new Held(r.error));
     });
     return bound.body.evaluate({ ...context, names });
   },
@@ -560,16 +564,19 @@ function describe(u: unknown): string {
 
 /** This function applies the test of a domain to a value. A test that throws rejects the value. */
 function accepts(d: AnyDomain, x: unknown): boolean {
+  let accepted = false;
   try {
-    return d.is(x);
+    accepted = d.is(x);
   } catch {
-    return false;
+    // The value stays rejected.
   }
+  return accepted;
 }
 
 /** This function finds an own method of a receiver or of its prototypes, but not of `Object` or `Function` (CALL.METHOD). */
 function methodOf(self: unknown, name: string): ((...a: unknown[]) => unknown) | undefined {
-  if (FORBIDDEN.has(name) || (typeof self !== "object" && typeof self !== "function") || self === null) return undefined;
+  // The loop stops at null, so a null receiver gives undefined too.
+  if (FORBIDDEN.has(name) || (typeof self !== "object" && typeof self !== "function")) return undefined;
   for (let o: object | null = self; o !== null && o !== Object.prototype && o !== Function.prototype; o = Object.getPrototypeOf(o) as object | null) {
     const d = Object.getOwnPropertyDescriptor(o, name);
     if (d !== undefined) return typeof d.value === "function" ? (d.value as (...a: unknown[]) => unknown) : undefined;
@@ -606,9 +613,10 @@ function callFound(found: Found, op: string, self: unknown, args: readonly unkno
   const lift = spec?.liftScalar;
   const from = domain.fromScalar;
   const rest = from === undefined ? args : args.map((a, i): unknown => (typeof a === "number" && (lift === true || (Array.isArray(lift) && lift[i] === true)) ? from(a) : a));
-  if (spec?.params !== undefined) {
+  const params = spec?.params;
+  if (params !== undefined) {
     rest.forEach((a, i) => {
-      const k = spec.params?.[i] ?? "any";
+      const k = params[i] ?? "any";
       if (k !== "any" && !(k === "domain" ? accepts(domain, a) : typeof a === k)) {
         stop(k === "domain" ? "not-instance" : "kind-mismatch", `argument ${String(i + 1)} of "${op}" is a ${describe(a)}, not a ${k === "domain" ? domain.name : k}`);
       }
@@ -676,8 +684,8 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
     case "take":
     case "drop":
     case "nth": {
-      const n = rest[0];
-      if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) return stop("kind-mismatch", `"${op}" needs a whole number from 0`);
+      const n = rest[0] as number;
+      if (!Number.isSafeInteger(n) || n < 0) return stop("kind-mismatch", `"${op}" needs a whole number from 0`);
       if (op === "take") return vexList(good.slice(0, n));
       if (op === "drop") return vexList(good.slice(n));
       return n < vs.length ? vs[n] : stop("empty", `"nth" has no item at the position ${String(n)}`);
@@ -691,9 +699,11 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
     case "flat":
       return flat(vs, strict);
     case "sum":
+      // Stryker disable next-line ArrayDeclaration: a sum needs no domain, and a text in the list accepts no value
       return checked(nums().reduce((s, x) => s + x, 0), op, []);
     case "mean": {
       const n = nums();
+      // Stryker disable next-line ArrayDeclaration: a mean needs no domain, and a text in the list accepts no value
       return n.length === 0 ? empty() : checked(n.reduce((s, x) => s + x, 0) / n.length, op, []);
     }
     case "min":
@@ -803,20 +813,19 @@ function profileOf(opts: CompileOptions): FormulaProfile {
   const fns = opts.fns ?? {};
   const extensions = opts.extensions ?? {};
   // Vex has no standard extension: each extension kind needs its handler, so the standard names give #NAME? too.
-  const ext: Record<string, ExtFn> = {};
+  // A record without a prototype, so an extension kind such as `__proto__` is an own entry too.
+  const ext = Object.create(null) as Record<string, ExtFn>;
   for (const name of Object.keys(STD_EXT)) ext[name] = () => failed("unknown-op", `no handler for the extension kind "${name}"`);
   for (const [name, handler] of Object.entries(extensions)) {
-    Object.defineProperty(ext, name, {
-      enumerable: true,
-      value: ((data, ctx) => {
-        const self = selfOf(ctx);
-        if (!(self instanceof Place)) return { ok: false, error: self };
-        const r = handler(data, { space: self.space, position: { origin: self.origin, focus: self.focus }, path: [] });
-        if (r.ok) return r;
-        // An error without an origin gets the position of the extension (EVAL.LOCATION).
-        return { ok: false, error: toKernelError(r.error.origin === undefined ? { ...r.error, origin: self.origin, focus: self.focus } : r.error) };
-      }) satisfies ExtFn,
-    });
+    ext[name] = (data, ctx) => {
+      const self = selfOf(ctx);
+      if (!(self instanceof Place)) return { ok: false, error: self };
+      // The kernel does not know the path of a node in the tagged IR, so the path is empty.
+      const r = handler(data, { space: self.space, position: { origin: self.origin, focus: self.focus }, path: [] });
+      if (r.ok) return r;
+      // An error without an origin gets the position of the extension (EVAL.LOCATION).
+      return { ok: false, error: toKernelError(r.error.origin === undefined ? { ...r.error, origin: self.origin, focus: self.focus } : r.error) };
+    };
   }
   return {
     ops: (name) => dispatch(name, domains, fns),
@@ -830,13 +839,10 @@ function profileOf(opts: CompileOptions): FormulaProfile {
 /** The evaluators of the literals: the JSON form of IR.JSON, and a value of the host (DOC.LITERAL). */
 function literals(domains: readonly AnyDomain[]): Readonly<Record<string, EvalFn>> {
   return {
+    // The kernel catches a decoder that throws, and gives #CALC! (CALL.THROW) or #DEPTH! (EVAL.DEPTH).
     "vex.lit": ({ doc }) => {
-      try {
-        const decoded = decodeValue(doc.value, domains);
-        return decoded.ok ? ok(decoded.value) : { ok: false, error: toKernelError(decoded.error) };
-      } catch (error) {
-        return thrown(error, "a decoder of a domain");
-      }
+      const decoded = decodeValue(doc.value, domains);
+      return decoded.ok ? ok(decoded.value) : { ok: false, error: toKernelError(decoded.error) };
     },
     // A literal of an expression without a JSON form: its document holds the value of the host, with this own entry.
     "vex.host": ({ doc }) => ok(doc.value),
@@ -854,6 +860,7 @@ const RULES = { plain: true, roots: ["self", "names"], maxDepth: MAX_DOCUMENT_DE
  * Vex. Vex adds its evaluators and its walkers. It is the reference tier of Vex (EVAL.REFERENCE).
  */
 export function vexMachine(opts: CompileOptions = {}): Machine {
+  // Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value
   return { world: VEX_WORLD, evaluators: { ...formulaEvaluators(profileOf(opts)), ...literals(opts.domains ?? []), ...LOOPS, ...FUNCTIONS, "vex.axis": axisEvaluator }, walkers: WALKERS, ...RULES };
 }
 

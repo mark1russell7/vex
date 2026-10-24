@@ -11,7 +11,7 @@ const unknown = packages.filter((p) => !ALL.includes(p) && !PARTS.includes(p));
 if (unknown.length > 0) throw new Error(`VEX_MUTATE names a package that the lane does not have: ${unknown.join(", ")}`);
 
 // The modules of the kernel of coeval in the core (docs/REVIEW.md, decision D13). prepare.mjs copied the core to work/.
-const KERNEL = new Set(["kernel.ts", "plan.ts", "document.ts", "deps.ts", "write.ts"]);
+const KERNEL = new Set(["kernel.ts", "plan.ts", "same.ts", "document.ts", "deps.ts", "write.ts"]);
 /** @type {(kernel: boolean) => string[]} */
 const coreFiles = (kernel) =>
   readdirSync(new URL("./work/core/", import.meta.url))

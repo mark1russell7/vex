@@ -64,7 +64,9 @@ A document that is not valid gives the error `#VALUE!` with the reason and the l
 
 ## The kernel of coeval
 
-coeval is the core of Vex (decision D13 of coeval). `VEX_WORLD` gives the contract of each kind of a document as data: the shape of its parts, the data of its fields and its names. The static kit of the kernel checks each document by these contracts before `fromDocument` reads it. `deps` finds the reads with the static kit too. The kernel is also the reference tier of Vex. `kernelPlan` evaluates the document of a program with `vexMachine`, and the interpreter and the compiler give its results.
+coeval is the core of Vex (decision D13 of coeval). `VEX_WORLD` gives the contract of each kind of a document as data: the shape of its parts, the data of its fields and its names. The static kit of the kernel checks each document by these contracts before `fromDocument` reads it. `deps` finds the reads with the static kit too.
+
+The kernel is also the reference tier of Vex. `kernelPlan` evaluates the document of a program with `vexMachine`, and the interpreter and the compiler give its results. `reference` reads the document with the reference interpreter of the kernel, and `agree` compares the tiers.
 
 ```ts doctest
 import { app, kernelPlan, ref, space } from "@mark1russell7/vex";

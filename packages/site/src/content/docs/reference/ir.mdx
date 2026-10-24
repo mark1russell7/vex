@@ -179,7 +179,9 @@ A document is JSON data. The value of a literal has the JSON form of `serialize`
 
 ### The kernel of coeval
 
-coeval is the core of Vex. `VEX_WORLD` gives the contract of each kind as data: its parts, the type of its data, the kinds of each position and its names. The static kit of the kernel checks each document by these contracts before `fromDocument` reads it (`DOC.CHECK`). The function `deps` finds the reads with `refsOf`. The kernel is also the reference tier of Vex (`EVAL.REFERENCE`). `kernelPlan` evaluates a document with `vexMachine`, and the closure compiler and the loop compiler give its results.
+coeval is the core of Vex. `VEX_WORLD` gives the contract of each kind as data: its parts, the type of its data, the kinds of each position and its names. The static kit of the kernel checks each document by these contracts before `fromDocument` reads it (`DOC.CHECK`). The function `deps` finds the reads with `refsOf`.
+
+The kernel is also the reference tier of Vex (`EVAL.REFERENCE`). `kernelPlan` evaluates a document with `vexMachine`, and the closure compiler and the loop compiler give its results. The method `reference` of a plan reads the document with the reference interpreter of the kernel, which compiles nothing. The method `agree` compares the tiers of the kernel with a tier that you give (`EVAL.AGREE`).
 
 ```ts doctest
 import { app, fromDocument, kernelPlan, ref, space } from "@mark1russell7/vex";
@@ -189,5 +191,8 @@ import { NumDomain } from "@mark1russell7/vex-domains";
 const extra = { type: "each", value: { axis: { type: ["axes", "all"], value: {} }, body: 1, extra: 1 } };
 fromDocument(extra).ok; // => false
 const plan = kernelPlan(app("add", ref("n"), ref("n")), { domains: [NumDomain] });
-plan.run({ space: space.array([{ n: 2 }]), origin: "0" }); // => { ok: true, value: 4 }
+const at = { space: space.array([{ n: 2 }]), origin: "0" };
+plan.run(at); // => { ok: true, value: 4 }
+plan.reference(at); // => { ok: true, value: 4 }
+plan.agree(at, () => ({ ok: true, value: 4 })).ok; // => true
 ```

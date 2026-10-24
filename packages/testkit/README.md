@@ -32,7 +32,7 @@ failed; // => []
 | `arbSpace`, `arbExpr`, `arbOrigin`, `arbTreeInput` | Arbitraries for random spaces and programs |
 | `arbNumberSpace`, `arbNumberExpr` | Programs over numbers that most often give a value, to compare the values of two tiers |
 | `arbChangedDocument` | The document of a random program with one random change, to test the check of the documents |
-| `referenceEvaluate`, `referenceRun` | The reference interpreter, for differential tests: the kernel of coeval with the machine of Vex (`kernelPlan`). The option `fns` gives the free functions. |
+| `referenceEvaluate` | The reference interpreter, for differential tests: the reference interpreter of the kernel of coeval, with the machine of Vex. It compiles nothing. The option `fns` gives the free functions. |
 | `arbChain`, `runChain`, `modelChain` | The builder model test: random sequences of builder calls, the run of a sequence on the builder, and the expected expression of a sequence |
 
 ## License

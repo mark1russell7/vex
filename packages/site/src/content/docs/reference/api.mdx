@@ -202,8 +202,8 @@ Under `isolatedDeclarations`, give a domain an explicit type. `OpTable<D, Names,
 | `deps(expr)` | Each field read of the expression, with its address and the axes around it |
 | `serialize(expr, domains)`, `parse(text, domains)` | The JSON text of an expression, and the expression of a JSON text. The text can also be a document. |
 | `toDocument(expr, domains)`, `fromDocument(doc, domains)`, `isDocument(value)` | The document of an expression in coeval, the expression of a document, and the test for a document. Refer to [documents](../ir/#documents). |
-| `kernelPlan(source, { domains, fns, extensions })` | The reference tier: a plan of the kernel of coeval, with `run({ space, origin, vars, tables })` and `evaluate`, which gives the result of the kernel. |
-| `VEX_WORLD`, `vexMachine(options)`, `vexSelf(space, origin, tables)` | The contracts of the kinds of Vex as data, the machine of the kernel that evaluates the documents of Vex, and the position that is the root `self` of an evaluation |
+| `kernelPlan(source, { domains, fns, extensions })` | The reference tier: a plan of the kernel of coeval. `run({ space, origin, vars, tables })` gives a result of Vex, and `evaluate` gives the result of the kernel. `reference` reads the document with the reference interpreter of the kernel, which compiles nothing. `agree(options, tier)` compares the tiers of the kernel and your tier (`EVAL.AGREE`). |
+| `VEX_WORLD`, `vexMachine(options)`, `vexDefinitions(options)`, `vexSelf(space, origin, tables)` | The contracts of the kinds of Vex as data, the machine of the kernel that evaluates the documents of Vex, the definitions of the formula kit for the reference interpreter of the kernel, and the position that is the root `self` of an evaluation |
 | `toVexError(error)`, `toKernelError(error)`, `toVexResult(result)` | The conversions between the errors of the kernel and the errors of Vex |
 
 ## The IR

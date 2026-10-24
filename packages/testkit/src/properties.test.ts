@@ -156,7 +156,7 @@ describe("properties of the interpreter", () => {
     expect(values).toBeGreaterThan(0);
   });
 
-  it("P22 EVAL.REFERENCE: the plan of the kernel, its reference interpreter, its traced evaluation, a second evaluation and the closure compiler agree", () => {
+  it("P22 EVAL.REFERENCE EVAL.AGREE: the plan of the kernel, its reference interpreter, its traced evaluation, a second evaluation and the closure compiler agree", () => {
     fc.assert(
       fc.property(program, ([s, e, k, tables]) => {
         const agreement = kernelPlan(e, { domains: DOMAINS }).agree({ space: s, origin: k, tables }, () => run(e, s, k, tables));

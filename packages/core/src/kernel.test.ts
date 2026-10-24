@@ -141,7 +141,7 @@ describe("the reference tier: the kernel of coeval (EVAL.REFERENCE)", () => {
   });
 });
 
-describe("the reference interpreter of the kernel and agree (EVAL.REFERENCE)", () => {
+describe("the reference interpreter of the kernel and agree (EVAL.REFERENCE, EVAL.AGREE)", () => {
   const at = { space: s, origin: "A" };
 
   it("EVAL.REFERENCE: the reference interpreter of the kernel gives the result of the plan, and the errors of the plan before the kernel", () => {
@@ -157,7 +157,7 @@ describe("the reference interpreter of the kernel and agree (EVAL.REFERENCE)", (
     expect(own.map(([name, evaluator]) => [name, typeof evaluator])).toEqual(["vex.lit", "vex.host", "vex.each", "vex.fold", "vex.iterate", "vex.fn", "vex.call", "vex.axis"].map((name) => [name, "function"]));
   });
 
-  it("EVAL.REFERENCE: agree compares the plan, the reference, the traced evaluation, a second evaluation and a tier", () => {
+  it("EVAL.AGREE: agree compares the plan, the reference, the traced evaluation, a second evaluation and a tier", () => {
     // Each decode of the literal gives a new point, and the fields of the points agree.
     const e = each(axes.all, app("add", ref("p"), lit(new Pt(1, 1))));
     const plan = kernelPlan(e, { domains: [PtDomain] });
@@ -177,7 +177,7 @@ describe("the reference interpreter of the kernel and agree (EVAL.REFERENCE)", (
     expect(errors.agree(at, () => ({ ok: true, value: [vexError("unknown-key", "x")] }))).toMatchObject({ ok: false, tier: "other" });
   });
 
-  it("EVAL.REFERENCE: agree compares records and lists with the rules of the kernel, also with a cycle", () => {
+  it("EVAL.AGREE: agree compares records and lists with the rules of the kernel, also with a cycle", () => {
     const loop: Record<string, unknown> = { n: 1 };
     loop["self"] = loop;
     const bare = Object.assign(Object.create(null) as Record<string, unknown>, { n: 1 });
@@ -194,7 +194,7 @@ describe("the reference interpreter of the kernel and agree (EVAL.REFERENCE)", (
     expect(kernelPlan(ref("ring")).agree(where, () => ({ ok: true, value: again }))).toMatchObject({ ok: true });
   });
 
-  it("EVAL.REFERENCE EVAL.ORIGIN EVAL.SHAPE: for a program that the kernel does not evaluate, a tier agrees when it gives the same error code", () => {
+  it("EVAL.AGREE EVAL.ORIGIN EVAL.SHAPE: for a program that the kernel does not evaluate, a tier agrees when it gives the same error code", () => {
     const outside = { space: s, origin: "Z" };
     const plan = kernelPlan(ref("n"));
     expect(plan.agree(outside)).toMatchObject({ ok: true, result: { ok: false, error: { code: "#REF!" } } });

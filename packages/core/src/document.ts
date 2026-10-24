@@ -31,7 +31,7 @@ import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { isStackOverflow, vexError, type VexError } from "./errors.ts";
 import { app, call, each, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Addr, type Axis, type Expr, type Move, type Names } from "./ir.ts";
-import { MAX_DOCUMENT_DEPTH, TERM_KINDS, vexMachine } from "./kernel.ts";
+import { MAX_DOCUMENT_DEPTH, TERM_KINDS, vexChecker } from "./kernel.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { WriteStop, writeDocument } from "./write.ts";
 
@@ -92,12 +92,12 @@ export function toDocument(e: Expr, domains: readonly AnyDomain[] = []): Result<
   return attempt(() => writeDocument(e, { domains, literals: "json", order: "document" }), "the expression has no document", "a literal value is too deep for the call stack of the engine");
 }
 
-// The machine of the checks: the contracts of Vex, and the names of its evaluators and walkers. A check calls no evaluator.
+// The machine of the checks: the contracts of Vex, and the names of its evaluators and walkers, without their code.
 let checker: Machine | undefined;
 
 /** This function gives the first problem of a document that the kernel finds by the contracts of Vex (DOC.CHECK). */
 function problemOf(doc: unknown): Issue | undefined {
-  checker ??= vexMachine();
+  checker ??= vexChecker();
   // A bare value at the root is a literal. The names of a let, a function, a loop and the caller are free names.
   return check(checker, doc, { declaredType: "lit", names: "any" })[0];
 }

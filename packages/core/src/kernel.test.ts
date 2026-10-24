@@ -9,7 +9,7 @@ import { toDocument, type Envelope } from "./document.ts";
 import { vexError } from "./errors.ts";
 import { compile, evaluate, MAX_NESTING, type ExtHandler } from "./evaluate.ts";
 import { app, axes, call, each, ext, fn, fold, index, key, let_, lit, offset, other, parent, ref, v, type Expr } from "./ir.ts";
-import { MAX_DOCUMENT_DEPTH, TERM_KINDS, toKernelError, toVexError, toVexResult, VEX_WORLD, vexDefinitions, vexMachine, vexSelf } from "./kernel.ts";
+import { MAX_DOCUMENT_DEPTH, TERM_KINDS, toKernelError, toVexError, toVexResult, VEX_WORLD, vexChecker, vexDefinitions, vexMachine, vexSelf } from "./kernel.ts";
 import { isVexList } from "./list.ts";
 import { kernelPlan } from "./plan.ts";
 import { space } from "./space.ts";
@@ -34,6 +34,20 @@ describe("the contracts of Vex (DOC.CHECK)", () => {
     // Without the names of the caller, the kernel finds a free name: it has no binding.
     expect(check(vexMachine(), doc(app("add", v("x"), let_({ y: lit(1) }, v("y")))), { declaredType: "lit" })).toMatchObject([{ code: "#NAME?", place: [0] }]);
     expect(TERM_KINDS.map((k) => k.join("."))).toEqual(["lit", "ref", "record", "let", "call", "each", "fold", "iterate", "ops", "ext"]);
+  });
+
+  it("DOC.CHECK: the machine of the checks has the names of the evaluators and the walkers of the machine, without their code", () => {
+    const checker = vexChecker();
+    const machine = vexMachine();
+    const evaluators = Object.keys(checker.evaluators ?? {});
+    // Each kind of the world has its evaluator in the machine, so a document that the check accepts has its code.
+    expect(evaluators.filter((name) => !Object.hasOwn(machine.evaluators ?? {}, name))).toEqual([]);
+    expect(evaluators.toSorted()).toEqual(["formula.ext", "formula.let", "formula.op", "formula.record", "formula.ref", "formula.step", "vex.axis", "vex.call", "vex.each", "vex.fn", "vex.fold", "vex.iterate", "vex.lit"]);
+    expect(Object.keys(checker.walkers ?? {}).toSorted()).toEqual(Object.keys(machine.walkers ?? {}).toSorted());
+    expect([checker.world, checker.plain, checker.roots, checker.maxDepth]).toEqual([machine.world, machine.plain, machine.roots, machine.maxDepth]);
+    // The check uses only the names: the code of the checks evaluates nothing.
+    expect(() => (checker.evaluators?.["vex.each"] as () => unknown)()).toThrow();
+    expect(check(checker, doc(each(axes.all, ref("n"))), { declaredType: "lit" })).toEqual([]);
   });
 
   it("DOC.CHECK DOC.ADDRESS: the address of a loop is an address for the static kit, not a read", () => {

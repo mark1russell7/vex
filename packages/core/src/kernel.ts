@@ -844,19 +844,39 @@ function literals(domains: readonly AnyDomain[]): Readonly<Record<string, EvalFn
 }
 
 /**
+ * The rules of the machines of Vex. The values of a space are data, so a field that has the shape of a reference stays
+ * a value. A reference starts at `self` or `names`, and a document has a limit of nesting.
+ */
+const RULES = { plain: true, roots: ["self", "names"], maxDepth: MAX_DOCUMENT_DEPTH } as const;
+
+/**
  * This function makes the machine of the kernel for Vex: the world of Vex, and the formula kit with the profile of
  * Vex. Vex adds its evaluators and its walkers. It is the reference tier of Vex (EVAL.REFERENCE).
  */
 export function vexMachine(opts: CompileOptions = {}): Machine {
-  return {
-    world: VEX_WORLD,
-    evaluators: { ...formulaEvaluators(profileOf(opts)), ...literals(opts.domains ?? []), ...LOOPS, ...FUNCTIONS, "vex.axis": axisEvaluator },
-    walkers: WALKERS,
-    // The values of a space are data: a field that has the shape of a reference stays a value.
-    plain: true,
-    roots: ["self", "names"],
-    maxDepth: MAX_DOCUMENT_DEPTH,
-  };
+  return { world: VEX_WORLD, evaluators: { ...formulaEvaluators(profileOf(opts)), ...literals(opts.domains ?? []), ...LOOPS, ...FUNCTIONS, "vex.axis": axisEvaluator }, walkers: WALKERS, ...RULES };
+}
+
+/** The code of each evaluator and walker of the machine of the checks. A check uses only their names. */
+const NO_CODE = (): never => stop("bad-expression", "the machine of the checks evaluates nothing");
+
+/**
+ * This function makes the machine of the checks (DOC.CHECK). It has the world of Vex, and the names of the evaluators
+ * and the walkers of `vexMachine` without their code. The static kit of the kernel needs only the names. Thus a
+ * program that only reads documents does not hold the evaluators.
+ */
+export function vexChecker(): Machine {
+  const evaluators: Record<string, EvalFn> = {};
+  const walkers: Record<string, Walker> = {};
+  const todo: unknown[] = Object.values(VEX_WORLD.kinds);
+  for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
+    const kind = x as { readonly verbs?: Readonly<Record<string, string>>; readonly kinds?: Readonly<Record<string, unknown>>; readonly fallback?: unknown };
+    const { eval: name, step } = kind.verbs ?? {};
+    if (name !== undefined) evaluators[name] = NO_CODE;
+    if (step !== undefined) walkers[step] = NO_CODE;
+    todo.push(...Object.values(kind.kinds ?? {}), ...(kind.fallback === undefined ? [] : [kind.fallback]));
+  }
+  return { world: VEX_WORLD, evaluators, walkers, ...RULES };
 }
 
 /**

@@ -563,6 +563,10 @@ class Lowerer {
       case "sortBy":
       case "take":
       case "nth":
+      case "drop":
+      case "append":
+      case "flat":
+      case "without":
         /* v8 ignore next -- @preserve */
         // Stryker disable next-line all: listReason stops these ops before the lowering
         throw new Unsupported(`the list op "${op}"`);

@@ -1,4 +1,4 @@
-import { app, axes, call, each, evaluate, ext, fn, fold, index, isVexList, iterate, key, let_, lit, offset, ok, rec, ref, space, toDocument, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
+import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, isVexList, iterate, key, let_, lit, offset, ok, rec, ref, space, toDocument, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, modelChain, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -311,6 +311,29 @@ describe("the tiers", () => {
       expect(p.tier).toBe(1);
       for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));
     }
+  });
+
+  it("LIST.BUILD COMPILE.FALLBACK: a list op that builds a list goes to tier 1, and a module gives a reason", () => {
+    const s = space.array([{ n: 3 }, { n: 1 }, { n: 2 }]);
+    const ns = each(axes.all, ref("n"));
+    const cases: readonly (readonly [Expr, string])[] = [
+      [app("count", app("drop", ns, lit(1))), "drop"],
+      [app("sum", app("append", ns, ns)), "append"],
+      [app("count", app("without", ns, app("take", ns, lit(1)))), "without"],
+      [app("sum", app("flat", each(axes.window(0, 1), ns))), "flat"],
+    ];
+    for (const [e, op] of cases) {
+      expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason: `the program has the list op "${op}", and tier 2 does not have lists as values yet` });
+      expect(emitModule(e, { domains: [NumDomain], schema: { fields: { n: "number" } } })).toEqual({ ok: false, reason: `the list op "${op}" is not in a module yet` });
+      const p = tiered(e, { domains: [NumDomain] });
+      expect(p.tier).toBe(1);
+      for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));
+    }
+    // A domain op with the name of a list op, on a value that is not a list, is not a list op in a module.
+    const Stack = defineDomain({ name: "Stack", primitive: "number", is: (u: unknown): u is number => typeof u === "number", ops: { drop: { fn: (a: number, b: number): number => a - b, params: ["number"], returns: "number" } } });
+    const own = app("drop", ref("n"), lit(1));
+    expect(emitModule(own, { domains: [Stack], schema: { fields: { n: "number" } } }).ok).toBe(true);
+    expect(fromCore(tiered(own, { domains: [Stack] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 2 });
   });
 
   it("COMPILE.FALLBACK: an exception in the lowering gives a reason, not an exception", () => {

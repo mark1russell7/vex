@@ -19,11 +19,14 @@ export const vexList = <T>(items: readonly ListItem<T>[]): VexList<T> => Object.
 export const isVexList = (u: unknown): u is VexList =>
   (u as { kind?: unknown } | null | undefined)?.kind === "vex.list" && Array.isArray((u as { items?: unknown }).items);
 
-/** The name of a core list op. `sortBy` and `take` give a list, and the other ops give a value. */
-export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth";
+/**
+ * The name of a core list op. `sortBy`, `take`, `drop`, `append`, `flat` and `without` give a list (LIST.BUILD), and
+ * the other ops give a value.
+ */
+export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth" | "drop" | "append" | "flat" | "without";
 
 /** The names of the core list ops. They apply when the first argument is a list. */
-export const LIST_OPS: ReadonlySet<string> = new Set<ListOp>(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth"]);
+export const LIST_OPS: ReadonlySet<string> = new Set<ListOp>(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without"]);
 
 /** This function tells if a name is the name of a core list op. */
 export const isListOp = (op: string): op is ListOp => LIST_OPS.has(op);

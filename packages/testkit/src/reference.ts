@@ -12,7 +12,7 @@ const err = (code: ErrorCode): RefOutcome => ({ ok: false, code });
 const val = (value: unknown): RefOutcome => ({ ok: true, value });
 
 const BAD_NAMES = new Set(["__proto__", "constructor", "prototype"]);
-const LIST_OPS = new Set(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth"]);
+const LIST_OPS = new Set(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without"]);
 
 interface Ctx {
   readonly space: Space;
@@ -321,19 +321,26 @@ function special(e: Extract<Expr, { tag: "app" }>, c: Ctx): RefOutcome {
 
 type RefItem = { readonly key: string; readonly result: { readonly ok: boolean; readonly value?: unknown; readonly error?: { readonly code: ErrorCode } } };
 
-/** This function compares two numbers or two texts, for the order of sortBy. */
-const before = (a: unknown, b: unknown): boolean => (a as number) < (b as number);
-
-function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[], c: Ctx): RefOutcome {
-  const o = op === "reduce" || op === "take" || op === "nth" ? rest[1] : rest[0];
-  const strict = typeof o === "object" && o !== null && (o as { strict?: unknown }).strict === true;
+/** This function gives the error of the first error item of a list, with strict (LIST.LENIENT). */
+function strictError(items: readonly RefItem[], strict: boolean): RefOutcome | undefined {
   const firstBad = items.find((it) => !it.result.ok);
   // An item that is not ok has an error, so the fallback code is defensive.
   // Stryker disable StringLiteral,OptionalChaining: the fallback is defensive
   /* v8 ignore next -- @preserve */
-  if (strict && firstBad !== undefined) return err(firstBad.result.error?.code ?? "#CALC!");
+  return strict && firstBad !== undefined ? err(firstBad.result.error?.code ?? "#CALC!") : undefined;
   // Stryker restore StringLiteral,OptionalChaining
+}
+
+/** This function compares two numbers or two texts, for the order of sortBy. */
+const before = (a: unknown, b: unknown): boolean => (a as number) < (b as number);
+
+function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[], c: Ctx): RefOutcome {
+  const o = op === "reduce" || op === "take" || op === "nth" || op === "drop" || op === "append" || op === "without" ? rest[1] : rest[0];
+  const strict = typeof o === "object" && o !== null && (o as { strict?: unknown }).strict === true;
+  const bad = strictError(items, strict);
+  if (bad !== undefined) return bad;
   const vs = items.filter((it) => it.result.ok).map((it) => it.result.value);
+  const good = items.filter((it) => it.result.ok);
   const nums: readonly number[] | undefined = vs.every((x): x is number => typeof x === "number") ? vs : undefined;
   const bools: readonly boolean[] | undefined = vs.every((x): x is boolean => typeof x === "boolean") ? vs : undefined;
   switch (op) {
@@ -351,15 +358,37 @@ function listOp(op: string, items: readonly RefItem[], rest: readonly unknown[],
       // All numbers without NaN, or all texts. toSorted is stable, so equal values keep their order.
       const kinds = new Set(vs.map((x) => typeof x));
       if (kinds.size > 1 || vs.some((x) => (typeof x !== "number" && typeof x !== "string") || Number.isNaN(x))) return err("#VALUE!");
-      const good = items.filter((it) => it.result.ok);
       return val({ kind: "vex.list", items: good.toSorted((a, b) => Number(before(b.result.value, a.result.value)) - Number(before(a.result.value, b.result.value))) });
     }
     case "take":
+    case "drop":
     case "nth": {
       const n = rest[0] as number;
       if (!Number.isSafeInteger(n) || n < 0) return err("#VALUE!");
       if (op === "nth") return n < vs.length ? val(vs[n]) : err("#N/A");
-      return val({ kind: "vex.list", items: items.filter((it) => it.result.ok).slice(0, n) });
+      return val({ kind: "vex.list", items: op === "take" ? good.slice(0, n) : good.slice(n) });
+    }
+    case "append":
+    case "without": {
+      // The second list follows the rules of the first list (LIST.BUILD).
+      const other = rest[0];
+      if (!isVexList(other)) return err("#VALUE!");
+      const otherBad = strictError(other.items, strict);
+      if (otherBad !== undefined) return otherBad;
+      const more = other.items.filter((it) => it.result.ok);
+      if (op === "append") return val({ kind: "vex.list", items: [...good, ...more] });
+      return val({ kind: "vex.list", items: good.filter((it) => !more.some((m) => m.key === it.key)) });
+    }
+    case "flat": {
+      // Each value is a list, and each inner list follows the rules of the first list (LIST.FLAT).
+      const out: RefItem[] = [];
+      for (const inner of vs) {
+        if (!isVexList(inner)) return err("#VALUE!");
+        const innerBad = strictError(inner.items, strict);
+        if (innerBad !== undefined) return innerBad;
+        out.push(...inner.items.filter((it) => it.result.ok));
+      }
+      return val({ kind: "vex.list", items: out });
     }
     case "sum":
       // Stryker disable next-line ArrayDeclaration: a sum needs no domain, and a list with a text accepts no value either

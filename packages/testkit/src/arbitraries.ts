@@ -130,7 +130,7 @@ export const arbLiteral = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<unk
     domainValue,
   );
 
-const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth"];
+const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without"];
 const FORMS = ["if", "and", "or", "ifError"];
 const NAMES = ["a", "b"];
 
@@ -216,12 +216,17 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
       tie("list").map((list): Axis => ({ t: "list", list })),
       tie("list").map((list): Axis => ({ t: "reverse", axis: { t: "list", list } })),
     ),
-    // A list (LIST.VALUE): an each, a sorted list, the first items of a list, or any expression.
+    // A list (LIST.VALUE, LIST.BUILD): an each, a sorted list, the first items or the other items of a list, two lists
+    // in one, a list without the keys of another, the lists of the targets of an axis in one list, or any expression.
     list: fc.oneof(
       { depthSize: "small", maxDepth: 2 },
       fc.tuple(tie("axis"), tie("expr")).map(([axis, body]): Expr => ({ tag: "each", axis, body })),
       tie("list").map((list): Expr => ({ tag: "app", op: "sortBy", args: [list] })),
       fc.tuple(tie("list"), fc.integer({ min: -1, max: 3 })).map(([list, n]): Expr => ({ tag: "app", op: "take", args: [list, { tag: "lit", value: n }] })),
+      fc.tuple(tie("list"), fc.integer({ min: -1, max: 3 })).map(([list, n]): Expr => ({ tag: "app", op: "drop", args: [list, { tag: "lit", value: n }] })),
+      fc.tuple(tie("list"), tie("list")).map(([list, other]): Expr => ({ tag: "app", op: "append", args: [list, other] })),
+      fc.tuple(tie("list"), tie("list")).map(([list, other]): Expr => ({ tag: "app", op: "without", args: [list, other] })),
+      fc.tuple(tie("axis"), tie("list")).map(([axis, body]): Expr => ({ tag: "app", op: "flat", args: [{ tag: "each", axis, body }] })),
       tie("expr"),
     ),
     // A fixed move, or a computed move (NAV.COMPUTED): a literal key or position, or any expression.

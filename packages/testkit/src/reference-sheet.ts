@@ -5,7 +5,7 @@
  * interpreter of the kernel of coeval evaluates each formula (EVAL.REFERENCE), so the reference shares no code of
  * evaluation with `SheetRun`.
  */
-import { fail, isMove, kernelPlan, resolveAddr, toVexResult, vexError, type CellFormulas, type CompileOptions, type Expr, type ExtHandler, type FixedMove, type KernelPlan, type Result, type SheetOptions, type Space } from "@mark1russell7/vex";
+import { fail, isMove, kernelPlan, resolveAddr, toVexResult, vexError, type CellFormulas, type CompileOptions, type Expr, type ExtHandler, type FixedMove, type Result, type SheetOptions, type Space } from "@mark1russell7/vex";
 
 interface Visit {
   readonly index: number;
@@ -62,9 +62,7 @@ export class ReferenceSheetRun {
   readonly #bySpace = new Map<Space, Table>();
   readonly #compile: CompileOptions;
   readonly #tables: Readonly<Record<string, Space>>;
-  readonly #vars: Readonly<Record<string, unknown>> | undefined;
-  // The plan of the kernel of each formula, made at its first read.
-  readonly #plans = new Map<Expr, KernelPlan>();
+  readonly #vars: Readonly<Record<string, unknown>>;
   // Stryker disable next-line ArrayDeclaration: the search never reads below the root of a component
   readonly #stack: { readonly table: Table; readonly column: string; readonly key: string; readonly visit: Visit }[] = [];
   // Stryker disable next-line all: the placeholder at the top is not a cell, so the search reads none of its fields
@@ -95,7 +93,7 @@ export class ReferenceSheetRun {
     };
     this.#compile = { ...rest, extensions: { ...rest.extensions, "vex.cell": handler } };
     this.#tables = Object.fromEntries([...this.#byName].map(([n, t]) => [n, t.space]));
-    this.#vars = vars;
+    this.#vars = vars ?? {};
   }
 
   /** This method gives the result of the column `column` at the key `key` of the main table, or of the table `table`. */
@@ -127,12 +125,7 @@ export class ReferenceSheetRun {
     setEntry(t.visits, column, key, visit);
     this.#stack.push({ table: t, column, key, visit });
     this.#top = visit;
-    let plan = this.#plans.get(program);
-    if (plan === undefined) {
-      plan = kernelPlan(program, this.#compile);
-      this.#plans.set(program, plan);
-    }
-    visit.result = toVexResult(plan.reference({ space: t.space, origin: key, tables: this.#tables, ...(this.#vars === undefined ? {} : { vars: this.#vars }) }));
+    visit.result = toVexResult(kernelPlan(program, this.#compile).reference({ space: t.space, origin: key, tables: this.#tables, vars: this.#vars }));
     this.#top = caller;
     if (visit.low === visit.index) {
       const members = this.#stack.splice(this.#stack.findIndex((m) => m.visit === visit));

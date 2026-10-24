@@ -27,8 +27,6 @@ export interface ReferenceOptions {
  * host of coeval.
  */
 export function referenceEvaluate(e: Expr | Envelope, opts: ReferenceOptions): RefOutcome {
-  const { domains, fns, extensions } = opts;
-  const plan = kernelPlan(e, { ...(domains === undefined ? {} : { domains }), ...(fns === undefined ? {} : { fns }), ...(extensions === undefined ? {} : { extensions }) });
-  const r = plan.reference(opts);
+  const r = kernelPlan(e, opts).reference(opts);
   return r.ok ? { ok: true, value: r.value } : { ok: false, code: r.error.code as ErrorCode };
 }

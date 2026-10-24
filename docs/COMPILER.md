@@ -266,9 +266,16 @@ The printed functions of a module:
 - A function that reads a name of the place of its binding is at that place in the code. Each other function is at the start of a run, so a constant of the run and a column of the run can call it.
 - A key of a constant of the run has the number of the binding of each function that it calls. Before, two functions with one name made two calls with the same text. The calls shared one constant, and the second call gave the value of the first.
 
-### 8.4 Recursion: open
+### 8.4 Recursion: decided
 
-A function cannot call itself (FN.TOTAL). Thus each call ends, and each program stays total. This section gives the first options for a function that calls itself. The owner keeps the decision for later. The three options below are possibly not the only ones, and the cost of each option in the compiler needs a study first.
+A function cannot call itself (FN.TOTAL). Thus each call ends, and each program stays total. This section gives the first options for a function that calls itself. The study of recursion compared them with the calculations of ireko.
+
+The decision of 2026-10-24: the vex session decided the four questions of the study with its recommended answers, by the rule of the owner. The owner can change them.
+
+- The engine of ireko is in scope, with its strategies. Thus tree spaces and sheets go into modules (design D).
+- Functions keep FN.TOTAL (option A). No calculation of ireko needs a function that calls itself.
+- List ops build lists, and a list can be the state of `iterate` (design E). Design E comes first.
+- The engine uses sheets as they are, with no self node. A sheet column already reads itself at the children or at the parent.
 
 The current language already has two forms of recursion:
 

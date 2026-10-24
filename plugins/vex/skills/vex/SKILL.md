@@ -111,6 +111,10 @@ The moves are `key(k)`, `index(i)`, `offset(...d)`, `other`, `origin` and `paren
 
 A list is a value. Bind it with `let_`, sort it with `sortBy`, and loop over its items in their order with `axes.list(v(name))`. `take(list, n)` gives the first items, and `nth(list, i)` gives one value. In the builder, a list chain has `sortBy()`, `take(n)`, `nth(i)` and `each(body)`, and `root.fn(kinds, body)` with `functions(fns, body)` makes and binds functions.
 
+Four list ops build lists. Each item keeps its key and its value. `drop(list, n)` gives the items after the first `n` items. `append(list, other)` joins two lists. `without(list, other)` removes the items with a key of `other`. `flat(list)` joins the lists that are the values of the items.
+
+Thus a search can keep a stack in a list: `take(stack, 1)` is the top, and `drop(stack, 1)` removes it. In the builder, a list chain has `drop(n)`, `append(other)`, `without(other)` and `flat()`. A standalone module gives a reason for these four ops.
+
 ```ts doctest
 import { app, axes, each, evaluate, lit, ref, space } from "@mark1russell7/vex";
 import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";

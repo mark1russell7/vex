@@ -11,8 +11,8 @@ import { children, isListOp, isOpName, liftsAt, listOf, type AnyDomain, type Exp
  */
 export const MAX_CALLS = 10_000;
 
-/** The list ops that give a list or read a position of a list (LIST.SORT, LIST.TAKE, LIST.NTH). */
-const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth"]);
+/** The list ops that give a list or read a position of a list (LIST.SORT, LIST.TAKE, LIST.NTH, LIST.BUILD). */
+const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth", "drop", "append", "flat", "without"]);
 
 /**
  * This function gives the reason that tier 2 cannot take a program with lists as values. The reason is the axis `list`

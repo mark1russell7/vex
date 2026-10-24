@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
-import { axes, each, index, parent, ref } from "./ir.ts";
+import { app, axes, each, index, lit, parent, ref } from "./ir.ts";
 import { ok } from "./result.ts";
 import { isSome, type Optional, type Result } from "./result.ts";
 import { space } from "./space.ts";
@@ -464,7 +464,7 @@ describe("tree spaces in the builder (EXAMPLE.TREE)", () => {
   });
 });
 
-describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER)", () => {
+describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER, BUILD.LIST.BUILD)", () => {
   const rows = vex(Num).over(space.array([{ w: 3, n: 30 }, { w: 1, n: 10 }, { w: 2, n: 20 }]));
 
   it("BUILD.FN: root.fn makes a function with typed parameters, functions binds it, and call gives a typed chain", () => {
@@ -526,5 +526,33 @@ describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER)", () =
     // The fold of an axis keeps the let of the start value: here the body adds the start value.
     expect(optionalValue(rows.from("w").each((c) => c._.plus("n")).fold({ s: 0 }, (vars, item) => ({ s: vars.s._.plus(item) }), (vars) => vars.s).at("1"))).toBe(63);
     expect(error(byW.take(2, { strict: true }).nth(5).result("0")).code).toBe("#N/A");
+  });
+
+  it("BUILD.LIST.BUILD: drop, append, without and flat on a list chain, and an axis body that gives a list chain", () => {
+    const byW = rows.start(0).each((c) => c.from("w")).sortBy();
+    const ns = rows.start(0).each((c) => c.from("n"));
+    expect(optionalValue(byW.drop(1).keys().at("0"))).toEqual(["2", "0"]);
+    expect(byW.drop(1, { strict: true }).program).toEqual(app("drop", byW.program, lit(1), lit({ strict: true })));
+    const both = byW.append(ns);
+    expect(optionalValue(both.values().at("0"))).toEqual([1, 2, 3, 30, 10, 20]);
+    expect(optionalValue(both.keys().at("0"))).toEqual(["1", "2", "0", "0", "1", "2"]);
+    expectTypeOf(both.values().result("0")).toEqualTypeOf<Result<readonly number[]>>();
+    // The items of two lists of two types have both types.
+    const texts = rows.start(0).each(() => rows.start("a"));
+    expectTypeOf(byW.append(texts).nth(0).result("0")).toEqualTypeOf<Result<number | "a">>();
+    expect(optionalValue(ns.without(byW.take(2)).keys().at("0"))).toEqual(["0"]);
+    expectTypeOf(ns.without(texts).values().result("0")).toEqualTypeOf<Result<readonly number[]>>();
+    // A body that gives a list chain makes a list of lists: here the n of the target and of the next key.
+    const pairs = rows.start(0).each((c) => c.window(0, 1, (t) => t.from("n")));
+    expectTypeOf(pairs.flat().values().result("0")).toEqualTypeOf<Result<readonly number[]>>();
+    expect(optionalValue(pairs.flat().values().at("0"))).toEqual([30, 10, 10, 20, 20]);
+    expect(optionalValue(byW.each((t) => t.window(0, 1, (u) => u.from("w"))).flat().count().at("0"))).toBe(5);
+    // @ts-expect-error -- flat needs a list chain whose items are lists
+    ns.flat();
+    // An argument that is not a chain makes the builder throw.
+    // @ts-expect-error -- a number is not a list chain
+    expect(() => ns.append(5)).toThrow("append needs a list chain");
+    // @ts-expect-error -- a field name is not a list chain
+    expect(() => ns.without("w")).toThrow("without needs a list chain");
   });
 });

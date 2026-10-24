@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { defineDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
-import { app, axes, axisExprs, call, children, each, fn, fold, isExpr, let_, lit, rec, ref, v, type Expr } from "./ir.ts";
-import { isVexList } from "./list.ts";
+import { vexError } from "./errors.ts";
+import { app, axes, axisExprs, call, children, each, fn, fold, isExpr, iterate, let_, lit, rec, ref, v, type Expr } from "./ir.ts";
+import { isVexList, vexList, type VexList } from "./list.ts";
 import { parse, serialize } from "./json.ts";
 import { axisTargets, space } from "./space.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
@@ -29,6 +30,7 @@ const boxes = space.array([
   { x: 10, w: 4, s: "B" },
 ]);
 const run = (e: Expr, origin = "0"): ReturnType<typeof evaluate> => evaluate(e, { space: boxes, origin, domains: [Num] });
+const runWith = (e: Expr, vars: Readonly<Record<string, unknown>>): ReturnType<typeof evaluate> => evaluate(e, { space: boxes, origin: "0", domains: [Num], vars });
 const keysOf = (r: ReturnType<typeof evaluate>): readonly string[] => {
   const list = value(r);
   return isVexList(list) ? list.items.map((item) => item.key) : [];
@@ -150,5 +152,109 @@ describe("lists as values", () => {
       { at: [], path: ["w"], axes: ["list"], axisAt: [[]] },
       { at: [], path: ["x"], axes: ["all"], axisAt: [[]] },
     ]);
+  });
+});
+
+describe("list ops that build lists (LIST.BUILD)", () => {
+  // The widths in key order: 1, 2, 3 and 4.
+  const ws = each(axes.all, ref("w"));
+  // The x of the next box: the key 3 has no next box, so its item is #REF!.
+  const gaps = each(axes.all, ref("x", [{ t: "offset", d: [1] }]));
+  // Each item is #N/A.
+  const missing = each(axes.all, ref("nope"));
+  const strict = lit({ strict: true });
+  // A list with an item of #DEPTH!: a full call stack of the engine.
+  const deep: VexList = vexList([{ key: "0", result: { ok: false, error: vexError("depth", "the call stack is full") } }]);
+
+  it("LIST.DROP: the items after the first n items, and a larger n gives an empty list", () => {
+    expect(keysOf(run(app("drop", sorted, lit(1))))).toEqual(["3", "2", "0"]);
+    expect(keysOf(run(app("drop", sorted, lit(0))))).toEqual(["1", "3", "2", "0"]);
+    expect(keysOf(run(app("drop", sorted, lit(4))))).toEqual([]);
+    expect(keysOf(run(app("drop", sorted, lit(9))))).toEqual([]);
+    expect(value(run(app("values", app("drop", ws, lit(2)))))).toEqual([3, 4]);
+    for (const bad of [lit(-1), lit(1.5), lit("1"), lit(Number.MAX_SAFE_INTEGER + 1)]) expect(error(run(app("drop", sorted, bad)))).toMatchObject({ code: "#VALUE!", op: "drop" });
+    expect(error(run(app("drop", sorted)))).toMatchObject({ code: "#VALUE!", message: '"drop" needs a whole number from 0, not undefined' });
+    // LIST.LENIENT: the error item of the key 3 is not in the list, and strict gives it. The options come after n.
+    expect(keysOf(run(app("drop", gaps, lit(1))))).toEqual(["1", "2"]);
+    expect(error(run(app("drop", gaps, lit(1), strict))).code).toBe("#REF!");
+  });
+
+  it("LIST.APPEND: the items of the list and then the items of the other list, also with the same keys", () => {
+    const two = app("take", sorted, lit(2));
+    expect(keysOf(run(app("append", two, ws)))).toEqual(["1", "3", "0", "1", "2", "3"]);
+    expect(value(run(app("values", app("append", two, ws))))).toEqual([10, 10, 1, 2, 3, 4]);
+    expect(value(run(app("sum", app("append", ws, ws))))).toBe(20);
+    expect(keysOf(run(app("append", app("take", ws, lit(0)), two)))).toEqual(["1", "3"]);
+    expect(keysOf(run(app("append", two, app("take", ws, lit(0)))))).toEqual(["1", "3"]);
+    // The axis list goes over each item, also over two items with one key.
+    expect(value(run(app("values", each(axes.list(app("append", two, two)), ref("s")))))).toEqual(["a", "B", "a", "B"]);
+    expect(error(run(app("append", ws, lit(5))))).toMatchObject({ code: "#VALUE!", op: "append", message: '"append" needs a list as its second argument, not a number' });
+    expect(error(run(app("append", ws))).code).toBe("#VALUE!");
+  });
+
+  it("LIST.WITHOUT: the items of the list whose key is not the key of an item of the other list", () => {
+    expect(keysOf(run(app("without", sorted, app("take", ws, lit(2)))))).toEqual(["3", "2"]);
+    expect(keysOf(run(app("without", ws, sorted)))).toEqual([]);
+    expect(keysOf(run(app("without", ws, app("take", ws, lit(0)))))).toEqual(["0", "1", "2", "3"]);
+    // Only the keys count, not the values, and each item with a removed key goes.
+    expect(keysOf(run(app("without", ws, each(axes.all, lit(false)))))).toEqual([]);
+    expect(keysOf(run(app("without", app("append", ws, ws), app("drop", ws, lit(2)))))).toEqual(["0", "1", "0", "1"]);
+    expect(error(run(app("without", ws, lit("0"))))).toMatchObject({ code: "#VALUE!", op: "without", message: '"without" needs a list as its second argument, not a string' });
+  });
+
+  it("LIST.FLAT: the items of the lists of the items, in order, and a value that is not a list gives #VALUE!", () => {
+    // At each target, the next two boxes: the window of the offsets 0 and 1 from the next box.
+    const nexts = each(axes.all, each(axes.window(0, 1), ref("w"), [{ t: "offset", d: [1] }]));
+    expect(keysOf(run(app("flat", nexts)))).toEqual(["1", "2", "2", "3", "3"]);
+    expect(value(run(app("values", app("flat", nexts))))).toEqual([2, 3, 3, 4, 4]);
+    expect(keysOf(run(app("flat", each(axes.where(axes.all, lit(false)), ws))))).toEqual([]);
+    // The grandchildren in a tree: a list of the lists of the children of each child.
+    const tree = space.tree({ r: { n: 1 }, a: { n: 2 }, b: { n: 3 }, c: { n: 4 }, d: { n: 5 } }, { a: "r", b: "r", c: "a", d: "b" });
+    expect(value(evaluate(app("keys", app("flat", each(axes.children, each(axes.children, ref("n"))))), { space: tree, origin: "r" }))).toEqual(["c", "d"]);
+    expect(error(run(app("flat", ws)))).toMatchObject({ code: "#VALUE!", op: "flat", message: '"flat" needs a list as the value of each item, but an item is a number' });
+  });
+
+  it("LIST.BUILD: an item keeps its key and its value, and LIST.LENIENT applies to each list that the op reads", () => {
+    const items = (e: Expr): VexList["items"] => {
+      const list = value(run(e));
+      return isVexList(list) ? list.items : [];
+    };
+    expect(items(app("append", gaps, ws))).toEqual([...items(gaps).filter((item) => item.result.ok), ...items(ws)]);
+    expect(items(app("drop", ws, lit(3)))).toEqual(items(ws).slice(3));
+    // By default, an error item is not in the new list: the key 3 of gaps.
+    expect(keysOf(run(app("append", gaps, gaps)))).toEqual(["0", "1", "2", "0", "1", "2"]);
+    expect(keysOf(run(app("without", ws, gaps)))).toEqual(["3"]);
+    const mixed = each(axes.all, app("if", app("gt", ref("w"), lit(3)), ref("nope"), gaps));
+    expect(keysOf(run(app("flat", mixed)))).toEqual(["0", "1", "2", "0", "1", "2", "0", "1", "2"]);
+    // With strict, the first error item of the list comes first, and then the first error item of the other lists.
+    expect(error(run(app("append", gaps, missing, strict))).code).toBe("#REF!");
+    expect(error(run(app("append", ws, missing, strict))).code).toBe("#N/A");
+    expect(error(run(app("without", ws, gaps, strict))).code).toBe("#REF!");
+    expect(error(run(app("flat", mixed, strict))).code).toBe("#N/A");
+    expect(error(run(app("flat", each(axes.window(0, 0), gaps), strict))).code).toBe("#REF!");
+    // EVAL.DEPTH: no list op skips #DEPTH!, also in the other lists.
+    for (const e of [app("append", ws, v("d")), app("without", ws, v("d")), app("flat", each(axes.window(0, 0), v("d"))), app("drop", v("d"), lit(0))]) {
+      expect(error(runWith(e, { d: deep })).code).toBe("#DEPTH!");
+    }
+    // The ops are app nodes, so JSON keeps them.
+    const e = app("flat", each(axes.all, app("without", app("append", ws, gaps), app("drop", sorted, lit(1)), strict)));
+    expect(isExpr(e)).toBe(true);
+    expect(value(parse(value(serialize(e)), []))).toEqual(e);
+  });
+
+  it("LIST.APPEND LIST.DROP LIST.WITHOUT LIST.FLAT: an iteration keeps the stack of a depth-first search in a list", () => {
+    // a goes to b and c, b and c go to d, and e goes to a. The search starts at each key, in key order.
+    const g = space.graph({ a: {}, b: {}, c: {}, d: {}, e: {} }, { a: ["b", "c"], b: ["d"], c: ["d"], e: ["a"] });
+    // The top of the stack, if the search did not see it: a list with one item, or an empty list.
+    const fresh = app("without", app("take", v("stack"), lit(1)), v("seen"));
+    const search = iterate(
+      100,
+      { stack: each(axes.all, lit(0)), seen: app("take", each(axes.all, lit(0)), lit(0)) },
+      // The step removes the top, and it puts the successors of a new top on the stack, in their order.
+      { stack: app("append", app("flat", each(axes.list(fresh), each(axes.successors, lit(0)))), app("drop", v("stack"), lit(1))), seen: app("append", v("seen"), fresh) },
+      app("keys", v("seen")),
+      app("gt", lit(1), app("count", v("stack"))),
+    );
+    expect(value(evaluate(search, { space: g, origin: "a", domains: [Num] }))).toEqual(["a", "b", "d", "c", "e"]);
   });
 });

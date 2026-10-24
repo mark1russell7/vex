@@ -177,6 +177,11 @@ A document is the form of an expression in [coeval](https://github.com/mark1russ
 - **[LIST.SORT]** `sortBy(list)` gives a list with the items in the order of their values, from the smallest. The sort is stable. The values are all numbers without `NaN`, or all texts. Texts compare by their UTF-16 code units. Another value gives `#VALUE!`.
 - **[LIST.TAKE]** `take(list, n)` gives a list of the first `n` items. A larger `n` gives each item.
 - **[LIST.NTH]** `nth(list, i)` gives the value of the item at the position `i`, from 0. A position after the last item gives `#N/A`. For `take` and `nth`, a number that is not a whole number from 0 gives `#VALUE!`.
+- **[LIST.DROP]** `drop(list, n)` gives a list of the items after the first `n` items. A larger `n` gives an empty list. As for `take`, a number that is not a whole number from 0 gives `#VALUE!`.
+- **[LIST.APPEND]** `append(list, other)` gives a list of the items of `list` and then the items of `other`. Two items can have the same key.
+- **[LIST.WITHOUT]** `without(list, other)` gives a list of the items of `list` whose key is not the key of an item of `other`.
+- **[LIST.FLAT]** `flat(list)` gives a list of the items of the lists that are the values of the items of `list`, in order. A value that is not a list gives `#VALUE!`.
+- **[LIST.BUILD]** An item of a list from `sortBy`, `take`, `drop`, `append`, `without` or `flat` keeps its key and its value. LIST.LENIENT applies to each list that the op reads: by default, an error item is not in the new list. With `{ strict: true }`, the first error item of `list` is the result, and then the first error item of the other lists, in order. The argument `other` must be a list, and another value gives `#VALUE!`.
 
 ### 5.6 Special forms
 
@@ -216,6 +221,7 @@ A document is the form of an expression in [coeval](https://github.com/mark1russ
 - **[BUILD.LIST.READ]** A list chain gives its list at an origin with `result`, `at` and `explain`, like a chain. Each item has the key of its target and its result.
 - **[BUILD.FN]** `root.fn(kinds, body)` makes a function with the kinds of its parameters. `functions(fns, body)` of a chain binds the functions, and `call` gives a chain of a call of each function.
 - **[BUILD.LIST.ORDER]** A list chain has `sortBy`, `take` and `nth`. Its method `each(body)` is the axis list over its items. `fold` needs the list of an axis.
+- **[BUILD.LIST.BUILD]** A list chain has `drop(n)`, `append(other)`, `without(other)` and `flat()`. `other` is a list chain, and another value makes the builder throw a `TypeError`. The body of an axis can give a list chain. Then the value of each item is a list, and only such a list chain has `flat`.
 - **[BUILD.CALL]** `call(name, ...args)` applies a free function of `withOptions`: the expression is `app(name, value, ...args)`. A domain op with the same name for the value comes first at run time.
 - **[TYPE.FROM]** `from(p)` accepts only the fields of the record type, and the chain value has the type of the field.
 - **[TYPE.OPS]** `._` has only the ops of the domain of the current value, with the parameter types of each op.

@@ -369,6 +369,8 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
 const NUMBER_LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max"]);
 const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
+/** The list ops that build a list from lists (LIST.BUILD). A module gives a reason for them. */
+const BUILD_OPS: ReadonlySet<string> = new Set(["drop", "append", "flat", "without"]);
 
 /** This function gives the kind of the result of a list op: first gives the kind of its items. */
 const listKind = (op: string, item: Kind | undefined): Kind | undefined => (NUMBER_LIST_OPS.has(op) ? "number" : BOOLEAN_LIST_OPS.has(op) ? "boolean" : item);
@@ -1194,6 +1196,8 @@ class Printer {
     const [head] = args;
     if (LIST_OPS.has(op) && head?.tag === "each") return this.#list(op, head, args.slice(1), ctx);
     if (head !== undefined && (op === "sortBy" || op === "take")) return this.#order(op, head, args.slice(1), ctx);
+    // LIST.BUILD: a module does not have the ops that build a list yet. The interpreter evaluates them.
+    if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) throw new NotStandalone(`the list op "${op}" is not in a module yet`);
     if (head !== undefined && (LIST_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, args.slice(1), ctx);
     const raw = args.map((x) => this.expr(x, ctx));
     const deps = depsOf(...raw);

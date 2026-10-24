@@ -110,8 +110,25 @@ evaluate(byX, { space: boxes, origin: "0", domains: [NumDomain] }); // => { ok: 
 | `sortBy(list)` | a list with the items in the order of their values, from the smallest. The values are numbers or texts. Equal values keep their order. |
 | `take(list, n)` | a list of the first `n` items |
 | `nth(list, i)` | the value of the item at the position `i`, from 0. A position after the last item gives `#N/A`. |
+| `drop(list, n)` | a list of the items after the first `n` items |
+| `append(list, other)` | a list of the items of `list`, and then the items of `other` |
+| `without(list, other)` | a list of the items of `list` whose key is not the key of an item of `other` |
+| `flat(list)` | a list of the items of the lists that are the values of the items of `list`, in order |
 
 These ops skip error items, as each list op does. The option `{ strict: true }` gives the first error. The axis `reverse(list(expr))` gives the reverse order, and an error item of the list gives an error item for its target. A standalone module keeps each list as an array. Tier 2 does not have lists yet, so tier 1 evaluates such a program.
+
+The ops `drop`, `append`, `without` and `flat` build new lists, and each item keeps its key and its value. Thus a list can be a stack: `append` puts items on the top, `take(stack, 1)` is the top, and `drop(stack, 1)` removes it. `without(list, seen)` removes the keys that a search saw. A body of an axis can give a list, and `flat` joins these lists. A standalone module does not have these four ops yet, so it gives a reason.
+
+```ts doctest
+import { app, axes, each, evaluate, ref, space } from "@mark1russell7/vex";
+
+const tree = space.tree({ r: { n: 1 }, a: { n: 2 }, b: { n: 3 }, c: { n: 4 }, d: { n: 5 } }, { a: "r", b: "r", c: "a", d: "b" });
+// The grandchildren of r: the lists of the children of each child, in one list.
+const grandchildren = app("flat", each(axes.children, each(axes.children, ref("n"))));
+
+evaluate(app("keys", grandchildren), { space: tree, origin: "r" }); // => { ok: true, value: ["c", "d"] }
+evaluate(app("keys", app("without", grandchildren, each(axes.descendants, ref("n"), [{ t: "key", key: "b" }]))), { space: tree, origin: "r" }); // => { ok: true, value: ["c"] }
+```
 
 ## Programs are data
 

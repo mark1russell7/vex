@@ -8,9 +8,11 @@ Each package must have a mutation score of 95 % or more. Stryker has one thresho
 
 The variable `VEX_MUTATE` names the packages of a run, for example `compiler` or `core,domains`. Without it, a run mutates the four packages. Then `scores.mjs` applies the gate to the packages of the run only.
 
+The core has two parts: `core.kernel` and `core.base`. `core.kernel` is the modules of the kernel of coeval: `kernel.ts`, `plan.ts`, `document.ts`, `deps.ts` and `write.ts`. `core.base` is the other modules. Each part gets the gate of 95 %, so the core gets it too. `core` names the two parts in one run.
+
 ## The nightly job
 
-The nightly job has one runner for each package. Each runner has a time limit of 150 minutes, and it keeps its report as the artifact `mutation-report-<package>`.
+The nightly job has one runner for each package, and one runner for each part of the core. Each runner has a time limit of 150 minutes, and it keeps its report as the artifact `mutation-report-<package>`. On 2026-10-24, the kernel of coeval made the core run longer than 90 minutes on one runner, so the core got two parts.
 
 ## Type checks
 

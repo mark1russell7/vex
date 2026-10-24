@@ -49,9 +49,13 @@ function kernel(e: Expr | Envelope, origin = "A", opts: CompileOptions = { domai
   return [r.error.code, r.error.reason, (r.error.cause as { readonly kind?: string } | undefined)?.kind];
 }
 
+/** This function gives the value of a result, or the code of its error. */
+function plain(r: { readonly ok: boolean; readonly value?: unknown; readonly error?: { readonly code: string } }): unknown {
+  return r.ok ? r.value : r.error?.code;
+}
+
 /** This function gives the result of tier 1 and of the kernel, as codes or values, for a comparison. */
 function both(e: Expr, opts: CompileOptions, at: Space = s, origin = "A"): readonly [unknown, unknown] {
-  const plain = (r: { readonly ok: boolean; readonly value?: unknown; readonly error?: { readonly code: string } }): unknown => (r.ok ? r.value : r.error?.code);
   const k = kernelPlan(e, opts);
   return [plain(evaluate(e, { ...opts, space: at, origin })), plain(k.run({ space: at, origin }))];
 }
@@ -157,12 +161,41 @@ describe("the errors of the kernel and of Vex (EVAL.REFERENCE)", () => {
   });
 });
 
+/** This function calls itself with no end, and fills the call stack of the engine. */
+function down(n: number): number {
+  return down(n + 1) + 1;
+}
+
+/** This free function fills the call stack of the engine. */
+function deep(): number {
+  return down(0);
+}
+
+/** This extension handler gives the origin of its position and its path. */
+const where: ExtHandler = (_data, ctx) => ({ ok: true, value: [ctx.position.origin, ctx.path] });
+
+/** This function gives the document of a program. */
+function docOf(e: Expr): Envelope {
+  return value(toDocument(e, [PtDomain]));
+}
+
+/** This function gives each kind of the world with its path, also the kinds of the groups and the fallbacks. */
+function kindsOf(kinds: Readonly<Record<string, unknown>>, at: string): (readonly [string, { readonly summary?: string }])[] {
+  return Object.entries(kinds).flatMap(([name, k]) => {
+    const kind = k as { readonly kinds?: Readonly<Record<string, unknown>>; readonly fallback?: { readonly summary?: string }; readonly summary?: string };
+    if (kind.kinds === undefined) return [[`${at}${name}`, kind] as const];
+    return [...kindsOf(kind.kinds, `${at}${name}.`), ...(kind.fallback === undefined ? [] : [[`${at}${name}.*`, kind.fallback] as const])];
+  });
+}
+
+/** This function gives the document of a program without one field of its construct. */
+function without(e: Expr, field: string): unknown {
+  const d = docOf(e) as { readonly type: unknown; readonly value: Readonly<Record<string, unknown>> };
+  const { [field]: _gone, ...rest } = d.value;
+  return { type: d.type, value: rest };
+}
+
 describe("the rare paths of the machine (EVAL.REFERENCE)", () => {
-  /** A free function that fills the call stack of the engine. */
-  const deep = (): number => {
-    const down = (n: number): number => down(n + 1) + 1;
-    return down(0);
-  };
   const fns = { deep };
 
   it("EVAL.DEPTH: ifError, #ARGS and a list op do not hide a full call stack in the kernel", () => {
@@ -191,7 +224,7 @@ describe("the rare paths of the machine (EVAL.REFERENCE)", () => {
   });
 
   it("CALL.FREE CALL.UNKNOWN-OP: a call without arguments has no receiver, also for a domain that accepts each value", () => {
-    const Any = defineDomain({ name: "Any", is: (u: unknown): u is unknown => u === undefined || u !== undefined, ops: { zero: { fn: (): number => 0 } } });
+    const Any = defineDomain({ name: "Any", is: (_u: unknown): _u is unknown => true, ops: { zero: { fn: (): number => 0 } } });
     expect(both(app("zero"), { domains: [Any] })).toEqual(["#NAME?", "#NAME?"]);
   });
 
@@ -215,21 +248,11 @@ describe("the rare paths of the machine (EVAL.REFERENCE)", () => {
   });
 
   it("EVAL.LOCATION: an extension handler of the kernel gets the position and an empty path", () => {
-    const where: ExtHandler = (_data, ctx) => ({ ok: true, value: [ctx.position.origin, ctx.path] });
     expect(kernel(ext("where", null), "B", { extensions: { where } })).toEqual(["B", []]);
   });
 });
 
 describe("the world of Vex (DOC.CHECK)", () => {
-  /** This function gives each kind of the world with its path, also the kinds of the groups and the fallbacks. */
-  function kindsOf(kinds: Readonly<Record<string, unknown>>, at: string): (readonly [string, { readonly summary?: string }])[] {
-    return Object.entries(kinds).flatMap(([name, k]) => {
-      const kind = k as { readonly kinds?: Readonly<Record<string, unknown>>; readonly fallback?: { readonly summary?: string }; readonly summary?: string };
-      if (kind.kinds === undefined) return [[`${at}${name}`, kind] as const];
-      return [...kindsOf(kind.kinds, `${at}${name}.`), ...(kind.fallback === undefined ? [] : [[`${at}${name}.*`, kind.fallback] as const])];
-    });
-  }
-
   it("DOC.CHECK: each kind of the world has a summary of one or more sentences", () => {
     const kinds = kindsOf(VEX_WORLD.kinds, "");
     expect(kinds.length).toBe(33);
@@ -237,12 +260,6 @@ describe("the world of Vex (DOC.CHECK)", () => {
   });
 
   it("DOC.CONSTRUCT DOC.CHECK: a construct without a necessary field, or with a field that it does not have, is not valid", () => {
-    const docOf = (e: Expr): Envelope => value(toDocument(e, [PtDomain]));
-    const without = (e: Expr, field: string): unknown => {
-      const d = docOf(e) as { readonly type: unknown; readonly value: Readonly<Record<string, unknown>> };
-      const { [field]: _gone, ...rest } = d.value;
-      return { type: d.type, value: rest };
-    };
     const programs: readonly (readonly [Expr, string])[] = [
       [let_({ a: lit(1) }, v("a")), "body"],
       [let_({ a: fn(["k"], v("k")) }, call("a", lit(1))), "bind"],
@@ -266,7 +283,6 @@ describe("the world of Vex (DOC.CHECK)", () => {
   });
 
   it("DOC.CHECK FN.CALL: the parameters of a function and the names of a let are bound in the body for the check", () => {
-    const docOf = (e: Expr): Envelope => value(toDocument(e, [PtDomain]));
     expect(check(vexMachine(), docOf(let_({ f: fn(["k"], v("k")) }, call("f", lit(1)))), { declaredType: "lit" })).toEqual([]);
     expect(check(vexMachine(), docOf(let_({ a: lit(1) }, v("a"))), { declaredType: "lit" })).toEqual([]);
   });

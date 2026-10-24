@@ -433,7 +433,7 @@ function targetsOf(value: unknown, ctx: Context): Outcome<{ readonly axis: Targe
 }
 
 /**
- * This function sets a name of a new record of names, also a name such as `__proto__`. The record is new and gets each
+ * This function sets a name of a new record of names, also the name `__proto__`. The record is new and gets each
  * name one time, so the property needs no other attributes. A later record copies it with a spread, so it is enumerable.
  */
 function setName(names: Record<string, unknown>, name: string, value: unknown): void {

@@ -1,10 +1,11 @@
 /**
  * The reference of a sheet run: the recursive form of the search, as `SheetRun` was before SHEET.DEEP. It reads a
  * cell with a recursive call, so it needs a deep call stack for a long chain of cells. The tests compare `SheetRun`
- * with it on small random sheets, where the depth is not a problem. It has the tables of SHEET.TABLES too. The kernel of
- * coeval evaluates each formula (EVAL.REFERENCE), so the reference shares no code of evaluation with `SheetRun`.
+ * with it on small random sheets, where the depth is not a problem. It has the tables of SHEET.TABLES too. The reference
+ * interpreter of the kernel of coeval evaluates each formula (EVAL.REFERENCE), so the reference shares no code of
+ * evaluation with `SheetRun`.
  */
-import { fail, isMove, kernelPlan, resolveAddr, vexError, type CellFormulas, type CompileOptions, type Expr, type ExtHandler, type FixedMove, type KernelPlan, type Result, type SheetOptions, type Space } from "@mark1russell7/vex";
+import { fail, isMove, kernelPlan, resolveAddr, toVexResult, vexError, type CellFormulas, type CompileOptions, type Expr, type ExtHandler, type FixedMove, type KernelPlan, type Result, type SheetOptions, type Space } from "@mark1russell7/vex";
 
 interface Visit {
   readonly index: number;
@@ -131,7 +132,7 @@ export class ReferenceSheetRun {
       plan = kernelPlan(program, this.#compile);
       this.#plans.set(program, plan);
     }
-    visit.result = plan.run({ space: t.space, origin: key, tables: this.#tables, ...(this.#vars === undefined ? {} : { vars: this.#vars }) });
+    visit.result = toVexResult(plan.reference({ space: t.space, origin: key, tables: this.#tables, ...(this.#vars === undefined ? {} : { vars: this.#vars }) }));
     this.#top = caller;
     if (visit.low === visit.index) {
       const members = this.#stack.splice(this.#stack.findIndex((m) => m.visit === visit));

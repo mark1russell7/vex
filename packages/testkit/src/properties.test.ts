@@ -156,6 +156,15 @@ describe("properties of the interpreter", () => {
     expect(values).toBeGreaterThan(0);
   });
 
+  it("P22 EVAL.REFERENCE: the plan of the kernel, its reference interpreter, its traced evaluation, a second evaluation and the closure compiler agree", () => {
+    fc.assert(
+      fc.property(program, ([s, e, k, tables]) => {
+        const agreement = kernelPlan(e, { domains: DOMAINS }).agree({ space: s, origin: k, tables }, () => run(e, s, k, tables));
+        expect(agreement.ok ? "agree" : `${agreement.tier}: ${agreement.reason}`).toBe("agree");
+      }),
+    );
+  });
+
   it("P15 AXIS.TABLE: inside the axis table, the origin is the target, in the body and in the test of where", () => {
     fc.assert(
       fc.property(program, fc.constantFrom(...PATHS), ([s, , k, tables], path) => {

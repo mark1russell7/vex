@@ -65,7 +65,9 @@ An expression is plain JSON data. It has one of these kinds.
 
 ### 4.1 Documents
 
-A document is the form of an expression in [coeval](https://github.com/mark1russell7/coeval), the kernel of the family. Its rules are the decision D12 of coeval. Each term is an envelope `{ "type": t, "value": v }`. `toDocument` writes a document, and `fromDocument` reads it. Since decision D13 of coeval, the kernel is the core of Vex. It checks and analyzes each document by the contracts of the kinds of Vex. It is also the reference tier of Vex (EVAL.REFERENCE).
+A document is the form of an expression in [coeval](https://github.com/mark1russell7/coeval), the kernel of the family. Its rules are the decision D12 of coeval. Each term is an envelope `{ "type": t, "value": v }`. `toDocument` writes a document, and `fromDocument` reads it.
+
+Since decision D13 of coeval, the kernel is the core of Vex. It checks and analyzes each document by the contracts of the kinds of Vex. It is also the reference tier of Vex (EVAL.REFERENCE).
 
 | Expression | Document |
 |---|---|

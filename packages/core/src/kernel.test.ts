@@ -9,7 +9,7 @@ import { toDocument, type Envelope } from "./document.ts";
 import { vexError } from "./errors.ts";
 import { compile, evaluate, MAX_NESTING, type ExtHandler } from "./evaluate.ts";
 import { app, axes, call, each, ext, fn, fold, index, key, let_, lit, offset, other, parent, ref, v, type Expr } from "./ir.ts";
-import { MAX_DOCUMENT_DEPTH, TERM_KINDS, toKernelError, toVexError, toVexResult, VEX_WORLD, vexMachine, vexSelf } from "./kernel.ts";
+import { MAX_DOCUMENT_DEPTH, TERM_KINDS, toKernelError, toVexError, toVexResult, VEX_WORLD, vexDefinitions, vexMachine, vexSelf } from "./kernel.ts";
 import { isVexList } from "./list.ts";
 import { kernelPlan } from "./plan.ts";
 import { space } from "./space.ts";
@@ -138,5 +138,70 @@ describe("the reference tier: the kernel of coeval (EVAL.REFERENCE)", () => {
     expect(toVexError({ code: "#CALC!", reason: "threw", cause })).toMatchObject({ code: "#CALC!", kind: "threw", thrown: cause });
     expect(toVexResult({ ok: true, value: 1 })).toEqual({ ok: true, value: 1 });
     expect(MAX_DOCUMENT_DEPTH).toBeGreaterThan(MAX_NESTING * 3);
+  });
+});
+
+describe("the reference interpreter of the kernel and agree (EVAL.REFERENCE)", () => {
+  const at = { space: s, origin: "A" };
+
+  it("EVAL.REFERENCE: the reference interpreter of the kernel gives the result of the plan, and the errors of the plan before the kernel", () => {
+    const e = app("add", ref("p"), ref("p", [key("B")]));
+    const plan = kernelPlan(e, { domains: [PtDomain] });
+    expect(toVexResult(plan.reference(at))).toEqual(plan.run(at));
+    expect(plan.reference({ space: s, origin: "Z" })).toMatchObject({ ok: false, error: { code: "#REF!" } });
+    expect(kernelPlan({ tag: "nope" } as unknown as Expr).reference(at)).toMatchObject({ ok: false, error: { code: "#VALUE!" } });
+    // The definitions are the formula kit with the profile of Vex. The evaluators of Vex are functions, so the reference
+    // uses their code.
+    expect(Object.keys(vexDefinitions().evaluators ?? {})).toContain("formula.op");
+    const own = Object.entries(vexMachine().evaluators ?? {}).filter(([name]) => name.startsWith("vex."));
+    expect(own.map(([name, evaluator]) => [name, typeof evaluator])).toEqual(["vex.lit", "vex.host", "vex.each", "vex.fold", "vex.iterate", "vex.fn", "vex.call", "vex.axis"].map((name) => [name, "function"]));
+  });
+
+  it("EVAL.REFERENCE: agree compares the plan, the reference, the traced evaluation, a second evaluation and a tier", () => {
+    // Each decode of the literal gives a new point, and the fields of the points agree.
+    const e = each(axes.all, app("add", ref("p"), lit(new Pt(1, 1))));
+    const plan = kernelPlan(e, { domains: [PtDomain] });
+    const tier1 = (): ReturnType<typeof evaluate> => evaluate(e, { ...at, domains: [PtDomain] });
+    expect(plan.agree(at)).toMatchObject({ ok: true });
+    // The items of tier 1 have errors with a location, and two errors agree when they have the same code.
+    expect(plan.agree(at, tier1)).toMatchObject({ ok: true });
+    expect(plan.agree(at, () => ({ ok: true, value: 42 }))).toMatchObject({ ok: false, tier: "other" });
+    const points = kernelPlan(app("add", ref("p"), lit(new Pt(1, 1))), { domains: [PtDomain] });
+    expect(points.agree(at, () => ({ ok: true, value: new Pt(2, 3) }))).toMatchObject({ ok: true });
+    expect(points.agree(at, () => ({ ok: true, value: new Pt(2, 4) }))).toMatchObject({ ok: false, tier: "other" });
+    expect(points.agree(at, () => ({ ok: true, value: { x: 2, y: 3 } }))).toMatchObject({ ok: false, tier: "other" });
+    expect(points.agree(at, () => ({ ok: true, value: null }))).toMatchObject({ ok: false, tier: "other" });
+    expect(points.agree(at, () => ({ ok: true, value: 5 }))).toMatchObject({ ok: false, tier: "other" });
+    const errors = kernelPlan(app("errors", each(axes.all, ref("n"))));
+    expect(errors.agree(at, () => evaluate(app("errors", each(axes.all, ref("n"))), at))).toMatchObject({ ok: true });
+    expect(errors.agree(at, () => ({ ok: true, value: [vexError("unknown-key", "x")] }))).toMatchObject({ ok: false, tier: "other" });
+  });
+
+  it("EVAL.REFERENCE: agree compares records and lists with the rules of the kernel, also with a cycle", () => {
+    const loop: Record<string, unknown> = { n: 1 };
+    loop["self"] = loop;
+    const bare = Object.assign(Object.create(null) as Record<string, unknown>, { n: 1 });
+    const ring: unknown[] = [1];
+    ring.push(ring);
+    const data = space.record({ L: { loop, bare, ring } });
+    const where = { space: data, origin: "L" };
+    const copy: Record<string, unknown> = { n: 1 };
+    copy["self"] = copy;
+    const again: unknown[] = [1];
+    again.push(again);
+    expect(kernelPlan(ref("loop")).agree(where, () => ({ ok: true, value: copy }))).toMatchObject({ ok: true });
+    expect(kernelPlan(ref("bare")).agree(where, () => ({ ok: true, value: { n: 1 } }))).toMatchObject({ ok: true });
+    expect(kernelPlan(ref("ring")).agree(where, () => ({ ok: true, value: again }))).toMatchObject({ ok: true });
+  });
+
+  it("EVAL.REFERENCE EVAL.ORIGIN EVAL.SHAPE: for a program that the kernel does not evaluate, a tier agrees when it gives the same error code", () => {
+    const outside = { space: s, origin: "Z" };
+    const plan = kernelPlan(ref("n"));
+    expect(plan.agree(outside)).toMatchObject({ ok: true, result: { ok: false, error: { code: "#REF!" } } });
+    expect(plan.agree(outside, () => evaluate(ref("n"), outside))).toMatchObject({ ok: true });
+    expect(plan.agree(outside, () => ({ ok: true, value: 1 }))).toMatchObject({ ok: false, tier: "other" });
+    const bad = { tag: "nope" } as unknown as Expr;
+    expect(kernelPlan(bad).agree(at, () => evaluate(bad, at))).toMatchObject({ ok: true });
+    expect(kernelPlan(bad).agree(at, () => evaluate(ref("Z", [key("Z")]), at))).toMatchObject({ ok: false, tier: "other" });
   });
 });

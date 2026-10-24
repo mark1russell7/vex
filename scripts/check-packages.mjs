@@ -89,8 +89,14 @@ const back = document.ok ? fromDocument(JSON.parse(JSON.stringify(document.value
 if (!back.ok || JSON.stringify(back.value) !== JSON.stringify(nearest.program)) throw new Error("the document of the program gave " + JSON.stringify(back));
 const fromDoc = evaluate(document.value, { space: root.space, origin: "A", domains: [Vec2Domain, NumDomain] });
 if (!fromDoc.ok || fromDoc.value !== 5) throw new Error("the document gave " + JSON.stringify(fromDoc));
-const reference = kernelPlan(document.value, { domains: [Vec2Domain, NumDomain] }).run({ space: root.space, origin: "A" });
-if (!reference.ok || reference.value !== 5) throw new Error("the kernel gave " + JSON.stringify(reference));
+const plan = kernelPlan(document.value, { domains: [Vec2Domain, NumDomain] });
+const kernel = plan.run({ space: root.space, origin: "A" });
+if (!kernel.ok || kernel.value !== 5) throw new Error("the kernel gave " + JSON.stringify(kernel));
+// The reference interpreter of the kernel compiles nothing, and agree compares the tiers of the kernel and tier 1.
+const reference = plan.reference({ space: root.space, origin: "A" });
+if (!reference.ok || reference.value !== 5) throw new Error("the reference of the kernel gave " + JSON.stringify(reference));
+const agreement = plan.agree({ space: root.space, origin: "A" }, () => fromDoc);
+if (!agreement.ok) throw new Error("the tiers do not agree: " + agreement.reason);
 const failed = checkLaws(NumDomain, { arb: fc.integer({ min: -100, max: 100 }), numRuns: 50 }).filter((r) => !r.ok);
 if (failed.length > 0) throw new Error("law failures: " + JSON.stringify(failed));
 if (!catalogText().includes("## \`XYDomain\`")) throw new Error("the catalog of the MCP server has no XYDomain");
@@ -109,6 +115,12 @@ console.info("package check: the tarballs install, import and run");
   if (JSON.stringify(Object.keys(manifest.dependencies ?? {})) !== JSON.stringify(["@mark1russell7/coeval"])) {
     throw new Error("the runtime dependencies of @mark1russell7/vex are " + JSON.stringify(manifest.dependencies));
   }
+  // The build imports the kernel and does not copy it, so a program has one kernel. The install got coeval from npm.
+  const js = readFileSync(join(app, "node_modules/@mark1russell7/vex/build/index.js"), "utf8");
+  if (!js.includes('from "@mark1russell7/coeval"')) throw new Error("the build of @mark1russell7/vex does not import @mark1russell7/coeval");
+  const coeval = /** @type {{ name?: string, version?: string }} */ (JSON.parse(readFileSync(join(app, "node_modules/@mark1russell7/coeval/package.json"), "utf8")));
+  if (coeval.name !== "@mark1russell7/coeval") throw new Error("the install has no @mark1russell7/coeval");
+  console.info(`package check: @mark1russell7/vex imports @mark1russell7/coeval ${String(coeval.version)} from npm`);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

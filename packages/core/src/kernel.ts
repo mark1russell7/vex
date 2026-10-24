@@ -9,12 +9,10 @@
  *   rules of Vex. Vex adds only what is its own: the moves, the axes, the loops and the dispatch on the domains.
  */
 import {
-  type CompileInput,
-  type CompiledEvaluator,
-  type CompiledPart,
   type Context,
+  type Definitions,
   type EvalError,
-  type Evaluator,
+  type EvalFn,
   type Failed,
   type ExtFn,
   type FormulaProfile,
@@ -24,14 +22,15 @@ import {
   type LazyOp,
   type Machine,
   type PartShape,
+  type Part,
   type Result as Outcome,
-  type Runtime,
   type Walker,
   type World,
   Failure,
   Held,
   STD_EXT,
   THING,
+  formulaDefinitions,
   formulaEvaluators,
   ok,
   thrown,
@@ -299,6 +298,12 @@ const WALKERS: Readonly<Record<string, Walker>> = {
 
 // ---------------------------------------------------------------- the axes and the loops
 
+/*
+ * The evaluators of Vex are functions of their input, not compilers. Thus a plan of the kernel and the reference
+ * interpreter of the kernel use the same code for them, and the reference needs a definition only for the formula kit
+ * (`vexDefinitions`).
+ */
+
 /** A target of an axis: its key, or its key and an error (AXIS.WHERE, AXIS.LIST). */
 interface Target {
   readonly key: string;
@@ -308,20 +313,17 @@ interface Target {
 /** The value of an axis document: the targets from a position. `table` names the table of the axis table. */
 interface Targets {
   readonly table: string | undefined;
-  targets(from: Place, rt: Runtime): Outcome<readonly Target[]>;
+  targets(from: Place): Outcome<readonly Target[]>;
 }
 
 /** This function gives the position of a target. In the space of the axis table, the origin is the target (AXIS.TABLE). */
 const placeOf = (axis: Targets, from: Place, key: string): Place => (axis.table === undefined ? from.to(key) : new Place(from.space, from.tables, key, key));
 
-/** This function gives the compiled parts of a record value, by name. */
-const partsOf = (value: unknown): Readonly<Record<string, CompiledPart | undefined>> => (value ?? {}) as Readonly<Record<string, CompiledPart | undefined>>;
+/** This function gives the parts of a record value, by name. */
+const partsOf = (value: unknown): Readonly<Record<string, Part | undefined>> => (value ?? {}) as Readonly<Record<string, Part | undefined>>;
 
 /** This function gives the part of a field that the contract makes necessary. */
-const partAt = (value: unknown, name: string): CompiledPart => partsOf(value)[name] as CompiledPart;
-
-/** This function makes a compiled evaluator. */
-const compiled = (compile: (input: CompileInput) => (ctx: Context, rt: Runtime) => Outcome): CompiledEvaluator => ({ compile });
+const partAt = (value: unknown, name: string): Part => partsOf(value)[name] as Part;
 
 /** This function gives the position of a context. A context without a position gives an error. */
 function selfOf(ctx: Context): Place | EvalError {
@@ -329,9 +331,9 @@ function selfOf(ctx: Context): Place | EvalError {
 }
 
 /** This function gives the position where an axis finds its targets: the key of the address, or the focus (AXIS.ADDRESS). */
-function startOf(at: CompiledPart | undefined, ctx: Context, rt: Runtime): Place | EvalError {
+function startOf(at: Part | undefined, ctx: Context): Place | EvalError {
   if (at === undefined) return selfOf(ctx);
-  const r = at.code(ctx, rt);
+  const r = at.evaluate();
   if (!r.ok) return r.error;
   const where = r.value as Place;
   return where.failure ?? where;
@@ -345,64 +347,57 @@ function spaceOf(axis: Targets, from: Place): Place | EvalError {
 }
 
 /**
- * This function gives the evaluator of the axes. An axis document gives a value that finds the targets from a position.
+ * This function is the evaluator of the axes. An axis document gives a value that finds the targets from a position.
  * The list of `list` evaluates at that position, and the test of `where` at each target (AXIS.LIST, AXIS.WHERE).
  */
-function axisEvaluator(): CompiledEvaluator {
-  return compiled(({ typePath, value }) => {
-    const name = String(typePath[1]);
-    const fields = partsOf(value);
-    if (name === "table") {
-      const table = (value as { readonly name: string }).name;
-      return () => ok<Targets>({ table, targets: (from) => ok(from.space.keys.map((key) => ({ key }))) });
-    }
-    if (name === "list") {
-      const list = fields["list"] as CompiledPart;
-      return (ctx) =>
-        ok<Targets>({
-          table: undefined,
-          targets: (from, rt) => {
-            const r = list.code({ ...ctx, self: from }, rt);
-            if (!r.ok) return r;
-            if (!isVexList(r.value)) return failed("kind-mismatch", `the axis "list" needs a list, not a ${describe(r.value)}`);
-            return ok(r.value.items.map(({ key, result }) => (result.ok ? { key } : { key, error: result.error })));
-          },
-        });
-    }
-    if (name === "reverse" || name === "where") {
-      const inner = fields["axis"] as CompiledPart;
-      const test = fields["test"];
-      return (ctx, rt) => {
-        const r = inner.code(ctx, rt);
+const axisEvaluator: EvalFn = ({ typePath, value, context }) => {
+  const name = String(typePath[1]);
+  const fields = partsOf(value);
+  if (name === "table") {
+    const table = (value as { readonly name: string }).name;
+    return ok<Targets>({ table, targets: (from) => ok(from.space.keys.map((key) => ({ key }))) });
+  }
+  if (name === "list") {
+    const list = fields["list"] as Part;
+    return ok<Targets>({
+      table: undefined,
+      targets: (from) => {
+        const r = list.evaluate({ ...context, self: from });
         if (!r.ok) return r;
-        const base = r.value as Targets;
-        if (test === undefined) {
-          return ok<Targets>({
-            table: base.table,
-            targets: (from, rt2) => {
-              const ts = base.targets(from, rt2);
-              return ts.ok ? ok(ts.value.toReversed()) : ts;
-            },
-          });
-        }
-        return ok<Targets>({ table: base.table, targets: (from, rt2) => whereTargets(base, test, ctx, from, rt2) });
-      };
-    }
-    const ir = { t: name, ...(value as object) } as Exclude<Axis, { readonly t: "where" }>;
-    return () =>
-      ok<Targets>({
-        table: undefined,
+        if (!isVexList(r.value)) return failed("kind-mismatch", `the axis "list" needs a list, not a ${describe(r.value)}`);
+        return ok(r.value.items.map(({ key, result }) => (result.ok ? { key } : { key, error: result.error })));
+      },
+    });
+  }
+  if (name === "reverse" || name === "where") {
+    const r = (fields["axis"] as Part).evaluate();
+    if (!r.ok) return r;
+    const base = r.value as Targets;
+    const test = fields["test"];
+    if (test === undefined) {
+      return ok<Targets>({
+        table: base.table,
         targets: (from) => {
-          const keys = axisTargets(from.space, from, ir);
-          return keys.ok ? ok(keys.value.map((key) => ({ key }))) : { ok: false, error: toKernelError(keys.error) };
+          const ts = base.targets(from);
+          return ts.ok ? ok(ts.value.toReversed()) : ts;
         },
       });
+    }
+    return ok<Targets>({ table: base.table, targets: (from) => whereTargets(base, test, context, from) });
+  }
+  const ir = { t: name, ...(value as object) } as Exclude<Axis, { readonly t: "where" }>;
+  return ok<Targets>({
+    table: undefined,
+    targets: (from) => {
+      const keys = axisTargets(from.space, from, ir);
+      return keys.ok ? ok(keys.value.map((key) => ({ key }))) : { ok: false, error: toKernelError(keys.error) };
+    },
   });
-}
+};
 
 /** This function keeps the targets where the test gives `true`. A failed test, or a value that is not a boolean, gives an error item. */
-function whereTargets(base: Targets, test: CompiledPart, ctx: Context, from: Place, rt: Runtime): Outcome<readonly Target[]> {
-  const ts = base.targets(from, rt);
+function whereTargets(base: Targets, test: Part, ctx: Context, from: Place): Outcome<readonly Target[]> {
+  const ts = base.targets(from);
   if (!ts.ok) return ts;
   const out: Target[] = [];
   for (const t of ts.value) {
@@ -410,7 +405,7 @@ function whereTargets(base: Targets, test: CompiledPart, ctx: Context, from: Pla
       out.push(t);
       continue;
     }
-    const r = test.code({ ...ctx, self: placeOf(base, from, t.key) }, rt);
+    const r = test.evaluate({ ...ctx, self: placeOf(base, from, t.key) });
     if (!r.ok) out.push({ key: t.key, error: toVexError(r.error) });
     else if (r.value === true) out.push({ key: t.key });
     else if (r.value !== false) out.push({ key: t.key, error: vexError("kind-mismatch", `the test of "where" gave a ${typeof r.value}, not a boolean`) });
@@ -418,16 +413,16 @@ function whereTargets(base: Targets, test: CompiledPart, ctx: Context, from: Pla
   return ok(out);
 }
 
-/** This function finds the targets of an axis part, from the address or the focus, in the space of the axis. */
-function targetsOf(axisPart: CompiledPart, at: CompiledPart | undefined, ctx: Context, rt: Runtime): Outcome<{ readonly axis: Targets; readonly from: Place; readonly targets: readonly Target[] }> {
-  const start = startOf(at, ctx, rt);
+/** This function finds the targets of the axis of a loop, from the address or the focus, in the space of the axis. */
+function targetsOf(value: unknown, ctx: Context): Outcome<{ readonly axis: Targets; readonly from: Place; readonly targets: readonly Target[] }> {
+  const start = startOf(partsOf(value)["at"], ctx);
   if (!(start instanceof Place)) return { ok: false, error: start };
-  const a = axisPart.code(ctx, rt);
+  const a = partAt(value, "axis").evaluate();
   if (!a.ok) return a;
   const axis = a.value as Targets;
   const from = spaceOf(axis, start);
   if (!(from instanceof Place)) return { ok: false, error: from };
-  const ts = axis.targets(from, rt);
+  const ts = axis.targets(from);
   return ts.ok ? ok({ axis, from, targets: ts.value }) : ts;
 }
 
@@ -435,10 +430,10 @@ function targetsOf(axisPart: CompiledPart, at: CompiledPart | undefined, ctx: Co
  * This function evaluates the parts of a record of names in order (LOOP.NAMES). It gives the names with their new
  * values, or the first error. Each value reads the names before the step, so the names change only after all values.
  */
-function bindAll(parts: Readonly<Record<string, CompiledPart | undefined>>, ctx: Context, rt: Runtime, names: Readonly<Record<string, unknown>>): Outcome<Readonly<Record<string, unknown>>> {
+function bindAll(record: Part | undefined, ctx: Context, names: Readonly<Record<string, unknown>>): Outcome<Readonly<Record<string, unknown>>> {
   const values: [string, unknown][] = [];
-  for (const [name, part] of Object.entries(parts)) {
-    const r = (part as CompiledPart).code(ctx, rt);
+  for (const [name, part] of Object.entries(partsOf(record))) {
+    const r = (part as Part).evaluate(ctx);
     if (!r.ok) return r;
     values.push([name, r.value]);
   }
@@ -448,73 +443,58 @@ function bindAll(parts: Readonly<Record<string, CompiledPart | undefined>>, ctx:
 }
 
 /** The evaluators of the loops: each, fold and iterate (LOOP.NAMES, FOLD.ORDER, ITERATE.LIMIT). */
-const LOOPS: Readonly<Record<string, Evaluator>> = {
-  "vex.each": compiled(({ value }) => {
-    const axisPart = partAt(value, "axis");
+const LOOPS: Readonly<Record<string, EvalFn>> = {
+  "vex.each": ({ value, context }) => {
+    const found = targetsOf(value, context);
+    if (!found.ok) return found;
+    const { axis, from, targets } = found.value;
     const body = partAt(value, "body");
-    const at = partsOf(value)["at"];
-    return (ctx, rt) => {
-      const found = targetsOf(axisPart, at, ctx, rt);
-      if (!found.ok) return found;
-      const { axis, from, targets } = found.value;
-      const items: ListItem[] = targets.map(({ key, error }) => ({ key, result: error === undefined ? toVexResult(body.code({ ...ctx, self: placeOf(axis, from, key) }, rt)) : vexFail(error) }));
-      return ok(vexList(items));
-    };
-  }),
+    const items: ListItem[] = targets.map(({ key, error }) => ({ key, result: error === undefined ? toVexResult(body.evaluate({ ...context, self: placeOf(axis, from, key) })) : vexFail(error) }));
+    return ok(vexList(items));
+  },
 
-  "vex.fold": compiled(({ value }) => {
-    const axisPart = partAt(value, "axis");
-    const init = partsOf(partsOf(value)["init"]);
-    const step = partsOf(partsOf(value)["step"]);
-    const result = partAt(value, "result");
-    const at = partsOf(value)["at"];
-    return (ctx, rt) => {
-      // The first values come at the node, before the address and the targets (FOLD.ORDER).
-      const first = bindAll(init, ctx, rt, ctx.names);
-      if (!first.ok) return first;
-      let names = first.value;
-      const found = targetsOf(axisPart, at, ctx, rt);
-      if (!found.ok) return found;
-      const { axis, from, targets } = found.value;
-      for (const { key, error } of targets) {
-        if (error !== undefined) return { ok: false, error: toKernelError(error) };
-        const next = bindAll(step, { ...ctx, self: placeOf(axis, from, key), names }, rt, names);
-        if (!next.ok) return next;
-        names = next.value;
-      }
-      return result.code({ ...ctx, names }, rt);
-    };
-  }),
+  "vex.fold": ({ value, context }) => {
+    const { init, step } = partsOf(value);
+    // The first values come at the node, before the address and the targets (FOLD.ORDER).
+    const first = bindAll(init, context, context.names);
+    if (!first.ok) return first;
+    let names = first.value;
+    const found = targetsOf(value, context);
+    if (!found.ok) return found;
+    const { axis, from, targets } = found.value;
+    for (const { key, error } of targets) {
+      if (error !== undefined) return { ok: false, error: toKernelError(error) };
+      const next = bindAll(step, { ...context, self: placeOf(axis, from, key), names }, names);
+      if (!next.ok) return next;
+      names = next.value;
+    }
+    return partAt(value, "result").evaluate({ ...context, names });
+  },
 
-  "vex.iterate": compiled(({ value }) => {
+  "vex.iterate": ({ value, context }) => {
+    const { init, step, until } = partsOf(value);
     const limit = (value as { readonly limit: number }).limit;
-    const init = partsOf(partsOf(value)["init"]);
-    const step = partsOf(partsOf(value)["step"]);
-    const until = partsOf(value)["until"];
-    const result = partAt(value, "result");
-    return (ctx, rt) => {
-      const first = bindAll(init, ctx, rt, ctx.names);
-      if (!first.ok) return first;
-      let names = first.value;
-      for (let k = 0; ; k++) {
-        const here: Context = { ...ctx, names };
-        if (until !== undefined) {
-          const t = until.code(here, rt);
-          if (!t.ok) return t;
-          if (t.value === true) break;
-          if (t.value !== false) return failed("kind-mismatch", `the test "until" of "iterate" gave a ${typeof t.value}, not a boolean`);
-        }
-        if (k === limit) {
-          if (until !== undefined) return failed("limit", `"iterate" made its ${String(limit)} steps, and its test "until" is not true`);
-          break;
-        }
-        const next = bindAll(step, here, rt, names);
-        if (!next.ok) return next;
-        names = next.value;
+    const first = bindAll(init, context, context.names);
+    if (!first.ok) return first;
+    let names = first.value;
+    for (let k = 0; ; k++) {
+      const here: Context = { ...context, names };
+      if (until !== undefined) {
+        const t = until.evaluate(here);
+        if (!t.ok) return t;
+        if (t.value === true) break;
+        if (t.value !== false) return failed("kind-mismatch", `the test "until" of "iterate" gave a ${typeof t.value}, not a boolean`);
       }
-      return result.code({ ...ctx, names }, rt);
-    };
-  }),
+      if (k === limit) {
+        if (until !== undefined) return failed("limit", `"iterate" made its ${String(limit)} steps, and its test "until" is not true`);
+        break;
+      }
+      const next = bindAll(step, here, names);
+      if (!next.ok) return next;
+      names = next.value;
+    }
+    return partAt(value, "result").evaluate({ ...context, names });
+  },
 };
 
 // ---------------------------------------------------------------- functions
@@ -525,10 +505,10 @@ const LOOPS: Readonly<Record<string, Evaluator>> = {
  */
 class Bound extends Held {
   readonly params: readonly string[];
-  readonly body: CompiledPart;
+  readonly body: Part;
   readonly names: Readonly<Record<string, unknown>>;
 
-  constructor(params: readonly string[], body: CompiledPart, names: Readonly<Record<string, unknown>>) {
+  constructor(params: readonly string[], body: Part, names: Readonly<Record<string, unknown>>) {
     super(kernelError("kind-mismatch", "the name is a function, not a value"));
     this.params = params;
     this.body = body;
@@ -537,31 +517,25 @@ class Bound extends Held {
 }
 
 /** The evaluators of the functions of Vex (FN.BIND, FN.CALL, FN.ARGS). */
-const FUNCTIONS: Readonly<Record<string, Evaluator>> = {
-  "vex.fn": compiled(({ value }) => {
-    const params = (value as { readonly params: readonly string[] }).params;
-    const body = partAt(value, "body");
-    return (ctx) => ok(new Bound(params, body, ctx.names));
-  }),
+const FUNCTIONS: Readonly<Record<string, EvalFn>> = {
+  "vex.fn": ({ value, context }) => ok(new Bound((value as { readonly params: readonly string[] }).params, partAt(value, "body"), context.names)),
 
-  "vex.call": compiled(({ doc, value }) => {
+  "vex.call": ({ doc, value, context }) => {
     // The contract and fromDocument make the function a reference to a name: ["names", name] (DOC.CALL).
-    const name = String(((doc.value as { readonly fn: { readonly value: readonly unknown[] } }).fn.value)[1]);
-    const args = (partsOf(value)["args"] ?? []) as unknown as readonly CompiledPart[];
-    return (ctx, rt) => {
-      if (!Object.hasOwn(ctx.names, name)) return failed("unbound", `the function "${name}" has no binding`);
-      const bound = ctx.names[name];
-      if (!(bound instanceof Bound)) return bound instanceof Held ? { ok: false, error: bound.error } : failed("kind-mismatch", `the name "${name}" is a value, not a function`);
-      if (bound.params.length !== args.length) return failed("bad-expression", `the function "${name}" takes ${String(bound.params.length)} arguments, not ${String(args.length)}`);
-      // Each parameter gets the result of its argument at the call. An error has an effect only where the body reads it.
-      const names: Record<string, unknown> = { ...bound.names };
-      bound.params.forEach((p, i) => {
-        const r = (args[i] as CompiledPart).code(ctx, rt);
-        Object.defineProperty(names, p, { value: r.ok ? r.value : new Held(r.error), enumerable: true, writable: true, configurable: true });
-      });
-      return bound.body.code({ ...ctx, names }, rt);
-    };
-  }),
+    const name = String((doc.value as { readonly fn: { readonly value: readonly unknown[] } }).fn.value[1]);
+    const args = partsOf(value)["args"] as unknown as readonly Part[];
+    if (!Object.hasOwn(context.names, name)) return failed("unbound", `the function "${name}" has no binding`);
+    const bound = context.names[name];
+    if (!(bound instanceof Bound)) return bound instanceof Held ? { ok: false, error: bound.error } : failed("kind-mismatch", `the name "${name}" is a value, not a function`);
+    if (bound.params.length !== args.length) return failed("bad-expression", `the function "${name}" takes ${String(bound.params.length)} arguments, not ${String(args.length)}`);
+    // Each parameter gets the result of its argument at the call. An error has an effect only where the body reads it.
+    const names: Record<string, unknown> = { ...bound.names };
+    bound.params.forEach((p, i) => {
+      const r = (args[i] as Part).evaluate();
+      Object.defineProperty(names, p, { value: r.ok ? r.value : new Held(r.error), enumerable: true, writable: true, configurable: true });
+    });
+    return bound.body.evaluate({ ...context, names });
+  },
 };
 
 // ---------------------------------------------------------------- ops
@@ -574,7 +548,7 @@ function describe(u: unknown): string {
   return typeof u;
 }
 
-/** This function runs the test of a domain. A test that throws rejects the value. */
+/** This function applies the test of a domain to a value. A test that throws rejects the value. */
 function accepts(d: AnyDomain, x: unknown): boolean {
   try {
     return d.is(x);
@@ -616,7 +590,7 @@ function opOf(d: AnyDomain, self: unknown, op: string): Found | undefined {
   return spec?.fn === undefined && method === undefined ? undefined : { domain: d, spec, method };
 }
 
-/** This function calls the op of a domain: it lifts the numbers, checks the kinds of the arguments and checks the value. */
+/** This function applies the op of a domain: it lifts the numbers, checks the kinds of the arguments and checks the value. */
 function callFound(found: Found, op: string, self: unknown, args: readonly unknown[], domains: readonly AnyDomain[]): unknown {
   const { domain, spec } = found;
   const lift = spec?.liftScalar;
@@ -634,17 +608,41 @@ function callFound(found: Found, op: string, self: unknown, args: readonly unkno
   return checked(out, op, domains);
 }
 
-/** The options of a list op that come after its first argument. */
-const optionsOf = (op: string, rest: readonly unknown[]): unknown => (op === "reduce" || op === "take" || op === "nth" ? rest[1] : rest[0]);
+/** The list ops with a second argument before their options: a count, a position, an op name or a list. */
+const WITH_ARGUMENT: ReadonlySet<string> = new Set(["reduce", "take", "nth", "drop", "append", "without"]);
+
+/**
+ * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that
+ * error comes first (EVAL.DEPTH). With `strict`, the first error item is the result.
+ */
+function goodOf(items: readonly ListItem[], strict: boolean): readonly ListItem[] {
+  const depth = items.find((it) => !it.result.ok && it.result.error.code === "#DEPTH!");
+  if (depth !== undefined && !depth.result.ok) throw new Failure(toKernelError(depth.result.error));
+  const firstBad = items.find((it) => !it.result.ok);
+  if (strict && firstBad !== undefined && !firstBad.result.ok) throw new Failure(toKernelError(firstBad.result.error));
+  return items.filter((it) => it.result.ok);
+}
+
+/** This function gives the items of the list `other` of `append` and `without` (LIST.BUILD). Another value gives `#VALUE!`. */
+function otherOf(op: string, other: unknown, strict: boolean): readonly ListItem[] {
+  return isVexList(other) ? goodOf(other.items, strict) : stop("kind-mismatch", `"${op}" needs a list as its second argument, not a ${describe(other)}`);
+}
+
+/** This function joins the lists that are the values of the items, in order (LIST.FLAT). Each list follows LIST.BUILD. */
+function flat(vs: readonly unknown[], strict: boolean): unknown {
+  const out: ListItem[] = [];
+  for (const inner of vs) {
+    if (!isVexList(inner)) return stop("kind-mismatch", `"flat" needs a list as the value of each item, but an item is a ${describe(inner)}`);
+    out.push(...goodOf(inner.items, strict));
+  }
+  return vexList(out);
+}
 
 /** This function applies a list op (LIST.*). The error items are skipped, except with `{ strict: true }`, and except `#DEPTH!`. */
 function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[], domains: readonly AnyDomain[]): unknown {
-  const depth = items.find((it) => !it.result.ok && it.result.error.code === "#DEPTH!");
-  if (depth !== undefined && !depth.result.ok) throw new Failure(toKernelError(depth.result.error));
-  const o = optionsOf(op, rest);
-  const firstBad = items.find((it) => !it.result.ok);
-  if ((o as { strict?: unknown } | null | undefined)?.strict === true && firstBad !== undefined && !firstBad.result.ok) throw new Failure(toKernelError(firstBad.result.error));
-  const good = items.filter((it) => it.result.ok);
+  const o = WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
+  const strict = (o as { strict?: unknown } | null | undefined)?.strict === true;
+  const good = goodOf(items, strict);
   const vs = good.map((it) => (it.result.ok ? it.result.value : undefined));
   const nums = (): readonly number[] => (vs.every((x) => typeof x === "number") ? vs : stop("kind-mismatch", `"${op}" needs numbers`));
   const bools = (): readonly boolean[] => (vs.every((x) => typeof x === "boolean") ? vs : stop("kind-mismatch", `"${op}" needs booleans`));
@@ -666,12 +664,22 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
       return vexList(good.map((it, i) => ({ it, i })).toSorted((a, b) => compare(vs[a.i], vs[b.i])).map(({ it }) => it));
     }
     case "take":
+    case "drop":
     case "nth": {
       const n = rest[0];
       if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) return stop("kind-mismatch", `"${op}" needs a whole number from 0`);
       if (op === "take") return vexList(good.slice(0, n));
+      if (op === "drop") return vexList(good.slice(n));
       return n < vs.length ? vs[n] : stop("empty", `"nth" has no item at the position ${String(n)}`);
     }
+    case "append":
+      return vexList([...good, ...otherOf(op, rest[0], strict)]);
+    case "without": {
+      const gone = new Set(otherOf(op, rest[0], strict).map((it) => it.key));
+      return vexList(good.filter((it) => !gone.has(it.key)));
+    }
+    case "flat":
+      return flat(vs, strict);
     case "sum":
       return checked(nums().reduce((s, x) => s + x, 0), op, []);
     case "mean": {
@@ -810,23 +818,18 @@ function profileOf(opts: CompileOptions): FormulaProfile {
 }
 
 /** The evaluators of the literals: the JSON form of IR.JSON, and a value of the host (DOC.LITERAL). */
-function literals(domains: readonly AnyDomain[]): Readonly<Record<string, Evaluator>> {
+function literals(domains: readonly AnyDomain[]): Readonly<Record<string, EvalFn>> {
   return {
-    "vex.lit": compiled(({ doc }) => {
-      let r: Outcome;
+    "vex.lit": ({ doc }) => {
       try {
         const decoded = decodeValue(doc.value, domains);
-        r = decoded.ok ? ok(decoded.value) : { ok: false, error: toKernelError(decoded.error) };
+        return decoded.ok ? ok(decoded.value) : { ok: false, error: toKernelError(decoded.error) };
       } catch (error) {
-        r = thrown(error, "a decoder of a domain");
+        return thrown(error, "a decoder of a domain");
       }
-      return () => r;
-    }),
+    },
     // A literal of an expression without a JSON form: its document holds the value of the host, with this own entry.
-    "vex.host": compiled(({ doc }) => {
-      const r = ok(doc.value);
-      return () => r;
-    }),
+    "vex.host": ({ doc }) => ok(doc.value),
   };
 }
 
@@ -837,11 +840,19 @@ function literals(domains: readonly AnyDomain[]): Readonly<Record<string, Evalua
 export function vexMachine(opts: CompileOptions = {}): Machine {
   return {
     world: VEX_WORLD,
-    evaluators: { ...formulaEvaluators(profileOf(opts)), ...literals(opts.domains ?? []), ...LOOPS, ...FUNCTIONS, "vex.axis": axisEvaluator() },
+    evaluators: { ...formulaEvaluators(profileOf(opts)), ...literals(opts.domains ?? []), ...LOOPS, ...FUNCTIONS, "vex.axis": axisEvaluator },
     walkers: WALKERS,
     // The values of a space are data: a field that has the shape of a reference stays a value.
     plain: true,
     roots: ["self", "names"],
     maxDepth: MAX_DOCUMENT_DEPTH,
   };
+}
+
+/**
+ * This function gives the definitions of the machine of Vex for the reference interpreter of the kernel. The formula
+ * kit gets its definitions with the profile of Vex. The evaluators of Vex are functions, so they need no definition.
+ */
+export function vexDefinitions(opts: CompileOptions = {}): Definitions {
+  return formulaDefinitions(profileOf(opts));
 }

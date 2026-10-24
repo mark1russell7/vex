@@ -62,7 +62,7 @@
     "bench:gate": "node bench/gate.ts"
   },
   "dependencies": {
-    "@mark1russell7/coeval": "link:../../../../coeval-wt/vex-contracts/packages/core"
+    "@mark1russell7/coeval": "^0.4.2"
   },
   "devDependencies": {
     "@mark1russell7/cue": "github:mark1russell7/cue",

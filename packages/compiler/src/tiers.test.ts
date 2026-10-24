@@ -167,16 +167,18 @@ describe("the tiers", () => {
     // The records of the spaces often break the schema: then a run goes to tier 1.
     const options: GenerateOptions = { domains: [NumDomain, BoolDomain, TextDomain, Vec2Domain], fns: FNS, schema: { fields: { n: "number", b: "boolean", s: "string" }, vars: { a: "number", c: "boolean" } } };
     const count = { values: 0, fast: 0 };
-    let direct = 0;
+    const runs = runOf(fc.oneof(arbExpr(OPTS), arbListProgram, arbKeyedProgram, arbNumeric, arbNumeric));
     fc.assert(
-      fc.property(runOf(fc.oneof(arbExpr(OPTS), arbListProgram, arbKeyedProgram, arbNumeric, arbNumeric)), ([s, e, k, t, v]) => {
+      fc.property(runs, ([s, e, k, t, v]) => {
         agree(e, s, k, t, v, count, options);
-        const g = generate(e, options);
-        if (g.ok && /= f\d+_\d+\(/.test(g.source)) direct++;
       }),
     );
-    // Some programs have static sites.
-    expect(direct).toBeGreaterThan(20);
+    // Some programs have static sites. A fixed sample gives the same count in each run, so a change of the generators fails at once.
+    const direct = fc.sample(runs, { seed: 20261024, numRuns: 200 }).filter(([, e]) => {
+      const g = generate(e, options);
+      return g.ok && /= f\d+_\d+\(/.test(g.source);
+    });
+    expect(direct.length).toBeGreaterThan(20);
   });
 
   it("COMPILE.MEMO V-051: the axis all with an address that fails at some keys gives the error at those keys", () => {

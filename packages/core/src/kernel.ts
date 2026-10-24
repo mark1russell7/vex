@@ -51,8 +51,6 @@ export const TERM_KINDS: readonly (readonly string[])[] = [["lit"], ["ref"], ["r
 
 /** A term: an envelope of a term kind, or a bare value, which is a literal. */
 const TERM: PartShape = { shape: "term", of: "lit", kinds: TERM_KINDS };
-/** A binding of a `let`: a term, or a function (FN.BIND). */
-const BIND: PartShape = { shape: "term", of: "lit", kinds: [...TERM_KINDS, ["fn"]] };
 const TERMS: PartShape = { shape: "list", item: TERM };
 const NAMES: PartShape = { shape: "map", item: TERM };
 const AXIS: PartShape = { shape: "term", kinds: [["axes"]] };
@@ -65,8 +63,6 @@ const closed = (fields: Readonly<Record<string, PartShape>>, required: readonly 
 
 /** The axes without parameters. */
 const PLAIN_AXES = ["all", "others", "other", "children", "ancestors", "descendants", "siblings", "successors", "predecessors", "reachable"] as const;
-/** The axes that `reverse` can hold: each axis but `where`, `reverse` and `table` (AXIS.REVERSE). */
-const BASE_AXES: readonly string[] = [...PLAIN_AXES, "neighbors", "window", "list"];
 
 /** This function gives the kind of an axis with these parameters (DOC.AXIS). */
 const axisKind = (fields: Readonly<Record<string, PartShape>>): Kind => ({ verbs: { eval: "vex.axis" }, parts: closed(fields, Object.keys(fields)), summary: "An axis of Vex: the targets of a body." });
@@ -78,66 +74,78 @@ const move = (walker: string, parts: PartShape): Kind => ({ verbs: { eval: "form
 const LOOP_SCOPE = [{ names: { keysAt: ["init"] }, in: [["step", "*"], ["until"], ["result"]] }] as const;
 
 /**
+ * This function gives the world of Vex. The module uses it one time, and the annotation `__PURE__` lets a bundler
+ * remove the world from a program that does not use it.
+ */
+function worldOfVex(): World {
+  /** A binding of a `let`: a term, or a function (FN.BIND). */
+  const BIND: PartShape = { shape: "term", of: "lit", kinds: [...TERM_KINDS, ["fn"]] };
+  /** The axes that `reverse` can hold: each axis but `where`, `reverse` and `table` (AXIS.REVERSE). */
+  const BASE_AXES: readonly string[] = [...PLAIN_AXES, "neighbors", "window", "list"];
+  return {
+    kinds: {
+      lit: { verbs: { eval: "vex.lit" }, summary: "A literal: its value in the JSON form of IR.JSON." },
+      ref: { verbs: { eval: "formula.ref" }, parts: { shape: "deep" }, summary: "A reference: the fields of self after its moves, or a name." },
+      record: { verbs: { eval: "formula.record" }, parts: NAMES, summary: "A record of the values of its fields." },
+      let: {
+        verbs: { eval: "formula.let" },
+        parts: closed({ bind: { shape: "map", item: BIND }, body: TERM }, ["bind", "body"]),
+        scope: [{ names: { keysAt: ["bind"] }, in: [["body"]] }],
+        summary: "Names for the body. A binding does not see the other bindings.",
+      },
+      fn: {
+        verbs: { eval: "vex.fn" },
+        parts: closed({ params: { shape: "list", item: { shape: "text" }, distinct: true }, body: TERM }, ["params", "body"]),
+        scope: [{ names: { listAt: ["params"] }, in: [["body"]] }],
+        summary: "A function of a let. Its body evaluates at the position of each call.",
+      },
+      call: { verbs: { eval: "vex.call" }, parts: closed({ fn: { shape: "term", kinds: [["ref"]] }, args: TERMS }, ["fn", "args"]), summary: "A call of a function of a let." },
+      each: { verbs: { eval: "vex.each" }, parts: closed({ axis: AXIS, body: TERM, at: ADDRESS }, ["axis", "body"]), summary: "The body at each target of an axis: a list." },
+      fold: {
+        verbs: { eval: "vex.fold" },
+        parts: closed({ axis: AXIS, init: NAMES, step: NAMES, result: TERM, at: ADDRESS }, ["axis", "init", "step", "result"]),
+        scope: LOOP_SCOPE,
+        summary: "A step at each target of an axis, in order, and a result.",
+      },
+      iterate: {
+        verbs: { eval: "vex.iterate" },
+        parts: closed({ limit: { shape: "number", whole: true, min: 0, max: MAX_ITERATIONS }, init: NAMES, step: NAMES, until: TERM, result: TERM }, ["limit", "init", "step", "result"]),
+        scope: LOOP_SCOPE,
+        summary: "Up to limit steps, until a test is true, and a result.",
+      },
+      ops: { kinds: {}, fallback: { verbs: { eval: "formula.op" }, parts: TERMS, summary: "An op, applied to the values of its arguments." } },
+      ext: { kinds: {}, fallback: { verbs: { eval: "formula.ext" }, summary: "An extension: its handler gives the value of its data." } },
+      axes: {
+        kinds: {
+          ...Object.fromEntries(PLAIN_AXES.map((name) => [name, axisKind({})])),
+          neighbors: axisKind({ n: { shape: "one", values: [4, 8] } }),
+          window: axisKind({ from: { shape: "number" }, to: { shape: "number" } }),
+          table: axisKind({ name: { shape: "text" } }),
+          list: axisKind({ list: TERM }),
+          reverse: axisKind({ axis: { shape: "term", kinds: BASE_AXES.map((name) => ["axes", name]) } }),
+          where: axisKind({ axis: AXIS, test: TERM }),
+        },
+      },
+      moves: {
+        kinds: {
+          key: move("vex.move.key", TERM),
+          index: move("vex.move.index", TERM),
+          offset: move("vex.move.offset", { shape: "list", item: { shape: "number" } }),
+          other: move("vex.move.other", NO_VALUE),
+          origin: move("vex.move.origin", NO_VALUE),
+          parent: move("vex.move.parent", NO_VALUE),
+        },
+      },
+    },
+    defaults: {},
+  };
+}
+
+/**
  * The world of Vex: the contract of each kind of a document of Vex, as data. A contract gives the shape of the parts,
  * the data of the fields and the names that the kind binds. The static kit of the kernel reads it.
  */
-export const VEX_WORLD: World = {
-  kinds: {
-    lit: { verbs: { eval: "vex.lit" }, summary: "A literal: its value in the JSON form of IR.JSON." },
-    ref: { verbs: { eval: "formula.ref" }, parts: { shape: "deep" }, summary: "A reference: the fields of self after its moves, or a name." },
-    record: { verbs: { eval: "formula.record" }, parts: NAMES, summary: "A record of the values of its fields." },
-    let: {
-      verbs: { eval: "formula.let" },
-      parts: closed({ bind: { shape: "map", item: BIND }, body: TERM }, ["bind", "body"]),
-      scope: [{ names: { keysAt: ["bind"] }, in: [["body"]] }],
-      summary: "Names for the body. A binding does not see the other bindings.",
-    },
-    fn: {
-      verbs: { eval: "vex.fn" },
-      parts: closed({ params: { shape: "list", item: { shape: "text" }, distinct: true }, body: TERM }, ["params", "body"]),
-      scope: [{ names: { listAt: ["params"] }, in: [["body"]] }],
-      summary: "A function of a let. Its body evaluates at the position of each call.",
-    },
-    call: { verbs: { eval: "vex.call" }, parts: closed({ fn: { shape: "term", kinds: [["ref"]] }, args: TERMS }, ["fn", "args"]), summary: "A call of a function of a let." },
-    each: { verbs: { eval: "vex.each" }, parts: closed({ axis: AXIS, body: TERM, at: ADDRESS }, ["axis", "body"]), summary: "The body at each target of an axis: a list." },
-    fold: {
-      verbs: { eval: "vex.fold" },
-      parts: closed({ axis: AXIS, init: NAMES, step: NAMES, result: TERM, at: ADDRESS }, ["axis", "init", "step", "result"]),
-      scope: LOOP_SCOPE,
-      summary: "A step at each target of an axis, in order, and a result.",
-    },
-    iterate: {
-      verbs: { eval: "vex.iterate" },
-      parts: closed({ limit: { shape: "number", whole: true, min: 0, max: MAX_ITERATIONS }, init: NAMES, step: NAMES, until: TERM, result: TERM }, ["limit", "init", "step", "result"]),
-      scope: LOOP_SCOPE,
-      summary: "Up to limit steps, until a test is true, and a result.",
-    },
-    ops: { kinds: {}, fallback: { verbs: { eval: "formula.op" }, parts: TERMS, summary: "An op, applied to the values of its arguments." } },
-    ext: { kinds: {}, fallback: { verbs: { eval: "formula.ext" }, summary: "An extension: its handler gives the value of its data." } },
-    axes: {
-      kinds: {
-        ...Object.fromEntries(PLAIN_AXES.map((name) => [name, axisKind({})])),
-        neighbors: axisKind({ n: { shape: "one", values: [4, 8] } }),
-        window: axisKind({ from: { shape: "number" }, to: { shape: "number" } }),
-        table: axisKind({ name: { shape: "text" } }),
-        list: axisKind({ list: TERM }),
-        reverse: axisKind({ axis: { shape: "term", kinds: BASE_AXES.map((name) => ["axes", name]) } }),
-        where: axisKind({ axis: AXIS, test: TERM }),
-      },
-    },
-    moves: {
-      kinds: {
-        key: move("vex.move.key", TERM),
-        index: move("vex.move.index", TERM),
-        offset: move("vex.move.offset", { shape: "list", item: { shape: "number" } }),
-        other: move("vex.move.other", NO_VALUE),
-        origin: move("vex.move.origin", NO_VALUE),
-        parent: move("vex.move.parent", NO_VALUE),
-      },
-    },
-  },
-  defaults: {},
-};
+export const VEX_WORLD: World = /* @__PURE__ */ worldOfVex();
 
 /** The deepest nesting of documents that the machine takes. A deeper document gives `#DEPTH!` (DOC.ERROR). */
 export const MAX_DOCUMENT_DEPTH = 4096;
@@ -192,7 +200,7 @@ const isDepth = (e: EvalError): boolean => e.code === ("#DEPTH!" satisfies Error
 // ---------------------------------------------------------------- the position
 
 /** The segments that are not fields (REF.FORBIDDEN). */
-const FORBIDDEN: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
+const FORBIDDEN: ReadonlySet<string> = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
 
 /**
  * A position of an evaluation, as a host thing of the kernel: the space, the tables, the origin and the focus. It is the
@@ -201,7 +209,8 @@ const FORBIDDEN: ReadonlySet<string> = new Set(["__proto__", "constructor", "pro
  * the computed keys come first (NAV.COMPUTED).
  */
 class Place implements HostThing {
-  readonly [THING]: true = true;
+  // The constructor sets the brand. A computed field of the class makes a bundler keep the class in each program.
+  declare readonly [THING]: true;
   readonly space: Space;
   readonly tables: Readonly<Record<string, Space>>;
   readonly origin: string;
@@ -209,6 +218,7 @@ class Place implements HostThing {
   readonly failure: EvalError | undefined;
 
   constructor(space: Space, tables: Readonly<Record<string, Space>>, origin: string, focus: string, failure?: EvalError) {
+    (this as { [THING]: true })[THING] = true;
     this.space = space;
     this.tables = tables;
     this.origin = origin;
@@ -288,12 +298,12 @@ function moveWalker(fix: (data: unknown) => FixedMove | string): Walker {
 
 /** The walkers of the moves of Vex. */
 const WALKERS: Readonly<Record<string, Walker>> = {
-  "vex.move.key": moveWalker((d) => (typeof d === "string" ? { t: "key", key: d } : `the key of a move is a ${typeof d}, not a text`)),
-  "vex.move.index": moveWalker((d) => (typeof d === "number" ? { t: "index", i: d } : `the position of a move is a ${typeof d}, not a number`)),
-  "vex.move.offset": moveWalker((d) => ({ t: "offset", d: d as readonly number[] })),
-  "vex.move.other": moveWalker(() => ({ t: "other" })),
-  "vex.move.origin": moveWalker(() => ({ t: "origin" })),
-  "vex.move.parent": moveWalker(() => ({ t: "parent" })),
+  "vex.move.key": /* @__PURE__ */ moveWalker((d) => (typeof d === "string" ? { t: "key", key: d } : `the key of a move is a ${typeof d}, not a text`)),
+  "vex.move.index": /* @__PURE__ */ moveWalker((d) => (typeof d === "number" ? { t: "index", i: d } : `the position of a move is a ${typeof d}, not a number`)),
+  "vex.move.offset": /* @__PURE__ */ moveWalker((d) => ({ t: "offset", d: d as readonly number[] })),
+  "vex.move.other": /* @__PURE__ */ moveWalker(() => ({ t: "other" })),
+  "vex.move.origin": /* @__PURE__ */ moveWalker(() => ({ t: "origin" })),
+  "vex.move.parent": /* @__PURE__ */ moveWalker(() => ({ t: "parent" })),
 };
 
 // ---------------------------------------------------------------- the axes and the loops
@@ -609,7 +619,7 @@ function callFound(found: Found, op: string, self: unknown, args: readonly unkno
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<string> = new Set(["reduce", "take", "nth", "drop", "append", "without"]);
+const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that
@@ -774,8 +784,8 @@ const FORMS: Readonly<Record<string, LazyOp>> = {
     const c = boolOf(args, 0, "if");
     return c.ok ? argOf(args, c.value === true ? 1 : 2, "if") : c;
   },
-  and: logic("and"),
-  or: logic("or"),
+  and: /* @__PURE__ */ logic("and"),
+  or: /* @__PURE__ */ logic("or"),
   // EVAL.DEPTH: ifError does not hide #DEPTH!, because the engine failed, not the data.
   ifError: (args) => {
     const first = argOf(args, 0, "ifError");

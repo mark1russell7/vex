@@ -265,35 +265,36 @@ function replaced(u: unknown, at: readonly (string | number)[], next: unknown): 
   return { ...(u as Readonly<Record<string, unknown>>), [k]: replaced((u as Readonly<Record<string, unknown>>)[k], rest, next) };
 }
 
-/** The parts that a changed document can get: JSON data, and documents of each kind of Vex, valid or not. */
-const arbPart: fc.Arbitrary<unknown> = fc.oneof(
-  fc.jsonValue({ maxDepth: 2 }),
-  fc.constantFrom(
-    { type: "ref", value: ["self", "p"] },
-    { type: "ref", value: ["names", "a"] },
-    { type: "ref", value: ["self", { type: ["moves", "key"], value: "A" }, "n"] },
-    { type: ["axes", "all"], value: {} },
-    { type: ["axes", "where"], value: { axis: { type: ["axes", "others"], value: {} }, test: true } },
-    { type: ["moves", "parent"], value: null },
-    { type: ["moves", "index"], value: 1 },
-    { type: "fn", value: { params: ["a"], body: 1 } },
-    { type: "lit", value: { type: "ref", value: ["self"] } },
-    { type: ["ops", "add"], value: [1, 2] },
-    { type: "record", value: { a: 1 } },
-    "A",
-    0,
-    null,
-    [],
-    {},
-  ),
-);
+/** This function gives the parts that a changed document can get: JSON data, and documents of each kind of Vex, valid or not. */
+const arbPart = (): fc.Arbitrary<unknown> =>
+  fc.oneof(
+    fc.jsonValue({ maxDepth: 2 }),
+    fc.constantFrom(
+      { type: "ref", value: ["self", "p"] },
+      { type: "ref", value: ["names", "a"] },
+      { type: "ref", value: ["self", { type: ["moves", "key"], value: "A" }, "n"] },
+      { type: ["axes", "all"], value: {} },
+      { type: ["axes", "where"], value: { axis: { type: ["axes", "others"], value: {} }, test: true } },
+      { type: ["moves", "parent"], value: null },
+      { type: ["moves", "index"], value: 1 },
+      { type: "fn", value: { params: ["a"], body: 1 } },
+      { type: "lit", value: { type: "ref", value: ["self"] } },
+      { type: ["ops", "add"], value: [1, 2] },
+      { type: "record", value: { a: 1 } },
+      "A",
+      0,
+      null,
+      [],
+      {},
+    ),
+  );
 
 /**
  * A document of Vex that a random change can make not valid. It is the document of a random expression, through JSON
  * text, with one value at a random path replaced. Each literal of the expression needs a JSON form with the domains.
  */
 export const arbChangedDocument = (opts: ArbOptions, domains: readonly AnyDomain[]): fc.Arbitrary<unknown> =>
-  fc.tuple(arbExpr(opts), fc.nat(), arbPart, fc.boolean()).map(([e, i, part, change]) => {
+  fc.tuple(arbExpr(opts), fc.nat(), arbPart(), fc.boolean()).map(([e, i, part, change]) => {
     const d = toDocument(e, domains);
     if (!d.ok) throw new Error(d.error.message);
     const json: unknown = JSON.parse(JSON.stringify(d.value));
@@ -306,7 +307,7 @@ export const arbChangedDocument = (opts: ArbOptions, domains: readonly AnyDomain
 const num = (value: number): Expr => ({ tag: "lit", value });
 
 /** A record space of records with a number `n`, with 1 to 4 keys. Some records have no `n`. */
-export const arbNumberSpace: fc.Arbitrary<Space> = fc.uniqueArray(fc.constantFrom(...RECORD_KEYS), { minLength: 1, maxLength: 4 }).chain((keys) =>
+export const arbNumberSpace: fc.Arbitrary<Space> = /* @__PURE__ */ fc.uniqueArray(fc.constantFrom(...RECORD_KEYS), { minLength: 1, maxLength: 4 }).chain((keys) =>
   fc
     .tuple(...keys.map(() => fc.oneof({ weight: 9, arbitrary: fc.integer({ min: -9, max: 9 }).map((n) => ({ n })) }, { weight: 1, arbitrary: fc.constant({}) })))
     .map((recs) => space.record(Object.fromEntries(keys.map((k, i) => [k, recs[i]])))),

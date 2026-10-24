@@ -118,7 +118,7 @@ export function fromDocument(doc: unknown, domains: readonly AnyDomain[] = []): 
 }
 
 /** The kinds of the terms, as the first key of their type. */
-const TERMS: ReadonlySet<string> = new Set(TERM_KINDS.map((k) => k[0] as string));
+const TERMS: ReadonlySet<string> = /* @__PURE__ */ new Set(/* @__PURE__ */ TERM_KINDS.map((k) => k[0] as string));
 
 /**
  * The reader of documents. The kernel checked the document, so each kind has the shape of its contract. The reader

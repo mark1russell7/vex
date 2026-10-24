@@ -256,8 +256,8 @@ importers:
   packages/core:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.4.2
-        version: 0.4.2
+        specifier: ^0.5.0
+        version: 0.5.0
     devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue
@@ -567,8 +567,8 @@ importers:
   tools/mutation:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.4.2
-        version: 0.4.2
+        specifier: ^0.5.0
+        version: 0.5.0
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains
@@ -1602,8 +1602,8 @@ packages:
     peerDependencies:
       zod: ^4.1.0
 
-  '@mark1russell7/coeval@0.4.2':
-    resolution: {integrity: sha512-gNBVRypYh/8hTno7L3qOgpjSFcyBqj+88ibqfzrrL9LXrpsBFjZwBjuYLyax7lfe7C9CDHfYENe1oIp1+0xNLg==}
+  '@mark1russell7/coeval@0.5.0':
+    resolution: {integrity: sha512-zLy8JSh8sOVOy1ZjT7rnJLxuBtZ4Bm3+/EEK4Djh8g8SVOi7Dk/6KbW2zKTEvA+LBVpgwQmgV+Wa42s0MQdrqA==}
 
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7':
     resolution: {gitHosted: true, integrity: sha512-hEpr79iwUOLCP6Pn6m8KHq200u4c2jM1npz+SIJQGrrT1fdUUAwgKCZgwOPiyiH5SA4QPXID7f1wCDz7T9HP7A==, tarball: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7}
@@ -5581,7 +5581,7 @@ snapshots:
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
       zod: 4.6.7
 
-  '@mark1russell7/coeval@0.4.2': {}
+  '@mark1russell7/coeval@0.5.0': {}
 
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7': {}
 

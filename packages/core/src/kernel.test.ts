@@ -46,7 +46,8 @@ describe("the contracts of Vex (DOC.CHECK)", () => {
     expect(Object.keys(checker.walkers ?? {}).toSorted()).toEqual(Object.keys(machine.walkers ?? {}).toSorted());
     expect([checker.world, checker.plain, checker.roots, checker.maxDepth]).toEqual([machine.world, machine.plain, machine.roots, machine.maxDepth]);
     // The check uses only the names: the code of the checks evaluates nothing.
-    expect(() => (checker.evaluators?.["vex.each"] as () => unknown)()).toThrow();
+    const code = (checker.evaluators ?? {})["vex.each"] as () => unknown;
+    expect(code).toThrow("the machine of the checks evaluates nothing");
     expect(check(checker, doc(each(axes.all, ref("n"))), { declaredType: "lit" })).toEqual([]);
   });
 

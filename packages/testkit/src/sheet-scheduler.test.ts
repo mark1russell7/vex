@@ -93,7 +93,7 @@ describe("the reference of a sheet run", () => {
     const reads = [["ok", "0"], ["fixed", "0"], ...bad.map((_d, i) => [`bad${i}`, "0"] as const)] as const;
     const got = expectSame(columns, { space: sheetRowsOf([1]), domains: [NumDomain] }, reads);
     expect(got.map(problem)).toEqual([undefined, undefined, ...bad.map(() => ["#VALUE!", "a cell reference needs a column name and an address of fixed moves"])]);
-    expect(plain(got[1] as Result<unknown>)).toBe(2);
+    expect(got.map(plain)[1]).toBe(2);
     // The closure compiler of SheetRun gives the error the path of the node of the extension (EVAL.LOCATION).
     const run = new SheetRun(columns, { space: sheetRowsOf([1]), domains: [NumDomain] });
     expect(reads.map(([c, k]) => run.cell(c, k)).map((r) => (r.ok ? undefined : r.error.path))).toEqual([undefined, undefined, ...bad.map(() => [0])]);

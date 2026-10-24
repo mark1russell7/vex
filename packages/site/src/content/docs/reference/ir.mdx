@@ -125,7 +125,7 @@ A program can go to a file, a database, a worker or another process. The JSON Sc
 
 ## Documents
 
-A program can also be a document of [coeval](https://github.com/mark1russell7/coeval), the language base of the family. Each language of the family writes its terms in this form. Thus one tool can read, check and show the programs of each language. `toDocument` gives the document of an expression, and `fromDocument` gives the expression of a document. `compile`, `evaluate`, `explain` and `parse` take a document too, and so do `tiered`, `generate` and `emitModule` of the compiler.
+A program can also be a document of [coeval](https://github.com/mark1russell7/coeval), the kernel of the family. Each language of the family writes its terms in this form. Thus one tool can read, check and show the programs of each language. `toDocument` gives the document of an expression, and `fromDocument` gives the expression of a document. `compile`, `evaluate`, `explain` and `parse` take a document too, and so do `tiered`, `generate` and `emitModule` of the compiler.
 
 ```ts doctest
 import { app, evaluate, fromDocument, lit, ref, space, toDocument } from "@mark1russell7/vex";
@@ -156,6 +156,21 @@ Each term is an envelope `{ type, value }`. Another JSON value in the place of a
 | `iterate(limit, init, step, result, until)` | `{ type: "iterate", value: { limit, init, step, until, result } }` |
 | `ext(kind, data)` | `{ type: ["ext", ...keys], value: data }` |
 
-A move is `{ type: ["moves", kind], value }`. The value of `key` is a text, and the value of `index` is a number. A computed key or position is a term in an envelope, also a literal. The value of `offset` is its list of numbers, and the value of `other`, `origin` and `parent` is `null`. An axis is `{ type: ["axes", name], value: parameters }`, for example `{ type: ["axes", "window"], value: { from: -1, to: 0 } }`.
+A move is `{ type: ["moves", kind], value }`. The value of `key` or `index` is a term. A text key and a number position are fixed, and another term is a computed key or position, for example a term in an envelope. A literal of another kind gives `#VALUE!` at run time. The value of `offset` is its list of numbers, and the value of `other`, `origin` and `parent` is `null`. An axis is `{ type: ["axes", name], value: parameters }`, for example `{ type: ["axes", "window"], value: { from: -1, to: 0 } }`.
 
 A document is JSON data. The value of a literal has the JSON form of `serialize`, so a domain value needs `encode` and `decode`. `fromDocument` does not throw. A document that is not valid gives `#VALUE!` with the reason and the location of the part, as a JSON Pointer. Refer to the rules `DOC.*` of [the specification](../../spec/).
+
+### The kernel of coeval
+
+coeval is the core of Vex. `VEX_WORLD` gives the contract of each kind as data: its parts, the type of its data, the kinds of each position and its names. The static kit of the kernel checks each document by these contracts before `fromDocument` reads it (`DOC.CHECK`). The function `deps` finds the reads with `refsOf`. The kernel is also the reference tier of Vex (`EVAL.REFERENCE`). `kernelPlan` evaluates a document with `vexMachine`, and the closure compiler and the loop compiler give its results.
+
+```ts doctest
+import { app, fromDocument, kernelPlan, ref, space } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+// The contract of each permits only the fields axis, body and at.
+const extra = { type: "each", value: { axis: { type: ["axes", "all"], value: {} }, body: 1, extra: 1 } };
+fromDocument(extra).ok; // => false
+const plan = kernelPlan(app("add", ref("n"), ref("n")), { domains: [NumDomain] });
+plan.run({ space: space.array([{ n: 2 }]), origin: "0" }); // => { ok: true, value: 4 }
+```

@@ -1,8 +1,8 @@
 /**
  * The reference interpreter of Vex: the kernel of coeval (decision D13 of coeval). It evaluates the document of a program
- * with the machine of Vex (`kernelPlan`): the formula kit of the kernel, the contracts of the kinds of Vex and its profile.
- * It shares no code with the closure compiler of `@mark1russell7/vex`. Property tests compare the two interpreters: the
- * same value, or the same error code (EVAL.REFERENCE).
+ * with the machine of Vex (`kernelPlan`). The machine is the formula kit of the kernel, the contracts of the kinds of Vex
+ * and its profile. It shares no code with the closure compiler of `@mark1russell7/vex`. Property tests compare the two
+ * interpreters: the same value, or the same error code (EVAL.REFERENCE).
  */
 import { kernelPlan, type AnyDomain, type Envelope, type ErrorCode, type Expr, type ExtHandler, type KernelPlan, type Space } from "@mark1russell7/vex";
 

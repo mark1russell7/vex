@@ -264,8 +264,8 @@ class Place implements HostThing {
 }
 
 /**
- * This function gives the root `self` of an evaluation in the kernel: the position at the origin of a space, with the
- * tables of the axis table (AXIS.TABLE).
+ * This function gives the root `self` of an evaluation in the kernel. It is the position at the origin of a space,
+ * with the tables of the axis table (AXIS.TABLE).
  */
 export function vexSelf(space: Space, origin: string, tables: Readonly<Record<string, Space>> = {}): HostThing {
   return new Place(space, tables, origin, origin);
@@ -317,7 +317,7 @@ const placeOf = (axis: Targets, from: Place, key: string): Place => (axis.table 
 /** This function gives the compiled parts of a record value, by name. */
 const partsOf = (value: unknown): Readonly<Record<string, CompiledPart | undefined>> => (value ?? {}) as Readonly<Record<string, CompiledPart | undefined>>;
 
-/** This function gives the part of a field that the contract requires. */
+/** This function gives the part of a field that the contract makes necessary. */
 const partAt = (value: unknown, name: string): CompiledPart => partsOf(value)[name] as CompiledPart;
 
 /** This function makes a compiled evaluator. */
@@ -776,8 +776,8 @@ const FORMS: Readonly<Record<string, LazyOp>> = {
 };
 
 /**
- * This function gives the profile of Vex for the formula kit: the dispatch of the ops, the special forms, the
- * extensions, and `#ARGS` for two or more failed arguments or fields (CALL.ARGS, REC.FIELDS).
+ * This function gives the profile of Vex for the formula kit: the dispatch of the ops, the special forms and the
+ * extensions. Two or more failed arguments or fields give `#ARGS` (CALL.ARGS, REC.FIELDS).
  */
 function profileOf(opts: CompileOptions): FormulaProfile {
   // Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value
@@ -831,8 +831,8 @@ function literals(domains: readonly AnyDomain[]): Readonly<Record<string, Evalua
 }
 
 /**
- * This function makes the machine of the kernel for Vex: the world of Vex, the evaluators of the formula kit with the
- * profile of Vex, and the evaluators and the walkers that Vex adds. It is the reference tier of Vex (EVAL.REFERENCE).
+ * This function makes the machine of the kernel for Vex: the world of Vex, and the formula kit with the profile of
+ * Vex. Vex adds its evaluators and its walkers. It is the reference tier of Vex (EVAL.REFERENCE).
  */
 export function vexMachine(opts: CompileOptions = {}): Machine {
   return {

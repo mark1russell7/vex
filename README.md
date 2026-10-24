@@ -58,7 +58,7 @@ The packages are on npm (see the badge for the version). The specification (Vex 
 
 | Package | Contents |
 |---|---|
-| [`@mark1russell7/vex`](./packages/core) | The kernel: spaces, addresses, the expression IR and its documents of coeval, domains, the interpreter, traces |
+| [`@mark1russell7/vex`](./packages/core) | The core: spaces, addresses, the expression IR and its documents, domains, the interpreter, traces, and the reference tier on the kernel of coeval |
 | [`@mark1russell7/vex-domains`](./packages/domains) | Domains for 2D vectors, named-component vectors, colors and angles |
 | [`@mark1russell7/vex-testkit`](./packages/testkit) | Arbitraries, law checks and the reference interpreter for property tests |
 | [`@mark1russell7/vex-compiler`](./packages/compiler) | Generated JavaScript for programs, with the results of the interpreter |

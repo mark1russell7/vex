@@ -143,3 +143,12 @@ const doc = toDocument(total);
 doc; // => { ok: true, value: { type: ["ops", "sum"], value: [{ type: "each", value: { axis: { type: ["axes", "others"], value: {} }, body: { type: "ref", value: ["self", "size"] } } }] } }
 fromDocument(doc.ok ? doc.value : null); // => { ok: true, value: total }
 ```
+
+The kernel of coeval is the core of Vex. Its static kit checks a document by the contracts of `VEX_WORLD` before `fromDocument` reads it. The error of a bad document has the JSON Pointer of the bad part. `kernelPlan` evaluates a document in the kernel: it is the reference tier, and the other tiers give its results. Use it to check a host of coeval against Vex.
+
+```ts doctest
+import { app, kernelPlan, ref, space } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+kernelPlan(app("add", ref("n"), ref("n")), { domains: [NumDomain] }).run({ space: space.array([{ n: 3 }]), origin: "0" }); // => { ok: true, value: 6 }
+```

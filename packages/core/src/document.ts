@@ -22,9 +22,9 @@
  *
  * The address `at` of `each` and `fold` is a reference from `self` with moves only. An empty address is no address.
  *
- * The kernel checks a document: the contracts of `VEX_WORLD` give the shape of each kind, the data of its fields and the
- * kinds that a position permits (DOC.CHECK). Then `fromDocument` reads the expression, and it checks only the rules that
- * are the grammar of Vex: the steps of a reference, the address, the function of a call and the names of a loop.
+ * The kernel checks a document by the contracts of `VEX_WORLD` (DOC.CHECK). A contract gives the shape of a kind, the
+ * data of its fields and the kinds of each position. Then `fromDocument` reads the expression. It checks only the grammar
+ * of Vex: the steps of a reference, the address, the function of a call and the names of a loop.
  */
 import { check, isEnvelope, typeName, typePath, type Envelope, type Issue, type Key, type Machine } from "@mark1russell7/coeval";
 import { decodeValue } from "./codec.ts";

@@ -2,7 +2,7 @@ import type { KernelCode } from "@mark1russell7/coeval";
 
 /**
  * The error codes of Vex. The names come from the spreadsheet error values, because a Vex program is a spreadsheet
- * formula over records. Each code is a code of the kernel of coeval with the same meaning: for example `#N/A` is a step
+ * formula over records. Each code is a code of the kernel of coeval with the same meaning. For example, `#N/A` is a step
  * that reaches nothing, and `#DEPTH!` is a full call stack. The type checks it: a code that the kernel does not have is
  * not a member.
  */

@@ -1,6 +1,6 @@
 /**
- * The core of Vex: spaces, addresses, the expression IR and its documents, domains, the interpreter and its folds, and
- * Vex in the kernel of coeval: the contracts of its kinds and the reference tier.
+ * The core of Vex: spaces, addresses, the expression IR and its documents, domains, the interpreter and its folds. It
+ * also has Vex in the kernel of coeval: the contracts of its kinds and the reference tier.
  */
 export * from "./result.ts";
 export * from "./errors.ts";

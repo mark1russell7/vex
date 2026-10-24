@@ -808,6 +808,29 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 | D10 | ste-lint and the spec | Write the spec in STE with requirement IDs. Do not exempt it. |
 | D11 | Template gaps T1–T5 | Fix them upstream in `template` and `cue` during P0 |
 | D12 | Scaffolding rules | The workspace `CLAUDE.md` says to use `lib new` and `cue-config`. Template monorepos use `pnpm package add`. State in the workspace `CLAUDE.md` which rule applies where. |
+| D13 | coeval is the core of Vex (2026-10-21) | Decided by the owner. `@mark1russell7/coeval` is the one runtime dependency of `@mark1russell7/vex`. Refer to the record below. |
+
+### D13: coeval is the core of Vex
+
+**Context.** Vex 0.9.1 read and wrote the documents of coeval with its own reader, its own checks and its own walk for `deps`. The package coeval was only a dev dependency, and the build copied its helpers. The owner reviewed it on 2026-10-21, and wrote:
+
+```text
+it looks like in some libs like vex and client u just wrote a dev dep mapper to the coeval system rather than
+making it core basis of those languages … one of the ideas here was to extract this shared stuff from these libs
+so we could dedupe and test it once
+```
+
+Decision D13 of coeval says that the languages evaluate through the kernel. The machinery lives once in coeval, and a language keeps only what is its own.
+
+**Decision.**
+
+- `@mark1russell7/coeval` is the one runtime dependency of `@mark1russell7/vex`. The build does not copy it, so a program has one kernel.
+- The contracts of the kinds of Vex are data (`VEX_WORLD`). The static kit of the kernel checks each document by them (`fromDocument`, DOC.CHECK), and `deps` finds the reads with its `refsOf`.
+- The kernel is the reference tier (EVAL.REFERENCE). `kernelPlan` evaluates a document with `vexMachine`. The machine is the formula kit of the kernel with a profile of the rules of Vex. Vex adds the evaluators and the walkers of the moves, the axes and the loops. The test kit compares the other tiers with it.
+- Vex keeps what is its own: the typed domains, the spaces, the moves and the axes. It also keeps the closure compiler, the loop compiler, the standalone modules and `SheetRun`, with their speed gates. They read documents through `fromDocument`.
+- A generic part goes into coeval, not into Vex. The kernel 0.4.0 has the computed steps of a path, the addresses, the contracts with data and a linear walk. It also has a profile that combines the errors of the parts.
+
+**Why.** One copy of the document model, the checks, the scope rules and the shared constructs gives one meaning. One set of tests proves it. A correction in the kernel corrects Vex.
 
 ---
 
@@ -903,6 +926,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 - Done on 2026-10-19: the speed job of the nightly workflow uses the shell `bash`, so a failed gate fails the job (`pipefail`). Before, each gate step sent its output into `tee`, and the job passed with a failed gate. The domains run of the mutation lane failed on a test that emitted a module with the mutated domains. That test moved to `module.test.ts` (`tools/mutation/README.md`).
 - Done on 2026-10-19: 0.8.1 is on npm. It makes the generated modules faster (COMPILE.MODULE), and the API does not change. It is the first release of the standard workflow of the template. A version commit on `main` publishes each new version, and the owner does not approve each release (`RELEASING.md`).
 - Done on 2026-10-19: 0.9.0 is on npm. The tools of `@mark1russell7/vex-mcp` are procedures of `@procedures/client` on `createMcpHost`, with the same names. The command starts under `run()` of `@mark1russell7/service`. The package check starts the installed command, lists its tools and closes its input. The command must stop with the code 0.
+- Done on 2026-10-21 (D13): coeval is the core of Vex, and its one runtime dependency. The kernel checks the documents by the contracts of `VEX_WORLD` (DOC.CHECK), `deps` uses its static kit, and the kernel is the reference tier (`kernelPlan`, EVAL.REFERENCE). The property tests compare the closure compiler with the kernel on random programs (P8, P10, P13) and on the JSON documents (P19). They also compare them on changed documents (P20), and on programs over numbers that most often have a value (P21). P20 found V-056. The kernel got the generic parts that Vex needed in coeval 0.4.0.
 - Done on 2026-10-20: a program can be a document of [coeval](https://github.com/mark1russell7/coeval), the language base of the family (its decision D12). `toDocument` and `fromDocument` change an expression into a document and back. `compile`, `evaluate`, `explain`, `parse`, the compiler and the MCP tools take a document (spec §4.1, property P18). The helpers of coeval come from a dev dependency, and the build copies them. Thus `@mark1russell7/vex` has no runtime dependency.
 
 ---

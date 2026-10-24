@@ -284,8 +284,8 @@ const arbPart: fc.Arbitrary<unknown> = fc.oneof(
 );
 
 /**
- * A document of Vex that a random change can make not valid: the document of a random expression, through JSON text,
- * with one value at a random path replaced. Each literal of the expression needs a JSON form with the domains.
+ * A document of Vex that a random change can make not valid. It is the document of a random expression, through JSON
+ * text, with one value at a random path replaced. Each literal of the expression needs a JSON form with the domains.
  */
 export const arbChangedDocument = (opts: ArbOptions, domains: readonly AnyDomain[]): fc.Arbitrary<unknown> =>
   fc.tuple(arbExpr(opts), fc.nat(), arbPart, fc.boolean()).map(([e, i, part, change]) => {
@@ -308,8 +308,8 @@ export const arbNumberSpace: fc.Arbitrary<Space> = fc.uniqueArray(fc.constantFro
 );
 
 /**
- * A program over the numbers of `arbNumberSpace` that most often gives a value, for the differential tests of values:
- * ops of `NumDomain`, list ops over axes, the special forms, lets, functions and loops. The hostile programs of
+ * A program over the numbers of `arbNumberSpace` that most often gives a value, for the differential tests of values.
+ * It has ops of `NumDomain`, list ops over axes, the special forms, lets, functions and loops. The hostile programs of
  * `arbExpr` mostly give errors, so they rarely compare two values.
  */
 export function arbNumberExpr(maxDepth = 4): fc.Arbitrary<Expr> {

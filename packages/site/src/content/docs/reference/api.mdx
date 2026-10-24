@@ -92,6 +92,17 @@ byW.each((t) => t.from("n")).values().at("0"); // => some([10, 20, 30])
 byW.nth(0).at("0"); // => some(1)
 ```
 
+A list chain also builds lists: `drop(n)`, `append(other)`, `without(other)` and `flat()`. The argument `other` is a list chain. The body of an axis can give a list chain. Then the value of each item is a list, and `flat()` joins these lists in order.
+
+```ts doctest
+const rows = vex(NumDomain).over(space.array([{ n: 30 }, { n: 10 }, { n: 20 }]));
+const ns = rows.start(0).each((c) => c.from("n"));
+
+ns.drop(1).append(ns.take(1)).values().at("0"); // => some([10, 20, 30])
+ns.without(ns.take(2)).keys().at("0"); // => some(["2"])
+rows.start(0).each((c) => c.window(0, 1, (t) => t.from("n"))).flat().values().at("0"); // => some([30, 10, 10, 20, 20])
+```
+
 `root.fn(kinds, body)` makes a function, and `functions(fns, body)` of a chain binds it (FN.BIND). Each kind is `"number"`, `"string"`, `"boolean"` or `"any"`, and it gives the type of the chain of a parameter. The body of a function evaluates at the focus of each call.
 
 ```ts doctest

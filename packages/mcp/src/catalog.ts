@@ -133,6 +133,10 @@ These ops apply to each value. They are not ops of a domain.
 | \`sortBy(list)\` | A list with the items in the order of their values, from the smallest. The values are numbers or texts. |
 | \`take(list, n)\` | A list of the first \`n\` items |
 | \`nth(list, i)\` | The value of the item at the position \`i\`, from 0 |
+| \`drop(list, n)\` | A list of the items after the first \`n\` items |
+| \`append(list, other)\` | A list of the items of \`list\`, and then the items of \`other\` |
+| \`without(list, other)\` | A list of the items of \`list\` whose key is not the key of an item of \`other\` |
+| \`flat(list)\` | A list of the items of the lists that are the values of the items, in order |
 
 A list op skips error items. The option \`{ strict: true }\` gives the first error.
 `;

@@ -727,15 +727,14 @@ class Compiler {
   }
 
   #listOp(op: ListOp, list: VexList, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
-    // The options come after the first argument of reduce, take and nth.
-    const optsArg = op === "reduce" || op === "take" || op === "nth" ? rest[1] : rest[0];
-    // A reduction that skips error items does not skip #DEPTH! (EVAL.DEPTH).
-    const depth = list.items.find((it) => !it.result.ok && isDepthError(it.result.error))?.result;
-    if (depth !== undefined && !depth.ok) return fail(depth.error);
+    // The options come after the second argument of an op with one, for example the count of take.
+    const optsArg = WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
     const strict = (optsArg as ListOptions | null | undefined)?.strict === true;
-    const firstError = list.items.find((it) => !it.result.ok)?.result;
-    if (strict && firstError !== undefined && !firstError.ok) return fail(firstError.error);
-    const okValues = list.items.flatMap((it) => (it.result.ok ? [it.result.value] : []));
+    const good = goodItems(list, strict);
+    if (!good.ok) return good;
+    const okItems = good.value;
+    // Stryker disable next-line ConditionalExpression,ArrayDeclaration: each item of okItems has a value
+    const okValues = okItems.flatMap((it) => (it.result.ok ? [it.result.value] : []));
     const numbers = (): Result<readonly number[]> => {
       const bad = okValues.find((x) => typeof x !== "number");
       return bad === undefined ? ok(okValues as readonly number[]) : this.#err("kind-mismatch", `"${op}" needs numbers, but an item is a ${describeType(bad)}`, f, path, { op });
@@ -745,19 +744,34 @@ class Compiler {
       return bad === undefined ? ok(okValues as readonly boolean[]) : this.#err("kind-mismatch", `"${op}" needs booleans, but an item is a ${describeType(bad)}`, f, path, { op });
     };
     const empty = (): Result<never> => this.#err("empty", `"${op}" has no values to work with`, f, path, { op });
-    // A count or a position of take and nth is a whole number from 0.
+    // A count or a position of take, drop and nth is a whole number from 0.
     const whole = (): Result<number> => {
       const n = rest[0] as number;
       return Number.isSafeInteger(n) && n >= 0 ? ok(n) : this.#err("kind-mismatch", `"${op}" needs a whole number from 0, not ${describeType(n)}`, f, path, { op });
     };
-    const okItems = list.items.filter((it) => it.result.ok);
+    // The second list of append and without follows the rules of the first list (LIST.BUILD).
+    const other = (): Result<readonly ListItem[]> => (isVexList(rest[0]) ? goodItems(rest[0], strict) : this.#err("kind-mismatch", `"${op}" needs a list as its second argument, not a ${describeType(rest[0])}`, f, path, { op }));
     switch (op) {
       case "sortBy":
         return this.#sortBy(okItems, okValues, f, path);
-      case "take": {
+      case "take":
+      case "drop": {
         const n = whole();
-        return n.ok ? ok(vexList(okItems.slice(0, n.value))) : n;
+        if (!n.ok) return n;
+        return ok(vexList(op === "take" ? okItems.slice(0, n.value) : okItems.slice(n.value)));
       }
+      case "append": {
+        const more = other();
+        return more.ok ? ok(vexList([...okItems, ...more.value])) : more;
+      }
+      case "without": {
+        const more = other();
+        if (!more.ok) return more;
+        const gone = new Set(more.value.map((it) => it.key));
+        return ok(vexList(okItems.filter((it) => !gone.has(it.key))));
+      }
+      case "flat":
+        return this.#flat(okValues, strict, f, path);
       case "nth": {
         const i = whole();
         if (!i.ok) return i;
@@ -768,7 +782,7 @@ class Compiler {
       case "values":
         return ok(Object.freeze([...okValues]));
       case "keys":
-        return ok(Object.freeze(list.items.filter((it) => it.result.ok).map((it) => it.key)));
+        return ok(Object.freeze(okItems.map((it) => it.key)));
       case "errors":
         return ok(Object.freeze(list.items.flatMap((it) => (it.result.ok ? [] : [it.result.error]))));
       case "first":
@@ -801,6 +815,21 @@ class Compiler {
       case "reduce":
         return this.#reduce(rest[0], okValues, f, path, optsArg);
     }
+  }
+
+  /**
+   * This method joins the lists that are the values of the items of a list, in order (LIST.FLAT). Each list follows the
+   * rules of LIST.BUILD. A value that is not a list gives `#VALUE!`.
+   */
+  #flat(values: readonly unknown[], strict: boolean, f: Frame, path: readonly number[]): Result<VexList> {
+    const out: ListItem[] = [];
+    for (const inner of values) {
+      if (!isVexList(inner)) return this.#err("kind-mismatch", `"flat" needs a list as the value of each item, but an item is a ${describeType(inner)}`, f, path, { op: "flat" });
+      const good = goodItems(inner, strict);
+      if (!good.ok) return good;
+      out.push(...good.value);
+    }
+    return ok(vexList(out));
   }
 
   /**
@@ -852,6 +881,21 @@ class Compiler {
     }
     return ok(acc);
   }
+}
+
+/** The list ops with a second argument before their options: a count, a position, an op name or a list. */
+const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without"]);
+
+/**
+ * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that
+ * error comes first (EVAL.DEPTH). With `strict`, the first error item is the result.
+ */
+function goodItems(list: VexList, strict: boolean): Result<readonly ListItem[]> {
+  const depth = list.items.find((it) => !it.result.ok && isDepthError(it.result.error))?.result;
+  if (depth !== undefined && !depth.ok) return fail(depth.error);
+  const firstError = list.items.find((it) => !it.result.ok)?.result;
+  if (strict && firstError !== undefined && !firstError.ok) return fail(firstError.error);
+  return ok(list.items.filter((it) => it.result.ok));
 }
 
 const FORBIDDEN_FIELDS = new Set(["__proto__", "constructor", "prototype"]);

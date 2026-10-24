@@ -231,35 +231,35 @@ export interface ChainBase<Ctx extends ChainContext, T> {
    */
   functions<const F extends Readonly<Record<string, FnDef<readonly FnParamKind[], unknown>>>, U>(fns: F, body: (c: ChainOf<Ctx, T>, call: FnCalls<Ctx, F>) => ChainBase<Ctx, U>): ChainOf<Ctx, U>;
   /** The others axis: the body evaluates at each key except the focus. Its start value is the current value. */
-  others<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  others<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The neighbors axis of a grid. */
-  neighbors<U>(n: 4 | 8, body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  neighbors<U>(n: 4 | 8, body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The all axis inside the expression: the body evaluates at each key, with the current value as start value. */
-  each<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  each<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The children axis of a tree space: the body evaluates at each child of the focus. */
-  children<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  children<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The ancestors axis of a tree space: the parent first, the root last. */
-  ancestors<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  ancestors<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The descendants axis of a tree space: depth first, each parent before its children. */
-  descendants<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  descendants<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The siblings axis of a tree space: the other children of the parent, or the other roots for a root. */
-  siblings<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  siblings<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /**
    * The window axis of an array space or a tree space: the keys at the offsets from `from` to `to` of the focus, in
    * order. The offset 0 is the focus. An offset outside the space has no target.
    */
-  window<U>(from: number, to: number, body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  window<U>(from: number, to: number, body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /**
    * The table axis: the body evaluates at each key of the table `name` of the evaluation, in the space of that table.
    * The body reads the fields of that table, but the types of the chain are the types of this space.
    */
-  table<U>(name: string, body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  table<U>(name: string, body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The successors axis of a graph space: the ends of the edges from the focus. In a tree space, the children. */
-  successors<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  successors<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The predecessors axis of a graph space: the keys with an edge to the focus. In a tree space, the parent. */
-  predecessors<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  predecessors<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
   /** The reachable axis of a graph space: each key that a path of edges reaches, in breadth-first order. */
-  reachable<U>(body: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  reachable<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
 }
 
 /** The options of an axis. */
@@ -341,8 +341,23 @@ export type FnCalls<Ctx extends ChainContext, F> = {
   readonly [N in keyof F]: F[N] extends FnDef<infer P, infer R> ? (...args: { readonly [I in keyof P]: ArgInput<KindValue<P[I]>, Ctx, false> }) => ChainOf<Ctx, R> : never;
 };
 
+/**
+ * The value of the body of an axis: a chain, or a list chain (BUILD.LIST.BUILD). For a list chain, the value of each
+ * item of the axis is a list, so `flat` joins the lists.
+ */
+export type AxisBody<Ctx extends ChainContext, U> = ChainBase<Ctx, U> | ListBody<U>;
+
+/** A list chain as the body of an axis. Its phantom member carries the list. */
+export interface ListBody<U> {
+  readonly kind: "vex.list-chain";
+  readonly [CHAIN_VALUE]?: U;
+  readonly program: Expr;
+}
+
 export interface ListChain<Ctx extends ChainContext, U> {
   readonly kind: "vex.list-chain";
+  /** This phantom member carries the type of the list. It is not present at run time. */
+  readonly [CHAIN_VALUE]?: VexList<U>;
   /** The expression of the chain, as plain data. */
   readonly program: Expr;
   /**
@@ -375,11 +390,19 @@ export interface ListChain<Ctx extends ChainContext, U> {
   take(n: number, opts?: ListOpts): ListChain<Ctx, U>;
   /** The value of the item at the position `i`, from 0 (LIST.NTH). */
   nth(i: number, opts?: ListOpts): ChainOf<Ctx, U>;
+  /** The items after the first `n` items (LIST.DROP). Thus `drop(1)` removes the first item of a stack. */
+  drop(n: number, opts?: ListOpts): ListChain<Ctx, U>;
+  /** The items of this list, and then the items of `other` (LIST.APPEND). Two items can have the same key. */
+  append<V>(other: ListChain<Ctx, V>, opts?: ListOpts): ListChain<Ctx, U | V>;
+  /** The items of this list whose key is not the key of an item of `other` (LIST.WITHOUT). */
+  without<V>(other: ListChain<Ctx, V>, opts?: ListOpts): ListChain<Ctx, U>;
+  /** The items of the lists that are the values of the items, in order (LIST.FLAT). The values must be lists. */
+  flat<V>(this: ListChain<Ctx, VexList<V>>, opts?: ListOpts): ListChain<Ctx, V>;
   /**
    * The axis list (AXIS.LIST): the body evaluates at the key of each item, in the order of the list. The body reads the
    * fields of the record of the item. The chain of the body has no value of its own.
    */
-  each<V>(body: (c: ChainOf<Ctx, null>) => ChainBase<Ctx, V>, opts?: AxisOpts<Ctx, null>): ListChain<Ctx, V>;
+  each<V>(body: (c: ChainOf<Ctx, null>) => AxisBody<Ctx, V>, opts?: AxisOpts<Ctx, null>): ListChain<Ctx, V>;
   /** The list at the origin `k`: one item for each target of the axis, with its key and its result. */
   result(k: Ctx["keys"]): Result<VexList<U>>;
   /** The list at the origin `k`, as an `Optional`. */
@@ -545,6 +568,12 @@ interface State {
 const kindOf = (u: unknown): unknown => (u as { kind?: unknown } | null | undefined)?.kind;
 const isArg = (u: unknown): u is Arg<unknown> => kindOf(u) === "vex.arg";
 const isChainLike = (u: unknown): u is { readonly program: Expr } => kindOf(u) === "vex.chain" || kindOf(u) === "vex.list-chain";
+
+/** This function gives the expression of the list of `append` and `without`. The list is a chain, not a literal. */
+function listProgram(op: string, other: unknown): Expr {
+  if (!isChainLike(other)) throw new TypeError(`${op} needs a list chain`);
+  return other.program;
+}
 
 /** This function turns a builder argument into an expression. A bare string is a field reference at `addr`. */
 function toExpr(a: unknown, addr: readonly Move[]): Expr {
@@ -864,6 +893,18 @@ class ListChainImpl {
   }
   nth(i: number, opts?: ListOpts): ChainImpl {
     return this.#op("nth", [lit(i)], opts);
+  }
+  drop(n: number, opts?: ListOpts): ListChainImpl {
+    return this.#list("drop", [lit(n)], opts);
+  }
+  append(other: unknown, opts?: ListOpts): ListChainImpl {
+    return this.#list("append", [listProgram("append", other)], opts);
+  }
+  without(other: unknown, opts?: ListOpts): ListChainImpl {
+    return this.#list("without", [listProgram("without", other)], opts);
+  }
+  flat(opts?: ListOpts): ListChainImpl {
+    return this.#list("flat", [], opts);
   }
   each(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     // The chain of the body is at the key of the item, and it has no value of its own.

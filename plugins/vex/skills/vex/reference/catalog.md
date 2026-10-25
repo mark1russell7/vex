@@ -29,8 +29,9 @@ These ops apply to each value. They are not ops of a domain.
 | `append(list, other)` | A list of the items of `list`, and then the items of `other` |
 | `without(list, other)` | A list of the items of `list` whose key is not the key of an item of `other` |
 | `flat(list)` | A list of the items of the lists that are the values of the items, in order |
+| `get(list, key)` | The value of the first item with the key `key`. A key that no item has gives `#N/A`. |
 
-A list op skips error items. The option `{ strict: true }` gives the first error.
+A list op skips error items. The option `{ strict: true }` gives the first error. A literal can be a list, for example the empty list `{ "kind": "vex.list", "items": [] }`, and a name of a loop can hold a list.
 
 ## `NumDomain`
 

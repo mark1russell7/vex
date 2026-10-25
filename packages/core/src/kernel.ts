@@ -628,7 +628,7 @@ function callFound(found: Found, op: string, self: unknown, args: readonly unkno
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without"]);
+const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without", "get"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that
@@ -699,6 +699,13 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
     }
     case "flat":
       return flat(vs, strict);
+    case "get": {
+      // The first item of the key gives its value. An error item is not an item of its key (LIST.GET).
+      const key = rest[0];
+      if (typeof key !== "string") return stop("kind-mismatch", `"get" needs a text key, not a ${describe(key)}`);
+      const i = good.findIndex((it) => it.key === key);
+      return i >= 0 ? vs[i] : stop("missing-field", `the list has no item with the key ${JSON.stringify(key)}`);
+    }
     case "sum":
       // Stryker disable next-line ArrayDeclaration: a sum needs no domain, and a text in the list accepts no value
       return checked(nums().reduce((s, x) => s + x, 0), op, []);

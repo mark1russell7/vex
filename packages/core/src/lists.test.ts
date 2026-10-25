@@ -4,12 +4,14 @@
  */
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
+import { fromDocument, toDocument } from "./document.ts";
 import { defineDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
 import { vexError } from "./errors.ts";
 import { app, axes, axisExprs, call, children, each, fn, fold, isExpr, iterate, let_, lit, rec, ref, v, type Expr } from "./ir.ts";
-import { isVexList, vexList, type VexList } from "./list.ts";
+import { isVexList, vexList, type ListItem, type VexList } from "./list.ts";
 import { parse, serialize } from "./json.ts";
+import { ok } from "./result.ts";
 import { axisTargets, space } from "./space.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
 
@@ -37,6 +39,8 @@ const keysOf = (r: ReturnType<typeof evaluate>): readonly string[] => {
 };
 const xs = each(axes.all, ref("x"));
 const sorted = app("sortBy", xs);
+/** This function makes a list literal with a value for each key. */
+const listLit = (...pairs: readonly (readonly [string, unknown])[]): Expr => lit(vexList(pairs.map(([key, x]): ListItem => ({ key, result: ok(x) }))));
 
 describe("lists as values", () => {
   it("LIST.VALUE: a let binds a list, and a list op applies to its name", () => {
@@ -256,5 +260,221 @@ describe("list ops that build lists (LIST.BUILD)", () => {
       app("gt", lit(1), app("count", v("stack"))),
     );
     expect(value(evaluate(search, { space: g, origin: "a", domains: [Num] }))).toEqual(["a", "b", "d", "c", "e"]);
+  });
+});
+
+/** This function makes an item of any form, for the checks of LIST.SHAPE. */
+const item = (result: unknown, key: unknown = "a"): unknown => ({ key, result });
+/** This function makes a value of the kind vex.list with items of any form. */
+const like = (...items: unknown[]): unknown => ({ kind: "vex.list", items });
+
+describe("the shape of a list (LIST.SHAPE)", () => {
+  const err = { code: "#REF!", kind: "missing-key", message: "m", path: [] };
+
+  it("LIST.SHAPE: a value is a list only with the kind vex.list and items that each have a text key and a result", () => {
+    for (const u of [like(), like(item({ ok: true, value: 0 })), like(item({ ok: true, value: null })), like(item({ ok: false, error: err })), vexList([{ key: "a", result: ok(1) }])]) expect(isVexList(u)).toBe(true);
+    const bad: readonly unknown[] = [
+      null,
+      undefined,
+      5,
+      "vex.list",
+      { kind: "vex.list" },
+      { kind: "vex.list", items: {} },
+      { kind: "record", items: [] },
+      like(0),
+      like(null),
+      like(item({ ok: true, value: 1 }, 1)),
+      like(item(null)),
+      like(item(3)),
+      like(item({ ok: true })),
+      like(item({ ok: "yes", value: 1 })),
+      like(item({ ok: false })),
+      like(item({ ok: false, error: null })),
+      like(item({ ok: false, error: 3 })),
+      like(item({ ok: false, error: { ...err, code: 1 } })),
+      like(item({ ok: false, error: { ...err, kind: 1 } })),
+      like(item({ ok: false, error: { ...err, message: 1 } })),
+      like(item({ ok: false, error: { ...err, path: "0" } })),
+      like(item({ ok: true, value: 1 }), 0),
+      // A hole of a sparse array is not an item.
+      { kind: "vex.list", items: Array.from({ length: 1 }) },
+    ];
+    for (const u of bad) expect(isVexList(u)).toBe(false);
+  });
+
+  it("LIST.SHAPE: the check of a list that can change runs each time, so a list op does not read a changed item", () => {
+    const items: unknown[] = [item({ ok: true, value: 1 })];
+    const open = { kind: "vex.list", items };
+    const half = Object.freeze({ kind: "vex.list", items });
+    expect(isVexList(open)).toBe(true);
+    expect(isVexList(half)).toBe(true);
+    items.push(0);
+    expect(isVexList(open)).toBe(false);
+    expect(isVexList(half)).toBe(false);
+    // A list of vexList is frozen, so it passes the check again.
+    const made = vexList([{ key: "a", result: ok(1) }]);
+    expect([isVexList(made), isVexList(made)]).toEqual([true, true]);
+  });
+
+  it("LIST.SHAPE LET.LAZY-ERROR: a literal of the kind vex.list with an item of another form is a record, and an unused binding of it has no effect", () => {
+    // The class of the counterexample of P20 (seed 1540709637): such a literal made the list ops throw.
+    const record = lit(like(0));
+    expect(error(run(app("count", record)))).toMatchObject({ code: "#VALUE!", message: 'no domain accepts the receiver of "count" (object)' });
+    expect(error(run(app("sortBy", record))).code).toBe("#VALUE!");
+    expect(error(run(each(axes.list(record), ref("x")))).code).toBe("#VALUE!");
+    expect(value(run(let_({ a: app("take", app("sortBy", record)) }, lit(0))))).toBe(0);
+  });
+});
+
+describe("lists as the state of a loop (LOOP.LIST, LIST.GET, LIST.LITERAL)", () => {
+  // The x of each box by key: 30, 10, 20 and 10.
+  const strict = lit({ strict: true });
+  // The x of the next box: the key 3 has no next box, so its item is #REF!.
+  const gaps = each(axes.all, ref("x", [{ t: "offset", d: [1] }]));
+  const deep: VexList = vexList([{ key: "0", result: { ok: false, error: vexError("depth", "the call stack is full") } }]);
+
+  it("LIST.GET: the value of the first item with the key, #N/A for a key that no item has, and #VALUE! for a key that is not a text", () => {
+    expect(value(run(app("get", xs, lit("1"))))).toBe(10);
+    expect(value(run(app("get", sorted, lit("0"))))).toBe(30);
+    // Two items with one key: the first item gives the value.
+    expect(value(run(app("get", app("append", each(axes.all, ref("w")), xs), lit("2"))))).toBe(3);
+    expect(value(run(app("get", app("append", app("drop", xs, lit(3)), xs), lit("3"))))).toBe(10);
+    expect(error(run(app("get", xs, lit("9"))))).toMatchObject({ code: "#N/A", op: "get", message: 'the list has no item with the key "9"' });
+    expect(error(run(app("get", app("take", xs, lit(0)), lit("0")))).code).toBe("#N/A");
+    expect(error(run(app("get", xs, lit(1))))).toMatchObject({ code: "#VALUE!", op: "get", message: '"get" needs a text key, not a number' });
+    expect(error(run(app("get", xs))).code).toBe("#VALUE!");
+    // A key from a field: the pay of the boss of each person.
+    const people = space.record({ ann: { boss: "bob", pay: 3 }, bob: { boss: "bob", pay: 5 }, cy: { boss: "dan", pay: 1 } });
+    const pays = each(axes.all, ref("pay"));
+    expect(value(evaluate(app("values", each(axes.all, app("get", pays, ref("boss")))), { space: people, origin: "ann" }))).toEqual([5, 5]);
+    // A value that is not a list: the domain Num has no op get.
+    expect(error(run(app("get", ref("x"), lit("0")))).code).toBe("#NAME?");
+  });
+
+  it("LIST.GET LIST.LENIENT: an error item is not an item of its key, strict gives the first error item, and #DEPTH! comes first", () => {
+    // The key 3 of gaps has the error #REF!.
+    expect(value(run(app("get", gaps, lit("0"))))).toBe(10);
+    expect(error(run(app("get", gaps, lit("3"))))).toMatchObject({ code: "#N/A", op: "get" });
+    expect(error(run(app("get", gaps, lit("0"), strict))).code).toBe("#REF!");
+    expect(error(run(app("get", gaps, lit(1), strict))).code).toBe("#REF!");
+    // One list, read without strict and then with strict: the second read gives the error item.
+    const twice = let_({ g: gaps }, rec({ lenient: app("get", v("g"), lit("1")), strict: app("ifError", app("get", v("g"), lit("1"), strict), lit("error")), again: app("get", v("g"), lit("2")) }));
+    expect(value(run(twice))).toEqual({ lenient: 20, strict: "error", again: 10 });
+    expect(error(runWith(app("get", v("d"), lit("0")), { d: deep })).code).toBe("#DEPTH!");
+    expect(error(runWith(app("get", app("append", v("d"), xs), lit("1")), { d: deep })).code).toBe("#DEPTH!");
+    // Two error items: strict gives the first one.
+    const two = vexList([
+      { key: "0", result: { ok: false, error: vexError("unknown-key", "first") } },
+      { key: "1", result: { ok: false, error: vexError("missing-field", "second") } },
+      { key: "2", result: { ok: false, error: vexError("depth", "third") } },
+      { key: "3", result: { ok: false, error: vexError("depth", "fourth") } },
+    ]);
+    expect(error(runWith(app("get", v("t"), lit("1"), strict), { t: vexList(two.items.slice(0, 2)) })).message).toBe("first");
+    expect(error(runWith(app("get", v("t"), lit("1")), { t: vexList(two.items.slice(0, 2)) })).code).toBe("#N/A");
+    // The first #DEPTH! comes before the first error item.
+    expect(error(runWith(app("get", v("t"), lit("1"), strict), { t: two })).message).toBe("third");
+  });
+
+  it("LIST.LITERAL: a literal can be a list, the empty list or a list with one key, and its JSON form is the record of the list", () => {
+    const none = listLit();
+    const one = listLit(["2", 7]);
+    expect(value(run(app("count", none)))).toBe(0);
+    expect(keysOf(run(none))).toEqual([]);
+    expect(keysOf(run(app("append", none, one)))).toEqual(["2"]);
+    expect(value(run(app("get", one, lit("2"))))).toBe(7);
+    // The axis list reads the record at each key, and a key that is not in the space has no record.
+    expect(value(run(app("values", each(axes.list(one), ref("w")))))).toEqual([3]);
+    expect(error(run(app("first", each(axes.list(listLit(["9", 0])), ref("w")), strict))).code).toBe("#N/A");
+    // The JSON form and the document keep the literal.
+    const e = app("count", app("append", none, one));
+    expect(isExpr(e)).toBe(true);
+    expect(value(parse(value(serialize(e)), []))).toEqual(e);
+    const doc: unknown = JSON.parse(JSON.stringify(value(toDocument(e))));
+    expect(doc).toEqual({ type: ["ops", "count"], value: [{ type: ["ops", "append"], value: [{ kind: "vex.list", items: [] }, { kind: "vex.list", items: [{ key: "2", result: { ok: true, value: 7 } }] }] }] });
+    expect(value(fromDocument(doc))).toEqual(e);
+    expect(value(run(value(fromDocument(doc))))).toBe(1);
+  });
+
+  it("LOOP.LIST LIST.LITERAL: an iteration starts a stack and a seen set with list literals, and searches from one key", () => {
+    // a goes to b and c, b and c go to d, and e goes to a.
+    const g = space.graph({ a: {}, b: {}, c: {}, d: {}, e: {} }, { a: ["b", "c"], b: ["d"], c: ["d"], e: ["a"] });
+    const fresh = app("without", app("take", v("stack"), lit(1)), v("seen"));
+    const search = (start: string): Expr =>
+      iterate(
+        100,
+        { stack: listLit([start, 0]), seen: listLit() },
+        { stack: app("append", app("flat", each(axes.list(fresh), each(axes.successors, lit(0)))), app("drop", v("stack"), lit(1))), seen: app("append", v("seen"), fresh) },
+        app("keys", v("seen")),
+        app("gt", lit(1), app("count", v("stack"))),
+      );
+    expect(value(evaluate(search("a"), { space: g, origin: "a", domains: [Num] }))).toEqual(["a", "b", "d", "c"]);
+    expect(value(evaluate(search("e"), { space: g, origin: "a", domains: [Num] }))).toEqual(["e", "a", "b", "d", "c"]);
+    expect(value(evaluate(search("d"), { space: g, origin: "a", domains: [Num] }))).toEqual(["d"]);
+  });
+
+  it("LOOP.LIST: a name of a fold holds a list, and each step gives a new list from the list before the step", () => {
+    // Each step puts the target before the list, so the list ends in the reverse order of the axis.
+    const reversed = fold(axes.all, { acc: listLit() }, { acc: app("append", each(axes.window(0, 0), ref("w")), v("acc")) }, v("acc"));
+    expect(keysOf(run(reversed))).toEqual(["3", "2", "1", "0"]);
+    expect(value(run(app("values", reversed)))).toEqual([4, 3, 2, 1]);
+    // A step reads the old list and the old sum: the running total of the widths, by key.
+    const totals = fold(
+      axes.all,
+      { acc: listLit(), sum: lit(0) },
+      { acc: app("append", v("acc"), each(axes.window(0, 0), app("add", v("sum"), ref("w")))), sum: app("add", v("sum"), ref("w")) },
+      app("values", v("acc")),
+    );
+    expect(value(run(totals))).toEqual([1, 3, 6, 10]);
+    // A step can give a value that is not a list. Then the list op of the result applies to a number: #VALUE!.
+    expect(error(run(iterate(2, { a: listLit() }, { a: lit("1") }, app("count", v("a"))))).code).toBe("#VALUE!");
+  });
+
+  it("LOOP.LIST LIST.GET: a force layout keeps the positions in a list, and each step reads the old position of each key", () => {
+    // A line of three nodes, and springs on the edges a-b and b-c. Each node pushes the other nodes away.
+    const Line = defineDomain({
+      name: "Line",
+      is: (u: unknown): u is number => typeof u === "number",
+      ops: {
+        add: { fn: (a: number, b: number): number => a + b, params: ["number"] },
+        subtract: { fn: (a: number, b: number): number => a - b, params: ["number"] },
+        multiply: { fn: (a: number, b: number): number => a * b, params: ["number"] },
+        divide: { fn: (a: number, b: number): number => a / b, params: ["number"] },
+      },
+    });
+    const records = { a: { id: "a", x: 0 }, b: { id: "b", x: 1 }, c: { id: "c", x: 3 } };
+    const edges = { a: ["b"], b: ["c"] } as const;
+    const g = space.graph(records, edges);
+    // The old position of the focus: the list of the loop, at the key in the field id.
+    const old = app("get", v("pos"), ref("id"));
+    // The push from another node: (me - other) / ((me - other)^2 + 1). The pull of a spring: (other - me) * 0.25.
+    const gap = app("subtract", v("me"), old);
+    const push = app("divide", gap, app("add", app("multiply", gap, gap), lit(1)));
+    const pull = app("multiply", app("subtract", old, v("me")), lit(0.25));
+    const next = let_({ me: old }, app("add", app("add", v("me"), app("sum", each(axes.others, push))), app("add", app("sum", each(axes.successors, pull)), app("sum", each(axes.predecessors, pull)))));
+    const steps = 3;
+    const layout = iterate(steps, { pos: each(axes.all, ref("x")) }, { pos: each(axes.all, next) }, old);
+    // The same arithmetic in plain TypeScript, in the same order.
+    const ids = Object.keys(records);
+    const ends: Readonly<Record<string, readonly string[] | undefined>> = edges;
+    const linked = (k: string, j: string): boolean => ends[k]?.includes(j) === true;
+    let pos = new Map(Object.entries(records).map(([k, r]) => [k, r.x]));
+    for (let i = 0; i < steps; i++) {
+      const before = pos;
+      const at = (k: string): number => before.get(k) ?? Number.NaN;
+      pos = new Map(
+        ids.map((k) => {
+          const me = at(k);
+          let pushes = 0;
+          for (const j of ids) if (j !== k) pushes += (me - at(j)) / ((me - at(j)) * (me - at(j)) + 1);
+          let out = 0;
+          for (const j of ids) if (linked(k, j)) out += (at(j) - me) * 0.25;
+          let into = 0;
+          for (const j of ids) if (linked(j, k)) into += (at(j) - me) * 0.25;
+          return [k, me + pushes + (out + into)];
+        }),
+      );
+    }
+    for (const k of ids) expect(value(evaluate(layout, { space: g, origin: k, domains: [Line] }))).toBe(pos.get(k));
+    expect(pos.get("a")).not.toBe(0);
   });
 });

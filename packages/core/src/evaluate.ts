@@ -195,6 +195,8 @@ class Compiler {
   readonly #domains: readonly AnyDomain[];
   readonly #fns: Readonly<Record<string, FreeFn>> | undefined;
   readonly #extensions: Readonly<Record<string, ExtHandler>> | undefined;
+  /** The index of the keys of each list that `get` read (LIST.GET). A list does not change, so its index stays right. */
+  readonly #keyIndex = new WeakMap<VexList, KeyIndex>();
 
   constructor(opts: CompileOptions) {
     // Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value
@@ -732,6 +734,7 @@ class Compiler {
     // The options come after the second argument of an op with one, for example the count of take.
     const optsArg = WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
     const strict = (optsArg as ListOptions | null | undefined)?.strict === true;
+    if (op === "get") return this.#get(list, rest[0], strict, f, path);
     const good = goodItems(list, strict);
     if (!good.ok) return good;
     const okItems = good.value;
@@ -820,6 +823,24 @@ class Compiler {
   }
 
   /**
+   * This method gives the value of the first item with a key (LIST.GET). LIST.LENIENT applies, so an error item is not
+   * an item of the key. The program keeps the index of each list, so a step that reads each key of a list reads it once.
+   */
+  #get(list: VexList, key: unknown, strict: boolean, f: Frame, path: readonly number[]): Result<unknown> {
+    let index = this.#keyIndex.get(list);
+    // Stryker disable next-line ConditionalExpression: a new index of the same list has the same values
+    if (index === undefined) {
+      index = keyIndexOf(list);
+      this.#keyIndex.set(list, index);
+    }
+    // As goodItems: #DEPTH! comes first, and with strict, the first error item is the result.
+    const stop = index.depth ?? (strict ? index.first : undefined);
+    if (stop !== undefined) return fail(stop);
+    if (typeof key !== "string") return this.#err("kind-mismatch", `"get" needs a text key, not a ${describeType(key)}`, f, path, { op: "get" });
+    return index.values.has(key) ? ok(index.values.get(key)) : this.#err("missing-field", `the list has no item with the key ${JSON.stringify(key)}`, f, path, { op: "get" });
+  }
+
+  /**
    * This method joins the lists that are the values of the items of a list, in order (LIST.FLAT). Each list follows the
    * rules of LIST.BUILD. A value that is not a list gives `#VALUE!`.
    */
@@ -886,7 +907,7 @@ class Compiler {
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without"]);
+const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without", "get"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that
@@ -898,6 +919,32 @@ function goodItems(list: VexList, strict: boolean): Result<readonly ListItem[]> 
   const firstError = list.items.find((it) => !it.result.ok)?.result;
   if (strict && firstError !== undefined && !firstError.ok) return fail(firstError.error);
   return ok(list.items.filter((it) => it.result.ok));
+}
+
+/** The index of the keys of a list (LIST.GET): the value of the first item of each key, and the first errors. */
+interface KeyIndex {
+  readonly values: ReadonlyMap<string, unknown>;
+  /** The first error item. With strict, it is the result. */
+  readonly first: VexError | undefined;
+  /** The first item of `#DEPTH!`. A list op does not skip it (EVAL.DEPTH). */
+  readonly depth: VexError | undefined;
+}
+
+/** This function makes the index of the keys of a list. An error item is not an item of its key (LIST.LENIENT). */
+function keyIndexOf(list: VexList): KeyIndex {
+  const values = new Map<string, unknown>();
+  let first: VexError | undefined;
+  let depth: VexError | undefined;
+  for (const it of list.items) {
+    if (it.result.ok) {
+      // The first item of a key gives its value. A later item with the same key does not replace it.
+      if (!values.has(it.key)) values.set(it.key, it.result.value);
+    } else {
+      first ??= it.result.error;
+      if (isDepthError(it.result.error)) depth ??= it.result.error;
+    }
+  }
+  return { values, first, depth };
 }
 
 const FORBIDDEN_FIELDS = new Set(["__proto__", "constructor", "prototype"]);

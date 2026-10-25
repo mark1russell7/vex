@@ -3,7 +3,7 @@
  * whose op the interpreter takes first, and the kinds and the lifts of its parameters. The facts come from the op
  * tables, so the same options always give the same facts, and the same source.
  */
-import { children, isListOp, isOpName, liftsAt, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
+import { children, isListOp, isOpName, isVexList, liftsAt, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
 /**
  * The most bodies of functions that tier 2 puts at the calls of one program. A function that calls another function
@@ -11,12 +11,16 @@ import { children, isListOp, isOpName, liftsAt, listOf, type AnyDomain, type Exp
  */
 export const MAX_CALLS = 10_000;
 
-/** The list ops that give a list or read a position of a list (LIST.SORT, LIST.TAKE, LIST.NTH, LIST.BUILD). */
-const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth", "drop", "append", "flat", "without"]);
+/**
+ * The list ops that give a list, or read a position or a key of a list (LIST.SORT, LIST.TAKE, LIST.NTH, LIST.BUILD,
+ * LIST.GET).
+ */
+const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth", "drop", "append", "flat", "without", "get"]);
 
 /**
- * This function gives the reason that tier 2 cannot take a program with lists as values. The reason is the axis `list`
- * or an op on the order of a list. Tier 1 evaluates such a program. It uses a stack, not recursion.
+ * This function gives the reason that tier 2 cannot take a program with lists as values. The reason is the axis `list`,
+ * an op on the order or the keys of a list, or a list literal. Tier 1 evaluates such a program. It uses a stack, not
+ * recursion.
  */
 export function listReason(expr: Expr): string | undefined {
   const todo: Expr[] = [expr];
@@ -24,6 +28,7 @@ export function listReason(expr: Expr): string | undefined {
     if ((x.tag === "each" || x.tag === "fold") && listOf(x.axis) !== undefined) return 'the program has the axis "list", and tier 2 does not have lists as values yet';
     // Stryker disable next-line ConditionalExpression: a node that is not an app has no field op, so the set does not have it
     if (x.tag === "app" && ORDER_OPS.has(x.op)) return `the program has the list op "${x.op}", and tier 2 does not have lists as values yet`;
+    if (x.tag === "lit" && isVexList(x.value)) return "the program has a list literal, and tier 2 does not have lists as values yet";
     todo.push(...children(x));
   }
   return undefined;

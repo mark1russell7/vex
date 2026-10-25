@@ -3,7 +3,7 @@
  * purpose: they make prototype names, missing fields, non-finite numbers, records that throw, and ops that do
  * not exist.
  */
-import { space, toDocument, type AnyDomain, type Axis, type Expr, type FixedMove, type Move, type Space } from "@mark1russell7/vex";
+import { space, toDocument, vexList, type AnyDomain, type Axis, type Expr, type FixedMove, type Move, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The options of the arbitraries. */
@@ -130,7 +130,7 @@ export const arbLiteral = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<unk
     domainValue,
   );
 
-const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without"];
+const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without", "get"];
 const FORMS = ["if", "and", "or", "ifError"];
 const NAMES = ["a", "b"];
 
@@ -157,6 +157,12 @@ const BASE_AXES: readonly Axis[] = [
 
 export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
   const ops = [...opts.ops, ...LIST_OPS, ...FORMS, "nope", "toString", "constructor"];
+  // The list literals (LIST.LITERAL): the empty list, and lists with one key of the space or a key that is not in it.
+  const literalLists: readonly Expr[] = [
+    { tag: "lit", value: vexList([]) },
+    { tag: "lit", value: vexList([{ key: "A", result: { ok: true, value: 1 } }]) },
+    { tag: "lit", value: vexList([{ key: "Z", result: { ok: true, value: true } }]) },
+  ];
   const { expr } = fc.letrec<{ expr: Expr; axis: Axis; move: Move; list: Expr }>((tie) => ({
     expr: fc.oneof(
       { depthSize: "small", withCrossShrink: true, maxDepth: opts.maxDepth ?? 4 },
@@ -205,6 +211,18 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
           const loop: Expr = { tag: "iterate", limit, init: two ? { a: init, b: init } : { a: init }, step: { a: step }, result };
           return until === undefined ? loop : { ...loop, until };
         }),
+      // A list as the name of a loop (LOOP.LIST): the step pushes a list onto a, or it removes the first item of a.
+      fc
+        .tuple(fc.integer({ min: 0, max: 3 }), tie("list"), fc.boolean(), tie("list"), tie("expr"))
+        .map(([limit, init, push, more, result]): Expr => {
+          const a: Expr = { tag: "var", name: "a" };
+          const step: Expr = push ? { tag: "app", op: "append", args: [more, a] } : { tag: "app", op: "drop", args: [a, { tag: "lit", value: 1 }] };
+          return { tag: "iterate", limit, init: { a: init }, step: { a: step }, result };
+        }),
+      // The value at a key of a list (LIST.GET): a key of the records, a key of an array or a grid, or no key.
+      fc
+        .tuple(tie("list"), fc.constantFrom(...RECORD_KEYS, "0", "1,1", "Z"))
+        .map(([list, k]): Expr => ({ tag: "app", op: "get", args: [list, { tag: "lit", value: k }] })),
     ),
     axis: fc.oneof(
       { depthSize: "small", maxDepth: 2 },
@@ -227,6 +245,8 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
       fc.tuple(tie("list"), tie("list")).map(([list, other]): Expr => ({ tag: "app", op: "append", args: [list, other] })),
       fc.tuple(tie("list"), tie("list")).map(([list, other]): Expr => ({ tag: "app", op: "without", args: [list, other] })),
       fc.tuple(tie("axis"), tie("list")).map(([axis, body]): Expr => ({ tag: "app", op: "flat", args: [{ tag: "each", axis, body }] })),
+      // A list literal (LIST.LITERAL): the empty list, or a list with one key of the space or a key that is not in it.
+      fc.constantFrom(...literalLists),
       tie("expr"),
     ),
     // A fixed move, or a computed move (NAV.COMPUTED): a literal key or position, or any expression.

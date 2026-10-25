@@ -142,6 +142,25 @@ describe("properties of the interpreter", () => {
     );
   });
 
+  it("P20 LIST.SHAPE LET.LAZY-ERROR EVAL.REFERENCE: a changed document with a literal of the kind vex.list that is not a list gives one result in both tiers", () => {
+    // The shrunk counterexample of the nightly run (seed 1540709637): the closure compiler threw in a binding that the
+    // body does not read, and gave #CALC!. The kernel did not evaluate the binding.
+    const bad = { kind: "vex.list", items: [0] };
+    const s = space.array([{ n: 1 }, { n: 2 }]);
+    const cases: readonly (readonly [unknown, unknown])[] = [
+      [{ type: "let", value: { bind: { f: 0, a: { type: ["ops", "take"], value: [{ type: ["ops", "sortBy"], value: [bad] }] } }, body: 0 } }, { ok: true, value: 0 }],
+      [{ type: ["ops", "sortBy"], value: [bad] }, { ok: false, code: "#VALUE!" }],
+      [{ type: ["ops", "sum"], value: [{ kind: "vex.list", items: [{ key: "a", result: 3 }] }] }, { ok: false, code: "#VALUE!" }],
+      [{ type: ["ops", "sum"], value: [{ kind: "vex.list", items: [{ key: "a", result: { ok: false, error: 3 } }] }] }, { ok: false, code: "#VALUE!" }],
+      [{ type: ["ops", "count"], value: [{ kind: "vex.list", items: [{ key: 1, result: { ok: true, value: 1 } }] }] }, { ok: false, code: "#VALUE!" }],
+    ];
+    for (const [d, expected] of cases) {
+      const core = fromCore(evaluate(d as Envelope, { space: s, origin: "0", domains: DOMAINS }));
+      expect(core).toEqual(expected);
+      expect(fromReference(referenceEvaluate(d as Envelope, { space: s, origin: "0", domains: DOMAINS }))).toEqual(core);
+    }
+  });
+
   it("P21 EVAL.REFERENCE: on programs over numbers that most often have a value, the closure compiler and the kernel give the same values", () => {
     const numbers = arbNumberSpace.chain((s) => fc.tuple(fc.constant(s), arbNumberExpr(), arbOrigin(s)));
     let values = 0;

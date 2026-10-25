@@ -7,10 +7,10 @@ import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
 import { app, call as callExpr, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
-import { toOptional, type Optional, type Result } from "./result.ts";
+import { ok, toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
-import type { VexList } from "./list.ts";
+import { vexList, type VexList } from "./list.ts";
 import { traversal, type Traversal } from "./traversal.ts";
 
 // ---------------------------------------------------------------- argument tokens
@@ -211,8 +211,16 @@ export interface ChainBase<Ctx extends ChainContext, T> {
   fork<const B extends Readonly<Record<string, (c: ChainOf<Ctx, T>) => ChainBase<Ctx, unknown>>>>(branches: B): ChainOf<Ctx, { readonly [N in keyof B]: ValueOf<ReturnType<B[N]>> }>;
   /**
    * This method makes up to `limit` steps (ITERATE.LIMIT). `init` gives the names and their first values, and `step`
-   * gives the next values. A true `until` stops the steps (ITERATE.UNTIL). `result` gives the value of the chain.
+   * gives the next values. A true `until` stops the steps (ITERATE.UNTIL). `result` gives the value of the chain. A
+   * name with a list chain as its first value is a list chain (BUILD.LIST.LOOP), and a list result gives a list chain.
    */
+  iterate<const I extends Readonly<Record<string, unknown>>, U>(
+    limit: number,
+    init: I,
+    step: (vars: LoopVars<Ctx, I>) => NoInfer<LoopStep<Ctx, I>>,
+    result: (vars: LoopVars<Ctx, I>) => ListChain<Ctx, U>,
+    opts?: { readonly until?: (vars: LoopVars<Ctx, I>) => ArgInput<boolean, Ctx, false> },
+  ): ListChain<Ctx, U>;
   iterate<const I extends Readonly<Record<string, unknown>>, R>(
     limit: number,
     init: I,
@@ -309,15 +317,29 @@ export type ArgValue<Ctx extends ChainContext, A> = A extends Arg<infer T>
       ? NonNullable<Ctx["record"][A]>
       : A;
 
-/** A chain whose value is a list: the result of an axis. */
 /** The type of a value of a name of a loop: a literal of `init` gives its primitive type. */
 type LoopValue<Ctx extends ChainContext, A> = ArgValue<Ctx, A> extends infer T ? (T extends number ? number : T extends string ? string : T extends boolean ? boolean : T) : never;
 
+/** The type of the items of a list chain, or `never` for another value. */
+type ItemsOf<A> = A extends { readonly kind: "vex.list-chain"; readonly [CHAIN_VALUE]?: VexList<infer U> } ? U : never;
+
+/** A value of `init` that is a list chain: then the name of the loop holds a list (LOOP.LIST). */
+type IsList<A> = A extends { readonly kind: "vex.list-chain" } ? true : false;
+
+/**
+ * The chain of a name of a loop: a list chain for a list chain of `init` (BUILD.LIST.LOOP), and else a chain of its
+ * value.
+ */
+export type LoopVar<Ctx extends ChainContext, A> = IsList<A> extends true ? ListChain<Ctx, ItemsOf<A>> : ChainOf<Ctx, LoopValue<Ctx, A>>;
+
 /** The names of a loop of the builder: a chain of the value of each name of `init` (LOOP.NAMES). */
-export type LoopVars<Ctx extends ChainContext, I> = { readonly [N in keyof I]: ChainOf<Ctx, LoopValue<Ctx, I[N]>> };
+export type LoopVars<Ctx extends ChainContext, I> = { readonly [N in keyof I]: LoopVar<Ctx, I[N]> };
+
+/** The next value of a name of a loop. A name of a list takes a list chain with items of the same type. */
+export type LoopNext<Ctx extends ChainContext, A> = IsList<A> extends true ? ListChain<Ctx, ItemsOf<A>> : ArgInput<LoopValue<Ctx, A>, Ctx, false>;
 
 /** The next values of a step of a loop: a value for some of the names of `init`. */
-export type LoopStep<Ctx extends ChainContext, I> = { readonly [N in keyof I]?: ArgInput<LoopValue<Ctx, I[N]>, Ctx, false> };
+export type LoopStep<Ctx extends ChainContext, I> = { readonly [N in keyof I]?: LoopNext<Ctx, I[N]> };
 
 /** The kind of a parameter of a function of the builder (BUILD.FN): a primitive type, or `any`. */
 export type FnParamKind = PrimitiveKind | "any";
@@ -354,6 +376,7 @@ export interface ListBody<U> {
   readonly program: Expr;
 }
 
+/** A chain whose value is a list: the result of an axis, of a list op or of a list literal. */
 export interface ListChain<Ctx extends ChainContext, U> {
   readonly kind: "vex.list-chain";
   /** This phantom member carries the type of the list. It is not present at run time. */
@@ -364,6 +387,11 @@ export interface ListChain<Ctx extends ChainContext, U> {
    * This method folds the items in the order of the axis (FOLD.ORDER). `init` gives the names and their first values.
    * `step` gives the next values from the names and the item, a chain at the target. `result` gives the value.
    */
+  fold<const I extends Readonly<Record<string, unknown>>, V>(
+    init: I,
+    step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>) => NoInfer<LoopStep<Ctx, I>>,
+    result: (vars: LoopVars<Ctx, I>) => ListChain<Ctx, V>,
+  ): ListChain<Ctx, V>;
   fold<const I extends Readonly<Record<string, unknown>>, R>(
     init: I,
     step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>) => NoInfer<LoopStep<Ctx, I>>,
@@ -390,6 +418,11 @@ export interface ListChain<Ctx extends ChainContext, U> {
   take(n: number, opts?: ListOpts): ListChain<Ctx, U>;
   /** The value of the item at the position `i`, from 0 (LIST.NTH). */
   nth(i: number, opts?: ListOpts): ChainOf<Ctx, U>;
+  /**
+   * The value of the first item with the key `k` (LIST.GET). A chain of a text gives the key, and it evaluates at the
+   * focus. A key that no item has gives `#N/A`. Thus a step reads the old value of each key.
+   */
+  get(k: Ctx["keys"] | ChainBase<Ctx, string>, opts?: ListOpts): ChainOf<Ctx, U>;
   /** The items after the first `n` items (LIST.DROP). Thus `drop(1)` removes the first item of a stack. */
   drop(n: number, opts?: ListOpts): ListChain<Ctx, U>;
   /** The items of this list, and then the items of `other` (LIST.APPEND). Two items can have the same key. */
@@ -438,6 +471,11 @@ export interface Root<Ctx extends ChainContext> {
   ofPath<T>(k: Ctx["keys"], path: string): Arg<T>;
   /** This method makes a record argument from field arguments. */
   rec<const F extends Readonly<Record<string, unknown>>>(fields: F): Arg<{ readonly [N in keyof F]: ArgValue<Ctx, F[N]> }>;
+  /**
+   * This method makes a list literal (LIST.LITERAL, BUILD.LIST.LOOP): an item for each pair of a key and a value, in
+   * order. Without pairs, it gives the empty list. Thus a loop can start a stack or a seen set.
+   */
+  list<U = unknown>(items?: readonly (readonly [Ctx["keys"], U])[]): ListChain<Ctx, U>;
   /**
    * This method makes an extension argument: the node `ext(kind, data)`. The handler of `kind` in the options of
    * `withOptions` gives its value. The caller gives the type `T` of that value.
@@ -723,16 +761,18 @@ class ChainImpl {
    * This method gives the names of a loop. Each name of `init` gets a name that is unique at the depth of the chain.
    * It also gets its first value at the address of the chain, and a chain of its value.
    */
-  loopNames(init: Readonly<Record<string, unknown>>): { readonly unique: ReadonlyMap<string, string>; readonly first: Readonly<Record<string, Expr>>; readonly vars: Readonly<Record<string, ChainImpl>> } {
+  loopNames(init: Readonly<Record<string, unknown>>): { readonly unique: ReadonlyMap<string, string>; readonly first: Readonly<Record<string, Expr>>; readonly vars: Readonly<Record<string, ChainImpl | ListChainImpl>> } {
     const depth = this.#s.depth;
     const unique = new Map<string, string>();
     const first: Record<string, Expr> = {};
-    const vars: Record<string, ChainImpl> = {};
+    const vars: Record<string, ChainImpl | ListChainImpl> = {};
     for (const [n, a] of Object.entries(init)) {
       const name = `${n}$${depth}`;
       unique.set(n, name);
       first[name] = toExpr(a, this.#s.addr);
-      vars[n] = new ChainImpl({ ...this.#s, expr: v(name), addr: [], depth: depth + 1 });
+      // A name of a list is a list chain, so a step can use the list ops on it (BUILD.LIST.LOOP).
+      const s: State = { ...this.#s, expr: v(name), addr: [], depth: depth + 1 };
+      vars[n] = kindOf(a) === "vex.list-chain" ? new ListChainImpl(s) : new ChainImpl(s);
     }
     return { unique, first, vars };
   }
@@ -740,14 +780,15 @@ class ChainImpl {
   iterate(
     limit: number,
     init: Readonly<Record<string, unknown>>,
-    step: (vars: Readonly<Record<string, ChainImpl>>) => Readonly<Record<string, unknown>>,
-    result: (vars: Readonly<Record<string, ChainImpl>>) => unknown,
-    opts?: { readonly until?: (vars: Readonly<Record<string, ChainImpl>>) => unknown },
-  ): ChainImpl {
+    step: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>) => Readonly<Record<string, unknown>>,
+    result: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>) => unknown,
+    opts?: { readonly until?: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>) => unknown },
+  ): ChainImpl | ListChainImpl {
     const { unique, first, vars } = this.loopNames(init);
     const next = stepExprs(step(vars), unique, this.#s.addr);
     const until = opts?.until === undefined ? undefined : toExpr(opts.until(vars), this.#s.addr);
-    return new ChainImpl({ ...this.#s, expr: iterateExpr(limit, first, next, toExpr(result(vars), this.#s.addr), until) });
+    const r = result(vars);
+    return chainOf({ ...this.#s, expr: iterateExpr(limit, first, next, toExpr(r, this.#s.addr), until) }, r);
   }
 
   #axis(a: Axis, body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
@@ -798,6 +839,9 @@ class ChainImpl {
   }
 }
 
+/** This function gives the chain of a loop: a list chain when its result is a list chain (BUILD.LIST.LOOP). */
+const chainOf = (s: State, result: unknown): ChainImpl | ListChainImpl => (kindOf(result) === "vex.list-chain" ? new ListChainImpl(s) : new ChainImpl(s));
+
 /** This function gives the options of an evaluation of a chain or a list chain at the origin `k`. */
 function evalOptions(s: State, k: string): EvalOptions {
   const { env } = s;
@@ -823,9 +867,9 @@ class ListChainImpl {
   }
   fold(
     init: Readonly<Record<string, unknown>>,
-    step: (vars: Readonly<Record<string, ChainImpl>>, item: ChainImpl) => Readonly<Record<string, unknown>>,
-    result: (vars: Readonly<Record<string, ChainImpl>>) => unknown,
-  ): ChainImpl {
+    step: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>, item: ChainImpl) => Readonly<Record<string, unknown>>,
+    result: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>) => unknown,
+  ): ChainImpl | ListChainImpl {
     // The list of an axis is a let of the start value around the axis, and the list of `each` of a list is the axis
     // alone. The fold keeps the let, and the body of the axis is the item of each step.
     const e = this.#s.expr;
@@ -834,8 +878,9 @@ class ListChainImpl {
     const names = new ChainImpl({ ...this.#s, expr: lit(null) }).loopNames(init);
     const item = new ChainImpl({ ...this.#s, expr: loop.body, addr: [] });
     const next = stepExprs(step(names.vars, item), names.unique, []);
-    const folded = foldExpr(loop.axis, names.first, next, toExpr(result(names.vars), this.#s.addr), loop.at);
-    return new ChainImpl({ ...this.#s, expr: e.tag === "let" ? let_(e.bind, folded) : folded });
+    const r = result(names.vars);
+    const folded = foldExpr(loop.axis, names.first, next, toExpr(r, this.#s.addr), loop.at);
+    return chainOf({ ...this.#s, expr: e.tag === "let" ? let_(e.bind, folded) : folded }, r);
   }
 
   #op(op: string, extra: readonly Expr[], opts?: ListOpts & { readonly domain?: string }): ChainImpl {
@@ -893,6 +938,10 @@ class ListChainImpl {
   }
   nth(i: number, opts?: ListOpts): ChainImpl {
     return this.#op("nth", [lit(i)], opts);
+  }
+  get(k: string | { readonly program: Expr }, opts?: ListOpts): ChainImpl {
+    // A text is a key, not a field reference, as for the move to(k).
+    return this.#op("get", [typeof k === "string" ? lit(k) : k.program], opts);
   }
   drop(n: number, opts?: ListOpts): ListChainImpl {
     return this.#list("drop", [lit(n)], opts);
@@ -967,6 +1016,10 @@ class RootImpl {
     const out: Record<string, Expr> = {};
     for (const [n, a] of Object.entries(fields)) out[n] = toExpr(a, []);
     return argToken(rec(out));
+  }
+  list(items: readonly (readonly [string, unknown])[] = []): ListChainImpl {
+    // LIST.LITERAL: a literal of the list, with a value for each item.
+    return new ListChainImpl({ env: this.#env, expr: lit(vexList(items.map(([key, value]) => ({ key, result: ok(value) })))), addr: [], depth: 0 });
   }
 }
 

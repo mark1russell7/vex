@@ -13,9 +13,10 @@ on:
 
 permissions: {}
 
-# A run for some packages does not stop a run for other packages.
+# A run for some packages does not stop a run for other packages, and a run on a branch does not stop a run on
+# another branch. A new run on the same branch for the same packages stops the old run.
 concurrency:
-  group: nightly-${{ inputs.packages || 'all' }}
+  group: nightly-${{ github.ref }}-${{ inputs.packages || 'all' }}
   cancel-in-progress: true
 
 jobs:

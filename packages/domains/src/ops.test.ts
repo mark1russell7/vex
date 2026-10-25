@@ -44,11 +44,20 @@ describe("the ops of Vec2Domain", () => {
     ["ceil", [], v(3, -4)],
     ["clamp", [-1, 1], v(1, -1)],
     ["swap", [], v(-4, 3)],
+    ["compose", [2, 5], v(-14, 7)],
+    ["select", [v(1, 2), v(5, 6)], v(1, 2)],
+    ["select", [7, v(5, 6)], v(7, 7)],
     ["lerp", [v(5, 0), 0.5], v(4, -2)],
     ["length", [], 5],
     ["lengthSq", [], 25],
     ["distance", [v(0, 0)], 5],
     ["dot", [v(1, 2)], -5],
+    ["along", [v(1, 0)], 3],
+    ["along", [v(0, 1)], -4],
+    ["along", [v(2, 3)], -6],
+    ["across", [v(1, 0)], -4],
+    ["across", [v(0, 1)], 3],
+    ["across", [v(2, 3)], 1],
     ["cross", [v(1, 2)], 10],
     ["area", [], -12],
     ["sum", [], -1],
@@ -96,6 +105,11 @@ describe("the ops of Vec2Domain", () => {
       expect(value(run([Vec2Domain], self, op))).toBe(expected);
     },
   );
+
+  it.each([[v(0, 1), v(5, 2)], [v(1, 0), v(1, 6)], [v(0, 0), v(5, 6)], [v(-0.5, 0), v(1, 6)]] as const)("select with the mask %s", (mask, expected) => {
+    expect(value(run([Vec2Domain], mask, "select", v(1, 2), v(5, 6)))).toEqual(expected);
+    expect(mask.select(v(1, 2), v(5, 6))).toEqual(expected);
+  });
 
   it("rotate and angle use radians, the zero vector stays zero, and a division by zero gives #NUM!", () => {
     const r = run([Vec2Domain], v(1, 0), "rotate", Math.PI / 2);

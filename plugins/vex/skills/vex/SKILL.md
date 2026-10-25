@@ -89,6 +89,8 @@ cell.at("0");          // => { tag: "some", value: new Vec2(30, 20) }
 corner._.x().at("0"); // => { tag: "some", value: 40 }
 ```
 
+When the math works along a main axis and a cross axis, as in a stack, write it once. The axis `dir` is (1, 0) or (0, 1). `v._.along(dir)` and `v._.across(dir)` give the two components, and `dir._.compose(main, cross)` makes the vector. A `Vec2` cannot have an infinite bound. For a bound on one component, `mask._.select(a, b)` takes `a` where the mask is not 0. These ops need the next release.
+
 For a standalone module, use `XYDomain` and the op `xy` instead: their vectors are plain `{ x, y }` data. Refer to [make a domain](reference/domains.md#a-domain-for-a-standalone-module).
 
 ## The IR

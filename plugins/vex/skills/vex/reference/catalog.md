@@ -119,6 +119,8 @@ Texts. The values are of the type `string`.
 | `ceil` | `ceil(Vec2)` | Vec2 |  |  |  |
 | `clamp` | `clamp(Vec2, number, number)` | Vec2 |  |  |  |
 | `swap` | `swap(Vec2)` | Vec2 |  |  |  |
+| `compose` | `compose(Vec2, number, number)` | Vec2 |  |  |  |
+| `select` | `select(Vec2, Vec2, Vec2)` | Vec2 | yes |  |  |
 | `rotate` | `rotate(Vec2, number)` | Vec2 |  |  |  |
 | `normalize` | `normalize(Vec2)` | Vec2 |  |  |  |
 | `lerp` | `lerp(Vec2, Vec2, number)` | Vec2 |  |  |  |
@@ -126,6 +128,8 @@ Texts. The values are of the type `string`.
 | `lengthSq` | `lengthSq(Vec2)` | number |  |  |  |
 | `distance` | `distance(Vec2, Vec2)` | number |  |  |  |
 | `dot` | `dot(Vec2, Vec2)` | number |  | commutative |  |
+| `along` | `along(Vec2, Vec2)` | number |  |  |  |
+| `across` | `across(Vec2, Vec2)` | number |  |  |  |
 | `cross` | `cross(Vec2, Vec2)` | number |  |  |  |
 | `angle` | `angle(Vec2)` | number |  |  |  |
 | `area` | `area(Vec2)` | number |  |  |  |

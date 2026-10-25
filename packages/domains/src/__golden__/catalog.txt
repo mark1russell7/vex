@@ -64,6 +64,8 @@ Vec2 (fromScalar (2, 2), valid yes, encode yes, methods -)
   ceil() | no lift | no laws | no identity | method
   clamp(number, number) | no lift | no laws | no identity | method
   swap() | no lift | no laws | no identity | method
+  compose(number, number) | no lift | no laws | no identity | method
+  select(domain, domain) | lift true | no laws | no identity | method
   rotate(number) | no lift | no laws | no identity | method
   normalize() | no lift | no laws | no identity | method
   lerp(domain, number) | no lift | no laws | no identity | method
@@ -71,6 +73,8 @@ Vec2 (fromScalar (2, 2), valid yes, encode yes, methods -)
   lengthSq() | no lift | no laws | no identity | method
   distance(domain) | no lift | no laws | no identity | method
   dot(domain) | no lift | laws [commutative] | no identity | method
+  along(domain) | no lift | no laws | no identity | method
+  across(domain) | no lift | no laws | no identity | method
   cross(domain) | no lift | no laws | no identity | method
   angle() | no lift | no laws | no identity | method
   area() | no lift | no laws | no identity | method

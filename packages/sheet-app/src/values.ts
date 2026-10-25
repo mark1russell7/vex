@@ -11,6 +11,9 @@ export type Parsed = { readonly kind: "empty" } | { readonly kind: "ok"; readonl
 const NUMBER = /^[+-]?(\d[\d_,]*(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i;
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
+/** This function reads a number, or gives `undefined`. The signs `_` and `,` between the digits do not count. */
+const numberOf = (t: string): number | undefined => (NUMBER.test(t) ? Number(t.replaceAll(/[_,]/g, "")) : undefined);
+
 /** This function reads the text of a cell as a value of the type `type`. */
 export function parseValue(type: ValueType, text: string): Parsed {
   const t = text.trim();
@@ -19,8 +22,8 @@ export function parseValue(type: ValueType, text: string): Parsed {
     case "text":
       return { kind: "ok", value: text };
     case "number": {
-      if (!NUMBER.test(t)) return { kind: "bad", reason: `"${t}" is not a number` };
-      return { kind: "ok", value: Number(t.replaceAll(/[_,]/g, "")) };
+      const n = numberOf(t);
+      return n === undefined ? { kind: "bad", reason: `"${t}" is not a number` } : { kind: "ok", value: n };
     }
     case "boolean": {
       const l = t.toLowerCase();
@@ -30,8 +33,9 @@ export function parseValue(type: ValueType, text: string): Parsed {
     }
     case "vec2": {
       const parts = t.replace(/^\(/, "").replace(/\)$/, "").split(",").map((s) => s.trim());
-      const [x, y] = parts.map(Number);
-      if (parts.length !== 2 || !parts.every((p) => NUMBER.test(p)) || x === undefined || y === undefined) return { kind: "bad", reason: `"${t}" is not a vector like (3, 4)` };
+      // Each part reads as a cell of the type number, so a part with the sign _ is not NaN.
+      const [x, y] = parts.map((p) => numberOf(p));
+      if (parts.length !== 2 || x === undefined || y === undefined) return { kind: "bad", reason: `"${t}" is not a vector like (3, 4)` };
       return { kind: "ok", value: new Vec2(x, y) };
     }
     case "date": {

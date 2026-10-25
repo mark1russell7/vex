@@ -2,7 +2,7 @@
  * A book: the tables of a document, and the table on the screen. The title of a table is its name, so a formula of
  * another table reads it with `table("title")`. Each operation gives a new book.
  */
-import { emptyDoc, emptyGrid, isSheetDoc, type SheetDoc } from "./doc.ts";
+import { emptyDoc, emptyGrid, isSheetDoc, uniqueNames, type SheetDoc } from "./doc.ts";
 
 /** The book: its tables, and the position of the table on the screen. */
 export interface Book {
@@ -57,8 +57,21 @@ export function isBook(u: unknown): u is Book {
   return r["version"] === 1 && Array.isArray(tables) && tables.length > 0 && tables.every(isSheetDoc) && Number.isInteger(r["active"]) && (r["active"] as number) >= 0 && (r["active"] as number) < tables.length;
 }
 
+const isObject = (u: unknown): u is Readonly<Record<string, unknown>> => typeof u === "object" && u !== null && !Array.isArray(u);
+
+/**
+ * This function gives the second column of a name in a table the next free name. A file of an older version can have
+ * such columns from a CSV import, and a table with them is not valid.
+ */
+function renamed(t: unknown): unknown {
+  if (!isObject(t) || !Array.isArray(t["columns"])) return t;
+  const columns: unknown[] = t["columns"];
+  return columns.every((c) => isObject(c) && typeof c["name"] === "string") ? { ...t, columns: uniqueNames(columns as { readonly name: string }[]) } : t;
+}
+
 /** This function reads a book, or a single table as a book with one table. Another value gives `undefined`. */
 export function toBook(u: unknown): Book | undefined {
-  if (isBook(u)) return u;
-  return isSheetDoc(u) ? bookOf(u) : undefined;
+  const v = isObject(u) && Array.isArray(u["tables"]) ? { ...u, tables: (u["tables"] as unknown[]).map(renamed) } : renamed(u);
+  if (isBook(v)) return v;
+  return isSheetDoc(v) ? bookOf(v) : undefined;
 }

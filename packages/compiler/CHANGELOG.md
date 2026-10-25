@@ -1,5 +1,28 @@
 # @mark1russell7/vex-compiler
 
+## 0.11.2
+
+### Patch Changes
+
+- 5501948: Four fixes of the compiler:
+  
+  - A static site of tier 2 whose op gives a value of a domain stays in tier 2 (V-059). An example is the op `xy` of `NumDomain`. Before, each run of such a program went to tier 1.
+  - `emitModule` gives a reason for some values of the option `name` (V-060). These values are a reserved word, a name that the module declares and a global that a module reads. Before, such a name gave a module that did not parse, or a run that read its own function in place of a global. Each other name gives a module as before.
+  - The check of a result of a domain has a JavaScript name for each name of the domain (V-061). Before, a name with a space, a dot or a parenthesis gave a module that did not parse.
+  - Tier 2 and a standalone module keep a field of a record with the name `__proto__` (V-062).
+  
+  The changes are fixes, and the API does not change, so the change is a patch.
+- 2cb5c71: A standalone module takes the formula columns of a sheet (COMPILE.MODULE.SHEET). The new function `emitSheetModule` prints them, and the module gives the results of `SheetRun`. Each cell on a cycle gives `VEX_ERROR`, with the budget of the stack of `SheetRun`.
+  
+  The level is PATCH: the function `emitSheetModule` and the type `SheetModuleOptions` are new, and no type changes. Before 1.0, a new feature is a PATCH.
+- 13b5f9b: A standalone module takes a tree space, the first part of design D of the study of recursion (COMPILE.MODULE.TREE). With the option `space: "tree"` of `emitModule`, the run takes the parents after the variables. Each entry is the position of the parent of its record, or -1 for a root. A parent that is not -1 or a position, or a cycle of parents, throws a `VexContractError`.
+  
+  The module has the move `parent` and the offsets among the siblings. It also has the window and the axes of a tree and of a graph, in both orders. The run makes only the parts of the tree that the program reads. The tool `vex_module` takes the input `space`.
+  
+  The type `ModuleOptions` gets the optional field `space`. Without it, a module is for an array space, and its text does not change. No caller needs a change, so the change is a patch before 1.0.
+- Updated dependencies [5501948]
+  - @mark1russell7/vex@0.11.2
+
 ## 0.11.1
 
 ### Patch Changes

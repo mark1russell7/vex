@@ -1,4 +1,4 @@
-import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, isVexList, iterate, key, let_, lit, offset, ok, rec, ref, space, toDocument, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
+import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, isVexList, iterate, key, let_, lit, offset, ok, rec, ref, space, toDocument, v as variable, vexList, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, fromReference, modelChain, referenceEvaluate, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -348,6 +348,32 @@ describe("the tiers", () => {
     const own = app("drop", ref("n"), lit(1));
     expect(emitModule(own, { domains: [Stack], schema: { fields: { n: "number" } } }).ok).toBe(true);
     expect(fromCore(tiered(own, { domains: [Stack] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 2 });
+  });
+
+  it("LIST.GET LIST.LITERAL LOOP.LIST COMPILE.FALLBACK: get, a list literal and a list of a loop go to tier 1, and a module gives a reason", () => {
+    const s = space.array([{ n: 3, id: "1" }, { n: 1, id: "2" }, { n: 2, id: "0" }]);
+    const ns = each(axes.all, ref("n"));
+    const empty = lit(vexList([]));
+    const schema = { fields: { n: "number", id: "string" } } as const;
+    const lists = "tier 2 does not have lists as values yet";
+    const cases: readonly (readonly [Expr, string, string])[] = [
+      [app("get", ns, ref("id")), `the program has the list op "get", and ${lists}`, 'the list op "get" is not in a module yet'],
+      [app("count", empty), `the program has a list literal, and ${lists}`, "a literal is not a number, a text, a boolean or null"],
+      [iterate(2, { a: empty }, { a: app("append", variable("a"), ns) }, app("sum", variable("a"))), `the program has the list op "append", and ${lists}`, "a literal is not a number, a text, a boolean or null"],
+      [iterate(2, { a: ns }, { a: app("drop", variable("a"), lit(1)) }, app("count", variable("a"))), `the program has the list op "drop", and ${lists}`, "a list is a value of the program"],
+    ];
+    for (const [e, reason, moduleReason] of cases) {
+      expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason });
+      expect(emitModule(e, { domains: [NumDomain], schema })).toEqual({ ok: false, reason: moduleReason });
+      const p = tiered(e, { domains: [NumDomain] });
+      expect(p.tier).toBe(1);
+      for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));
+    }
+    // A domain op get on a value that is not a list is not a list op in a module, and tier 1 gives its value.
+    const own = app("get", ref("n"), lit(1));
+    const Pick = defineDomain({ name: "Pick", primitive: "number", is: (u: unknown): u is number => typeof u === "number", ops: { get: { fn: (a: number, b: number): number => a * 10 + b, params: ["number"], returns: "number" } } });
+    expect(emitModule(own, { domains: [Pick], schema }).ok).toBe(true);
+    expect(fromCore(tiered(own, { domains: [Pick] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 31 });
   });
 
   it("COMPILE.FALLBACK: an exception in the lowering gives a reason, not an exception", () => {

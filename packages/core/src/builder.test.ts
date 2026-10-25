@@ -555,4 +555,52 @@ describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER, BUILD.
     // @ts-expect-error -- a field name is not a list chain
     expect(() => ns.without("w")).toThrow("without needs a list chain");
   });
+
+  it("BUILD.LIST.LOOP: a name of a loop with a list chain as its first value is a list chain, and get reads a value by key", () => {
+    const ns = rows.start(0).each((c) => c.from("n"));
+    // A stack: the step removes the first item, and the result reads the keys that stay.
+    const popped = rows.start(0).iterate(2, { stack: ns }, ({ stack }) => ({ stack: stack.drop(1) }), ({ stack }) => stack.keys());
+    expectTypeOf(popped.result("0")).toEqualTypeOf<Result<readonly `${number}`[]>>();
+    expect(optionalValue(popped.at("0"))).toEqual(["2"]);
+    // A list result gives a list chain, and root.list starts an empty list of numbers.
+    const twice = rows.start(0).iterate(2, { acc: rows.list<number>() }, ({ acc }) => ({ acc: acc.append(ns) }), ({ acc }) => acc);
+    expectTypeOf(twice.get("1").result("0")).toEqualTypeOf<Result<number>>();
+    expect(optionalValue(twice.values().at("0"))).toEqual([30, 10, 20, 30, 10, 20]);
+    expect(optionalValue(twice.get("1").at("0"))).toBe(10);
+    // The test until reads the list too: the steps stop when the list has four items.
+    const until = rows.start(0).iterate(9, { acc: rows.list<number>() }, ({ acc }) => ({ acc: acc.append(ns.take(2)) }), ({ acc }) => acc.count(), { until: ({ acc }) => acc.count()._.gt(3) });
+    expect(optionalValue(until.at("0"))).toBe(4);
+    // A fold over the items keeps a list: each step puts the target first, so the list ends in the reverse order.
+    const reversed = ns.fold({ acc: rows.list<number>() }, ({ acc }, item) => ({ acc: item.window(0, 0, (t) => t.from("w")).append(acc) }), ({ acc }) => acc);
+    expectTypeOf(reversed.values().result("0")).toEqualTypeOf<Result<readonly number[]>>();
+    expect(optionalValue(reversed.keys().at("0"))).toEqual(["2", "1", "0"]);
+    expect(optionalValue(ns.fold({ acc: rows.list<number>() }, ({ acc }, item) => ({ acc: item.window(0, 0, (t) => t.from("w")).append(acc) }), ({ acc }) => acc.count()).at("0"))).toBe(3);
+    // @ts-expect-error -- the step of a name of a list gives a list chain
+    rows.start(0).iterate(1, { acc: ns }, () => ({ acc: 1 }), ({ acc }) => acc.count());
+    // @ts-expect-error -- the items of the step have the type of the items of the first list
+    rows.start(0).iterate(1, { acc: rows.list<string>() }, ({ acc }) => ({ acc: acc.append(ns) }), ({ acc }) => acc.count());
+  });
+
+  it("BUILD.LIST.LOOP LIST.LITERAL: root.list makes a list literal, and get takes a key or a chain of a text", () => {
+    const people = vex(Num).over(space.record({ ann: { boss: "bob", pay: 3 }, bob: { boss: "bob", pay: 5 }, cy: { boss: "ann", pay: 1 } }));
+    const pays = people.start(0).each((c) => c.from("pay"));
+    expect(optionalValue(pays.get("cy").at("ann"))).toBe(1);
+    expect(pays.get("cy").program).toEqual(app("get", pays.program, lit("cy")));
+    expect(pays.get("cy", { strict: true }).program).toEqual(app("get", pays.program, lit("cy"), lit({ strict: true })));
+    // A chain of a text is a computed key: here the boss of each person.
+    const bossPay = people.start(0).each((c) => pays.get(c.from("boss")));
+    // The record type of space.record keeps the literal types of the pays.
+    expectTypeOf(bossPay.values().result("ann")).toEqualTypeOf<Result<readonly (1 | 3 | 5)[]>>();
+    expect(optionalValue(bossPay.values().at("ann"))).toEqual([5, 5, 3]);
+    // @ts-expect-error -- "zed" is not a key of the space
+    pays.get("zed");
+    const one = people.list([["bob", 7]]);
+    expect(one.program).toEqual(lit({ kind: "vex.list", items: [{ key: "bob", result: { ok: true, value: 7 } }] }));
+    expectTypeOf(one.get("bob").result("ann")).toEqualTypeOf<Result<number>>();
+    expect(optionalValue(one.get("bob").at("ann"))).toBe(7);
+    expect(optionalValue(people.list().count().at("ann"))).toBe(0);
+    expect(optionalValue(people.list().append(one).keys().at("ann"))).toEqual(["bob"]);
+    // @ts-expect-error -- "zed" is not a key of the space
+    people.list([["zed", 1]]);
+  });
 });

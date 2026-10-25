@@ -185,6 +185,8 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[LIST.WITHOUT]** `without(list, other)` gives a list of the items of `list` whose key is not the key of an item of `other`.
 - **[LIST.FLAT]** `flat(list)` gives a list of the items of the lists that are the values of the items of `list`, in order. A value that is not a list gives `#VALUE!`.
 - **[LIST.BUILD]** An item of a list from `sortBy`, `take`, `drop`, `append`, `without` or `flat` keeps its key and its value. LIST.LENIENT applies to each list that the op reads: by default, an error item is not in the new list. With `{ strict: true }`, the first error item of `list` is the result, and then the first error item of the other lists, in order. The argument `other` must be a list, and another value gives `#VALUE!`.
+- **[LIST.GET]** `get(list, key)` gives the value of the first item with the key `key`. A key that no item has gives `#N/A`, and a key that is not a text gives `#VALUE!`. LIST.LENIENT applies: by default, an error item is not an item of its key. With `{ strict: true }`, the first error item of the list is the result.
+- **[LIST.LITERAL]** A literal can be a list. Its JSON form is the form of `vexList`: `{ "kind": "vex.list", "items": [...] }`, and each item has a `key` and the result `{ "ok": true, "value": v }`. Thus the empty list and a list with one key are literals.
 
 ### 5.6 Special forms
 
@@ -200,6 +202,7 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[ITERATE.LIMIT]** `iterate` makes `limit` steps at the position of the node. `limit` is a whole number from 0 to 100000 in the expression.
 - **[ITERATE.UNTIL]** With `until`, the test evaluates before each step and after the last step. A true test stops the iteration. With no true test, the value is `#NUM!`. A test that is not a boolean gives `#VALUE!`.
 - **[ITERATE.ERROR]** The first error of a value, of the test or of `result` is the value of the iteration.
+- **[LOOP.LIST]** A name of `fold` or `iterate` can hold a list (LIST.VALUE). A step gives a new list from the values before the step, for example with `append`, `drop` and `without`. Thus a list can be the stack or the seen set of a search, or the positions of a layout. A step reads the old value at a key with `get` (LIST.GET).
 
 ## 6. Folds
 
@@ -225,6 +228,7 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[BUILD.FN]** `root.fn(kinds, body)` makes a function with the kinds of its parameters. `functions(fns, body)` of a chain binds the functions, and `call` gives a chain of a call of each function.
 - **[BUILD.LIST.ORDER]** A list chain has `sortBy`, `take` and `nth`. Its method `each(body)` is the axis list over its items. `fold` needs the list of an axis.
 - **[BUILD.LIST.BUILD]** A list chain has `drop(n)`, `append(other)`, `without(other)` and `flat()`. `other` is a list chain, and another value makes the builder throw a `TypeError`. The body of an axis can give a list chain. Then the value of each item is a list, and only such a list chain has `flat`.
+- **[BUILD.LIST.LOOP]** In `iterate` and `fold`, a name whose first value is a list chain is a list chain in `step`, `until` and `result`. Its next value must be a list chain with items of the same type. A list chain as `result` gives a list chain. `root.list(items)` gives a list literal, and a list chain has `get(key)`. The key is a key of the space or a chain of a text.
 - **[BUILD.CALL]** `call(name, ...args)` applies a free function of `withOptions`: the expression is `app(name, value, ...args)`. A domain op with the same name for the value comes first at run time.
 - **[TYPE.FROM]** `from(p)` accepts only the fields of the record type, and the chain value has the type of the field.
 - **[TYPE.OPS]** `._` has only the ops of the domain of the current value, with the parameter types of each op.

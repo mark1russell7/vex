@@ -10,6 +10,7 @@ export * from "./ireko-radial.ts";
 export * from "./ireko-audit.ts";
 export * from "./heat.ts";
 export * from "./flock.ts";
+export * from "./force.ts";
 export * from "./polygon.ts";
 export * from "./palette.ts";
 export * from "./formula-run.ts";

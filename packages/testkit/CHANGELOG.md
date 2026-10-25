@@ -1,5 +1,12 @@
 # @mark1russell7/vex-testkit
 
+## 0.11.2
+
+### Patch Changes
+
+- Updated dependencies [5501948]
+  - @mark1russell7/vex@0.11.2
+
 ## 0.11.1
 
 ### Patch Changes

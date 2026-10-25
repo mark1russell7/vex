@@ -222,6 +222,22 @@ describe("the tiers", () => {
     }
   });
 
+  it("V-062 REC.FIELDS: tier 2 makes a field __proto__ an own field of the record, as the interpreter does", () => {
+    // V-062: an assignment of the key __proto__ set the prototype of the new record, so the field was lost.
+    const s = space.array([{ n: 1 }, { n: 2 }]);
+    const e = rec(JSON.parse('{"__proto__":{"tag":"ref","path":["n"]},"m":{"tag":"lit","value":3}}') as Readonly<Record<string, Expr>>);
+    expect(generate(e, { domains: DOMAINS }).ok).toBe(true);
+    const p = tiered(e, { domains: DOMAINS });
+    for (const [i, k] of s.keys.entries()) {
+      const got = p.run({ space: s, origin: k });
+      expect(fromCore(got)).toStrictEqual(fromCore(evaluate(e, { domains: DOMAINS, space: s, origin: k })));
+      const out = got.ok ? got.value : undefined;
+      expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+      expect(Object.getOwnPropertyDescriptor(out, "__proto__")?.value).toBe(i + 1);
+    }
+    expect(p.stats).toEqual({ runs: 2, fallbacks: 0 });
+  });
+
   it("COMPILE.TIERED: an extension in each part of a loop and of an address gets the path of its node", () => {
     // The handler "where" gives the path of its node, so a wrong path in tier 2 gives another value than the interpreter.
     const w = ext("where", null);

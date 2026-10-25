@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { explain } from "./evaluate.ts";
+import { vex } from "./builder.ts";
+import { evaluate, explain } from "./evaluate.ts";
 import { app, axes, each, ext, index, isExpr, key, let_, lit, offset, origin, other, parent, rec, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { SheetRun } from "./sheet.ts";
@@ -131,5 +132,36 @@ describe("the edges of the address of an axis and of a tree offset", () => {
     const run = new SheetRun(new Map([["a", app("add", lit(1), ext("vex.cell", { nope: 1 }))]]), { space: space.record({ A: {} }), domains: [] });
     const r = error(run.cell("a", "A"));
     expect([r.code, r.path]).toEqual(["#VALUE!", [1]]);
+  });
+});
+
+/** This function tells if a value has the plain prototype, and gives the value of its own field `__proto__`. */
+const protoField = (u: unknown): { readonly plain: boolean; readonly field: unknown } => ({ plain: Object.getPrototypeOf(u) === Object.prototype, field: Object.getOwnPropertyDescriptor(u, "__proto__")?.value });
+
+describe("V-062: the key __proto__ is a field, not the prototype", () => {
+  const AT = { space: space.record({ A: { weight: 2 } }), origin: "A" };
+
+  it("V-062 IR.JSON: parse and serialize keep a key __proto__ of a literal record, of a binding and of rec", () => {
+    // V-062: an assignment of the key __proto__ set the prototype of the new record, so the field was lost.
+    expect(protoField(read('{"__proto__":{"x":1},"y":2}'))).toEqual({ plain: true, field: { x: 1 } });
+    expect(protoField(read('{"$vex":"escape","value":{"$vex":1,"__proto__":3}}'))).toEqual({ plain: true, field: 3 });
+    const bound = value(parse('{"tag":"let","bind":{"__proto__":{"tag":"lit","value":3}},"body":{"tag":"var","name":"__proto__"}}'));
+    expect(protoField(bound.tag === "let" ? bound.bind : undefined)).toEqual({ plain: true, field: lit(3) });
+    expect(value(evaluate(bound, AT))).toBe(3);
+    const fields = value(parse('{"tag":"rec","fields":{"__proto__":{"tag":"lit","value":{"x":1}}}}'));
+    expect(protoField(fields.tag === "rec" ? fields.fields : undefined)).toEqual({ plain: true, field: lit({ x: 1 }) });
+    // serialize writes the key back, also in a record of a literal.
+    const data: unknown = JSON.parse('{"__proto__":{"x":1},"y":2}');
+    expect(value(serialize(lit(data)))).toBe('{"tag":"lit","value":{"__proto__":{"x":1},"y":2}}');
+    expect(value(serialize(lit([data])))).toBe('{"tag":"lit","value":[{"__proto__":{"x":1},"y":2}]}');
+  });
+
+  it("V-062 REC.FIELDS: rec, and the builder methods rec and fork, make a field __proto__ an own field", () => {
+    expect(protoField(value(evaluate(rec(JSON.parse('{"__proto__":{"tag":"ref","path":["weight"]}}') as Readonly<Record<string, Expr>>), AT)))).toEqual({ plain: true, field: 2 });
+    const b = vex(PtDomain).over(space.record({ A: { weight: 2 } }));
+    expect(protoField(value(b.start(b.rec(JSON.parse('{"__proto__":"weight"}') as Readonly<Record<string, string>>)).result("A")))).toEqual({ plain: true, field: 2 });
+    const chain = b.from("weight");
+    const branches = Object.fromEntries([["__proto__", <C,>(c: C): C => c]]) as Parameters<typeof chain.fork>[0];
+    expect(protoField(value(chain.fork(branches).result("A")))).toEqual({ plain: true, field: 2 });
   });
 });

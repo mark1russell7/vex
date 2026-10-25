@@ -59,7 +59,7 @@ An expression is plain JSON data. It has one of these kinds.
 | `iterate` | `limit`, `init`, `step`, `until`, `result` | the result, after the steps |
 | `ext` | `kind`, `data` | the value of an extension handler |
 
-- **[IR.JSON]** An expression gives the same expression after `serialize` and `parse`, if each literal is JSON data or a value of a domain. A domain value needs `encode` and `decode` in its domain. A domain value can be in a list or a record of a literal.
+- **[IR.JSON]** An expression gives the same expression after `serialize` and `parse`, if each literal is JSON data or a value of a domain. A domain value needs `encode` and `decode` in its domain. A domain value can be in a list or a record of a literal. A key `__proto__` of a record of a literal, of a `let` or of a `rec` is a key too.
 - **[IR.JSON.NUMBER]** A literal number that JSON has no text for (`-0`, `NaN`, `Infinity` or `-Infinity`) gets the form `{ "$vex": "number", "value": text }`.
 - **[IR.JSON.ESCAPE]** A record of a literal with the key `$vex` gets the form `{ "$vex": "escape", "value": record }`. Thus `parse` does not read data as a domain value. A record with another form of `$vex` stays data.
 
@@ -147,7 +147,7 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[FN.TOTAL]** A binding of `let` does not see the other bindings of that `let`. Thus a function cannot call itself or another binding of its `let`, and each call ends.
 - **[FN.ARGS]** A call with another number of arguments than the parameters gives `#VALUE!`. A call of a name without a binding gives `#NAME?`, and a call of a value gives `#VALUE!`.
 - **[FN.VALUE]** A function is not a value: a `var` of its name gives `#VALUE!`.
-- **[REC.FIELDS]** `rec` makes a record of its fields. Two or more failed fields give `#ARGS`.
+- **[REC.FIELDS]** `rec` makes a record of its fields. Each field is an own field of the record, also the field `__proto__`. Two or more failed fields give `#ARGS`.
 
 ### 5.4 Axes
 
@@ -265,9 +265,9 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[COMPILE.TRACE]** A run with a trace, and `explain`, use tier 1. Thus they give the traces of the interpreter.
 - **[COMPILE.MEMO]** A program keeps the value of each node that depends only on the space, for each space. Thus a run at each key of a space evaluates such a node once. A space does not change, so each run gives the result of `evaluate`.
 - **[COMPILE.GROUP]** A program keeps the value of a node for each space and each value of its keys. A key reads the origin or a name from outside the node, and nothing that the node changes. Thus an aggregate over the group of the origin evaluates once for each group.
-- **[KIND.STATIC]** When the kinds of the values of an op site decide its op, the site uses that op with no guard. A value against the schema, or a result against `returns`, sends the evaluation to tier 1.
+- **[KIND.STATIC]** When the kinds of the values of an op site decide its op, the site uses that op with no guard. A value against the schema, or a result against a primitive kind of `returns`, sends the evaluation to tier 1. A result of the kind of a domain gets the checks of the interpreter.
 - **[KIND.DOMAIN]** A value of a domain without a primitive type has the kind of its domain, `domain:Name`. An op with `returns: "domain"` gives this kind, and a schema can declare it for a field. A module checks such a field with a copy of `is` of the domain. It checks each copy of an op with the `samples` of the domain.
-- **[COMPILE.MODULE]** `emitModule(e, options)` gives an ES module with no import of Vex. For an input that keeps the schema, its run gives the value of the interpreter at each key, or `VEX_ERROR` for an error. An input against the schema throws a `VexContractError`.
+- **[COMPILE.MODULE]** `emitModule(e, options)` gives an ES module with no import of Vex. For an input that keeps the schema, its run gives the value of the interpreter at each key, or `VEX_ERROR` for an error. An input against the schema throws a `VexContractError`. The option `name` is the name of the run. A reserved word, a name that the module declares or a global that a module reads gives a reason.
 - **[COMPILE.MODULE.TREE]** With the option `space: "tree"`, the module is for a tree space. Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The key of a record is the text of its position. A parent that is not -1 or a position, or a cycle of parents, throws a `VexContractError`. The move `parent`, the offsets, the window and the axes of a tree and of a graph give the targets of the interpreter.
 - **[COMPILE.SOURCE]** `generate(e)` gives the same source for the same expression. The source has no name and no literal of the expression. It reads them from its constants, by index.
 

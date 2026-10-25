@@ -64,6 +64,8 @@ The source has no name and no literal of the program. It reads each one from a l
 | `tiered(expr, options)` | A program of tier 2 if it can, and else of tier 1 |
 | `generate(expr, options)` | The loop IR and the source of a program for the options, or the reason that it has none |
 | `load(generated)` | The function of tier 2. It gives the value, or `FALLBACK`. |
+| `emitModule(expr, options)` | The source of a standalone ES module of a program over an array or a tree, or the reason that it has none |
+| `emitSheetModule(columns, options)` | The source of a standalone ES module of the formula columns of a sheet, with the results of `SheetRun` |
 
 `tiered`, `generate` and `emitModule` take an expression or a document of coeval, as `toDocument` of `@mark1russell7/vex` gives it.
 

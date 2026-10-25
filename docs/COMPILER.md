@@ -173,7 +173,7 @@ A domain can give an **inline form** for an op: the arithmetic on the components
 
 A sheet whose cell references have fixed addresses has a fixed order of evaluation. The compiler gives straight-line code in that order, like the calculation chain of a spreadsheet. A recurrence over `row(-1)` becomes one forward loop.
 
-The first form of this is done (§13.2). `SheetRun.fill` evaluates the cells in a static order, and each cell reference finds a finished cell. Generated code that reads the cells without the extension is a later step.
+The first form of this is done (§13.2). `SheetRun.fill` evaluates the cells in a static order, and each cell reference finds a finished cell. A standalone module of a sheet reads the cells of each column as an array, without the extension (§13.3).
 
 ### 7.5 Recalculation
 
@@ -288,7 +288,7 @@ The decision of 2026-10-24: the vex session decided the four questions of the st
 - List ops build lists, and a list can be the state of `iterate` (design E). Design E comes first.
 - The engine uses sheets as they are, with no self node. A sheet column already reads itself at the children or at the parent.
 
-The status on 2026-10-25: tree spaces are in modules (COMPILE.MODULE.TREE), the first part of design D (§13.3). The formula columns of a sheet in a module are the second part.
+The status on 2026-10-25: design D is done (§13.3). Tree spaces are in modules (COMPILE.MODULE.TREE). The formula columns of a sheet are in modules too (COMPILE.MODULE.SHEET).
 
 The current language already has two forms of recursion:
 
@@ -461,7 +461,7 @@ The results of the finished cells are in a map for each column, by key. Before, 
 | A fill with the interpreter | 26 ms |
 | A fill with `tiered` | 13 to 20 ms |
 
-The sheet app and `table()` of the builder fill the table first. The remaining time is in the extension of each cell reference and in the maps. Generated code that reads the cells of a column as an array is the next step. It is an open item of phase C5.
+The sheet app and `table()` of the builder fill the table first. The remaining time is in the extension of each cell reference and in the maps. A standalone module of a sheet reads the cells of a column as an array (§13.3). A `SheetRun` with `compile` still reads each cell with the extension. That is an open item of phase C5.
 
 ### 13.3 Phase C3: ireko
 
@@ -652,3 +652,19 @@ Thus the targets of each axis are a range of an array, and the loop over them is
 A property compares random programs over random trees with the interpreter (P17). A random order of the keys gives each key a parent before it in that order. Thus a parent can come after its child in the key order. The programs read the parent, the siblings and each axis of a tree, also in the reverse order and from an address. The text of a module of a tree is in the golden file `__golden__/module-tree.js`.
 
 The speed gate of the compiler has a tree case. It gives the cost of the team and the depth of each of 1000 nodes, against loops with a stack. The nightly run gives its numbers, and its limit is 3.
+
+#### Sheets in modules (design D)
+
+The engine of ireko uses sheets as they are, so a module also takes the formula columns of a sheet (COMPILE.MODULE.SHEET). `emitSheetModule(columns, options)` takes the columns of a `SheetRun` and the options of a module. Its options also take the formulas of cells, the kinds of the columns and the budget of the stack. The run gives an object with an array for each column: the result at each key, or `VEX_ERROR`.
+
+The run fills the columns in the static order of `SheetRun.fill` (§13.2). The text of the module has this order: one `for` loop for each column. The loop goes forward or in reverse, or over the keys of a tree in the order of the helper `KO`. A read of a finished cell is the read of an array.
+
+A read of a cell that is not finished starts the search of `SheetRun`, in the helper `SH`. The search has the same budget of the stack and the same costs. Thus each cell on a cycle gives `VEX_ERROR`, as `#CYCLE!` of the run. A long chain of cells pauses and continues, as SHEET.DEEP tells.
+
+The search decides the cycles, and each read of a cell can start it. Thus the module reads each cell that the interpreter reads, in the same order. Before a part of a node reads a cell, the module evaluates the parts that come before it. A list op that can stop at an item evaluates each item first, as the interpreter does.
+
+- A column without a kind in `kinds` takes the kind of its first formula. A formula that reads a column before that formula gives a reason, so that column needs its kind in `kinds`.
+- A test of the axis of a fold that reads a cell gives a reason. The interpreter evaluates each test before the first step, and the module does not have that order.
+- The tables of SHEET.TABLES and the axis `table` are not in modules.
+
+A property compares the results of a module with `SheetRun` on random sheets over arrays and trees, with each budget of the stack (P17). The fixed sample of the property has cycles in many sheets, deep trees and parents after their children. The text of the module of the sheet of the engine is in the golden file `__golden__/module-sheet.js`.

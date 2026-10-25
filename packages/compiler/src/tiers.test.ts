@@ -136,18 +136,28 @@ function agree(e: Expr, s: Space, k: string, t: Readonly<Record<string, Space>>,
   }
 }
 
+/**
+ * This function gives the share of the values that tier 2 gave, on a fixed sample of runs. The share is the same in each
+ * test run, so a change of the generators that lowers it fails at once, on the change that causes it.
+ */
+function shareOfTier2(runs: ReturnType<typeof runOf<Expr>>): number {
+  const count = { values: 0, fast: 0 };
+  for (const [s, e, k, t, v] of fc.sample(runs, { seed: 20261024, numRuns: 200 })) agree(e, s, k, t, v, count);
+  return count.fast / count.values;
+}
+
 describe("the tiers", () => {
   // In each property, a fallback gives the right result too. Thus the share of tier 2 shows a gap that the equality cannot show.
   it("P17 COMPILE.TIERED EVAL.REFERENCE: on programs of the whole grammar, a tiered program gives the result of the interpreter and of the kernel", () => {
-    const count = { values: 0, fast: 0 };
-    fc.assert(fc.property(runOf(arbExpr(OPTS)), ([s, e, k, t, v]) => agree(e, s, k, t, v, count)));
-    expect(count.fast / count.values).toBeGreaterThan(0.5);
+    const runs = runOf(arbExpr(OPTS));
+    fc.assert(fc.property(runs, ([s, e, k, t, v]) => agree(e, s, k, t, v, { values: 0, fast: 0 })));
+    expect(shareOfTier2(runs)).toBeGreaterThan(0.5);
   });
 
   it("P17 COMPILE.TIERED: on the programs of the builder, a tiered program gives the result of the interpreter", () => {
-    const count = { values: 0, fast: 0 };
-    fc.assert(fc.property(arbSpace(vec).chain((s) => runOf(arbChain(CHAINS(s.keys)).map(modelChain))), ([s, e, k, t, v]) => agree(e, s, k, t, v, count)));
-    expect(count.fast / count.values).toBeGreaterThan(0.5);
+    const runs = arbSpace(vec).chain((s) => runOf(arbChain(CHAINS(s.keys)).map(modelChain)));
+    fc.assert(fc.property(runs, ([s, e, k, t, v]) => agree(e, s, k, t, v, { values: 0, fast: 0 })));
+    expect(shareOfTier2(runs)).toBeGreaterThan(0.5);
   });
 
   it("P17 COMPILE.MEMO: one program at each key of each space, twice, gives the result of the interpreter at each key", () => {
@@ -383,8 +393,8 @@ describe("the tiers", () => {
   });
 
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {
-    const count = { values: 0, fast: 0 };
-    fc.assert(fc.property(runOf(arbListProgram), ([s, e, k, t, v]) => agree(e, s, k, t, v, count)));
-    expect(count.fast / count.values).toBeGreaterThan(0.5);
+    const runs = runOf(arbListProgram);
+    fc.assert(fc.property(runs, ([s, e, k, t, v]) => agree(e, s, k, t, v, { values: 0, fast: 0 })));
+    expect(shareOfTier2(runs)).toBeGreaterThan(0.5);
   });
 });

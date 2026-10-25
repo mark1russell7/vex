@@ -8,8 +8,8 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "package": "tsx packages/cli/src/index.ts package",
-    "template": "tsx packages/cli/src/index.ts repo",
+    "package": "template package",
+    "template": "template repo",
     "build": "pnpm --filter @mark1russell7/vex --filter @mark1russell7/vex-domains --filter @mark1russell7/vex-testkit --filter @mark1russell7/vex-compiler --filter @mark1russell7/vex-mcp run build",
     "check:packages": "pnpm build && node scripts/check-packages.mjs",
     "changeset": "changeset",
@@ -27,6 +27,7 @@
     "@changesets/cli": "^3.0.3",
     "@mark1russell7/cue": "github:mark1russell7/cue",
     "@mark1russell7/ste-lint": "github:mark1russell7/ste-lint",
+    "@mark1russell7/template-cli": "^0.1.2",
     "@vitest/coverage-v8": "^5.0.3",
     "oxlint": "^1.87.0",
     "oxlint-tsgolint": "^7.0.2003",

@@ -181,6 +181,9 @@ importers:
       '@mark1russell7/ste-lint':
         specifier: github:mark1russell7/ste-lint
         version: https://codeload.github.com/mark1russell7/ste-lint/tar.gz/f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7
+      '@mark1russell7/template-cli':
+        specifier: ^0.1.2
+        version: 0.1.2
       '@vitest/coverage-v8':
         specifier: ^5.0.3
         version: 5.0.3(vitest@5.0.3)
@@ -199,25 +202,6 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^5.0.3
-        version: 5.0.3(@types/node@26.6.4)(@vitest/coverage-v8@5.0.3)(vite@8.3.4(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  packages/cli:
-    dependencies:
-      '@clack/prompts':
-        specifier: ^1.8.1
-        version: 1.8.1
-    devDependencies:
-      '@mark1russell7/cue':
-        specifier: github:mark1russell7/cue
-        version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
-      '@types/node':
-        specifier: ^26.6.4
-        version: 26.6.4
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -1647,6 +1631,11 @@ packages:
     resolution: {gitHosted: true, integrity: sha512-HDxumpWNUeciZKaXbAGFPyoOTrt0trj7L3/koNvWnTN/vEuF0gYzqVJdsgfTQ9bE/DhSxfNMRxtrh4KYnbbimA==, tarball: https://codeload.github.com/mark1russell7/ste-lint/tar.gz/f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7}
     version: 0.1.0
     engines: {node: '>=22'}
+    hasBin: true
+
+  '@mark1russell7/template-cli@0.1.2':
+    resolution: {integrity: sha512-PymBwlcDGyJiGZCQ6y9+dxWCpKPMSoqky5WkuNP+paoQp8z6vFkQJZTeIozxRHPtCipL2GmHg6RmpthaWAiM5g==}
+    engines: {node: '>=22.12'}
     hasBin: true
 
   '@modelcontextprotocol/sdk@1.32.1':
@@ -5582,6 +5571,10 @@ snapshots:
   '@mark1russell7/ste-lint@https://codeload.github.com/mark1russell7/ste-lint/tar.gz/f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7':
     dependencies:
       typescript: 6.0.3
+
+  '@mark1russell7/template-cli@0.1.2':
+    dependencies:
+      '@clack/prompts': 1.8.1
 
   '@modelcontextprotocol/sdk@1.32.1(supports-color@7.2.0)(zod@4.6.7)':
     dependencies:

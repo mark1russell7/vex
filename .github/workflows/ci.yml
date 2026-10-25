@@ -13,38 +13,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: check (node ${{ matrix.node }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  # The checks of each Node.js version: the shared CI of mark1russell7 (reusable-ci.yml of
+  # mark1russell7/template, its CI.md)
+  ci:
+    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@a743392393fc72acd1f5557eefe06e097bc9f906 # main
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [22, 24, 26]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # The pnpm version comes from "packageManager" in package.json
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ matrix.node }}
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      # The source and the tests of each package (tsconfig.json and tsconfig.test.json)
-      - run: pnpm typecheck
-      # Oxlint with type-aware rules
-      - run: pnpm lint
-      - run: pnpm test
-      # The coverage of @mark1russell7/vex from the tests of each package, with the thresholds of vitest.config.ts
-      - run: pnpm test:coverage
-      # The code blocks of the docs with the meta word "doctest": types, values and type errors
-      - run: pnpm test:docs
-      # The writing rules (ASD-STE100) of the README files, the docs and the doc comments
-      - run: pnpm lint:ste
+    with:
+      # typecheck: the source and the tests of each package (tsconfig.json and tsconfig.test.json).
+      # lint: Oxlint with type-aware rules.
+      # test:coverage: the coverage of @mark1russell7/vex from the tests of each package, with the thresholds of vitest.config.ts.
+      # test:docs: the code blocks of the docs with the meta word "doctest": types, values and type errors.
+      # lint:ste: the writing rules (ASD-STE100) of the README files, the docs and the doc comments.
+      scripts: typecheck lint test test:coverage test:docs lint:ste
+      node-versions: '["22", "24", "26"]'
 
   # The site: typecheck of the widgets, the spec pages and the static build
   site:
@@ -93,7 +75,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [check, site, package]
+    needs: [ci, site, package]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}

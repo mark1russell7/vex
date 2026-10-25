@@ -337,11 +337,11 @@ importers:
         specifier: workspace:*
         version: link:../domains
       '@procedures/client':
-        specifier: ^0.30.0
-        version: 0.30.0(express@5.3.0(supports-color@7.2.0))
+        specifier: ^0.31.0
+        version: 0.31.0(express@5.3.0(supports-color@7.2.0))
       '@procedures/mcp-server':
-        specifier: ^0.30.0
-        version: 0.30.0(@procedures/client@0.30.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)
+        specifier: ^0.31.0
+        version: 0.31.0(@procedures/client@0.31.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1871,8 +1871,8 @@ packages:
     resolution: {integrity: sha512-pOr5+q1fLYKwFN3LAJuGZEnfXDcQ73zqgDHMtGy+K+uIoUqyY+6MeDCWFwfu+4EFuq76I5EPFofoNAI+Bmmq4A==}
     engines: {node: '>=22.13'}
 
-  '@procedures/client@0.30.0':
-    resolution: {integrity: sha512-R/fDIBVKgzJEK/cMy/yVb8sGorCW1UjUDZso2DtsKyDs9x2TzZhpE6MAqRJ/7XIs547vtSDwfMWpWg9Qu9+iLQ==}
+  '@procedures/client@0.31.0':
+    resolution: {integrity: sha512-FUoNQv7THSY9BtuYmnwPIUg1DW3npT20IgXzN/OQscpxAJsGCxrT8mGGoSUKKdTdC9T6jLuZx9nw1dgGxl5Ckg==}
     engines: {node: '>=22'}
     peerDependencies:
       express: ^4.0.0 || ^5.0.0
@@ -1880,17 +1880,17 @@ packages:
       express:
         optional: true
 
-  '@procedures/mcp-server@0.30.0':
-    resolution: {integrity: sha512-so6uDxD/xsVqRnPX0eksVmIlT01G09ELoCfFFYhqovPesCDRNI7BB5e366LUkM+dEmDb5Q5h766moFRulunI0A==}
+  '@procedures/mcp-server@0.31.0':
+    resolution: {integrity: sha512-Yac9Ckfx0zAJ8NjaHILaJsexrs7qkK8Rr2u/IToh8nKI70/s6+HpOpcpXbGNY9ck421dnmHiUWzf9bjo40arcQ==}
     engines: {node: '>=22'}
     peerDependencies:
-      '@procedures/client': ^0.30.0
+      '@procedures/client': ^0.31.0
 
-  '@procedures/mcp@0.30.0':
-    resolution: {integrity: sha512-jrch09j2sRhmzQb4OXzUobJ4QMEdEnii75moKdqRCT2wtGlNMe03vUkfiU1iY9/3dG4guRKDRICcR58sBpbGIQ==}
+  '@procedures/mcp@0.31.0':
+    resolution: {integrity: sha512-xD1grSvWAfT6aRqyKs5En+XSULGqwx2NdXy9yVg5jNTzDwvZeNm+L64tNSM5PjW2Z25WfGfgyigrrP6LP/WDHw==}
     engines: {node: '>=22'}
     peerDependencies:
-      '@procedures/client': ^0.30.0
+      '@procedures/client': ^0.31.0
 
   '@publint/pack@0.1.7':
     resolution: {integrity: sha512-4EDEmvxWtgsCnnVeBvtFIFZtUhPPt1+bA9JrSwU4Sa//6oKtzCSlGGXYJr44OD9aGISymbieJ4mCKHUygUDU+g==}
@@ -5727,7 +5727,7 @@ snapshots:
 
   '@pnpm/deps.graph-sequencer@1100.0.1': {}
 
-  '@procedures/client@0.30.0(express@5.3.0(supports-color@7.2.0))':
+  '@procedures/client@0.31.0(express@5.3.0(supports-color@7.2.0))':
     dependencies:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/coeval': 0.7.0
@@ -5743,19 +5743,19 @@ snapshots:
       - ioredis
       - utf-8-validate
 
-  '@procedures/mcp-server@0.30.0(@procedures/client@0.30.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)':
+  '@procedures/mcp-server@0.31.0(@procedures/client@0.31.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.32.1(supports-color@7.2.0)(zod@4.6.7)
-      '@procedures/client': 0.30.0(express@5.3.0(supports-color@7.2.0))
-      '@procedures/mcp': 0.30.0(@procedures/client@0.30.0(express@5.3.0(supports-color@7.2.0)))
+      '@procedures/client': 0.31.0(express@5.3.0(supports-color@7.2.0))
+      '@procedures/mcp': 0.31.0(@procedures/client@0.31.0(express@5.3.0(supports-color@7.2.0)))
       zod: 4.6.7
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@procedures/mcp@0.30.0(@procedures/client@0.30.0(express@5.3.0(supports-color@7.2.0)))':
+  '@procedures/mcp@0.31.0(@procedures/client@0.31.0(express@5.3.0(supports-color@7.2.0)))':
     dependencies:
-      '@procedures/client': 0.30.0(express@5.3.0(supports-color@7.2.0))
+      '@procedures/client': 0.31.0(express@5.3.0(supports-color@7.2.0))
 
   '@publint/pack@0.1.7':
     dependencies:

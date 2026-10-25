@@ -108,5 +108,9 @@ describe("the tools", () => {
     expect(m.ok).toBe(true);
     expect(m.source).toContain("export function plusOne(");
     expect(moduleOf({ program: { tag: "ext", kind: "note", data: null }, schema: {} })).toEqual({ ok: false, reason: 'the extension "note"' });
+    // COMPILE.MODULE.TREE: the module of a tree space takes the parents.
+    const children = { tag: "each", axis: { t: "children" }, body: ref("n") };
+    const tree = moduleOf({ program: app("count", children), schema: { fields: { n: "number" } }, space: "tree" }) as { readonly ok: boolean; readonly source: string };
+    expect(tree.source).toContain("export function run(records, vars, parents) {");
   });
 });

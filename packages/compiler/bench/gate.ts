@@ -13,7 +13,7 @@ import type { Space } from "@mark1russell7/vex";
 import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, radialArrange, radialRun, type RadialInput } from "../../pilots/src/ireko-radial.ts";
-import { app, axes, each, ref, space } from "@mark1russell7/vex";
+import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { emitModule, tiered } from "../src/index.ts";
 
@@ -96,11 +96,54 @@ const radialCase = (n: number, mode: "nested" | "linked"): { readonly title: str
   return { title: `the radial module of ireko, a full ring of ${String(n)} children, ${mode}`, compiled: { run: () => radialModule(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limit: 4 };
 };
 
+// A tree space as a standalone module (COMPILE.MODULE.TREE), against hand-written loops. At each node, the program gives
+// the cost of its team, the sum over its descendants (EXAMPLE.TREE), and its depth, the count of its ancestors.
+const TEAM = rec({ team: app("add", ref("w"), app("sum", each(axes.descendants, ref("w")))), depth: app("count", each(axes.ancestors, ref("w"))) });
+type TreeRun = (records: unknown, vars: unknown, parents: unknown) => unknown;
+const teamModule = ((): TreeRun => {
+  const m = emitModule(TEAM, { domains: [NumDomain], schema: { fields: { w: "number" } }, space: "tree", name: "team" });
+  if (!m.ok) throw new Error(m.reason);
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
+  const load = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn team;`) as () => TreeRun;
+  return load();
+})();
+
+/** This function gives the cost of the team and the depth of each node, with loops: a walk with a stack, and a walk up. */
+function teamHand(records: readonly { readonly w: number }[], parents: readonly number[]): readonly { readonly team: number; readonly depth: number }[] {
+  const children: number[][] = records.map(() => []);
+  parents.forEach((p, i) => children[p]?.push(i));
+  return records.map((r, i) => {
+    // The descendants depth first, as the axis gives them, so the sum has the bits of the module.
+    let sum = 0;
+    const none: readonly number[] = [];
+    const stack: number[] = [];
+    const push = (keys: readonly number[]): void => {
+      for (let q = keys.length - 1; q >= 0; q--) stack.push(keys[q] ?? 0);
+    };
+    push(children[i] ?? none);
+    for (let k: number | undefined = stack.pop(); k !== undefined; k = stack.pop()) {
+      sum += records[k]?.w ?? 0;
+      push(children[k] ?? none);
+    }
+    let depth = 0;
+    for (let p = parents[i] ?? -1; p >= 0; p = parents[p] ?? -1) depth++;
+    return { team: r.w + sum, depth };
+  });
+}
+
+const treeCase = (n: number): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limit: number } => {
+  // Each node has at most three children, so the depth is near log3(n).
+  const records = Array.from({ length: n }, (_, i) => ({ w: (i * 37) % 11 }));
+  const parents = records.map((_r, i) => (i === 0 ? -1 : Math.floor((i - 1) / 3)));
+  return { title: `a tree module, the team and the depth of each of ${String(n)} nodes`, compiled: { run: () => teamModule(records, {}, parents), tier: 2, fallbacks: () => 0 }, hand: () => teamHand(records, parents), limit: 3 };
+};
+
 const CASES = [
   { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limit: 2 },
   { title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limit: 1.5 },
   radialCase(12, "linked"),
   radialCase(60, "nested"),
+  treeCase(1000),
 ] as const;
 
 let failed = false;

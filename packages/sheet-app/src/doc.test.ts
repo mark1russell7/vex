@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { addColumn, addRow, cellFormulaOf, cellTextOf, columnLetter, convertColumn, deleteColumn, deleteRow, depthOf, emptyDoc, emptyGrid, freeLetter, indentRow, isSheetDoc, moveColumn, moveRow, outdentRow, setCell, setCellFormula, setCellText, subtree, updateColumn, type SheetDoc } from "./doc.ts";
+import { addColumn, addRow, cellFormulaOf, cellTextOf, columnLetter, convertColumn, deleteColumn, deleteRow, depthOf, emptyDoc, emptyGrid, freeLetter, indentRow, isSheetDoc, moveColumn, moveRow, outdentRow, setCell, setCellFormula, setCellText, subtree, uniqueNames, updateColumn, type SheetDoc } from "./doc.ts";
 import { EXAMPLES } from "./examples.ts";
 
 const shape = (d: SheetDoc): string[] => d.rows.map((r) => `${"  ".repeat(depthOf(d, r.id))}${r.id}`);
@@ -22,7 +22,25 @@ function sample(): SheetDoc {
   return d;
 }
 
+/** This function gives the names that `uniqueNames` gives to columns with the names `ns`. */
+const uniqueOf = (ns: readonly string[]): string[] => uniqueNames(ns.map((name) => ({ name }))).map((c) => c.name);
+
 describe("the document", () => {
+  it("gives a duplicate column a name that no column has, and keeps each first name", () => {
+    expect(uniqueOf(["a", "a", "a 2"])).toEqual(["a", "a 3", "a 2"]);
+    expect(uniqueOf(["a", "A", "a"])).toEqual(["a", "A 2", "a 3"]);
+    expect(uniqueOf(["x", "y"])).toEqual(["x", "y"]);
+    fc.assert(
+      fc.property(fc.array(fc.constantFrom("a", "A", "a 2", "a 3", "b"), { maxLength: 8 }), (ns) => {
+        const out = uniqueOf(ns);
+        expect(new Set(out.map((n) => n.toLowerCase())).size).toBe(out.length);
+        // A column keeps its name when no earlier column has it.
+        const firsts = ns.flatMap((n, i) => (ns.slice(0, i).some((m) => m.toLowerCase() === n.toLowerCase()) ? [] : [i]));
+        expect(firsts.map((i) => out[i])).toEqual(firsts.map((i) => ns[i]));
+      }),
+    );
+  });
+
   it("adds rows as siblings or children, after the block of a row", () => {
     expect(shape(sample())).toEqual(["r1", "  r2", "    r3", "  r4", "r5"]);
     expect(subtree(sample(), "r2")).toEqual(["r2", "r3"]);

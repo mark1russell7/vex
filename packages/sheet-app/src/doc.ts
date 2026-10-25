@@ -254,15 +254,23 @@ export function freeName(doc: SheetDoc, base: string): string {
 
 /**
  * This function gives the columns with unique names, with the rule of `freeName`. A column with the name of an earlier
- * column, in any case, gets the next free name, for example `a 2`. The engine keys the values of a row by name.
+ * column, in any case, gets the next name that no column has, for example `a 2`. The first column with a name keeps it.
+ * The engine keys the values of a row by name.
  */
 export function uniqueNames<C extends { readonly name: string }>(columns: readonly C[]): C[] {
-  const taken = new Set<string>();
+  const taken = new Set(columns.map((c) => c.name.toLowerCase()));
+  const seen = new Set<string>();
   return columns.map((c) => {
-    let name = c.name;
-    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${c.name} ${n}`;
+    if (!seen.has(c.name.toLowerCase())) {
+      seen.add(c.name.toLowerCase());
+      return c;
+    }
+    let n = 2;
+    while (taken.has(`${c.name} ${n}`.toLowerCase())) n++;
+    const name = `${c.name} ${n}`;
     taken.add(name.toLowerCase());
-    return name === c.name ? c : { ...c, name };
+    seen.add(name.toLowerCase());
+    return { ...c, name };
   });
 }
 

@@ -24,33 +24,40 @@ function keeping(): { readonly compile: (e: Expr, o: CompileOptions) => TieredPr
   };
 }
 
+type SheetCase = typeof arbSheet extends fc.Arbitrary<infer T> ? T : never;
+
+/**
+ * This function checks that a sheet with the compiler gives the results of the reference, with each budget of the stack.
+ * It counts the runs of the programs, and the runs that tier 2 gave.
+ */
+function checkSheet({ formulas, own, rows, reads }: SheetCase, count: { runs: number; fast: number }): void {
+  const columns = sheetColumnsOf(formulas);
+  const opts = { space: sheetRowsOf(rows), domains: [NumDomain], cells: sheetCellsOf(own) };
+  const reference = new ReferenceSheetRun(columns, opts);
+  const expected = reads.map(([c, k]) => plain(reference.cell(c, k)));
+  for (const budget of [undefined, 1, 40]) {
+    const { compile, programs } = keeping();
+    const run = new SheetRun(columns, { ...opts, compile }, budget);
+    expect(reads.map(([c, k]) => plain(run.cell(c, k)))).toEqual(expected);
+    // A fill with the compiler gives the same results (SHEET.FILL).
+    const filled = new SheetRun(columns, { ...opts, compile }, budget);
+    filled.fill();
+    expect(reads.map(([c, k]) => plain(filled.cell(c, k)))).toEqual(expected);
+    for (const p of programs) {
+      count.runs += p.stats.runs;
+      count.fast += p.stats.runs - p.stats.fallbacks;
+    }
+  }
+}
+
 describe("SHEET.COMPILE: a sheet run with the compiler", () => {
   it("SHEET.COMPILE P17: a run with tiered gives the results of the reference, with each budget of the stack", () => {
-    let runs = 0;
-    let fast = 0;
-    fc.assert(
-      fc.property(arbSheet, ({ formulas, own, rows, reads }) => {
-        const columns = sheetColumnsOf(formulas);
-        const opts = { space: sheetRowsOf(rows), domains: [NumDomain], cells: sheetCellsOf(own) };
-        const reference = new ReferenceSheetRun(columns, opts);
-        const expected = reads.map(([c, k]) => plain(reference.cell(c, k)));
-        for (const budget of [undefined, 1, 40]) {
-          const { compile, programs } = keeping();
-          const run = new SheetRun(columns, { ...opts, compile }, budget);
-          expect(reads.map(([c, k]) => plain(run.cell(c, k)))).toEqual(expected);
-          // A fill with the compiler gives the same results (SHEET.FILL).
-          const filled = new SheetRun(columns, { ...opts, compile }, budget);
-          filled.fill();
-          expect(reads.map(([c, k]) => plain(filled.cell(c, k)))).toEqual(expected);
-          for (const p of programs) {
-            runs += p.stats.runs;
-            fast += p.stats.runs - p.stats.fallbacks;
-          }
-        }
-      }),
-    );
-    // Tier 2 gives most results. A read of a cell on a cycle or of a paused cell goes to tier 1.
-    expect(fast / runs).toBeGreaterThan(0.5);
+    fc.assert(fc.property(arbSheet, (sheet) => checkSheet(sheet, { runs: 0, fast: 0 })));
+    // Tier 2 gives most results. A read of a cell on a cycle or of a paused cell goes to tier 1. A fixed sample gives the
+    // same share in each test run, so a change of the generators that lowers it fails at once.
+    const count = { runs: 0, fast: 0 };
+    for (const sheet of fc.sample(arbSheet, { seed: 20261024, numRuns: 200 })) checkSheet(sheet, count);
+    expect(count.fast / count.runs).toBeGreaterThan(0.5);
   });
 
   it("SHEET.COMPILE SHEET.TABLES: a run of two tables with tiered gives the results of the reference", () => {

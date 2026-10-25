@@ -306,7 +306,9 @@ function checkSheet(columns: ReadonlyMap<string, Expr>, cells: CellFormulas, rec
 /** This function gives the depth of the key `k` in a tree: 0 for a root. */
 const depth = (parents: readonly number[], k: number): number => (k < 0 ? -1 : 1 + depth(parents, parents[k] ?? -1));
 
-describe("COMPILE.MODULE.SHEET P17: random sheets", () => {
+// These tests check some hundred sheets, each with four budgets. In the mutation lane, Stryker adds its counters to
+// the code, and one test takes more than the 5 s of Vitest.
+describe("COMPILE.MODULE.SHEET P17: random sheets", { timeout: 60_000 }, () => {
   it("P17 COMPILE.MODULE.SHEET: a module of a random sheet of the test kit gives the results of SheetRun, with each budget of the stack", () => {
     fc.assert(fc.property(arbSheet, ({ formulas, own, rows: vs }) => void checkSheet(sheetColumnsOf(formulas), sheetCellsOf(own), vs.map((x) => ({ v: x })), undefined)));
     // A fixed sample has cycles in many sheets.

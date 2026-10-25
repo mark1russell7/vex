@@ -263,6 +263,69 @@ describe("list ops that build lists (LIST.BUILD)", () => {
   });
 });
 
+/** This function makes an item of any form, for the checks of LIST.SHAPE. */
+const item = (result: unknown, key: unknown = "a"): unknown => ({ key, result });
+/** This function makes a value of the kind vex.list with items of any form. */
+const like = (...items: unknown[]): unknown => ({ kind: "vex.list", items });
+
+describe("the shape of a list (LIST.SHAPE)", () => {
+  const err = { code: "#REF!", kind: "missing-key", message: "m", path: [] };
+
+  it("LIST.SHAPE: a value is a list only with the kind vex.list and items that each have a text key and a result", () => {
+    for (const u of [like(), like(item({ ok: true, value: 0 })), like(item({ ok: true, value: null })), like(item({ ok: false, error: err })), vexList([{ key: "a", result: ok(1) }])]) expect(isVexList(u)).toBe(true);
+    const bad: readonly unknown[] = [
+      null,
+      undefined,
+      5,
+      "vex.list",
+      { kind: "vex.list" },
+      { kind: "vex.list", items: {} },
+      { kind: "record", items: [] },
+      like(0),
+      like(null),
+      like(item({ ok: true, value: 1 }, 1)),
+      like(item(null)),
+      like(item(3)),
+      like(item({ ok: true })),
+      like(item({ ok: "yes", value: 1 })),
+      like(item({ ok: false })),
+      like(item({ ok: false, error: null })),
+      like(item({ ok: false, error: 3 })),
+      like(item({ ok: false, error: { ...err, code: 1 } })),
+      like(item({ ok: false, error: { ...err, kind: 1 } })),
+      like(item({ ok: false, error: { ...err, message: 1 } })),
+      like(item({ ok: false, error: { ...err, path: "0" } })),
+      like(item({ ok: true, value: 1 }), 0),
+      // A hole of a sparse array is not an item.
+      { kind: "vex.list", items: Array.from({ length: 1 }) },
+    ];
+    for (const u of bad) expect(isVexList(u)).toBe(false);
+  });
+
+  it("LIST.SHAPE: the check of a list that can change runs each time, so a list op does not read a changed item", () => {
+    const items: unknown[] = [item({ ok: true, value: 1 })];
+    const open = { kind: "vex.list", items };
+    const half = Object.freeze({ kind: "vex.list", items });
+    expect(isVexList(open)).toBe(true);
+    expect(isVexList(half)).toBe(true);
+    items.push(0);
+    expect(isVexList(open)).toBe(false);
+    expect(isVexList(half)).toBe(false);
+    // A list of vexList is frozen, so it passes the check again.
+    const made = vexList([{ key: "a", result: ok(1) }]);
+    expect([isVexList(made), isVexList(made)]).toEqual([true, true]);
+  });
+
+  it("LIST.SHAPE LET.LAZY-ERROR: a literal of the kind vex.list with an item of another form is a record, and an unused binding of it has no effect", () => {
+    // The class of the counterexample of P20 (seed 1540709637): such a literal made the list ops throw.
+    const record = lit(like(0));
+    expect(error(run(app("count", record)))).toMatchObject({ code: "#VALUE!", message: 'no domain accepts the receiver of "count" (object)' });
+    expect(error(run(app("sortBy", record))).code).toBe("#VALUE!");
+    expect(error(run(each(axes.list(record), ref("x")))).code).toBe("#VALUE!");
+    expect(value(run(let_({ a: app("take", app("sortBy", record)) }, lit(0))))).toBe(0);
+  });
+});
+
 describe("lists as the state of a loop (LOOP.LIST, LIST.GET, LIST.LITERAL)", () => {
   // The x of each box by key: 30, 10, 20 and 10.
   const strict = lit({ strict: true });

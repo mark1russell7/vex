@@ -263,10 +263,8 @@ class Compiler {
         return (f, c) => {
           const values = this.#all(fields, f, c, path, "fields");
           if (!values.ok) return this.#emit(c, info, f, values);
-          const out: Record<string, unknown> = {};
-          names.forEach((n, i) => {
-            out[n] = values.value[i];
-          });
+          // Object.fromEntries gives an own field for each name, also for "__proto__" (V-062).
+          const out = Object.fromEntries(names.map((n, i) => [n, values.value[i]]));
           return this.#emit(c, info, f, ok(Object.freeze(out)));
         };
       }

@@ -340,6 +340,25 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(reasonOf(where(op("lt", op("if", ref("b"), n, ref("s")), K), w))).toBe(undecided("lt"));
   });
 
+  it("V-060 COMPILE.MODULE: the name of the run is not a reserved word, a global of JavaScript or a name of the module", () => {
+    // V-060: such a name gave a module that did not parse, or a run that read its own function in place of a global.
+    const e = op("add", n, lit(1));
+    expect(sourceOf(e)).toContain("const k_number = ");
+    const cases: readonly (readonly [string, string])[] = [
+      ...["class", "function", "await", "let", "yield", "enum", "static", "eval", "arguments", "true"].map((x) => [x, "a reserved word of JavaScript"] as const),
+      ...["Math", "Array", "Number", "Object", "Error", "Int32Array", "undefined", "NaN", "globalThis"].map((x) => [x, "a global of JavaScript"] as const),
+      ...["F", "E", "C", "T", "S", "Z", "N", "W", "M1", "PT", "VEX_ERROR", "VexContractError", "k_number"].map((x) => [x, "a name of the module"] as const),
+    ];
+    for (const [name, why] of cases) expect(reasonOf(e, { ...OPTIONS, name })).toBe(`the name "${name}" is ${why}`);
+    // Each other name gives a module that parses and gives the values of the interpreter.
+    for (const name of ["run", "plusOne", "$", "_", "R", "records", "Run"]) {
+      const source = sourceOf(e, { ...OPTIONS, name });
+      // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
+      const run = new Function(`${source.replaceAll(/^export /gm, "")}\nreturn ${name};`)() as Run;
+      expect(run(RECORDS, VARS)).toEqual([2, -1, 4]);
+    }
+  });
+
   it("copies only a function whose source is an expression that reads no name outside itself", () => {
     const outside = "reads a name outside itself, so a module cannot copy it";
     const none = "has no source that a module can copy";
@@ -702,6 +721,41 @@ describe("COMPILE.MODULE: the text of a module", () => {
       const other = defineDomain({ ...Interval, ops: { ...Interval.ops, grow: { fn: fnOf(src, 1) as (i: Span, d: number) => Span, params: ["number"], returns: "domain" } } });
       expect(reasonOf(op("span", op("grow", iv, ref("n"))), { ...options, domains: [NumDomain, other] })).toBe('the op "grow" of the domain Interval reads a name outside itself, so a module cannot copy it');
     }
+  });
+
+  it("V-062 REC.FIELDS: a record of a module has a field __proto__ as an own field, as the interpreter does", () => {
+    // V-062: the key "__proto__" of an object literal sets the prototype, so the module lost the field.
+    const e = rec(JSON.parse('{"__proto__":{"tag":"ref","path":["n"]},"m":{"tag":"ref","path":["w"]}}') as Readonly<Record<string, Expr>>);
+    const m = make(sourceOf(e));
+    expectSame(m, e);
+    for (const [i, out] of m.run(RECORDS, VARS).entries()) {
+      expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+      expect(Object.getOwnPropertyDescriptor(out, "__proto__")?.value).toBe(RECORDS[i]?.n);
+    }
+  });
+
+  it("V-061 KIND.DOMAIN: the check of a result of a domain has a JavaScript name for each name of the domain", () => {
+    // V-061: the name of the check held the name of the domain. A name with a space, a dot, a parenthesis or a second
+    // colon gave a module that did not parse.
+    type Span = { readonly lo: number; readonly hi: number };
+    const odd = "A b.c(d):e";
+    const Odd = defineDomain({
+      name: odd,
+      is: (u: unknown): u is Span => typeof u === "object" && u !== null && typeof (u as Partial<Span>).lo === "number" && typeof (u as Partial<Span>).hi === "number",
+      valid: (i: Span): boolean => i.lo <= i.hi,
+      ops: {
+        span: { fn: (i: Span): number => i.hi - i.lo, returns: "number" },
+        grow: { fn: (i: Span, d: number): Span => ({ lo: i.lo - d, hi: i.hi + d }), params: ["number"], returns: "domain" },
+      },
+      samples: (): readonly Span[] => [{ lo: 0, hi: 1 }, { lo: -2, hi: 5 }],
+    });
+    const options: ModuleOptions = { domains: [NumDomain, Odd], schema: { fields: { iv: `domain:${odd}`, n: "number" } } };
+    const e = op("span", op("grow", ref("iv"), ref("n")));
+    const source = sourceOf(e, options);
+    // The check has the index of the domain in its name.
+    expect(source).toContain("const k_d1 = (x) => (v_1(x) ? x : F());");
+    // The second record grows to an interval that is not valid, so its value is an error.
+    expectSame(make(source), e, [{ iv: { lo: 0, hi: 2 }, n: 1 }, { iv: { lo: 0, hi: 1 }, n: -2 }], {}, options);
   });
 
   it("AXIS.REVERSE: a module loops over the reverse order of all and of a window from the end", () => {

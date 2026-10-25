@@ -9,7 +9,7 @@
  * inline caches in the engine, and a guard sends each other case to the dispatch of the runtime.
  */
 import { liftsAt, type ParamKind } from "@mark1russell7/vex";
-import type { Facts, SiteFacts, StaticSite } from "./facts.ts";
+import { primitiveOf, type Facts, type SiteFacts, type StaticSite } from "./facts.ts";
 import { constant, FIXED_LOCALS, type Fail, type LExpr, type LoopProgram, type LStmt, type RuntimeFn } from "./loop.ts";
 
 type OpExpr = Extract<LExpr, { readonly t: "op" }>;
@@ -189,7 +189,9 @@ export function printJs(p: LoopProgram, facts: Facts): string {
     const f = `f${x.name}_${st.domain}`;
     fns.set(f, `${domain(st.domain)}.ops[${expr(constant(x.name))}].fn`);
     attempt(`${f}(${values.join(", ")})`, indent);
-    const kind = st.returns;
+    // A local of tier 2 has a primitive kind or no kind (lower.ts). Thus a result of the kind of a domain gets the checks
+    // of the interpreter, as a result of the kind any (V-059).
+    const kind = primitiveOf(st.returns);
     if (kind === undefined) {
       resultChecks(out, facts.checks, indent);
       return;

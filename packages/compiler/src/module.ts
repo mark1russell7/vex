@@ -29,7 +29,10 @@ export interface ModuleOptions {
   readonly domains?: readonly AnyDomain[];
   /** The kinds of the fields of the records and of the variables. A module reads only the names of its schema. */
   readonly schema: Schema;
-  /** The name of the function that the module exports. The default is `run`. */
+  /**
+   * The name of the function that the module exports. The default is `run`. A reserved word, a global of JavaScript and
+   * a name of the module are not names of the run (V-060).
+   */
   readonly name?: string;
   /**
    * The space of the records. In both spaces, the key of a record is the text of its position. The default `array`
@@ -734,6 +737,30 @@ function inlineForm(src: string): InlineForm | undefined {
 /** This function gives the text of an inline form without spaces, with `#i` for the parameter `at(i)`. */
 const patternOf = (form: InlineForm, at: (p: number) => number): string => form.parts.map((p) => (typeof p === "number" ? `#${at(p)}` : p.replaceAll(/\s/g, ""))).join("");
 
+/** The reserved words of the strict code of a module, and the two names that strict code does not bind. */
+const RESERVED: ReadonlySet<string> = new Set(
+  "await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield arguments eval".split(" "),
+);
+
+/** The globals of JavaScript. The code of a module and the copies of the ops can read each of them. */
+const GLOBALS: ReadonlySet<string> = new Set(
+  "globalThis Infinity NaN undefined isFinite isNaN parseFloat parseInt decodeURI decodeURIComponent encodeURI encodeURIComponent escape unescape AggregateError Array ArrayBuffer Atomics BigInt BigInt64Array BigUint64Array Boolean DataView Date Error EvalError FinalizationRegistry Float16Array Float32Array Float64Array Function Int8Array Int16Array Int32Array Intl Iterator JSON Map Math Number Object Promise Proxy RangeError ReferenceError Reflect RegExp Set SharedArrayBuffer String Symbol SyntaxError TypeError Uint8Array Uint8ClampedArray Uint16Array Uint32Array URIError WeakMap WeakRef WeakSet".split(" "),
+);
+
+/** The names that each module can declare at its top: the constants and the helpers. */
+const DECLARED: readonly string[] = ["VexContractError", "VEX_ERROR", "E", "Z", "N", "W", "S", ...Object.keys(HELPERS)];
+
+/**
+ * This function gives the reason that a name cannot be the name of the run, or `undefined` for a good name (V-060). A
+ * reserved word does not parse, and a second declaration of a name of the module does not parse. The function of the
+ * run with the name of a global hides the global from the code of the module.
+ */
+function nameReason(name: string, top: Iterable<string>): string | undefined {
+  if (RESERVED.has(name)) return `the name "${name}" is a reserved word of JavaScript`;
+  if (GLOBALS.has(name)) return `the name "${name}" is a global of JavaScript`;
+  return DECLARED.includes(name) || new Set(top).has(name) ? `the name "${name}" is a name of the module` : undefined;
+}
+
 class Printer {
   readonly #facts: Facts;
   readonly #domains: readonly AnyDomain[];
@@ -814,12 +841,15 @@ class Printer {
    * declaration `returns` of each op (KIND.RETURNS), so the module trusts the kind itself.
    */
   check(kind: Kind): string | undefined {
-    const name = `k_${kind.replace(":", "_")}`;
+    const d = this.#facts.checkOf(kind);
+    // The kind is primitive here. A static site on a value of a domain has no domain without a primitive type before it.
+    if (d === undefined) throw new NotStandalone(`a domain without a primitive type comes before the domain of a ${kind}`);
+    // The name of a domain can have each character. For a name that is not a JavaScript name, the check has the index
+    // of its domain in its name (V-061).
+    const plain = `k_${kind.replace(":", "_")}`;
+    const name = /^[\w$]+$/.test(plain) ? plain : `k_d${String(d)}`;
     // Stryker disable next-line ConditionalExpression: a check of a kind is always the same, so the map only saves time
     if (!this.top.has(name)) {
-      const d = this.#facts.checkOf(kind);
-      // The kind is primitive here. A static site on a value of a domain has no domain without a primitive type before it.
-      if (d === undefined) throw new NotStandalone(`a domain without a primitive type comes before the domain of a ${kind}`);
       const domain = this.#domains[d];
       const valid = domain?.valid === undefined ? undefined : this.#valid(d, domain.name, kind, domain.valid);
       const conds = [...(kind === "number" ? ["Number.isFinite(x)"] : []), ...(valid === undefined ? [] : [`${valid}(x)`])];
@@ -1072,7 +1102,7 @@ class Printer {
         const deps = depsOf(...raw);
         const fields = this.#settle(raw, deps, Object.values(e.fields));
         // A record of a module is a new object, so it needs no freeze.
-        const code = `({ ${fields.map((x, i) => `${JSON.stringify(names[i])}: ${x.v.code}`).join(", ")} })`;
+        const code = `({ ${fields.map((x, i) => `${names[i] === "__proto__" ? '["__proto__"]' : JSON.stringify(names[i])}: ${x.v.code}`).join(", ")} })`;
         return { s: stmtsOf(...fields), v: { code, kind: undefined, safe: fields.every((x) => x.v.safe), deps } };
       }
       case "app":
@@ -1990,6 +2020,8 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   const parts = (["children", "siblings", "order"] as const).filter((x) => p.treeParts.has(x));
   for (const x of parts) p.use(TREE_PARTS[x][0]);
   [...p.helpers].toSorted().forEach(add);
+  const bad = nameReason(name, p.top.keys());
+  if (bad !== undefined) return { ok: false, reason: bad };
   const lines = [
     "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
     "/** The error of a run whose input does not keep the schema of the program. */",

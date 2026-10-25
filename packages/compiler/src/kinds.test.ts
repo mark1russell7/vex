@@ -84,6 +84,20 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
     expect(expectSame(op("half", n), { domains: [Liar], schema: SCHEMA })).toBe(3);
   });
 
+  it("V-059 KIND.STATIC KIND.RETURNS: a site whose op gives a value of a domain stays in tier 2, with the checks of the interpreter", () => {
+    // V-059: the site compared the JavaScript type of the result with the kind of a domain, so each run went to tier 1.
+    const options = { domains: [NumDomain, XYDomain], schema: SCHEMA };
+    const e = op("xy", n, v("k"));
+    expect(sitesOf(e, options)).toMatchObject({ direct: 1, guarded: 0 });
+    // Only the third record breaks the schema, so only its run goes to tier 1.
+    expect(expectSame(e, options)).toBe(1);
+    // A component that is not finite is not valid in XYDomain. The check of the result finds it, and tier 1 gives the error.
+    expect(expectSame(e, options, { k: Number.POSITIVE_INFINITY, t: "x" })).toBe(3);
+    // An op can give a value of another kind than it declares. The checks of the interpreter keep such a value too.
+    const Liar = defineDomain({ name: "Liar", is: (u: unknown): u is number => typeof u === "number", primitive: "number", ops: { pt: { fn: (a: number): unknown => a * 2, returns: "domain:XY" } } });
+    expect(expectSame(op("pt", n), { domains: [Liar, XYDomain], schema: SCHEMA })).toBe(1);
+  });
+
   it("keeps the guards when a domain without a primitive type comes first, or when an op lifts a number", () => {
     expect(sitesOf(op("add", n, v("k")), { domains: [Vec2Domain, NumDomain], schema: SCHEMA })).toMatchObject({ direct: 0, guarded: 1 });
     const Lifted = defineDomain({

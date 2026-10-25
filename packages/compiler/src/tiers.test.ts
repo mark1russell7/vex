@@ -22,6 +22,8 @@ const calls = (count: number): Expr => let_({ f: fn(["x"], app("add", variable("
 
 /** A position from the text of a path: its length, modulo 3, the number of keys of the test. */
 const positionOf = (x: Expr): Expr => app("mod", app("length", x), lit(3));
+/** The reduction of the field q of each key with the op `op`. */
+const total = (op: string): Expr => app("reduce", each(axes.all, ref("q")), lit(op));
 const vec = fc.tuple(fc.integer({ min: -5, max: 5 }), fc.integer({ min: -5, max: 5 })).map(([x, y]) => new Vec2(x, y));
 const OPS = ["add", "subtract", "scale", "length", "dot", "divide", "multiply", "anyNonPositive", "gt", "not", "and"];
 const OPTS = { domainValue: vec, ops: OPS };
@@ -432,6 +434,19 @@ describe("the tiers", () => {
     expect([slow.tier, slow.reason, slow.expr]).toEqual([1, reason, bad]);
     const r = slow.run({ space: s, origin: "0" });
     expect(r.ok ? undefined : r.error.message).toBe(reason);
+  });
+
+  it("P17 VEC2.COMPOSE VEC2.SELECT: a program with the frame ops of Vec2 gives the result of the interpreter in tier 2", () => {
+    // The content size along the axis p: the sum of the sizes q along p, and their maximum across p.
+    const programs: readonly Expr[] = [
+      app("compose", ref("p"), app("along", total("add"), ref("p")), app("across", total("max"), ref("p"))),
+      app("select", ref("p"), ref("q"), lit(3)),
+      app("select", ref("p"), app("min", ref("q"), ref("p")), ref("q")),
+    ];
+    for (const e of programs) expect(tiered(e, { domains: DOMAINS, fns: FNS }).tier).toBe(2);
+    const runs = runOf(fc.constantFrom(...programs));
+    fc.assert(fc.property(runs, ([s, e, k, t, v]) => agree(e, s, k, t, v, { values: 0, fast: 0 })));
+    expect(shareOfTier2(runs)).toBeGreaterThan(0.5);
   });
 
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {

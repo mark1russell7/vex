@@ -30,7 +30,7 @@ In the JSON form of a program, a literal vector is `{ "$vex": "domain", "domain"
 
 The ops `add`, `subtract`, `multiply`, `divide`, `min` and `max` of `Vec2Domain` work on each component. A number argument of these ops becomes a vector with that number twice. Thus `size._.max(1)` makes a size of at least 1 by 1, and `cell._.add(gap)` adds the gap in the two dimensions.
 
-`floor`, `ceil`, `round`, `abs`, `clamp`, `scale` and `negate` work on each component too. `dot`, `length`, `distance`, `area`, `sum`, `minComponent` and `maxComponent` give a number. The [domains page](../../reference/domains/) lists each op.
+`floor`, `ceil`, `round`, `abs`, `clamp`, `scale`, `negate` and `select` work on each component too. `dot`, `length`, `distance`, `area`, `sum`, `minComponent` and `maxComponent` give a number. The [domains page](../../reference/domains/) lists each op.
 
 ## Reduce a list of vectors
 
@@ -59,6 +59,47 @@ const corner = items.start(1)._.vec2(0)._.multiply(cell._.add(10));
 corner.at("0");        // => some(new Vec2(40, 0))
 corner._.x().at("0"); // => some(40)
 ```
+
+## A main axis and a cross axis
+
+A stack, a span or a row of keys and values has a main axis and a cross axis. The axis `dir` is the vector (1, 0) for a row and (0, 1) for a column. Four ops of `Vec2Domain` let one program serve the two directions:
+
+| Op | Value |
+|---|---|
+| `v._.along(dir)` | The component of `v` along `dir`: `dot(v, dir)` |
+| `v._.across(dir)` | The component of `v` on the other axis: `dot(v, swap(dir))` |
+| `dir._.compose(main, cross)` | The vector with `main` along `dir` and `cross` on the other axis |
+| `mask._.select(a, b)` | The component of `a` where `mask` is not 0, else the component of `b` |
+
+The content of a stack is the sum of the sizes along `dir`, and the largest size across `dir`. For a column, the width is the largest width, and the height is the sum of the heights. One program gives the two stacks:
+
+```ts doctest
+const parts = space.tree(
+  { column: { dir: new Vec2(0, 1) }, row: { dir: new Vec2(1, 0) }, a: { size: new Vec2(60, 18) }, b: { size: new Vec2(145, 90) }, c: { size: new Vec2(60, 18) }, d: { size: new Vec2(145, 90) } },
+  { a: "column", b: "column", c: "row", d: "row" },
+);
+const stacks = vex(NumDomain, Vec2Domain).over(parts);
+const dir = stacks.from("dir");
+const sizes = stacks.start(0).children((c) => c.from("size"));
+const content = dir._.compose(sizes.reduce("add")._.along(dir), sizes.reduce("max")._.across(dir));
+
+content.at("column"); // => some(new Vec2(145, 108))
+content.at("row");    // => some(new Vec2(205, 90))
+```
+
+A component of a `Vec2` must be finite, so a bound cannot be infinite. For an open bound, use `max` or `min` for one side, and `select` for one component. The mask (0, 1) bounds only the height, and the width has no bound:
+
+```ts doctest
+const parts = space.tree({ column: { dir: new Vec2(0, 1) }, a: { size: new Vec2(60, 18) }, b: { size: new Vec2(145, 90) } }, { a: "column", b: "column" });
+const stacks = vex(NumDomain, Vec2Domain).over(parts);
+const sizes = stacks.start(0).children((c) => c.from("size"));
+const content = stacks.from("dir")._.compose(sizes.reduce("add")._.along("dir"), sizes.reduce("max")._.across("dir"));
+const capped = stacks.start(new Vec2(0, 1))._.select(content._.min(100), content);
+
+capped.at("column"); // => some(new Vec2(145, 100))
+```
+
+With a mask of bounds, a 0 means no bound: `hi._.select(v._.min(hi), v)` bounds each component of `v` by `hi`, except where `hi` has a 0.
 
 ## Vectors in a standalone module
 

@@ -219,6 +219,15 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[KIND.PRIMITIVE]** A domain with `primitive` accepts each value of that JavaScript type, and no other value. The law checker of the test kit checks it.
 - **[KIND.RETURNS]** An op with `returns` gives a result of that kind, or an error. The law checker checks each such op on random values. The kind `domain:Name` is a value of the domain `Name`, for example the op `xy` of `NumDomain` gives a value of `XYDomain`. The law checker checks such an op when its option `domains` has that domain.
 
+### 7.1 The axes of `Vec2Domain`
+
+A layout rule often works along a main axis and a cross axis, for example the total of a stack. A unit axis `dir` is (1, 0) for a row or (0, 1) for a column. These ops let one program serve both dimensions.
+
+- **[VEC2.ALONG]** `along(v, dir)` gives `dot(v, dir)`: the component of `v` along the unit axis `dir`. `across(v, dir)` gives `dot(v, swap(dir))`: the component on the other axis. On the axis (1, 0), `along` gives x and `across` gives y.
+- **[VEC2.COMPOSE]** `compose(dir, main, cross)` gives `dir * main + swap(dir) * cross`. On a unit axis, `along` of the result gives `main`, and `across` of the result gives `cross`.
+- **[VEC2.SELECT]** `select(mask, a, b)` gives the component of `a` where the component of `mask` is not 0, and the component of `b` where it is 0. A number argument becomes a vector with that number twice.
+- **[VEC2.FINITE]** A `Vec2` with a component that is not finite is not valid, so an op that gives one gives `#NUM!`. Thus a bound cannot be infinite. An open bound uses `select`: `select(vec2(0, 1), max(v, lo), v)` bounds only y, and `select(hi, min(v, hi), v)` sets no bound where `hi` has a 0.
+
 ## 8. The builder
 
 - **[BUILD.IMMUTABLE]** A builder call gives a new chain. An earlier chain does not change.

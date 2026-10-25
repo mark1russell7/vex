@@ -75,6 +75,20 @@ export class Vec2 {
   swap(): Vec2 {
     return new Vec2(this.y, this.x);
   }
+  /**
+   * The vector with `main` along the unit axis of this vector and `cross` on the other axis: `this * main + swap(this) *
+   * cross`. For the axis (1, 0) it is (main, cross), and for the axis (0, 1) it is (cross, main).
+   */
+  compose(main: number, cross: number): Vec2 {
+    return new Vec2(this.x * main + this.y * cross, this.y * main + this.x * cross);
+  }
+  /**
+   * The component-wise choice: a component of `a` where this mask has a component that is not 0, else the component
+   * of `b`. Thus `hi.select(v.min(hi), v)` bounds each component of `v` by `hi`, and a 0 in `hi` sets no bound.
+   */
+  select(a: Vec2, b: Vec2): Vec2 {
+    return new Vec2(this.x !== 0 ? a.x : b.x, this.y !== 0 ? a.y : b.y);
+  }
   /** The vector turned by `radians`, counterclockwise. */
   rotate(radians: number): Vec2 {
     const c = Math.cos(radians);
@@ -101,6 +115,14 @@ export class Vec2 {
   }
   dot(o: Vec2): number {
     return this.x * o.x + this.y * o.y;
+  }
+  /** The component along the unit axis `dir`: `dot(this, dir)`. For the axis (1, 0) it is x, and for (0, 1) it is y. */
+  along(dir: Vec2): number {
+    return this.x * dir.x + this.y * dir.y;
+  }
+  /** The component on the other axis of the unit axis `dir`: `dot(this, swap(dir))`. For the axis (1, 0) it is y. */
+  across(dir: Vec2): number {
+    return this.x * dir.y + this.y * dir.x;
   }
   /** The z component of the 3D cross product. */
   cross(o: Vec2): number {
@@ -166,14 +188,14 @@ export class Vec2 {
 }
 
 type Vec2OpNames =
-  | "add" | "subtract" | "multiply" | "divide" | "min" | "max" | "scale" | "negate" | "halve" | "abs" | "round" | "floor"
-  | "ceil" | "clamp" | "swap" | "rotate" | "normalize" | "lerp" | "length" | "lengthSq" | "distance" | "dot" | "cross"
-  | "angle" | "area" | "sum" | "minComponent" | "maxComponent" | "equals" | "anyNonPositive" | "allPositive"
-  | "anyNegative" | "allNonNegative" | "anyZero" | "allZero" | "anyLessThan" | "allLessThan" | "anyGreaterThan"
-  | "allGreaterThan";
+  | "add" | "subtract" | "multiply" | "divide" | "min" | "max" | "scale" | "negate" | "halve" | "abs" | "round"
+  | "floor" | "ceil" | "clamp" | "swap" | "compose" | "select" | "rotate" | "normalize" | "lerp" | "length"
+  | "lengthSq" | "distance" | "dot" | "along" | "across" | "cross" | "angle" | "area" | "sum" | "minComponent"
+  | "maxComponent" | "equals" | "anyNonPositive" | "allPositive" | "anyNegative" | "allNonNegative" | "anyZero"
+  | "allZero" | "anyLessThan" | "allLessThan" | "anyGreaterThan" | "allGreaterThan";
 
 /** The ops of `Vec2Domain`. The ops `x` and `y` give a component. */
-export type Vec2Ops = OpTable<Vec2, Vec2OpNames, "add" | "subtract" | "multiply" | "divide" | "min" | "max"> & {
+export type Vec2Ops = OpTable<Vec2, Vec2OpNames, "add" | "subtract" | "multiply" | "divide" | "min" | "max" | "select"> & {
   readonly x: FnOp<Vec2, (v: Vec2) => number>;
   readonly y: FnOp<Vec2, (v: Vec2) => number>;
 };
@@ -210,6 +232,8 @@ export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Ve
     ceil: { params: [], returns: "domain" },
     clamp: { params: ["number", "number"], returns: "domain" },
     swap: { params: [], returns: "domain" },
+    compose: { params: ["number", "number"], returns: "domain" },
+    select: { liftScalar: true, params: ["domain", "domain"], returns: "domain" },
     rotate: { params: ["number"], returns: "domain" },
     normalize: { params: [], returns: "domain" },
     lerp: { params: ["domain", "number"], returns: "domain" },
@@ -217,6 +241,8 @@ export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Ve
     lengthSq: { params: [], returns: "number" },
     distance: { params: ["domain"], returns: "number" },
     dot: { laws: ["commutative"], params: ["domain"], returns: "number" },
+    along: { params: ["domain"], returns: "number" },
+    across: { params: ["domain"], returns: "number" },
     cross: { params: ["domain"], returns: "number" },
     angle: { params: [], returns: "number" },
     area: { params: [], returns: "number" },

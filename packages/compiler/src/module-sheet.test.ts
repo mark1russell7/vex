@@ -148,6 +148,28 @@ describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
     for (const budget of [undefined, 0, 1, 40]) expectSame(make(sourceOf(columns, { ...NUM, kinds, ...(budget === undefined ? {} : { budget }) })), columns, records, undefined, new Map(), budget);
   });
 
+  it("V-063 COMPILE.MODULE.SHEET SHEET.CYCLE: a count whose safe body reads a cell keeps its loop, so a cell that reads itself gives VEX_ERROR", () => {
+    // The shrunk counterexample of P17 (seed 1824510466). The cell A at "0" counts the items of an axis, and each item
+    // reads A at that item behind ifError. Before the fix, the module gave the count of the records and read no cell.
+    const columns = new Map<string, Expr>([
+      ["A", cell("A")],
+      ["B", app("ifError", app("nth", each(axes.others, cell("A")), lit(0)), cell("A"))],
+    ]);
+    const cells: CellFormulas = new Map([["A", new Map([["0", app("count", each(axes.reverse(axes.all), app("ifError", cell("A"), lit(0))))]])]]);
+    for (const budget of [undefined, 1, 40]) {
+      const m = make(sourceOf(columns, { ...NUM, cells, ...(budget === undefined ? {} : { budget }) }));
+      expect(m.run([{ v: 0 }], {})).toStrictEqual({ A: [m.VEX_ERROR], B: [m.VEX_ERROR] });
+      expectSame(m, columns, [{ v: 0 }], undefined, cells, budget);
+    }
+    // A count that reads another column gives the count, and a count that reads no cell is the count of the records.
+    const other = new Map<string, Expr>([["src", ref("v")], ["n", app("count", each(axes.all, app("ifError", cell("src"), lit(0))))], ["plain", app("count", each(axes.all, lit(1)))]]);
+    const source = sourceOf(other, { ...NUM, kinds: { src: "number", n: "number", plain: "number" } });
+    expect(source).toContain("const cf2 = (o) => n;");
+    const m = make(source);
+    expect(m.run(ENGINE_RECORDS, {})).toStrictEqual({ src: [4, 1, 2, 3, 1, 5], n: [6, 6, 6, 6, 6, 6], plain: [6, 6, 6, 6, 6, 6] });
+    expectSame(m, other, ENGINE_RECORDS, undefined);
+  });
+
   it("COMPILE.MODULE.SHEET SHEET.DEEP: a read of a cell that is not finished starts the search, and a chain of 100000 cells gives its results", () => {
     // The column a reads b at the same row, and b reads a at the next row. The order of the columns is a cycle, so the
     // fill of a reads cells that are not finished, and the search follows the chain to the end of the rows.

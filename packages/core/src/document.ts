@@ -33,7 +33,7 @@ import { isStackOverflow, vexError, type VexError } from "./errors.ts";
 import { app, call, each, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Addr, type Axis, type Expr, type Move, type Names } from "./ir.ts";
 import { MAX_DOCUMENT_DEPTH, TERM_KINDS, vexChecker } from "./kernel.ts";
 import { fail, ok, type Result } from "./result.ts";
-import { WriteStop, writeDocument } from "./write.ts";
+import { WriteStop, writeDocument, type WriteOptions } from "./write.ts";
 
 export type { Envelope, Json } from "@mark1russell7/coeval";
 
@@ -88,8 +88,14 @@ export function isDocument(u: unknown): u is Envelope {
 export function toDocument(e: Expr, domains: readonly AnyDomain[] = []): Result<Envelope> {
   const shape = shapeError(e);
   if (shape !== undefined) return fail(vexError("bad-expression", shape));
+  const options: WriteOptions = {
+    domains,
+    literals: "json",
+    // Stryker disable next-line StringLiteral: the writer tests only the order "reads", and each other order is the order of DOC.CONSTRUCT
+    order: "document",
+  };
   // A getter of a literal value can throw, so the conversion is inside the attempt.
-  return attempt(() => writeDocument(e, { domains, literals: "json", order: "document" }), "the expression has no document", "a literal value is too deep for the call stack of the engine");
+  return attempt(() => writeDocument(e, options), "the expression has no document", "a literal value is too deep for the call stack of the engine");
 }
 
 // The machine of the checks: the contracts of Vex, and the names of its evaluators and walkers, without their code.
@@ -113,6 +119,7 @@ export function fromDocument(doc: unknown, domains: readonly AnyDomain[] = []): 
   if (!problem.ok) return problem;
   const issue = problem.value;
   if (issue?.code === "#DEPTH!") return fail(vexError("depth", `the document is nested deeper than ${String(MAX_DOCUMENT_DEPTH)} documents`));
+  // Stryker disable next-line ArrayDeclaration: the check of coeval gives each issue the keys of its value
   if (issue !== undefined) return fail(vexError("bad-expression", notValid(pointer(issue.at ?? []), issue.reason)));
   return attempt(() => new Reader(domains).term(doc, ""), "a decoder of a domain threw an exception", "the document is too deep for the call stack of the engine");
 }
@@ -141,8 +148,9 @@ class Reader {
     const at = into(where, "value");
     const keys = this.#type(u, where);
     const head = String(keys[0]);
-    // The contracts permit only the kinds of the terms in the position of a term. The root has no position.
-    if (!TERMS.has(head) || (keys.length > 1 && head !== "ops" && head !== "ext")) return bad(where, `the type "${typeName(u.type)}" is not a term of Vex`);
+    // The contracts permit only the kinds of the terms in the position of a term. The root has no position. The check gave
+    // the type a kind of the world, so the first key tells if the type is a term.
+    if (!TERMS.has(head)) return bad(where, `the type "${typeName(u.type)}" is not a term of Vex`);
     if (head === "ops" || head === "ext") {
       const name = this.#name(keys.slice(1), into(where, "type"));
       return head === "ops" ? app(name, ...(u.value as readonly unknown[]).map((x, i) => this.term(x, into(at, i)))) : ext(name, u.value);

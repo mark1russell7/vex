@@ -31,6 +31,10 @@ A standalone module copies the text of each op function of a domain. A mutated d
 | `testkit/arbitraries.ts` | This file generates test data. A mutant changes the distribution of the data, not a behavior that a test can check. |
 | `testkit/builder-model-arbitraries.ts` | This file generates the calls of the builder model test, for the same reason. The model and the runner are in `builder-model.ts`, and the lane mutates them. |
 
+## A module that does not load
+
+A mutant at the top level of a module can make the module throw when it loads. Then each test file that imports the module stops before its tests, and Vitest reports no test. Stryker sees no failed test, so it reports a survivor. Thus `core/load.test.ts` loads the modules of the core inside a test, and that test fails for such a mutant.
+
 ## A local run
 
 This machine has little memory, so a local run mutates one package at a time, with two workers:

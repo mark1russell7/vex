@@ -46,6 +46,7 @@ interface Plan {
 }
 
 const NONE: readonly Job[] = [];
+// Stryker disable next-line StringLiteral: the writer tests only the kind "envelope", so each other kind is the kind "term"
 const term = (e: Expr): Job => ({ t: "term", e });
 const envelope = (e: Expr): Job => ({ t: "envelope", e });
 
@@ -191,6 +192,7 @@ class Writer {
 
   /** This method gives the plan of the field `at` of `each` and `fold`: a reference from `self` with moves only (DOC.ADDRESS). */
   #at(at: readonly Move[] | undefined): { readonly jobs: readonly Job[]; readonly make: (docs: readonly Json[]) => { readonly at?: Envelope } } {
+    // Stryker disable next-line ArrowFunction: a spread of no value adds no fields, as a spread of an empty record does
     if (at === undefined || at.length === 0) return { jobs: NONE, make: () => ({}) };
     return { jobs: at.map((m): Job => ({ t: "move", m })), make: (docs) => ({ at: path("self", ...docs) }) };
   }

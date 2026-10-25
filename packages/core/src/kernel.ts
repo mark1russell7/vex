@@ -603,7 +603,8 @@ interface Found {
 /** This function finds the op of a domain for a receiver, or `undefined` (CALL.UNKNOWN-OP). */
 function opOf(d: AnyDomain, self: unknown, op: string): Found | undefined {
   const spec = Object.hasOwn(d.ops, op) && !FORBIDDEN.has(op) ? (d.ops[op] as Found["spec"]) : undefined;
-  const method = spec?.fn === undefined && (spec !== undefined || d.methods === "all") ? methodOf(self, op) : undefined;
+  // An op with a function does not use the method, so the search of the method only adds work there.
+  const method = spec !== undefined || d.methods === "all" ? methodOf(self, op) : undefined;
   return spec?.fn === undefined && method === undefined ? undefined : { domain: d, spec, method };
 }
 
@@ -798,6 +799,7 @@ const FORMS: Readonly<Record<string, LazyOp>> = {
   or: /* @__PURE__ */ logic("or"),
   // EVAL.DEPTH: ifError does not hide #DEPTH!, because the engine failed, not the data.
   ifError: (args) => {
+    // Stryker disable next-line StringLiteral: ifError replaces the error of a missing first argument, so no one sees this name
     const first = argOf(args, 0, "ifError");
     return first.ok || isDepth(first.error) ? first : argOf(args, 1, "ifError");
   },

@@ -7,13 +7,14 @@ import { describe, expect, it } from "vitest";
 import { defineDomain } from "./domain.ts";
 import { toDocument, fromDocument, type Envelope } from "./document.ts";
 import { vexError, type ErrorCode, type ErrorKind } from "./errors.ts";
-import { evaluate, type CompileOptions, type ExtHandler } from "./evaluate.ts";
-import { app, axes, call, each, ext, fn, fold, index, iterate, key, let_, lit, ref, rec, v, type Expr } from "./ir.ts";
-import { toVexError, VEX_WORLD, vexMachine, vexSelf } from "./kernel.ts";
+import { evaluate, MAX_NESTING, type CompileOptions, type ExtHandler } from "./evaluate.ts";
+import { app, axes, call, each, ext, fn, fold, index, iterate, key, let_, lit, parent, ref, rec, v, type Expr } from "./ir.ts";
+import { toVexError, VEX_WORLD, vexChecker, vexMachine, vexSelf } from "./kernel.ts";
 import { isVexList } from "./list.ts";
 import { kernelPlan } from "./plan.ts";
+import { sameVex } from "./same.ts";
 import { space, type Space } from "./space.ts";
-import { Pt, PtDomain, value } from "./test-support.ts";
+import { error, Pt, PtDomain, value } from "./test-support.ts";
 
 /** A value of a class with methods that give no value, NaN and a value that its domain does not accept as valid. */
 class Thing {
@@ -98,6 +99,7 @@ describe("the messages of the kernel tier (EVAL.REFERENCE)", () => {
     [app("if", lit(1), lit(1), lit(2)), "A", ["#VALUE!", 'argument 1 of "if" is a number, not a boolean', "kind-mismatch"]],
     [app("and"), "A", ["#VALUE!", '"and" needs at least 1 argument', "bad-expression"]],
     [app("or", lit(false), lit(2)), "A", ["#VALUE!", 'argument 2 of "or" is a number, not a boolean', "kind-mismatch"]],
+    [app("ifError"), "A", ["#VALUE!", '"ifError" needs argument 2', "bad-expression"]],
     [app("ifError", ref("zz")), "A", ["#VALUE!", '"ifError" needs argument 2', "bad-expression"]],
     [ext("number", 1), "A", ["#NAME?", 'no handler for the extension kind "number"', "unknown-op"]],
     [rec({ a: ref("zz"), b: ref("yy") }), "A", ["#ARGS", "2 arguments failed", "args"]],
@@ -105,6 +107,10 @@ describe("the messages of the kernel tier (EVAL.REFERENCE)", () => {
 
   it.each(cases)("EVAL.REFERENCE CALL.RESULT: the kernel gives the message of the rule (%#)", (e, origin, expected) => {
     expect(kernel(e, origin)).toEqual(expected);
+  });
+
+  it("REF.MISSING: a key of the space without a record has no value at the focus", () => {
+    expect(kernel(ref([]), "U", {}, space.record({ U: undefined }))).toEqual(["#N/A", 'the record at "U" has no value', "missing-field"]);
   });
 
   it("AXIS.WHERE: a test of where that is not a boolean gives an error item with its message", () => {
@@ -155,11 +161,16 @@ describe("the errors of the kernel and of Vex (EVAL.REFERENCE)", () => {
       null,
     ];
     for (const cause of causes) {
-      const error: EvalError = { code: "#CALC!", reason: "r", cause };
-      expect(toVexError(error)).toMatchObject({ code: "#CALC!", kind: "threw", message: "r", thrown: cause });
+      const failure: EvalError = { code: "#CALC!", reason: "r", cause };
+      expect(toVexError(failure)).toMatchObject({ code: "#CALC!", kind: "threw", message: "r", thrown: cause });
     }
   });
 });
+
+/** This function gives no value: it calls itself with no end, and fills the call stack of the engine. */
+function forever(): unknown {
+  return forever();
+}
 
 /** This function calls itself with no end, and fills the call stack of the engine. */
 function down(n: number): number {
@@ -234,6 +245,15 @@ describe("the rare paths of the machine (EVAL.REFERENCE)", () => {
     expect(both(app("twice", ref("th")), { domains: [Throws] })).toEqual(["#VALUE!", "#VALUE!"]);
   });
 
+  it("FN.CALL: the body of a function reads the names of the place of its binding in the kernel", () => {
+    const plusY = fn(["x"], app("add", v("x"), v("y")));
+    expect(both(let_({ y: lit(1) }, let_({ plusY }, let_({ y: lit(100) }, call("plusY", lit(5))))), { domains: [Num] })).toEqual([6, 6]);
+  });
+
+  it("LOOP.NAMES LET.UNBOUND: a loop binds only the names of init", () => {
+    expect(both(iterate(1, { x: lit(0) }, { x: lit(1) }, v("S")), { domains: [Num] })).toEqual(["#NAME?", "#NAME?"]);
+  });
+
   it("LOOP.NAMES: a name of init that the steps do not change stays for each step", () => {
     const e = fold(axes.all, { s: lit(0), c: lit(5) }, { s: app("add", v("s"), v("c")) }, v("s"));
     expect(both(e, { domains: [Num] })).toEqual([15, 15]);
@@ -282,8 +302,144 @@ describe("the world of Vex (DOC.CHECK)", () => {
     expect(fromDocument(literalAddress)).toMatchObject({ ok: false, error: { message: expect.stringContaining('"/value/at"') as unknown } });
   });
 
+  it("DOC.CHECK: the code of the machine of the checks stops with #VALUE!", () => {
+    const code = (vexChecker().evaluators ?? {})["vex.each"] as () => unknown;
+    let caught: unknown;
+    try {
+      code();
+    } catch (thrown) {
+      caught = thrown;
+    }
+    expect(caught).toMatchObject({ error: { code: "#VALUE!", reason: "the machine of the checks evaluates nothing", cause: { kind: "bad-expression" } } });
+  });
+
   it("DOC.CHECK FN.CALL: the parameters of a function and the names of a let are bound in the body for the check", () => {
     expect(check(vexMachine(), docOf(let_({ f: fn(["k"], v("k")) }, call("f", lit(1)))), { declaredType: "lit" })).toEqual([]);
     expect(check(vexMachine(), docOf(let_({ a: lit(1) }, v("a"))), { declaredType: "lit" })).toEqual([]);
+  });
+});
+
+/** A literal that no domain decodes. The reader stops at its location. */
+const UNKNOWN = { $vex: "domain", domain: "Nope", value: 1 };
+const ALL = { type: ["axes", "all"], value: {} };
+/** This function gives an axis list with the literal that no domain decodes. */
+const listOfUnknown = (): unknown => ({ type: ["axes", "list"], value: { list: UNKNOWN } });
+
+/** This function gives a document with a getter of the value of a literal. */
+function withGetter(get: () => unknown): unknown {
+  return { type: ["ops", "f"], value: [Object.defineProperty({ type: "lit" }, "value", { enumerable: true, get })] };
+}
+
+/** This function throws an exception. */
+function threw(): never {
+  throw new Error("getter");
+}
+
+describe("the reader of the documents (DOC.ERROR)", () => {
+  it("DOC.ERROR DOC.CONSTRUCT DOC.AXIS: the reader gives the location of a literal that it cannot decode, in each position", () => {
+    const cases: readonly (readonly [unknown, string])[] = [
+      [{ type: "call", value: { fn: { type: "ref", value: ["names", "f"] }, args: [1, UNKNOWN] } }, "/value/args/1"],
+      [{ type: "each", value: { axis: ALL, body: UNKNOWN } }, "/value/body"],
+      [{ type: "fold", value: { axis: { type: ["axes", "where"], value: { axis: ALL, test: UNKNOWN } }, init: {}, step: {}, result: 1 } }, "/value/axis/value/test"],
+      [{ type: "fold", value: { axis: ALL, init: {}, step: {}, result: UNKNOWN } }, "/value/result"],
+      [{ type: "fold", value: { axis: ALL, init: {}, step: {}, result: 1, at: { type: "ref", value: ["self", { type: ["moves", "key"], value: UNKNOWN }] } } }, "/value/at/value/1/value"],
+      [{ type: "iterate", value: { limit: 1, init: {}, step: {}, until: UNKNOWN, result: 1 } }, "/value/until"],
+      [{ type: "iterate", value: { limit: 1, init: {}, step: {}, result: UNKNOWN } }, "/value/result"],
+      [{ type: "iterate", value: { limit: 1, init: { a: UNKNOWN }, step: {}, result: 1 } }, "/value/init/a"],
+      [{ type: "iterate", value: { limit: 1, init: { a: 0 }, step: { a: UNKNOWN }, result: 1 } }, "/value/step/a"],
+      [{ type: "let", value: { bind: { f: { type: "fn", value: { params: [], body: UNKNOWN } } }, body: 1 } }, "/value/bind/f/value/body"],
+      [{ type: "each", value: { axis: listOfUnknown(), body: 1 } }, "/value/axis/value/list"],
+      [{ type: "each", value: { axis: { type: ["axes", "reverse"], value: { axis: listOfUnknown() } }, body: 1 } }, "/value/axis/value/axis/value/list"],
+      [{ type: "each", value: { axis: { type: ["axes", "where"], value: { axis: listOfUnknown(), test: true } }, body: 1 } }, "/value/axis/value/axis/value/list"],
+    ];
+    for (const [d, pointer] of cases) {
+      const message = `the document is not valid at "${pointer}": no domain "Nope" decodes a literal`;
+      expect([pointer, error(fromDocument(d))]).toEqual([pointer, { code: "#VALUE!", kind: "bad-expression", message, path: [] }]);
+    }
+  });
+
+  it("DOC.CALL DOC.ERROR: the function of a call is a reference to a name that is a text", () => {
+    const d = { type: "call", value: { fn: { type: "ref", value: ["names", 1] }, args: [] } };
+    expect(error(fromDocument(d)).message).toBe('the document is not valid at "/value/fn": the function of a call is a reference to a name: { "type": "ref", "value": ["names", name] }');
+  });
+
+  it("DOC.ERROR EVAL.DEPTH: a getter that throws or fills the call stack in the check, and a decoder that fills it, give their errors", () => {
+    expect(error(fromDocument(withGetter(threw)))).toMatchObject({ code: "#CALC!", kind: "threw", message: "the check of the document threw an exception" });
+    const full = error(fromDocument(withGetter(forever)));
+    expect(full).toMatchObject({ code: "#DEPTH!", kind: "depth", message: "the document is too deep for the call stack of the engine" });
+    expect(full.thrown).toBeInstanceOf(RangeError);
+    const Looping = { ...PtDomain, decode: forever };
+    const decoded = error(fromDocument({ type: "lit", value: { $vex: "domain", domain: "Pt", value: [1, 2] } }, [Looping]));
+    expect(decoded).toMatchObject({ code: "#DEPTH!", kind: "depth", message: "the document is too deep for the call stack of the engine" });
+  });
+});
+
+/** This function gives the names of the fields of the document of an expression, in their order. */
+function fieldsOf(e: Expr): readonly string[] {
+  return Object.keys(docOf(e).value as object);
+}
+
+describe("the writer of the documents (DOC.TERM, DOC.CONSTRUCT)", () => {
+  it("DOC.CONSTRUCT: the fields of each and fold come in the order of their contracts", () => {
+    expect(fieldsOf(each(axes.all, lit(1)))).toEqual(["axis", "body"]);
+    expect(fieldsOf(each(axes.all, lit(1), [parent]))).toEqual(["axis", "body", "at"]);
+    expect(fieldsOf(fold(axes.all, { s: lit(0) }, { s: lit(1) }, v("s")))).toEqual(["axis", "init", "step", "result"]);
+    expect(fieldsOf(fold(axes.all, { s: lit(0) }, { s: lit(1) }, v("s"), [parent]))).toEqual(["axis", "init", "step", "result", "at"]);
+  });
+
+  it("DOC.TERM: a record of names in a document is plain data, so each name is writable, enumerable and configurable", () => {
+    const d = docOf(let_({ a: lit(1) }, v("a"))).value as { readonly bind: object };
+    expect(Object.getOwnPropertyDescriptor(d.bind, "a")).toEqual({ value: 1, writable: true, enumerable: true, configurable: true });
+  });
+});
+
+describe("the plan of the kernel (EVAL.REFERENCE, EVAL.AGREE)", () => {
+  it("EVAL.NESTING: the kernel tier evaluates an expression at the limit of the nesting", () => {
+    let e: Expr = lit(1);
+    for (let i = 1; i < MAX_NESTING; i++) e = app("add", e, lit(1));
+    expect(kernel(e, "A", { domains: [Num] })).toBe(MAX_NESTING);
+  });
+
+  it("DOC.LITERAL: the document of a plan has the JSON form of a literal that has one", () => {
+    expect(kernelPlan(lit(new Pt(1, 2)), { domains: [PtDomain] }).doc).toEqual({ type: "lit", value: { $vex: "domain", domain: "Pt", value: [1, 2] } });
+  });
+
+  it("EVAL.ORIGIN EVAL.AGREE: an origin outside the space gives its error at its position, and agree gives the reason of a tier that differs", () => {
+    const plan = kernelPlan(lit(1));
+    const outside = { space: s, origin: "Z" };
+    expect(plan.run(outside)).toEqual({ ok: false, error: { code: "#REF!", kind: "unknown-key", message: 'the space has no key "Z"', path: [], origin: "Z", focus: "Z" } });
+    const first = plan.evaluate(outside);
+    expect(plan.agree(outside)).toEqual({ ok: true, result: first, effects: [] });
+    const reason = "The plan does not evaluate the program, and the tier gives another result.";
+    expect(plan.agree(outside, () => ({ ok: true, value: 1 }))).toEqual({ ok: false, tier: "other", plan: first, other: { ok: true, value: 1 }, reason });
+  });
+});
+
+/** A class with the fields of `Pt`, but another prototype. */
+class Other {
+  readonly x = 1;
+  readonly y = 2;
+}
+
+describe("the comparison of agree (EVAL.AGREE)", () => {
+  it("EVAL.AGREE: two Vex errors agree by their code, and two values of one class by their fields", () => {
+    const [a, b, c] = [vexError("unknown-key", "a", { origin: "A" }), vexError("unknown-key", "b"), vexError("missing-field", "a")];
+    expect([sameVex(a, b), sameVex(a, c)]).toEqual([true, false]);
+    expect([sameVex(new Pt(1, 2), new Pt(1, 2)), sameVex(new Pt(1, 2), new Pt(1, 3)), sameVex(new Pt(1, 2), new Other())]).toEqual([true, false, false]);
+  });
+
+  it("EVAL.AGREE: the rules of the kernel compare each other pair, also a value with only some fields of a Vex error", () => {
+    const pairs: readonly (readonly [unknown, unknown])[] = [
+      [vexError("unknown-key", "a"), { code: "#REF!" }],
+      [{ code: "#REF!" }, vexError("unknown-key", "a")],
+      [new Pt(1, 2), { x: 1, y: 2 }],
+      [{ x: 1, y: 2 }, new Pt(1, 2)],
+      [[1], [1]],
+      [null, null],
+      [Object.create(null), Object.create(null)],
+      [1, 1],
+      [forever, forever],
+    ];
+    for (const [a, b] of pairs) expect(sameVex(a, b)).toBeUndefined();
   });
 });

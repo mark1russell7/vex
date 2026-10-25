@@ -3,7 +3,7 @@
  * program, by the contracts of Vex (`refsOf`). Vex adds only what is its own: the axes around a read, and the reads of
  * a function at each of its calls (FN.CALL).
  */
-import { isEnvelope, pathMatches, refsOf, typeName, type DocVisit, type Key, type RefUse } from "@mark1russell7/coeval";
+import { pathMatches, refsOf, type DocVisit, type Key, type RefUse } from "@mark1russell7/coeval";
 import type { Addr, Axis, Expr, ExprOf } from "./ir.ts";
 import { VEX_WORLD } from "./kernel.ts";
 import { writeDocument } from "./write.ts";
@@ -54,6 +54,7 @@ function itemsUntil<T>(chain: Chain<T> | undefined, end: Chain<T> | undefined): 
 }
 
 /** This function gives the kind of a visit, as its keys joined with dots, for example `each` or `axes.where`. */
+// Stryker disable next-line ArrayDeclaration: each document of the writer has a type of the world, so each visit has a type path
 const kindOf = (v: DocVisit): string => (v.typePath ?? []).join(".");
 
 /**
@@ -65,11 +66,18 @@ const kindOf = (v: DocVisit): string => (v.typePath ?? []).join(".");
 export function deps(e: Expr): readonly Dependency[] {
   const nodes = new Map<object, Expr>();
   // The order "reads" puts the body or the steps of a loop before its axis, as the reads of an evaluation come.
-  const doc = writeDocument(e, { domains: [], literals: "host", order: "reads", nodes });
+  const doc = writeDocument(e, {
+    // Stryker disable next-line ArrayDeclaration: the reads come from the references, not from the form of a literal
+    domains: [],
+    // Stryker disable next-line StringLiteral: the writer tests only the mode "json", and each other mode keeps the value
+    literals: "host",
+    order: "reads",
+    nodes,
+  });
   const uses = refsOf(VEX_WORLD, doc);
   const memo = new WeakMap<DocVisit, Context>();
   const functions = new WeakMap<DocVisit, DocVisit | null>();
-  const fnVisits = new Map<object, DocVisit>();
+  const fnVisits = new Map<unknown, DocVisit>();
 
   /** This function gives the function of a call: the visit of the binding of a let, or `undefined` (FN.CALL). */
   const functionOf = (call: DocVisit): DocVisit | undefined => {
@@ -79,14 +87,16 @@ export function deps(e: Expr): readonly Dependency[] {
     let found: DocVisit | undefined;
     // The innermost kind that binds the name decides. A parameter, a binding or a name of a loop hides a function.
     search: for (let child: DocVisit = call, around = call.parent; around !== undefined; child = around, around = around.parent) {
+      // Stryker disable next-line OptionalChaining: each document around a call is a term or a function, so it has a kind
       for (const rule of around.kind?.scope ?? []) {
         if (!rule.in.some((pattern) => pathMatches(child.slot, pattern))) continue;
         const source = rule.names as { readonly keysAt?: readonly Key[]; readonly listAt?: readonly Key[] };
+        // Stryker disable next-line ArrayDeclaration: each rule of the scopes of Vex gives its names with keysAt or listAt
         const at = (source.keysAt ?? source.listAt ?? []).reduce<unknown>((x, k) => (x as Readonly<Record<string, unknown>>)[String(k)], around.doc.value);
         const names = source.keysAt !== undefined ? Object.keys(at as object) : (at as readonly string[]);
         if (!names.includes(name)) continue;
-        const binding = source.keysAt !== undefined && kindOf(around) === "let" ? (at as Readonly<Record<string, unknown>>)[name] : undefined;
-        found = isEnvelope(binding) && typeName(binding.type) === "fn" ? fnVisits.get(binding) : undefined;
+        // Only a binding of a let is a function (FN.BIND), and the map has only the documents of the functions.
+        found = fnVisits.get((at as Readonly<Record<string, unknown>>)[name]);
         break search;
       }
     }
@@ -102,7 +112,8 @@ export function deps(e: Expr): readonly Dependency[] {
     let axis: Around | undefined;
     if (outer.axis !== undefined) {
       // In the axis document of a loop: a test of where is inside the axis, and the list of the axis list is outside.
-      if (kind === "axes.where" && head === "test") axes = { item: outer.axis, up: axes };
+      // Only the axis where has a test.
+      if (head === "test") axes = { item: outer.axis, up: axes };
       else if (head === "axis") axis = outer.axis;
     } else if (kind === "each" || kind === "fold") {
       const node = nodes.get(parent.doc) as ExprOf<"each" | "fold">;
@@ -114,12 +125,16 @@ export function deps(e: Expr): readonly Dependency[] {
       fn = parent;
       fnVisits.set(parent.doc, parent);
     }
-    if (kind === "call" && functionOf(parent) !== undefined) calls = { item: parent, up: calls };
+    // Each call goes in the chain, also a call of a name that is not a function: inCall looks for one call of a function.
+    if (kind === "call") calls = { item: parent, up: calls };
     return { axes, axis, fn, calls };
   };
 
-  /** This function gives the context of a visit. It walks up to a known context with a loop, not with recursion. */
-  const contextOf = (v: DocVisit): Context => {
+  /**
+   * This function gives the context of a visit. It walks up to a known context with a loop, not with recursion. The
+   * context of no visit is the context of the root.
+   */
+  const contextOf = (v: DocVisit | undefined): Context => {
     const todo: DocVisit[] = [];
     let x: DocVisit | undefined = v;
     while (x !== undefined && !memo.has(x)) {
@@ -147,18 +162,18 @@ export function deps(e: Expr): readonly Dependency[] {
   const out: Dependency[] = [];
   /** This function gives the reads of the references of a function at a call, inside the axes of the call. */
   const emit = (group: readonly RefUse[], base: DocVisit | undefined, outside: readonly Around[]): void => {
-    const baseAxes = base === undefined ? undefined : contextOf(base).axes;
+    const baseAxes = contextOf(base).axes;
     const inside = (v: DocVisit): readonly Around[] => [...outside, ...itemsUntil(contextOf(v).axes, baseAxes)];
     // The reads of a call come after the reads of its arguments, so a call waits until the walk leaves it.
     const pending: { readonly call: DocVisit; readonly fn: DocVisit; readonly axes: readonly Around[] }[] = [];
-    const inCall = (v: DocVisit, call: DocVisit): boolean => {
+    const inCall = (v: DocVisit | undefined, call: DocVisit): boolean => {
       for (let c = contextOf(v).calls; c !== undefined && c.item.depth >= call.depth; c = c.up) if (c.item === call) return true;
       return false;
     };
     const flush = (until?: DocVisit): void => {
       for (;;) {
         const top = pending.at(-1);
-        if (top === undefined || (until !== undefined && inCall(until, top.call))) return;
+        if (top === undefined || inCall(until, top.call)) return;
         pending.pop();
         emit(groups.get(top.fn) ?? [], top.fn, top.axes);
       }

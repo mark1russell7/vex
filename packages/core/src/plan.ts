@@ -3,7 +3,7 @@
  * the document of the program with the machine of `kernel.ts`. The closure compiler and the loop compiler give its
  * results (EVAL.REFERENCE), and the test kit compares them on random programs.
  */
-import { agree as kernelAgree, context, prepare, reference as kernelReference, type Agreement, type Context, type Failed, type Plan, type Result as Outcome } from "@mark1russell7/coeval";
+import { agree as kernelAgree, context, prepare, reference as kernelReference, type Agreement, type Context, type Failed, type Result as Outcome } from "@mark1russell7/coeval";
 import { fromDocument, isDocument, type Envelope } from "./document.ts";
 import { vexError, type VexError } from "./errors.ts";
 import { MAX_NESTING, nestingOf, type CompileOptions, type RunOptions } from "./evaluate.ts";
@@ -62,17 +62,19 @@ export function kernelPlan(source: Expr | Envelope, opts: CompileOptions = {}): 
     const shape = shapeError(source);
     const nesting = shape === undefined ? nestingOf(source) : 0;
     const reason = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${String(nesting)} levels deep, and the limit is ${String(MAX_NESTING)}` : undefined);
+    // Stryker disable next-line StringLiteral: the writer tests only the mode "json" and the order "reads"
     if (reason === undefined) doc = writeDocument(source, { domains, literals: "host", order: "document" });
     else bad = vexError("bad-expression", reason);
   }
   const machine = vexMachine(opts);
-  const plan: Plan | undefined = doc === undefined ? undefined : prepare(machine, doc);
+  // A program that is not valid has no document. Its plan does not run, because each run fails before the kernel.
+  const plan = prepare(machine, doc);
   // An origin outside the space and a program that is not valid fail before the kernel (EVAL.ORIGIN, EVAL.SHAPE).
   const early = ({ space, origin }: KernelRunOptions): Failed | undefined => {
     if (!space.has(origin)) return { ok: false, error: toKernelError(vexError("unknown-key", `the space has no key "${origin}"`, { origin, focus: origin })) };
     return bad === undefined ? undefined : { ok: false, error: toKernelError(bad) };
   };
-  const evaluate = (r: KernelRunOptions): Outcome => early(r) ?? (plan as Plan).evaluate(contextOf(r));
+  const evaluate = (r: KernelRunOptions): Outcome => early(r) ?? plan.evaluate(contextOf(r));
   const reference = (r: KernelRunOptions): Outcome => early(r) ?? kernelReference(machine, doc, contextOf(r), { definitions: vexDefinitions(opts) });
   const agree = (r: KernelRunOptions, other?: () => Result<unknown>): Agreement => {
     const tier = other === undefined ? {} : { other: (): Outcome => toOutcome(other()) };

@@ -2,6 +2,7 @@
 "@mark1russell7/vex": patch
 "@mark1russell7/vex-domains": patch
 "@mark1russell7/vex-testkit": patch
+"@mark1russell7/vex-mcp": patch
 ---
 
 coeval is the core of Vex (decision D13 of coeval, and decision D13 in `docs/REVIEW.md`). `@mark1russell7/coeval` ^0.6.0 is the one runtime dependency of `@mark1russell7/vex`, and the build does not copy it.
@@ -12,6 +13,7 @@ coeval is the core of Vex (decision D13 of coeval, and decision D13 in `docs/REV
 - `referenceEvaluate` of the test kit uses the reference interpreter of the kernel. It takes a document too, and the options `vars` and `extensions`. The test kit has `arbChangedDocument`, `arbNumberExpr` and `arbNumberSpace`. The properties P19 to P22 compare the tiers with the kernel, and P17 compares the compiler with it too.
 - `toDocument` writes an expression of any depth.
 - `@mark1russell7/vex`, `@mark1russell7/vex-domains` and `@mark1russell7/vex-testkit` declare `"sideEffects": false`. No module of them has an effect at its import, so a bundler removes each module that a program does not use. The top level of the kernel has the annotation `__PURE__` too.
+- The MCP server ends the reason of a program that is not valid with one period, also when the reason of the kernel has its own period.
 - V-056: a program that is not an object, for example `0`, made `evaluate`, `explain` and a sheet with a compiler throw a `TypeError`. It gives `#VALUE!`.
 
-The API only grows, and no export changes its type, so the level is patch (SemVer before 1.0).
+The API only grows, no export changes its type, and a document that is not valid still gives `#VALUE!`. Thus the level is patch (SemVer before 1.0).

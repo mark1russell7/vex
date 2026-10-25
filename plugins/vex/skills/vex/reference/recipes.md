@@ -133,6 +133,22 @@ m.ok && m.source.includes("export function run(records, vars, parents)"); // => 
 
 A host gives the records in an array, and the parents in an array of the same length: `run([{ salary: 10 }, { salary: 5 }], {}, [-1, 0])` gives the values 15 and 5.
 
+`emitSheetModule` prints the formula columns of a sheet as a module (from the next release). A column that a formula reads before its formula needs its kind in `kinds`. This column reads itself, so it needs its kind.
+
+```ts doctest
+import { app, axes, cell, each, ref } from "@mark1russell7/vex";
+import { emitSheetModule } from "@mark1russell7/vex-compiler";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+// The cost of each node: its own pay plus the costs of its children.
+const columns = new Map([["cost", app("add", ref("pay"), app("sum", each(axes.children, cell("cost"))))]]);
+const m = emitSheetModule(columns, { domains: [NumDomain], schema: { fields: { pay: "number" } }, space: "tree", kinds: { cost: "number" } });
+
+m.ok; // => true
+```
+
+The run gives an array for each column: `run([{ pay: 300 }, { pay: 200 }, { pay: 100 }], {}, [-1, 0, 1])` gives `{ cost: [600, 300, 100] }`. A cell on a cycle gives `VEX_ERROR`, as `#CYCLE!` of `SheetRun`.
+
 ## A program as data
 
 A program is JSON. `serialize` gives the text, and `parse` checks the text and gives the program. A literal of a domain needs `encode` and `decode` in its domain.

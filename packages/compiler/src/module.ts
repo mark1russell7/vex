@@ -19,10 +19,15 @@
  * the variables of the schema. It takes the axes `all`, `others` and `window`. A tree space also has the move `parent` and the
  * axes of a tree (COMPILE.MODULE.TREE). The kinds of each op site must decide its op. Another construct gives a
  * reason, not code.
+ *
+ * `emitSheetModule` prints the formula columns of a sheet as one module (COMPILE.MODULE.SHEET). Each column is an array
+ * of results, and the run fills the arrays in the static order of `SheetRun.fill`. A read of a cell that is not finished
+ * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex.
  */
-import { addrExprs, children, fromDocument, isDocument, isFieldName, lit, moveExpr, shapeError, type AnyDomain, type Axis, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, lit, moveExpr, nestingOf, rec, shapeError, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
+import { columnOrder, isCellRef, keyOrderOf, readsOf } from "./sheet-order.ts";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {
@@ -37,6 +42,19 @@ export interface ModuleOptions {
    * is the position of the parent of its record, or -1 for a root.
    */
   readonly space?: "array" | "tree";
+}
+
+/** The options of a module of a sheet (COMPILE.MODULE.SHEET): the options of a module, and the parts of a sheet. */
+export interface SheetModuleOptions extends ModuleOptions {
+  /** The cells with their own formula (SHEET.CELL.FORMULA). The formula of a cell replaces the formula of its column at its key. */
+  readonly cells?: CellFormulas;
+  /**
+   * The kind of the values of each column. The printer prints each column after the columns that it reads. A column
+   * that a formula reads before its own formula prints needs its kind here, for example a column that reads itself.
+   */
+  readonly kinds?: Readonly<Record<string, Kind>>;
+  /** The budget of the stack of the search of a run, in estimated frames, as in `SheetRun`. The default is 3000. */
+  readonly budget?: number;
 }
 
 /** The source of a standalone module, or the reason that the program cannot be one. */
@@ -95,6 +113,26 @@ interface Arg {
 
 /** The levels of a constant of the run. */
 const NO_DEPS: ReadonlySet<number> = new Set();
+
+/**
+ * The level of a read of a cell (COMPILE.MODULE.SHEET). The results of the cells change in a run. Thus a value that reads
+ * a cell is not a constant or a column of the run. The level is far from the other levels.
+ */
+const CELLS = -1;
+
+/** The name of the function of a run of a sheet that reads a cell: its column and its position. */
+const READ_CELL = "RC";
+
+/** This pattern finds a read of a cell in the code of a value: the read, or a printed function that can read a cell. */
+const READS_IN_CODE = /\b(RC|fn\d+)\(/;
+
+/** The columns of a sheet for the printer (COMPILE.MODULE.SHEET). */
+interface SheetInfo {
+  /** The position of each column in the arrays of the run. */
+  readonly columns: ReadonlyMap<string, number>;
+  /** The kind of each column that the printer knows: a kind of the options, or the kind of a printed formula. */
+  readonly kinds: Map<string, Kind | undefined>;
+}
 
 /** This function gives the levels of some codes together. */
 const depsOf = (...xs: readonly Code[]): ReadonlySet<number> => new Set(xs.flatMap((x) => [...x.v.deps]));
@@ -175,10 +213,13 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT" | TreeHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT" | TreeHelper | SheetHelper;
 
 /** The helpers of a tree space (COMPILE.MODULE.TREE). */
 type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
+
+/** The helpers of a sheet (COMPILE.MODULE.SHEET): the state of a run of a sheet, and the order of the keys of a tree. */
+type SheetHelper = "SH" | "KO";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -277,6 +318,129 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   AN: "function AN(P, k) { const o = []; for (let p = P[k]; p >= 0; p = P[p]) o.push(p); return o; }",
   // The record and the keys under it, in the order of a breadth-first search. A tree has no cycle, so no key comes twice.
   BF: "function BF(h, k) { const o = [k]; for (let i = 0; i < o.length; i++) for (const c of h[o[i]]) o.push(c); return o; }",
+  // The state of a run of a sheet (COMPILE.MODULE.SHEET), as in SheetRun: the result of each finished cell, the search
+  // of Tarjan with its stack, and the budget of the stack. `r` reads a cell, `f` fills a cell, and `o` gives a column.
+  // A cell without a formula has the error sentinel from the start, as the error of its read.
+  SH: [
+    "function SH(n, cols, own, budget) {",
+    "  const pg = (c, k) => {",
+    "    const o = own[c];",
+    "    const g = o === undefined ? undefined : o[k];",
+    "    return g === undefined ? cols[c] : g;",
+    "  };",
+    "  const D = [];",
+    "  for (let c = 0; c < cols.length; c++) {",
+    "    const d = new Array(n);",
+    "    for (let k = 0; k < n; k++) if (pg(c, k) === undefined) d[k] = E;",
+    "    D.push(d);",
+    "  }",
+    "  const seen = new Map(), stack = [], FILL = {};",
+    "  let top = FILL, missed = false, next = 0, used = 0;",
+    "  const start = (c, k) => {",
+    "    const i = next++;",
+    "    const v = { id: c * n + k, c, k, i, low: i, re: false, r: E, p: false, need: undefined };",
+    "    seen.set(v.id, v);",
+    "    stack.push(v);",
+    "    return v;",
+    "  };",
+    "  const ev = (v, g) => {",
+    "    const caller = top;",
+    "    v.p = false;",
+    "    v.need = undefined;",
+    "    top = v;",
+    "    used += g[1];",
+    "    const x = g[0](v.k);",
+    "    used -= g[1];",
+    "    top = caller;",
+    "    if (!v.p) v.r = x;",
+    "  };",
+    "  const end = (v, caller) => {",
+    "    if (v.low === v.i) {",
+    "      const ms = stack.splice(stack.lastIndexOf(v));",
+    "      const cycle = ms.length > 1 || v.re;",
+    "      for (const m of ms) {",
+    "        seen.delete(m.id);",
+    "        D[m.c][m.k] = cycle ? E : m.r;",
+    "      }",
+    "    } else if (caller !== undefined) caller.low = Math.min(caller.low, v.low);",
+    "  };",
+    "  const r = (c, k) => {",
+    "    const d = D[c][k];",
+    "    if (d !== undefined) return d;",
+    "    const caller = top;",
+    "    if (caller === FILL) {",
+    "      missed = true;",
+    "      return E;",
+    "    }",
+    "    if (caller.p) return E;",
+    "    const s = seen.get(c * n + k);",
+    "    if (s !== undefined) {",
+    "      caller.low = Math.min(caller.low, s.i);",
+    "      s.re = true;",
+    "      return E;",
+    "    }",
+    "    const g = pg(c, k);",
+    "    const v = start(c, k);",
+    "    if (used + g[1] > budget) {",
+    "      caller.p = true;",
+    "      caller.need = v;",
+    "      return E;",
+    "    }",
+    "    ev(v, g);",
+    "    if (v.p) {",
+    "      caller.p = true;",
+    "      caller.need = v;",
+    "      return E;",
+    "    }",
+    "    end(v, caller);",
+    "    const x = D[c][k];",
+    "    return x === undefined ? E : x;",
+    "  };",
+    "  const drive = (c, k) => {",
+    "    const work = [start(c, k)];",
+    "    for (let v = work[0]; v !== undefined; v = work[work.length - 1]) {",
+    "      ev(v, pg(v.c, v.k));",
+    "      if (v.p) {",
+    "        for (let q = v.need; q !== undefined; q = q.need) work.push(q);",
+    "        continue;",
+    "      }",
+    "      work.pop();",
+    "      end(v, work[work.length - 1]);",
+    "    }",
+    "  };",
+    "  const f = (c, k) => {",
+    "    if (D[c][k] !== undefined) return;",
+    "    missed = false;",
+    "    const x = pg(c, k)[0](k);",
+    "    if (missed) drive(c, k);",
+    "    else D[c][k] = x;",
+    "  };",
+    "  const o = (c) => {",
+    "    const d = D[c], out = [];",
+    "    for (let k = 0; k < n; k++) out.push(d[k] === E ? VEX_ERROR : d[k]);",
+    "    return out;",
+    "  };",
+    "  return { r, f, o };",
+    "}",
+  ].join("\n"),
+  // The keys of a tree in the order of a fill (SHEET.FILL): each parent before its children, or after them with `post`.
+  // `back` reverses the order of the siblings.
+  KO: [
+    "function KO(h, r, post, back) {",
+    "  const o = [], st = [];",
+    "  const push = (x) => {",
+    "    if (back) for (let q = 0; q < x.length; q++) st.push(x[q]);",
+    "    else for (let q = x.length - 1; q >= 0; q--) st.push(x[q]);",
+    "  };",
+    "  push(r);",
+    "  while (st.length > 0) {",
+    "    const k = st.pop();",
+    "    o.push(k);",
+    "    push(h[k]);",
+    "  }",
+    "  return post ? o.reverse() : o;",
+    "}",
+  ].join("\n"),
   // The memo of a function of one key, and of more keys. -0 has its own entry, because an op can tell it from 0.
   M1: [
     "function M1(f) {",
@@ -443,6 +607,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Stryker disable next-line ArrayDeclaration: see the comment above
   PT: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
+  SH: [], KO: [],
 };
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
@@ -482,6 +647,12 @@ const NUMBER_LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "m
 const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
 /** The list ops that build a list from lists (LIST.BUILD), and `get` (LIST.GET). A module gives a reason for them. */
 const BUILD_OPS: ReadonlySet<string> = new Set(["drop", "append", "flat", "without", "get"]);
+
+/** This function tells if the step of a list op throws for a value of the kind `kind`, which is the wrong kind. */
+const stepThrows = (op: string, kind: Kind | undefined): boolean => (NUMBER_STEPS.has(op) && kind !== "number") || (BOOLEAN_LIST_OPS.has(op) && kind !== "boolean");
+
+/** The list ops whose step takes a number. */
+const NUMBER_STEPS: ReadonlySet<string> = new Set(["sum", "mean", "min", "max"]);
 
 /** This function gives the kind of the result of a list op: first gives the kind of its items. */
 const listKind = (op: string, item: Kind | undefined): Kind | undefined => (NUMBER_LIST_OPS.has(op) ? "number" : BOOLEAN_LIST_OPS.has(op) ? "boolean" : item);
@@ -736,6 +907,8 @@ class Printer {
   /** True for a tree space, and the parts of the tree that the program reads (COMPILE.MODULE.TREE). */
   readonly #tree: boolean;
   readonly treeParts = new Set<TreePart>();
+  /** The columns of a sheet, for a module of a sheet (COMPILE.MODULE.SHEET). */
+  readonly #sheet: SheetInfo | undefined;
   #names = 0;
   /** The number of the next bound function, and of the next printed function. */
   #fnIds = 0;
@@ -772,12 +945,13 @@ class Printer {
   /** The facts of the list of each function of the memo whose value is a list. */
   readonly #lists = new Map<string, ListInfo | undefined>();
 
-  constructor(expr: Expr, options: ModuleOptions) {
+  constructor(expr: Expr, options: ModuleOptions, sheet?: SheetInfo) {
     this.#domains = options.domains ?? [];
     this.#facts = factsOf({ domains: this.#domains });
     this.#schema = options.schema;
     this.#memo = memoOf(expr);
     this.#tree = options.space === "tree";
+    this.#sheet = sheet;
   }
 
   use(name: Helper): string {
@@ -953,8 +1127,9 @@ class Printer {
    * from outside is a constant of the run, so its code can be outside the loop.
    */
   #columnar(e: Expr, c: Code, ctx: Ctx): boolean {
-    // A node of the memo has the level 1, so a column has a focus.
-    if (ctx.level < 2 || !c.v.deps.has(ctx.level) || this.#work(e, ctx.fns) < COLUMN_WORK) return false;
+    // A node of the memo has the level 1, so a column has a focus. The results of the cells change in a run, so a part
+    // that reads a cell is not a column.
+    if (ctx.level < 2 || c.v.deps.has(CELLS) || !c.v.deps.has(ctx.level) || this.#work(e, ctx.fns) < COLUMN_WORK) return false;
     const scope = this.#callScope(c, ctx);
     if (c.v.deps.size !== 1 && scope === undefined) return false;
     // A node of the memo with keys keeps its costly part for each value of its keys already.
@@ -1053,7 +1228,8 @@ class Printer {
         const names = Object.keys(e.fields);
         const raw = Object.values(e.fields).map((x) => this.expr(x, ctx));
         const deps = depsOf(...raw);
-        const fields = this.#settle(raw, deps, Object.values(e.fields));
+        // The interpreter evaluates each field, also after an error.
+        const fields = this.#inOrder(this.#settle(raw, deps, Object.values(e.fields)), true);
         // A record of a module is a new object, so it needs no freeze.
         const code = `({ ${fields.map((x, i) => `${JSON.stringify(names[i])}: ${x.v.code}`).join(", ")} })`;
         return { s: stmtsOf(...fields), v: { code, kind: undefined, safe: fields.every((x) => x.v.safe), deps } };
@@ -1067,8 +1243,55 @@ class Printer {
       case "iterate":
         return this.#iterate(e, ctx);
       case "ext":
-        throw new NotStandalone(`the extension "${e.kind}"`);
+        return this.#cell(e, ctx);
     }
+  }
+
+  /**
+   * This method gives the code of a read of a cell in a module of a sheet (COMPILE.MODULE.SHEET). The value is the result
+   * of the cell, which can be the error sentinel, so the read throws its error. A read that is not a cell reference, or
+   * of a column that the sheet does not have, gives an error, as in `SheetRun`.
+   */
+  #cell(e: ExprOf<"ext">, ctx: Ctx): Code {
+    const sheet = this.#sheet;
+    if (sheet === undefined || e.kind !== CELL_KIND) throw new NotStandalone(`the extension "${e.kind}"`);
+    const F = this.use("F");
+    if (!isCellRef(e.data)) return bare({ code: `${F}()`, kind: undefined, safe: false, deps: new Set([CELLS]) });
+    const { column, at } = e.data;
+    const deps = new Set([...this.#addressDeps(at, ctx, []), CELLS]);
+    const index = sheet.columns.get(column);
+    // The read of a column that the sheet does not have is an error. A kind of the options lets an op take it.
+    if (index === undefined) return bare({ code: `${F}()`, kind: sheet.kinds.get(column), safe: false, deps });
+    if (!sheet.kinds.has(column)) throw new NotStandalone(`a formula reads the column "${column}" before its formula, so the column needs its kind in the option kinds`);
+    const read = `${READ_CELL}(${String(index)}, ${this.#address(at, ctx, [])})`;
+    const v = { code: `${this.use("G")}(${read})`, kind: sheet.kinds.get(column), safe: false, deps };
+    // The read itself gives the result or the error sentinel. A move of the address can throw, so then the read is not
+    // a value that holds the sentinel.
+    return bare(at.every((m) => m.t === "origin") ? { ...v, held: read } : v);
+  }
+
+  /**
+   * This method gives the parts of a node in the order of the interpreter, when a part reads a cell (COMPILE.MODULE.SHEET).
+   * A read of a cell can start the search of the run, and the search decides the cycles. So the module must read each
+   * cell that the interpreter reads. With `all`, the interpreter evaluates each part also after an error, so each part
+   * goes into a variable that can hold the error. Else the first error stops the parts, so each part goes into a
+   * variable before the next part starts.
+   *
+   * The statements of the parts come before the code of their values. The last part that reads a cell keeps its place
+   * only if no statement after it can throw. Also, with `all`, a value before it must not throw, or the code of its value
+   * must read no cell.
+   */
+  #inOrder(parts: readonly Code[], all: boolean): readonly Code[] {
+    const last = parts.findLastIndex((x) => x.v.deps.has(CELLS));
+    const after = parts.slice(last + 1).every((x) => x.s.length === 0 || x.v.safe);
+    const before = !all || parts.slice(0, Math.max(last, 0)).every((x) => x.v.safe) || !READS_IN_CODE.test((parts[last] as Code).v.code);
+    return parts.map((x, i) => {
+      // A part after the last read of a cell cannot stop a read. A part that cannot throw and reads no cell cannot either.
+      if (i > last || (x.v.safe && !x.v.deps.has(CELLS)) || (i === last && after && before)) return x;
+      const b = this.fresh("b");
+      if (all && !x.v.safe) return { s: this.#store(b, x), v: { ...x.v, code: `${this.use("G")}(${b})`, held: b, plain: false } };
+      return { s: [...x.s, `const ${b} = ${x.v.code};`], v: { kind: x.v.kind, deps: x.v.deps, list: x.v.list, code: b, safe: true, plain: true } };
+    });
   }
 
   /**
@@ -1147,7 +1370,8 @@ class Printer {
     const safe = at.every((m) => m.t === "origin");
     const values = this.#addressValues(at, ctx);
     const deps = this.#addressDeps(at, ctx, values);
-    const parts = this.#settle(values, deps);
+    // The interpreter evaluates the expressions of the address before its moves, and the first error stops them.
+    const parts = this.#inOrder(this.#settle(values, deps), false);
     return { s: stmtsOf(...parts), v: { code: `R[${this.#address(at, ctx, parts)}][${JSON.stringify(field)}]`, kind, safe, deps } };
   }
 
@@ -1331,7 +1555,8 @@ class Printer {
     if (head !== undefined && (LIST_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, args.slice(1), ctx);
     const raw = args.map((x) => this.expr(x, ctx));
     const deps = depsOf(...raw);
-    const values = this.#settle(raw, deps, args);
+    // The interpreter evaluates each argument, also after an error.
+    const values = this.#inOrder(this.#settle(raw, deps, args), true);
     const site = this.#facts.staticSite(op, values.map((x) => x.v.kind));
     if (site?.t !== "fn") throw new NotStandalone(`the kinds of the values of "${op}" do not decide its op`);
     if (site.bad) return { s: stmtsOf(...values), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
@@ -1480,7 +1705,7 @@ class Printer {
     if (f !== undefined) {
       const values = this.#addressValues(at, ctx);
       start = this.#addressDeps(at, ctx, values);
-      const parts = this.#settle(values, start);
+      const parts = this.#inOrder(this.#settle(values, start), false);
       s.push(...stmtsOf(...parts), `const ${f} = ${this.#address(at, ctx, parts)};`);
     }
     const startSafe = at.every((m) => m.t === "origin");
@@ -1555,6 +1780,15 @@ class Printer {
     const item = [...check, ...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
     // An item whose tests and body cannot fail needs no try.
     const safeItem = check.length === 0 && body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
+    // The interpreter evaluates each item before the list op (COMPILE.MODULE.SHEET). When an item reads a cell, an error
+    // of an item or of a step must not stop the reads of the next items. So the items go into an array first.
+    if ([body, ...testCodes].some((x) => x.v.deps.has(CELLS)) && (strict || stepThrows(op, body.v.kind))) {
+      const list = this.fresh("L");
+      const x = this.fresh("x");
+      const all = [...key, ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]), `let ${x};`, "try {", ...ind(item), `  ${x} = ${body.v.code};`, "} catch {", `  ${x} = E;`, "}", `${list}.push(${x});`];
+      const reduce = [`for (const ${v} of ${list}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
+      return { s: [...s, `const ${list} = [];`, head, ...ind(all), "}", ...reduce], v: { code: r.result, kind: listKind(op, body.v.kind), safe: false, deps } };
+    }
     const loop = [
       ...key,
       ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
@@ -1644,7 +1878,7 @@ class Printer {
     const strict = this.#strict(op, rest.slice(exprs.length - 1));
     const raw = [list, ...exprs.slice(1).map((x) => this.expr(x, ctx))];
     const deps = depsOf(...raw);
-    const parts = this.#settle(raw, deps, exprs);
+    const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
     const item = (list.v.list as ListInfo).item;
     return { s: stmtsOf(...parts), v: { code: `${this.use(op === "sortBy" ? "SB" : "TK")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: undefined, safe: false, deps, list: { item } } };
   }
@@ -1657,7 +1891,7 @@ class Printer {
     const strict = this.#strict(op, rest.slice(exprs.length - 1));
     const raw = [list, ...exprs.slice(1).map((x) => this.expr(x, ctx))];
     const deps = depsOf(...raw);
-    const parts = this.#settle(raw, deps, exprs);
+    const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
     const [l] = parts as [Code];
     const item = (list.v.list as ListInfo).item;
     if (op === "nth") return { s: stmtsOf(...parts), v: { code: `${this.use("NT")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: item, safe: false, deps } };
@@ -1740,6 +1974,8 @@ class Printer {
     const names = this.#loopNames(e.init, ctx, loop);
     const t = this.#targetLoop(e.axis, e.at ?? [], ctx);
     const tests = t.tests.map((x) => this.#hoist(this.expr(x, t.inner), hasLoop(x)));
+    // The interpreter evaluates the tests at each target before the first step, so a module of a sheet does not have them.
+    if (tests.some((x) => x.v.deps.has(CELLS))) throw new NotStandalone("a test of the axis of a fold reads a cell");
     const step = this.#loopStep(e.step, { ...t.inner, env: names.env }, names.vars);
     const result = this.expr(e.result, { ...ctx, env: names.env });
     const body = [
@@ -1896,11 +2132,15 @@ class Printer {
   }
 
   /** This method gives the code of the program at the key of the run. A constant of the run evaluates once. */
+  /** This method gives the code of a program at the key `o` of the run. A sheet has one program for each formula. */
   root(expr: Expr): Code {
-    const c = this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: new Map() }));
+    return this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: new Map() }));
+  }
+
+  /** This method removes the declarations that no code reads, after the last program. */
+  finish(): void {
     // A function of an op with an inline form at each of its sites needs no declaration.
     for (const [name, form] of this.#forms) if (form !== undefined && !this.#called.has(name)) this.top.delete(name);
-    return c;
   }
 
   /**
@@ -1921,33 +2161,26 @@ class Printer {
   }
 }
 
-/**
- * This function prints a program as a standalone ES module. The module exports `VexContractError`, `VEX_ERROR` and a
- * function that takes the records and the variables and gives the value at each key. A module of a tree space takes
- * the parents too. The function is pure, so a build can use it. The program can be an expression or a document
- * (DOC.ENTRY).
- */
-export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emitted {
+/** This function gives the name of the function of a module, and its space, or the reason that the options are not valid. */
+function runOf(options: ModuleOptions): { readonly name: string; readonly tree: boolean } | { readonly reason: string } {
   const name = options.name ?? "run";
-  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return { ok: false, reason: `the name "${name}" is not a JavaScript name` };
+  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return { reason: `the name "${name}" is not a JavaScript name` };
   const tree = options.space === "tree";
-  if (!tree && options.space !== undefined && options.space !== "array") return { ok: false, reason: `the space "${String(options.space)}" is not "array" or "tree"` };
-  // DOC.ENTRY: a document gives its expression first, or the reason that it is not valid.
-  const read = isDocument(source) ? fromDocument(source, options.domains) : { ok: true as const, value: source };
-  if (!read.ok) return { ok: false, reason: read.error.message };
-  const expr = read.value;
-  // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
-  const shape = shapeError(expr);
-  if (shape !== undefined) return { ok: false, reason: shape };
-  const p = new Printer(expr, options);
-  let value: Code;
-  try {
-    value = p.root(expr);
-  } catch (thrown) {
-    // Each error of the printer is a NotStandalone. Another exception is a defect, so it goes to the caller.
-    if (!(thrown instanceof NotStandalone)) throw thrown;
-    return { ok: false, reason: thrown.message };
-  }
+  if (!tree && options.space !== undefined && options.space !== "array") return { reason: `the space "${String(options.space)}" is not "array" or "tree"` };
+  return { name, tree };
+}
+
+/** This function gives the reason of an error of the printer. Another exception is a defect, so it goes to the caller. */
+function reasonOf(thrown: unknown): Emitted {
+  if (!(thrown instanceof NotStandalone)) throw thrown;
+  return { ok: false, reason: thrown.message };
+}
+
+/**
+ * This function gives the text of a module: the declarations, the helpers, and the function of the run. The run checks
+ * its input, computes the parts of the tree and the constants of the run, and then gives the statements `body`.
+ */
+function printModule(p: Printer, options: ModuleOptions, run: { readonly name: string; readonly tree: boolean }, body: readonly string[]): Emitted {
   p.use("C");
   const helpers = new Set<Helper>();
   // A helper comes after the helpers that it needs. A set keeps the first place of each helper.
@@ -1963,9 +2196,9 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
     fieldChecks = fields.map(([f, k]) => ` || ${p.against(k, `r[${JSON.stringify(f)}]`)}`).join("");
     varChecks = vars.map(([v, k]) => ` || ${p.against(k, `vars[${JSON.stringify(v)}]`)}`).join("");
   } catch (thrown) {
-    if (!(thrown instanceof NotStandalone)) throw thrown;
-    return { ok: false, reason: thrown.message };
+    return reasonOf(thrown);
   }
+  const { name, tree } = run;
   // A tree checks its parents, and it computes the parts that the program reads. The siblings and the order need the
   // children.
   if (tree) p.use("PT");
@@ -1997,18 +2230,140 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
     ...(tree ? ["  const P = PT(parents, n);", ...parts.map((x) => `  ${TREE_PARTS[x][1]}`)] : []),
     ...[...p.vars].map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
     ...ind(p.run),
-    "  const out = [];",
-    "  for (let o = 0; o < n; o++) {",
-    "    try {",
-    ...ind(ind(ind(value.s))),
-    `      out.push(${value.v.code});`,
-    "    } catch {",
-    "      out.push(VEX_ERROR);",
-    "    }",
-    "  }",
-    "  return out;",
+    ...ind(body),
     "}",
     "",
   ];
   return { ok: true, source: lines.join("\n") };
+}
+
+/**
+ * This function prints a program as a standalone ES module. The module exports `VexContractError`, `VEX_ERROR` and a
+ * function that takes the records and the variables and gives the value at each key. A module of a tree space takes
+ * the parents too. The function is pure, so a build can use it. The program can be an expression or a document
+ * (DOC.ENTRY).
+ */
+export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emitted {
+  const run = runOf(options);
+  if ("reason" in run) return { ok: false, reason: run.reason };
+  // DOC.ENTRY: a document gives its expression first, or the reason that it is not valid.
+  const read = isDocument(source) ? fromDocument(source, options.domains) : { ok: true as const, value: source };
+  if (!read.ok) return { ok: false, reason: read.error.message };
+  const expr = read.value;
+  // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
+  const shape = shapeError(expr);
+  if (shape !== undefined) return { ok: false, reason: shape };
+  const p = new Printer(expr, options);
+  let value: Code;
+  try {
+    value = p.root(expr);
+    p.finish();
+  } catch (thrown) {
+    return reasonOf(thrown);
+  }
+  const body = ["const out = [];", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out.push(${value.v.code});`, "  } catch {", "    out.push(VEX_ERROR);", "  }", "}", "return out;"];
+  return printModule(p, options, run, body);
+}
+
+/** The budget of the stack of the search of a run of a sheet, as `STACK_BUDGET` of `SheetRun`. */
+const SHEET_BUDGET = 3000;
+
+/** A formula of a sheet: its column, the position of its cell (undefined for the formula of the column) and its expression. */
+interface Formula {
+  readonly column: string;
+  readonly key: number | undefined;
+  readonly expr: Expr;
+}
+
+/** This function gives the words for a formula in a reason: the formula of a column, or of one cell. */
+const formulaText = (f: Formula): string => (f.key === undefined ? `the formula of the column "${f.column}"` : `the formula of the cell "${f.column}" at "${String(f.key)}"`);
+
+/** This function gives the words for a kind in a reason. */
+const kindText = (k: Kind | undefined): string => k ?? "that the printer does not know";
+
+/**
+ * This function prints the formula columns of a sheet as a standalone ES module (COMPILE.MODULE.SHEET). The function of
+ * the module takes the records and the variables, and the parents for a tree. It gives an object with an array for
+ * each column: the result of the column at each key, or `VEX_ERROR`. The results are the results of `SheetRun`.
+ *
+ * The run fills the columns in the order of `SheetRun.fill`. A read of a finished cell is the read of an array. A read
+ * of a cell that is not finished starts the search of `SheetRun`, with the same budget of the stack. Each cell on a
+ * cycle of reads gives `VEX_ERROR`.
+ */
+export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions): Emitted {
+  const run = runOf(options);
+  if ("reason" in run) return { ok: false, reason: run.reason };
+  const budget = options.budget ?? SHEET_BUDGET;
+  if (!Number.isSafeInteger(budget) || budget < 0) return { ok: false, reason: `the budget ${String(budget)} is not a whole number of 0 or more` };
+  const cells: CellFormulas = options.cells ?? new Map();
+  const names = [...new Set([...columns.keys(), ...cells.keys()])];
+  const order = columnOrder(columns, cells);
+  // The formulas in the order of the columns. A key of a cell that is not the text of a position is not a key of the
+  // space, so no read finds its formula.
+  const formulas: Formula[] = order.flatMap((column): Formula[] => {
+    const own = [...(cells.get(column) ?? [])].filter(([k]) => /^(0|[1-9]\d*)$/.test(k) && Number.isSafeInteger(Number(k)));
+    const formula = columns.get(column);
+    return [...(formula === undefined ? [] : [{ column, key: undefined, expr: formula }]), ...own.map(([k, expr]) => ({ column, key: Number(k), expr }))];
+  });
+  for (const f of formulas) {
+    // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
+    const shape = shapeError(f.expr);
+    if (shape !== undefined) return { ok: false, reason: `${formulaText(f)}: ${shape}` };
+  }
+  const kinds = new Map<string, Kind | undefined>(Object.entries(options.kinds ?? {}));
+  const index = new Map(names.map((c, i) => [c, i]));
+  // The memo of the printer covers each formula, so the formulas share their nodes of the memo.
+  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, { columns: index, kinds });
+  const fns: string[] = [];
+  const decls: string[] = [];
+  try {
+    for (const f of formulas) {
+      const code = p.root(f.expr);
+      const kind = code.v.kind;
+      // The first formula of a column without a kind of the options gives the kind of the column.
+      if (!kinds.has(f.column)) kinds.set(f.column, kind);
+      else if (kinds.get(f.column) !== kind) throw new NotStandalone(`${formulaText(f)} gives a value of the kind ${kindText(kind)}, not of the kind ${kindText(kinds.get(f.column))} of its column`);
+      const fn = p.fresh("cf");
+      fns.push(fn);
+      decls.push(...(code.v.safe && code.s.length === 0 ? [`const ${fn} = (o) => ${code.v.code};`] : [`const ${fn} = (o) => {`, "  try {", ...ind(ind(code.s)), `    return ${code.v.code};`, "  } catch {", "    return E;", "  }", "};"]));
+    }
+    p.finish();
+  } catch (thrown) {
+    return reasonOf(thrown);
+  }
+  // The program of each column, and of each cell with its own formula, with its cost in estimated frames, as in SheetRun.
+  const entry = (i: number): string => `[${fns[i] as string}, ${String(3 * nestingOf((formulas[i] as Formula).expr) + 16)}]`;
+  const own = names.map((c) => {
+    const at = formulas.flatMap((f, i) => (f.column === c && f.key !== undefined ? [`${String(f.key)}: ${entry(i)}`] : []));
+    return at.length === 0 ? "undefined" : `{ ${at.join(", ")} }`;
+  });
+  const cols = names.map((c) => {
+    const i = formulas.findIndex((f) => f.column === c && f.key === undefined);
+    return i < 0 ? "undefined" : entry(i);
+  });
+  p.use("SH");
+  // A tree gives the keys in the order of a fill with the helper KO, once for each order.
+  const orders = new Map<string, string>();
+  const fill = order.map((c) => {
+    const { reverse, post, back } = keyOrderOf(readsOf(columns, cells, c).directions);
+    const at = String(index.get(c));
+    if (!run.tree) return reverse ? `for (let o = n - 1; o >= 0; o--) SS.f(${at}, o);` : `for (let o = 0; o < n; o++) SS.f(${at}, o);`;
+    const args = `${p.use("KO")}(H, RT, ${String(post)}, ${String(back)})`;
+    let keys = orders.get(args);
+    if (keys === undefined) {
+      keys = p.fresh("K");
+      orders.set(args, keys);
+    }
+    return `for (const o of ${keys}) SS.f(${at}, o);`;
+  });
+  if (run.tree) p.treeParts.add("children");
+  const body = [
+    ...decls,
+    `const SS = SH(n, [${cols.join(", ")}], [${own.join(", ")}], ${String(budget)});`,
+    `const ${READ_CELL} = SS.r;`,
+    ...[...orders].map(([args, keys]) => `const ${keys} = ${args};`),
+    ...fill,
+    `return { ${names.map((c, i) => `${JSON.stringify(c)}: SS.o(${String(i)})`).join(", ")} };`,
+  ];
+  return printModule(p, options, run, body);
 }

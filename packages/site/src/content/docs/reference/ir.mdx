@@ -148,6 +148,37 @@ evaluate(app("count", lit(vexList([]))), { space: ring, origin: "0" }); // => { 
 evaluate(app("get", each(axes.all, ref("n")), lit("9")), { space: ring, origin: "0" }).ok; // => false
 ```
 
+### Arrays as lists
+
+An array of a field or of a name is a list where a list op or the axis `list` needs a list (LIST.ARRAY). The key of each item is its position, from `"0"`. A position without a value, or with `null`, gives an error item of `#N/A`. A domain or a function of the host with the op comes first, so each result of that op stays.
+
+| Op | Value |
+|---|---|
+| `indexOf(list, value)` | the position of the first item with the value, from 0, as `nth` counts. The value is a number, a text or a boolean. A value that no item has gives `#N/A`. |
+| `fill(n, value)` | a list of `n` items with the value. The keys are the positions. `n` is a whole number from 0 to 100000. |
+
+Thus a stack of a layout needs no functions of the host. The fractions, the keys of the slots and the bounds are names of the run. The body of the axis `list` reads the fields of each target, not the values of the items. Thus the fold below counts the items, and `nth` reads the value at each position.
+
+```ts doctest
+import { app, axes, evaluate, fold, let_, lit, ref, space, v, type Expr } from "@mark1russell7/vex";
+import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
+
+const items = space.array([{ key: "head" }, { key: "body" }, { key: "foot" }]);
+const vars = { fr: [0.2, 0.3, 0.5], keys: ["head", "body", "foot"], bounds: new Vec2(300, 220), dir: new Vec2(0, 1), gap: 10 };
+const run = (e: Expr, origin: string) => evaluate(e, { space: items, origin, domains: [Vec2Domain, NumDomain], vars });
+// The length of the stacked axis without the gaps: 220 - 10 * (3 - 1) = 200.
+const total = app("subtract", app("along", v("bounds"), v("dir")), app("multiply", v("gap"), app("subtract", app("count", v("fr")), lit(1))));
+// The slot of an item is the position of its key. The offset adds f * total + gap for each fraction before the slot.
+const step = app("add", v("at"), app("add", app("multiply", app("nth", v("fr"), v("i")), v("total")), v("gap")));
+const offset = let_({ total, s: app("indexOf", v("keys"), ref("key")) }, fold(axes.list(app("take", v("fr"), v("s"))), { i: lit(0), at: lit(0) }, { i: app("add", v("i"), lit(1)), at: step }, v("at")));
+
+["0", "1", "2"].map((k) => run(offset, k)); // => [{ ok: true, value: 0 }, { ok: true, value: 50 }, { ok: true, value: 120 }]
+run(app("sum", app("take", v("fr"), lit(2))), "0"); // => { ok: true, value: 0.5 }
+run(app("values", app("fill", lit(4), lit(0.25))), "0"); // => { ok: true, value: [0.25, 0.25, 0.25, 0.25] }
+```
+
+Tier 2 and a standalone module do not have lists yet. Thus they give a reason for `indexOf` and `fill`, and tier 1 evaluates the program. A list op of tier 2 on an array also goes to tier 1, so each tier gives the same result.
+
 ## Programs are data
 
 <ProgramIR program="overlaps" />

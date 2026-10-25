@@ -120,6 +120,8 @@ Thus a search can keep a stack in a list: `take(stack, 1)` is the top, and `drop
 
 A name of `iterate` or `fold` can hold a list, and each step gives the next list. `get(list, key)` gives the value of the first item with the key. A key that no item has gives `#N/A`. A literal can be a list: `lit(vexList([]))` is the empty list. In the builder, `root.list(items)` makes a list literal, and a list chain has `get(key)`.
 
+An array of a field or of a name is a list where a list op or the axis `list` needs one. The keys are the positions, from `"0"`. Thus `count(fr)`, `nth(fr, s)` and `take(fr, s)` read a config array `fr`, and a layout needs no host functions for it. `indexOf(list, value)` gives the position of a number, a text or a boolean, and `fill(n, value)` makes a list of `n` equal items. A domain or a function of the host with the op comes first.
+
 Thus a force layout keeps all positions in one name of `iterate`, and each step reads the old positions by key. `get` takes the key as a value, so put the key of each record in a field, for example `id`. Tier 2 and a module give a reason for these programs, and tier 1 evaluates them.
 
 ```ts doctest

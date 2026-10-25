@@ -654,8 +654,8 @@ interface TreeRange {
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
 const NUMBER_LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max"]);
 const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
-/** The list ops that build a list from lists (LIST.BUILD), and `get` (LIST.GET). A module gives a reason for them. */
-const BUILD_OPS: ReadonlySet<string> = new Set(["drop", "append", "flat", "without", "get"]);
+/** The list ops that build a list from lists (LIST.BUILD), `get` (LIST.GET) and `indexOf` (LIST.INDEXOF). A module gives a reason for them. */
+const BUILD_OPS: ReadonlySet<string> = new Set(["drop", "append", "flat", "without", "get", "indexOf"]);
 
 /** This function tells if the step of a list op throws for a value of the kind `kind`, which is the wrong kind. */
 const stepThrows = (op: string, kind: Kind | undefined): boolean => (NUMBER_STEPS.has(op) && kind !== "number") || (BOOLEAN_LIST_OPS.has(op) && kind !== "boolean");

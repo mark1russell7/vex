@@ -191,16 +191,19 @@ function prepare(doc: SheetDoc, compiler: Compiler, tables: ReadonlyMap<string, 
   const valueCols = doc.columns.filter((c): c is Extract<Column, { kind: "value" }> => c.kind === "value");
   const formulaCols = doc.columns.filter((c): c is Extract<Column, { kind: "formula" }> => c.kind === "formula");
   // A cell whose text is not a value of its type keeps its text, so a formula that reads it gives an error value.
-  const records: Record<string, Record<string, unknown>> = {};
-  for (const r of doc.rows) {
-    const rec: Record<string, unknown> = {};
-    for (const c of valueCols) {
-      const p = parseValue(c.type, r.cells[c.id] ?? "");
-      if (p.kind === "ok") rec[c.name] = p.value;
-      else if (p.kind === "bad") rec[c.name] = r.cells[c.id];
-    }
-    records[r.id] = rec;
-  }
+  // Object.fromEntries gives an own field for each key. An assignment of the key "__proto__" changes the prototype, so a
+  // row with that id or a column with that name was lost.
+  const records: Record<string, Record<string, unknown>> = Object.fromEntries(
+    doc.rows.map((r) => [
+      r.id,
+      Object.fromEntries(
+        valueCols.flatMap((c) => {
+          const p = parseValue(c.type, r.cells[c.id] ?? "");
+          return p.kind === "ok" ? [[c.name, p.value]] : p.kind === "bad" ? [[c.name, r.cells[c.id]]] : [];
+        }),
+      ),
+    ]),
+  );
   const parents: Record<string, string | null> = Object.fromEntries(doc.rows.map((r) => [r.id, r.parent]));
   const sp = space.tree(records, parents);
   const grid = doc.mode === "grid" ? gridOf(doc) : undefined;

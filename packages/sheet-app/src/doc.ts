@@ -252,6 +252,20 @@ export function freeName(doc: SheetDoc, base: string): string {
   return `${base} ${n}`;
 }
 
+/**
+ * This function gives the columns with unique names, with the rule of `freeName`. A column with the name of an earlier
+ * column, in any case, gets the next free name, for example `a 2`. The engine keys the values of a row by name.
+ */
+export function uniqueNames<C extends { readonly name: string }>(columns: readonly C[]): C[] {
+  const taken = new Set<string>();
+  return columns.map((c) => {
+    let name = c.name;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${c.name} ${n}`;
+    taken.add(name.toLowerCase());
+    return name === c.name ? c : { ...c, name };
+  });
+}
+
 /** This function adds a column at the position `at`, or at the end. */
 export function addColumn(doc: SheetDoc, column: Omit<ValueColumn, "id"> | Omit<FormulaColumn, "id">, at?: number): { readonly doc: SheetDoc; readonly id: string } {
   const id = nextId("c", doc.columns.map((c) => c.id));
@@ -332,9 +346,12 @@ export function isSheetDoc(u: unknown): u is SheetDoc {
   if (u["mode"] !== undefined && u["mode"] !== "grid") return false;
   const cols = u["columns"] as unknown[];
   const colIds = new Set<string>();
+  // Two columns with one name, in any case, are not valid: the engine keys the values of a row by name.
+  const names = new Set<string>();
   for (const c of cols) {
-    if (!isRecord(c) || typeof c["id"] !== "string" || typeof c["name"] !== "string" || colIds.has(c["id"])) return false;
+    if (!isRecord(c) || typeof c["id"] !== "string" || typeof c["name"] !== "string" || colIds.has(c["id"]) || names.has(c["name"].toLowerCase())) return false;
     colIds.add(c["id"]);
+    names.add(c["name"].toLowerCase());
     if (c["kind"] === "value" ? !VALUE_TYPES.includes(c["type"] as ValueType) : c["kind"] !== "formula" || typeof c["formula"] !== "string") return false;
   }
   if (u["chart"] !== undefined && !isChartSpec(u["chart"], colIds)) return false;

@@ -7,7 +7,7 @@ import { Vec2 } from "@mark1russell7/vex-domains";
 import { useMemo, type ReactElement } from "react";
 import { show } from "../lib/format.ts";
 import { getBoxes, resetBoxes, rootOf, setBoxes, useBoxes, type BoxKey, type Boxes, type SpecimenRoot } from "../lib/specimen.ts";
-import { SpaceView, UNIT } from "./SpaceView.tsx";
+import { COLS, ROWS, SpaceView, UNIT } from "./SpaceView.tsx";
 
 const KEYS: readonly BoxKey[] = ["A", "B", "C", "D"];
 
@@ -33,8 +33,8 @@ function pushOf(root: SpecimenRoot) {
     .reduce("add");
 }
 
-/** This function moves each box one step along its push. */
-function relaxOnce(b: Boxes): Boxes {
+/** This function moves each box one step along its push. A box stays on the graph paper, as a drag keeps it. */
+export function relaxOnce(b: Boxes): Boxes {
   const t = pushOf(rootOf(b)).all();
   let next = b;
   for (const k of KEYS) {
@@ -42,7 +42,7 @@ function relaxOnce(b: Boxes): Boxes {
     if (o.tag !== "some") continue;
     const v = o.value;
     const p = next[k].position;
-    next = { ...next, [k]: { ...next[k], position: new Vec2(Math.max(0, Math.min(19 - next[k].size.x, p.x + Math.round(v.x))), Math.max(0, Math.min(14 - next[k].size.y, p.y + Math.round(v.y)))) } };
+    next = { ...next, [k]: { ...next[k], position: new Vec2(Math.max(0, Math.min(COLS - next[k].size.x, p.x + Math.round(v.x))), Math.max(0, Math.min(ROWS - next[k].size.y, p.y + Math.round(v.y)))) } };
   }
   return next;
 }

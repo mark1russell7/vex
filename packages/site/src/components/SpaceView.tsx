@@ -31,8 +31,9 @@ export interface SpaceViewProps {
 
 /** The size of one grid unit, in pixels of the view box. */
 export const UNIT = 24;
-const COLS = 20;
-const ROWS = 15;
+/** The size of the graph paper, in cells: the columns and the rows. */
+export const COLS = 20;
+export const ROWS = 15;
 
 const centre = (b: Boxes, k: string): readonly [number, number] => {
   const box = b[k as BoxKey];

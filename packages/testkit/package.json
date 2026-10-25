@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/vex-testkit",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Vex test kit: fast-check arbitraries, domain law checks and a reference interpreter.",
   "keywords": [
     "vex",

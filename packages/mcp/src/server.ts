@@ -98,6 +98,7 @@ export const vexModule: ProcedureModule = defineModule("vex", [
         .object({ fields: z.record(z.string(), z.string()).optional(), vars: z.record(z.string(), z.string()).optional() })
         .describe('The kind of each field and variable: number, string, boolean, or domain:Name, for example {"fields":{"w":"number"}}'),
       name: z.string().optional().describe("The name of the exported function. The default is run."),
+      space: z.enum(["array", "tree"]).optional().describe("The space of the records. The default is array. The run of a tree takes the parents too: the position of the parent of each record, or -1 for a root."),
     }),
     output: json,
     metadata: {

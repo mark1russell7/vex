@@ -117,6 +117,22 @@ const m = emitModule(share, { domains: [NumDomain], schema: { fields: { v: "numb
 m.ok; // => true
 ```
 
+A module of a tree takes the option `space: "tree"` (from the next release). Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The module has the move `parent` and the axes of a tree.
+
+```ts doctest
+import { app, axes, each, ref } from "@mark1russell7/vex";
+import { emitModule } from "@mark1russell7/vex-compiler";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+// The cost of the team of each person: the salary plus the salaries of the persons under the person.
+const team = app("add", ref("salary"), app("sum", each(axes.descendants, ref("salary"))));
+const m = emitModule(team, { domains: [NumDomain], schema: { fields: { salary: "number" } }, space: "tree" });
+
+m.ok && m.source.includes("export function run(records, vars, parents)"); // => true
+```
+
+A host gives the records in an array, and the parents in an array of the same length: `run([{ salary: 10 }, { salary: 5 }], {}, [-1, 0])` gives the values 15 and 5.
+
 ## A program as data
 
 A program is JSON. `serialize` gives the text, and `parse` checks the text and gives the program. A literal of a domain needs `encode` and `decode` in its domain.

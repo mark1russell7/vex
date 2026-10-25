@@ -288,6 +288,8 @@ The decision of 2026-10-24: the vex session decided the four questions of the st
 - List ops build lists, and a list can be the state of `iterate` (design E). Design E comes first.
 - The engine uses sheets as they are, with no self node. A sheet column already reads itself at the children or at the parent.
 
+The status on 2026-10-25: tree spaces are in modules (COMPILE.MODULE.TREE), the first part of design D (§13.3). The formula columns of a sheet in a module are the second part.
+
 The current language already has two forms of recursion:
 
 | Recursion | The form of Vex | Why it ends |
@@ -496,7 +498,9 @@ The source of tier 2 has approximately seven lines for each node: the checks of 
 - A node of the memo with a loop of its own is one function of its keys. Two nodes with the same expression share the function.
 - A node whose key is only in one test of a list op keeps its items. One pass gives the items, and each lookup uses them. With the test `===`, the lookup is a map of the groups. With `<` and values that do not decrease, the lookup is a binary search on the prefixes.
 
-The printer takes a part of the language. It takes an array space, the fields and the variables of the schema, and the axes `all`, `others` and `window`. Each op site must have a static op. Another construct gives a reason. A property compares random programs with the interpreter, and the grid pilot compares the module with the code of ireko. The golden files `__golden__/module-*.js` keep the text of some modules, so a change of the text shows in review.
+The printer takes a part of the language. It takes an array space or a tree space, the fields and the variables of the schema, and the axes `all`, `others` and `window`. A tree space also has the move `parent` and the axes of a tree ("Tree spaces" below). Each op site must have a static op, and another construct gives a reason.
+
+A property compares random programs with the interpreter, and the grid pilot compares the module with the code of ireko. The golden files `__golden__/module-*.js` keep the text of some modules, so a change of the text shows in review.
 
 | The strategy `grid` | Bytes | Gzip |
 |---|---|---|
@@ -621,3 +625,30 @@ The key of `key` and the position of `index` can be an expression. The expressio
 - A module uses the helpers `I` and `K`, which check the position or the key.
 
 A cell reference is data of an extension, not an expression, so it takes only fixed moves. A formula reads a formula column at a computed row as the one item of the axis `window(0, 0)`, whose address has the computed move.
+
+#### Tree spaces (design D)
+
+The engine of ireko walks a tree of nodes. Thus a module takes a tree space too (COMPILE.MODULE.TREE). With the option `space: "tree"`, the run takes a third argument: the position of the parent of each record, or -1 for a root. The key of a record is the text of its position, as in an array space.
+
+The run checks the parents once, before the loop over the keys. A parent that is not -1 or a position, or a cycle of parents, throws a `VexContractError`. The interpreter throws a `TypeError` for the same parents when it makes the space.
+
+Before the loop over the keys, the run makes only the parts of the tree that the program reads:
+
+| Part | Helper | For |
+|---|---|---|
+| The parent of each record, in an `Int32Array` | `PT` | Each tree |
+| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the two parts below |
+| The siblings of each record with the record itself, and its position among them | `SG` | `siblings`, `window` and the offsets |
+| The keys depth first, and the position and the size of the subtree of each key | `PR` | `descendants` |
+
+Thus the targets of each axis are a range of an array, and the loop over them is a `for` loop over that range. The reverse order is the same loop from the end.
+
+- `children` and `successors` are the children of the focus. `siblings` are the siblings of the focus, and the loop skips the focus.
+- `descendants` are the keys after the focus in the order depth first, as many as the subtree of the focus has under it.
+- `window(from, to)` is the range of the siblings from the position of the focus plus `from` to its position plus `to`.
+- `ancestors` and `reachable` make an array for each loop. `predecessors` is the parent, or no target for a root.
+- The move `parent` is the helper `UP`, and an offset is the helper `SO`. Each one gives the error of Vex outside the tree.
+
+A property compares random programs over random trees with the interpreter (P17). A random order of the keys gives each key a parent before it in that order. Thus a parent can come after its child in the key order. The programs read the parent, the siblings and each axis of a tree, also in the reverse order and from an address. The text of a module of a tree is in the golden file `__golden__/module-tree.js`.
+
+The speed gate of the compiler has a tree case. It gives the cost of the team and the depth of each of 1000 nodes, against loops with a stack. The nightly run gives its numbers, and its limit is 3.

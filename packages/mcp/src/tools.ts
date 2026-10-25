@@ -155,9 +155,9 @@ export function explainAt(input: RunInput & { readonly origin: string }): string
 }
 
 /** This function gives the source of a standalone ES module of a program, or the reason that it has none. */
-export function moduleOf(input: { readonly program: unknown; readonly domains?: readonly string[] | undefined; readonly schema: Schema; readonly name?: string | undefined }): unknown {
+export function moduleOf(input: { readonly program: unknown; readonly domains?: readonly string[] | undefined; readonly schema: Schema; readonly name?: string | undefined; readonly space?: "array" | "tree" | undefined }): unknown {
   const domains = domainsOf(input.domains);
   const e = programOf(input.program, domains);
-  const m = emitModule(e, { domains, schema: input.schema, ...(input.name === undefined ? {} : { name: input.name }) });
+  const m = emitModule(e, { domains, schema: input.schema, ...(input.name === undefined ? {} : { name: input.name }), ...(input.space === undefined ? {} : { space: input.space }) });
   return m.ok ? { ok: true, source: m.source } : { ok: false, reason: m.reason };
 }

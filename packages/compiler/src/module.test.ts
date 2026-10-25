@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
+import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
@@ -13,7 +13,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { emitModule, type ModuleOptions } from "./module.ts";
 
-type Run = (records: unknown, vars: unknown) => readonly unknown[];
+type Run = (records: unknown, vars: unknown, parents?: unknown) => readonly unknown[];
 interface Loaded {
   readonly run: Run;
   readonly VEX_ERROR: unknown;
@@ -73,6 +73,33 @@ function expectSame(m: Loaded, e: Expr, records: readonly unknown[] = RECORDS, v
   });
   expect(got).toStrictEqual(expected);
 }
+
+/** The options of a module of a tree space (COMPILE.MODULE.TREE), and the move to the parent. */
+const TREE: ModuleOptions = { ...OPTIONS, space: "tree" };
+const PARENT = { t: "parent" } as const;
+
+/** This function gives the tree space of some records: the key of a record is the text of its position, and -1 is a root. */
+function treeOf(records: readonly unknown[], parents: readonly number[]): Space {
+  return space.tree(Object.fromEntries(records.map((r, i) => [String(i), r])), Object.fromEntries(parents.map((p, i) => [String(i), p < 0 ? null : String(p)])));
+}
+
+/** This function compares the values of a module of a tree space with the interpreter at each key. */
+function expectSameTree(m: Loaded, e: Expr, records: readonly unknown[], parents: readonly number[], vars: Readonly<Record<string, unknown>> = VARS, options: ModuleOptions = TREE): void {
+  const got = m.run(structuredClone(records), vars, [...parents]);
+  const s = treeOf(records, parents);
+  const expected = s.keys.map((origin) => {
+    const r = evaluate(e, { space: s, origin, vars, ...(options.domains === undefined ? {} : { domains: options.domains }) });
+    return r.ok ? r.value : m.VEX_ERROR;
+  });
+  expect(got).toStrictEqual(expected);
+}
+
+/**
+ * A tree of 9 records with two roots, 0 and 5. A parent can come after its child: 4 is the parent of 3 and of 6. The
+ * record 8 is the third child of 4, and 7 is the only child of 5.
+ */
+const PARENTS: readonly number[] = [-1, 0, 0, 4, 1, -1, 4, 5, 4];
+const TREE_RECORDS = MANY.slice(0, 9);
 
 /** This function makes a function from its source, so the test decides the text that the printer reads. */
 function fnOf(src: string, outside?: unknown): (...a: never[]) => unknown {
@@ -1128,47 +1155,236 @@ describe("COMPILE.MODULE: the text of a module", () => {
   });
 });
 
-/** A program over numbers, texts and booleans from the whole part of the language that a module has. */
-const program = fc.letrec<{ num: Expr; bool: Expr }>((tie) => ({
-  num: fc.oneof(
-    { maxDepth: 4, depthSize: "small" },
-    fc.integer({ min: -3, max: 3 }).map((x) => lit(x)),
-    fc.constantFrom(n, w, v("a"), ref("n", [{ t: "origin" }]), ref("w", [offset(-1)]), ref("n", [offset(1)]), ref("w", [index(n)]), ref("n", [index(v("a"))]), ref("w", [offset(1), key("0")]), ref("n", [offset(-1), { t: "origin" }])),
-    tie("num").map((x) => ref("w", [index(x)])),
-    fc.tuple(fc.constantFrom("add", "subtract", "multiply", "divide", "max", "min", "mod"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
-    fc.tuple(tie("bool"), tie("num"), tie("num")).map(([c, a, b]) => op("if", c, a, b)),
-    fc.tuple(tie("num"), tie("num")).map(([a, b]) => op("ifError", a, b)),
-    fc
-      .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.reverse(axes.window(-1, 0))), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(undefined, [offset(1)], [index(1)], [{ t: "origin" as const }], [index(n)], [index(v("a"))], [offset(1), index(0)]))
-      .map(([o, a, body, test, strict, at]) => op(o, each(test === undefined ? a : axes.where(a, test), body, at), ...(strict ? [lit({ strict: true })] : []))),
-    fc.tuple(tie("num"), tie("num")).map(([a, b]) => let_({ x: a }, op("add", v("x"), b))),
-    fc.constant(op("length", ref("s"))),
-    // The loops: a name s with a first value and a step, as an iteration or as a fold over an axis.
-    fc.tuple(fc.integer({ min: 0, max: 3 }), tie("num"), tie("num")).map(([k, init, step]) => iterate(k, { s: init }, { s: op("add", v("s"), step) }, v("s"))),
-    fc
-      .tuple(fc.constantFrom(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.reverse(axes.window(-1, 0))), tie("num"), tie("num"), fc.constantFrom(undefined, [offset(1)]))
-      // The step depends on the order of the targets, so a loop in the wrong order gives another value.
-      .map(([a, init, step, at]) => fold(a, { s: init }, { s: op("subtract", step, v("s")) }, v("s"), at)),
-  ),
-  bool: fc.oneof(
-    { maxDepth: 4, depthSize: "small" },
-    fc.constantFrom(ref("b"), lit(true), op("eq", ref("s"), v("t"))),
-    fc.tuple(fc.constantFrom("gt", "lt", "eq"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
-    fc.tuple(fc.constantFrom("and", "or"), tie("bool"), tie("bool")).map(([o, a, b]) => op(o, a, b)),
-    tie("bool").map((x) => op("not", x)),
-    fc.tuple(fc.constantFrom("any", "all", "none"), tie("bool")).map(([o, body]) => op(o, each(axes.all, body))),
-  ),
-}));
+describe("COMPILE.MODULE.TREE: a module of a tree space", () => {
+  it("COMPILE.MODULE.TREE: the run takes the parents, and a parent that is not -1 or a position, or a cycle, throws a VexContractError", () => {
+    const e = op("count", each(axes.children, n));
+    const m = make(sourceOf(e, TREE));
+    expectSameTree(m, e, TREE_RECORDS, PARENTS);
+    expect(() => m.run(RECORDS, VARS)).toThrow("the parents are not an array with one parent for each record");
+    expect(() => m.run(RECORDS, VARS, [-1, 0])).toThrow(m.VexContractError);
+    for (const bad of [3, -2, 1.5, "0", null, Number.NaN]) expect(() => m.run(RECORDS, VARS, [-1, 0, bad])).toThrow("the parent of the record 2 is not -1 or the position of a record");
+    expect(() => m.run(RECORDS, VARS, [0, -1, -1])).toThrow("the parents of the record 0 make a cycle");
+    expect(() => m.run(RECORDS, VARS, [-1, 2, 1])).toThrow("the parents of the record 1 make a cycle");
+    expect(() => m.run(RECORDS, VARS, [1, 2, 0])).toThrow(m.VexContractError);
+    // The interpreter throws for the same parents, when it makes the space.
+    expect(() => treeOf(RECORDS, [-1, 2, 1])).toThrow(TypeError);
+    // A walk that meets a key of an earlier walk ends there. -0 is the position 0.
+    expect(m.run(RECORDS, VARS, [-1, 0, 1])).toEqual([1, 1, 0]);
+    expect(m.run(RECORDS, VARS, [2, 2, -1])).toEqual([0, 0, 2]);
+    expect(m.run(RECORDS, VARS, [-1, -0, -0])).toEqual([2, 0, 0]);
+    expect(m.run([], VARS, [])).toEqual([]);
+    // The module does not change the parents.
+    const parents = [-1, 0, 0];
+    m.run(RECORDS, VARS, parents);
+    expect(parents).toEqual([-1, 0, 0]);
+    // Only the module of a tree space takes the parents. A space of another name gives a reason.
+    expect(sourceOf(e, TREE)).toContain("export function run(records, vars, parents) {");
+    expect(sourceOf(n)).toContain("export function run(records, vars) {");
+    expect(reasonOf(n, { ...OPTIONS, space: "grid" as "tree" })).toBe('the space "grid" is not "array" or "tree"');
+  });
 
-const records = fc.array(
-  fc.record({
-    n: fc.integer({ min: -4, max: 4 }),
-    w: fc.oneof(fc.integer({ min: -3, max: 3 }), fc.double({ noNaN: true, min: -10, max: 10 }), fc.constantFrom(Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1e308)),
-    s: fc.constantFrom("", "x", "abc"),
-    b: fc.boolean(),
-  }),
-  { maxLength: 6 },
-);
+  it("COMPILE.MODULE.TREE NAV.PARENT NAV.OFFSET.TREE AXIS.TREE AXIS.GRAPH AXIS.WINDOW: the moves and the axes of a tree give the targets of the interpreter", async () => {
+    const safe = (x: Expr): Expr => op("ifError", x, lit(-99));
+    // The step depends on the order of the targets, so a loop in another order gives another value.
+    const order = (a: Axis, at?: readonly Move[]): Expr => safe(fold(a, { s: lit(0) }, { s: op("subtract", op("multiply", v("s"), lit(3)), n) }, v("s"), at));
+    const e = rec({
+      moves: rec({
+        parent: safe(ref("w", [PARENT])),
+        grand: safe(ref("n", [PARENT, PARENT])),
+        next: safe(ref("n", [offset(1)])),
+        prev: safe(ref("w", [offset(-1)])),
+        uncle: safe(ref("n", [PARENT, offset(1)])),
+        far: safe(ref("n", [offset(5)])),
+        zero: ref("n", [offset(0)]),
+        two: safe(ref("n", [offset(1, 1)])),
+        half: safe(ref("n", [offset(0.5)])),
+        fixed: safe(ref("n", [key("4"), PARENT])),
+        root: safe(ref("n", [key("0"), PARENT])),
+      }),
+      axes: rec({
+        children: order(axes.children),
+        ancestors: order(axes.ancestors),
+        descendants: order(axes.descendants),
+        siblings: order(axes.siblings),
+        window: order(axes.window(-1, 1)),
+        wide: order(axes.window(-20, 20)),
+        none: order(axes.window(2, 1)),
+        successors: order(axes.successors),
+        predecessors: order(axes.predecessors),
+        reachable: order(axes.reachable),
+        all: order(axes.all),
+        others: op("sum", each(axes.others, n)),
+      }),
+      reversed: rec({
+        children: order(axes.reverse(axes.children)),
+        descendants: order(axes.reverse(axes.descendants)),
+        ancestors: order(axes.reverse(axes.ancestors)),
+        window: order(axes.reverse(axes.window(-1, 1))),
+      }),
+      at: rec({
+        parent: order(axes.children, [PARENT]),
+        cousins: order(axes.descendants, [PARENT, PARENT]),
+        next: order(axes.siblings, [offset(1)]),
+      }),
+      // EXAMPLE.TREE: the cost of the team of a person, and the depth of a person.
+      team: op("add", w, op("sum", each(axes.descendants, w))),
+      depth: op("count", each(axes.ancestors, n)),
+      tested: op("count", each(axes.where(axes.descendants, ref("b")), n)),
+      list: let_({ xs: each(axes.children, n) }, op("sum", v("xs"))),
+      // A node of the memo with a loop over the children of each key evaluates once for each run.
+      memo: op("sum", each(axes.all, op("count", each(axes.children, n)))),
+    });
+    const source = sourceOf(e, TREE);
+    await expect(source).toMatchFileSnapshot("./__golden__/module-tree.js");
+    const m = make(source);
+    expectSameTree(m, e, TREE_RECORDS, PARENTS);
+    // A flat tree, a chain, one root with each other key as its child, and an empty tree.
+    expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map(() => -1));
+    expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map((_r, i) => i - 1));
+    expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map((_r, i) => (i === 0 ? -1 : 0)));
+    expectSameTree(m, e, [], []);
+  });
+
+  it("COMPILE.MODULE.TREE: a module computes only the parts of the tree that the program reads", () => {
+    // The parent needs no lists of children, the children need no order, and a module of an array space has no tree.
+    const parts = (e: Expr, options: ModuleOptions = TREE): string => {
+      const source = sourceOf(e, options);
+      return ["PT", "CH", "SG", "PR", "UP", "SO", "AN", "BF"].filter((x) => source.includes(`function ${x}(`)).join(" ");
+    };
+    expect(parts(ref("n", [PARENT]))).toBe("PT UP");
+    expect(parts(op("count", each(axes.children, n)))).toBe("PT CH");
+    expect(parts(op("count", each(axes.siblings, n)))).toBe("PT CH SG");
+    expect(parts(ref("n", [offset(1)]))).toBe("PT CH SG SO");
+    expect(parts(op("count", each(axes.descendants, n)))).toBe("PT CH PR");
+    expect(parts(op("count", each(axes.ancestors, n)))).toBe("PT AN");
+    expect(parts(op("count", each(axes.reachable, n)))).toBe("PT CH BF");
+    expect(parts(op("count", each(axes.all, n)))).toBe("PT");
+    expect(parts(ref("n", [PARENT]), OPTIONS)).toBe("");
+    // In an array space, the move parent fails at each key, and the axes of a tree give a reason. In a tree, the move
+    // parent reads the index of the move before it, so that move needs no check of its own.
+    expectSame(make(sourceOf(op("ifError", ref("n", [PARENT]), lit(1)))), op("ifError", ref("n", [PARENT]), lit(1)));
+    expect(sourceOf(ref("n", [offset(1), PARENT]))).toContain('R[(X(o + 1, n), F())]["n"]');
+    expect(sourceOf(ref("n", [offset(1), PARENT]), TREE)).toContain('R[UP(P, SO(GP, SI, o, 1))]["n"]');
+    expect(reasonOf(op("count", each(axes.descendants, n)))).toBe('the axis "descendants"');
+    expect(reasonOf(op("count", each(axes.reachable, n)))).toBe('the axis "reachable"');
+    // A tree space has no neighbors of a grid, and a module has no axis other or table.
+    expect(reasonOf(op("count", each(axes.neighbors(4), n)), TREE)).toBe('the axis "neighbors"');
+    expect(reasonOf(op("count", each(axes.window(0.5, 1), n)), TREE)).toBe('the axis "window" with a bound that is not an integer');
+  });
+
+  it("COMPILE.MODULE.TREE: a costly part of a loop over the children is a column of the run, and a node of the memo can have the parent of the origin as its key", () => {
+    const heavy = op("max", op("abs", op("subtract", w, op("divide", n, lit(2)))), op("abs", op("add", w, op("multiply", n, lit(3)))));
+    const e = rec({
+      columns: op("sum", each(axes.all, op("sum", each(axes.children, heavy)))),
+      // The key is the field n of the parent of the origin, so the node keeps its items. A root has no parent, so its key
+      // is an error.
+      keyed: op("ifError", op("count", each(axes.where(axes.all, op("eq", n, ref("n", [{ t: "origin" }, PARENT]))), w)), lit(-1)),
+      // Inside the loop, the parent is the parent of the target.
+      targets: op("count", each(axes.where(axes.all, op("eq", n, op("ifError", ref("n", [PARENT]), lit(9)))), w)),
+    });
+    const source = sourceOf(e, TREE);
+    expect(source).toContain("Q((");
+    expect(source).toContain("= S(n, 1, ");
+    expectSameTree(make(source), e, TREE_RECORDS, PARENTS);
+    expectSameTree(make(source), e, TREE_RECORDS, TREE_RECORDS.map((_r, i) => i - 1));
+  });
+});
+
+/**
+ * The parts of a space in a grammar of random programs: the reads of a field, the axes of the list ops and of the
+ * folds, the addresses of the axes, and the axes of the list ops over booleans.
+ */
+interface Grammar {
+  readonly reads: readonly Expr[];
+  readonly axes: readonly Axis[];
+  readonly ats: readonly (readonly Move[] | undefined)[];
+  readonly foldAts: readonly (readonly Move[] | undefined)[];
+  readonly boolAxes: readonly [Axis, ...Axis[]];
+}
+
+/** This function gives the programs over numbers, texts and booleans of a grammar, from the part of the language that a module has. */
+const programOf = (g: Grammar): { readonly num: fc.Arbitrary<Expr>; readonly bool: fc.Arbitrary<Expr> } =>
+  fc.letrec<{ num: Expr; bool: Expr }>((tie) => ({
+    num: fc.oneof(
+      { maxDepth: 4, depthSize: "small" },
+      fc.integer({ min: -3, max: 3 }).map((x) => lit(x)),
+      fc.constantFrom(...g.reads),
+      tie("num").map((x) => ref("w", [index(x)])),
+      fc.tuple(fc.constantFrom("add", "subtract", "multiply", "divide", "max", "min", "mod"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
+      fc.tuple(tie("bool"), tie("num"), tie("num")).map(([c, a, b]) => op("if", c, a, b)),
+      fc.tuple(tie("num"), tie("num")).map(([a, b]) => op("ifError", a, b)),
+      fc
+        .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(...g.axes), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(...g.ats))
+        .map(([o, a, body, test, strict, at]) => op(o, each(test === undefined ? a : axes.where(a, test), body, at), ...(strict ? [lit({ strict: true })] : []))),
+      fc.tuple(tie("num"), tie("num")).map(([a, b]) => let_({ x: a }, op("add", v("x"), b))),
+      fc.constant(op("length", ref("s"))),
+      // The loops: a name s with a first value and a step, as an iteration or as a fold over an axis.
+      fc.tuple(fc.integer({ min: 0, max: 3 }), tie("num"), tie("num")).map(([k, init, step]) => iterate(k, { s: init }, { s: op("add", v("s"), step) }, v("s"))),
+      fc
+        .tuple(fc.constantFrom(...g.axes), tie("num"), tie("num"), fc.constantFrom(...g.foldAts))
+        // The step depends on the order of the targets, so a loop in the wrong order gives another value.
+        .map(([a, init, step, at]) => fold(a, { s: init }, { s: op("subtract", step, v("s")) }, v("s"), at)),
+    ),
+    bool: fc.oneof(
+      { maxDepth: 4, depthSize: "small" },
+      fc.constantFrom(ref("b"), lit(true), op("eq", ref("s"), v("t"))),
+      fc.tuple(fc.constantFrom("gt", "lt", "eq"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
+      fc.tuple(fc.constantFrom("and", "or"), tie("bool"), tie("bool")).map(([o, a, b]) => op(o, a, b)),
+      tie("bool").map((x) => op("not", x)),
+      // One axis keeps the programs of the array space as they were before the tree space.
+      g.boolAxes.length === 1
+        ? fc.tuple(fc.constantFrom("any", "all", "none"), tie("bool")).map(([o, body]) => op(o, each(g.boolAxes[0], body)))
+        : fc.tuple(fc.constantFrom("any", "all", "none"), fc.constantFrom(...g.boolAxes), tie("bool")).map(([o, a, body]) => op(o, each(a, body))),
+    ),
+  }));
+
+/** A program of an array space. */
+const program = programOf({
+  reads: [n, w, v("a"), ref("n", [{ t: "origin" }]), ref("w", [offset(-1)]), ref("n", [offset(1)]), ref("w", [index(n)]), ref("n", [index(v("a"))]), ref("w", [offset(1), key("0")]), ref("n", [offset(-1), { t: "origin" }])],
+  axes: [axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.reverse(axes.window(-1, 0))],
+  ats: [undefined, [offset(1)], [index(1)], [{ t: "origin" as const }], [index(n)], [index(v("a"))], [offset(1), index(0)]],
+  foldAts: [undefined, [offset(1)]],
+  boolAxes: [axes.all],
+});
+
+/** A program of a tree space: the move parent, the offsets among the siblings, and the axes of a tree (COMPILE.MODULE.TREE). */
+const treeProgram = programOf({
+  reads: [n, w, ref("n", [{ t: "origin" }]), ref("w", [PARENT]), ref("n", [PARENT, PARENT]), ref("w", [offset(-1)]), ref("n", [offset(1)]), ref("w", [PARENT, offset(1)]), ref("n", [index(n)]), ref("w", [key("2"), PARENT])],
+  axes: [axes.children, axes.ancestors, axes.descendants, axes.siblings, axes.window(-1, 1), axes.successors, axes.predecessors, axes.reachable, axes.reverse(axes.children), axes.reverse(axes.descendants), axes.reverse(axes.ancestors), axes.reverse(axes.window(-2, 0)), axes.all, axes.others],
+  ats: [undefined, [PARENT], [offset(1)], [index(1)], [{ t: "origin" as const }], [PARENT, PARENT], [index(n)]],
+  foldAts: [undefined, [PARENT], [offset(-1)]],
+  boolAxes: [axes.children, axes.descendants, axes.siblings],
+});
+
+const record = fc.record({
+  n: fc.integer({ min: -4, max: 4 }),
+  w: fc.oneof(fc.integer({ min: -3, max: 3 }), fc.double({ noNaN: true, min: -10, max: 10 }), fc.constantFrom(Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1e308)),
+  s: fc.constantFrom("", "x", "abc"),
+  b: fc.boolean(),
+});
+const records = fc.array(record, { maxLength: 6 });
+
+/**
+ * The records of a random tree and their parents. A random order of the keys gives each key a parent among the keys
+ * before it, or no parent. Thus a parent can come after its child in the key order, and the tree has no cycle.
+ */
+const trees: fc.Arbitrary<readonly [readonly unknown[], readonly number[]]> = fc.array(record, { maxLength: 9 }).chain((rs) => {
+  const keys = rs.map((_r, i) => i);
+  return fc.tuple(fc.constant(rs), fc.shuffledSubarray(keys, { minLength: keys.length, maxLength: keys.length }), fc.array(fc.nat(), { minLength: keys.length, maxLength: keys.length })).map(([xs, order, picks]): readonly [readonly unknown[], readonly number[]] => {
+    const parents = keys.map(() => -1);
+    order.forEach((k, i) => {
+      // An even pick gives one of the two keys just before the key in the order, so the tree gets deep. An odd pick gives
+      // no parent for c = 0, or the key at the place c - 1.
+      const p = picks[i] ?? 0;
+      const c = p % 2 === 0 && i > 0 ? i - ((p >> 1) % Math.min(2, i)) : (p >> 1) % (i + 1);
+      parents[k] = c === 0 ? -1 : (order[c - 1] ?? -1);
+    });
+    return [xs, parents];
+  });
+});
+
+/** This function gives the depth of the key at the position `k` of a tree: 0 for a root. */
+const depth = (parents: readonly number[], k: number): number => (k < 0 ? -1 : 1 + depth(parents, parents[k] ?? -1));
 
 const S_ORIGIN = ref("s", [{ t: "origin" }]);
 
@@ -1289,6 +1505,20 @@ describe("COMPILE.MODULE: random programs", () => {
         expectSame(make(sourceOf(e)), e, rs, { a, t: "x" });
       }),
     );
+  });
+
+  it("P17 COMPILE.MODULE.TREE: a module of a tree space gives the value of the interpreter at each key, or VEX_ERROR", () => {
+    fc.assert(
+      fc.property(fc.oneof(treeProgram.num, treeProgram.bool), trees, fc.integer({ min: -3, max: 3 }), (e, [rs, parents], a) => {
+        expectSameTree(make(sourceOf(e, TREE)), e, rs, parents, { a, t: "x" });
+      }),
+    );
+    // The random trees have depth: a fixed sample has trees with a key of depth 3 or more, and trees with two roots or more.
+    const sample = fc.sample(trees, { seed: 20261024, numRuns: 200 });
+    expect(sample.filter(([, p]) => p.some((_x, k) => depth(p, k) >= 3)).length).toBeGreaterThan(40);
+    expect(sample.filter(([, p]) => p.filter((x) => x < 0).length >= 2).length).toBeGreaterThan(60);
+    // Some parents come after their child in the key order.
+    expect(sample.filter(([, p]) => p.some((x, k) => x > k)).length).toBeGreaterThan(60);
   });
 
   it("P17 COMPILE.MODULE: a module gives the value of the interpreter at each key, or VEX_ERROR", () => {

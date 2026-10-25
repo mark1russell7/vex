@@ -15,9 +15,10 @@
  * before the loop over the keys. A node of the memo is one function of its other keys, with a map of its values. The
  * nodes with the same expression share the function.
  *
- * The printer takes a part of the language. It takes an array space of records, the fields and the variables of the
- * schema, and the axes `all`, `others` and `window`. The kinds of each op site must decide its op. Another construct
- * gives a reason, not code.
+ * The printer takes a part of the language. It takes an array space or a tree space of records, and the fields and
+ * the variables of the schema. It takes the axes `all`, `others` and `window`. A tree space also has the move `parent` and the
+ * axes of a tree (COMPILE.MODULE.TREE). The kinds of each op site must decide its op. Another construct gives a
+ * reason, not code.
  */
 import { addrExprs, children, fromDocument, isDocument, isFieldName, lit, moveExpr, shapeError, type AnyDomain, type Axis, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
@@ -30,6 +31,12 @@ export interface ModuleOptions {
   readonly schema: Schema;
   /** The name of the function that the module exports. The default is `run`. */
   readonly name?: string;
+  /**
+   * The space of the records. In both spaces, the key of a record is the text of its position. The default `array`
+   * has no parents. A `tree` takes the parents as the third argument of the run (COMPILE.MODULE.TREE). Each entry
+   * is the position of the parent of its record, or -1 for a root.
+   */
+  readonly space?: "array" | "tree";
 }
 
 /** The source of a standalone module, or the reason that the program cannot be one. */
@@ -168,7 +175,10 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT" | TreeHelper;
+
+/** The helpers of a tree space (COMPILE.MODULE.TREE). */
+type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -201,6 +211,72 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   TK: "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
   NT: "function NT(l, i, s) { const o = V(l, s); return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F(); }",
+  // The parents of a tree space: the position of the parent of each record, or -1 for a root. A walk up from each record
+  // marks its keys, so a walk that meets a key of the same walk finds a cycle. Each key is in one walk, so the check is linear.
+  PT: [
+    "function PT(p, n) {",
+    '  if (!Array.isArray(p) || p.length !== n) C("the parents are not an array with one parent for each record");',
+    "  const P = new Int32Array(n), s = new Uint8Array(n);",
+    "  for (let i = 0; i < n; i++) {",
+    "    const x = p[i];",
+    "    if (x !== -1 && !(Number.isInteger(x) && x >= 0 && x < n)) C(`the parent of the record ${i} is not -1 or the position of a record`);",
+    "    P[i] = x;",
+    "  }",
+    "  for (let i = 0; i < n; i++) {",
+    "    let k = i;",
+    "    while (k >= 0 && s[k] === 0) {",
+    "      s[k] = 1;",
+    "      k = P[k];",
+    "    }",
+    "    if (k >= 0 && s[k] === 1) C(`the parents of the record ${i} make a cycle`);",
+    "    for (k = i; k >= 0 && s[k] === 1; k = P[k]) s[k] = 2;",
+    "  }",
+    "  return P;",
+    "}",
+  ].join("\n"),
+  // The children of each record and the roots, in key order.
+  CH: [
+    "function CH(P, n) {",
+    "  const h = [], r = [];",
+    "  for (let i = 0; i < n; i++) h.push([]);",
+    "  for (let i = 0; i < n; i++) (P[i] < 0 ? r : h[P[i]]).push(i);",
+    "  return [h, r];",
+    "}",
+  ].join("\n"),
+  // The siblings of each record with the record itself, and its position among them. The roots are the siblings of a root.
+  SG: [
+    "function SG(P, h, r, n) {",
+    "  const g = [], s = new Int32Array(n);",
+    "  for (let i = 0; i < n; i++) g.push(P[i] < 0 ? r : h[P[i]]);",
+    "  for (const x of [r, ...h]) for (let q = 0; q < x.length; q++) s[x[q]] = q;",
+    "  return [g, s];",
+    "}",
+  ].join("\n"),
+  // The keys depth first, with each parent before its children, and the position and the size of the subtree of each
+  // record. Thus the descendants of a record are the keys after it, as many as its subtree has under it.
+  PR: [
+    "function PR(h, r, n) {",
+    "  const o = [], at = new Int32Array(n), z = new Int32Array(n), st = [];",
+    "  for (let q = r.length - 1; q >= 0; q--) st.push(r[q]);",
+    "  while (st.length > 0) {",
+    "    const k = st.pop();",
+    "    at[k] = o.length;",
+    "    o.push(k);",
+    "    for (let q = h[k].length - 1; q >= 0; q--) st.push(h[k][q]);",
+    "  }",
+    "  for (let q = n - 1; q >= 0; q--) {",
+    "    const k = o[q];",
+    "    z[k] = 1;",
+    "    for (const c of h[k]) z[k] += z[c];",
+    "  }",
+    "  return [o, at, z];",
+    "}",
+  ].join("\n"),
+  UP: "function UP(P, k) { const p = P[k]; return p < 0 ? F() : p; }",
+  SO: "function SO(g, s, k, d) { const t = g[k][s[k] + d]; return t === undefined ? F() : t; }",
+  AN: "function AN(P, k) { const o = []; for (let p = P[k]; p >= 0; p = P[p]) o.push(p); return o; }",
+  // The record and the keys under it, in the order of a breadth-first search. A tree has no cycle, so no key comes twice.
+  BF: "function BF(h, k) { const o = [k]; for (let i = 0; i < o.length; i++) for (const c of h[o[i]]) o.push(c); return o; }",
   // The memo of a function of one key, and of more keys. -0 has its own entry, because an op can tell it from 0.
   M1: [
     "function M1(f) {",
@@ -363,7 +439,42 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
   SB: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"],
+  // Each module has C, and each move uses F (#move), so these needs only complete the list.
+  // Stryker disable next-line ArrayDeclaration: see the comment above
+  PT: ["C"], UP: ["F"], SO: ["F"],
+  CH: [], SG: [], PR: [], AN: [], BF: [],
 };
+
+/** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
+type TreePart = "children" | "siblings" | "order";
+
+/** The statement of each part of a tree in a run, with the helper that computes it. */
+const TREE_PARTS: Readonly<Record<TreePart, readonly [TreeHelper, string]>> = {
+  children: ["CH", "const [H, RT] = CH(P, n);"],
+  siblings: ["SG", "const [GP, SI] = SG(P, H, RT, n);"],
+  order: ["PR", "const [PO, PI, SZ] = PR(H, RT, n);"],
+};
+
+/** An axis whose targets in a tree space are a range of an array of positions: an axis of a tree, or a window. */
+type TreeAxis = Extract<Axis, { readonly t: "children" | "ancestors" | "descendants" | "siblings" | "successors" | "predecessors" | "reachable" | "window" }>;
+
+/** The axes of a tree space in a module, and the axes that a module of an array space does not have. */
+const TREE_AXES: ReadonlySet<string> = new Set(["children", "ancestors", "descendants", "siblings", "successors", "predecessors", "reachable"]);
+
+/** This function tells if an axis has its targets in a range of an array of positions in a tree space. */
+const isTreeAxis = (a: Axis): a is TreeAxis => a.t === "window" || TREE_AXES.has(a.t);
+
+/**
+ * The targets of an axis of a tree space: the statements before the loop, and the positions `a[q]` for `q` from `lo` up
+ * to `hi`. The loop skips the key `skip`.
+ */
+interface TreeRange {
+  readonly s: readonly string[];
+  readonly a: string;
+  readonly lo: string;
+  readonly hi: string;
+  readonly skip: string | undefined;
+}
 
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
@@ -622,6 +733,9 @@ class Printer {
   memos = false;
   /** The parts of the helper S that the nodes of the memo that keep their items need (helperS). */
   readonly features = new Set<Feature>();
+  /** True for a tree space, and the parts of the tree that the program reads (COMPILE.MODULE.TREE). */
+  readonly #tree: boolean;
+  readonly treeParts = new Set<TreePart>();
   #names = 0;
   /** The number of the next bound function, and of the next printed function. */
   #fnIds = 0;
@@ -663,10 +777,17 @@ class Printer {
     this.#facts = factsOf({ domains: this.#domains });
     this.#schema = options.schema;
     this.#memo = memoOf(expr);
+    this.#tree = options.space === "tree";
   }
 
   use(name: Helper): string {
     this.helpers.add(name);
+    return name;
+  }
+
+  /** This method gives the name of a part of the tree, for example `H` for the children, and marks the part as read. */
+  #part(part: TreePart, name: string): string {
+    this.treeParts.add(part);
     return name;
   }
 
@@ -958,11 +1079,12 @@ class Printer {
     let index = ctx.focus;
     let next = 0;
     // A move that can fail keeps its check when a later fixed key, index or origin replaces its index (V-052). The focus
-    // and the origin cannot fail, and the code of a move from an index has the code of that index in it.
+    // and the origin cannot fail, and the code of a move from an index has the code of that index in it. In a tree,
+    // the move parent is a move from an index.
     let fails = false;
     const checks: string[] = [];
     for (const m of at) {
-      if (fails && index !== undefined && m.t !== "offset" && m.t !== "other") checks.push(index);
+      if (fails && index !== undefined && m.t !== "offset" && m.t !== "other" && (m.t !== "parent" || !this.#tree)) checks.push(index);
       index = moveExpr(m) === undefined ? this.#move(m, index, ctx.origin) : this.#computed(m, values[next++] as Code);
       fails = m.t !== "origin";
     }
@@ -997,6 +1119,8 @@ class Printer {
         /* v8 ignore next -- @preserve */
         if (focus === undefined) throw new NotStandalone("a node of the memo reads its focus");
         if (d === undefined || more.length > 0 || !Number.isInteger(d)) return `${F}()`;
+        // In a tree space, an offset goes among the siblings (NAV.OFFSET.TREE).
+        if (this.#tree) return `${this.use("SO")}(${this.#part("siblings", "GP")}, SI, ${focus}, ${d})`;
         return `${this.use("X")}(${focus} + ${d}, n)`;
       }
       case "other":
@@ -1005,7 +1129,12 @@ class Printer {
         if (focus === undefined) throw new NotStandalone("a node of the memo reads its focus");
         return `(n === 2 ? 1 - ${focus} : ${F}())`;
       case "parent":
-        return `${F}()`;
+        // Only a tree space has parents (NAV.PARENT).
+        if (!this.#tree) return `${F}()`;
+        // Stryker disable next-line ConditionalExpression,StringLiteral: see #address
+        /* v8 ignore next -- @preserve */
+        if (focus === undefined) throw new NotStandalone("a node of the memo reads its focus");
+        return `${this.use("UP")}(P, ${focus})`;
     }
   }
 
@@ -1042,7 +1171,8 @@ class Printer {
       if (fails) for (const d of deps) kept.add(d);
       if (moveExpr(m) !== undefined) deps = (values[next++] as Code).v.deps;
       else if (m.t === "origin") deps = new Set([ctx.originLevel]);
-      else if (m.t === "key" || m.t === "index" || m.t === "parent") deps = NO_DEPS;
+      // The parent of a key of a tree depends on the key. Outside a tree, the move fails at each key.
+      else if (m.t === "key" || m.t === "index" || (m.t === "parent" && !this.#tree)) deps = NO_DEPS;
       fails = m.t !== "origin";
     }
     return new Set([...deps, ...kept]);
@@ -1303,8 +1433,8 @@ class Printer {
    */
   /**
    * This method gives the loop over the targets of an axis: the statements before it, its bounds and the key that it
-   * skips. `start` has the levels of the address, and `inner` is the position at a target. The axes all, others and
-   * window have a loop.
+   * skips. `start` has the levels of the address, and `inner` is the position at a target. The axes all, others,
+   * window and list have a loop. In a tree space, the axes of a tree have a loop too.
    */
   #targetLoop(axis: Axis, at: readonly Move[], ctx: Ctx): {
     readonly s: string[];
@@ -1353,16 +1483,59 @@ class Printer {
       const parts = this.#settle(values, start);
       s.push(...stmtsOf(...parts), `const ${f} = ${this.#address(at, ctx, parts)};`);
     }
+    const startSafe = at.every((m) => m.t === "origin");
+    if (base.t === "window" && (!Number.isInteger(base.from) || !Number.isInteger(base.to))) throw new NotStandalone('the axis "window" with a bound that is not an integer');
+    // In a tree space, the targets of a tree axis and of a window are a range of an array of positions.
+    if (this.#tree && isTreeAxis(base)) {
+      const range = this.#treeRange(base, f as string);
+      const q = this.fresh("q");
+      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: range.skip, fixed: false, start, startSafe, tests, inner };
+    }
     if (base.t === "others") skip = f;
     else if (base.t === "window") {
-      if (!Number.isInteger(base.from) || !Number.isInteger(base.to)) throw new NotStandalone('the axis "window" with a bound that is not an integer');
       const h = this.fresh("h");
       lo = `Math.max(0, ${f as string} + Math.max(${base.from}, -n))`;
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
-    const startSafe = at.every((m) => m.t === "origin");
     return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], skip, fixed: f === undefined, start, startSafe, tests, inner };
+  }
+
+  /**
+   * This method gives the targets of an axis of a tree space at the position `f`. They are the positions `a[q]` for `q`
+   * from `lo` up to `hi`, without the key that the loop skips. The axes come from AXIS.TREE, AXIS.GRAPH and AXIS.WINDOW.
+   */
+  #treeRange(base: TreeAxis, f: string): TreeRange {
+    const a = this.fresh("A");
+    const all = (code: string, lo = "0", skip?: string): TreeRange => ({ s: [`const ${a} = ${code};`], a, lo, hi: `${a}.length`, skip });
+    switch (base.t) {
+      // In a tree, the edges go from a parent to its children.
+      case "children":
+      case "successors":
+        return all(`${this.#part("children", "H")}[${f}]`);
+      case "siblings":
+        return all(`${this.#part("siblings", "GP")}[${f}]`, "0", f);
+      case "ancestors":
+        return all(`${this.use("AN")}(P, ${f})`);
+      case "predecessors":
+        return all(`(P[${f}] < 0 ? [] : [P[${f}]])`);
+      case "reachable":
+        // The first key of the search is the focus, which is not a target.
+        return all(`${this.use("BF")}(${this.#part("children", "H")}, ${f})`, "1");
+      case "descendants": {
+        // The descendants of a key are the keys after it in the order depth first, as many as its subtree has under it.
+        const h = this.fresh("h");
+        return { s: [`const ${a} = ${this.#part("order", "PI")}[${f}] + 1;`, `const ${h} = ${a} + SZ[${f}] - 1;`], a: "PO", lo: a, hi: h, skip: undefined };
+      }
+      case "window": {
+        // The offsets among the siblings, from `from` to `to`. The bounds are integers (#targetLoop).
+        const { from, to } = base;
+        const l = this.fresh("h");
+        const h = this.fresh("h");
+        const s = [`const ${a} = ${this.#part("siblings", "GP")}[${f}];`, `const ${l} = Math.max(0, SI[${f}] + ${String(from)});`, `const ${h} = Math.min(${a}.length, SI[${f}] + ${String(to)} + 1);`];
+        return { s, a, lo: l, hi: h, skip: undefined };
+      }
+    }
   }
 
   #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
@@ -1750,12 +1923,15 @@ class Printer {
 
 /**
  * This function prints a program as a standalone ES module. The module exports `VexContractError`, `VEX_ERROR` and a
- * function that takes the records and the variables and gives the value at each key. It is pure, so a build can use it.
- * The program can be an expression or a document (DOC.ENTRY).
+ * function that takes the records and the variables and gives the value at each key. A module of a tree space takes
+ * the parents too. The function is pure, so a build can use it. The program can be an expression or a document
+ * (DOC.ENTRY).
  */
 export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emitted {
   const name = options.name ?? "run";
   if (!/^[A-Za-z_$][\w$]*$/.test(name)) return { ok: false, reason: `the name "${name}" is not a JavaScript name` };
+  const tree = options.space === "tree";
+  if (!tree && options.space !== undefined && options.space !== "array") return { ok: false, reason: `the space "${String(options.space)}" is not "array" or "tree"` };
   // DOC.ENTRY: a document gives its expression first, or the reason that it is not valid.
   const read = isDocument(source) ? fromDocument(source, options.domains) : { ok: true as const, value: source };
   if (!read.ok) return { ok: false, reason: read.error.message };
@@ -1790,6 +1966,12 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
     if (!(thrown instanceof NotStandalone)) throw thrown;
     return { ok: false, reason: thrown.message };
   }
+  // A tree checks its parents, and it computes the parts that the program reads. The siblings and the order need the
+  // children.
+  if (tree) p.use("PT");
+  if (p.treeParts.size > 0) p.treeParts.add("children");
+  const parts = (["children", "siblings", "order"] as const).filter((x) => p.treeParts.has(x));
+  for (const x of parts) p.use(TREE_PARTS[x][0]);
   [...p.helpers].toSorted().forEach(add);
   const lines = [
     "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
@@ -1803,7 +1985,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
     ...(helpers.has("S") ? ["const N = {}, W = {};"] : []),
     ...[...helpers].map((h) => (h === "S" ? helperS(p.features) : HELPERS[h])),
     ...p.top.values(),
-    `export function ${name}(records, vars) {`,
+    `export function ${name}(records, vars${tree ? ", parents" : ""}) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
     "  const n = R.length;",
@@ -1812,6 +1994,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
     `    if (typeof r !== "object" || r === null${fieldChecks}) C(\`the record \${i} does not keep the schema\`);`,
     "  }",
     `  if (typeof vars !== "object" || vars === null${varChecks}) C("the variables do not keep the schema");`,
+    ...(tree ? ["  const P = PT(parents, n);", ...parts.map((x) => `  ${TREE_PARTS[x][1]}`)] : []),
     ...[...p.vars].map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
     ...ind(p.run),
     "  const out = [];",

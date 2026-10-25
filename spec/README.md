@@ -268,6 +268,7 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[KIND.STATIC]** When the kinds of the values of an op site decide its op, the site uses that op with no guard. A value against the schema, or a result against `returns`, sends the evaluation to tier 1.
 - **[KIND.DOMAIN]** A value of a domain without a primitive type has the kind of its domain, `domain:Name`. An op with `returns: "domain"` gives this kind, and a schema can declare it for a field. A module checks such a field with a copy of `is` of the domain. It checks each copy of an op with the `samples` of the domain.
 - **[COMPILE.MODULE]** `emitModule(e, options)` gives an ES module with no import of Vex. For an input that keeps the schema, its run gives the value of the interpreter at each key, or `VEX_ERROR` for an error. An input against the schema throws a `VexContractError`.
+- **[COMPILE.MODULE.TREE]** With the option `space: "tree"`, the module is for a tree space. Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The key of a record is the text of its position. A parent that is not -1 or a position, or a cycle of parents, throws a `VexContractError`. The move `parent`, the offsets, the window and the axes of a tree and of a graph give the targets of the interpreter.
 - **[COMPILE.SOURCE]** `generate(e)` gives the same source for the same expression. The source has no name and no literal of the expression. It reads them from its constants, by index.
 
 ## 11. Examples

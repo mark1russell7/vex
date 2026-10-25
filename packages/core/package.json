@@ -27,6 +27,7 @@
     "directory": "packages/core"
   },
   "type": "module",
+  "sideEffects": false,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -61,8 +62,10 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
     "bench:gate": "node bench/gate.ts"
   },
+  "dependencies": {
+    "@mark1russell7/coeval": "^0.6.0"
+  },
   "devDependencies": {
-    "@mark1russell7/coeval": "^0.1.0",
     "@mark1russell7/cue": "github:mark1russell7/cue",
     "@mark1russell7/optional": "github:mark1russell7/optional",
     "@types/node": "^26.6.4",

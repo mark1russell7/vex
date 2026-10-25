@@ -1,27 +1,12 @@
-import { addrExprs, children, listOf, type Addr, type Axis, type Expr, type ExprOf } from "./ir.ts";
-
-/** A bound function: its node, and the functions of the place of its binding. */
-interface Bound {
-  readonly fn: ExprOf<"fn">;
-  readonly fns: ReadonlyMap<string, Bound>;
-}
-
-/** This function gives the functions of a scope without some names: a parameter or a binding hides a function. */
-const without = (fns: ReadonlyMap<string, Bound>, names: readonly string[]): ReadonlyMap<string, Bound> => new Map([...fns].filter(([n]) => !names.includes(n)));
-
 /**
- * This function gives the functions that each child of a node sees. The names of a loop hide the functions with those
- * names in its steps, its test of until and its result. The values of init, the tests of where and an address see the
- * functions outside.
+ * The static reads of a program (DEPS.READS). The static kit of coeval finds the references of the document of the
+ * program, by the contracts of Vex (`refsOf`). Vex adds only what is its own: the axes around a read, and the reads of
+ * a function at each of its calls (FN.CALL).
  */
-function childFns(x: Expr, fns: ReadonlyMap<string, Bound>, count: number): (i: number) => ReadonlyMap<string, Bound> {
-  if (x.tag !== "fold" && x.tag !== "iterate") return () => fns;
-  const hidden = without(fns, Object.keys(x.init));
-  const first = Object.keys(x.init).length;
-  const steps = first + Object.keys(x.step).length;
-  // The children of a fold have the tests of where and the address between the steps and the result.
-  return (i) => (i >= first && (i < steps || i === count - 1 || x.tag === "iterate") ? hidden : fns);
-}
+import { pathMatches, refsOf, type DocVisit, type Key, type RefUse } from "@mark1russell7/coeval";
+import type { Addr, Axis, Expr, ExprOf } from "./ir.ts";
+import { VEX_WORLD } from "./kernel.ts";
+import { writeDocument } from "./write.ts";
 
 /** One static read of a program: a field path at an address, inside zero or more axes. */
 export interface Dependency {
@@ -35,50 +20,179 @@ export interface Dependency {
   readonly axisAt: readonly Addr[];
 }
 
+/** An axis around a read: the kind of the axis of a loop, and the address of the loop. */
+interface Around {
+  readonly t: Axis["t"];
+  readonly at: Addr;
+}
+
+/** A chain of items, the innermost first. The chains of two documents share the items of the documents around both. */
+interface Chain<T> {
+  readonly item: T;
+  readonly up: Chain<T> | undefined;
+}
+
+/** The context of a document for its reads. */
+interface Context {
+  /** The axes around the document, the innermost first. */
+  readonly axes: Chain<Around> | undefined;
+  /** Inside the axis document of a loop: the axis of that loop. A test of `where` there is inside the axis. */
+  readonly axis: Around | undefined;
+  /** The nearest function around the document: a binding of a let. Its reads happen at its calls, not here. */
+  readonly fn: DocVisit | undefined;
+  /** The calls around the document whose function is a binding of a let, the innermost first. */
+  readonly calls: Chain<DocVisit> | undefined;
+}
+
+const ROOT: Context = { axes: undefined, axis: undefined, fn: undefined, calls: undefined };
+
+/** This function gives the items of a chain until the chain `end`, from the outside to the inside. */
+function itemsUntil<T>(chain: Chain<T> | undefined, end: Chain<T> | undefined): T[] {
+  const out: T[] = [];
+  for (let c = chain; c !== undefined && c !== end; c = c.up) out.push(c.item);
+  return out.toReversed();
+}
+
+/** This function gives the kind of a visit, as its keys joined with dots, for example `each` or `axes.where`. */
+// Stryker disable next-line ArrayDeclaration: each document of the writer has a type of the world, so each visit has a type path
+const kindOf = (v: DocVisit): string => (v.typePath ?? []).join(".");
+
 /**
- * This function gives the static reads of an expression. A host can use them to recompute a program only
- * when a field that it reads changes. A computed move reads a key that only a run knows. Its address keeps the
- * expression, and the reads of that expression are in the list too (NAV.COMPUTED).
+ * This function gives the static reads of an expression. A host can use them to recompute a program only when a field
+ * that it reads changes. A computed move reads a key that only a run knows. Its address keeps the expression, and the
+ * reads of that expression are in the list too (DEPS.COMPUTED). The kernel walks the document with a stack, so an
+ * expression of any depth works (EVAL.NESTING).
  */
 export function deps(e: Expr): readonly Dependency[] {
-  const out: Dependency[] = [];
-  // A stack, not recursion, so a deep expression needs no deep call stack. The children go on the stack in reverse
-  // order, so the reads come out in the order of a depth-first walk.
-  type Item = { readonly x: Expr; readonly axes: readonly Axis["t"][]; readonly axisAt: readonly Addr[]; readonly fns: ReadonlyMap<string, Bound> };
-  const todo: Item[] = [{ x: e, axes: [], axisAt: [], fns: new Map() }];
-  for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
-    const { x } = item;
-    if (x.tag === "ref") out.push({ at: x.at ?? [], path: x.path, axes: item.axes, axisAt: item.axisAt });
-    // A function reads at each call, inside the axes of the call (FN.CALL). Its body does not read where it is bound.
-    if (x.tag === "let") {
-      const names = Object.keys(x.bind);
-      const inner = new Map(without(item.fns, names));
-      for (const [name, b] of Object.entries(x.bind)) if (b.tag === "fn") inner.set(name, { fn: b, fns: item.fns });
-      todo.push({ ...item, x: x.body, fns: inner });
-      for (const b of Object.values(x.bind).toReversed()) if (b.tag !== "fn") todo.push({ ...item, x: b });
-      continue;
+  const nodes = new Map<object, Expr>();
+  // The order "reads" puts the body or the steps of a loop before its axis, as the reads of an evaluation come.
+  const doc = writeDocument(e, {
+    // Stryker disable next-line ArrayDeclaration: the reads come from the references, not from the form of a literal
+    domains: [],
+    // Stryker disable next-line StringLiteral: the writer tests only the mode "json", and each other mode keeps the value
+    literals: "host",
+    order: "reads",
+    nodes,
+  });
+  const uses = refsOf(VEX_WORLD, doc);
+  const memo = new WeakMap<DocVisit, Context>();
+  const functions = new WeakMap<DocVisit, DocVisit | null>();
+  const fnVisits = new Map<unknown, DocVisit>();
+
+  /** This function gives the function of a call: the visit of the binding of a let, or `undefined` (FN.CALL). */
+  const functionOf = (call: DocVisit): DocVisit | undefined => {
+    const known = functions.get(call);
+    if (known !== undefined) return known ?? undefined;
+    const name = (call.doc.value as { readonly fn: { readonly value: readonly [string, string] } }).fn.value[1];
+    let found: DocVisit | undefined;
+    // The innermost kind that binds the name decides. A parameter, a binding or a name of a loop hides a function.
+    search: for (let child: DocVisit = call, around = call.parent; around !== undefined; child = around, around = around.parent) {
+      // Stryker disable next-line OptionalChaining: each document around a call is a term or a function, so it has a kind
+      for (const rule of around.kind?.scope ?? []) {
+        if (!rule.in.some((pattern) => pathMatches(child.slot, pattern))) continue;
+        const source = rule.names as { readonly keysAt?: readonly Key[]; readonly listAt?: readonly Key[] };
+        // Stryker disable next-line ArrayDeclaration: each rule of the scopes of Vex gives its names with keysAt or listAt
+        const at = (source.keysAt ?? source.listAt ?? []).reduce<unknown>((x, k) => (x as Readonly<Record<string, unknown>>)[String(k)], around.doc.value);
+        const names = source.keysAt !== undefined ? Object.keys(at as object) : (at as readonly string[]);
+        if (!names.includes(name)) continue;
+        // Only a binding of a let is a function (FN.BIND), and the map has only the documents of the functions.
+        found = fnVisits.get((at as Readonly<Record<string, unknown>>)[name]);
+        break search;
+      }
     }
-    if (x.tag === "call") {
-      const bound = item.fns.get(x.fn);
-      if (bound !== undefined) todo.push({ ...item, x: bound.fn.body, fns: without(bound.fns, bound.fn.params) });
-      for (const a of x.args.toReversed()) todo.push({ ...item, x: a });
-      continue;
+    functions.set(call, found ?? null);
+    return found;
+  };
+
+  /** This function gives the context of a child from the context of its parent. */
+  const step = (outer: Context, parent: DocVisit, child: DocVisit): Context => {
+    const kind = kindOf(parent);
+    const head = child.slot[0];
+    let { axes, fn, calls } = outer;
+    let axis: Around | undefined;
+    if (outer.axis !== undefined) {
+      // In the axis document of a loop: a test of where is inside the axis, and the list of the axis list is outside.
+      // Only the axis where has a test.
+      if (head === "test") axes = { item: outer.axis, up: axes };
+      else if (head === "axis") axis = outer.axis;
+    } else if (kind === "each" || kind === "fold") {
+      const node = nodes.get(parent.doc) as ExprOf<"each" | "fold">;
+      const around: Around = { t: node.axis.t, at: node.at ?? [] };
+      if (head === "body" || head === "step") axes = { item: around, up: axes };
+      else if (head === "axis") axis = around;
     }
-    const all = children(x);
-    const fnsOf = childFns(x, item.fns, all.length);
-    const axial = x.tag === "each" || x.tag === "fold";
-    // Inside the axis: the body or the values of the step, and the tests of where. The values of init, the result of a
-    // fold, the list of the axis list and the expressions of an address evaluate at the node, outside the axis.
-    const first = x.tag === "fold" ? Object.keys(x.init).length : 0;
-    const last = axial ? all.length - addrExprs(x.at).length - (x.tag === "fold" ? 1 : 0) : 0;
-    // The list of the axis list comes after the body or the values of the step, before the tests of where.
-    const listAt = axial && listOf(x.axis) !== undefined ? (x.tag === "fold" ? first + Object.keys(x.step).length : 1) : -1;
-    const axes = axial ? [...item.axes, x.axis.t] : item.axes;
-    const axisAt = axial ? [...item.axisAt, x.at ?? []] : item.axisAt;
-    for (let i = all.length - 1; i >= 0; i--) {
-      const inside = i >= first && i < last && i !== listAt;
-      todo.push({ x: all[i] as Expr, axes: inside ? axes : item.axes, axisAt: inside ? axisAt : item.axisAt, fns: fnsOf(i) });
+    if (kind === "fn") {
+      fn = parent;
+      fnVisits.set(parent.doc, parent);
     }
+    // Each call goes in the chain, also a call of a name that is not a function: inCall looks for one call of a function.
+    if (kind === "call") calls = { item: parent, up: calls };
+    return { axes, axis, fn, calls };
+  };
+
+  /**
+   * This function gives the context of a visit. It walks up to a known context with a loop, not with recursion. The
+   * context of no visit is the context of the root.
+   */
+  const contextOf = (v: DocVisit | undefined): Context => {
+    const todo: DocVisit[] = [];
+    let x: DocVisit | undefined = v;
+    while (x !== undefined && !memo.has(x)) {
+      todo.push(x);
+      x = x.parent;
+    }
+    let ctx = x === undefined ? ROOT : (memo.get(x) as Context);
+    for (let i = todo.length - 1; i >= 0; i--) {
+      const child = todo[i] as DocVisit;
+      ctx = child.parent === undefined ? ROOT : step(ctx, child.parent, child);
+      memo.set(child, ctx);
+    }
+    return ctx;
+  };
+
+  // The references of each function, apart from the others: they read at each call of the function.
+  const groups = new Map<DocVisit | undefined, RefUse[]>();
+  for (const use of uses) {
+    const fn = contextOf(use.visit).fn;
+    const group = groups.get(fn) ?? [];
+    group.push(use);
+    groups.set(fn, group);
   }
+
+  const out: Dependency[] = [];
+  /** This function gives the reads of the references of a function at a call, inside the axes of the call. */
+  const emit = (group: readonly RefUse[], base: DocVisit | undefined, outside: readonly Around[]): void => {
+    const baseAxes = contextOf(base).axes;
+    const inside = (v: DocVisit): readonly Around[] => [...outside, ...itemsUntil(contextOf(v).axes, baseAxes)];
+    // The reads of a call come after the reads of its arguments, so a call waits until the walk leaves it.
+    const pending: { readonly call: DocVisit; readonly fn: DocVisit; readonly axes: readonly Around[] }[] = [];
+    const inCall = (v: DocVisit | undefined, call: DocVisit): boolean => {
+      for (let c = contextOf(v).calls; c !== undefined && c.item.depth >= call.depth; c = c.up) if (c.item === call) return true;
+      return false;
+    };
+    const flush = (until?: DocVisit): void => {
+      for (;;) {
+        const top = pending.at(-1);
+        if (top === undefined || inCall(until, top.call)) return;
+        pending.pop();
+        emit(groups.get(top.fn) ?? [], top.fn, top.axes);
+      }
+    };
+    for (const use of group) {
+      flush(use.visit);
+      if (use.root === "self" && !use.address) {
+        const node = nodes.get(use.visit.doc) as ExprOf<"ref">;
+        const axes = inside(use.visit);
+        out.push({ at: node.at ?? [], path: node.path, axes: axes.map((a) => a.t), axisAt: axes.map((a) => a.at) });
+      }
+      const call = use.visit.parent;
+      if (call !== undefined && kindOf(call) === "call" && use.visit.slot[0] === "fn") {
+        const fn = functionOf(call);
+        if (fn !== undefined) pending.push({ call, fn, axes: inside(call) });
+      }
+    }
+    flush();
+  };
+  emit(groups.get(undefined) ?? [], undefined, []);
   return out;
 }

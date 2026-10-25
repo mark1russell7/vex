@@ -1,6 +1,6 @@
 import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, isVexList, iterate, key, let_, lit, offset, ok, rec, ref, space, toDocument, v as variable, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
-import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, modelChain, type ModelOptions } from "@mark1russell7/vex-testkit";
+import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, fromReference, modelChain, referenceEvaluate, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { emitModule } from "./module.ts";
@@ -120,14 +120,16 @@ const vars = fc.option(fc.record({ a: arbLiteral(vec), c: arbLiteral(vec) }), { 
 const runOf = <E,>(e: fc.Arbitrary<E>) => arbSpace(vec).chain((s) => fc.tuple(fc.constant(s), e, arbOrigin(s), tables, vars));
 
 /**
- * This function checks that the tiered program gives the result of the interpreter. It counts the runs with a value,
- * and the runs where tier 2 gave the value. Tier 2 makes no error values, so a list with an error item does not count.
+ * This function checks that the tiered program gives the result of the interpreter, and that both give the result of
+ * the reference tier: the kernel of coeval (EVAL.REFERENCE). It counts the runs with a value, and the runs where tier 2
+ * gave the value. Tier 2 makes no error values, so a list with an error item does not count.
  */
 function agree(e: Expr, s: Space, k: string, t: Readonly<Record<string, Space>>, v: Readonly<Record<string, unknown>> | undefined, count: { values: number; fast: number }, options: GenerateOptions = { domains: DOMAINS, fns: FNS }): void {
   const p = tiered(e, options);
   const run = { space: s, origin: k, tables: t, ...(v === undefined ? {} : { vars: v }) };
   const expected = evaluate(e, { ...options, ...run });
   expect(fromCore(p.run(run))).toStrictEqual(fromCore(expected));
+  expect(fromReference(referenceEvaluate(e, { ...options, ...run }))).toStrictEqual(fromCore(expected));
   if (expected.ok && !(isVexList(expected.value) && expected.value.items.some((item) => !item.result.ok))) {
     count.values++;
     if (p.tier === 2 && p.stats.fallbacks === 0) count.fast++;
@@ -136,7 +138,7 @@ function agree(e: Expr, s: Space, k: string, t: Readonly<Record<string, Space>>,
 
 describe("the tiers", () => {
   // In each property, a fallback gives the right result too. Thus the share of tier 2 shows a gap that the equality cannot show.
-  it("P17 COMPILE.TIERED: on programs of the whole grammar, a tiered program gives the result of the interpreter", () => {
+  it("P17 COMPILE.TIERED EVAL.REFERENCE: on programs of the whole grammar, a tiered program gives the result of the interpreter and of the kernel", () => {
     const count = { values: 0, fast: 0 };
     fc.assert(fc.property(runOf(arbExpr(OPTS)), ([s, e, k, t, v]) => agree(e, s, k, t, v, count)));
     expect(count.fast / count.values).toBeGreaterThan(0.5);
@@ -372,7 +374,7 @@ describe("the tiers", () => {
     for (const origin of s.keys) expect(fromCore(program.run({ space: s, origin }))).toStrictEqual(fromCore(evaluate(e, { domains: DOMAINS, space: s, origin })));
     // A document that is not valid gives its reason, and tier 1 gives its error at each run.
     const bad = { type: "ref", value: ["world", "n"] };
-    const reason = 'the document is not valid at "/value/0": Vex reads only from the roots "self" and "names", and this reference starts at "world"';
+    const reason = 'the document is not valid at "/value/0": The root world is not open here. The open roots are self, names.';
     expect(generate(bad)).toEqual({ ok: false, reason });
     const slow = tiered(bad);
     expect([slow.tier, slow.reason, slow.expr]).toEqual([1, reason, bad]);

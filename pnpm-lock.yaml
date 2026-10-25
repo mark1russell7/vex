@@ -254,10 +254,11 @@ importers:
         version: 5.0.3(@types/node@26.6.4)(@vitest/coverage-v8@5.0.3)(vite@8.3.4(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/core:
-    devDependencies:
+    dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.6.0
+        version: 0.6.0
+    devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -566,8 +567,8 @@ importers:
   tools/mutation:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.6.0
+        version: 0.6.0
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains
@@ -1601,8 +1602,8 @@ packages:
     peerDependencies:
       zod: ^4.1.0
 
-  '@mark1russell7/coeval@0.1.0':
-    resolution: {integrity: sha512-oadsjgTZJQEdrq2e+XK/2wsYBgOAKsPkYjc/Um/06CCBFYWuY40Exh1cSfKF8L35wdFwUcHGKzDrAgVM4p7R0g==}
+  '@mark1russell7/coeval@0.6.0':
+    resolution: {integrity: sha512-z+7xYhrS0COlNX6/TP7asTuMYzhsSlWqzITxtaJDz+Oybar3xcjMAfst7+YEUrEkVaOjvl7NH7xEvbhp6Fo6Fg==}
 
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7':
     resolution: {gitHosted: true, integrity: sha512-hEpr79iwUOLCP6Pn6m8KHq200u4c2jM1npz+SIJQGrrT1fdUUAwgKCZgwOPiyiH5SA4QPXID7f1wCDz7T9HP7A==, tarball: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7}
@@ -5580,7 +5581,7 @@ snapshots:
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
       zod: 4.6.7
 
-  '@mark1russell7/coeval@0.1.0': {}
+  '@mark1russell7/coeval@0.6.0': {}
 
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7': {}
 

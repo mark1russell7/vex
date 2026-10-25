@@ -65,7 +65,9 @@ An expression is plain JSON data. It has one of these kinds.
 
 ### 4.1 Documents
 
-A document is the form of an expression in [coeval](https://github.com/mark1russell7/coeval), the language base of the family. Its rules are the decision D12 of coeval. Each term is an envelope `{ "type": t, "value": v }`. `toDocument` writes a document, and `fromDocument` reads it.
+A document is the form of an expression in [coeval](https://github.com/mark1russell7/coeval), the kernel of the family. Its rules are the decision D12 of coeval. Each term is an envelope `{ "type": t, "value": v }`. `toDocument` writes a document, and `fromDocument` reads it.
+
+Since decision D13 of coeval, the kernel is the core of Vex. It checks and analyzes each document by the contracts of the kinds of Vex. It is also the reference tier of Vex (EVAL.REFERENCE).
 
 | Expression | Document |
 |---|---|
@@ -89,14 +91,15 @@ A document is the form of an expression in [coeval](https://github.com/mark1russ
 - **[DOC.LITERAL]** The value of a literal has the JSON form of IR.JSON. Thus a domain value, `-0`, `NaN` and the infinities have the forms with the key `$vex`.
 - **[DOC.OPS]** The type of an op is `["ops", ...keys]`. The keys are the name of the op, split at its dots. The value is the list of the arguments.
 - **[DOC.REF]** A reference is a path from a root. A reference from `self` has the moves of its address and then the segments of its path. A reference from `names` has one step: a name of a `let`, a function, a loop or the caller. Vex reads from no other root.
-- **[DOC.MOVE]** The value of the move `key` is a text, and the value of `index` is a number. A computed key or position is a term in an envelope. The value of `offset` is the list of its numbers. The value of `other`, `origin` and `parent` is `null`.
+- **[DOC.MOVE]** The value of the move `key` or `index` is a term. A text key and a number position are fixed. Another term is a computed key or position, for example a term in an envelope. A literal of another kind gives `#VALUE!` at run time (NAV.COMPUTED). The value of `offset` is the list of its numbers. The value of `other`, `origin` and `parent` is `null`.
 - **[DOC.ADDRESS]** The field `at` of `each` and `fold` is a reference from `self` with moves only. An empty address and no address are the same expression, and the document has no field `at` for them.
 - **[DOC.CONSTRUCT]** The constructs `let`, `fn`, `record`, `each`, `fold` and `iterate` have the fields of the table, and no other fields. Only `at` and `until` are optional. `limit` and `params` are data, not terms.
 - **[DOC.CALL]** The field `fn` of `call` is a reference to a name: `{ "type": "ref", "value": ["names", name] }`. Thus a call applies a function that a `let` binds.
 - **[DOC.AXIS]** The value of an axis is a record of its parameters, with the same names as the fields of the axis. An axis without parameters has the value `{}`. `list` and `test` are terms, and `axis` is an axis.
 - **[DOC.EXT]** The type of an extension is `["ext", ...keys]`. The keys are the kind, split at its dots. The value is the data, without a change.
 - **[DOC.ENTRY]** `compile`, `evaluate`, `explain` and `parse` take a document or an expression. For a document, they give the results of its expression. `tiered`, `generate` and `emitModule` of the compiler also take a document.
-- **[DOC.ERROR]** `fromDocument` does not throw. A document that is not valid gives `#VALUE!` with the reason and its location as a JSON Pointer. A document that is too deep gives `#DEPTH!`. Then `fromDocument` checks the expression as EVAL.SHAPE tells. `toDocument` gives `#VALUE!` for an expression that is not valid, or for a literal without a JSON form.
+- **[DOC.ERROR]** `fromDocument` does not throw. A document that is not valid gives `#VALUE!` with the reason and its location as a JSON Pointer. A document nested deeper than `MAX_DOCUMENT_DEPTH` documents gives `#DEPTH!`. The expression of a valid document is valid, as EVAL.SHAPE tells. `toDocument` gives `#VALUE!` for an expression that is not valid, or for a literal without a JSON form. It writes an expression of any depth.
+- **[DOC.CHECK]** `VEX_WORLD` gives the contract of each kind as data: the shape of its parts, the data of its fields and its names. The `check` of the kernel reads it before `fromDocument` reads the expression. Thus the kernel finds each kind that Vex does not have, and each missing or extra field. It also finds each value of a field of the wrong type, and each part of a kind that its position does not permit. Only the grammar of Vex stays in `fromDocument`: the steps of a reference, the address, the function of a call and the loop names.
 
 ## 5. Evaluation
 
@@ -108,7 +111,8 @@ A document is the form of an expression in [coeval](https://github.com/mark1russ
 - **[EVAL.ORIGIN]** An origin that is not a key of the space gives `#REF!`.
 - **[EVAL.LOCATION]** An error value has the path of the node that made it, and the origin and the focus of the evaluation at that node. An extension handler can give an error without an origin. Then the interpreter adds the path, the origin and the focus of the extension node.
 - **[EVAL.COMPILE]** `compile(e, options)` gives a program. Its `run` and `explain` give the same results and the same traces as `evaluate` and `explain`. One program evaluates at each origin of each space, and one evaluation does not change a later evaluation.
-- **[EVAL.REFERENCE]** The interpreter of `@mark1russell7/vex` and the reference interpreter of `@mark1russell7/vex-testkit` give the same value or the same error code.
+- **[EVAL.REFERENCE]** The interpreter of `@mark1russell7/vex`, the compiler of `@mark1russell7/vex-compiler` and the reference tier give the same value or the same error code. The reference tier is the kernel of coeval. `kernelPlan` gives the plan of a program in the kernel, with the machine `vexMachine`. Its `evaluate` evaluates the plan. Its `reference` reads the document with the reference interpreter of the kernel, which compiles nothing. `referenceEvaluate` of `@mark1russell7/vex-testkit` uses `reference`.
+- **[EVAL.AGREE]** `agree` of a plan of the kernel evaluates the program with `evaluate`, `reference`, the traced evaluation of the kernel and a second evaluation. Then it evaluates the tier of the caller, when the caller gives one. It gives the result, or the first tier that gives another result. Two errors agree when they have the same code. Two values of one class agree when their fields agree.
 
 ### 5.1 References
 
@@ -201,7 +205,7 @@ A document is the form of an expression in [coeval](https://github.com/mark1russ
 
 - **[TRACE.EVENTS]** `explain` records one event for each node evaluation, in the order that the nodes finish. A reference event records its reads.
 - **[TRACE.AXIS]** Inside an axis, the focus of each event is the target.
-- **[DEPS.READS]** `deps` gives each reference of an expression, with its address, the axes around it and the address of each axis.
+- **[DEPS.READS]** `deps` gives each reference of an expression, with its address, the axes around it and the address of each axis. The static kit of the kernel finds the references of the document of the expression (`refsOf`). The contracts give the names that each kind binds. Vex adds the axes and the reads of a function at each of its calls.
 - **[DEPS.COMPUTED]** A computed move keeps its expression in the address that `deps` gives. Only a run knows its key. `deps` also gives the references of that expression, with the axes around its node.
 
 ## 7. Domains

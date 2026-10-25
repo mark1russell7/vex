@@ -312,7 +312,7 @@ Each program has the `Program` interface of the core (`run`, `explain`), so each
 
 ## 10. Tests
 
-- **Property P17**: on random programs and random spaces, `tiered` gives the result of the interpreter. The test also reports the share of programs in tier 2, so a fallback cannot hide a gap.
+- **Property P17**: on random programs and random spaces, `tiered` gives the result of the interpreter. Since decision D13 of `REVIEW.md`, both also give the result of the reference interpreter of the kernel of coeval. The test also reports the share of programs in tier 2, so a fallback cannot hide a gap.
 - **Golden files** of the generated source for fixed programs. A change of the generated code shows in the diff.
 - **The speed gate** of the nightly workflow: generated code against the hand-written loops for the programs of the speed lane, with no fallback. In phase C1, each limit is approximately twice the measured ratio. Phase C2 sets the limit 1.2.
 - **Standalone modules**: a test imports a generated module and compares it with the interpreter.

@@ -1,4 +1,4 @@
-import { app, axes, cell, each, ext, let_, lit, offset, ref, SheetRun, space, type Expr, type Result, type SheetOptions } from "@mark1russell7/vex";
+import { app, axes, cell, each, ext, index, key, let_, lit, offset, ref, SheetRun, space, v, type Expr, type Result, type SheetOptions, type VexError } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -7,12 +7,24 @@ import { arbSheet, arbTwoTables, sheetCellsOf, sheetColumnsOf, sheetRowsOf } fro
 
 const plain = (r: Result<unknown>): unknown => (r.ok ? r.value : r.error.code);
 
+/**
+ * This function gives an error without its location: the path of a node in the tagged IR, and the origin and the focus
+ * at that node. Only the closure compiler has them (EVAL.LOCATION). The kernel of the reference evaluates the document.
+ */
+const unlocated = (e: VexError): unknown => {
+  const { path: _path, origin: _origin, focus: _focus, causes, ...rest } = e;
+  return causes === undefined ? rest : { ...rest, causes: causes.map(unlocated) };
+};
+
+/** This function gives a result with an error without its location. */
+const located = (r: Result<unknown>): unknown => (r.ok ? r : { ok: false, error: unlocated(r.error) });
+
 /** This function reads each cell with the reference and with `SheetRun`, and it compares the whole results. */
 function expectSame(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, reads: readonly (readonly [string, string, string?])[]): readonly Result<unknown>[] {
   const reference = new ReferenceSheetRun(columns, opts);
   const run = new SheetRun(columns, opts);
   const got = reads.map(([c, k, t]) => reference.cell(c, k, t));
-  expect(got).toEqual(reads.map(([c, k, t]) => run.cell(c, k, t)));
+  expect(got.map(located)).toEqual(reads.map(([c, k, t]) => located(run.cell(c, k, t))));
   return got;
 }
 
@@ -74,12 +86,17 @@ describe("the reference of a sheet run", () => {
 
   it("SHEET.CELL: a cell reference without a column name or a valid address gives #VALUE!", () => {
     // A computed move is an expression, not data, so a cell reference takes only fixed moves.
-    const bad: readonly unknown[] = [null, "A", { column: 1, at: [] }, { column: "A" }, { column: "A", at: [{ t: "nope" }] }, { at: [] }, { column: "A", at: [{ t: "index", i: lit(0) }] }];
+    const bad: readonly unknown[] = [null, "A", { column: 1, at: [] }, { column: "A" }, { column: "A", at: [{ t: "nope" }] }, { at: [] }, { column: "A", at: [{ t: "index", i: lit(0) }] }, { column: "A", at: [{ t: "key", key: lit("0") }] }];
     // Each reference is in the body of a let, so its error has a path that is not empty.
-    const columns = new Map<string, Expr>([["ok", lit(1)], ...bad.map((data, i): [string, Expr] => [`bad${i}`, let_({}, ext("vex.cell", data))])]);
-    const got = expectSame(columns, { space: sheetRowsOf([1]) }, [["ok", "0"], ...bad.map((_d, i) => [`bad${i}`, "0"] as const)]);
-    expect(got.map(problem)).toEqual([undefined, ...bad.map(() => ["#VALUE!", "a cell reference needs a column name and an address of fixed moves"])]);
-    expect(got.map((r) => (r.ok ? undefined : r.error.path))).toEqual([undefined, ...bad.map(() => [0])]);
+    // A fixed key and a fixed position are data.
+    const columns = new Map<string, Expr>([["ok", lit(1)], ["fixed", app("add", cell("ok", [key("0")]), cell("ok", [index(0)]))], ...bad.map((data, i): [string, Expr] => [`bad${i}`, let_({}, ext("vex.cell", data))])]);
+    const reads = [["ok", "0"], ["fixed", "0"], ...bad.map((_d, i) => [`bad${i}`, "0"] as const)] as const;
+    const got = expectSame(columns, { space: sheetRowsOf([1]), domains: [NumDomain] }, reads);
+    expect(got.map(problem)).toEqual([undefined, undefined, ...bad.map(() => ["#VALUE!", "a cell reference needs a column name and an address of fixed moves"])]);
+    expect(got.map(plain)[1]).toBe(2);
+    // The closure compiler of SheetRun gives the error the path of the node of the extension (EVAL.LOCATION).
+    const run = new SheetRun(columns, { space: sheetRowsOf([1]), domains: [NumDomain] });
+    expect(reads.map(([c, k]) => run.cell(c, k)).map((r) => (r.ok ? undefined : r.error.path))).toEqual([undefined, undefined, ...bad.map(() => [0])]);
   });
 
   it("SHEET.TABLES: the first table of a name wins, and a run without a name has no table with an empty name", () => {
@@ -100,6 +117,8 @@ describe("the reference of a sheet run", () => {
     expect(named.map(plain)).toEqual([1, 5, "#NAME?", "#REF!", 5, 2, 9]);
     expect(problem(named[2])).toEqual(["#NAME?", 'the table "t2" has no column "zzz"']);
     expect(problem(named[3])).toEqual(["#REF!", 'the run has no table "nope"']);
+    // The reference makes this error itself, so it has the origin and the focus of the error of SheetRun.
+    expect(named[3]).toEqual(new SheetRun(columns, { space: mainRows, domains: [NumDomain], name: "main", tables }).cell("A", "0", "nope"));
     const unnamed = expectSame(columns, { space: mainRows, domains: [NumDomain], tables }, [["A", "0", ""], ["A", "0", "undefined"], ["B", "0"], ["zzz", "0"]]);
     expect(unnamed.map(plain)).toEqual(["#REF!", "#REF!", "#REF!", "#NAME?"]);
     expect(problem(unnamed[3])).toEqual(["#NAME?", 'the sheet has no column "zzz"']);
@@ -115,6 +134,14 @@ describe("the reference of a sheet run", () => {
     const got = expectSame(columns, { space: sheetRowsOf(Array.from({ length: 40 }, () => 0)), domains: [NumDomain] }, [["A", "0"], ["B", "0"], ["F", "39"]]);
     expect(got.map(plain)).toEqual(["#CYCLE!", "#CYCLE!", 2 ** 40]);
     expect(problem(got[0])).toEqual(["#CYCLE!", 'the cell "A" at "0" is on a cycle of cell references']);
+    // The reference makes the error of a cycle itself, so it has the origin and the focus of the error of SheetRun.
+    expect(got[1]).toEqual(new SheetRun(columns, { space: sheetRowsOf(Array.from({ length: 40 }, () => 0)), domains: [NumDomain] }).cell("B", "0"));
+  });
+
+  it("LET.VARS SHEET.CELL: the formulas of the reference read the variables of the run", () => {
+    const columns = new Map<string, Expr>([["V", app("add", v("a"), cell("W"))], ["W", v("a")]]);
+    const got = expectSame(columns, { space: sheetRowsOf([1]), domains: [NumDomain], vars: { a: 2 } }, [["V", "0"], ["W", "0"]]);
+    expect(got.map(plain)).toEqual([4, 2]);
   });
 
   it("SHEET.CELL.FORMULA: the reference gives the errors of SheetRun for a cell without a formula", () => {

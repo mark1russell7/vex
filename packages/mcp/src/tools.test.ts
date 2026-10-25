@@ -28,7 +28,7 @@ describe("the inputs of the tools", () => {
     expect(programOf(document, DEFAULT_DOMAINS)).toEqual(app("add", ref("n"), lit(1)));
     expect(programOf(JSON.stringify(document), DEFAULT_DOMAINS)).toEqual(app("add", ref("n"), lit(1)));
     expect(() => programOf({ type: ["ops", "add"], value: [{ type: "ref", value: ["world", "n"] }] }, DEFAULT_DOMAINS)).toThrow(
-      new ToolError('the program is not valid: the document is not valid at "/value/0/value/0": Vex reads only from the roots "self" and "names", and this reference starts at "world".'),
+      new ToolError('the program is not valid: the document is not valid at "/value/0/value/0": The root world is not open here. The open roots are self, names.'),
     );
   });
 

@@ -41,8 +41,8 @@ The types know the fields of the records and the ops of each domain. `root.from(
 - **Sheets.** Named columns of formulas that read each other, like the columns of a spreadsheet. A cycle of reads gives `#CYCLE!`.
 - **Error values.** Each failure has a code, a kind, a message, the path of its node, the origin and the focus. `ifError` catches an error.
 - **Programs are data.** A program is a JSON tree. `explain` gives a trace, `deps` gives the reads, and `compile` gives a program that evaluates at each record of each space.
-- **Documents.** A program can also be a document of [coeval](https://github.com/mark1russell7/coeval), the shared form of the languages of the family.
-- **No runtime dependencies.** The package is one ES module with its type declarations.
+- **Documents.** A program can also be a document of [coeval](https://github.com/mark1russell7/coeval), the kernel of the languages of the family.
+- **One runtime dependency.** The package is one ES module with its type declarations. Its one dependency is `@mark1russell7/coeval`.
 
 ## Documents
 
@@ -61,6 +61,22 @@ evaluate(doc, { space: space.array([{ n: 2 }]), origin: "0", domains: [NumDomain
 ```
 
 A document that is not valid gives the error `#VALUE!` with the reason and the location of the part. The rules are in [the specification](https://github.com/mark1russell7/vex/blob/main/spec/README.md#41-documents).
+
+## The kernel of coeval
+
+coeval is the core of Vex (decision D13 of coeval). `VEX_WORLD` gives the contract of each kind of a document as data: the shape of its parts, the data of its fields and its names. The static kit of the kernel checks each document by these contracts before `fromDocument` reads it. `deps` finds the reads with the static kit too.
+
+The kernel is also the reference tier of Vex. `kernelPlan` evaluates the document of a program with `vexMachine`, and the interpreter and the compiler give its results. `reference` reads the document with the reference interpreter of the kernel, and `agree` compares the tiers.
+
+```ts doctest
+import { app, kernelPlan, ref, space } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+const plan = kernelPlan(app("add", ref("n"), ref("n")), { domains: [NumDomain] });
+plan.run({ space: space.array([{ n: 2 }]), origin: "0" }); // => { ok: true, value: 4 }
+```
+
+Vex keeps what is its own: the typed domains, the spaces, the moves and the axes, the closure compiler, the loop compiler and the sheets.
 
 ## Related packages
 

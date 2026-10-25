@@ -257,6 +257,16 @@ The status on 2026-10-17:
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
 - Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 gives a reason for a program with lists, and tier 1 evaluates it. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
 - The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 and a module give a reason for them, and tier 1 evaluates the program.
+- Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 and a module give a reason for them, and tier 1 evaluates the program. A module does not have lists as names of loops, or the ops of the two blocks, yet.
+
+The decisions of the second block:
+
+- The op has the name `get`. The domain `NDVector` has `get(name)` for the value at a key of a vector, and a `Map` of JavaScript has `get(key)`. The builder has the method `at(key)`, and `lookup` suggests the `LOOKUP` of a spreadsheet, with the key first.
+- A key that no item has gives `#N/A`, as a missing field does (REF.MISSING). An error item is not an item of its key, as LIST.LENIENT tells for each list op.
+- Two items can have one key (LIST.APPEND). `get` gives the value of the first one, so `append(new, old)` puts the new values before the old values.
+- `get` takes the key as a value. Vex has no read of the key of the focus. Thus a record that a step reads by key keeps its key in a field, for example `id`. The force pilot does this. A read of the key of the focus is a new kind of expression for each stage. Thus it waits for a need that a field cannot meet.
+- A list literal is the JSON form of the list, because a list is plain data. Thus a document writes the empty list as `{ "kind": "vex.list", "items": [] }`. A literal has fixed keys. A list with a computed key comes from an axis, for example `where`.
+- The interpreter keeps an index of the keys of each list that `get` reads. Thus a step that reads each key of a list of `n` items costs O(n), not O(n²).
 
 Tier 2 puts the bodies of functions in at most 10000 places in one program (`MAX_CALLS`). A function that calls another function twice doubles its body. Thus a chain of 15 such functions puts the first body in 16384 places. Over the limit, tier 1 evaluates the program. A module prints each function once, so it has no limit.
 

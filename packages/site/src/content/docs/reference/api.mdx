@@ -103,6 +103,20 @@ ns.without(ns.take(2)).keys().at("0"); // => some(["2"])
 rows.start(0).each((c) => c.window(0, 1, (t) => t.from("n"))).flat().values().at("0"); // => some([30, 10, 10, 20, 20])
 ```
 
+In `iterate` and `fold`, a name whose first value is a list chain is a list chain in each step (BUILD.LIST.LOOP). Its next value must be a list chain too. `root.list(items)` makes a list literal, and `get(key)` of a list chain gives the value at a key. The key is a key of the space or a chain of a text.
+
+```ts doctest
+const rows = vex(NumDomain).over(space.array([{ n: 30 }, { n: 10 }, { n: 20 }]));
+const ns = rows.start(0).each((c) => c.from("n"));
+// A stack: each step removes the top item.
+const rest = rows.start(0).iterate(2, { stack: ns }, ({ stack }) => ({ stack: stack.drop(1) }), ({ stack }) => stack);
+
+rest.keys().at("0"); // => some(["2"])
+ns.get("1").at("0"); // => some(10)
+rows.list([["2", 5]]).append(ns).get("2").at("0"); // => some(5)
+rows.list().keys().at("0"); // => some([])
+```
+
 `root.fn(kinds, body)` makes a function, and `functions(fns, body)` of a chain binds it (FN.BIND). Each kind is `"number"`, `"string"`, `"boolean"` or `"any"`, and it gives the type of the chain of a parameter. The body of a function evaluates at the focus of each call.
 
 ```ts doctest

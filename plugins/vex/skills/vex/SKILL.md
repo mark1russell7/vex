@@ -115,6 +115,10 @@ Four list ops build lists. Each item keeps its key and its value. `drop(list, n)
 
 Thus a search can keep a stack in a list: `take(stack, 1)` is the top, and `drop(stack, 1)` removes it. In the builder, a list chain has `drop(n)`, `append(other)`, `without(other)` and `flat()`. A standalone module gives a reason for these four ops.
 
+A name of `iterate` or `fold` can hold a list, and each step gives the next list. `get(list, key)` gives the value of the first item with the key. A key that no item has gives `#N/A`. A literal can be a list: `lit(vexList([]))` is the empty list. In the builder, `root.list(items)` makes a list literal, and a list chain has `get(key)`.
+
+Thus a force layout keeps all positions in one name of `iterate`, and each step reads the old positions by key. `get` takes the key as a value, so put the key of each record in a field, for example `id`. Tier 2 and a module give a reason for these programs, and tier 1 evaluates them.
+
 ```ts doctest
 import { app, axes, each, evaluate, lit, ref, space } from "@mark1russell7/vex";
 import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";

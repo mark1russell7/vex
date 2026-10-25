@@ -114,6 +114,7 @@ evaluate(byX, { space: boxes, origin: "0", domains: [NumDomain] }); // => { ok: 
 | `append(list, other)` | a list of the items of `list`, and then the items of `other` |
 | `without(list, other)` | a list of the items of `list` whose key is not the key of an item of `other` |
 | `flat(list)` | a list of the items of the lists that are the values of the items of `list`, in order |
+| `get(list, key)` | the value of the first item with the key `key`. A key that no item has gives `#N/A`. |
 
 These ops skip error items, as each list op does. The option `{ strict: true }` gives the first error. The axis `reverse(list(expr))` gives the reverse order, and an error item of the list gives an error item for its target. A standalone module keeps each list as an array. Tier 2 does not have lists yet, so tier 1 evaluates such a program.
 
@@ -128,6 +129,23 @@ const grandchildren = app("flat", each(axes.children, each(axes.children, ref("n
 
 evaluate(app("keys", grandchildren), { space: tree, origin: "r" }); // => { ok: true, value: ["c", "d"] }
 evaluate(app("keys", app("without", grandchildren, each(axes.descendants, ref("n"), [{ t: "key", key: "b" }]))), { space: tree, origin: "r" }); // => { ok: true, value: ["c"] }
+```
+
+A name of `fold` or `iterate` can hold a list (LOOP.LIST). A step reads the old value at a key with `get(list, key)`. Thus each item of the next list can read each item of the old list. A record that a step reads by key keeps its key in a field, because `get` takes the key as a value.
+
+A literal can be a list (LIST.LITERAL). Its JSON form is the form of `vexList`, so the empty list can start a stack or a seen set. A standalone module gives a reason for these programs, and tier 1 evaluates them.
+
+```ts doctest
+import { app, axes, each, evaluate, iterate, lit, ref, space, v, vexList } from "@mark1russell7/vex";
+
+const ring = space.array([{ next: "1", n: 30 }, { next: "2", n: 10 }, { next: "0", n: 20 }]);
+// Each step gives each item the old value of the item at the key in the field next.
+const turn = (steps: number) => iterate(steps, { xs: each(axes.all, ref("n")) }, { xs: each(axes.all, app("get", v("xs"), ref("next"))) }, app("values", v("xs")));
+
+evaluate(turn(1), { space: ring, origin: "0" }); // => { ok: true, value: [10, 20, 30] }
+evaluate(turn(2), { space: ring, origin: "0" }); // => { ok: true, value: [20, 30, 10] }
+evaluate(app("count", lit(vexList([]))), { space: ring, origin: "0" }); // => { ok: true, value: 0 }
+evaluate(app("get", each(axes.all, ref("n")), lit("9")), { space: ring, origin: "0" }).ok; // => false
 ```
 
 ## Programs are data

@@ -130,7 +130,7 @@ export const arbLiteral = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<unk
     domainValue,
   );
 
-const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without", "get"];
+const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without", "get", "indexOf", "fill"];
 const FORMS = ["if", "and", "or", "ifError"];
 const NAMES = ["a", "b"];
 

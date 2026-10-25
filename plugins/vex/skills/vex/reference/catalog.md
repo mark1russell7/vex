@@ -30,8 +30,12 @@ These ops apply to each value. They are not ops of a domain.
 | `without(list, other)` | A list of the items of `list` whose key is not the key of an item of `other` |
 | `flat(list)` | A list of the items of the lists that are the values of the items, in order |
 | `get(list, key)` | The value of the first item with the key `key`. A key that no item has gives `#N/A`. |
+| `indexOf(list, value)` | The position of the first item with the value, from 0, as `nth` counts. The value is a number, a text or a boolean. A value that no item has gives `#N/A`. |
+| `fill(n, value)` | A list of `n` items with the value, from 0 to 100000 items. The keys are the positions. |
 
 A list op skips error items. The option `{ strict: true }` gives the first error. A literal can be a list, for example the empty list `{ "kind": "vex.list", "items": [] }`, and a name of a loop can hold a list.
+
+An array of a field or of a name is a list where a list op or the axis `list` needs one. The keys are the positions, from `"0"`. Thus `count(fr)`, `nth(fr, 1)` and `take(fr, 2)` read the array `fr`. A domain or a function of the host with the op comes first.
 
 ## `NumDomain`
 

@@ -2,6 +2,7 @@ import { fromDocument, isDocument, type Envelope } from "./document.ts";
 import { liftsAt, resolveOp, type AnyDomain, type ParamKind, type ResolvedOp } from "./domain.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
 import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type Move } from "./ir.ts";
+import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { axisTargets, fixAddr, resolveAddr, type Position, type Space } from "./space.ts";
@@ -207,6 +208,18 @@ class Compiler {
 
   #err(kind: ErrorKind, message: string, f: Frame, path: readonly number[], extra: { op?: string; causes?: readonly VexError[]; thrown?: unknown } = {}): Result<never> {
     return fail(vexError(kind, message, { path, origin: f.pos.origin, focus: f.pos.focus, ...extra }));
+  }
+
+  /** This method gives the error of a position of an array without a value (LIST.ARRAY), at a node. */
+  #missing(f: Frame, path: readonly number[]): (message: string) => VexError {
+    return (message) => vexError("missing-field", message, { path, origin: f.pos.origin, focus: f.pos.focus });
+  }
+
+  /** This method gives the list of `fill(n, value)` (LIST.FILL). A count that is not a whole number from 0 to 100000 gives `#VALUE!`. */
+  #fill(values: readonly unknown[], f: Frame, path: readonly number[]): Result<VexList> {
+    const [n, value] = values;
+    if (!isFillCount(n)) return this.#err("kind-mismatch", `"fill" needs a whole number from 0 to 100000, not ${describeType(n)}`, f, path, { op: "fill" });
+    return value === undefined ? this.#err("bad-expression", '"fill" needs argument 2', f, path, { op: "fill" }) : ok(fillList(n, value));
   }
 
   #emit(c: Ctx, info: Info, f: Frame, result: Result<unknown>, reads?: readonly Read[]): Result<unknown> {
@@ -605,8 +618,10 @@ class Compiler {
     return (f, c) => {
       const r = node(f, c);
       if (!r.ok) return r;
-      if (!isVexList(r.value)) return this.#err("kind-mismatch", `the axis "list" needs a list, not a ${describeType(r.value)}`, f, path);
-      const items = r.value.items.map(({ key, result }) => (result.ok ? { key } : { key, test: result }));
+      // LIST.ARRAY: an array is a list with the positions as keys.
+      const listed = asList(r.value, this.#missing(f, path));
+      if (listed === undefined) return this.#err("kind-mismatch", `the axis "list" needs a list, not a ${describeType(r.value)}`, f, path);
+      const items = listed.items.map(({ key, result }) => (result.ok ? { key } : { key, test: result }));
       return ok(reverse ? items.toReversed() : items);
     };
   }
@@ -633,6 +648,9 @@ class Compiler {
         }
       }
       if (fn !== undefined) return this.#emit(c, info, f, this.#checkResult(this.#invoke(() => fn(...values), op, f, path), f, path, op));
+      // LIST.ARRAY and LIST.FILL come after the domains and the functions of the host, so each of their results stays.
+      if (listOp !== undefined && Array.isArray(self)) return this.#emit(c, info, f, this.#listOp(listOp, listOfArray(self, this.#missing(f, path)), values.slice(1), f, path));
+      if (op === "fill") return this.#emit(c, info, f, this.#fill(values, f, path));
       if (accepted !== undefined) return this.#emit(c, info, f, this.#err("unknown-op", `the domain "${accepted.name}" has no op "${op}"`, f, path, { op }));
       if (values.length === 0) return this.#emit(c, info, f, this.#err("unknown-op", `there is no function "${op}"`, f, path, { op }));
       return this.#emit(c, info, f, this.#err("not-instance", `no domain accepts the receiver of "${op}" (${describeType(self)})`, f, path, { op }));
@@ -753,7 +771,10 @@ class Compiler {
       return Number.isSafeInteger(n) && n >= 0 ? ok(n) : this.#err("kind-mismatch", `"${op}" needs a whole number from 0, not ${describeType(n)}`, f, path, { op });
     };
     // The second list of append and without follows the rules of the first list (LIST.BUILD).
-    const other = (): Result<readonly ListItem[]> => (isVexList(rest[0]) ? goodItems(rest[0], strict) : this.#err("kind-mismatch", `"${op}" needs a list as its second argument, not a ${describeType(rest[0])}`, f, path, { op }));
+    const other = (): Result<readonly ListItem[]> => {
+      const second = asList(rest[0], this.#missing(f, path));
+      return second !== undefined ? goodItems(second, strict) : this.#err("kind-mismatch", `"${op}" needs a list as its second argument, not a ${describeType(rest[0])}`, f, path, { op });
+    };
     switch (op) {
       case "sortBy":
         return this.#sortBy(okItems, okValues, f, path);
@@ -775,6 +796,12 @@ class Compiler {
       }
       case "flat":
         return this.#flat(okValues, strict, f, path);
+      case "indexOf": {
+        const x = rest[0];
+        if (!isIndexValue(x)) return this.#err("kind-mismatch", `"indexOf" needs a number, a text or a boolean, not a ${describeType(x)}`, f, path, { op });
+        const i = okValues.indexOf(x);
+        return i >= 0 ? ok(i) : this.#err("missing-field", `the list has no item with the value ${JSON.stringify(x)}`, f, path, { op });
+      }
       case "nth": {
         const i = whole();
         if (!i.ok) return i;
@@ -844,8 +871,9 @@ class Compiler {
    */
   #flat(values: readonly unknown[], strict: boolean, f: Frame, path: readonly number[]): Result<VexList> {
     const out: ListItem[] = [];
-    for (const inner of values) {
-      if (!isVexList(inner)) return this.#err("kind-mismatch", `"flat" needs a list as the value of each item, but an item is a ${describeType(inner)}`, f, path, { op: "flat" });
+    for (const value of values) {
+      const inner = asList(value, this.#missing(f, path));
+      if (inner === undefined) return this.#err("kind-mismatch", `"flat" needs a list as the value of each item, but an item is a ${describeType(value)}`, f, path, { op: "flat" });
       const good = goodItems(inner, strict);
       if (!good.ok) return good;
       out.push(...good.value);
@@ -905,7 +933,7 @@ class Compiler {
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without", "get"]);
+const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that

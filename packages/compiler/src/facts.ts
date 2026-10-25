@@ -13,9 +13,9 @@ export const MAX_CALLS = 10_000;
 
 /**
  * The list ops that give a list, or read a position or a key of a list (LIST.SORT, LIST.TAKE, LIST.NTH, LIST.BUILD,
- * LIST.GET).
+ * LIST.GET, LIST.INDEXOF, LIST.FILL).
  */
-const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth", "drop", "append", "flat", "without", "get"]);
+const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth", "drop", "append", "flat", "without", "get", "indexOf", "fill"]);
 
 /**
  * This function gives the reason that tier 2 cannot take a program with lists as values. The reason is the axis `list`,

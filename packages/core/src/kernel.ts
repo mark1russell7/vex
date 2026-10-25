@@ -34,6 +34,7 @@ import {
   formulaEvaluators,
   ok,
 } from "@mark1russell7/coeval";
+import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { vexError, type ErrorCode, type ErrorDetails, type ErrorKind, type VexError } from "./errors.ts";
@@ -182,6 +183,9 @@ const kernelError = (kind: ErrorKind, message: string, details: ErrorDetails = {
 
 /** This function makes a failed result of the kernel. */
 const failed = (kind: ErrorKind, message: string): Failed => ({ ok: false, error: kernelError(kind, message) });
+
+/** This function gives the error of a position of an array without a value (LIST.ARRAY). */
+const missing = (message: string): VexError => vexError("missing-field", message);
 
 /** This function stops host code with an error of the kernel. The kernel catches the `Failure` and gives its error. */
 const stop = (kind: ErrorKind, message: string): never => {
@@ -368,8 +372,10 @@ const axisEvaluator: EvalFn = ({ typePath, value, context }) => {
       targets: (from) => {
         const r = list.evaluate({ ...context, self: from });
         if (!r.ok) return r;
-        if (!isVexList(r.value)) return failed("kind-mismatch", `the axis "list" needs a list, not a ${describe(r.value)}`);
-        return ok(r.value.items.map(({ key, result }) => (result.ok ? { key } : { key, error: result.error })));
+        // LIST.ARRAY: an array is a list with the positions as keys.
+        const items = asList(r.value, missing);
+        if (items === undefined) return failed("kind-mismatch", `the axis "list" needs a list, not a ${describe(r.value)}`);
+        return ok(items.items.map(({ key, result }) => (result.ok ? { key } : { key, error: result.error })));
       },
     });
   }
@@ -628,7 +634,7 @@ function callFound(found: Found, op: string, self: unknown, args: readonly unkno
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without", "get"]);
+const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that
@@ -644,14 +650,16 @@ function goodOf(items: readonly ListItem[], strict: boolean): readonly ListItem[
 
 /** This function gives the items of the list `other` of `append` and `without` (LIST.BUILD). Another value gives `#VALUE!`. */
 function otherOf(op: string, other: unknown, strict: boolean): readonly ListItem[] {
-  return isVexList(other) ? goodOf(other.items, strict) : stop("kind-mismatch", `"${op}" needs a list as its second argument, not a ${describe(other)}`);
+  const list = asList(other, missing);
+  return list !== undefined ? goodOf(list.items, strict) : stop("kind-mismatch", `"${op}" needs a list as its second argument, not a ${describe(other)}`);
 }
 
 /** This function joins the lists that are the values of the items, in order (LIST.FLAT). Each list follows LIST.BUILD. */
 function flat(vs: readonly unknown[], strict: boolean): unknown {
   const out: ListItem[] = [];
-  for (const inner of vs) {
-    if (!isVexList(inner)) return stop("kind-mismatch", `"flat" needs a list as the value of each item, but an item is a ${describe(inner)}`);
+  for (const v of vs) {
+    const inner = asList(v, missing);
+    if (inner === undefined) return stop("kind-mismatch", `"flat" needs a list as the value of each item, but an item is a ${describe(v)}`);
     out.push(...goodOf(inner.items, strict));
   }
   return vexList(out);
@@ -705,6 +713,13 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
       if (typeof key !== "string") return stop("kind-mismatch", `"get" needs a text key, not a ${describe(key)}`);
       const i = good.findIndex((it) => it.key === key);
       return i >= 0 ? vs[i] : stop("missing-field", `the list has no item with the key ${JSON.stringify(key)}`);
+    }
+    case "indexOf": {
+      // The position of the first value, among the items with a value (LIST.INDEXOF).
+      const x = rest[0];
+      if (!isIndexValue(x)) return stop("kind-mismatch", `"indexOf" needs a number, a text or a boolean, not a ${describe(x)}`);
+      const i = vs.indexOf(x);
+      return i >= 0 ? i : stop("missing-field", `the list has no item with the value ${JSON.stringify(x)}`);
     }
     case "sum":
       // Stryker disable next-line ArrayDeclaration: a sum needs no domain, and a text in the list accepts no value
@@ -772,9 +787,18 @@ function dispatch(op: string, domains: readonly AnyDomain[], fns: Readonly<Recor
       }
     }
     if (free !== undefined) return checked(free(...values), op, domains);
+    // LIST.ARRAY and LIST.FILL come after the domains and the functions of the host, so each of their results stays.
+    if (listed && Array.isArray(self)) return listOp(op, listOfArray(self, missing).items, values.slice(1), domains);
+    if (op === "fill") return fill(values);
     if (accepted || values.length === 0) return stop("unknown-op", accepted ? `the domain of the receiver has no op "${op}"` : `there is no function "${op}"`);
     return stop("not-instance", `no domain accepts the receiver of "${op}" (${describe(self)})`);
   };
+}
+
+/** This function gives the list of `fill(n, value)` (LIST.FILL). A count that is not a whole number from 0 to 100000 gives `#VALUE!`. */
+function fill([n, value]: readonly unknown[]): unknown {
+  if (!isFillCount(n)) return stop("kind-mismatch", `"fill" needs a whole number from 0 to 100000, not ${describe(n)}`);
+  return value === undefined ? stop("bad-expression", '"fill" needs argument 2') : fillList(n, value);
 }
 
 /** This function gives an argument of a special form. A missing argument gives `#VALUE!`. */

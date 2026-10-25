@@ -394,6 +394,38 @@ describe("the tiers", () => {
     expect(fromCore(tiered(own, { domains: [Pick] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 31 });
   });
 
+  it("LIST.ARRAY LIST.INDEXOF LIST.FILL COMPILE.FALLBACK: a list op on an array, indexOf and fill give the result of tier 1, and a module gives a reason", () => {
+    const s = space.array([{ n: 3, fr: [0.2, 0.3] }, { n: 1, fr: [] }, { n: 2, fr: [1, null] }]);
+    const names = { a: [3, 1, 2], keys: ["x", "y"] };
+    const ns = each(axes.all, ref("n"));
+    const schema = { fields: { n: "number" } } as const;
+    const lists = "tier 2 does not have lists as values yet";
+    const cases: readonly (readonly [Expr, string])[] = [
+      [app("indexOf", ns, lit(1)), "indexOf"],
+      [app("indexOf", variable("keys"), lit("y")), "indexOf"],
+      [app("count", app("fill", lit(2), lit(1))), "fill"],
+    ];
+    const same = (e: Expr, p: ReturnType<typeof tiered>): void => {
+      for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k, vars: names }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k, vars: names })));
+    };
+    for (const [e, op] of cases) {
+      expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason: `the program has the list op "${op}", and ${lists}` });
+      const p = tiered(e, { domains: [NumDomain] });
+      expect(p.tier).toBe(1);
+      same(e, p);
+    }
+    expect(emitModule(app("indexOf", ns, lit(1)), { domains: [NumDomain], schema })).toEqual({ ok: false, reason: 'the list op "indexOf" is not in a module yet' });
+    expect(emitModule(app("count", app("fill", lit(2), lit(1))), { domains: [NumDomain], schema }).ok).toBe(false);
+    // Tier 2 takes a list op on a field or a name. A run with an array goes to tier 1, which reads the array as a list.
+    for (const e of [app("sum", ref("fr")), app("count", variable("a")), app("max", variable("a")), app("add", app("count", ref("fr")), lit(1))]) {
+      const p = tiered(e, { domains: [NumDomain] });
+      expect(p.tier).toBe(2);
+      same(e, p);
+      expect(p.stats.fallbacks).toBeGreaterThan(0);
+    }
+    expect(fromCore(tiered(app("sum", ref("fr")), { domains: [NumDomain] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 0.5 });
+  });
+
   it("COMPILE.FALLBACK: an exception in the lowering gives a reason, not an exception", () => {
     // A host domain whose op table throws when the compiler reads it.
     const broken = Object.defineProperty({ ...NumDomain }, "ops", {

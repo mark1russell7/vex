@@ -379,11 +379,12 @@ describe("COMPILE.MODULE: a standalone module", () => {
 
   it("V-060 COMPILE.MODULE: MODULE_GLOBALS has each global that the text of a module of a golden file reads, and no other global", () => {
     // A golden file with another global fails this test, so the list grows with the printer.
-    const dir = new URL("./__golden__/", import.meta.url);
-    const files = readdirSync(dir).filter((f) => /^module-.*\.js$/.test(f));
-    expect(files.length).toBeGreaterThan(20);
-    const used = new Set(files.flatMap((f) => globalsOf(readFileSync(new URL(f, dir), "utf8"))));
-    expect([...used].toSorted()).toEqual([...MODULE_GLOBALS].toSorted());
+    const golden = new URL("./__golden__/", import.meta.url);
+    const modules = readdirSync(golden).filter((f) => /^module-.*\.js$/.test(f));
+    expect(modules.length).toBeGreaterThan(20);
+    const used = new Set(modules.flatMap((f) => globalsOf(readFileSync(new URL(f, golden), "utf8"))));
+    const byName = (a: string, b: string): number => a.localeCompare(b);
+    expect([...used].toSorted(byName)).toEqual([...MODULE_GLOBALS].toSorted(byName));
   });
 
   it("copies only a function whose source is an expression that reads no name outside itself", () => {

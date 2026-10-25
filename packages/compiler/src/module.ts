@@ -320,8 +320,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
 };
 
 /**
- * The globals of JavaScript that the code of a module reads: the helpers, the run and the copies of the ops of the
- * domains of the tests. A test reads the text of the modules of the golden files and checks this list (V-060).
+ * This list has the globals of JavaScript that the code of a module reads. This code is the helpers, the run and the
+ * copies of the ops of the test domains. A test reads the text of the modules of the golden files and checks this list (V-060).
  */
 export const MODULE_GLOBALS: ReadonlySet<string> = new Set("Array Error Int32Array Map Math Number Object Uint8Array undefined".split(" "));
 

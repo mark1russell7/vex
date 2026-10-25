@@ -31,7 +31,8 @@ jobs:
   # The site: typecheck of the widgets, the spec pages and the static build
   site:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The site job runs Playwright in three browsers. It takes about 9 minutes, and more on a slow runner.
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:

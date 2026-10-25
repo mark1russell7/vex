@@ -6,12 +6,12 @@ import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, it
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { emitModule, type ModuleOptions } from "./module.ts";
+import { emitModule, MODULE_GLOBALS, type ModuleOptions } from "./module.ts";
 
 type Run = (records: unknown, vars: unknown, parents?: unknown) => readonly unknown[];
 interface Loaded {
@@ -39,6 +39,18 @@ async function load(source: string): Promise<Loaded> {
   const file = join(dir, `m${files++}.mjs`);
   writeFileSync(file, source);
   return (await import(/* @vite-ignore */ pathToFileURL(file).href)) as Loaded;
+}
+
+/**
+ * This function gives the globals that the code of a text reads. These are the names of `globalThis` outside the
+ * comments and the texts, and not after a dot.
+ */
+function globalsOf(text: string): string[] {
+  const code = text
+    .replaceAll(/\/\*[\s\S]*?\*\//g, " ")
+    .replaceAll(/(^|[^:\\])\/\/[^\n]*/gm, "$1 ")
+    .replaceAll(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, " ");
+  return [...code.matchAll(/(?<![\w$.])[A-Za-z_$][\w$]*/g)].map((m) => m[0]).filter((t) => Object.hasOwn(globalThis, t));
 }
 
 /** This function makes the module of a source with `new Function`, for the many programs of a property. */
@@ -340,23 +352,38 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(reasonOf(where(op("lt", op("if", ref("b"), n, ref("s")), K), w))).toBe(undecided("lt"));
   });
 
-  it("V-060 COMPILE.MODULE: the name of the run is not a reserved word, a global of JavaScript or a name of the module", () => {
+  it("V-060 COMPILE.MODULE: the name of the run is not a reserved word, a name that the module declares or a global that a module reads", () => {
     // V-060: such a name gave a module that did not parse, or a run that read its own function in place of a global.
     const e = op("add", n, lit(1));
     expect(sourceOf(e)).toContain("const k_number = ");
-    const cases: readonly (readonly [string, string])[] = [
-      ...["class", "function", "await", "let", "yield", "enum", "static", "eval", "arguments", "true"].map((x) => [x, "a reserved word of JavaScript"] as const),
-      ...["Math", "Array", "Number", "Object", "Error", "Int32Array", "undefined", "NaN", "globalThis"].map((x) => [x, "a global of JavaScript"] as const),
-      ...["F", "E", "C", "T", "S", "Z", "N", "W", "M1", "PT", "VEX_ERROR", "VexContractError", "k_number"].map((x) => [x, "a name of the module"] as const),
+    // A node of the memo with two keys declares the helper M and the constant Z. A node that keeps its items declares the
+    // helper S and the constants N and W.
+    const memo = rec({ two: op("sum", each(axes.where(axes.all, op("lt", n, K)), op("multiply", w, KW))), kept: op("sum", each(axes.where(axes.all, op("eq", n, K)), w)) });
+    expect(sourceOf(memo)).toMatch(/^const Z = \{\};\nconst N = \{\}, W = \{\};\n[\s\S]*^function M\(f\) \{$[\s\S]*^function S\(/m);
+    const cases: readonly (readonly [Expr, string, string])[] = [
+      ...["class", "function", "await", "let", "yield", "enum", "static", "implements", "eval", "arguments", "true"].map((x) => [e, x, "a reserved word of JavaScript"] as const),
+      ...[...MODULE_GLOBALS].map((x) => [e, x, "a global that a module reads"] as const),
+      ...["F", "C", "E", "VEX_ERROR", "VexContractError", "k_number"].map((x) => [e, x, "a name of the module"] as const),
+      ...["M", "S", "Z", "N", "W"].map((x) => [memo, x, "a name of the module"] as const),
     ];
-    for (const [name, why] of cases) expect(reasonOf(e, { ...OPTIONS, name })).toBe(`the name "${name}" is ${why}`);
-    // Each other name gives a module that parses and gives the values of the interpreter.
-    for (const name of ["run", "plusOne", "$", "_", "R", "records", "Run"]) {
+    for (const [program, name, why] of cases) expect(reasonOf(program, { ...OPTIONS, name })).toBe(`the name "${name}" is ${why}`);
+    // Each other name gives a module that parses and gives the values of the interpreter. A global that no module reads,
+    // and a helper that the module does not declare, are good names too.
+    for (const name of ["run", "plusOne", "$", "_", "R", "records", "Run", "Intl", "JSON", "globalThis", "M", "S", "Z", "N", "W"]) {
       const source = sourceOf(e, { ...OPTIONS, name });
       // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
       const run = new Function(`${source.replaceAll(/^export /gm, "")}\nreturn ${name};`)() as Run;
       expect(run(RECORDS, VARS)).toEqual([2, -1, 4]);
     }
+  });
+
+  it("V-060 COMPILE.MODULE: MODULE_GLOBALS has each global that the text of a module of a golden file reads, and no other global", () => {
+    // A golden file with another global fails this test, so the list grows with the printer.
+    const dir = new URL("./__golden__/", import.meta.url);
+    const files = readdirSync(dir).filter((f) => /^module-.*\.js$/.test(f));
+    expect(files.length).toBeGreaterThan(20);
+    const used = new Set(files.flatMap((f) => globalsOf(readFileSync(new URL(f, dir), "utf8"))));
+    expect([...used].toSorted()).toEqual([...MODULE_GLOBALS].toSorted());
   });
 
   it("copies only a function whose source is an expression that reads no name outside itself", () => {

@@ -57,9 +57,9 @@
     "@mark1russell7/vex": "workspace:*",
     "@mark1russell7/vex-compiler": "workspace:*",
     "@mark1russell7/vex-domains": "workspace:*",
-    "@mark1russell7/service": "^0.5.5",
-    "@procedures/client": "^0.14.1",
-    "@procedures/mcp-server": "^0.14.1",
+    "@mark1russell7/service": "^0.5.8",
+    "@procedures/client": "^0.27.2",
+    "@procedures/mcp-server": "^0.27.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {

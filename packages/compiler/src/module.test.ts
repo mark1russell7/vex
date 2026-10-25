@@ -383,8 +383,7 @@ describe("COMPILE.MODULE: a standalone module", () => {
     const modules = readdirSync(golden).filter((f) => /^module-.*\.js$/.test(f));
     expect(modules.length).toBeGreaterThan(20);
     const used = new Set(modules.flatMap((f) => globalsOf(readFileSync(new URL(f, golden), "utf8"))));
-    const byName = (a: string, b: string): number => a.localeCompare(b);
-    expect([...used].toSorted(byName)).toEqual([...MODULE_GLOBALS].toSorted(byName));
+    expect([...used].toSorted((a, b) => a.localeCompare(b))).toEqual([...MODULE_GLOBALS].toSorted((a, b) => a.localeCompare(b)));
   });
 
   it("copies only a function whose source is an expression that reads no name outside itself", () => {

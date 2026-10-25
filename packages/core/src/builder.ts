@@ -722,8 +722,8 @@ class ChainImpl {
 
   fork(branches: Readonly<Record<string, (c: ChainImpl) => { readonly program: Expr }>>): ChainImpl {
     const { name, start } = this.#bound();
-    const fields: Record<string, Expr> = {};
-    for (const [n, f] of Object.entries(branches)) fields[n] = f(start).program;
+    // Object.fromEntries gives an own field for each name, also for "__proto__" (V-062).
+    const fields = Object.fromEntries(Object.entries(branches).map(([n, f]) => [n, f(start).program]));
     return new ChainImpl({ ...this.#s, expr: let_({ [name]: this.#s.expr }, rec(fields)) });
   }
 
@@ -1013,9 +1013,7 @@ class RootImpl {
     return { kind: "vex.fn", params, build };
   }
   rec(fields: Readonly<Record<string, unknown>>): Arg<unknown> {
-    const out: Record<string, Expr> = {};
-    for (const [n, a] of Object.entries(fields)) out[n] = toExpr(a, []);
-    return argToken(rec(out));
+    return argToken(rec(Object.fromEntries(Object.entries(fields).map(([n, a]) => [n, toExpr(a, [])]))));
   }
   list(items: readonly (readonly [string, unknown])[] = []): ListChainImpl {
     // LIST.LITERAL: a literal of the list, with a value for each item.

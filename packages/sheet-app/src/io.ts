@@ -2,7 +2,7 @@
  * The import and export of documents: CSV (RFC 4180), JSON, a share link, and the automatic save in the browser.
  */
 import { toBook, type Book } from "./book.ts";
-import { emptyDoc, isSheetDoc, nextId, type Column, type Row, type SheetDoc, type ValueType } from "./doc.ts";
+import { emptyDoc, isSheetDoc, nextId, uniqueNames, type Column, type Row, type SheetDoc, type ValueType } from "./doc.ts";
 import type { Evaluation } from "./engine.ts";
 import { formatValue, parseValue } from "./values.ts";
 
@@ -80,7 +80,8 @@ export function importCsv(text: string, title = "Imported"): SheetDoc {
   const idAt = header.indexOf("id");
   const parentAt = header.indexOf("parent");
   const dataAt = header.map((_h, i) => i).filter((i) => i !== idAt && i !== parentAt);
-  const columns: Column[] = dataAt.map((i, n) => ({ id: `c${n + 1}`, name: header[i]?.trim() || `Column ${n + 1}`, kind: "value", type: guessType(lines.map((l) => l[i] ?? "")) }));
+  // A file can give two columns the same name. Then the second column gets the next free name, for example "a 2".
+  const columns: Column[] = uniqueNames(dataAt.map((i, n): Column => ({ id: `c${n + 1}`, name: header[i]?.trim() || `Column ${n + 1}`, kind: "value", type: guessType(lines.map((l) => l[i] ?? "")) })));
   const used = new Set<string>();
   const ids: string[] = lines.map((l) => {
     const want = idAt >= 0 ? (l[idAt] ?? "").trim() : "";
@@ -125,9 +126,29 @@ const toBase64Url = (bytes: Uint8Array): string => {
 };
 const fromBase64Url = (text: string): Uint8Array => Uint8Array.from(atob(text.replaceAll("-", "+").replaceAll("_", "/")), (c) => c.charCodeAt(0));
 
-async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
-  const out = new Blob([bytes as BlobPart]).stream().pipeThrough(stream);
-  return new Uint8Array(await new Response(out).arrayBuffer());
+/** The most bytes of the JSON text of a share link. A small link can inflate to gigabytes, so the decode stops here. */
+const SHARE_LIMIT = 5 * 1024 * 1024;
+
+/** This function sends bytes through a stream. With `limit`, more output bytes than the limit throw an error. */
+async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream, limit = Number.POSITIVE_INFINITY): Promise<Uint8Array> {
+  const reader = new Blob([bytes as BlobPart]).stream().pipeThrough(stream).getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (let r = await reader.read(); !r.done; r = await reader.read()) {
+    size += r.value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      throw new RangeError(`the text is larger than ${limit} bytes`);
+    }
+    chunks.push(r.value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.byteLength;
+  }
+  return out;
 }
 
 /** This function encodes a book for the address of a share link: compressed JSON in base64url. */
@@ -138,7 +159,7 @@ export async function encodeShare(book: Book): Promise<string> {
 /** This function decodes a share link, or gives `undefined` for a broken link. */
 export async function decodeShare(text: string): Promise<Book | undefined> {
   try {
-    const json = new TextDecoder().decode(await pipe(fromBase64Url(text), new DecompressionStream("deflate-raw")));
+    const json = new TextDecoder().decode(await pipe(fromBase64Url(text), new DecompressionStream("deflate-raw"), SHARE_LIMIT));
     return importJson(json);
   } catch {
     return undefined;

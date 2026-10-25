@@ -25,13 +25,14 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
       }
       out[key] = items;
     } else if (isRecord(list)) {
-      const rec: Record<string, unknown> = {};
+      const entries: [string, unknown][] = [];
       for (const [k, x] of Object.entries(list)) {
         const r = mapValues(x, f);
         if (!r.ok) return r;
-        rec[k] = r.value;
+        entries.push([k, r.value]);
       }
-      out[key] = rec;
+      // A binding or a field with the name "__proto__" is an own field too (V-062).
+      out[key] = Object.fromEntries(entries);
     }
     return undefined;
   };

@@ -308,13 +308,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     },
     // A list op reads the option `strict` of its options. The read can throw, as in the interpreter.
     opts: (value) => (value as { readonly strict?: unknown } | null | undefined)?.strict,
-    rec(names, values) {
-      const out: Record<string, unknown> = {};
-      names.forEach((n, i) => {
-        out[n] = values[i];
-      });
-      return Object.freeze(out);
-    },
+    // Object.fromEntries gives an own field for each name, also for "__proto__" (V-062).
+    rec: (names, values) => Object.freeze(Object.fromEntries(names.map((n, i) => [n, values[i]]))),
     list: (keys, values) => vexList(keys.map((key, i) => ({ key, result: { ok: true, value: values[i] } }))),
     frozen: (values) => Object.freeze([...values]),
     ext(kind, data, s, origin, focus, path) {

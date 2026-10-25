@@ -2,7 +2,7 @@ import { app, cell, each, offset, ref, axes, lit, type Expr } from "@mark1russel
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { bookOf } from "./book.ts";
-import { addRow, emptyDoc, setCell, setCellFormula, updateColumn, type SheetDoc } from "./doc.ts";
+import { addRow, emptyDoc, isSheetDoc, setCell, setCellFormula, updateColumn, type SheetDoc } from "./doc.ts";
 import { evaluateDoc, type Compiler } from "./engine.ts";
 import { exportCsv, importCsv, importJson, exportJson, parseCsv, toCsv, encodeShare, decodeShare } from "./io.ts";
 import { commit, historyOf, redo, undo } from "./history.ts";
@@ -130,6 +130,8 @@ describe("values", () => {
     expect(parseValue("boolean", "Yes")).toEqual({ kind: "ok", value: true });
     expect(parseValue("vec2", "(3, -4)")).toEqual({ kind: "ok", value: new Vec2(3, -4) });
     expect(parseValue("vec2", "3")).toMatchObject({ kind: "bad" });
+    // A part of a vector reads as a number does, so the separator _ of digits gives a number, not NaN.
+    expect(parseValue("vec2", "(1_0, 2.5)")).toEqual({ kind: "ok", value: new Vec2(10, 2.5) });
     expect(formatValue((parseValue("date", " 2026-10-13 ") as { value: unknown }).value)).toBe("2026-10-13");
     expect(parseValue("date", "2026-02-30")).toEqual({ kind: "bad", reason: '"2026-02-30" is not a date like 2026-10-13' });
     expect(formatValue((parseValue("color", "#36f") as { value: unknown }).value)).toBe("#3366ff");
@@ -155,6 +157,57 @@ describe("import and export", () => {
     expect(back.columns.find((c) => c.name === "Cost")).toMatchObject({ kind: "value", type: "number" });
     // A column of texts in the form YYYY-MM-DD is a column of dates.
     expect(importCsv("When,Note\n2026-10-13,a\n2026-10-14,b\n").columns.map((c) => (c.kind === "value" ? c.type : c.kind))).toEqual(["date", "text"]);
+  });
+
+  it("gives each column of a CSV file a unique name, also for names that differ only in case", () => {
+    const d = importCsv("a,a,A,Cost,cost\n1,2,3,4,5\n");
+    expect(d.columns.map((c) => c.name)).toEqual(["a", "a 2", "A 3", "Cost", "cost 2"]);
+    // Each column keeps its values, so a formula reads the first and the second column.
+    const sum: SheetDoc = { ...d, columns: [...d.columns, { id: "f", name: "Sum", kind: "formula", formula: JSON.stringify(app("add", ref("a"), ref("a 2"))) }] };
+    expect(evaluateDoc(sum, json).cell(d.rows[0]?.id ?? "", "f")).toMatchObject({ ok: true, value: 3 });
+  });
+
+  it("refuses a table with two columns of one name, and renames the second column of such a file", () => {
+    const d = doc();
+    const twice: SheetDoc = { ...d, columns: [...d.columns, { id: "c9", name: "cost", kind: "value", type: "number" }] };
+    expect(isSheetDoc(twice)).toBe(false);
+    expect(isSheetDoc({ ...twice, columns: [...d.columns, { id: "c9", name: "Cost", kind: "value", type: "number" }] })).toBe(false);
+    // A file of an older version can have such columns. The read gives the second column the next free name.
+    expect(importJson(JSON.stringify(twice))?.tables[0]?.columns.map((c) => c.name)).toEqual(["Item", "Cost", "Total", "Running", "cost 2"]);
+    expect(importJson(JSON.stringify(bookOf(twice)))?.tables[0]?.columns.at(-1)?.name).toBe("cost 2");
+  });
+
+  it("stops the decode of a share link after 5 MB of text", async () => {
+    // A small link can inflate to a very large text. The decode stops at the limit, so the tab keeps its memory.
+    const large = bookOf(emptyDoc(" ".repeat(6 * 1024 * 1024)));
+    const link = await encodeShare(large);
+    expect(link.length).toBeLessThan(100_000);
+    expect(await decodeShare(link)).toBeUndefined();
+    const small = bookOf(emptyDoc(" ".repeat(1024 * 1024)));
+    expect(await decodeShare(await encodeShare(small))).toEqual(small);
+  });
+
+  it("keeps a row with the id __proto__, and a column with the name __proto__", () => {
+    const d: SheetDoc = {
+      ...emptyDoc(),
+      columns: [
+        { id: "c1", name: "Cost", kind: "value", type: "number" },
+        { id: "c2", name: "__proto__", kind: "value", type: "vec2" },
+        { id: "c3", name: "Twice", kind: "formula", formula: JSON.stringify(app("multiply", ref("Cost"), lit(2))) },
+        // The vector of the column __proto__ is a field, not the prototype of the record, so the record has no field x.
+        { id: "c5", name: "X", kind: "formula", formula: JSON.stringify(ref("x")) },
+        { id: "c4", name: "Under", kind: "formula", formula: JSON.stringify(app("sum", each(axes.children, ref("Cost")))) },
+      ],
+      rows: [
+        { id: "__proto__", parent: null, cells: { c1: "3", c2: "(7, 8)" } },
+        { id: "r2", parent: "__proto__", cells: { c1: "4", c2: "(7, 8)" } },
+      ],
+    };
+    const ev = evaluateDoc(d, json);
+    expect(ev.cell("__proto__", "c3")).toMatchObject({ ok: true, value: 6 });
+    expect(ev.cell("__proto__", "c4")).toMatchObject({ ok: true, value: 4 });
+    expect(ev.cell("r2", "c3")).toMatchObject({ ok: true, value: 8 });
+    expect(ev.cell("r2", "c5")).toMatchObject({ ok: false });
   });
 
   it("keeps a book through JSON and through a share link, and reads the JSON of one table as a book", async () => {

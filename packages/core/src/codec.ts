@@ -52,12 +52,14 @@ export function encodeValue(u: unknown, domains: readonly AnyDomain[]): Result<u
     return ok(out);
   }
   if (isPlainRecord(u)) {
-    const out: Record<string, unknown> = {};
+    const entries: [string, unknown][] = [];
     for (const [k, x] of Object.entries(u)) {
       const r = encodeValue(x, domains);
       if (!r.ok) return r;
-      out[k] = r.value;
+      entries.push([k, r.value]);
     }
+    // Object.fromEntries gives an own field for each key, also for "__proto__" (V-062).
+    const out = Object.fromEntries(entries);
     return ok(Object.hasOwn(u, "$vex") ? ({ $vex: "escape", value: out } satisfies Encoded) : out);
   }
   // A plain array or record stays data. Another object is a value of a domain, or it has no JSON form.
@@ -81,13 +83,14 @@ export function decodeValue(u: unknown, domains: readonly AnyDomain[]): Result<u
   }
   if (!isRecord(u)) return ok(u);
   const fields = (record: Readonly<Record<string, unknown>>): Result<unknown> => {
-    const out: Record<string, unknown> = {};
+    const entries: [string, unknown][] = [];
     for (const [k, x] of Object.entries(record)) {
       const r = decodeValue(x, domains);
       if (!r.ok) return r;
-      out[k] = r.value;
+      entries.push([k, r.value]);
     }
-    return ok(out);
+    // A key "__proto__" of the data is an own field too (V-062).
+    return ok(Object.fromEntries(entries));
   };
   // A record without the key $vex matches none of the forms below, so it stays data too.
   const kind = u["$vex"];

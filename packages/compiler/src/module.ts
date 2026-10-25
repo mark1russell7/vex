@@ -854,6 +854,23 @@ interface InlineForm {
 }
 
 /**
+ * The tokens of the text between the names of an inline form: digits, spaces, operators and parentheses. The tokenizer
+ * takes the first token that matches at each position, as the tokenizer of JavaScript takes the longest operator. So
+ * `<<=`, `>>=` and `>>>=` leave a lone `=`, and an assignment stops the inline form (V-058).
+ */
+const TOKEN = /\d|\.\d|\s|===?|!==?|<<|>>>?|<=|>=|[+\-*/%<>!?:(),&|^~]/y;
+
+/**
+ * This function tells if a text is a sequence of tokens. It takes one token at each step, so its time is linear in the
+ * length of the text. A repeated group of the tokens can split `!==` in two ways, and its time is exponential (V-057).
+ */
+function isTokens(t: string): boolean {
+  TOKEN.lastIndex = 0;
+  while (TOKEN.lastIndex < t.length) if (!TOKEN.test(t)) return false;
+  return true;
+}
+
+/**
  * This function gives the inline form of the source of an arrow function. The body of the function must be an
  * expression of operators, numbers, its parameters and the functions of `CALLS`. Such a body cannot throw for primitive
  * values (§7.1). The inline form is the text of the function itself, so it has its bits.
@@ -870,7 +887,7 @@ function inlineForm(src: string): InlineForm | undefined {
   const split = (m[2] as string).split(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/);
   for (const [i, t] of split.entries()) {
     if (i % 2 === 0) {
-      if (!/^(?:\d|\.\d|\s|===?|!==?|<=|>=|[+\-*/%<>!?:(),&|^~])*$/.test(t) || /\+\+|--|\)\s*\(/.test(t)) return undefined;
+      if (!isTokens(t) || /\+\+|--|\)\s*\(/.test(t)) return undefined;
       text += t;
     } else if (CALLS.has(t)) text += t;
     else {

@@ -121,6 +121,19 @@ function domainOf(name: string, primitive: PrimitiveKind, ops: Readonly<Record<s
 const n = ref("n");
 const w = ref("w");
 const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
+
+/**
+ * This function gives true when the module calls the op of a source, and false for an inline form. The module gives the
+ * values of the interpreter (P17), and it does not change its records.
+ */
+function called(src: string, kind: PrimitiveKind, returns: PrimitiveKind): boolean {
+  const options: ModuleOptions = { domains: [domainOf("Tokens", kind, { probe: [src, returns] }), NumDomain, BoolDomain, TextDomain], schema: SCHEMA };
+  const x = kind === "number" ? n : ref("s");
+  const e = rec({ value: op("probe", x), x });
+  const source = sourceOf(e, options);
+  expectSame(make(source), e, MANY, VARS, options);
+  return /const op_\d+_\d+ = /.test(source);
+}
 /** The keys of the origin, for the nodes of the memo. */
 const K = ref("n", [{ t: "origin" }]);
 const KW = ref("w", [{ t: "origin" }]);
@@ -1128,6 +1141,42 @@ describe("COMPILE.MODULE: the text of a module", () => {
       fewer: safe(op("tight", n)),
     });
     await expectGolden("inline", e, options);
+  });
+
+  it("COMPILE.MODULE V-057: the tokens of the text between the names of an inline form take a time that is linear in its length", () => {
+    // V-057: a repeated group of the tokens split each "!==" in two ways. A text of many "!==" and then a quote failed
+    // only after each split, so the time was exponential (CodeQL js/redos), and emitModule ran for hours.
+    const start = performance.now();
+    expect(called(`(a) => a + "x${"!==".repeat(40)}"`, "string", "string")).toBe(true);
+    expect(called(`(a) => a + 1 ${"!== 1 ".repeat(40)}+ "x"`, "number", "boolean")).toBe(true);
+    expect(performance.now() - start).toBeLessThan(1000);
+    // The tokenizer takes the first token at each position, and these texts are inline forms.
+    const inline: readonly (readonly [string, PrimitiveKind])[] = [
+      ["(a) => a == 1", "boolean"],
+      ["(a) => a === 1", "boolean"],
+      ["(a) => a != 1", "boolean"],
+      ["(a) => a !== 1", "boolean"],
+      ["(a) => a < 1", "boolean"],
+      ["(a) => a <= 1", "boolean"],
+      ["(a) => a > 1", "boolean"],
+      ["(a) => a >= 1", "boolean"],
+      ["(a) => a << 1", "number"],
+      ["(a) => a >> 1", "number"],
+      ["(a) => a >>> 1", "number"],
+      ["(a) => a * .5 + 1.5", "number"],
+      ["(a) => (a % 3) ** 2 - -4 / 2", "number"],
+      ["(a) => (a & 3) | (4 ^ ~5)", "number"],
+      ["(a) => (!a ? 1 : 2)", "number"],
+      ["(a) => Math.max(a, 2)", "number"],
+    ];
+    expect(inline.filter(([src, returns]) => called(src, "number", returns))).toEqual([]);
+  });
+
+  it("COMPILE.MODULE V-058: an assignment is not an inline form, so the module does not change the field of a record", () => {
+    // V-058: the check took `<<=` as `<` and `<=`, so the inline form of `(a) => (a <<= 1)` wrote the field of the record.
+    // The tokenizer takes `<<`, `>>` and `>>>` first, so a shift with an assignment leaves a lone "=", as `+=` does.
+    const assignments = ["(a) => (a <<= 1)", "(a) => (a >>= 1)", "(a) => (a >>>= 1)", "(a) => (a += 1)", "(a) => (a === 1 ? 2 : (a = 3))"];
+    expect(assignments.filter((src) => !called(src, "number", "number"))).toEqual([]);
   });
 
   it("the checks of the results: a domain with valid, and a valid that is only the check of a finite number", async () => {

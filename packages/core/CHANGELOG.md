@@ -1,5 +1,9 @@
 # @mark1russell7/vex
 
+## 0.11.1
+
+No changes in this release.
+
 ## 0.11.0
 
 ### Minor Changes

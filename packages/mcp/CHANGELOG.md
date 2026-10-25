@@ -1,5 +1,35 @@
 # @mark1russell7/vex-mcp
 
+## 0.11.0
+
+### Minor Changes
+
+- 0d6edf5: `@mark1russell7/vex-mcp` takes `@procedures/client` and `@procedures/mcp-server` `^0.27.2`, not `^0.14.1`. It also takes `@mark1russell7/service` `^0.5.8`, not `^0.5.5`, because the new client needs it. The five tools keep their names, their inputs and their hints. Each tool stays read-only and idempotent. The command `vex-mcp` still stops with the code 0 at the end of its input.
+  
+  MINOR: before 1.0.0, a break of the public API raises MINOR. `vexModule` and `createHost` give the types of these packages, and those types changed from 0.14 to 0.27.
+  
+  The changes for a caller of `createHost(faces)`:
+  
+  - The face `http` has no listener of its own (`@procedures/mcp-server` 0.17.0). Its options `port`, `host` and `server` are removed.
+  - To serve the face `http`, mount `host.handleHttp` on a listener. Then declare the listener and the host on a service.
+  - The `token` of the face `http` is the token of the policy (0.27.0). The server of the host admits each HTTP request one time.
+  - The faces `stdio` and `sdk` do not change. The default face is the standard input and output, as before.
+
+### Patch Changes
+
+- 9918bfb: Lists as the state of a loop, the second block of design E of the study of recursion. A name of `iterate` or `fold` can hold a list, and a step gives the next list from the old one (LOOP.LIST). `get(list, key)` gives the value of the first item with the key, and a key that no item has gives `#N/A` (LIST.GET). A literal can be a list, so the empty list and a list with one key start a stack or a seen set (LIST.LITERAL). Thus a force layout keeps all positions in one name, and each step reads the old positions by key.
+  
+  In the builder, a name of a loop whose first value is a list chain is a list chain in each step. A list chain as the result gives a list chain. `root.list(items)` makes a list literal, and a list chain has `get(key)` (BUILD.LIST.LOOP). The type `ListOp` has one more name, so a `switch` over it needs one more case. The types `LoopVars` and `LoopStep` change for names that hold lists.
+  
+  `isVexList` checks each item: a text key, and a value or an error value (LIST.SHAPE). Another value of the kind `vex.list` is a record, so no list op applies to it, and both tiers give `#VALUE!`. Before, a list op threw on such a value.
+  
+  Tier 2 and a module give a reason for these programs, and tier 1 evaluates them. The reference interpreter and the random programs of the test kit have them. The catalog of the MCP server lists `get` and the list literals.
+- Updated dependencies [52c1e27]
+- Updated dependencies [9918bfb]
+  - @mark1russell7/vex@0.11.0
+  - @mark1russell7/vex-compiler@0.11.0
+  - @mark1russell7/vex-domains@0.11.0
+
 ## 0.10.0
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mark1russell7/vex-mcp
 
+## 0.11.1
+
+### Patch Changes
+
+- Updated dependencies [dd4d5cb]
+  - @mark1russell7/vex-compiler@0.11.1
+  - @mark1russell7/vex@0.11.1
+  - @mark1russell7/vex-domains@0.11.1
+
 ## 0.11.0
 
 ### Minor Changes

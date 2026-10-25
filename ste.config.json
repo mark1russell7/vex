@@ -9,7 +9,8 @@
     "packages/site/**/*.{md,mdx}",
     "packages/*/src/**/*.{ts,tsx}",
     "packages/*/*.config.{ts,mts}",
-    "plugins/**/*.md"
+    "plugins/**/*.md",
+    ".changeset/*.md"
   ],
   "ignore": [
     "**/node_modules/**",
@@ -21,7 +22,8 @@
     "**/*.spec.tsx",
     "docs/archive/**",
     "docs/research/**",
-    "packages/site/src/content/docs/spec/**"
+    "packages/site/src/content/docs/spec/**",
+    ".changeset/README.md"
   ],
   "technicalNouns": [
     "adapter",

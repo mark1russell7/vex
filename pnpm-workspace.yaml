@@ -10,12 +10,8 @@ allowBuilds:
   esbuild: true
 
 minimumReleaseAgeExclude:
-  # coeval is our own package, and it has provenance. Its patches come often, so the name stays here, not each version.
-  # Renovate keeps its own wait of 1 day for the packages of @mark1russell7.
-  - "@mark1russell7/coeval"
+  # Our own packages: the release train updates them, so the release age check of pnpm does not apply to them.
+  - "@mark1russell7/*"
+  - "@procedures/*"
   - "@astrojs/starlight@0.42.6"
   - astro@7.3.8
-  - "@mark1russell7/algebra@0.7.2"
-  - "@procedures/client@0.27.2"
-  - "@procedures/mcp-server@0.27.2"
-  - "@procedures/mcp@0.27.2"

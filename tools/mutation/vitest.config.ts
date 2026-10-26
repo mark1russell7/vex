@@ -9,13 +9,13 @@ export default defineConfig({
   plugins: [
     {
       // This plugin gives "@mark1russell7/vex-domains" to each test. A standalone module copies the text of each op
-      // function, so the tests of the modules (module.test.ts, module-sheet.test.ts) get the copy that Stryker does
+      // function, so the tests of the modules (module.test.ts, module-sheet-lists.test.ts) get the copy that Stryker does
       // not mutate (prepare.mjs).
       name: "vex-domains",
       enforce: "pre",
       resolveId(source, importer) {
         if (source !== "@mark1russell7/vex-domains") return null;
-        return /\/work\/compiler\/module(-[a-z]+)?\.test\.ts$/.test((importer ?? "").replaceAll("\\", "/")) ? work("domains-plain/index.ts") : work("domains/index.ts");
+        return /\/work\/compiler\/module(-[a-z]+)*\.test\.ts$/.test((importer ?? "").replaceAll("\\", "/")) ? work("domains-plain/index.ts") : work("domains/index.ts");
       },
     },
   ],

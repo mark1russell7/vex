@@ -180,11 +180,13 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
     expect(reasonOf(op("count", op("append", ns, nested())))).toBe('"append" of a list of lists and a list of values');
     expect(reasonOf(op("count", op("append", ns)))).toBe("a list op on a value that is not a list");
     expect(reasonOf(op("count", op("without", ns, lit(1))))).toBe("a list op on a value that is not a list");
-    // A list is a value only at a place that takes a list.
-    expect(reasonOf(iterate(2, { p: ns }, { p: ns }, v("p")))).toBe("a list is a value of the program");
-    expect(reasonOf(op("first", nested()))).toBe("a list is a value of the program");
+    // A list is a value only at a place that takes a list. The value of the program is such a place
+    // (COMPILE.MODULE.LIST.RESULT).
+    expect(reasonOf(iterate(2, { p: ns }, { p: ns }, v("p")))).toBe("");
+    expect(reasonOf(op("first", nested()))).toBe("");
+    expect(reasonOf(LIT)).toBe("");
     expect(reasonOf(op("add", op("get", nested(), id), lit(1)))).toBe("a list is a value of the program");
-    expect(reasonOf(LIT)).toBe("a list is a value of the program");
+    expect(reasonOf(op("add", op("first", nested()), lit(1)))).toBe("a list is a value of the program");
     // A step keeps the kind of the name and the kind of its items. A literal under another name gives keys of a literal.
     expect(reasonOf(iterate(2, { p: ns }, { p: each(axes.all, ref("b")) }, op("count", v("p"))))).toBe('a step of a loop gives the name "p" a list that does not fit its first list');
     expect(reasonOf(iterate(2, { p: ns }, { p: op("append", v("p"), each(axes.all, id)) }, op("count", v("p"))))).toBe('a step of a loop gives the name "p" a list that does not fit its first list');

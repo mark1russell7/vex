@@ -269,7 +269,7 @@ The decisions of the third block:
 - A list op over a `let` with literal options is the list op over the body of the `let`. A builder sheet prints `sum(let($0 = 0, each(…)))`. Thus the `each` stays one loop with a running value.
 - The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus an op on a `get` of a name whose first list is empty gives a reason.
 - The focus of the axis `list` is the position of a record. Thus the axis `list` over a list with the keys of a literal gives a reason.
-- Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list, a list as the value of the program and `if` with lists as branches give a reason. Since 2026-10-26, a module has graph spaces and `reduce`, so the force pilot is a module ("Graph spaces and reduce" below).
+- Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list gives a reason. Since 2026-10-26, the value of a program and the branches of `if` and `ifError` can be lists ("Lists in cells" below). Since 2026-10-26, a module has graph spaces and `reduce`, so the force pilot is a module ("Graph spaces and reduce" below).
 
 The decisions of the second block:
 
@@ -711,7 +711,7 @@ A module also has `reduce` with the op of a domain (COMPILE.MODULE.REDUCE). The 
 - No items give the identity of the op in the one domain that has one, or in the domain of the option `domain`. The module copies the identity. Another case gives the error of Vex, as in the interpreter.
 - An error item is skipped (LIST.LENIENT), and the option `strict` gives the error. A name of the op that is not a literal text gives a reason.
 
-The ops of `Vec2Domain` are methods of a class, so a module cannot copy them. Thus `forceProgram` of the pilot uses `XYDomain`, the plain data with the same arithmetic. It uses `dot(gap, gap)` in place of `lengthSq`, which gives the same bits. A list is not a value of a module, so the program gives the last position of each node with `get(…, id)`. The list of the loop is a constant of the run, so the run computes it once.
+The ops of `Vec2Domain` are methods of a class, so a module cannot copy them. Thus `forceProgram` of the pilot uses `XYDomain`, the plain data with the same arithmetic. It uses `dot(gap, gap)` in place of `lengthSq`, which gives the same bits. A list was not a value of a module, so the program gives the last position of each node with `get(…, id)`. The list of the loop is a constant of the run, so the run computes it once.
 
 A property compares random programs over random graphs with the interpreter (P17). The graphs have cycles, edges to their own record and two edges to one record. The programs read each axis of a graph, also in the reverse order and from an address, and `reduce` with each option. The force pilot compares the module with `layoutReference` on random graphs, with the same bits. The text of a module of a graph is in the golden file `__golden__/module-graph.js`.
 
@@ -763,8 +763,8 @@ The module adds approximately 1.1 kB after gzip to the core of ireko. A rough lo
 
 Thus the measure pass is approximately 1.4 to 2 times slower, and a full layout is approximately 1.1 to 1.4 times slower. Each run of the module checks its input and makes its arrays and functions again. The next section removes the functions. These parts of the measure pass stay in ireko:
 
-- The strategies `tree` and `layers`, and the strategies of the user. A sheet over the tree that starts a strategy at each node needs a list of offsets as the value of a cell. A module gives the reason "a list is a value of the program".
-- The shapes of the children. A shape is a list of rectangles, and the same reason applies.
+- The strategies `tree` and `layers`, and the strategies of the user. A sheet over the tree that starts a strategy at each node needs a list of offsets as the value of a cell. Before COMPILE.MODULE.SHEET.LIST, a module gave the reason "a list is a value of the program". The strategies are still not Vex programs.
+- The shapes of the children. A shape is a list of bands on each axis ("Lists in cells" below tells what a shape still needs).
 - The size of each node from the function `measure` of the user, and the checks of the options with their findings.
 - The edges between the children of each node: a search for the lowest common ancestor of the ends of each edge.
 
@@ -793,3 +793,26 @@ Thus a run is approximately two times faster. It is still approximately seven ti
 The four folds of `MEASURE_COLUMNS` are two pairs. In each pair, the two folds have the same steps and give a different name. The module does not share the loop of a pair. A test of a shared loop gave approximately 5 % less time and 19 bytes less after gzip.
 
 A shared fold must evaluate before the formula of its first column, outside the `try` block of that formula. Then a fold in a branch that the interpreter does not take evaluates at each key. Thus the gain does not pay for the risk.
+
+#### Lists in cells (COMPILE.MODULE.SHEET.LIST)
+
+The measure pilot found that a cell of a module cannot hold a list. Thus a sheet cannot send the shapes or the lists of the children from one node to the next. The interpreter has lists as values of cells, so the module has them too.
+
+- A column of a sheet module can hold a list (COMPILE.MODULE.SHEET.LIST). Its array has the array of the list at each key, or the sentinel of an error. A list does not change after the op that makes it, so two cells can share one array.
+- A read of a cell of such a column is a list. A formula reads it with the list ops, `get`, `indexOf`, the axis `list`, a `let` and the names of a loop. A list in an argument of an op still gives the reason "a list is a value of the program".
+- A column of lists that a formula reads before its own formula needs its kind in `kinds`. The kind is a `ListKind`, for example `{ list: "number" }` or `{ list: { list: "number" } }`. The option `texts` lets a key of an item be a key of a list literal.
+- Each formula of the column must give a list that fits the kind of the column, as a step of a loop does (LOOP.LIST). The empty literal fits each column of lists.
+- The first formula of a column without a kind gives the kind. An empty list of that formula does not tell that the other cells are empty, so the items of such a column have no kind.
+
+The value of a program can be a list too (COMPILE.MODULE.LIST.RESULT). Before, `emitModule` gave a reason for it. The run gives each list as a `vex.list`, as the interpreter does, with the keys as text. The module keeps only the sentinel of an error, so an error item has the error `VEX_ERROR`. Thus a list with an error item is not a list for `isVexList`. The run of a sheet gives a `vex.list` in each cell of a column of lists.
+
+`if` and `ifError` can have lists as branches at a place that takes a list. Thus a formula can start a list at a root and read the list of the parent at each other node. A list in only one branch gives a reason, because the module must know the kind of each value.
+
+A property compares random sheets with lists over arrays and trees with `SheetRun` (P17). The column of lists of each sheet reads itself at the parent, the children or the siblings. Thus some modules have the search. The lists have error items, empty lists and lists of lists. A second property compares random programs whose value is a list with the interpreter.
+
+These parts are not in a module yet:
+
+- A body of the axis `list` reads the record at the key of each item, not the value of the item. A loop with `nth` reads each value, but each `nth` costs O(n). A band of a shape of ireko also needs a domain whose ops give its fields.
+- `sortBy` sorts the values. It cannot sort records or the values of a domain by a field. The merge of the bands of a shape sorts the bands by `from`.
+- A record with a list in a field, for example a shape with `rows` and `columns`, gives a reason. A sheet keeps the two lists in two columns.
+- The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.

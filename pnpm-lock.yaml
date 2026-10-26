@@ -241,7 +241,7 @@ importers:
     dependencies:
       '@mark1russell7/coeval':
         specifier: ^0.7.0
-        version: 0.7.0
+        version: 0.7.1
     devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue
@@ -310,7 +310,7 @@ importers:
     dependencies:
       '@mark1russell7/service':
         specifier: ^0.5.8
-        version: 0.5.18(ws@8.22.0)(zod@4.6.7)
+        version: 0.5.19(ws@8.22.0)(zod@4.6.7)
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -321,11 +321,11 @@ importers:
         specifier: workspace:*
         version: link:../domains
       '@procedures/client':
-        specifier: ^0.35.0
-        version: 0.35.0(express@5.3.0(supports-color@7.2.0))
+        specifier: ^0.36.0
+        version: 0.36.0(express@5.3.0(supports-color@7.2.0))
       '@procedures/mcp-server':
-        specifier: ^0.35.0
-        version: 0.35.0(@procedures/client@0.35.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)
+        specifier: ^0.36.0
+        version: 0.36.0(@procedures/client@0.36.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -552,7 +552,7 @@ importers:
     dependencies:
       '@mark1russell7/coeval':
         specifier: ^0.7.0
-        version: 0.7.0
+        version: 0.7.1
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains
@@ -1583,6 +1583,9 @@ packages:
   '@mark1russell7/coeval@0.7.0':
     resolution: {integrity: sha512-PLJXG5raA1Kb0QqBL7uEoEP7IPLZay1Gk/FuLXJNNorgC0WKOGNCcTA9E0dQ13mGQQjiE8hCkdGh1sJX8BdO4A==}
 
+  '@mark1russell7/coeval@0.7.1':
+    resolution: {integrity: sha512-PKseoj9kHD8sSq0ZDpKjUEu9NhtH5pF65ORsGCapeCyRXWGIjcQ7YBSY8ZyHF541xnoV+ZPVVWhF3wr0NIEeEA==}
+
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7':
     resolution: {gitHosted: true, integrity: sha512-hEpr79iwUOLCP6Pn6m8KHq200u4c2jM1npz+SIJQGrrT1fdUUAwgKCZgwOPiyiH5SA4QPXID7f1wCDz7T9HP7A==, tarball: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7}
     version: 1.0.0
@@ -1615,8 +1618,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.5.17':
-    resolution: {integrity: sha512-ZNAjwTm5mVjcPmC8OJ8AybbZKwJQF9R391+uKA4a46bH1h1CHgWeaEwqrtFgNmUNs/Yx5UkbUuUN6bmm0gaURw==}
+  '@mark1russell7/service@0.5.18':
+    resolution: {integrity: sha512-wUJx6qyghejV1ZYVCcC3r+KbCO3U08A+zQNqKRqa+wjCqIfI+WR/zN7nGUXQjyOTkoqOAXEOJZFsuLOi/fYoFw==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -1642,8 +1645,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.5.18':
-    resolution: {integrity: sha512-wUJx6qyghejV1ZYVCcC3r+KbCO3U08A+zQNqKRqa+wjCqIfI+WR/zN7nGUXQjyOTkoqOAXEOJZFsuLOi/fYoFw==}
+  '@mark1russell7/service@0.5.19':
+    resolution: {integrity: sha512-lLf7OtMeRYmqbaIAd2yVe3fQaqj3AbWWWQZVDDEdmmeFDMMJNWVXwBR+l1WCLHWLcjLzzp/dwdZa9/ewQPsLew==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -1902,8 +1905,8 @@ packages:
     resolution: {integrity: sha512-pOr5+q1fLYKwFN3LAJuGZEnfXDcQ73zqgDHMtGy+K+uIoUqyY+6MeDCWFwfu+4EFuq76I5EPFofoNAI+Bmmq4A==}
     engines: {node: '>=22.13'}
 
-  '@procedures/client@0.35.0':
-    resolution: {integrity: sha512-Tg/5ZHpzr5qY17QuNRgvTdxqlOXj3u4WMhS6NOxzqmTfjKvqtD1rircGTP/WN8JlPnfjXQvxrqWlKiMUnBFHrw==}
+  '@procedures/client@0.36.0':
+    resolution: {integrity: sha512-8ZfjhnO9crYHkDLnDxEjw6nEw4Fy08KPutthBFK+fTjHAMo1vm0ryeQXufK3kOPAMAiQfidFdC+s/LYwLMbvdA==}
     engines: {node: '>=22'}
     peerDependencies:
       express: ^4.0.0 || ^5.0.0
@@ -1911,17 +1914,17 @@ packages:
       express:
         optional: true
 
-  '@procedures/mcp-server@0.35.0':
-    resolution: {integrity: sha512-m/trteJlJsqO/rL4TaRVIt3Flov4qt9Hvrxmg62rpIvrOju0SkOestMD1aYsWyFD1hS0yXHzU5cKvFXTly8hEA==}
+  '@procedures/mcp-server@0.36.0':
+    resolution: {integrity: sha512-dhnDKBnlvfu2VNtQbCnPeWCrOpTuB3F4+qRN8xffBlHRWSChugb7N2C2DQcMKhecvBl9Kqp3zz3VxWbEkksA2w==}
     engines: {node: '>=22'}
     peerDependencies:
-      '@procedures/client': ^0.35.0
+      '@procedures/client': ^0.36.0
 
-  '@procedures/mcp@0.35.0':
-    resolution: {integrity: sha512-EXIlnDpxx+BJGKYn48W+ZO0EBvcOTxtmiPyPmLaBcYuAllYSY4U/k2LZX2FNl6kAVMRQYhWFlfNIWnrEbebu3A==}
+  '@procedures/mcp@0.36.0':
+    resolution: {integrity: sha512-O/1MIPr6mKi+fk9cLJcMkXM5yuuCon1jKYczw8U/7K56M/p8YesxueNbDta2oyUcrCquIbyFKVYD5kn8twLOWA==}
     engines: {node: '>=22'}
     peerDependencies:
-      '@procedures/client': ^0.35.0
+      '@procedures/client': ^0.36.0
 
   '@publint/pack@0.1.7':
     resolution: {integrity: sha512-4EDEmvxWtgsCnnVeBvtFIFZtUhPPt1+bA9JrSwU4Sa//6oKtzCSlGGXYJr44OD9aGISymbieJ4mCKHUygUDU+g==}
@@ -5591,6 +5594,8 @@ snapshots:
 
   '@mark1russell7/coeval@0.7.0': {}
 
+  '@mark1russell7/coeval@0.7.1': {}
+
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7': {}
 
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/da04dd56699a2ae806ab64da5b1d677476afe69e': {}
@@ -5603,7 +5608,7 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/service@0.5.17(ws@8.22.0)(zod@4.6.7)':
+  '@mark1russell7/service@0.5.18(ws@8.22.0)(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
@@ -5611,7 +5616,7 @@ snapshots:
       ws: 8.22.0
       zod: 4.6.7
 
-  '@mark1russell7/service@0.5.18(ws@8.22.0)(zod@4.6.7)':
+  '@mark1russell7/service@0.5.19(ws@8.22.0)(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
@@ -5771,12 +5776,12 @@ snapshots:
 
   '@pnpm/deps.graph-sequencer@1100.0.1': {}
 
-  '@procedures/client@0.35.0(express@5.3.0(supports-color@7.2.0))':
+  '@procedures/client@0.36.0(express@5.3.0(supports-color@7.2.0))':
     dependencies:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/coeval': 0.7.0
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
-      '@mark1russell7/service': 0.5.17(ws@8.22.0)(zod@4.6.7)
+      '@mark1russell7/service': 0.5.18(ws@8.22.0)(zod@4.6.7)
       '@types/ws': 8.18.2
       ws: 8.22.0
       zod: 4.6.7
@@ -5791,19 +5796,19 @@ snapshots:
       - pg
       - utf-8-validate
 
-  '@procedures/mcp-server@0.35.0(@procedures/client@0.35.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)':
+  '@procedures/mcp-server@0.36.0(@procedures/client@0.36.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.32.1(supports-color@7.2.0)(zod@4.6.7)
-      '@procedures/client': 0.35.0(express@5.3.0(supports-color@7.2.0))
-      '@procedures/mcp': 0.35.0(@procedures/client@0.35.0(express@5.3.0(supports-color@7.2.0)))
+      '@procedures/client': 0.36.0(express@5.3.0(supports-color@7.2.0))
+      '@procedures/mcp': 0.36.0(@procedures/client@0.36.0(express@5.3.0(supports-color@7.2.0)))
       zod: 4.6.7
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@procedures/mcp@0.35.0(@procedures/client@0.35.0(express@5.3.0(supports-color@7.2.0)))':
+  '@procedures/mcp@0.36.0(@procedures/client@0.36.0(express@5.3.0(supports-color@7.2.0)))':
     dependencies:
-      '@procedures/client': 0.35.0(express@5.3.0(supports-color@7.2.0))
+      '@procedures/client': 0.36.0(express@5.3.0(supports-color@7.2.0))
 
   '@publint/pack@0.1.7':
     dependencies:

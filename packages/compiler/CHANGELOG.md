@@ -1,5 +1,19 @@
 # @mark1russell7/vex-compiler
 
+## 0.13.3
+
+### Patch Changes
+
+- 1fbfe81: A cell of a sheet module can hold a list (COMPILE.MODULE.SHEET.LIST). A later formula reads the list with the list ops, `get`, `indexOf`, the axis `list`, a `let` and the names of a loop. A column of lists that a formula reads before its own formula takes a `ListKind` in the option `kinds`, for example `{ list: "number" }`. The new type `ListKind` is an export.
+  
+  The value of a program in `emitModule` can be a list too, and `if` and `ifError` take lists as branches (COMPILE.MODULE.LIST.RESULT). The run gives each list as a `vex.list` with the keys as text, and an error item has the error `VEX_ERROR`. A program whose value is a list gave the reason "a list is a value of the program" before, and at this time it gives a module. Thus the tool `vex_module` gives a module for such a program.
+  
+  The level is PATCH: the change adds a feature and keeps each earlier result. Before 1.0, a backward-compatible feature is a PATCH. The option `kinds` takes more values, and the modules of the earlier programs do not change.
+- ba594b7: A sheet module with no search has no function for a column (COMPILE.MODULE.ONCE). The code of each formula is in its loop over the keys, so a run makes no functions and starts none. Columns with the same order of the keys share one loop when each read of an earlier column of the loop reads a finished cell. A run of the measure module of ireko is approximately two times faster, and the module is 61 bytes smaller after minify and gzip.
+  
+  The level is PATCH: the exported function and its signature do not change, and the results stay the same. Only the text of the module changes.
+- @mark1russell7/vex@0.13.3
+
 ## 0.13.2
 
 ### Patch Changes

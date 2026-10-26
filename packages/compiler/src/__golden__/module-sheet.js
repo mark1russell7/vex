@@ -13,6 +13,7 @@ function CH(P, n) {
   for (let i = 0; i < n; i++) (P[i] < 0 ? r : h[P[i]]).push(i);
   return [h, r];
 }
+function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }
 function G(x) { return x === E ? F() : x; }
 function KO(h, r, post, back) {
   const o = [], st = [];
@@ -53,106 +54,6 @@ function SG(P, h, r, n) {
   for (const x of [r, ...h]) for (let q = 0; q < x.length; q++) s[x[q]] = q;
   return [g, s];
 }
-function SH(n, cols, own, budget) {
-  const pg = (c, k) => {
-    const o = own[c];
-    const g = o === undefined ? undefined : o[k];
-    return g === undefined ? cols[c] : g;
-  };
-  const D = [];
-  for (let c = 0; c < cols.length; c++) {
-    const d = new Array(n);
-    for (let k = 0; k < n; k++) if (pg(c, k) === undefined) d[k] = E;
-    D.push(d);
-  }
-  const seen = new Map(), stack = [], FILL = {};
-  let top = FILL, missed = false, next = 0, used = 0;
-  const start = (c, k) => {
-    const i = next++;
-    const v = { id: c * n + k, c, k, i, low: i, re: false, r: E, p: false, need: undefined };
-    seen.set(v.id, v);
-    stack.push(v);
-    return v;
-  };
-  const ev = (v, g) => {
-    const caller = top;
-    v.p = false;
-    v.need = undefined;
-    top = v;
-    used += g[1];
-    const x = g[0](v.k);
-    used -= g[1];
-    top = caller;
-    if (!v.p) v.r = x;
-  };
-  const end = (v, caller) => {
-    if (v.low === v.i) {
-      const ms = stack.splice(stack.lastIndexOf(v));
-      const cycle = ms.length > 1 || v.re;
-      for (const m of ms) {
-        seen.delete(m.id);
-        D[m.c][m.k] = cycle ? E : m.r;
-      }
-    } else if (caller !== undefined) caller.low = Math.min(caller.low, v.low);
-  };
-  const r = (c, k) => {
-    const d = D[c][k];
-    if (d !== undefined) return d;
-    const caller = top;
-    if (caller === FILL) {
-      missed = true;
-      return E;
-    }
-    if (caller.p) return E;
-    const s = seen.get(c * n + k);
-    if (s !== undefined) {
-      caller.low = Math.min(caller.low, s.i);
-      s.re = true;
-      return E;
-    }
-    const g = pg(c, k);
-    const v = start(c, k);
-    if (used + g[1] > budget) {
-      caller.p = true;
-      caller.need = v;
-      return E;
-    }
-    ev(v, g);
-    if (v.p) {
-      caller.p = true;
-      caller.need = v;
-      return E;
-    }
-    end(v, caller);
-    const x = D[c][k];
-    return x === undefined ? E : x;
-  };
-  const drive = (c, k) => {
-    const work = [start(c, k)];
-    for (let v = work[0]; v !== undefined; v = work[work.length - 1]) {
-      ev(v, pg(v.c, v.k));
-      if (v.p) {
-        for (let q = v.need; q !== undefined; q = q.need) work.push(q);
-        continue;
-      }
-      work.pop();
-      end(v, work[work.length - 1]);
-    }
-  };
-  const f = (c, k) => {
-    if (D[c][k] !== undefined) return;
-    missed = false;
-    const x = pg(c, k)[0](k);
-    if (missed) drive(c, k);
-    else D[c][k] = x;
-  };
-  const o = (c) => {
-    const d = D[c], out = [];
-    for (let k = 0; k < n; k++) out.push(d[k] === E ? VEX_ERROR : d[k]);
-    return out;
-  };
-  return { r, f, o };
-}
 function UP(P, k) { const p = P[k]; return p < 0 ? F() : p; }
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 export function run(records, vars, parents) {
@@ -187,16 +88,10 @@ export function run(records, vars, parents) {
       return E;
     }
   };
-  const cf18 = (o) => {
+  const cf17 = (o) => {
     try {
-      let t17;
+      let t16;
       try {
-        let b16;
-        try {
-          b16 = G(RC(1, UP(P, o)));
-        } catch {
-          b16 = E;
-        }
         let l8 = 0;
         const f10 = o;
         const A11 = GP[f10];
@@ -207,20 +102,20 @@ export function run(records, vars, parents) {
           const t15 = k_number((l8) + (G(RC(0, j9))));
           l8 = t15;
         }
-        t17 = k_number((G(b16)) + (l8));
+        t16 = k_number((G(RC(1, UP(P, o)))) + (l8));
       } catch {
-        t17 = 0;
+        t16 = 0;
       }
-      return t17;
+      return t16;
     } catch {
       return E;
     }
   };
-  const SS = SH(n, [[cf7, 31], [cf18, 31]], [undefined, undefined], 3000);
-  const RC = SS.r;
-  const K19 = KO(H, RT, true, true);
-  const K20 = KO(H, RT, false, false);
-  for (const o of K19) SS.f(0, o);
-  for (const o of K20) SS.f(1, o);
-  return { "size": SS.o(0), "x": SS.o(1) };
+  const D = [new Array(n), new Array(n)];
+  const RC = (c, k) => D[c][k];
+  const K18 = KO(H, RT, true, true);
+  const K19 = KO(H, RT, false, false);
+  for (const o of K18) D[0][o] = cf7(o);
+  for (const o of K19) D[1][o] = cf17(o);
+  return { "size": DO(D[0]), "x": DO(D[1]) };
 }

@@ -81,6 +81,14 @@ describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
   it("COMPILE.MODULE.SHEET: the engine of ireko as a module gives the results of SheetRun, and a column without its kind gives a reason", async () => {
     const source = sourceOf(ENGINE, { ...TREE, kinds: { size: "number", x: "number" } });
     await expect(source).toMatchFileSnapshot("__golden__/module-sheet.js");
+    // Each read of the engine reads a finished cell, so its fill has no search (COMPILE.MODULE.SHEET.DIRECT). A read of
+    // the next sibling can read a cell that is not finished, so that sheet keeps the search.
+    expect(isDirect(source)).toBe(true);
+    const next = new Map([...ENGINE, ["next", app("ifError", cell("next", [offset(1)]), ref("v"))]]);
+    const search = sourceOf(next, { ...TREE, kinds: { size: "number", x: "number", next: "number" } });
+    await expect(search).toMatchFileSnapshot("__golden__/module-sheet-search.js");
+    expect(isDirect(search)).toBe(false);
+    expectSame(make(search), next, ENGINE_RECORDS, ENGINE_PARENTS);
     const m = make(source);
     expectSame(m, ENGINE, ENGINE_RECORDS, ENGINE_PARENTS);
     expect(m.run(ENGINE_RECORDS, {}, ENGINE_PARENTS)).toStrictEqual({ size: [19, 9, 2, 3, 1, 5], x: [0, 0, 9, 0, 3, 0] });
@@ -108,7 +116,8 @@ describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
       ["src", ref("v")],
     ]);
     const atNodeSource = sourceOf(atNode, NUM);
-    expect(atNodeSource).toContain(["for (let o = 0; o < n; o++) SS.f(2, o);", "for (let o = 0; o < n; o++) SS.f(0, o);", "for (let o = 0; o < n; o++) SS.f(1, o);"].join("\n  "));
+    // Each read of this sheet reads a finished cell, so the fill has no search (COMPILE.MODULE.SHEET.DIRECT).
+    expect(atNodeSource).toMatch(/for \(let o = 0; o < n; o\+\+\) D\[2\]\[o\] = cf\d+\(o\);\n {2}for \(let o = 0; o < n; o\+\+\) D\[0\]\[o\] = cf\d+\(o\);\n {2}for \(let o = 0; o < n; o\+\+\) D\[1\]\[o\] = cf\d+\(o\);/);
     expectSame(make(atNodeSource), atNode, ENGINE_RECORDS, undefined);
     // A tree: a read of the children puts them first, and a read of the sibling after reverses the siblings.
     const tree = new Map<string, Expr>([
@@ -349,5 +358,99 @@ describe("COMPILE.MODULE.SHEET P17: random sheets", { timeout: 60_000 }, () => {
     expect(cyclic).toBeGreaterThan(40);
     expect(sample.filter(([, [, parents]]) => parents.some((_p, k) => depth(parents, k) >= 2)).length).toBeGreaterThan(40);
     expect(sample.filter(([, [, parents]]) => parents.some((p, k) => p > k)).length).toBeGreaterThan(40);
+  });
+});
+
+/**
+ * The formula of the column `self` of a sheet with a direct fill (COMPILE.MODULE.SHEET.DIRECT). It reads the columns
+ * of `earlier` at each address, and it reads `self` in the forms that read a finished cell. Some formulas also read
+ * `self` in a function or in an axis, so the module of their sheet has the search.
+ */
+const directFormula = (self: string, earlier: readonly string[], tree: boolean): fc.Arbitrary<Expr> => {
+  const ats: readonly (readonly FixedMove[])[] = tree ? [[], [PARENT], [offset(-1)], [PARENT, offset(1)]] : [[], [offset(-1)], [offset(1)], [index(0)]];
+  const own: readonly Expr[] = tree
+    ? [cell(self, [PARENT]), app("sum", each(axes.children, cell(self))), app("sum", each(axes.where(axes.reverse(axes.children), app("gt", cell(self), lit(0))), cell(self)))]
+    : [cell(self, [offset(-1)]), cell(self, [offset(-2)])];
+  const axesOf: readonly Axis[] = tree ? [axes.children, axes.siblings, axes.ancestors, axes.others] : [axes.others, axes.all, axes.window(-1, 1)];
+  return fc.letrec<{ num: Expr }>((tie) => ({
+    num: fc.oneof(
+      { maxDepth: 3, depthSize: "small" },
+      fc.integer({ min: -3, max: 3 }).map((x) => lit(x)),
+      fc.constant(ref("v")),
+      ...(earlier.length === 0 ? [] : [{ arbitrary: fc.tuple(fc.constantFrom(...earlier), fc.constantFrom(...ats)).map(([c, at]) => cell(c, at)), weight: 4 }]),
+      { arbitrary: fc.constantFrom(...own), weight: 4 },
+      fc.tuple(fc.constantFrom("add", "subtract", "max"), tie("num"), tie("num")).map(([o, a, b]) => app(o, a, b)),
+      fc.tuple(tie("num"), tie("num")).map(([a, b]) => app("ifError", a, b)),
+      fc.tuple(tie("num"), tie("num"), tie("num")).map(([c, a, b]) => app("if", app("gt", c, lit(0)), a, b)),
+      // A read of the column itself in the body of an axis or of a function reads a cell that is maybe not finished.
+      fc.tuple(fc.constantFrom(...axesOf), tie("num")).map(([a, body]) => app("sum", each(a, body))),
+      fc.tuple(tie("num"), tie("num")).map(([a, b]) => let_({ f: fn(["p"], app("subtract", v("p"), a)) }, call("f", b))),
+    ),
+  })).num;
+};
+
+/** A sheet of the columns A, B and C: each column reads itself and the columns before it. */
+const directSheet = (tree: boolean): fc.Arbitrary<ReadonlyMap<string, Expr>> =>
+  fc.tuple(directFormula("A", [], tree), directFormula("B", ["A"], tree), directFormula("C", ["A", "B"], tree)).map(([a, b, c]) => new Map([["A", a], ["B", b], ["C", c]]));
+
+/** True when the module of a sheet fills its cells with no search. */
+const isDirect = (source: string): boolean => source.includes("function DO(") && !source.includes("function SH(");
+
+/** True when the module of the sheet fills its cells with no search. */
+const direct = (columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions): boolean => isDirect(sourceOf(columns, options));
+/** The sum of a column at the children. */
+const sum = (c: string): Expr => app("sum", each(axes.children, cell(c)));
+/** This function compares the module of a sheet with SheetRun, and it tells if the module has a direct fill. */
+const runDirect = (columns: ReadonlyMap<string, Expr>, records: readonly unknown[], parents: readonly number[] | undefined): boolean => {
+  const source = sourceOf(columns, parents === undefined ? NUM : TREE);
+  expectSame(make(source), columns, records, parents);
+  return isDirect(source);
+};
+
+describe("COMPILE.MODULE.SHEET.DIRECT: a fill with no search", () => {
+  it("COMPILE.MODULE.SHEET.DIRECT: a sheet whose reads all read finished cells has no search, and each other sheet keeps it", () => {
+    const kinds = { ...KINDS, D: "number" } as const;
+    const tree = { ...TREE, kinds };
+    const array = { ...NUM, kinds };
+    // The forms that read a finished cell: an earlier column at each address, the parent in pre-order, the children in
+    // post-order, and an earlier key of an array.
+    const yes: readonly [Map<string, Expr>, SheetModuleOptions][] = [
+      [new Map([["A", app("add", ref("v"), sum("A"))], ["B", app("ifError", cell("B", [PARENT]), cell("A", [offset(1)]))]]), tree],
+      [new Map([["A", app("ifError", cell("A", [offset(-1)]), ref("v"))], ["B", app("add", cell("A", [offset(1)]), app("ifError", cell("B", [offset(-2)]), lit(0)))]]), array],
+      [new Map<string, Expr>([["A", ref("v")], ["B", fold(axes.others, { s: cell("A") }, { s: app("add", v("s"), cell("A")) }, v("s"))]]), array],
+    ];
+    for (const [columns, options] of yes) {
+      expect(direct(columns, options)).toBe(true);
+      expectSame(make(sourceOf(columns, options)), columns, ENGINE_RECORDS, options.space === "tree" ? ENGINE_PARENTS : undefined);
+    }
+    // The forms that can read a cell that is not finished: a later column, the cell itself, the parent and the children
+    // together, a read in a function, an axis from another key, and a later key or a sibling.
+    const no: readonly [Map<string, Expr>, SheetModuleOptions][] = [
+      [new Map([["A", app("ifError", cell("B"), lit(1))], ["B", app("ifError", cell("A"), lit(2))]]), array],
+      [new Map([["A", app("ifError", cell("A"), lit(1))]]), array],
+      [new Map([["A", app("add", sum("A"), app("ifError", cell("A", [PARENT]), lit(0)))]]), tree],
+      [new Map([["A", let_({ f: fn([], app("ifError", cell("A", [PARENT]), lit(0))) }, app("sum", each(axes.children, call("f"))))]]), tree],
+      [new Map([["A", app("sum", each(axes.children, cell("A"), [PARENT]))]]), tree],
+      [new Map([["A", app("sum", each(axes.siblings, sum("A")))]]), tree],
+      [new Map([["A", app("ifError", cell("A", [offset(1)]), lit(0))]]), array],
+      [new Map([["A", app("ifError", cell("A", [offset(-1)]), lit(0))]]), tree],
+      [new Map([["A", app("ifError", cell("A", [PARENT]), lit(0))]]), { ...tree, cells: new Map([["A", new Map([["1", lit(5)]])]]) }],
+    ];
+    for (const [columns, options] of no) {
+      expect(direct(columns, options)).toBe(false);
+      expectSame(make(sourceOf(columns, options)), columns, ENGINE_RECORDS, options.space === "tree" ? ENGINE_PARENTS : undefined, options.cells);
+    }
+  });
+
+  it("P17 COMPILE.MODULE.SHEET.DIRECT: a module of a random sheet with a direct fill gives the results of SheetRun", () => {
+    fc.assert(fc.property(directSheet(false), rows, (columns, rs) => void runDirect(columns, rs, undefined)), { numRuns: 150 });
+    fc.assert(fc.property(directSheet(true), trees, (columns, [rs, parents]) => void runDirect(columns, rs, parents)), { numRuns: 150 });
+    // A fixed sample has many sheets with a direct fill and many sheets with the search, over arrays and trees.
+    for (const tree of [false, true]) {
+      const sample = fc.sample(fc.tuple(directSheet(tree), trees), { seed: 20261026, numRuns: 200 });
+      const directs = sample.filter(([columns, [rs, parents]]) => runDirect(columns, rs, tree ? parents : undefined)).length;
+      expect(directs).toBeGreaterThan(40);
+      expect(directs).toBeLessThan(180);
+    }
   });
 });

@@ -221,10 +221,11 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
     const e = let_({ xs: inv }, op("add", op("sum", each(axes.all, lenient)), op("sum", each(axes.list(v("xs")), strictNth))));
     const source = sourceOf(e);
     expect(source).toContain("l.vw = o;");
-    const many = Array.from({ length: 300 }, (_x, i) => ({ id: String(i), n: i % 7, w: i % 50 === 0 ? 0 : (i % 3) + 1, b: true }));
-    const clean = many.map((r) => ({ ...r, w: 1 }));
+    // The interpreter costs O(n squared) here, so it compares 40 keys. The count of the calls of filter uses 300 keys.
+    const many = Array.from({ length: 40 }, (_x, i) => ({ id: String(i), n: i % 7, w: i % 10 === 0 ? 0 : (i % 3) + 1, b: true }));
+    const clean = Array.from({ length: 300 }, (_x, i) => ({ id: String(i), n: i % 7, w: 1, b: true }));
     const m = make(source);
-    for (const records of [many, clean, RECORDS]) expectSame(m, e, records);
+    for (const records of [many, clean.slice(0, 40), RECORDS]) expectSame(m, e, records);
     // The run of 300 keys calls filter once for the one list, not once for each key.
     const filter = vi.spyOn(Array.prototype, "filter");
     try {

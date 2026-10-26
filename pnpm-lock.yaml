@@ -310,7 +310,7 @@ importers:
     dependencies:
       '@mark1russell7/service':
         specifier: ^0.5.8
-        version: 0.5.13(ws@8.22.0)(zod@4.6.7)
+        version: 0.5.14(ws@8.22.0)(zod@4.6.7)
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -1615,8 +1615,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.5.13':
-    resolution: {integrity: sha512-T4T10AXHuWiDcuP28Osr2Ru0fV5TY/BV8nuXcAnjP6/J0Pw33uau6DqcW03y8tWQaDPzLZ8kSdAaRA3bOHmiTg==}
+  '@mark1russell7/service@0.5.14':
+    resolution: {integrity: sha512-hu6qZtApoZeZXVixck9n2x4s7CwC/C40+tJn2Ow9ZvegOqqOkGq46OpNtRisjm2XsBViE4h9ZJN5V3rTumhN/w==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -5576,7 +5576,7 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/service@0.5.13(ws@8.22.0)(zod@4.6.7)':
+  '@mark1russell7/service@0.5.14(ws@8.22.0)(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
@@ -5741,7 +5741,7 @@ snapshots:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/coeval': 0.7.0
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
-      '@mark1russell7/service': 0.5.13(ws@8.22.0)(zod@4.6.7)
+      '@mark1russell7/service': 0.5.14(ws@8.22.0)(zod@4.6.7)
       '@types/ws': 8.18.2
       ws: 8.22.0
       zod: 4.6.7

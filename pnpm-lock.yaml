@@ -310,7 +310,7 @@ importers:
     dependencies:
       '@mark1russell7/service':
         specifier: ^0.5.8
-        version: 0.5.16(ws@8.22.0)(zod@4.6.7)
+        version: 0.5.17(ws@8.22.0)(zod@4.6.7)
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -321,11 +321,11 @@ importers:
         specifier: workspace:*
         version: link:../domains
       '@procedures/client':
-        specifier: ^0.33.0
-        version: 0.33.0(express@5.3.0(supports-color@7.2.0))
+        specifier: ^0.34.0
+        version: 0.34.0(express@5.3.0(supports-color@7.2.0))
       '@procedures/mcp-server':
-        specifier: ^0.33.0
-        version: 0.33.0(@procedures/client@0.33.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)
+        specifier: ^0.34.0
+        version: 0.34.0(@procedures/client@0.34.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1642,6 +1642,33 @@ packages:
       zod:
         optional: true
 
+  '@mark1russell7/service@0.5.17':
+    resolution: {integrity: sha512-ZNAjwTm5mVjcPmC8OJ8AybbZKwJQF9R391+uKA4a46bH1h1CHgWeaEwqrtFgNmUNs/Yx5UkbUuUN6bmm0gaURw==}
+    engines: {node: '>=22.19'}
+    peerDependencies:
+      '@grpc/grpc-js': ^1.14.6
+      amqplib: ^2.2.0
+      ioredis: ^6.0.0
+      mongodb: ^7.7.0
+      pg: ^8.23.1
+      ws: ^8.22.0
+      zod: ^4.1.0
+    peerDependenciesMeta:
+      '@grpc/grpc-js':
+        optional: true
+      amqplib:
+        optional: true
+      ioredis:
+        optional: true
+      mongodb:
+        optional: true
+      pg:
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   '@mark1russell7/ste-lint@https://codeload.github.com/mark1russell7/ste-lint/tar.gz/f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7':
     resolution: {gitHosted: true, integrity: sha512-HDxumpWNUeciZKaXbAGFPyoOTrt0trj7L3/koNvWnTN/vEuF0gYzqVJdsgfTQ9bE/DhSxfNMRxtrh4KYnbbimA==, tarball: https://codeload.github.com/mark1russell7/ste-lint/tar.gz/f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7}
     version: 0.1.0
@@ -1875,8 +1902,8 @@ packages:
     resolution: {integrity: sha512-pOr5+q1fLYKwFN3LAJuGZEnfXDcQ73zqgDHMtGy+K+uIoUqyY+6MeDCWFwfu+4EFuq76I5EPFofoNAI+Bmmq4A==}
     engines: {node: '>=22.13'}
 
-  '@procedures/client@0.33.0':
-    resolution: {integrity: sha512-ZS4ePGMPuWm/S7XSCdnr80LiXFmdQ+rbK2lpAGfzi9dpgqBzXfdquZucqX2E3x7yMHCPm7Wcmem/IEp9q7fuZg==}
+  '@procedures/client@0.34.0':
+    resolution: {integrity: sha512-cDrzDrX4RyrXHACcXIA43zPdIFX9PL9O/27QfyCYEaHD2gj267sG3SoLqzYOJbRdzF+VvXIIlp8P0ZcMKZQ04Q==}
     engines: {node: '>=22'}
     peerDependencies:
       express: ^4.0.0 || ^5.0.0
@@ -1884,17 +1911,17 @@ packages:
       express:
         optional: true
 
-  '@procedures/mcp-server@0.33.0':
-    resolution: {integrity: sha512-7DgqSnN/RZE5u8maRFr12JEyuAz2Ykb5aspW1gIPKqzPZyc2odojalXHhQtL18bEZsw8CXyDs95YBjICrPDCqA==}
+  '@procedures/mcp-server@0.34.0':
+    resolution: {integrity: sha512-2l3UaiOnOAuRng28kEJM6mxkrVyprXSt07bhYX0mYkedHWx2eaZvXrMk4aV1FhLoy44ZJ4vVYfeEFlwv9RNgaA==}
     engines: {node: '>=22'}
     peerDependencies:
-      '@procedures/client': ^0.33.0
+      '@procedures/client': ^0.34.0
 
-  '@procedures/mcp@0.33.0':
-    resolution: {integrity: sha512-9aLGwZaFRNeLJZ604QwWueNLuwqzmkS7w3Kk20d4b9ThWiUFa7IaI/cCIMKF0KTmdYc10twX2yF3I18UFp84/A==}
+  '@procedures/mcp@0.34.0':
+    resolution: {integrity: sha512-z0KCRj9WmohFKEajtkrDB1JbBl/+9pMnIL/TK5qVOO2KdfOvu4Oay0VE0i8+9gqEo4K/Qom3nkNkx87dlhEdiA==}
     engines: {node: '>=22'}
     peerDependencies:
-      '@procedures/client': ^0.33.0
+      '@procedures/client': ^0.34.0
 
   '@publint/pack@0.1.7':
     resolution: {integrity: sha512-4EDEmvxWtgsCnnVeBvtFIFZtUhPPt1+bA9JrSwU4Sa//6oKtzCSlGGXYJr44OD9aGISymbieJ4mCKHUygUDU+g==}
@@ -5584,6 +5611,14 @@ snapshots:
       ws: 8.22.0
       zod: 4.6.7
 
+  '@mark1russell7/service@0.5.17(ws@8.22.0)(zod@4.6.7)':
+    dependencies:
+      '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
+      '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
+    optionalDependencies:
+      ws: 8.22.0
+      zod: 4.6.7
+
   '@mark1russell7/ste-lint@https://codeload.github.com/mark1russell7/ste-lint/tar.gz/f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7':
     dependencies:
       typescript: 6.0.3
@@ -5736,7 +5771,7 @@ snapshots:
 
   '@pnpm/deps.graph-sequencer@1100.0.1': {}
 
-  '@procedures/client@0.33.0(express@5.3.0(supports-color@7.2.0))':
+  '@procedures/client@0.34.0(express@5.3.0(supports-color@7.2.0))':
     dependencies:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/coeval': 0.7.0
@@ -5756,19 +5791,19 @@ snapshots:
       - pg
       - utf-8-validate
 
-  '@procedures/mcp-server@0.33.0(@procedures/client@0.33.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)':
+  '@procedures/mcp-server@0.34.0(@procedures/client@0.34.0(express@5.3.0(supports-color@7.2.0)))(supports-color@7.2.0)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.32.1(supports-color@7.2.0)(zod@4.6.7)
-      '@procedures/client': 0.33.0(express@5.3.0(supports-color@7.2.0))
-      '@procedures/mcp': 0.33.0(@procedures/client@0.33.0(express@5.3.0(supports-color@7.2.0)))
+      '@procedures/client': 0.34.0(express@5.3.0(supports-color@7.2.0))
+      '@procedures/mcp': 0.34.0(@procedures/client@0.34.0(express@5.3.0(supports-color@7.2.0)))
       zod: 4.6.7
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@procedures/mcp@0.33.0(@procedures/client@0.33.0(express@5.3.0(supports-color@7.2.0)))':
+  '@procedures/mcp@0.34.0(@procedures/client@0.34.0(express@5.3.0(supports-color@7.2.0)))':
     dependencies:
-      '@procedures/client': 0.33.0(express@5.3.0(supports-color@7.2.0))
+      '@procedures/client': 0.34.0(express@5.3.0(supports-color@7.2.0))
 
   '@publint/pack@0.1.7':
     dependencies:

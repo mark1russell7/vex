@@ -15,11 +15,12 @@
  * before the loop over the keys. A node of the memo is one function of its other keys, with a map of its values. The
  * nodes with the same expression share the function.
  *
- * The printer takes a part of the language. It takes an array space or a tree space of records, and the fields and
- * the variables of the schema. It takes the axes `all`, `others` and `window`. A tree space also has the move `parent` and the
- * axes of a tree (COMPILE.MODULE.TREE). A list is an array of pairs of a key and a value. The list ops, list literals
- * and lists as names of loops are in a module (COMPILE.MODULE.LIST). The kinds of each op site must decide its op.
- * Another construct gives a reason, not code.
+ * The printer takes a part of the language. It takes an array space, a tree space or a graph space of records, and
+ * the fields and the variables of the schema. It takes the axes `all`, `others` and `window`. A tree space also has the
+ * move `parent` and the axes of a tree (COMPILE.MODULE.TREE). A graph space has the axes of a graph
+ * (COMPILE.MODULE.GRAPH). A list is an array of pairs of a key and a value. The list ops, `reduce`, list literals and
+ * lists as names of loops are in a module (COMPILE.MODULE.LIST, COMPILE.MODULE.REDUCE). The kinds of each op site must
+ * decide its op. Another construct gives a reason, not code.
  *
  * `emitSheetModule` prints the formula columns of a sheet as one module (COMPILE.MODULE.SHEET). Each column is an array
  * of results, and the run fills the arrays in the static order of `SheetRun.fill`. A read of a cell that is not finished
@@ -41,11 +42,12 @@ export interface ModuleOptions {
    */
   readonly name?: string;
   /**
-   * The space of the records. In both spaces, the key of a record is the text of its position. The default `array`
+   * The space of the records. In each space, the key of a record is the text of its position. The default `array`
    * has no parents. A `tree` takes the parents as the third argument of the run (COMPILE.MODULE.TREE). Each entry
-   * is the position of the parent of its record, or -1 for a root.
+   * is the position of the parent of its record, or -1 for a root. A `graph` takes the edges as the third argument
+   * (COMPILE.MODULE.GRAPH). Each entry is an array of the positions of the ends of the edges from its record, in order.
    */
-  readonly space?: "array" | "tree";
+  readonly space?: "array" | "tree" | "graph";
 }
 
 /** The options of a module of a sheet (COMPILE.MODULE.SHEET): the options of a module, and the parts of a sheet. */
@@ -100,6 +102,12 @@ interface ListInfo {
   readonly texts?: boolean;
   /** True for a list without items: the empty literal, and a list from it. Such a list fits each list. */
   readonly empty?: boolean;
+}
+
+/** The op of each step of `reduce` (COMPILE.MODULE.REDUCE): the name of the op, and the value of the option `domain`. */
+interface Step {
+  readonly op: string;
+  readonly domain: unknown;
 }
 
 /** The code of a node: the statements before its value, and its value. `safe` covers the statements too. */
@@ -226,13 +234,16 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT" | BuildHelper | TreeHelper | SheetHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "WO" | "FL" | "GT" | "IX";
 
 /** The helpers of a tree space (COMPILE.MODULE.TREE). */
 type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
+
+/** The helpers of a graph space (COMPILE.MODULE.GRAPH). */
+type GraphHelper = "GR" | "GI" | "RB";
 
 /** The helpers of a sheet (COMPILE.MODULE.SHEET): the state of a run of a sheet, and the order of the keys of a tree. */
 type SheetHelper = "SH" | "KO";
@@ -378,6 +389,32 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   AN: "function AN(P, k) { const o = []; for (let p = P[k]; p >= 0; p = P[p]) o.push(p); return o; }",
   // The record and the keys under it, in the order of a breadth-first search. A tree has no cycle, so no key comes twice.
   BF: "function BF(h, k) { const o = [k]; for (let i = 0; i < o.length; i++) for (const c of h[o[i]]) o.push(c); return o; }",
+  // The edges of a graph space: the positions of the ends of the edges from each record, in order. A second edge to the
+  // same end is the same edge, as in the interpreter. The mark of an end is the number of its record plus 1.
+  GR: [
+    "function GR(e, n) {",
+    '  if (!Array.isArray(e) || e.length !== n) C("the edges are not an array with the ends of the edges of each record");',
+    "  const O = [], s = new Int32Array(n);",
+    "  for (let i = 0; i < n; i++) {",
+    "    const x = e[i];",
+    "    if (!Array.isArray(x)) C(`the edges of the record ${i} are not an array`);",
+    "    const o = [];",
+    "    for (const t of x) {",
+    "      if (!(Number.isInteger(t) && t >= 0 && t < n)) C(`an edge of the record ${i} does not go to the position of a record`);",
+    "      if (s[t] !== i + 1) {",
+    "        s[t] = i + 1;",
+    "        o.push(t);",
+    "      }",
+    "    }",
+    "    O.push(o);",
+    "  }",
+    "  return O;",
+    "}",
+  ].join("\n"),
+  // The predecessors of each record of a graph, in key order: the records in key order, and the ends of the edges of each record.
+  GI: "function GI(O, n) { const I = []; for (let i = 0; i < n; i++) I.push([]); for (let i = 0; i < n; i++) for (const t of O[i]) I[t].push(i); return I; }",
+  // The record and the keys that a path of edges reaches from it, once, in the order of a breadth-first search.
+  RB: "function RB(O, k, n) { const s = new Uint8Array(n), o = [k]; s[k] = 1; for (let i = 0; i < o.length; i++) for (const c of O[o[i]]) if (s[c] === 0) { s[c] = 1; o.push(c); } return o; }",
   // The state of a run of a sheet (COMPILE.MODULE.SHEET), as in SheetRun: the result of each finished cell, the search
   // of Tarjan with its stack, and the budget of the stack. `r` reads a cell, `f` fills a cell, and `o` gives a column.
   // A cell without a formula has the error sentinel from the start, as the error of its read.
@@ -672,8 +709,9 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   DR: ["V", "F"], AP: ["V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
-  PT: ["C"], UP: ["F"], SO: ["F"],
+  PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
+  GI: [], RB: [],
   SH: [], KO: [],
 };
 
@@ -696,6 +734,9 @@ const TREE_AXES: ReadonlySet<string> = new Set(["children", "ancestors", "descen
 /** This function tells if an axis has its targets in a range of an array of positions in a tree space. */
 const isTreeAxis = (a: Axis): a is TreeAxis => a.t === "window" || TREE_AXES.has(a.t);
 
+/** The axes of a graph space in a module (COMPILE.MODULE.GRAPH), other than the axes of each space. */
+const GRAPH_AXES: ReadonlySet<string> = new Set(["successors", "predecessors", "reachable"]);
+
 /**
  * The targets of an axis of a tree space: the statements before the loop, and the positions `a[q]` for `q` from `lo` up
  * to `hi`. The loop skips the key `skip`.
@@ -710,6 +751,8 @@ interface TreeRange {
 
 /** The list ops of a standalone module. */
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
+/** The list ops with a running value in a module: the list ops above, and `reduce` with the op of a domain (COMPILE.MODULE.REDUCE). */
+const FOLD_OPS: ReadonlySet<string> = new Set([...LIST_OPS, "reduce"]);
 const NUMBER_LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max"]);
 const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
 /** The list ops over lists of `#build`: append, without and flat (LIST.BUILD), get (LIST.GET) and indexOf (LIST.INDEXOF). */
@@ -781,7 +824,7 @@ function fits(name: ListInfo, step: ListInfo): boolean {
 }
 
 /** This function tells if the step of a list op throws for a value of the kind `kind`, which is the wrong kind. */
-const stepThrows = (op: string, kind: Kind | undefined): boolean => (NUMBER_STEPS.has(op) && kind !== "number") || (BOOLEAN_LIST_OPS.has(op) && kind !== "boolean");
+const stepThrows = (op: string, kind: Kind | undefined): boolean => op === "reduce" || (NUMBER_STEPS.has(op) && kind !== "number") || (BOOLEAN_LIST_OPS.has(op) && kind !== "boolean");
 
 /** The list ops whose step takes a number. */
 const NUMBER_STEPS: ReadonlySet<string> = new Set(["sum", "mean", "min", "max"]);
@@ -1072,6 +1115,9 @@ class Printer {
   /** True for a tree space, and the parts of the tree that the program reads (COMPILE.MODULE.TREE). */
   readonly #tree: boolean;
   readonly treeParts = new Set<TreePart>();
+  /** True for a graph space, and true when the program reads the predecessors of a graph (COMPILE.MODULE.GRAPH). */
+  readonly #graph: boolean;
+  into = false;
   /** The columns of a sheet, for a module of a sheet (COMPILE.MODULE.SHEET). */
   readonly #sheet: SheetInfo | undefined;
   #names = 0;
@@ -1116,6 +1162,7 @@ class Printer {
     this.#schema = options.schema;
     this.#memo = memoOf(expr);
     this.#tree = options.space === "tree";
+    this.#graph = options.space === "graph";
     this.#sheet = sheet;
   }
 
@@ -1516,7 +1563,8 @@ class Printer {
         // Stryker disable next-line ConditionalExpression,StringLiteral: see #address
         /* v8 ignore next -- @preserve */
         if (focus === undefined) throw new NotStandalone("a node of the memo reads its focus");
-        if (d === undefined || more.length > 0 || !Number.isInteger(d)) return `${F}()`;
+        // A graph space has no offsets (NAV.OFFSET), so an offset fails at each key.
+        if (this.#graph || d === undefined || more.length > 0 || !Number.isInteger(d)) return `${F}()`;
         // In a tree space, an offset goes among the siblings (NAV.OFFSET.TREE).
         if (this.#tree) return `${this.use("SO")}(${this.#part("siblings", "GP")}, SI, ${focus}, ${d})`;
         return `${this.use("X")}(${focus} + ${d}, n)`;
@@ -1729,18 +1777,23 @@ class Printer {
     const [head] = args;
     const rest = args.slice(1);
     // An each whose body is a list gives a list of lists (LIST.FLAT), so a list op over it goes over its array.
-    if (LIST_OPS.has(op) && head?.tag === "each" && !this.#isList(head.body, ctx)) return this.#list(op, head, rest, ctx);
+    if (FOLD_OPS.has(op) && head?.tag === "each" && !this.#isList(head.body, ctx)) return this.#list(op, head, rest, ctx);
     // A list op over a let with only literal options is the list op over the body of the let, so an each in the body
     // is one loop with a running value, not an array. A builder sheet prints such a let, for example `sum(let($0 = 0, each(…)))`.
-    if (LIST_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) return this.#let(head, ctx, (body) => app(op, body, ...rest));
+    if (FOLD_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) return this.#let(head, ctx, (body) => app(op, body, ...rest));
     // sortBy and take are list ops for each receiver. Each other list op needs a list, and a domain can have its name.
     if (head !== undefined && (op === "sortBy" || op === "take" || (op === "drop" && this.#isList(head, ctx)))) return this.#order(op, head, rest, ctx);
     if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) return this.#build(op, head, rest, ctx);
-    if (head !== undefined && (LIST_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, rest, ctx);
+    if (head !== undefined && (FOLD_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, rest, ctx);
     const raw = args.map((x) => this.expr(x, ctx));
     const deps = depsOf(...raw);
     // The interpreter evaluates each argument, also after an error.
     const values = this.#inOrder(this.#settle(raw, deps, args), true);
+    return this.#opCall(op, values, deps);
+  }
+
+  /** This method prints the call of the op of a domain on some values, from the static site of their kinds. */
+  #opCall(op: string, values: readonly Code[], deps: ReadonlySet<number>): Code {
     const site = this.#facts.staticSite(op, values.map((x) => x.v.kind));
     if (site?.t !== "fn") throw new NotStandalone(`the kinds of the values of "${op}" do not decide its op`);
     if (site.bad) return { s: stmtsOf(...values), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
@@ -1827,13 +1880,26 @@ class Printer {
    * This method gives the option strict of a list op. The options must be one literal with only strict. Only a literal
    * has a value, so another expression gives the reason too.
    */
-  #strict(op: string, rest: readonly Expr[]): boolean {
+  #strict(op: string, rest: readonly Expr[], names: readonly string[] = ["strict"]): boolean {
     const [options, ...more] = rest;
     if (more.length > 0) throw new NotStandalone(`"${op}" with more than one option`);
     if (options === undefined) return false;
     const opts = (options as { readonly value?: unknown }).value;
-    if (typeof opts !== "object" || opts === null || Object.keys(opts).some((k) => k !== "strict")) throw new NotStandalone(`the options of "${op}" are not a literal with strict`);
+    if (typeof opts !== "object" || opts === null || Object.keys(opts).some((k) => !names.includes(k))) throw new NotStandalone(`the options of "${op}" are not a literal with ${names.join(" or ")}`);
     return (opts as { readonly strict?: unknown }).strict === true;
+  }
+
+  /**
+   * This method gives the option strict of a list op. For `reduce`, it also gives the op of each step: the first
+   * argument, a literal text, and the value of the option `domain` (COMPILE.MODULE.REDUCE).
+   */
+  #foldOptions(op: string, rest: readonly Expr[]): { readonly strict: boolean; readonly step: Step | undefined } {
+    if (op !== "reduce") return { strict: this.#strict(op, rest), step: undefined };
+    const [name, ...options] = rest;
+    const value = (name as { readonly value?: unknown } | undefined)?.value;
+    if (name?.tag !== "lit" || typeof value !== "string") throw new NotStandalone('"reduce" without a literal text as its op');
+    const strict = this.#strict(op, options, ["strict", "domain"]);
+    return { strict, step: { op: value, domain: (options[0] as { readonly value?: { readonly domain?: unknown } } | undefined)?.value?.domain } };
   }
 
   /**
@@ -1902,6 +1968,13 @@ class Printer {
       const q = this.fresh("q");
       return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: range.skip, fixed: false, start, startSafe, tests, inner };
     }
+    // In a graph space, the targets of an axis of a graph are an array of positions. A graph has no offsets and no tree.
+    if (this.#graph && GRAPH_AXES.has(base.t)) {
+      const range = this.#graphRange(base.t, f as string);
+      const q = this.fresh("q");
+      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: undefined, fixed: false, start, startSafe, tests, inner };
+    }
+    if (this.#graph && base.t === "window") throw new NotStandalone('the axis "window" in a graph space');
     if (base.t === "others") skip = f;
     else if (base.t === "window") {
       const h = this.fresh("h");
@@ -1910,6 +1983,21 @@ class Printer {
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
     return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], skip, fixed: f === undefined, start, startSafe, tests, inner };
+  }
+
+  /**
+   * This method gives the targets of an axis of a graph space at the position `f` (AXIS.GRAPH). They are the positions
+   * `a[q]` for `q` from `lo` up to `hi`. The first key of the search of `reachable` is the focus, which is not a target.
+   */
+  #graphRange(t: string, f: string): TreeRange {
+    const a = this.fresh("A");
+    const range = (code: string, lo = "0"): TreeRange => ({ s: [`const ${a} = ${code};`], a, lo, hi: `${a}.length`, skip: undefined });
+    if (t === "successors") return range(`GO[${f}]`);
+    if (t === "predecessors") {
+      this.into = true;
+      return range(`GN[${f}]`);
+    }
+    return range(`${this.use("RB")}(GO, ${f}, n)`, "1");
   }
 
   /**
@@ -1950,7 +2038,7 @@ class Printer {
   }
 
   #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
-    const strict = this.#strict(op, rest);
+    const { strict, step } = this.#foldOptions(op, rest);
     const at = target.at ?? [];
     const { s, j, head, key, check, skip, fixed, start, startSafe, tests, inner } = this.#targetLoop(target.axis, at, ctx);
     const { level } = inner;
@@ -1962,7 +2050,7 @@ class Printer {
     // itself gives `#CYCLE!`.
     if (op === "count" && fixed && tests.length === 0 && body.v.safe && !body.v.deps.has(CELLS)) return bare(plainValue("n", "number"));
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== level));
-    const r = this.#reduction(op, body.v.kind);
+    const r = this.#reduction(op, body.v.kind, step);
     const { v } = r;
     s.push(r.init);
     const item = [...check, ...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
@@ -1975,7 +2063,7 @@ class Printer {
       const x = this.fresh("x");
       const all = [...key, ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]), `let ${x};`, "try {", ...ind(item), `  ${x} = ${body.v.code};`, "} catch {", `  ${x} = E;`, "}", `${list}.push(${x});`];
       const reduce = [`for (const ${v} of ${list}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
-      return { s: [...s, `const ${list} = [];`, head, ...ind(all), "}", ...reduce], v: { code: r.result, kind: listKind(op, body.v.kind), safe: false, deps } };
+      return { s: [...s, `const ${list} = [];`, head, ...ind(all), "}", ...reduce], v: { code: r.result, kind: r.kind, safe: false, deps } };
     }
     const loop = [
       ...key,
@@ -1989,17 +2077,18 @@ class Printer {
     // A count without strict, and any, all and none over booleans without strict, cannot fail. The address of the axis
     // can fail, except at the focus or at the origin.
     const safe = startSafe && !strict && (op === "count" || (BOOLEAN_LIST_OPS.has(op) && body.v.kind === "boolean"));
-    return { s, v: { code: r.result, kind: listKind(op, body.v.kind), safe, deps } };
+    return { s, v: { code: r.result, kind: r.kind, safe, deps } };
   }
 
   /**
    * This method gives the parts of a list op that reduces the values of its items. The parts are the variable `v` of
    * the value of an item, the first statement, the step and the result. A value of the wrong kind is an error of the op.
    */
-  #reduction(op: string, kind: Kind | undefined): { readonly v: string; readonly init: string; readonly step: string; readonly result: string } {
+  #reduction(op: string, kind: Kind | undefined, step?: Step): { readonly v: string; readonly init: string; readonly step: string; readonly result: string; readonly kind: Kind | undefined } {
     const a = this.fresh("a");
     const n = this.fresh("n");
     const v = this.fresh("x");
+    if (step !== undefined) return { v, init: `let ${a}, ${n} = 0;`, ...this.#reduceStep(step, kind, a, n, v) };
     const num = kind === "number" ? v : `${this.use("U")}(${v})`;
     const bool = kind === "boolean" ? v : `${this.use("B")}(${v})`;
     const inits: Readonly<Record<string, string>> = {
@@ -2030,7 +2119,40 @@ class Printer {
       all: a,
       none: `!${a}`,
     };
-    return { v, init: inits[op] ?? `let ${a}, ${n} = 0;`, step: steps[op] as string, result: results[op] ?? `(${n} === 0 ? ${F}() : ${a})` };
+    return { v, init: inits[op] ?? `let ${a}, ${n} = 0;`, step: steps[op] as string, result: results[op] ?? `(${n} === 0 ? ${F}() : ${a})`, kind: listKind(op, kind) };
+  }
+
+  /**
+   * This method gives the step and the result of `reduce` (COMPILE.MODULE.REDUCE), as in the interpreter. The first item
+   * is the first running value. Each later item goes into the op of the domain of the running value. The kinds of the
+   * items decide that op, and the op must give a value of the same kind. No items give the identity of the op.
+   */
+  #reduceStep(step: Step, kind: Kind | undefined, a: string, n: string, v: string): { readonly step: string; readonly result: string; readonly kind: Kind | undefined } {
+    const arg = (code: string): Code => bare({ code, kind, safe: true, deps: NO_DEPS, plain: true });
+    const call = this.#opCall(step.op, [arg(a), arg(v)], NO_DEPS);
+    if (call.v.kind !== kind) throw new NotStandalone(`the op "${step.op}" of "reduce" gives a value of the kind ${kindText(call.v.kind)}, not of the kind ${kindText(kind)} of the items`);
+    const empty = this.#identity(step);
+    // The identity of another domain is a value of another kind, so the kind of the result is not known.
+    return { step: `${a} = ${n}++ === 0 ? ${v} : ${call.v.code};`, result: `(${n} === 0 ? ${empty.code} : ${a})`, kind: empty.kind === undefined || empty.kind === kind ? kind : undefined };
+  }
+
+  /**
+   * This method gives the code of `reduce` over no items, as in the interpreter. The code is the identity of the op in
+   * the one domain that has one, or in the domain of the option `domain`. Another case is an error. The kind is the kind
+   * of the domain.
+   */
+  #identity(step: Step): { readonly code: string; readonly kind: Kind | undefined } {
+    const { op, domain } = step;
+    const fail = { code: `${this.use("F")}()`, kind: undefined };
+    // A name of a domain that the program does not have leaves no domain, so it gives the error too.
+    const found = [...this.#domains.entries()].filter(([, d]) => Object.hasOwn(d.ops, op) && (d.ops[op] as { readonly identity?: unknown }).identity !== undefined && (domain === undefined || d.name === domain));
+    const [only, second] = found;
+    if (only === undefined || second !== undefined) return fail;
+    const [i, d] = only;
+    const name = `id_${String(i)}_${String(this.#opIndex(op))}`;
+    // Stryker disable next-line ConditionalExpression: the copy of an identity is always the same, so the test only saves time
+    if (!this.top.has(name)) this.top.set(name, `const ${name} = ${copied((d.ops[op] as { readonly identity: () => unknown }).identity, [], `the identity of the op "${op}" of the domain ${d.name}`)};`);
+    return { code: `${name}()`, kind: kindOfDomain(d) };
   }
 
   /**
@@ -2109,7 +2231,7 @@ class Printer {
     const list = this.#listOf(head, ctx);
     // A missing position is the literal null, which is not a whole number, so nth gives its error.
     const exprs = [head, ...(op === "nth" ? [rest[0] ?? lit(null)] : [])];
-    const strict = this.#strict(op, rest.slice(exprs.length - 1));
+    const { strict, step } = this.#foldOptions(op, rest.slice(exprs.length - 1));
     const raw = [list, ...exprs.slice(1).map((x) => this.expr(x, ctx))];
     const deps = depsOf(...raw);
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
@@ -2117,10 +2239,10 @@ class Printer {
     const { item, inner } = list.v.list as ListInfo;
     // The value of an item of a list of lists is a list, so nth and first give a list (LIST.FLAT).
     if (op === "nth") return { s: stmtsOf(...parts), v: { code: `${this.use("NT")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: item, safe: false, deps, list: inner } };
-    const r = this.#reduction(op, item);
+    const r = this.#reduction(op, item, step);
     const { v } = r;
     const s = [...l.s, r.init, `for (const [, ${v}] of ${l.v.code}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
-    return { s, v: { code: r.result, kind: listKind(op, item), safe: false, deps, list: op === "first" ? inner : undefined } };
+    return { s, v: { code: r.result, kind: r.kind, safe: false, deps, list: op === "first" ? inner : undefined } };
   }
 
   /**
@@ -2395,12 +2517,19 @@ class Printer {
 }
 
 /** This function gives the name of the function of a module, and its space, or the reason that the options are not valid. */
-function runOf(options: ModuleOptions): { readonly name: string; readonly tree: boolean } | { readonly reason: string } {
+function runOf(options: ModuleOptions): Run | { readonly reason: string } {
   const name = options.name ?? "run";
   if (!/^[A-Za-z_$][\w$]*$/.test(name)) return { reason: `the name "${name}" is not a JavaScript name` };
-  const tree = options.space === "tree";
-  if (!tree && options.space !== undefined && options.space !== "array") return { reason: `the space "${String(options.space)}" is not "array" or "tree"` };
-  return { name, tree };
+  const space = options.space ?? "array";
+  if (space !== "array" && space !== "tree" && space !== "graph") return { reason: `the space "${String(space)}" is not "array", "tree" or "graph"` };
+  return { name, tree: space === "tree", graph: space === "graph" };
+}
+
+/** The function of a module: its name, and its space. */
+interface Run {
+  readonly name: string;
+  readonly tree: boolean;
+  readonly graph: boolean;
 }
 
 /** This function gives the reason of an error of the printer. Another exception is a defect, so it goes to the caller. */
@@ -2413,7 +2542,7 @@ function reasonOf(thrown: unknown): Emitted {
  * This function gives the text of a module: the declarations, the helpers, and the function of the run. The run checks
  * its input, computes the parts of the tree and the constants of the run, and then gives the statements `body`.
  */
-function printModule(p: Printer, options: ModuleOptions, run: { readonly name: string; readonly tree: boolean }, body: readonly string[]): Emitted {
+function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonly string[]): Emitted {
   p.use("C");
   const helpers = new Set<Helper>();
   // A helper comes after the helpers that it needs. A set keeps the first place of each helper.
@@ -2431,13 +2560,16 @@ function printModule(p: Printer, options: ModuleOptions, run: { readonly name: s
   } catch (thrown) {
     return reasonOf(thrown);
   }
-  const { name, tree } = run;
+  const { name, tree, graph } = run;
   // A tree checks its parents, and it computes the parts that the program reads. The siblings and the order need the
   // children.
   if (tree) p.use("PT");
   if (p.treeParts.size > 0) p.treeParts.add("children");
   const parts = (["children", "siblings", "order"] as const).filter((x) => p.treeParts.has(x));
   for (const x of parts) p.use(TREE_PARTS[x][0]);
+  // A graph checks its edges, and it computes the predecessors if the program reads them.
+  if (graph) p.use("GR");
+  if (p.into) p.use("GI");
   [...p.helpers].toSorted().forEach(add);
   // The names that this module declares at its top: the constants, the helpers and the declarations of the printer.
   const declared = new Set<string>(["VexContractError", "VEX_ERROR", "E", ...(p.memos ? ["Z"] : []), ...(helpers.has("S") ? ["N", "W"] : []), ...helpers, ...p.top.keys()]);
@@ -2455,7 +2587,7 @@ function printModule(p: Printer, options: ModuleOptions, run: { readonly name: s
     ...(helpers.has("S") ? ["const N = {}, W = {};"] : []),
     ...[...helpers].map((h) => (h === "S" ? helperS(p.features) : HELPERS[h])),
     ...p.top.values(),
-    `export function ${name}(records, vars${tree ? ", parents" : ""}) {`,
+    `export function ${name}(records, vars${tree ? ", parents" : graph ? ", edges" : ""}) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
     "  const n = R.length;",
@@ -2465,6 +2597,7 @@ function printModule(p: Printer, options: ModuleOptions, run: { readonly name: s
     "  }",
     `  if (typeof vars !== "object" || vars === null${varChecks}) C("the variables do not keep the schema");`,
     ...(tree ? ["  const P = PT(parents, n);", ...parts.map((x) => `  ${TREE_PARTS[x][1]}`)] : []),
+    ...(graph ? ["  const GO = GR(edges, n);", ...(p.into ? ["  const GN = GI(GO, n);"] : [])] : []),
     ...[...p.vars].map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
     ...ind(p.run),
     ...ind(body),

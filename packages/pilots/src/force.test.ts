@@ -1,7 +1,9 @@
+import { evaluate, space } from "@mark1russell7/vex";
+import { emitModule } from "@mark1russell7/vex-compiler";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { layoutReference, layoutVex, type ForceNode, type ForceOptions } from "./force.ts";
+import { FORCE_DOMAINS, FORCE_SCHEMA, forceProgram, layoutReference, layoutVex, type ForceNode, type ForceOptions } from "./force.ts";
 
 const node = (id: string, x: number, y: number): ForceNode => ({ id, pos: new Vec2(x, y) });
 const ONE: ForceOptions = { steps: 1, repel: 1, spring: 0.5, center: 0 };
@@ -52,5 +54,77 @@ describe("the force pilot", () => {
 
   it("gives no positions for no nodes", () => {
     expect(layoutVex({}, {}, ONE)).toEqual({});
+  });
+});
+
+type XY = { readonly x: number; readonly y: number };
+type ForceRun = (records: unknown, vars: unknown, edges: unknown) => readonly unknown[];
+
+/** This function gives the function of the standalone module of the layout over a graph space. */
+function moduleOf(o: ForceOptions): ForceRun {
+  const m = emitModule(forceProgram(o), { domains: FORCE_DOMAINS, schema: FORCE_SCHEMA, space: "graph", name: "force" });
+  if (!m.ok) throw new Error(m.reason);
+  expect(m.source).not.toContain("import");
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule.
+  return new Function(`${m.source.replaceAll(/^export /gm, "")}
+return force;`)() as ForceRun;
+}
+
+interface Input {
+  readonly nodes: Record<string, ForceNode>;
+  readonly edges: Record<string, readonly string[]>;
+  readonly records: readonly { readonly id: string; readonly pos: XY }[];
+  readonly ends: readonly (readonly number[])[];
+}
+
+/**
+ * This function gives the input of the module: the records in key order, and the positions of the ends of the edges.
+ * In a module, the key of a record is the text of its position. Thus the nodes and the edges get these keys too.
+ */
+function inputOf(nodes: Readonly<Record<string, ForceNode>>, edges: Readonly<Record<string, readonly string[]>>): Input {
+  const keys = Object.keys(nodes);
+  const at = (k: string): string => String(keys.indexOf(k));
+  const points = Object.values(nodes).map((x) => x.pos);
+  const records = points.map((p, i) => ({ id: String(i), pos: { x: p.x, y: p.y } }));
+  return {
+    nodes: Object.fromEntries(points.map((p, i) => [String(i), node(String(i), p.x, p.y)])),
+    edges: Object.fromEntries(Object.entries(edges).map(([k, e]) => [at(k), e.map(at)])),
+    records,
+    ends: keys.map((k) => (edges[k] ?? []).map((j) => keys.indexOf(j))),
+  };
+}
+
+/** This function gives the positions of a layout as plain data, in key order. */
+const plain = (r: Record<string, Vec2>): XY[] => Object.values(r).map((p) => ({ x: p.x, y: p.y }));
+
+describe("the force pilot as a standalone module", () => {
+
+  it("COMPILE.MODULE.GRAPH COMPILE.MODULE.REDUCE: the module gives the positions of the reference, with the same bits", () => {
+    fc.assert(
+      fc.property(graph, options, ({ nodes, edges }, o) => {
+        const i = inputOf(nodes, edges);
+        expect(moduleOf(o)(i.records, {}, i.ends)).toEqual(plain(layoutReference(i.nodes, i.edges, o)));
+      }),
+      { numRuns: 50 },
+    );
+  });
+
+  it("COMPILE.MODULE.GRAPH: the module gives the values of the interpreter (P17) and of tier 1 at each node", () => {
+    const o: ForceOptions = { steps: 4, repel: 1, spring: 0.25, center: 0.05 };
+    // The edges have a duplicate, a loop on one node and a cycle.
+    const { nodes, edges, records, ends } = inputOf({ a: node("a", 0, 0), b: node("b", 1, 0), c: node("c", 3, 1), d: node("d", -2, 2) }, { a: ["b", "b", "a"], b: ["c"], c: ["a"] });
+    const got = moduleOf(o)(records, {}, ends);
+    const s = space.graph(Object.fromEntries(records.map((r) => [r.id, r])), edges);
+    const want = s.keys.map((origin) => {
+      const r = evaluate(forceProgram(o), { space: s, origin, vars: {}, domains: FORCE_DOMAINS });
+      if (!r.ok) throw new Error(r.error.message);
+      return r.value;
+    });
+    expect(got).toEqual(want);
+    expect(got).toEqual(plain(layoutVex(nodes, edges, o)));
+  });
+
+  it("COMPILE.MODULE.GRAPH: the module refuses edges that do not go to a record", () => {
+    expect(() => moduleOf(ONE)([{ id: "a", pos: { x: 0, y: 0 } }], {}, [[1]])).toThrow("an edge of the record 0 does not go to the position of a record");
   });
 });

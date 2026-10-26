@@ -260,6 +260,7 @@ The status on 2026-10-17:
 - Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives a reason for `indexOf` and `fill`. A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3. An array is not a list of a module. The kinds of `fill` and of an array do not decide an op of a module.
 - Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 gives a reason for them, and tier 1 evaluates the program.
 - Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus the force layouts of Graph and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
+- Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops come from `XYDomain`, because a module cannot copy the methods of `Vec2Domain`.
 
 The decisions of the third block:
 
@@ -268,7 +269,7 @@ The decisions of the third block:
 - A list op over a `let` with literal options is the list op over the body of the `let`. A builder sheet prints `sum(let($0 = 0, each(…)))`. Thus the `each` stays one loop with a running value.
 - The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus an op on a `get` of a name whose first list is empty gives a reason.
 - The focus of the axis `list` is the position of a record. Thus the axis `list` over a list with the keys of a literal gives a reason.
-- Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list, a list as the value of the program and `if` with lists as branches give a reason. The force pilot itself uses a graph space and `reduce`, so a module of the whole pilot waits for them.
+- Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list, a list as the value of the program and `if` with lists as branches give a reason. Since 2026-10-26, a module has graph spaces and `reduce`, so the force pilot is a module ("Graph spaces and reduce" below).
 
 The decisions of the second block:
 
@@ -509,7 +510,7 @@ The source of tier 2 has approximately seven lines for each node: the checks of 
 - A node of the memo with a loop of its own is one function of its keys. Two nodes with the same expression share the function.
 - A node whose key is only in one test of a list op keeps its items. One pass gives the items, and each lookup uses them. With the test `===`, the lookup is a map of the groups. With `<` and values that do not decrease, the lookup is a binary search on the prefixes.
 
-The printer takes a part of the language. It takes an array space or a tree space, the fields and the variables of the schema, and the axes `all`, `others` and `window`. A tree space also has the move `parent` and the axes of a tree ("Tree spaces" below). Each op site must have a static op, and another construct gives a reason.
+The printer takes a part of the language. It takes an array space, a tree space or a graph space. It takes the fields and the variables of the schema, and the axes `all`, `others` and `window`. A tree space also has the move `parent` and the axes of a tree ("Tree spaces" below). A graph space has the axes of a graph ("Graph spaces and reduce" below). Each op site must have a static op, and another construct gives a reason.
 
 A property compares random programs with the interpreter, and the grid pilot compares the module with the code of ireko. The golden files `__golden__/module-*.js` keep the text of some modules, so a change of the text shows in review.
 
@@ -679,3 +680,29 @@ The search decides the cycles, and each read of a cell can start it. Thus the mo
 - The tables of SHEET.TABLES and the axis `table` are not in modules.
 
 A property compares the results of a module with `SheetRun` on random sheets over arrays and trees, with each budget of the stack (P17). The fixed sample of the property has cycles in many sheets, deep trees and parents after their children. The text of the module of the sheet of the engine is in the golden file `__golden__/module-sheet.js`.
+
+#### Graph spaces and reduce (the force pilot)
+
+The force pilot moves the nodes of a graph. Thus a module takes a graph space too (COMPILE.MODULE.GRAPH). With the option `space: "graph"`, the run takes a third argument: for each record, an array of the positions of the ends of its edges. The key of a record is the text of its position, as in the other spaces.
+
+The run checks the edges once, before the loop over the keys. Edges that are not an array of positions for each record throw a `VexContractError`. Before the loop, the run makes only the parts of the graph that the program reads:
+
+| Part | Helper | For |
+|---|---|---|
+| The successors of each record, in the order of its edges, with no second edge to one record | `GR` | Each graph |
+| The predecessors of each record, in key order | `GI` | `predecessors` |
+| The search breadth first from the focus | `RB` | `reachable`, an array for each loop |
+
+Thus the loop over the targets of an axis is a `for` loop over an array, as in a tree. The reverse order is the same loop from the end. The search of `reachable` starts at the focus, and the loop skips it. A graph has no offsets and no tree, so an offset and the move `parent` give the error of Vex. A window and the axes of a tree give a reason.
+
+A module also has `reduce` with the op of a domain (COMPILE.MODULE.REDUCE). The force pilot adds its forces with `reduce("add", { domain: "XY" })`. The loop keeps a running value, as the other list ops do:
+
+- The first item is the first running value. Each later item goes into the op, with the static site of the kinds of the items. The op must give a value of that kind, or the printer gives a reason.
+- No items give the identity of the op in the one domain that has one, or in the domain of the option `domain`. The module copies the identity. Another case gives the error of Vex, as in the interpreter.
+- An error item is skipped (LIST.LENIENT), and the option `strict` gives the error. A name of the op that is not a literal text gives a reason.
+
+The ops of `Vec2Domain` are methods of a class, so a module cannot copy them. Thus `forceProgram` of the pilot uses `XYDomain`, the plain data with the same arithmetic. It uses `dot(gap, gap)` in place of `lengthSq`, which gives the same bits. A list is not a value of a module, so the program gives the last position of each node with `get(…, id)`. The list of the loop is a constant of the run, so the run computes it once.
+
+A property compares random programs over random graphs with the interpreter (P17). The graphs have cycles, edges to their own record and two edges to one record. The programs read each axis of a graph, also in the reverse order and from an address, and `reduce` with each option. The force pilot compares the module with `layoutReference` on random graphs, with the same bits. The text of a module of a graph is in the golden file `__golden__/module-graph.js`.
+
+A rough local timing on 2026-10-26 used 10 steps on a busy machine. With 20 nodes, the module takes 0.6 ms, tier 1 takes 11 ms and `layoutReference` takes 0.3 ms. With 60 nodes, the module takes 3.1 ms, tier 1 takes 74 ms and `layoutReference` takes 1.9 ms. Thus the module is approximately 20 times faster than tier 1. It is approximately 1.7 times slower than the plain loops.

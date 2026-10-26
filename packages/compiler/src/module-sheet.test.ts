@@ -206,7 +206,7 @@ describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
   it("COMPILE.MODULE.SHEET: the options, the formulas and the reads of a sheet that a module does not have give a reason", () => {
     const columns = new Map<string, Expr>([["a", ref("v")]]);
     expect(reasonOf(columns, { ...NUM, name: "a-b" })).toBe('the name "a-b" is not a JavaScript name');
-    expect(reasonOf(columns, { ...NUM, space: "grid" as "tree" })).toBe('the space "grid" is not "array" or "tree"');
+    expect(reasonOf(columns, { ...NUM, space: "grid" as "tree" })).toBe('the space "grid" is not "array", "tree" or "graph"');
     expect(reasonOf(columns, { ...NUM, budget: 1.5 })).toBe("the budget 1.5 is not a whole number of 0 or more");
     expect(reasonOf(columns, { ...NUM, budget: -1 })).toBe("the budget -1 is not a whole number of 0 or more");
     expect(reasonOf(new Map([["a", { tag: "nope" } as unknown as Expr]]))).toMatch(/^the formula of the column "a": /);

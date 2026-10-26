@@ -106,6 +106,25 @@ function expectSameTree(m: Loaded, e: Expr, records: readonly unknown[], parents
   expect(got).toStrictEqual(expected);
 }
 
+/** The options of a module of a graph space (COMPILE.MODULE.GRAPH). */
+const GRAPH: ModuleOptions = { ...OPTIONS, space: "graph" };
+
+/** This function gives the graph space of some records: the key of a record is the text of its position. */
+function graphOf(records: readonly unknown[], edges: readonly (readonly number[])[]): Space {
+  return space.graph(Object.fromEntries(records.map((r, i) => [String(i), r])), Object.fromEntries(edges.map((ends, i) => [String(i), ends.map(String)])));
+}
+
+/** This function compares the values of a module of a graph space with the interpreter at each key. */
+function expectSameGraph(m: Loaded, e: Expr, records: readonly unknown[], edges: readonly (readonly number[])[], vars: Readonly<Record<string, unknown>> = VARS): void {
+  const got = m.run(structuredClone(records), vars, structuredClone(edges));
+  const s = graphOf(records, edges);
+  const expected = s.keys.map((origin) => {
+    const r = evaluate(e, { space: s, origin, vars, domains: GRAPH.domains ?? [] });
+    return r.ok ? r.value : m.VEX_ERROR;
+  });
+  expect(got).toStrictEqual(expected);
+}
+
 /**
  * A tree of 9 records with two roots, 0 and 5. A parent can come after its child: 4 is the parent of 3 and of 6. The
  * record 8 is the third child of 4, and 7 is the only child of 5.
@@ -1310,7 +1329,7 @@ describe("COMPILE.MODULE.TREE: a module of a tree space", () => {
     // Only the module of a tree space takes the parents. A space of another name gives a reason.
     expect(sourceOf(e, TREE)).toContain("export function run(records, vars, parents) {");
     expect(sourceOf(n)).toContain("export function run(records, vars) {");
-    expect(reasonOf(n, { ...OPTIONS, space: "grid" as "tree" })).toBe('the space "grid" is not "array" or "tree"');
+    expect(reasonOf(n, { ...OPTIONS, space: "grid" as "tree" })).toBe('the space "grid" is not "array", "tree" or "graph"');
   });
 
   it("COMPILE.MODULE.TREE NAV.PARENT NAV.OFFSET.TREE AXIS.TREE AXIS.GRAPH AXIS.WINDOW: the moves and the axes of a tree give the targets of the interpreter", async () => {
@@ -1430,7 +1449,15 @@ interface Grammar {
   readonly ats: readonly (readonly Move[] | undefined)[];
   readonly foldAts: readonly (readonly Move[] | undefined)[];
   readonly boolAxes: readonly [Axis, ...Axis[]];
+  /** The ops of `reduce` over numbers and over booleans (COMPILE.MODULE.REDUCE). The grammar of the array space has none. */
+  readonly folds?: { readonly num: readonly [string, ...string[]]; readonly bool: readonly [string, ...string[]] };
 }
+
+/** The options of `reduce` in a grammar: none, strict, the domain of the op, a domain with no identity, and no domain. */
+const REDUCE_OPTIONS: readonly (Readonly<Record<string, unknown>> | undefined)[] = [undefined, { strict: true }, { domain: "Num" }, { domain: "Bool" }, { domain: "Nope" }];
+
+/** This function gives `reduce` with an op, over the values of a body at the targets of an axis. */
+const reduceOf = ([name, a, body, options]: readonly [string, Axis, Expr, Readonly<Record<string, unknown>> | undefined]): Expr => op("reduce", each(a, body), lit(name), ...(options === undefined ? [] : [lit(options)]));
 
 /** This function gives the programs over numbers, texts and booleans of a grammar, from the part of the language that a module has. */
 const programOf = (g: Grammar): { readonly num: fc.Arbitrary<Expr>; readonly bool: fc.Arbitrary<Expr> } =>
@@ -1454,6 +1481,7 @@ const programOf = (g: Grammar): { readonly num: fc.Arbitrary<Expr>; readonly boo
         .tuple(fc.constantFrom(...g.axes), tie("num"), tie("num"), fc.constantFrom(...g.foldAts))
         // The step depends on the order of the targets, so a loop in the wrong order gives another value.
         .map(([a, init, step, at]) => fold(a, { s: init }, { s: op("subtract", step, v("s")) }, v("s"), at)),
+      ...(g.folds === undefined ? [] : [fc.tuple(fc.constantFrom(...g.folds.num), fc.constantFrom(...g.axes), tie("num"), fc.constantFrom(...REDUCE_OPTIONS)).map(reduceOf)]),
     ),
     bool: fc.oneof(
       { maxDepth: 4, depthSize: "small" },
@@ -1465,6 +1493,7 @@ const programOf = (g: Grammar): { readonly num: fc.Arbitrary<Expr>; readonly boo
       g.boolAxes.length === 1
         ? fc.tuple(fc.constantFrom("any", "all", "none"), tie("bool")).map(([o, body]) => op(o, each(g.boolAxes[0], body)))
         : fc.tuple(fc.constantFrom("any", "all", "none"), fc.constantFrom(...g.boolAxes), tie("bool")).map(([o, a, body]) => op(o, each(a, body))),
+      ...(g.folds === undefined ? [] : [fc.tuple(fc.constantFrom(...g.folds.bool), fc.constantFrom(...g.boolAxes), tie("bool"), fc.constantFrom(...REDUCE_OPTIONS)).map(reduceOf)]),
     ),
   }));
 
@@ -1484,6 +1513,19 @@ const treeProgram = programOf({
   ats: [undefined, [PARENT], [offset(1)], [index(1)], [{ t: "origin" as const }], [PARENT, PARENT], [index(n)]],
   foldAts: [undefined, [PARENT], [offset(-1)]],
   boolAxes: [axes.children, axes.descendants, axes.siblings],
+});
+
+/**
+ * A program of a graph space (COMPILE.MODULE.GRAPH): the axes of a graph and `reduce`. An offset and the move parent
+ * give an error in a graph, and the grammar has them as reads.
+ */
+const graphProgram = programOf({
+  reads: [n, w, ref("n", [{ t: "origin" }]), ref("w", [offset(1)]), ref("n", [PARENT]), ref("n", [index(n)]), ref("w", [key("2")])],
+  axes: [axes.successors, axes.predecessors, axes.reachable, axes.reverse(axes.successors), axes.reverse(axes.predecessors), axes.reverse(axes.reachable), axes.all, axes.others],
+  ats: [undefined, [index(1)], [{ t: "origin" as const }], [index(n)], [key("0")]],
+  foldAts: [undefined, [{ t: "origin" as const }]],
+  boolAxes: [axes.successors, axes.predecessors, axes.reachable],
+  folds: { num: ["add", "multiply", "max", "subtract"], bool: ["and", "or", "xor"] },
 });
 
 const record = fc.record({
@@ -1512,6 +1554,14 @@ const trees: fc.Arbitrary<readonly [readonly unknown[], readonly number[]]> = fc
     return [xs, parents];
   });
 });
+
+/**
+ * The records of a random graph and the ends of the edges of each record. An edge can go to its own record, and two
+ * edges of a record can go to the same record. The edges can make cycles.
+ */
+const graphs: fc.Arbitrary<readonly [readonly unknown[], readonly (readonly number[])[]]> = fc
+  .array(record, { maxLength: 7 })
+  .chain((rs) => fc.tuple(fc.constant(rs), fc.array(fc.array(fc.nat({ max: Math.max(0, rs.length - 1) }), { maxLength: rs.length === 0 ? 0 : 4 }), { minLength: rs.length, maxLength: rs.length })));
 
 /** This function gives the depth of the key at the position `k` of a tree: 0 for a root. */
 const depth = (parents: readonly number[], k: number): number => (k < 0 ? -1 : 1 + depth(parents, parents[k] ?? -1));
@@ -1649,6 +1699,19 @@ describe("COMPILE.MODULE: random programs", () => {
     expect(sample.filter(([, p]) => p.filter((x) => x < 0).length >= 2).length).toBeGreaterThan(60);
     // Some parents come after their child in the key order.
     expect(sample.filter(([, p]) => p.some((x, k) => x > k)).length).toBeGreaterThan(60);
+  });
+
+  it("P17 COMPILE.MODULE.GRAPH COMPILE.MODULE.REDUCE: a module of a graph space gives the value of the interpreter at each key, or VEX_ERROR", () => {
+    fc.assert(
+      fc.property(fc.oneof(graphProgram.num, graphProgram.bool), graphs, fc.integer({ min: -3, max: 3 }), (e, [rs, edges], a) => {
+        expectSameGraph(make(sourceOf(e, GRAPH)), e, rs, edges, { a, t: "x" });
+      }),
+    );
+    // The random graphs have cycles, duplicate edges and edges to their own record.
+    const sample = fc.sample(graphs, { seed: 20261026, numRuns: 200 });
+    expect(sample.filter(([, g]) => g.some((ends, i) => ends.includes(i))).length).toBeGreaterThan(40);
+    expect(sample.filter(([, g]) => g.some((ends) => new Set(ends).size < ends.length)).length).toBeGreaterThan(40);
+    expect(sample.filter(([, g]) => g.some((ends, i) => ends.some((j) => j !== i && (g[j] ?? []).includes(i)))).length).toBeGreaterThan(20);
   });
 
   it("P17 COMPILE.MODULE: a module gives the value of the interpreter at each key, or VEX_ERROR", () => {

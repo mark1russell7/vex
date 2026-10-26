@@ -6,9 +6,14 @@
  *
  * The Vex program uses the typed builder. The name `pos` of `iterate` is a list chain (BUILD.LIST.LOOP), and the result
  * is the list of the last positions. A record has its key in the field `id`, because `get` takes the key as a value.
+ *
+ * `forceProgram` is the same layout as a standalone module over a graph space (COMPILE.MODULE.GRAPH). A module copies
+ * the functions of the ops, and the ops of `Vec2Domain` are methods of a class. Thus the module form uses `XYDomain`,
+ * the plain data with the same arithmetic, and `dot(gap, gap)` in place of `lengthSq`.
  */
-import { space, vex } from "@mark1russell7/vex";
-import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
+import { app, ref, space, vex, type Expr } from "@mark1russell7/vex";
+import type { Schema } from "@mark1russell7/vex-compiler";
+import { NumDomain, Vec2, Vec2Domain, XYDomain, type XY } from "@mark1russell7/vex-domains";
 
 /** A node: its key, and its position at the start. */
 export interface ForceNode {
@@ -95,4 +100,40 @@ export function layoutReference(nodes: Readonly<Record<string, ForceNode>>, edge
     );
   }
   return Object.fromEntries(pos);
+}
+
+/** The domains of the module form of the layout. `NumDomain` comes first, as `XYDomain` tells. */
+export const FORCE_DOMAINS: readonly [typeof NumDomain, typeof XYDomain] = [NumDomain, XYDomain];
+
+/** The schema of a record of the module form: its key in `id`, and its position at the start in `pos`. */
+export const FORCE_SCHEMA: Schema = { fields: { id: "string", pos: "domain:XY" } };
+
+/**
+ * This function gives the layout as one program for a standalone module over a graph space. At each node, the program
+ * gives the last position of that node. The option `domain` of `reduce` gives the zero vector for no items.
+ */
+export function forceProgram(o: ForceOptions): Expr {
+  // The space gives only the type of a record to the builder. The module takes its records and edges at run time.
+  const types: Readonly<Record<string, { readonly id: string; readonly pos: XY }>> = {};
+  const root = vex(...FORCE_DOMAINS).over(space.graph(types, {}));
+  const layout = root.start(0).iterate(
+    o.steps,
+    { pos: root.start(0).each((c) => c.from("pos")) },
+    ({ pos }) => ({
+      pos: root.start(0).each((c) => {
+        const me = pos.get(c.from("id"));
+        const push = me
+          .others((other) => {
+            const gap = other._.subtract(pos.get(other.from("id")));
+            return gap._.scale(root.start(o.repel)._.divide(gap._.dot(gap)._.add(1)));
+          })
+          .reduce("add", { domain: "XY" });
+        const out = me.successors((t) => pos.get(t.from("id"))._.subtract(t)._.scale(o.spring)).reduce("add", { domain: "XY" });
+        const into = me.predecessors((t) => pos.get(t.from("id"))._.subtract(t)._.scale(o.spring)).reduce("add", { domain: "XY" });
+        return me._.add(push)._.add(out)._.add(into)._.add(me._.scale(-o.center));
+      }),
+    }),
+    ({ pos }) => pos,
+  );
+  return app("get", layout.program, ref("id"));
 }

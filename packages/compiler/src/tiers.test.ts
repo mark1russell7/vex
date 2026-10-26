@@ -240,6 +240,46 @@ describe("the tiers", () => {
     expect(p.stats).toEqual({ runs: 2, fallbacks: 0 });
   });
 
+  it("V-064 LIST.ARRAY COMPILE.TIERED: a list op on an array in the body of a list op goes to tier 1, so the item stays", () => {
+    // V-064: the runtime gave FALLBACK for a list op on an array. In the loop of count, FALLBACK is an error item, so
+    // tier 2 skipped each item and gave 0. The property P17 found the first two programs.
+    const s = space.record({ A: { fr: [1, 2] }, B: { fr: [] }, C: { fr: [3] } });
+    const empty = lit([]);
+    const programs: readonly Expr[] = [
+      app("count", each(axes.all, app("sum", let_({ b: empty }, empty)))),
+      app("count", each(axes.all, rec({ x: app("keys", empty), y: lit(null) }))),
+      app("sum", each(axes.all, app("sum", ref("fr")))),
+      app("count", each(axes.all, app("keys", ref("fr")))),
+    ];
+    const values = [3, 3, 6, 3];
+    for (const [i, e] of programs.entries()) {
+      const p = tiered(e, { domains: DOMAINS });
+      expect(p.tier).toBe(2);
+      for (const k of s.keys) {
+        const got = fromCore(p.run({ space: s, origin: k }));
+        expect(got).toStrictEqual(fromCore(evaluate(e, { domains: DOMAINS, space: s, origin: k })));
+        expect(got).toStrictEqual({ ok: true, value: values[i] });
+      }
+      expect(p.stats.fallbacks).toBe(s.keys.length);
+    }
+    // A function of the host with the name of the list op comes first, and an op that is not a list op is an error item.
+    // Tier 2 gives these values itself.
+    const fns: Readonly<Record<string, FreeFn>> = { keys: () => 1 };
+    const own: readonly (readonly [Expr, number])[] = [
+      [app("sum", each(axes.all, app("keys", ref("fr")))), 3],
+      [app("count", each(axes.all, app("add", ref("fr"), lit(1)))), 0],
+    ];
+    for (const [e, value] of own) {
+      const p = tiered(e, { domains: DOMAINS, fns });
+      for (const k of s.keys) {
+        const got = fromCore(p.run({ space: s, origin: k }));
+        expect(got).toStrictEqual(fromCore(evaluate(e, { domains: DOMAINS, fns, space: s, origin: k })));
+        expect(got).toStrictEqual({ ok: true, value });
+      }
+      expect(p.stats.fallbacks).toBe(0);
+    }
+  });
+
   it("COMPILE.TIERED: an extension in each part of a loop and of an address gets the path of its node", () => {
     // The handler "where" gives the path of its node, so a wrong path in tier 2 gives another value than the interpreter.
     const w = ext("where", null);

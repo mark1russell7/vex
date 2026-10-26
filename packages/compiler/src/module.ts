@@ -1489,7 +1489,9 @@ class Printer {
     // The read of a column that the sheet does not have is an error. A kind of the options lets an op take it.
     if (index === undefined) return bare({ code: `${F}()`, kind: sheet.kinds.get(column), safe: false, deps });
     if (!sheet.kinds.has(column)) throw new NotStandalone(`a formula reads the column "${column}" before its formula, so the column needs its kind in the option kinds`);
-    const read = `${READ_CELL}(${String(index)}, ${this.#address(at, ctx, [])})`;
+    // A direct fill reads the array of the column. The search reads the cell with the function of its state.
+    const address = this.#address(at, ctx, []);
+    const read = sheet.direct ? `D[${String(index)}][${address}]` : `${READ_CELL}(${String(index)}, ${address})`;
     const v = { code: `${this.use("G")}(${read})`, kind: sheet.kinds.get(column), safe: false, deps };
     // The read itself gives the result or the error sentinel. A move of the address can throw, so then the read is not
     // a value that holds the sentinel.
@@ -2695,6 +2697,8 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, { columns: index, kinds, direct });
   const fns: string[] = [];
   const decls: string[] = [];
+  // The statements that put the value of each formula into the array of its column at the key `o`, for a direct fill.
+  const blocks = new Map<string, readonly string[]>();
   try {
     for (const f of formulas) {
       const code = p.root(f.expr);
@@ -2702,6 +2706,12 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
       // The first formula of a column without a kind of the options gives the kind of the column.
       if (!kinds.has(f.column)) kinds.set(f.column, kind);
       else if (kinds.get(f.column) !== kind) throw new NotStandalone(`${formulaText(f)} gives a value of the kind ${kindText(kind)}, not of the kind ${kindText(kinds.get(f.column))} of its column`);
+      // COMPILE.MODULE.ONCE: a direct fill has the code of each formula in its loop over the keys, with no function.
+      if (direct) {
+        const at = `D[${String(index.get(f.column))}][o]`;
+        blocks.set(f.column, code.v.safe && code.s.length === 0 ? [`${at} = ${code.v.code};`] : ["try {", ...ind(code.s), `  ${at} = ${code.v.code};`, "} catch {", `  ${at} = E;`, "}"]);
+        continue;
+      }
       const fn = p.fresh("cf");
       fns.push(fn);
       decls.push(...(code.v.safe && code.s.length === 0 ? [`const ${fn} = (o) => ${code.v.code};`] : [`const ${fn} = (o) => {`, "  try {", ...ind(ind(code.s)), `    return ${code.v.code};`, "  } catch {", "    return E;", "  }", "};"]));
@@ -2710,40 +2720,50 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   } catch (thrown) {
     return reasonOf(thrown);
   }
-  // The program of each column, and of each cell with its own formula, with its cost in estimated frames, as in SheetRun.
-  const entry = (i: number): string => `[${fns[i] as string}, ${String(3 * nestingOf((formulas[i] as Formula).expr) + 16)}]`;
-  const own = names.map((c) => {
-    const at = formulas.flatMap((f, i) => (f.column === c && f.key !== undefined ? [`${String(f.key)}: ${entry(i)}`] : []));
-    return at.length === 0 ? "undefined" : `{ ${at.join(", ")} }`;
-  });
-  const cols = names.map((c) => {
-    const i = formulas.findIndex((f) => f.column === c && f.key === undefined);
-    return i < 0 ? "undefined" : entry(i);
-  });
   p.use(direct ? "DO" : "SH");
-  // The function of the formula of each column, for a direct fill. A direct fill has no formulas of cells.
-  const fnOf = new Map(formulas.map((f, i) => [f.column, fns[i] as string]));
-  const fillOf = (c: string, at: string): string => (direct ? `D[${at}][o] = ${fnOf.get(c) as string}(o);` : `SS.f(${at}, o);`);
   // A tree gives the keys in the order of a fill with the helper KO, once for each order.
   const orders = new Map<string, string>();
-  const fill = order.map((c) => {
+  const headOf = (c: string): string => {
     const { reverse, post, back } = keyOrderOf(readsOf(columns, cells, c).directions);
-    const at = String(index.get(c));
-    if (!run.tree) return reverse ? `for (let o = n - 1; o >= 0; o--) ${fillOf(c, at)}` : `for (let o = 0; o < n; o++) ${fillOf(c, at)}`;
+    if (!run.tree) return reverse ? "for (let o = n - 1; o >= 0; o--)" : "for (let o = 0; o < n; o++)";
     const args = `${p.use("KO")}(H, RT, ${String(post)}, ${String(back)})`;
     let keys = orders.get(args);
     if (keys === undefined) {
       keys = p.fresh("K");
       orders.set(args, keys);
     }
-    return `for (const o of ${keys}) ${fillOf(c, at)}`;
-  });
+    return `for (const o of ${keys})`;
+  };
+  let fill: string[];
+  if (direct) {
+    // COMPILE.MODULE.ONCE: the columns that follow each other in the order share one loop over the keys when they have
+    // the same order of the keys, and each read of a column of the loop reads a finished cell.
+    const loops: { head: string; columns: string[] }[] = [];
+    for (const c of order) {
+      const head = headOf(c);
+      const last = loops.at(-1);
+      if (last?.head === head && readsFinished(columns, order, c, run.tree, new Set(last.columns))) last.columns.push(c);
+      else loops.push({ head, columns: [c] });
+    }
+    fill = [];
+    for (const { head, columns: cs } of loops) fill.push(`${head} {`, ...cs.flatMap((c) => ind(blocks.get(c) as readonly string[])), "}");
+  } else {
+    // The program of each column, and of each cell with its own formula, with its cost in estimated frames, as in SheetRun.
+    const entry = (i: number): string => `[${fns[i] as string}, ${String(3 * nestingOf((formulas[i] as Formula).expr) + 16)}]`;
+    const own = names.map((c) => {
+      const at = formulas.flatMap((f, i) => (f.column === c && f.key !== undefined ? [`${String(f.key)}: ${entry(i)}`] : []));
+      return at.length === 0 ? "undefined" : `{ ${at.join(", ")} }`;
+    });
+    const cols = names.map((c) => {
+      const i = formulas.findIndex((f) => f.column === c && f.key === undefined);
+      return i < 0 ? "undefined" : entry(i);
+    });
+    decls.push(`const SS = SH(n, [${cols.join(", ")}], [${own.join(", ")}], ${String(budget)});`, `const ${READ_CELL} = SS.r;`);
+    fill = order.map((c) => `${headOf(c)} SS.f(${String(index.get(c))}, o);`);
+  }
   if (run.tree) p.treeParts.add("children");
   const body = [
-    ...decls,
-    ...(direct
-      ? [`const D = [${names.map(() => "new Array(n)").join(", ")}];`, `const ${READ_CELL} = (c, k) => D[c][k];`]
-      : [`const SS = SH(n, [${cols.join(", ")}], [${own.join(", ")}], ${String(budget)});`, `const ${READ_CELL} = SS.r;`]),
+    ...(direct ? [`const D = [${names.map(() => "new Array(n)").join(", ")}];`] : decls),
     ...[...orders].map(([args, keys]) => `const ${keys} = ${args};`),
     ...fill,
     `return { ${names.map((c, i) => `${JSON.stringify(c)}: ${direct ? `DO(D[${String(i)}])` : `SS.o(${String(i)})`}`).join(", ")} };`,

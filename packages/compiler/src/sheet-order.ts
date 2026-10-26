@@ -145,8 +145,12 @@ function baseOf(axis: Axis): Axis {
  * - in a tree in post-order, at the key of a target of the axis `children` of the key.
  *
  * A read in the body of a function can evaluate at each place of a call, so it is not one of these forms.
+ *
+ * The columns of `fused` come before `self` in one loop over the keys (COMPILE.MODULE.ONCE). The loop evaluates each of
+ * them at a key before `self` at that key. Thus a read of one of them reads a finished cell only at the key itself, or
+ * in one of the three forms.
  */
-export function readsFinished(columns: ReadonlyMap<string, Expr>, order: readonly string[], self: string, tree: boolean): boolean {
+export function readsFinished(columns: ReadonlyMap<string, Expr>, order: readonly string[], self: string, tree: boolean, fused: ReadonlySet<string> = new Set()): boolean {
   const formula = columns.get(self);
   if (formula === undefined || shapeError(formula) !== undefined) return false;
   const { reverse, post } = keyOrderOf(readsOf(columns, new Map(), self).directions);
@@ -166,12 +170,15 @@ export function readsFinished(columns: ReadonlyMap<string, Expr>, order: readonl
       const { column, at } = e.data;
       const index = order.indexOf(column);
       if (index > position) return false;
-      if (column !== self) continue;
+      if (column !== self && !fused.has(column)) continue;
       const [move, ...rest] = at;
+      // The cell of a fused column at the key itself is finished. The cell of `self` at the key is a cycle.
+      const here = column !== self && place === "key" && at.every((m) => m.t === "origin");
       const ok =
-        place === "key"
+        here ||
+        (place === "key"
           ? move !== undefined && rest.length === 0 && ((tree && !post && move.t === "parent") || (!tree && !reverse && move.t === "offset" && move.d.length === 1 && (move.d[0] ?? 0) < 0))
-          : place === "children" && tree && post && at.length === 0;
+          : place === "children" && tree && post && at.length === 0);
       if (!ok) return false;
     }
   }

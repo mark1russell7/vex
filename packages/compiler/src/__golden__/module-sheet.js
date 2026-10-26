@@ -68,7 +68,10 @@ export function run(records, vars, parents) {
   const P = PT(parents, n);
   const [H, RT] = CH(P, n);
   const [GP, SI] = SG(P, H, RT, n);
-  const cf7 = (o) => {
+  const D = [new Array(n), new Array(n)];
+  const K16 = KO(H, RT, true, true);
+  const K17 = KO(H, RT, false, false);
+  for (const o of K16) {
     try {
       const f1 = o;
       const A2 = H[f1];
@@ -77,45 +80,39 @@ export function run(records, vars, parents) {
         const j0 = A2[q3];
         let x6;
         try {
-          x6 = k_number((G(RC(0, j0))) + (2));
+          x6 = k_number((G(D[0][j0])) + (2));
         } catch {
           continue;
         }
         a4 += x6;
       }
-      return k_number((R[o]["v"]) + (k_number(a4)));
+      D[0][o] = k_number((R[o]["v"]) + (k_number(a4)));
     } catch {
-      return E;
+      D[0][o] = E;
     }
-  };
-  const cf17 = (o) => {
+  }
+  for (const o of K17) {
     try {
-      let t16;
+      let t15;
       try {
-        let l8 = 0;
-        const f10 = o;
-        const A11 = GP[f10];
-        const h12 = Math.max(0, SI[f10] + -9);
-        const h13 = Math.min(A11.length, SI[f10] + -1 + 1);
-        for (let q14 = h12; q14 < h13; q14++) {
-          const j9 = A11[q14];
-          const t15 = k_number((l8) + (G(RC(0, j9))));
-          l8 = t15;
+        let l7 = 0;
+        const f9 = o;
+        const A10 = GP[f9];
+        const h11 = Math.max(0, SI[f9] + -9);
+        const h12 = Math.min(A10.length, SI[f9] + -1 + 1);
+        for (let q13 = h11; q13 < h12; q13++) {
+          const j8 = A10[q13];
+          const t14 = k_number((l7) + (G(D[0][j8])));
+          l7 = t14;
         }
-        t16 = k_number((G(RC(1, UP(P, o)))) + (l8));
+        t15 = k_number((G(D[1][UP(P, o)])) + (l7));
       } catch {
-        t16 = 0;
+        t15 = 0;
       }
-      return t16;
+      D[1][o] = t15;
     } catch {
-      return E;
+      D[1][o] = E;
     }
-  };
-  const D = [new Array(n), new Array(n)];
-  const RC = (c, k) => D[c][k];
-  const K18 = KO(H, RT, true, true);
-  const K19 = KO(H, RT, false, false);
-  for (const o of K18) D[0][o] = cf7(o);
-  for (const o of K19) D[1][o] = cf17(o);
+  }
   return { "size": DO(D[0]), "x": DO(D[1]) };
 }

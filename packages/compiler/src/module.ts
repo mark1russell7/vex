@@ -29,7 +29,7 @@
 import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isVexList, lit, moveExpr, nestingOf, rec, shapeError, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
-import { columnOrder, isCellRef, keyOrderOf, readsOf } from "./sheet-order.ts";
+import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {
@@ -153,6 +153,8 @@ interface SheetInfo {
   readonly columns: ReadonlyMap<string, number>;
   /** The kind of each column that the printer knows: a kind of the options, or the kind of a printed formula. */
   readonly kinds: Map<string, Kind | undefined>;
+  /** True when each read of a cell reads a finished cell, so a read starts no search (COMPILE.MODULE.SHEET.DIRECT). */
+  readonly direct: boolean;
 }
 
 /** This function gives the levels of some codes together. */
@@ -246,7 +248,7 @@ type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
 type GraphHelper = "GR" | "GI" | "RB";
 
 /** The helpers of a sheet (COMPILE.MODULE.SHEET): the state of a run of a sheet, and the order of the keys of a tree. */
-type SheetHelper = "SH" | "KO";
+type SheetHelper = "SH" | "KO" | "DO";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -418,6 +420,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // The state of a run of a sheet (COMPILE.MODULE.SHEET), as in SheetRun: the result of each finished cell, the search
   // of Tarjan with its stack, and the budget of the stack. `r` reads a cell, `f` fills a cell, and `o` gives a column.
   // A cell without a formula has the error sentinel from the start, as the error of its read.
+  // A column of a direct fill (COMPILE.MODULE.SHEET.DIRECT): the error sentinel of a cell changes to VEX_ERROR.
+  DO: "function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }",
   SH: [
     "function SH(n, cols, own, budget) {",
     "  const pg = (c, k) => {",
@@ -712,7 +716,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
-  SH: [], KO: [],
+  SH: [], KO: [], DO: [],
 };
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
@@ -1504,6 +1508,8 @@ class Printer {
    * must read no cell.
    */
   #inOrder(parts: readonly Code[], all: boolean): readonly Code[] {
+    // A read of a finished cell starts no search, so the order of the reads does not change a result.
+    if (this.#sheet?.direct === true) return parts;
     const last = parts.findLastIndex((x) => x.v.deps.has(CELLS));
     const after = parts.slice(last + 1).every((x) => x.s.length === 0 || x.v.safe);
     const before = !all || parts.slice(0, Math.max(last, 0)).every((x) => x.v.safe) || !READS_IN_CODE.test((parts[last] as Code).v.code);
@@ -2683,7 +2689,10 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   const kinds = new Map<string, Kind | undefined>(Object.entries(options.kinds ?? {}));
   const index = new Map(names.map((c, i) => [c, i]));
   // The memo of the printer covers each formula, so the formulas share their nodes of the memo.
-  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, { columns: index, kinds });
+  // A sheet whose reads all read finished cells needs no search: each cell is the value of its formula
+  // (COMPILE.MODULE.SHEET.DIRECT). A sheet with formulas of cells always has the search.
+  const direct = formulas.every((f) => f.key === undefined) && order.every((c) => readsFinished(columns, order, c, run.tree));
+  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, { columns: index, kinds, direct });
   const fns: string[] = [];
   const decls: string[] = [];
   try {
@@ -2711,29 +2720,33 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
     const i = formulas.findIndex((f) => f.column === c && f.key === undefined);
     return i < 0 ? "undefined" : entry(i);
   });
-  p.use("SH");
+  p.use(direct ? "DO" : "SH");
+  // The function of the formula of each column, for a direct fill. A direct fill has no formulas of cells.
+  const fnOf = new Map(formulas.map((f, i) => [f.column, fns[i] as string]));
+  const fillOf = (c: string, at: string): string => (direct ? `D[${at}][o] = ${fnOf.get(c) as string}(o);` : `SS.f(${at}, o);`);
   // A tree gives the keys in the order of a fill with the helper KO, once for each order.
   const orders = new Map<string, string>();
   const fill = order.map((c) => {
     const { reverse, post, back } = keyOrderOf(readsOf(columns, cells, c).directions);
     const at = String(index.get(c));
-    if (!run.tree) return reverse ? `for (let o = n - 1; o >= 0; o--) SS.f(${at}, o);` : `for (let o = 0; o < n; o++) SS.f(${at}, o);`;
+    if (!run.tree) return reverse ? `for (let o = n - 1; o >= 0; o--) ${fillOf(c, at)}` : `for (let o = 0; o < n; o++) ${fillOf(c, at)}`;
     const args = `${p.use("KO")}(H, RT, ${String(post)}, ${String(back)})`;
     let keys = orders.get(args);
     if (keys === undefined) {
       keys = p.fresh("K");
       orders.set(args, keys);
     }
-    return `for (const o of ${keys}) SS.f(${at}, o);`;
+    return `for (const o of ${keys}) ${fillOf(c, at)}`;
   });
   if (run.tree) p.treeParts.add("children");
   const body = [
     ...decls,
-    `const SS = SH(n, [${cols.join(", ")}], [${own.join(", ")}], ${String(budget)});`,
-    `const ${READ_CELL} = SS.r;`,
+    ...(direct
+      ? [`const D = [${names.map(() => "new Array(n)").join(", ")}];`, `const ${READ_CELL} = (c, k) => D[c][k];`]
+      : [`const SS = SH(n, [${cols.join(", ")}], [${own.join(", ")}], ${String(budget)});`, `const ${READ_CELL} = SS.r;`]),
     ...[...orders].map(([args, keys]) => `const ${keys} = ${args};`),
     ...fill,
-    `return { ${names.map((c, i) => `${JSON.stringify(c)}: SS.o(${String(i)})`).join(", ")} };`,
+    `return { ${names.map((c, i) => `${JSON.stringify(c)}: ${direct ? `DO(D[${String(i)}])` : `SS.o(${String(i)})`}`).join(", ")} };`,
   ];
   return printModule(p, options, run, body);
 }

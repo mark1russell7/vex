@@ -1,22 +1,25 @@
 /**
- * This script writes the standalone module of a strategy of ireko (docs/COMPILER.md §13.3). Start it with
- * `npx tsx scripts/ireko-module.ts <grid|radial> <file>`. Node itself leaves spaces where the types of the copied
- * functions were.
+ * This script writes a standalone module of ireko (docs/COMPILER.md §13.3). Start it with
+ * `npx tsx scripts/ireko-module.ts <grid|radial|place> <file>`. The strategies `grid` and `radial` are programs. The
+ * place pass of the engine is a sheet over the tree of the nodes. Node itself leaves spaces where the types of the
+ * copied functions were.
  */
-import { emitModule } from "@mark1russell7/vex-compiler";
+import { emitModule, emitSheetModule, type Emitted } from "@mark1russell7/vex-compiler";
 import { writeFileSync } from "node:fs";
 import { GRID_DOMAINS, GRID_PROGRAM, GRID_SCHEMA } from "../src/ireko-grid.ts";
+import { PLACE_COLUMNS, PLACE_DOMAINS, PLACE_KINDS, PLACE_SCHEMA } from "../src/ireko-place.ts";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA } from "../src/ireko-radial.ts";
 
-const STRATEGIES = {
-  grid: { program: GRID_PROGRAM, domains: GRID_DOMAINS, schema: GRID_SCHEMA, name: "gridOf" },
-  radial: { program: RADIAL_PROGRAM, domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radialOf" },
+const MODULES: Readonly<Record<string, () => Emitted>> = {
+  grid: () => emitModule(GRID_PROGRAM, { domains: GRID_DOMAINS, schema: GRID_SCHEMA, name: "gridOf" }),
+  radial: () => emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radialOf" }),
+  place: () => emitSheetModule(PLACE_COLUMNS, { domains: PLACE_DOMAINS, schema: PLACE_SCHEMA, kinds: PLACE_KINDS, space: "tree", name: "placeOf" }),
 };
 
-const [strategy, out] = process.argv.slice(2);
-if (strategy !== "grid" && strategy !== "radial") throw new Error("Give the strategy: grid or radial.");
+const [which, out] = process.argv.slice(2);
+const emit = which === undefined ? undefined : MODULES[which];
+if (emit === undefined) throw new Error("Give the module: grid, radial or place.");
 if (out === undefined) throw new Error("Give the path of the module file.");
-const { program, ...options } = STRATEGIES[strategy];
-const m = emitModule(program, options);
+const m = emit();
 if (!m.ok) throw new Error(m.reason);
 writeFileSync(out, m.source);

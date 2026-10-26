@@ -300,7 +300,7 @@ The decision of 2026-10-24: the vex session decided the four questions of the st
 - List ops build lists, and a list can be the state of `iterate` (design E). Design E comes first.
 - The engine uses sheets as they are, with no self node. A sheet column already reads itself at the children or at the parent.
 
-The status on 2026-10-25: design D is done (§13.3). Tree spaces are in modules (COMPILE.MODULE.TREE). The formula columns of a sheet are in modules too (COMPILE.MODULE.SHEET).
+The status on 2026-10-25: design D is done (§13.3). Tree spaces are in modules (COMPILE.MODULE.TREE). The formula columns of a sheet are in modules too (COMPILE.MODULE.SHEET). On 2026-10-26, the place pass of the engine became a sheet module with no search (§13.3).
 
 The current language already has two forms of recursion:
 
@@ -673,13 +673,21 @@ The run fills the columns in the static order of `SheetRun.fill` (§13.2). The t
 
 A read of a cell that is not finished starts the search of `SheetRun`, in the helper `SH`. The search has the same budget of the stack and the same costs. Thus each cell on a cycle gives `VEX_ERROR`, as `#CYCLE!` of the run. A long chain of cells pauses and continues, as SHEET.DEEP tells.
 
-The search decides the cycles, and each read of a cell can start it. Thus the module reads each cell that the interpreter reads, in the same order. Before a part of a node reads a cell, the module evaluates the parts that come before it. A list op that can stop at an item evaluates each item first, as the interpreter does.
+Many sheets need no search (COMPILE.MODULE.SHEET.DIRECT). The compiler examines each read of a cell. A read of a column before its own column in the order reads a finished cell. A read of its own column reads a finished cell in three forms:
+
+- the parent, in a tree that the fill visits in pre-order,
+- each child, in an axis `children` from the key, in a tree that the fill visits in post-order,
+- one earlier key, with a negative offset, in an array that the fill visits forward.
+
+When each read of the sheet reads a finished cell, the module has no helper `SH`. Each loop puts the value of the formula into the array of its column. A read starts no search and changes nothing, so the parts of a node keep the order of the source. A read in a function, a read in an axis from another key and a sheet with formulas of cells keep the search.
+
+The search decides the cycles, and each read of a cell can start it. Thus a module with the search reads each cell that the interpreter reads, in the same order. Before a part of a node reads a cell, the module evaluates the parts that come before it. A list op that can stop at an item evaluates each item first, as the interpreter does.
 
 - A column without a kind in `kinds` takes the kind of its first formula. A formula that reads a column before that formula gives a reason, so that column needs its kind in `kinds`.
 - A test of the axis of a fold that reads a cell gives a reason. The interpreter evaluates each test before the first step, and the module does not have that order.
 - The tables of SHEET.TABLES and the axis `table` are not in modules.
 
-A property compares the results of a module with `SheetRun` on random sheets over arrays and trees, with each budget of the stack (P17). The fixed sample of the property has cycles in many sheets, deep trees and parents after their children. The text of the module of the sheet of the engine is in the golden file `__golden__/module-sheet.js`.
+A property compares the results of a module with `SheetRun` on random sheets over arrays and trees, with each budget of the stack (P17). The fixed sample of the property has cycles in many sheets, deep trees and parents after their children. A second property compares the sheets of a generator with many forms of reads, with and without the search. The golden file `__golden__/module-sheet.js` keeps the text of the module of the sheet of the engine, with no search. The golden file `__golden__/module-sheet-search.js` keeps a sheet with the search.
 
 #### Graph spaces and reduce (the force pilot)
 
@@ -706,3 +714,23 @@ The ops of `Vec2Domain` are methods of a class, so a module cannot copy them. Th
 A property compares random programs over random graphs with the interpreter (P17). The graphs have cycles, edges to their own record and two edges to one record. The programs read each axis of a graph, also in the reverse order and from an address, and `reduce` with each option. The force pilot compares the module with `layoutReference` on random graphs, with the same bits. The text of a module of a graph is in the golden file `__golden__/module-graph.js`.
 
 A rough local timing on 2026-10-26 used 10 steps on a busy machine. With 20 nodes, the module takes 0.6 ms, tier 1 takes 11 ms and `layoutReference` takes 0.3 ms. With 60 nodes, the module takes 3.1 ms, tier 1 takes 74 ms and `layoutReference` takes 1.9 ms. Thus the module is approximately 20 times faster than tier 1. It is approximately 1.7 times slower than the plain loops.
+
+#### The place pilot (the engine)
+
+The engine of ireko has two passes over its tree of nodes. The measure pass uses the strategies of each node, from the leaves to the root. A strategy is code of the user, or `tree` and `layers` of ireko. These are not Vex programs yet, so the measure pass is not a module.
+
+The place pass is a sheet over the tree. It visits each node after its parent, and it composes the placements into absolute positions and scales. It also finds the nested container of each node. `PLACE_COLUMNS` of `@vex/pilots` has eight columns, and each column reads the cells of its node and of the parent. Thus its module has no search.
+
+A property compares the module with `placeTree`, a copy of the loop of ireko, on random trees of up to 60 nodes. A second property compares `SheetRun` with `placeTree`. The bits are the same, also for `-0` and a chain of 20000 nodes.
+
+A branch of ireko (`feat/vex-engine`) uses the module in its place pass. The 217 tests of ireko pass, also its golden SVG files. The core is 16.7 kB, so the branch sets the limit of the core to 17 kB. The limit of `layout` stays at 16 kB, with 15.97 kB.
+
+The first module of the pass had the search, and it was approximately 1.6 times slower than the loop of ireko. The module with no search is approximately 1.2 times slower. These times are approximate, on a shared machine:
+
+| The place pass | ireko | The module |
+|---|---|---|
+| 111 nodes | 51 µs | 65 µs |
+| 1111 nodes | 1.16 ms | 1.40 ms |
+| 11111 nodes | 12.2 ms | 14.7 ms |
+
+The place pass is a small part of a layout. A layout of 11111 nodes takes approximately 64 to 73 ms with each of the two.

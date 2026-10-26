@@ -69,7 +69,7 @@ nearest.all().values(); // => [5, 5, 5]
 9. Do not copy the math of a program into TypeScript. One program is the source of truth, and `explain` shows each step.
 10. For speed, compile the program with `tiered` of `@mark1russell7/vex-compiler`. It gives the results of the interpreter.
 11. Write a calculation that repeats as a function in a `let`, with `fn` and `call`. Do not copy the same expression twice.
-12. For a build without Vex at run time, use `emitModule`. For a tree, give `space: "tree"`, and give the parents to the run. For the formula columns of a sheet, use `emitSheetModule`. Refer to [a standalone module](reference/recipes.md#a-standalone-module).
+12. For a build without Vex at run time, use `emitModule`. For a tree, give `space: "tree"`, and give the parents to the run. For a graph, give `space: "graph"`, and give the edges as positions to the run. For the formula columns of a sheet, use `emitSheetModule`. Refer to [a standalone module](reference/recipes.md#a-standalone-module).
 
 ## Two dimensions in one value
 

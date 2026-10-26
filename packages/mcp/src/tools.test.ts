@@ -112,5 +112,9 @@ describe("the tools", () => {
     const children = { tag: "each", axis: { t: "children" }, body: ref("n") };
     const tree = moduleOf({ program: app("count", children), schema: { fields: { n: "number" } }, space: "tree" }) as { readonly ok: boolean; readonly source: string };
     expect(tree.source).toContain("export function run(records, vars, parents) {");
+    // COMPILE.MODULE.GRAPH: the module of a graph space takes the edges.
+    const successors = { tag: "each", axis: { t: "successors" }, body: ref("n") };
+    const graph = moduleOf({ program: app("count", successors), schema: { fields: { n: "number" } }, space: "graph" }) as { readonly ok: boolean; readonly source: string };
+    expect(graph.source).toContain("export function run(records, vars, edges) {");
   });
 });

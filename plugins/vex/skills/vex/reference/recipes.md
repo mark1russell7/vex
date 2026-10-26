@@ -119,6 +119,8 @@ m.ok; // => true
 
 A module of a tree takes the option `space: "tree"` (from 0.11.2). Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The module has the move `parent` and the axes of a tree.
 
+A module of a graph takes the option `space: "graph"` (the next release). Its run takes the edges after the variables: for each record, an array of the positions of the ends of its edges. The module has the axes of a graph and `reduce`. A module cannot copy the methods of `Vec2Domain`, so use `XYDomain` in a module.
+
 ```ts doctest
 import { app, axes, each, ref } from "@mark1russell7/vex";
 import { emitModule } from "@mark1russell7/vex-compiler";

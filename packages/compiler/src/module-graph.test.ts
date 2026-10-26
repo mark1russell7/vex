@@ -242,7 +242,7 @@ describe("COMPILE.MODULE.REDUCE: reduce with the op of a domain in a module", ()
     expect(expectSameArray(op("reduce", empty, lit("add"), lit({ domain: "Num" })), XY)[0]).toBe(0);
   });
 
-  it("COMPILE.MODULE.REDUCE LIST.LENIENT LIST.STRICT: reduce skips an error item, and the option strict gives the error", () => {
+  it("COMPILE.MODULE.REDUCE LIST.LENIENT: reduce skips an error item, and the option strict gives the error", () => {
     const [first] = expectSameArray(rec({ lenient: op("reduce", inv, lit("add")), strict: guard(op("reduce", inv, lit("add"), lit({ strict: true }))), both: guard(op("reduce", inv, lit("add"), lit({ strict: true, domain: "Num" }))) }));
     expect(first).toMatchObject({ strict: -1, both: -1 });
     expect((first as { readonly lenient: number }).lenient).toBeCloseTo(0.65, 12);

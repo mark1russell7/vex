@@ -2129,11 +2129,11 @@ class Printer {
    */
   #reduceStep(step: Step, kind: Kind | undefined, a: string, n: string, v: string): { readonly step: string; readonly result: string; readonly kind: Kind | undefined } {
     const arg = (code: string): Code => bare({ code, kind, safe: true, deps: NO_DEPS, plain: true });
-    const call = this.#opCall(step.op, [arg(a), arg(v)], NO_DEPS);
-    if (call.v.kind !== kind) throw new NotStandalone(`the op "${step.op}" of "reduce" gives a value of the kind ${kindText(call.v.kind)}, not of the kind ${kindText(kind)} of the items`);
+    const opCode = this.#opCall(step.op, [arg(a), arg(v)], NO_DEPS);
+    if (opCode.v.kind !== kind) throw new NotStandalone(`the op "${step.op}" of "reduce" gives a value of the kind ${kindText(opCode.v.kind)}, not of the kind ${kindText(kind)} of the items`);
     const empty = this.#identity(step);
     // The identity of another domain is a value of another kind, so the kind of the result is not known.
-    return { step: `${a} = ${n}++ === 0 ? ${v} : ${call.v.code};`, result: `(${n} === 0 ? ${empty.code} : ${a})`, kind: empty.kind === undefined || empty.kind === kind ? kind : undefined };
+    return { step: `${a} = ${n}++ === 0 ? ${v} : ${opCode.v.code};`, result: `(${n} === 0 ? ${empty.code} : ${a})`, kind: empty.kind === undefined || empty.kind === kind ? kind : undefined };
   }
 
   /**

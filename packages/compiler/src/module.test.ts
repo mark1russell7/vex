@@ -1063,7 +1063,7 @@ describe("COMPILE.MODULE: the text of a module", () => {
     expect(reasonOf(each(axes.all, n))).toBe("a list is a value of the program");
     expect(reasonOf(let_({ xs: sorted }, v("xs")))).toBe("a list is a value of the program");
     expect(reasonOf(op("add", lit(1), op("take", sorted, lit(1))))).toBe("a list is a value of the program");
-    expect(reasonOf(op("nth", let_({ a: lit(1) }, sorted), lit(0)))).toBe("a list is a value of the program");
+    expect(reasonOf(op("add", lit(1), let_({ a: lit(1) }, sorted)))).toBe("a list is a value of the program");
     expect(reasonOf(op("count", op("sortBy", lit(5))))).toBe("a list op on a value that is not a list");
     expect(reasonOf(op("count", v("a")))).toBe('the kinds of the values of "count" do not decide its op');
     // A list of each key in a loop: the memo does not follow the axis list, so each key has its own list.

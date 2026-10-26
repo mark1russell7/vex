@@ -17,14 +17,15 @@
  *
  * The printer takes a part of the language. It takes an array space or a tree space of records, and the fields and
  * the variables of the schema. It takes the axes `all`, `others` and `window`. A tree space also has the move `parent` and the
- * axes of a tree (COMPILE.MODULE.TREE). The kinds of each op site must decide its op. Another construct gives a
- * reason, not code.
+ * axes of a tree (COMPILE.MODULE.TREE). A list is an array of pairs of a key and a value. The list ops, list literals
+ * and lists as names of loops are in a module (COMPILE.MODULE.LIST). The kinds of each op site must decide its op.
+ * Another construct gives a reason, not code.
  *
  * `emitSheetModule` prints the formula columns of a sheet as one module (COMPILE.MODULE.SHEET). Each column is an array
  * of results, and the run fills the arrays in the static order of `SheetRun.fill`. A read of a cell that is not finished
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex.
  */
-import { addrExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, lit, moveExpr, nestingOf, rec, shapeError, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isVexList, lit, moveExpr, nestingOf, rec, shapeError, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsOf } from "./sheet-order.ts";
@@ -87,9 +88,18 @@ interface Value {
   readonly list?: ListInfo | undefined;
 }
 
-/** The facts of a list of the code: the kind of the values of its items, if the printer knows it. */
+/**
+ * The facts of a list of the code: the kind of the values of its items, if the printer knows it. The key of an item is
+ * the position of its record, or the text of the key of a list literal (LIST.LITERAL).
+ */
 interface ListInfo {
   readonly item: Kind | undefined;
+  /** For a list of lists (LIST.FLAT): the facts of each list that is the value of an item. Each item of such a list is an array. */
+  readonly inner?: ListInfo | undefined;
+  /** True when a key can be the text of a key of a literal. The focus of the axis list must be the position of a record. */
+  readonly texts?: boolean;
+  /** True for a list without items: the empty literal, and a list from it. Such a list fits each list. */
+  readonly empty?: boolean;
 }
 
 /** The code of a node: the statements before its value, and its value. `safe` covers the statements too. */
@@ -216,7 +226,10 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT" | TreeHelper | SheetHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT" | BuildHelper | TreeHelper | SheetHelper;
+
+/** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
+type BuildHelper = "DR" | "AP" | "WO" | "FL" | "GT" | "IX";
 
 /** The helpers of a tree space (COMPILE.MODULE.TREE). */
 type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
@@ -255,6 +268,50 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   TK: "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
   NT: "function NT(l, i, s) { const o = V(l, s); return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F(); }",
+  // The ops that build a list (LIST.BUILD) keep the key and the value of each item. A key is a position or a text, so
+  // `without` and `get` compare the text of each key. A list is an array that does not change after the op that makes it.
+  DR: "function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }",
+  AP: "function AP(l, o, s) { return V(l, s).concat(V(o, s)); }",
+  WO: [
+    "function WO(l, o, s) {",
+    "  const a = V(l, s), g = new Map();",
+    "  for (const [k] of V(o, s)) g.set(`${k}`, 1);",
+    "  return a.filter((x) => !g.has(`${x[0]}`));",
+    "}",
+  ].join("\n"),
+  FL: [
+    "function FL(l, s) {",
+    "  const o = [];",
+    "  for (const [, v] of V(l, s)) for (const x of V(v, s)) o.push(x);",
+    "  return o;",
+    "}",
+  ].join("\n"),
+  // The index of the keys of a list (LIST.GET): the value of the first item of each key. The array keeps its index, so a
+  // step that reads each key of a list of n items costs O(n). The key E marks an error item, for strict.
+  GT: [
+    "function GT(l, k, s) {",
+    "  let x = l.ix;",
+    "  if (x === undefined) {",
+    "    x = new Map();",
+    "    for (const [q, v] of l) {",
+    "      const t = `${q}`;",
+    "      if (v === E) x.set(E, E);",
+    "      else if (!x.has(t)) x.set(t, v);",
+    "    }",
+    "    l.ix = x;",
+    "  }",
+    '  return (s && x.has(E)) || typeof k !== "string" || !x.has(k) ? F() : x.get(k);',
+    "}",
+  ].join("\n"),
+  // The position of the first value among the items with a value (LIST.INDEXOF). `===` compares the values.
+  IX: [
+    "function IX(l, x, s) {",
+    "  const o = V(l, s);",
+    '  if (typeof x !== "number" && typeof x !== "string" && typeof x !== "boolean") F();',
+    "  for (let i = 0; i < o.length; i++) if (o[i][1] === x) return i;",
+    "  return F();",
+    "}",
+  ].join("\n"),
   // The parents of a tree space: the position of the parent of each record, or -1 for a root. A walk up from each record
   // marks its keys, so a walk that meets a key of the same walk finds a cycle. Each key is in one walk, so the check is linear.
   PT: [
@@ -608,10 +665,11 @@ const STEPS: Readonly<Record<string, readonly [string, string]>> = {
 /** The helpers that each helper uses. */
 const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"],
-  // Only SB, TK and NT use V, and they need F too, so the need of V only completes the list.
+  // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
   SB: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"],
+  DR: ["V", "F"], AP: ["V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   PT: ["C"], UP: ["F"], SO: ["F"],
@@ -654,8 +712,73 @@ interface TreeRange {
 const LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max", "any", "all", "none", "first"]);
 const NUMBER_LIST_OPS: ReadonlySet<string> = new Set(["count", "sum", "mean", "min", "max"]);
 const BOOLEAN_LIST_OPS: ReadonlySet<string> = new Set(["any", "all", "none"]);
-/** The list ops that build a list from lists (LIST.BUILD), `get` (LIST.GET) and `indexOf` (LIST.INDEXOF). A module gives a reason for them. */
-const BUILD_OPS: ReadonlySet<string> = new Set(["drop", "append", "flat", "without", "get", "indexOf"]);
+/** The list ops over lists of `#build`: append, without and flat (LIST.BUILD), get (LIST.GET) and indexOf (LIST.INDEXOF). */
+const BUILD_OPS: ReadonlySet<string> = new Set(["append", "without", "flat", "get", "indexOf"]);
+
+/** The helper of each op of `#build`. */
+const BUILD_HELPERS: Readonly<Record<string, BuildHelper>> = { append: "AP", without: "WO", flat: "FL", get: "GT", indexOf: "IX" };
+
+/** The list ops whose value is a list (LIST.SORT, LIST.TAKE and LIST.BUILD). */
+const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "append", "without", "flat"]);
+
+/**
+ * This function tells if an expression gives a list. An each, a list literal and a list op of `LIST_RESULTS` give a
+ * list. A name of a list, and a let or a loop whose result is a list, give a list too. `isName` tells if a name outside the expression holds a list.
+ */
+function listy(e: Expr, isName: (name: string) => boolean): boolean {
+  switch (e.tag) {
+    case "each":
+      return true;
+    case "lit":
+      return isVexList(e.value);
+    case "app":
+      return LIST_RESULTS.has(e.op);
+    case "var":
+      return isName(e.name);
+    case "let":
+      return listy(e.body, namesIn(e.bind, isName));
+    case "fold":
+    case "iterate":
+      return listy(e.result, namesIn(e.init, isName));
+    case "call":
+    case "ext":
+    case "fn":
+    case "rec":
+    case "ref":
+      return false;
+  }
+}
+
+/** This function tells if a name holds a list in the scope of some bindings. A binding hides a name outside, and a function is not a list. */
+function namesIn(bind: Readonly<Record<string, Expr>>, isName: (name: string) => boolean): (name: string) => boolean {
+  const lists = new Map(Object.entries(bind).map(([name, x]) => [name, x.tag !== "fn" && listy(x, isName)]));
+  return (name) => lists.get(name) ?? isName(name);
+}
+
+/** This function tells if an expression has a list literal with an item, so a key of the list can be a text (LIST.LITERAL). */
+function hasKeyedLiteral(e: Expr): boolean {
+  return (e.tag === "lit" && isVexList(e.value) && e.value.items.length > 0) || children(e).some(hasKeyedLiteral);
+}
+
+/** This function gives the facts of the list of `append` from the facts of its two lists. An empty list fits each list. */
+function joinLists(a: ListInfo, b: ListInfo): ListInfo {
+  if (a.empty === true) return b;
+  if (b.empty === true) return a;
+  if ((a.inner === undefined) !== (b.inner === undefined)) throw new NotStandalone('"append" of a list of lists and a list of values');
+  const texts = a.texts === true || b.texts === true;
+  return { item: join(a.item, b.item), inner: a.inner === undefined ? undefined : joinLists(a.inner, b.inner as ListInfo), texts };
+}
+
+/**
+ * This function tells if a list of a step fits the list of a name of a loop (LOOP.LIST). The items of the step have the
+ * kind of the items of the name, if the name has one. The name also has the text keys and the lists of lists of the step.
+ */
+function fits(name: ListInfo, step: ListInfo): boolean {
+  if (step.empty === true) return true;
+  if (name.item !== undefined && step.item !== name.item) return false;
+  if (step.texts === true && name.texts !== true) return false;
+  return name.inner === undefined ? step.inner === undefined : step.inner !== undefined && fits(name.inner, step.inner);
+}
 
 /** This function tells if the step of a list op throws for a value of the kind `kind`, which is the wrong kind. */
 const stepThrows = (op: string, kind: Kind | undefined): boolean => (NUMBER_STEPS.has(op) && kind !== "number") || (BOOLEAN_LIST_OPS.has(op) && kind !== "boolean");
@@ -1159,11 +1282,18 @@ class Printer {
     return c;
   }
 
-  /** This method tells if an expression gives a list at a place that takes one: an each, sortBy, take or a name of a list. */
+  /** This method tells if an expression gives a list at a place that takes one (`listy`). */
   #isList(e: Expr, ctx: Ctx): boolean {
-    if (e.tag === "each") return true;
-    if (e.tag === "app") return e.op === "sortBy" || e.op === "take";
-    return e.tag === "var" && ctx.env.get(e.name)?.list !== undefined;
+    return listy(e, (name) => ctx.env.get(name)?.list !== undefined);
+  }
+
+  /** This method prints a list literal (LIST.LITERAL) as an array of pairs of a key and a value. An error item holds the sentinel. */
+  #listLiteral(l: VexList): Code {
+    const values = l.items.map((it) => (it.result.ok ? literal(it.result.value) : undefined));
+    const kinds = values.flatMap((x) => (x === undefined ? [] : [x.kind]));
+    const code = `[${l.items.map((it, i) => `[${JSON.stringify(it.key)}, ${values[i]?.code ?? "E"}]`).join(", ")}]`;
+    const has = l.items.length > 0;
+    return bare({ code, kind: undefined, safe: true, deps: NO_DEPS, list: { item: kinds.reduce(join, kinds[0]), texts: has, empty: !has } });
   }
 
   /**
@@ -1256,7 +1386,7 @@ class Printer {
   #node(e: Expr, ctx: Ctx): Code {
     switch (e.tag) {
       case "lit":
-        return bare(literal(e.value));
+        return isVexList(e.value) ? this.#listLiteral(e.value) : bare(literal(e.value));
       case "ref":
         return this.#ref(e, ctx);
       case "var":
@@ -1466,7 +1596,7 @@ class Printer {
    * A binding is a variable. A binding with an error is an error only where the body reads its name, so the variable
    * can hold the sentinel. A binding that is a constant of the run is the variable of that constant.
    */
-  #let(e: ExprOf<"let">, ctx: Ctx): Code {
+  #let(e: ExprOf<"let">, ctx: Ctx, wrap?: (body: Expr) => Expr): Code {
     const env = new Map(ctx.env);
     const fns = new Map(ctx.fns);
     const s: string[] = [];
@@ -1501,8 +1631,12 @@ class Printer {
       // The statements of the binding read its keys, so the let is not a constant of the run.
       deps = new Set([...deps, ...c.v.deps]);
     }
-    if (root !== undefined) root.root = e.body;
-    const body = this.expr(e.body, { ...ctx, env, fns });
+    // A list op over a let is the list op over its body, in the scope of its bindings (`#app`).
+    const inner = wrap === undefined ? e.body : wrap(e.body);
+    // A let at a place that takes a list gives its body there (LIST.VALUE).
+    if (this.#wantList.has(e)) this.#wantList.add(inner);
+    if (root !== undefined) root.root = inner;
+    const body = this.expr(inner, { ...ctx, env, fns });
     // A function that reads names of the place of the binding comes after them, before the body.
     return { s: [...s, ...bound.flatMap((b) => b.decls), ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
   }
@@ -1593,11 +1727,16 @@ class Printer {
     if (op === "and" || op === "or") return this.#andOr(op === "and", args, ctx);
     if (op === "ifError") return this.#ifError(args, ctx);
     const [head] = args;
-    if (LIST_OPS.has(op) && head?.tag === "each") return this.#list(op, head, args.slice(1), ctx);
-    if (head !== undefined && (op === "sortBy" || op === "take")) return this.#order(op, head, args.slice(1), ctx);
-    // LIST.BUILD and LIST.GET: a module does not have the ops that build a list, or get, yet. The interpreter evaluates them.
-    if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) throw new NotStandalone(`the list op "${op}" is not in a module yet`);
-    if (head !== undefined && (LIST_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, args.slice(1), ctx);
+    const rest = args.slice(1);
+    // An each whose body is a list gives a list of lists (LIST.FLAT), so a list op over it goes over its array.
+    if (LIST_OPS.has(op) && head?.tag === "each" && !this.#isList(head.body, ctx)) return this.#list(op, head, rest, ctx);
+    // A list op over a let with only literal options is the list op over the body of the let, so an each in the body
+    // is one loop with a running value, not an array. A builder sheet prints such a let, for example `sum(let($0 = 0, each(…)))`.
+    if (LIST_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) return this.#let(head, ctx, (body) => app(op, body, ...rest));
+    // sortBy and take are list ops for each receiver. Each other list op needs a list, and a domain can have its name.
+    if (head !== undefined && (op === "sortBy" || op === "take" || (op === "drop" && this.#isList(head, ctx)))) return this.#order(op, head, rest, ctx);
+    if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) return this.#build(op, head, rest, ctx);
+    if (head !== undefined && (LIST_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, rest, ctx);
     const raw = args.map((x) => this.expr(x, ctx));
     const deps = depsOf(...raw);
     // The interpreter evaluates each argument, also after an error.
@@ -1732,6 +1871,8 @@ class Printer {
     if (base.t === "list") {
       if (at.length > 0) throw new NotStandalone('the axis "list" with an address');
       const list = this.#hoist(this.#listOf(base.list, ctx), hasLoop(base.list));
+      // The focus of a target is the position of a record, so a list with the keys of a literal has no loop of a module.
+      if ((list.v.list as ListInfo).texts === true) throw new NotStandalone('the axis "list" over a list with the keys of a literal');
       const a = this.fresh("A");
       const q = this.fresh("q");
       const head = reverse ? `for (let ${q} = ${a}.length - 1; ${q} >= 0; ${q}--) {` : `for (let ${q} = 0; ${q} < ${a}.length; ${q}++) {`;
@@ -1900,6 +2041,8 @@ class Printer {
     const at = e.at ?? [];
     const { s, j, head, key, check, skip, start, startSafe, tests, inner } = this.#targetLoop(e.axis, at, ctx);
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
+    // The value of an item can be a list, for flat (LIST.FLAT). The facts of the list tell it.
+    if (this.#wantList.has(e)) this.#wantList.add(e.body);
     const body = this.#hoist(this.expr(e.body, inner), hasLoop(e.body));
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== inner.level));
     const list = this.fresh("L");
@@ -1911,23 +2054,54 @@ class Printer {
       ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
       ...(safeItem ? [...item, `${list}.push([${j}, ${body.v.code}]);`] : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", `  ${v} = E;`, "}", `${list}.push([${j}, ${v}]);`]),
     ];
-    return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: { item: body.v.kind } } };
+    return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: { item: body.v.kind, inner: body.v.list } } };
   }
 
   /**
-   * This method prints sortBy and take (LIST.SORT, LIST.TAKE): a new array from the array of a list. An error item is
-   * not in the new list, and with strict it is the error of the op.
+   * This method prints sortBy, take and drop (LIST.SORT, LIST.TAKE, LIST.DROP): a new array from the array of a list. An
+   * error item is not in the new list, and with strict it is the error of the op.
    */
-  #order(op: "sortBy" | "take", head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
+  #order(op: "sortBy" | "take" | "drop", head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
     const list = this.#listOf(head, ctx);
-    // A missing count is the literal null, which is not a whole number, so take gives its error.
-    const exprs = [head, ...(op === "take" ? [rest[0] ?? lit(null)] : [])];
+    // A missing count is the literal null, which is not a whole number, so take and drop give their error.
+    const exprs = [head, ...(op === "sortBy" ? [] : [rest[0] ?? lit(null)])];
     const strict = this.#strict(op, rest.slice(exprs.length - 1));
     const raw = [list, ...exprs.slice(1).map((x) => this.expr(x, ctx))];
     const deps = depsOf(...raw);
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
-    const item = (list.v.list as ListInfo).item;
-    return { s: stmtsOf(...parts), v: { code: `${this.use(op === "sortBy" ? "SB" : "TK")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: undefined, safe: false, deps, list: { item } } };
+    const helper = op === "sortBy" ? "SB" : op === "take" ? "TK" : "DR";
+    // The new list has some items of the list, so it keeps the facts of the list.
+    return { s: stmtsOf(...parts), v: { code: `${this.use(helper)}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: undefined, safe: false, deps, list: list.v.list } };
+  }
+
+  /**
+   * This method prints append, without and flat (LIST.BUILD), get (LIST.GET) and indexOf (LIST.INDEXOF) over the array
+   * of a list. Each list that the op reads follows LIST.LENIENT, as in the interpreter.
+   */
+  #build(op: string, head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
+    const list = this.#listOf(head, ctx);
+    const info = list.v.list as ListInfo;
+    const two = op === "append" || op === "without";
+    // A missing key of get, or value of indexOf, is the literal null. It is not a text or a value of indexOf, so the op
+    // gives its error. A missing second list of append and without is not a list, so it gives a reason.
+    const exprs = [head, ...(op === "flat" ? [] : [rest[0] ?? lit(null)])];
+    const strict = this.#strict(op, rest.slice(exprs.length - 1));
+    const raw = [list, ...exprs.slice(1).map((x) => (two ? this.#listOf(x, ctx) : this.expr(x, ctx)))];
+    const deps = depsOf(...raw);
+    const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
+    const helper = BUILD_HELPERS[op] as BuildHelper;
+    const value = (kind: Kind | undefined, facts: ListInfo | undefined): Code => ({
+      s: stmtsOf(...parts),
+      v: { code: `${this.use(helper)}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind, safe: false, deps, list: facts },
+    });
+    if (op === "get") return value(info.item, info.inner);
+    if (op === "indexOf") return value("number", undefined);
+    if (op === "without") return value(undefined, info);
+    if (op === "append") return value(undefined, joinLists(info, (parts[1] as Code).v.list as ListInfo));
+    // flat: the value of each item must be a list, so a list of values gives a reason. An empty list gives an empty list.
+    if (info.empty === true) return value(undefined, info);
+    if (info.inner === undefined) throw new NotStandalone('"flat" over a list whose items are not lists');
+    return value(undefined, info.inner);
   }
 
   /** This method prints a list op over a list that is not an each: a loop over its array, and nth (LIST.NTH). */
@@ -1940,12 +2114,13 @@ class Printer {
     const deps = depsOf(...raw);
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
     const [l] = parts as [Code];
-    const item = (list.v.list as ListInfo).item;
-    if (op === "nth") return { s: stmtsOf(...parts), v: { code: `${this.use("NT")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: item, safe: false, deps } };
+    const { item, inner } = list.v.list as ListInfo;
+    // The value of an item of a list of lists is a list, so nth and first give a list (LIST.FLAT).
+    if (op === "nth") return { s: stmtsOf(...parts), v: { code: `${this.use("NT")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: item, safe: false, deps, list: inner } };
     const r = this.#reduction(op, item);
     const { v } = r;
     const s = [...l.s, r.init, `for (const [, ${v}] of ${l.v.code}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
-    return { s, v: { code: r.result, kind: listKind(op, item), safe: false, deps } };
+    return { s, v: { code: r.result, kind: listKind(op, item), safe: false, deps, list: op === "first" ? inner : undefined } };
   }
 
   /**
@@ -1953,17 +2128,23 @@ class Printer {
    * node. Inside the loop, each name has the level `loop`. Thus a part that reads a name stays in the loop. A loop that
    * reads no key of the run is a constant of the run.
    */
-  #loopNames(init: Names, ctx: Ctx, loop: number): { readonly s: string[]; readonly env: Map<string, Name>; readonly vars: ReadonlyMap<string, Name>; readonly deps: Set<number> } {
+  #loopNames(init: Names, step: Names, ctx: Ctx, loop: number): { readonly s: string[]; readonly env: Map<string, Name>; readonly vars: ReadonlyMap<string, Name>; readonly deps: Set<number> } {
     const s: string[] = [];
     const env = new Map(ctx.env);
     const vars = new Map<string, Name>();
     const deps = new Set<number>();
+    // A step with a list literal can give a name the keys of the literal (LOOP.LIST).
+    const keyed = Object.values(step).some(hasKeyedLiteral);
     for (const [name, x] of Object.entries(init)) {
+      // A name of a loop can hold a list (LOOP.LIST). Its first list fixes the kind of the items, if it has one.
+      this.#wantList.add(x);
       const c = this.expr(x, ctx);
-      if (c.v.kind === undefined) throw new NotStandalone(`the first value of the name "${name}" of a loop has no kind`);
+      const facts = c.v.list;
+      if (c.v.kind === undefined && facts === undefined) throw new NotStandalone(`the first value of the name "${name}" of a loop has no kind`);
       const v = this.fresh("l");
       s.push(...c.s, `let ${v} = ${c.v.code};`);
-      const read: Name = { code: v, kind: c.v.kind, lazy: false, deps: new Set([loop]) };
+      const list = facts === undefined ? undefined : { item: facts.item, inner: facts.inner, texts: facts.texts === true || keyed };
+      const read: Name = { code: v, kind: c.v.kind, lazy: false, deps: new Set([loop]), list };
       env.set(name, read);
       vars.set(name, read);
       for (const d of c.v.deps) deps.add(d);
@@ -1977,9 +2158,11 @@ class Printer {
     const sets: string[] = [];
     const deps = new Set<number>();
     for (const [name, x] of Object.entries(step)) {
+      this.#wantList.add(x);
       const c = this.#hoist(this.expr(x, inner), hasLoop(x));
       const v = vars.get(name) as Name;
-      if (c.v.kind !== v.kind) throw new NotStandalone(`a step of a loop changes the kind of the name "${name}"`);
+      if (c.v.kind !== v.kind || (c.v.list === undefined) !== (v.list === undefined)) throw new NotStandalone(`a step of a loop changes the kind of the name "${name}"`);
+      if (v.list !== undefined && !fits(v.list, c.v.list as ListInfo)) throw new NotStandalone(`a step of a loop gives the name "${name}" a list that does not fit its first list`);
       const t = this.fresh("t");
       s.push(...c.s, `const ${t} = ${c.v.code};`);
       sets.push(`${v.code} = ${t};`);
@@ -1995,8 +2178,10 @@ class Printer {
   #iterate(e: ExprOf<"iterate">, ctx: Ctx): Code {
     // Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code
     const loop = this.#loops++;
-    const names = this.#loopNames(e.init, ctx, loop);
+    const names = this.#loopNames(e.init, e.step, ctx, loop);
     const inner: Ctx = { ...ctx, env: names.env };
+    // A loop at a place that takes a list gives its result there (LOOP.LIST).
+    if (this.#wantList.has(e)) this.#wantList.add(e.result);
     const until = e.until === undefined ? undefined : this.expr(e.until, inner);
     const step = this.#loopStep(e.step, inner, names.vars);
     const result = this.expr(e.result, inner);
@@ -2008,7 +2193,7 @@ class Printer {
     ];
     const inside = [...(until?.v.deps ?? []), ...step.deps, ...result.v.deps].filter((d) => d !== loop);
     const deps = new Set([...names.deps, ...inside]);
-    return { s: [...names.s, `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps } };
+    return { s: [...names.s, `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
   }
 
   /**
@@ -2018,7 +2203,8 @@ class Printer {
   #fold(e: ExprOf<"fold">, ctx: Ctx): Code {
     // Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code
     const loop = this.#loops++;
-    const names = this.#loopNames(e.init, ctx, loop);
+    const names = this.#loopNames(e.init, e.step, ctx, loop);
+    if (this.#wantList.has(e)) this.#wantList.add(e.result);
     const t = this.#targetLoop(e.axis, e.at ?? [], ctx);
     const tests = t.tests.map((x) => this.#hoist(this.expr(x, t.inner), hasLoop(x)));
     // The interpreter evaluates the tests at each target before the first step, so a module of a sheet does not have them.
@@ -2034,7 +2220,7 @@ class Printer {
     ];
     const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level);
     const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
-    return { s: [...names.s, ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps } };
+    return { s: [...names.s, ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
   }
 
   /**

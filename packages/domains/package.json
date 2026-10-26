@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/vex-domains",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "Vex domains: 2D vectors, named-component vectors, colors, angles, numbers and booleans.",
   "keywords": [
     "vex",

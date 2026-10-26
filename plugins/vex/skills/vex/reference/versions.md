@@ -38,6 +38,6 @@ The five packages have one version. The `CHANGELOG.md` of each package lists the
 | The axes of `Vec2Domain`: `along`, `across`, `compose` and `select`, for a main axis and a cross axis, and open bounds with `select` | 0.12.0 |
 | Arrays as lists: an array of a field or of a name in a list op and in the axis `list`, and the list ops `indexOf(list, value)` and `fill(n, value)` | 0.12.0 |
 | Lists in a standalone module: `drop`, `append`, `without`, `flat`, `get` and `indexOf`, list literals, a list op over a `let`, and lists as names of `iterate` and `fold` | 0.13.1 |
-| A standalone module of a graph space: the option `space: "graph"` of `emitModule`, with the edges as positions and the axes of a graph. `reduce` in a module. The input `space: "graph"` of the tool `vex_module`. | the next release |
+| A standalone module of a graph space: the option `space: "graph"` of `emitModule`, with the edges as positions and the axes of a graph. `reduce` in a module. The input `space: "graph"` of the tool `vex_module`. | 0.13.2 |
 
 A feature of the main branch that is not on npm yet has the version "the next release". Until it is on npm, a project can use it only from a local copy of the repository, for example with `pnpm link`. Do not write a workaround for a missing feature without a note. Tell the user which version has it.

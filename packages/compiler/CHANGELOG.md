@@ -1,5 +1,26 @@
 # @mark1russell7/vex-compiler
 
+## 0.13.2
+
+### Patch Changes
+
+- d1a3432: A standalone module takes a graph space (COMPILE.MODULE.GRAPH). With the option `space: "graph"`, the run takes the edges after the variables: for each record, the positions of the ends of its edges. The axes `successors`, `predecessors` and `reachable` give the targets of the interpreter. A module also takes `reduce` with a literal op and the options `strict` and `domain` (COMPILE.MODULE.REDUCE). Thus the force pilot is a module with plain loops.
+  
+  The tool `vex_module` takes the input `space: "graph"`.
+  
+  The type of the option `space` of `ModuleOptions` is wider: `"array" | "tree" | "graph"`. The reason for a space that a module does not take changes from `the space "…" is not "array" or "tree"` to `the space "…" is not "array", "tree" or "graph"`. A program with `reduce` or a graph space gave a reason before, and at this time it gives a module.
+  
+  The level is PATCH: the type of an option is wider, and no export changes its name. Before 1.0, a new feature is a PATCH.
+- ea8bfb6: A sheet module fills its cells with no search when each read of a cell reads a finished cell (COMPILE.MODULE.SHEET.DIRECT). Each loop puts the value of a formula into the array of its column. The module is smaller and faster, and its results do not change.
+  
+  A read of an earlier column reads a finished cell. A read of the same column reads a finished cell in three forms. These are the parent in pre-order, the children in post-order and an earlier key of an array.
+  
+  The level is PATCH: no exported type changes, and the results stay the same. Before 1.0, a backward-compatible change is a PATCH.
+- e63b1d7: A list op on an array in the body of a list op over an axis goes to tier 1 (V-064). Before, the runtime of tier 2 took such a list op as an error item. So `count(each(all, sum(let(b = [], []))))` gave 0 in tier 2, and the interpreter gave the count of the records. The two tiers give the same result again.
+  
+  The level is PATCH: a bug fix, with no change to an export.
+- @mark1russell7/vex@0.13.2
+
 ## 0.13.1
 
 ### Patch Changes

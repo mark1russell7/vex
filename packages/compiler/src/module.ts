@@ -1817,7 +1817,9 @@ class Printer {
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
     const body = this.#hoist(this.expr(target.body, inner), hasLoop(target.body));
     // A count of all the items, whose body cannot fail, is the count of the records. A safe body covers its statements.
-    if (op === "count" && fixed && tests.length === 0 && body.v.safe) return bare(plainValue("n", "number"));
+    // V-063: a body that reads a cell keeps its loop. The search of the run must see each read, so a cell that reads
+    // itself gives `#CYCLE!`.
+    if (op === "count" && fixed && tests.length === 0 && body.v.safe && !body.v.deps.has(CELLS)) return bare(plainValue("n", "number"));
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== level));
     const r = this.#reduction(op, body.v.kind);
     const { v } = r;

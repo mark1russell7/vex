@@ -48,8 +48,12 @@ jobs:
       - run: pnpm --filter @vex/site run build
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
+      # The shared action installs the browsers from a cache, with a time limit and a second try for each install.
+      - uses: mark1russell7/template/.github/actions/setup-playwright@987ee6f01f652f48cadbd3ac2379e4508c5467ae # main
+        with:
+          browsers: chromium firefox webkit
+          command: pnpm --filter @vex/site exec playwright
       # The smoke tests: each route renders without a console error, and the main widgets work
-      - run: pnpm --filter @vex/site exec playwright install --with-deps chromium firefox webkit
       - run: pnpm --filter @vex/site run test:e2e
         env:
           ASTRO_TELEMETRY_DISABLED: "1"

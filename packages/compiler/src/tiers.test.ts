@@ -345,7 +345,7 @@ describe("the tiers", () => {
     }
   });
 
-  it("LIST.BUILD COMPILE.FALLBACK: a list op that builds a list goes to tier 1, and a module gives a reason", () => {
+  it("LIST.BUILD COMPILE.FALLBACK COMPILE.MODULE.LIST: a list op that builds a list goes to tier 1, and a module has it", () => {
     const s = space.array([{ n: 3 }, { n: 1 }, { n: 2 }]);
     const ns = each(axes.all, ref("n"));
     const cases: readonly (readonly [Expr, string])[] = [
@@ -356,7 +356,7 @@ describe("the tiers", () => {
     ];
     for (const [e, op] of cases) {
       expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason: `the program has the list op "${op}", and tier 2 does not have lists as values yet` });
-      expect(emitModule(e, { domains: [NumDomain], schema: { fields: { n: "number" } } })).toEqual({ ok: false, reason: `the list op "${op}" is not in a module yet` });
+      expect(emitModule(e, { domains: [NumDomain], schema: { fields: { n: "number" } } }).ok).toBe(true);
       const p = tiered(e, { domains: [NumDomain] });
       expect(p.tier).toBe(1);
       for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));
@@ -368,21 +368,21 @@ describe("the tiers", () => {
     expect(fromCore(tiered(own, { domains: [Stack] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 2 });
   });
 
-  it("LIST.GET LIST.LITERAL LOOP.LIST COMPILE.FALLBACK: get, a list literal and a list of a loop go to tier 1, and a module gives a reason", () => {
+  it("LIST.GET LIST.LITERAL LOOP.LIST COMPILE.FALLBACK COMPILE.MODULE.LIST: get, a list literal and a list of a loop go to tier 1, and a module has them", () => {
     const s = space.array([{ n: 3, id: "1" }, { n: 1, id: "2" }, { n: 2, id: "0" }]);
     const ns = each(axes.all, ref("n"));
     const empty = lit(vexList([]));
     const schema = { fields: { n: "number", id: "string" } } as const;
     const lists = "tier 2 does not have lists as values yet";
-    const cases: readonly (readonly [Expr, string, string])[] = [
-      [app("get", ns, ref("id")), `the program has the list op "get", and ${lists}`, 'the list op "get" is not in a module yet'],
-      [app("count", empty), `the program has a list literal, and ${lists}`, "a literal is not a number, a text, a boolean or null"],
-      [iterate(2, { a: empty }, { a: app("append", variable("a"), ns) }, app("sum", variable("a"))), `the program has the list op "append", and ${lists}`, "a literal is not a number, a text, a boolean or null"],
-      [iterate(2, { a: ns }, { a: app("drop", variable("a"), lit(1)) }, app("count", variable("a"))), `the program has the list op "drop", and ${lists}`, "a list is a value of the program"],
+    const cases: readonly (readonly [Expr, string])[] = [
+      [app("get", ns, ref("id")), `the program has the list op "get", and ${lists}`],
+      [app("count", empty), `the program has a list literal, and ${lists}`],
+      [iterate(2, { a: empty }, { a: app("append", variable("a"), ns) }, app("sum", variable("a"))), `the program has the list op "append", and ${lists}`],
+      [iterate(2, { a: ns }, { a: app("drop", variable("a"), lit(1)) }, app("count", variable("a"))), `the program has the list op "drop", and ${lists}`],
     ];
-    for (const [e, reason, moduleReason] of cases) {
+    for (const [e, reason] of cases) {
       expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason });
-      expect(emitModule(e, { domains: [NumDomain], schema })).toEqual({ ok: false, reason: moduleReason });
+      expect(emitModule(e, { domains: [NumDomain], schema }).ok).toBe(true);
       const p = tiered(e, { domains: [NumDomain] });
       expect(p.tier).toBe(1);
       for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));
@@ -394,7 +394,7 @@ describe("the tiers", () => {
     expect(fromCore(tiered(own, { domains: [Pick] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 31 });
   });
 
-  it("LIST.ARRAY LIST.INDEXOF LIST.FILL COMPILE.FALLBACK: a list op on an array, indexOf and fill give the result of tier 1, and a module gives a reason", () => {
+  it("LIST.ARRAY LIST.INDEXOF LIST.FILL COMPILE.FALLBACK: a list op on an array, indexOf and fill give the result of tier 1, and a module has indexOf over a list", () => {
     const s = space.array([{ n: 3, fr: [0.2, 0.3] }, { n: 1, fr: [] }, { n: 2, fr: [1, null] }]);
     const names = { a: [3, 1, 2], keys: ["x", "y"] };
     const ns = each(axes.all, ref("n"));
@@ -414,7 +414,9 @@ describe("the tiers", () => {
       expect(p.tier).toBe(1);
       same(e, p);
     }
-    expect(emitModule(app("indexOf", ns, lit(1)), { domains: [NumDomain], schema })).toEqual({ ok: false, reason: 'the list op "indexOf" is not in a module yet' });
+    expect(emitModule(app("indexOf", ns, lit(1)), { domains: [NumDomain], schema }).ok).toBe(true);
+    // An array is not a list of a module, so indexOf over an array gives a reason.
+    expect(emitModule(app("indexOf", variable("keys"), lit("y")), { domains: [NumDomain], schema }).ok).toBe(false);
     expect(emitModule(app("count", app("fill", lit(2), lit(1))), { domains: [NumDomain], schema }).ok).toBe(false);
     // Tier 2 takes a list op on a field or a name. A run with an array goes to tier 1, which reads the array as a list.
     for (const e of [app("sum", ref("fr")), app("count", variable("a")), app("max", variable("a")), app("add", app("count", ref("fr")), lit(1))]) {

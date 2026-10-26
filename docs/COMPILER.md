@@ -717,7 +717,7 @@ A rough local timing on 2026-10-26 used 10 steps on a busy machine. With 20 node
 
 #### The place pilot (the engine)
 
-The engine of ireko has two passes over its tree of nodes. The measure pass uses the strategies of each node, from the leaves to the root. A strategy is code of the user, or `tree` and `layers` of ireko. These are not Vex programs yet, so the measure pass is not a module.
+The engine of ireko has two passes over its tree of nodes. The measure pass uses the strategies of each node, from the leaves to the root. A strategy is code of the user, or `tree` and `layers` of ireko. These are not Vex programs yet, so the measure pass starts them in its own loop. The fit after each strategy is a module (the measure pilot, below).
 
 The place pass is a sheet over the tree. It visits each node after its parent, and it composes the placements into absolute positions and scales. It also finds the nested container of each node. `PLACE_COLUMNS` of `@vex/pilots` has eight columns, and each column reads the cells of its node and of the parent. Thus its module has no search.
 
@@ -734,3 +734,34 @@ The first module of the pass had the search, and it was approximately 1.6 times 
 | 11111 nodes | 12.2 ms | 14.7 ms |
 
 The place pass is a small part of a layout. A layout of 11111 nodes takes approximately 64 to 73 ms with each of the two.
+
+#### The measure pilot (the engine)
+
+The measure pass of ireko visits each node after its children. For each node with children, it starts the strategy of the node. Then it fits the arrangement into the box of the node:
+
+- In the linked mode, the extent of the node is the union of its own box with the placed subtrees of its children. Each child keeps the offset from the strategy.
+- In the nested mode, the content is the union of the placed subtrees, with the content area of the strategy. The box holds the content, the padding and the header. The fit `grow`, `scale` or `clip` decides the size, the scale and the start of the content.
+
+The strategies are code of the user, so the pass keeps its loop. It starts the module of the fit once for each node with children.
+
+`MEASURE_COLUMNS` of `@vex/pilots` is a sheet over a small tree. The node is the root, and its children are the leaves. The columns of the node read the children with `fold` over the axis `children`. The columns of a child read the cells of the node with the move `parent`. Thus the module has no search.
+
+The union of ireko starts each step from the last union. Thus the fold keeps the start and the size of the union, as ireko does. The bits are the same. The node is the root of the tree because a cell takes only fixed moves. In a sheet over an array of the children, a column cannot read the cell of the last child.
+
+A property compares the module with `fitNode`, a copy of the code of ireko, on random nodes with up to 30 children and each fit. A second property compares `SheetRun` with `fitNode`. A branch of ireko (`feat/vex-measure`) uses the module in its measure pass. The 217 tests of ireko pass, also its golden SVG files.
+
+The module adds approximately 1.1 kB after gzip to the core of ireko. A rough local timing on 2026-10-26, on a busy machine, gave these times for full trees with the strategy `grid`. The measure pass includes the strategies.
+
+| The measure pass | ireko | With the module |
+|---|---|---|
+| 111 nodes, nested | 77 µs | 134 µs |
+| 1111 nodes, nested | 0.9 ms | 1.35 ms |
+| 11111 nodes, nested | 9.7 ms | 20 ms |
+| 11111 nodes, linked | 18 ms | 29 ms |
+
+Thus the measure pass is approximately 1.4 to 2 times slower, and a full layout is approximately 1.1 to 1.4 times slower. Each run of the module checks its input and makes its arrays and functions again. These parts of the measure pass stay in ireko:
+
+- The strategies `tree` and `layers`, and the strategies of the user. A sheet over the tree that starts a strategy at each node needs a list of offsets as the value of a cell. A module gives the reason "a list is a value of the program".
+- The shapes of the children. A shape is a list of rectangles, and the same reason applies.
+- The size of each node from the function `measure` of the user, and the checks of the options with their findings.
+- The edges between the children of each node: a search for the lowest common ancestor of the ends of each edge.

@@ -3,7 +3,7 @@
  * the value, or `VEX_ERROR` for an error of Vex. This is also true for each cell on a cycle and with each budget of the
  * stack. The run fills the columns in the order of `SheetRun.fill`.
  */
-import { app, axes, call, cell, each, ext, fn, fold, index, iterate, let_, lit, offset, rec, ref, SheetRun, space, v, type Axis, type CellFormulas, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
+import { app, axes, call, cell, each, ext, fn, fold, index, iterate, let_, lit, offset, origin, rec, ref, SheetRun, space, v, type Axis, type CellFormulas, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { arbSheet, sheetCellsOf, sheetColumnsOf } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -116,8 +116,11 @@ describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
       ["src", ref("v")],
     ]);
     const atNodeSource = sourceOf(atNode, NUM);
-    // Each read of this sheet reads a finished cell, so the fill has no search (COMPILE.MODULE.SHEET.DIRECT).
-    expect(atNodeSource).toMatch(/for \(let o = 0; o < n; o\+\+\) D\[2\]\[o\] = cf\d+\(o\);\n {2}for \(let o = 0; o < n; o\+\+\) D\[0\]\[o\] = cf\d+\(o\);\n {2}for \(let o = 0; o < n; o\+\+\) D\[1\]\[o\] = cf\d+\(o\);/);
+    // Each read of this sheet reads a finished cell, so the fill has no search (COMPILE.MODULE.SHEET.DIRECT). The
+    // column listed reads src at other keys, so it starts a second loop. The column folded shares that loop
+    // (COMPILE.MODULE.ONCE).
+    expect(atNodeSource).toMatch(/ {2}for \(let o = 0; o < n; o\+\+\) \{\n {4}D\[2\]\[o\] = R\[o\]\["v"\];\n {2}\}\n {2}for \(let o = 0; o < n; o\+\+\) \{\n[^]*D\[0\]\[o\] = [^]*D\[1\]\[o\] = /);
+    expect(atNodeSource.match(/for \(let o = 0; o < n; o\+\+\)/g)).toHaveLength(2);
     expectSame(make(atNodeSource), atNode, ENGINE_RECORDS, undefined);
     // A tree: a read of the children puts them first, and a read of the sibling after reverses the siblings.
     const tree = new Map<string, Expr>([
@@ -173,7 +176,7 @@ describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
     // A count that reads another column gives the count, and a count that reads no cell is the count of the records.
     const other = new Map<string, Expr>([["src", ref("v")], ["n", app("count", each(axes.all, app("ifError", cell("src"), lit(0))))], ["plain", app("count", each(axes.all, lit(1)))]]);
     const source = sourceOf(other, { ...NUM, kinds: { src: "number", n: "number", plain: "number" } });
-    expect(source).toContain("const cf2 = (o) => n;");
+    expect(source).toContain("D[2][o] = n;");
     const m = make(source);
     expect(m.run(ENGINE_RECORDS, {})).toStrictEqual({ src: [4, 1, 2, 3, 1, 5], n: [6, 6, 6, 6, 6, 6], plain: [6, 6, 6, 6, 6, 6] });
     expectSame(m, other, ENGINE_RECORDS, undefined);
@@ -396,8 +399,11 @@ const directSheet = (tree: boolean): fc.Arbitrary<ReadonlyMap<string, Expr>> =>
 /** True when the module of a sheet fills its cells with no search. */
 const isDirect = (source: string): boolean => source.includes("function DO(") && !source.includes("function SH(");
 
+/** The number of the loops over the keys of the fill of a module (COMPILE.MODULE.ONCE). */
+const loopsOf = (source: string): number => source.match(/^ {2}for \((let o = |const o of )/gm)?.length ?? 0;
+
 /** True when the module of the sheet fills its cells with no search. */
-const direct = (columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions): boolean => isDirect(sourceOf(columns, options));
+const direct =(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions): boolean => isDirect(sourceOf(columns, options));
 /** The sum of a column at the children. */
 const sum = (c: string): Expr => app("sum", each(axes.children, cell(c)));
 /** This function compares the module of a sheet with SheetRun, and it tells if the module has a direct fill. */
@@ -451,6 +457,37 @@ describe("COMPILE.MODULE.SHEET.DIRECT: a fill with no search", () => {
       const directs = sample.filter(([columns, [rs, parents]]) => runDirect(columns, rs, tree ? parents : undefined)).length;
       expect(directs).toBeGreaterThan(40);
       expect(directs).toBeLessThan(180);
+      // COMPILE.MODULE.ONCE: many direct fills share a loop between columns, and many have more than one loop.
+      const loops = sample.map(([columns]) => sourceOf(columns, tree ? TREE : NUM)).filter(isDirect).map(loopsOf);
+      expect(loops.filter((x) => x < 3).length).toBeGreaterThan(20);
+      expect(loops.filter((x) => x > 1).length).toBeGreaterThan(20);
     }
+  });
+
+  it("COMPILE.MODULE.ONCE: a direct fill has no function for a column, and the columns with one order of the keys share a loop", () => {
+    // B reads A at the key and at the parent, so it shares the loop of A. C reads B at the children, which a
+    // pre-order loop has not filled, so C starts a second loop. D reads C at the origin, the key itself, so it shares
+    // the loop of C.
+    const columns = new Map<string, Expr>([
+      ["A", app("add", ref("v"), app("ifError", cell("A", [PARENT]), lit(0)))],
+      ["B", app("multiply", cell("A"), app("ifError", cell("A", [PARENT]), lit(1)))],
+      ["C", app("sum", each(axes.children, cell("B")))],
+      ["D", app("subtract", cell("C", [origin]), cell("A"))],
+    ]);
+    const options = { ...TREE, kinds: { ...KINDS, D: "number" } } as const;
+    const source = sourceOf(columns, options);
+    expect(isDirect(source)).toBe(true);
+    expect(source).not.toMatch(/\bcf\d+\b/);
+    expect(source).not.toContain("RC");
+    expect(loopsOf(source)).toBe(2);
+    expect(source).toMatch(/for \(const o of K\d+\) \{\n[^]*D\[0\]\[o\] = [^]*D\[1\]\[o\] = [^]*\n {2}\}\n {2}for \(const o of K\d+\) \{\n[^]*D\[2\]\[o\] = [^]*D\[3\]\[o\] = /);
+    expectSame(make(source), columns, ENGINE_RECORDS, ENGINE_PARENTS);
+    // Each column at one key comes after the columns before it, so a fill in one loop gives the results of SheetRun.
+    expect(make(source).run(ENGINE_RECORDS, {}, ENGINE_PARENTS)).toStrictEqual({ A: [4, 5, 6, 8, 6, 5], B: [4, 20, 24, 40, 30, 5], C: [44, 70, 0, 0, 0, 0], D: [40, 65, -6, -8, -6, -5] });
+    // A key order that differs starts a loop: the column up reads the children of itself, so its fill is in post-order.
+    const orders = new Map<string, Expr>([["A", ref("v")], ["up", app("add", cell("A"), app("sum", each(axes.children, cell("up"))))]]);
+    const two = sourceOf(orders, { ...TREE, kinds: { A: "number", up: "number" } });
+    expect(loopsOf(two)).toBe(2);
+    expectSame(make(two), orders, ENGINE_RECORDS, ENGINE_PARENTS);
   });
 });

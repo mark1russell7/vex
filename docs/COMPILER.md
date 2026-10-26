@@ -681,6 +681,8 @@ Many sheets need no search (COMPILE.MODULE.SHEET.DIRECT). The compiler examines 
 
 When each read of the sheet reads a finished cell, the module has no helper `SH`. Each loop puts the value of the formula into the array of its column. A read starts no search and changes nothing, so the parts of a node keep the order of the source. A read in a function, a read in an axis from another key and a sheet with formulas of cells keep the search.
 
+A module with no search has no function for a column (COMPILE.MODULE.ONCE). The code of each formula is in the loop over the keys, so a run makes no function of a column and starts none. Columns that follow each other in the order share one loop when they have the same order of the keys. Then the loop evaluates each of these columns at a key before the next column at that key. Thus a column can share the loop only in one case. It must read the earlier columns of the loop at the key itself or in the three forms above. A read of such a column at another key starts a new loop.
+
 The search decides the cycles, and each read of a cell can start it. Thus a module with the search reads each cell that the interpreter reads, in the same order. Before a part of a node reads a cell, the module evaluates the parts that come before it. A list op that can stop at an item evaluates each item first, as the interpreter does.
 
 - A column without a kind in `kinds` takes the kind of its first formula. A formula that reads a column before that formula gives a reason, so that column needs its kind in `kinds`.
@@ -759,9 +761,35 @@ The module adds approximately 1.1 kB after gzip to the core of ireko. A rough lo
 | 11111 nodes, nested | 9.7 ms | 20 ms |
 | 11111 nodes, linked | 18 ms | 29 ms |
 
-Thus the measure pass is approximately 1.4 to 2 times slower, and a full layout is approximately 1.1 to 1.4 times slower. Each run of the module checks its input and makes its arrays and functions again. These parts of the measure pass stay in ireko:
+Thus the measure pass is approximately 1.4 to 2 times slower, and a full layout is approximately 1.1 to 1.4 times slower. Each run of the module checks its input and makes its arrays and functions again. The next section removes the functions. These parts of the measure pass stay in ireko:
 
 - The strategies `tree` and `layers`, and the strategies of the user. A sheet over the tree that starts a strategy at each node needs a list of offsets as the value of a cell. A module gives the reason "a list is a value of the program".
 - The shapes of the children. A shape is a list of rectangles, and the same reason applies.
 - The size of each node from the function `measure` of the user, and the checks of the options with their findings.
 - The edges between the children of each node: a search for the lowest common ancestor of the ends of each edge.
+
+#### One loop for the columns (COMPILE.MODULE.ONCE)
+
+The measure pilot found the cost of a run of the module. A run made a function for each of the 20 columns, and it started that function at each key. The first idea was to make the functions once, when the module loads. A test of that form on 2026-10-26 gave approximately 10 % less time. The starts of the functions stayed, so the cost stayed.
+
+Thus a module with no search has the code of each formula in its loop over the keys, with no function (COMPILE.MODULE.ONCE). The columns of the fit read only the cells of the key and of the parent, so all 20 columns share one loop. The run still checks its input, makes its arrays and starts the constants of the run. This work depends on the input, so it stays in each run.
+
+| The module | Bytes before | Gzip before | Bytes after | Gzip after |
+|---|---|---|---|---|
+| `measure`, minified | 6194 | 1821 | 5486 | 1760 |
+| `place`, minified | 2800 | 1120 | 2526 | 1070 |
+| `grid` and `radial` | no change | | | |
+
+The modules of `grid` and `radial` are programs, not sheets, so their text does not change. A rough local timing on 2026-10-26, on a busy machine, gave these times for one run of `measure`:
+
+| One run of `measure` | `fitNode` | Before | After |
+|---|---|---|---|
+| 3 children | 0.05 µs | 1.5 µs | 0.7 µs |
+| 10 children | 0.2 µs | 3.0 µs | 1.4 µs |
+| 100 children | 1.5 µs | 23 to 30 µs | 11 to 28 µs |
+
+Thus a run is approximately two times faster. It is still approximately seven times slower than `fitNode`, because the sheet evaluates each of the 20 columns at each key. `fitNode` computes the node once and three values for each child.
+
+The four folds of `MEASURE_COLUMNS` are two pairs. In each pair, the two folds have the same steps and give a different name. The module does not share the loop of a pair. A test of a shared loop gave approximately 5 % less time and 19 bytes less after gzip.
+
+A shared fold must evaluate before the formula of its first column, outside the `try` block of that formula. Then a fold in a branch that the interpreter does not take evaluates at each key. Thus the gain does not pay for the risk.

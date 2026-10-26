@@ -340,7 +340,7 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(reasonOf(n, { schema: {} })).toBe(field("n"));
     expect(reasonOf(v("free"))).toBe('a variable that is not in the schema: "free"');
     expect(reasonOf(v("a"), { schema: {} })).toBe('a variable that is not in the schema: "a"');
-    expect(reasonOf(each(axes.all, n))).toBe("a list is a value of the program");
+    expect(reasonOf(op("add", n, each(axes.all, n)))).toBe("a list is a value of the program");
     expect(reasonOf(ext("note", null))).toBe('the extension "note"');
     expect(reasonOf(op("add", n, lit(null)))).toBe(undecided("add"));
     expect(reasonOf(op("count"))).toBe(undecided("count"));
@@ -1078,9 +1078,9 @@ describe("COMPILE.MODULE: the text of a module", () => {
       }),
     );
     await expectGolden("list-values", e);
-    // A list is a value only at a place that takes one.
-    expect(reasonOf(each(axes.all, n))).toBe("a list is a value of the program");
-    expect(reasonOf(let_({ xs: sorted }, v("xs")))).toBe("a list is a value of the program");
+    // A list is a value only at a place that takes one. The value of the program is such a place (COMPILE.MODULE.LIST.RESULT).
+    expect(reasonOf(each(axes.all, n))).toBe("");
+    expect(reasonOf(let_({ xs: sorted }, v("xs")))).toBe("");
     expect(reasonOf(op("add", lit(1), op("take", sorted, lit(1))))).toBe("a list is a value of the program");
     expect(reasonOf(op("add", lit(1), let_({ a: lit(1) }, sorted)))).toBe("a list is a value of the program");
     expect(reasonOf(op("count", op("sortBy", lit(5))))).toBe("a list op on a value that is not a list");

@@ -19,12 +19,14 @@
  * the fields and the variables of the schema. It takes the axes `all`, `others` and `window`. A tree space also has the
  * move `parent` and the axes of a tree (COMPILE.MODULE.TREE). A graph space has the axes of a graph
  * (COMPILE.MODULE.GRAPH). A list is an array of pairs of a key and a value. The list ops, `reduce`, list literals and
- * lists as names of loops are in a module (COMPILE.MODULE.LIST, COMPILE.MODULE.REDUCE). The kinds of each op site must
- * decide its op. Another construct gives a reason, not code.
+ * lists as names of loops are in a module (COMPILE.MODULE.LIST, COMPILE.MODULE.REDUCE). The value of a program can be a
+ * list, and the run gives it as a `vex.list` (COMPILE.MODULE.LIST.RESULT). The kinds of each op site must decide its op.
+ * Another construct gives a reason, not code.
  *
  * `emitSheetModule` prints the formula columns of a sheet as one module (COMPILE.MODULE.SHEET). Each column is an array
  * of results, and the run fills the arrays in the static order of `SheetRun.fill`. A read of a cell that is not finished
- * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex.
+ * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
+ * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
 import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isVexList, lit, moveExpr, nestingOf, rec, shapeError, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
@@ -57,10 +59,20 @@ export interface SheetModuleOptions extends ModuleOptions {
   /**
    * The kind of the values of each column. The printer prints each column after the columns that it reads. A column
    * that a formula reads before its own formula prints needs its kind here, for example a column that reads itself.
+   * A column of lists has a `ListKind` (COMPILE.MODULE.SHEET.LIST).
    */
-  readonly kinds?: Readonly<Record<string, Kind>>;
+  readonly kinds?: Readonly<Record<string, Kind | ListKind>>;
   /** The budget of the stack of the search of a run, in estimated frames, as in `SheetRun`. The default is 3000. */
   readonly budget?: number;
+}
+
+/**
+ * The kind of a column of lists in a module of a sheet (COMPILE.MODULE.SHEET.LIST): the kind of the items, which can be
+ * a list too. With `texts`, a key of an item can be the text of a key of a list literal.
+ */
+export interface ListKind {
+  readonly list: Kind | ListKind;
+  readonly texts?: boolean;
 }
 
 /** The source of a standalone module, or the reason that the program cannot be one. */
@@ -153,6 +165,8 @@ interface SheetInfo {
   readonly columns: ReadonlyMap<string, number>;
   /** The kind of each column that the printer knows: a kind of the options, or the kind of a printed formula. */
   readonly kinds: Map<string, Kind | undefined>;
+  /** The facts of the lists of each column of lists that the printer knows (COMPILE.MODULE.SHEET.LIST). */
+  readonly lists: Map<string, ListInfo>;
   /** True when each read of a cell reads a finished cell, so a read starts no search (COMPILE.MODULE.SHEET.DIRECT). */
   readonly direct: boolean;
 }
@@ -248,7 +262,7 @@ type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
 type GraphHelper = "GR" | "GI" | "RB";
 
 /** The helpers of a sheet (COMPILE.MODULE.SHEET): the state of a run of a sheet, and the order of the keys of a tree. */
-type SheetHelper = "SH" | "KO" | "DO";
+type SheetHelper = "SH" | "KO" | "DO" | "LO" | "LC";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -422,6 +436,11 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A cell without a formula has the error sentinel from the start, as the error of its read.
   // A column of a direct fill (COMPILE.MODULE.SHEET.DIRECT): the error sentinel of a cell changes to VEX_ERROR.
   DO: "function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }",
+  // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
+  // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
+  LO: 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
+  // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`.
+  LC: "function LC(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LO(d[k], h); return d; }",
   SH: [
     "function SH(n, cols, own, budget) {",
     "  const pg = (c, k) => {",
@@ -716,7 +735,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
-  SH: [], KO: [], DO: [],
+  SH: [], KO: [], DO: [], LO: [], LC: ["LO"],
 };
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
@@ -772,23 +791,25 @@ const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "ap
  * This function tells if an expression gives a list. An each, a list literal and a list op of `LIST_RESULTS` give a
  * list. A name of a list, and a let or a loop whose result is a list, give a list too. `isName` tells if a name outside the expression holds a list.
  */
-function listy(e: Expr, isName: (name: string) => boolean): boolean {
+function listy(e: Expr, isName: (name: string) => boolean, isCell: (e: ExprOf<"ext">) => boolean): boolean {
   switch (e.tag) {
     case "each":
       return true;
     case "lit":
       return isVexList(e.value);
     case "app":
-      return LIST_RESULTS.has(e.op);
+      // A branch of if and ifError can be a list (COMPILE.MODULE.LIST.RESULT).
+      return LIST_RESULTS.has(e.op) || ((e.op === "if" || e.op === "ifError") && e.args.slice(e.op === "if" ? 1 : 0).some((x) => listy(x, isName, isCell)));
     case "var":
       return isName(e.name);
     case "let":
-      return listy(e.body, namesIn(e.bind, isName));
+      return listy(e.body, namesIn(e.bind, isName, isCell), isCell);
     case "fold":
     case "iterate":
-      return listy(e.result, namesIn(e.init, isName));
-    case "call":
+      return listy(e.result, namesIn(e.init, isName, isCell), isCell);
     case "ext":
+      return isCell(e);
+    case "call":
     case "fn":
     case "rec":
     case "ref":
@@ -797,8 +818,8 @@ function listy(e: Expr, isName: (name: string) => boolean): boolean {
 }
 
 /** This function tells if a name holds a list in the scope of some bindings. A binding hides a name outside, and a function is not a list. */
-function namesIn(bind: Readonly<Record<string, Expr>>, isName: (name: string) => boolean): (name: string) => boolean {
-  const lists = new Map(Object.entries(bind).map(([name, x]) => [name, x.tag !== "fn" && listy(x, isName)]));
+function namesIn(bind: Readonly<Record<string, Expr>>, isName: (name: string) => boolean, isCell: (e: ExprOf<"ext">) => boolean): (name: string) => boolean {
+  const lists = new Map(Object.entries(bind).map(([name, x]) => [name, x.tag !== "fn" && listy(x, isName, isCell)]));
   return (name) => lists.get(name) ?? isName(name);
 }
 
@@ -807,13 +828,23 @@ function hasKeyedLiteral(e: Expr): boolean {
   return (e.tag === "lit" && isVexList(e.value) && e.value.items.length > 0) || children(e).some(hasKeyedLiteral);
 }
 
-/** This function gives the facts of the list of `append` from the facts of its two lists. An empty list fits each list. */
-function joinLists(a: ListInfo, b: ListInfo): ListInfo {
+/**
+ * This function gives the facts of the list of `append` from the facts of its two lists. It also gives the list of
+ * `if` from its two branches. An empty list fits each list. The op `op` names the op in the reason.
+ */
+function joinLists(a: ListInfo, b: ListInfo, op: string): ListInfo {
   if (a.empty === true) return b;
   if (b.empty === true) return a;
-  if ((a.inner === undefined) !== (b.inner === undefined)) throw new NotStandalone('"append" of a list of lists and a list of values');
+  if ((a.inner === undefined) !== (b.inner === undefined)) throw new NotStandalone(`"${op}" of a list of lists and a list of values`);
   const texts = a.texts === true || b.texts === true;
-  return { item: join(a.item, b.item), inner: a.inner === undefined ? undefined : joinLists(a.inner, b.inner as ListInfo), texts };
+  return { item: join(a.item, b.item), inner: a.inner === undefined ? undefined : joinLists(a.inner, b.inner as ListInfo, op), texts };
+}
+
+/** This function gives the facts of the list of `if` or `ifError` from its two branches. Two values that are not lists give undefined. */
+function branchLists(op: string, a: ListInfo | undefined, b: ListInfo | undefined): ListInfo | undefined {
+  if (a === undefined && b === undefined) return undefined;
+  if (a === undefined || b === undefined) throw new NotStandalone(`"${op}" of a list and a value that is not a list`);
+  return joinLists(a, b, op);
 }
 
 /**
@@ -1335,7 +1366,12 @@ class Printer {
 
   /** This method tells if an expression gives a list at a place that takes one (`listy`). */
   #isList(e: Expr, ctx: Ctx): boolean {
-    return listy(e, (name) => ctx.env.get(name)?.list !== undefined);
+    return listy(e, (name) => ctx.env.get(name)?.list !== undefined, (x) => this.#cellList(x) !== undefined);
+  }
+
+  /** This method gives the facts of the list of a read of a cell. A read of a column that holds no list gives undefined. */
+  #cellList(e: ExprOf<"ext">): ListInfo | undefined {
+    return e.kind === CELL_KIND && isCellRef(e.data) ? this.#sheet?.lists.get(e.data.column) : undefined;
   }
 
   /** This method prints a list literal (LIST.LITERAL) as an array of pairs of a key and a value. An error item holds the sentinel. */
@@ -1487,12 +1523,13 @@ class Printer {
     const deps = new Set([...this.#addressDeps(at, ctx, []), CELLS]);
     const index = sheet.columns.get(column);
     // The read of a column that the sheet does not have is an error. A kind of the options lets an op take it.
-    if (index === undefined) return bare({ code: `${F}()`, kind: sheet.kinds.get(column), safe: false, deps });
+    const list = sheet.lists.get(column);
+    if (index === undefined) return bare({ code: `${F}()`, kind: sheet.kinds.get(column), safe: false, deps, list });
     if (!sheet.kinds.has(column)) throw new NotStandalone(`a formula reads the column "${column}" before its formula, so the column needs its kind in the option kinds`);
     // A direct fill reads the array of the column. The search reads the cell with the function of its state.
     const address = this.#address(at, ctx, []);
     const read = sheet.direct ? `D[${String(index)}][${address}]` : `${READ_CELL}(${String(index)}, ${address})`;
-    const v = { code: `${this.use("G")}(${read})`, kind: sheet.kinds.get(column), safe: false, deps };
+    const v = { code: `${this.use("G")}(${read})`, kind: sheet.kinds.get(column), safe: false, deps, list };
     // The read itself gives the result or the error sentinel. A move of the address can throw, so then the read is not
     // a value that holds the sentinel.
     return bare(at.every((m) => m.t === "origin") ? { ...v, held: read } : v);
@@ -1779,6 +1816,8 @@ class Printer {
 
   #app(e: ExprOf<"app">, ctx: Ctx): Code {
     const { op, args } = e;
+    // A branch of if and of ifError is at a place that takes a list when the node is.
+    if ((op === "if" || op === "ifError") && this.#wantList.has(e)) for (const x of args.slice(op === "if" ? 1 : 0)) this.#wantList.add(x);
     if (op === "if") return this.#if(args, ctx);
     if (op === "and" || op === "or") return this.#andOr(op === "and", args, ctx);
     if (op === "ifError") return this.#ifError(args, ctx);
@@ -1840,7 +1879,7 @@ class Printer {
     const raw = [this.expr(c, ctx), this.expr(a, ctx), this.expr(b, ctx)];
     const deps = depsOf(...raw);
     const [cond, yes, no] = this.#settle(raw, deps, [c, a, b]) as [Code, Code, Code];
-    const v = { kind: join(yes.v.kind, no.v.kind), safe: this.#safeBoolean(cond.v) && yes.v.safe && no.v.safe, deps };
+    const v = { kind: join(yes.v.kind, no.v.kind), safe: this.#safeBoolean(cond.v) && yes.v.safe && no.v.safe, deps, list: branchLists("if", yes.v.list, no.v.list) };
     if (yes.s.length === 0 && no.s.length === 0) return { s: cond.s, v: { ...v, code: `(${this.#boolean(cond.v)} ? ${yes.v.code} : ${no.v.code})` } };
     const t = this.fresh("t");
     const s = [...cond.s, `let ${t};`, `if (${this.#boolean(cond.v)}) {`, ...ind(yes.s), `  ${t} = ${yes.v.code};`, "} else {", ...ind(no.s), `  ${t} = ${no.v.code};`, "}"];
@@ -1872,7 +1911,7 @@ class Printer {
     if (first.v.safe) return first;
     const t = this.fresh("t");
     const s = [`let ${t};`, "try {", ...ind(first.s), `  ${t} = ${first.v.code};`, "} catch {", ...ind(second.s), `  ${t} = ${second.v.code};`, "}"];
-    return { s, v: { code: t, kind: join(first.v.kind, second.v.kind), safe: second.v.safe, deps } };
+    return { s, v: { code: t, kind: join(first.v.kind, second.v.kind), safe: second.v.safe, deps, list: branchLists("ifError", first.v.list, second.v.list) } };
   }
 
   #opIndex(op: string): number {
@@ -2227,7 +2266,7 @@ class Printer {
     if (op === "get") return value(info.item, info.inner);
     if (op === "indexOf") return value("number", undefined);
     if (op === "without") return value(undefined, info);
-    if (op === "append") return value(undefined, joinLists(info, (parts[1] as Code).v.list as ListInfo));
+    if (op === "append") return value(undefined, joinLists(info, (parts[1] as Code).v.list as ListInfo, op));
     // flat: the value of each item must be a list, so a list of values gives a reason. An empty list gives an empty list.
     if (info.empty === true) return value(undefined, info);
     if (info.inner === undefined) throw new NotStandalone('"flat" over a list whose items are not lists');
@@ -2497,6 +2536,8 @@ class Printer {
   /** This method gives the code of the program at the key of the run. A constant of the run evaluates once. */
   /** This method gives the code of a program at the key `o` of the run. A sheet has one program for each formula. */
   root(expr: Expr): Code {
+    // The value of a program and of a cell can be a list (COMPILE.MODULE.LIST.RESULT).
+    this.#wantList.add(expr);
     return this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: new Map() }));
   }
 
@@ -2639,7 +2680,9 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   } catch (thrown) {
     return reasonOf(thrown);
   }
-  const body = ["const out = [];", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out.push(${value.v.code});`, "  } catch {", "    out.push(VEX_ERROR);", "  }", "}", "return out;"];
+  // A list gives a vex.list (COMPILE.MODULE.LIST.RESULT).
+  const result = value.v.list === undefined ? value.v.code : `${p.use("LO")}(${value.v.code}, ${String(depthOf(value.v.list))})`;
+  const body = ["const out = [];", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out.push(${result});`, "  } catch {", "    out.push(VEX_ERROR);", "  }", "}", "return out;"];
   return printModule(p, options, run, body);
 }
 
@@ -2656,8 +2699,23 @@ interface Formula {
 /** This function gives the words for a formula in a reason: the formula of a column, or of one cell. */
 const formulaText = (f: Formula): string => (f.key === undefined ? `the formula of the column "${f.column}"` : `the formula of the cell "${f.column}" at "${String(f.key)}"`);
 
-/** This function gives the words for a kind in a reason. */
-const kindText = (k: Kind | undefined): string => k ?? "that the printer does not know";
+/** This function gives the words for a kind in a reason. A list gives the kind of its items. */
+const kindText = (k: Kind | undefined, l?: ListInfo): string => (l === undefined ? (k ?? "that the printer does not know") : `list of ${l.inner === undefined ? kindText(l.item) : kindText(undefined, l.inner)}`);
+
+/** This function gives the number of the levels of lists in the items of a list: 0 for a list of values. */
+const depthOf = (l: ListInfo): number => (l.inner === undefined ? 0 : 1 + depthOf(l.inner));
+
+/** This function gives the facts of the lists of a column from the kind of the option `kinds` (COMPILE.MODULE.SHEET.LIST). */
+const listOfKind = (k: ListKind): ListInfo => {
+  const texts = k.texts === true;
+  return typeof k.list === "object" ? { item: undefined, inner: listOfKind(k.list), texts } : { item: k.list, texts };
+};
+
+/**
+ * This function gives the facts of the lists of a column from the list of its first formula. The other cells of the
+ * column can have other formulas. Thus a list without items does not tell that each list of the column is empty.
+ */
+const columnList = (l: ListInfo): ListInfo => ({ item: l.item, inner: l.inner === undefined ? undefined : columnList(l.inner), texts: l.texts === true });
 
 /**
  * This function prints the formula columns of a sheet as a standalone ES module (COMPILE.MODULE.SHEET). The function of
@@ -2688,13 +2746,18 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
     const shape = shapeError(f.expr);
     if (shape !== undefined) return { ok: false, reason: `${formulaText(f)}: ${shape}` };
   }
-  const kinds = new Map<string, Kind | undefined>(Object.entries(options.kinds ?? {}));
+  const kinds = new Map<string, Kind | undefined>();
+  const lists = new Map<string, ListInfo>();
+  for (const [c, k] of Object.entries(options.kinds ?? {})) {
+    kinds.set(c, typeof k === "object" ? undefined : k);
+    if (typeof k === "object") lists.set(c, listOfKind(k));
+  }
   const index = new Map(names.map((c, i) => [c, i]));
   // The memo of the printer covers each formula, so the formulas share their nodes of the memo.
   // A sheet whose reads all read finished cells needs no search: each cell is the value of its formula
   // (COMPILE.MODULE.SHEET.DIRECT). A sheet with formulas of cells always has the search.
   const direct = formulas.every((f) => f.key === undefined) && order.every((c) => readsFinished(columns, order, c, run.tree));
-  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, { columns: index, kinds, direct });
+  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, { columns: index, kinds, lists, direct });
   const fns: string[] = [];
   const decls: string[] = [];
   // The statements that put the value of each formula into the array of its column at the key `o`, for a direct fill.
@@ -2702,10 +2765,18 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   try {
     for (const f of formulas) {
       const code = p.root(f.expr);
-      const kind = code.v.kind;
-      // The first formula of a column without a kind of the options gives the kind of the column.
-      if (!kinds.has(f.column)) kinds.set(f.column, kind);
-      else if (kinds.get(f.column) !== kind) throw new NotStandalone(`${formulaText(f)} gives a value of the kind ${kindText(kind)}, not of the kind ${kindText(kinds.get(f.column))} of its column`);
+      const { kind, list } = code.v;
+      // The first formula of a column without a kind of the options gives the kind of the column. Each other formula
+      // must give a value of that kind, or a list that fits the lists of the column (COMPILE.MODULE.SHEET.LIST).
+      if (!kinds.has(f.column)) {
+        kinds.set(f.column, kind);
+        if (list !== undefined) lists.set(f.column, columnList(list));
+      } else {
+        const known = lists.get(f.column);
+        if (kinds.get(f.column) !== kind || (known === undefined) !== (list === undefined) || (known !== undefined && !fits(known, list as ListInfo))) {
+          throw new NotStandalone(`${formulaText(f)} gives a value of the kind ${kindText(kind, list)}, not of the kind ${kindText(kinds.get(f.column), known)} of its column`);
+        }
+      }
       // COMPILE.MODULE.ONCE: a direct fill has the code of each formula in its loop over the keys, with no function.
       if (direct) {
         const at = `D[${String(index.get(f.column))}][o]`;
@@ -2762,11 +2833,16 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
     fill = order.map((c) => `${headOf(c)} SS.f(${String(index.get(c))}, o);`);
   }
   if (run.tree) p.treeParts.add("children");
+  // A column of lists gives a vex.list in each cell with a list (COMPILE.MODULE.LIST.RESULT).
+  const resultOf = (c: string, read: string): string => {
+    const l = lists.get(c);
+    return l === undefined ? read : `${p.use("LC")}(${read}, ${String(depthOf(l))})`;
+  };
   const body = [
     ...(direct ? [`const D = [${names.map(() => "new Array(n)").join(", ")}];`] : decls),
     ...[...orders].map(([args, keys]) => `const ${keys} = ${args};`),
     ...fill,
-    `return { ${names.map((c, i) => `${JSON.stringify(c)}: ${direct ? `DO(D[${String(i)}])` : `SS.o(${String(i)})`}`).join(", ")} };`,
+    `return { ${names.map((c, i) => `${JSON.stringify(c)}: ${resultOf(c, direct ? `DO(D[${String(i)}])` : `SS.o(${String(i)})`)}`).join(", ")} };`,
   ];
   return printModule(p, options, run, body);
 }

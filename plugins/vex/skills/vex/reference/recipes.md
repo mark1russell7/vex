@@ -151,6 +151,25 @@ m.ok; // => true
 
 The run gives an array for each column: `run([{ pay: 300 }, { pay: 200 }, { pay: 100 }], {}, [-1, 0, 1])` gives `{ cost: [600, 300, 100] }`. A cell on a cycle gives `VEX_ERROR`, as `#CYCLE!` of `SheetRun`.
 
+A cell can hold a list (from the next release). A later formula reads the list with the list ops. A column of lists that reads itself needs a `ListKind` in `kinds`, for example `{ list: "number" }`.
+
+```ts doctest
+import { app, axes, cell, each, ref } from "@mark1russell7/vex";
+import { emitSheetModule } from "@mark1russell7/vex-compiler";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+// The pay of each node and of each node under it, as a list. Then the largest pay of each subtree.
+const columns = new Map([
+  ["pays", app("append", each(axes.window(0, 0), ref("pay")), app("flat", each(axes.children, cell("pays"))))],
+  ["top", app("max", cell("pays"))],
+]);
+const m = emitSheetModule(columns, { domains: [NumDomain], schema: { fields: { pay: "number" } }, space: "tree", kinds: { pays: { list: "number" } } });
+
+m.ok; // => true
+```
+
+The run gives each list as a `vex.list`, with the keys as text. An error item has the error `VEX_ERROR`. The value of a program in `emitModule` can be a list too.
+
 ## A program as data
 
 A program is JSON. `serialize` gives the text, and `parse` checks the text and gives the program. A literal of a domain needs `encode` and `decode` in its domain.

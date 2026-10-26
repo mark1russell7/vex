@@ -49,7 +49,15 @@ jobs:
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
       # The smoke tests: each route renders without a console error, and the main widgets work
-      - run: pnpm --filter @vex/site exec playwright install --with-deps chromium firefox webkit
+      # The install of the browsers stops after 7 minutes and starts again one time. A hung install failed two runs on 2026-10-26.
+      - name: Install the browsers
+        timeout-minutes: 16
+        run: |
+          for attempt in 1 2; do
+            timeout 7m pnpm --filter @vex/site exec playwright install --with-deps chromium firefox webkit && exit 0
+            echo "The install of the browsers stopped (attempt $attempt)."
+          done
+          exit 1
       - run: pnpm --filter @vex/site run test:e2e
         env:
           ASTRO_TELEMETRY_DISABLED: "1"

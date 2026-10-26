@@ -237,6 +237,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
           });
           if (r !== undefined) return r;
         }
+        // LIST.ARRAY: after the domains and the function of the host, a list op on an array is a list op on a list.
+        // FALLBACK is an error, and a list op skips an error item, so an exception must stop the program (V-064).
+        // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
+        if (listOp && fn === undefined && Array.isArray(values[0])) throw new Error("tier 1 gives a list op on an array");
         try {
           // Stryker disable next-line ConditionalExpression: a call of undefined throws, and the catch also gives F
           return fn === undefined ? F : checked(fn(...values));

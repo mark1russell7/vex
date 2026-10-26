@@ -294,7 +294,19 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "}",
   ].join("\n"),
   TK: "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
-  NT: "function NT(l, i, s) { const o = V(l, s); return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F(); }",
+  // nth keeps the items with values on the array, as GT keeps its index. Thus a loop that reads each item of a list of n
+  // items costs O(n), not O(n squared) (COMPILE.MODULE.NTH.INDEX).
+  NT: [
+    "function NT(l, i, s) {",
+    "  let o = l.vw;",
+    "  if (o === undefined) {",
+    "    o = l.filter((x) => x[1] !== E);",
+    "    l.vw = o;",
+    "  }",
+    "  if (s && o.length < l.length) F();",
+    "  return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();",
+    "}",
+  ].join("\n"),
   // The ops that build a list (LIST.BUILD) keep the key and the value of each item. A key is a position or a text, so
   // `without` and `get` compare the text of each key. A list is an array that does not change after the op that makes it.
   DR: "function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }",
@@ -1366,6 +1378,9 @@ class Printer {
 
   /** This method tells if an expression gives a list at a place that takes one (`listy`). */
   #isList(e: Expr, ctx: Ctx): boolean {
+    // A key of a node of the memo is a name of its function, and the name keeps the facts of a list.
+    const key = ctx.keys.get(e);
+    if (key !== undefined) return key.list !== undefined;
     return listy(e, (name) => ctx.env.get(name)?.list !== undefined, (x) => this.#cellList(x) !== undefined);
   }
 
@@ -2398,6 +2413,8 @@ class Printer {
    * is a constant of the run itself.
    */
   #memoized(e: Expr, keys: readonly Expr[], ctx: Ctx): Code {
+    // A key can be a list, for example the list of a let that nth reads in the node (COMPILE.MODULE.NTH.INDEX).
+    for (const k of keys) this.#wantList.add(k);
     const values = keys.map((k) => this.#hoist(this.expr(k, ctx)));
     const varying = keys.filter((_k, i) => (values[i] as Code).v.deps.size > 0);
     const params = varying.map(() => this.fresh("q"));
@@ -2405,7 +2422,7 @@ class Printer {
       keys.map((k, i): [Expr, Name] => {
         const x = (values[i] as Code).v;
         const p = varying.indexOf(k);
-        return [k, p < 0 ? this.#nameOf(x) : { code: params[p] as string, kind: x.kind, lazy: true, deps: new Set([1]) }];
+        return [k, p < 0 ? this.#nameOf(x) : { code: params[p] as string, kind: x.kind, lazy: true, deps: new Set([1]), list: x.list }];
       }),
     );
     const outer = this.#inside;
@@ -2418,7 +2435,7 @@ class Printer {
     }
     // The kinds of the keys decide the ops in the node, so they are a part of the structure. Each key of the function
     // can hold the error sentinel, so the nodes with a safe key and the nodes without one share it.
-    const tokens = new Map(keys.map((k, i): [Expr, object] => [k, varying.includes(k) ? { "#": varying.indexOf(k), kind: (values[i] as Code).v.kind } : { "@": (names.get(k) as Name).code }]));
+    const tokens = new Map(keys.map((k, i): [Expr, object] => [k, varying.includes(k) ? { "#": varying.indexOf(k), kind: (values[i] as Code).v.kind, list: (values[i] as Code).v.list } : { "@": (names.get(k) as Name).code }]));
     const structure = canonical(e, (x) => tokens.get(x as Expr));
     let fn = this.#structures.get(structure);
     if (fn === undefined) {

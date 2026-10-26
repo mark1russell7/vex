@@ -212,6 +212,37 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
     const many = Array.from({ length: 300 }, (_x, i) => ({ id: String(299 - i), n: i % 7, w: 1, b: true }));
     expectSame(make(source), e, many);
   });
+
+  it("COMPILE.MODULE.NTH.INDEX LIST.NTH: a loop that reads each item of a list with nth filters the list once", () => {
+    // The items with values stay on the array, so each nth after the first does not read the list again. The strict nth
+    // and the lenient nth share them, and an error item still fails the strict nth.
+    const lenient = op("ifError", op("nth", v("xs"), n), lit(-1));
+    const strictNth = op("ifError", op("nth", v("xs"), n, strict), lit(-2));
+    const e = let_({ xs: inv }, op("add", op("sum", each(axes.all, lenient)), op("sum", each(axes.list(v("xs")), strictNth))));
+    const source = sourceOf(e);
+    expect(source).toContain("l.vw = o;");
+    const many = Array.from({ length: 300 }, (_x, i) => ({ id: String(i), n: i % 7, w: i % 50 === 0 ? 0 : (i % 3) + 1, b: true }));
+    const clean = many.map((r) => ({ ...r, w: 1 }));
+    const m = make(source);
+    for (const records of [many, clean, RECORDS]) expectSame(m, e, records);
+    // The run of 300 keys calls filter once for the one list, not once for each key.
+    const filter = Array.prototype.filter;
+    let calls = 0;
+    Array.prototype.filter = function (this: unknown[], ...args: Parameters<typeof filter>) {
+      calls++;
+      return filter.apply(this, args);
+    } as typeof filter;
+    try {
+      m.run(clean, VARS);
+    } finally {
+      Array.prototype.filter = filter;
+    }
+    expect(calls).toBe(1);
+    // The list of the let is a key of a node of the memo. A list that changes at each key is a key of its function.
+    const window = let_({ xs: each(axes.window(-1, 1), w) }, op("sum", each(axes.all, op("ifError", op("nth", v("xs"), n), lit(0)))));
+    const twice = let_({ xs: inv, ys: ns }, op("add", op("sum", each(axes.all, op("ifError", op("nth", v("xs"), n), lit(0)))), op("sum", each(axes.all, op("nth", v("ys"), op("abs", n))))));
+    for (const p of [window, twice]) for (const records of [many, RECORDS]) expectSame(make(sourceOf(p)), p, records);
+  });
 });
 
 /** A record of the property: an id that names a key, or not. */

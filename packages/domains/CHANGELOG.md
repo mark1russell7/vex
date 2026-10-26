@@ -1,5 +1,11 @@
 # @mark1russell7/vex-domains
 
+## 0.13.3
+
+### Patch Changes
+
+- @mark1russell7/vex@0.13.3
+
 ## 0.13.2
 
 ### Patch Changes

@@ -151,7 +151,7 @@ m.ok; // => true
 
 The run gives an array for each column: `run([{ pay: 300 }, { pay: 200 }, { pay: 100 }], {}, [-1, 0, 1])` gives `{ cost: [600, 300, 100] }`. A cell on a cycle gives `VEX_ERROR`, as `#CYCLE!` of `SheetRun`.
 
-A cell can hold a list (from the next release). A later formula reads the list with the list ops. A column of lists that reads itself needs a `ListKind` in `kinds`, for example `{ list: "number" }`.
+A cell can hold a list (from 0.13.3). A later formula reads the list with the list ops. A column of lists that reads itself needs a `ListKind` in `kinds`, for example `{ list: "number" }`.
 
 ```ts doctest
 import { app, axes, cell, each, ref } from "@mark1russell7/vex";

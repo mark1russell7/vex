@@ -24,7 +24,8 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - `@mark1russell7/vex` has one runtime dependency: `@mark1russell7/coeval`, the kernel of the family (decision D13 in `docs/REVIEW.md`). Other packages depend on it, and it depends on none of them.
 - The kernel checks and analyzes the documents, and it is the reference tier. Do not copy its machinery into Vex. Put each generic part into coeval.
 - The type `Optional` comes from `@mark1russell7/optional`, the Optional of the family. It is a dev dependency, and the build copies the type into the declarations.
-- The published packages are `@mark1russell7/vex`, `@mark1russell7/vex-domains`, `@mark1russell7/vex-testkit` and `@mark1russell7/vex-compiler`. The other packages are private.
+- The published packages are `@mark1russell7/vex`, `@mark1russell7/vex-domains`, `@mark1russell7/vex-testkit`, `@mark1russell7/vex-compiler` and `@mark1russell7/vex-mcp`. The other packages are private.
+- The first four packages have one version. `@mark1russell7/vex-mcp` has its own version.
 
 ## Tests
 

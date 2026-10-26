@@ -1,5 +1,18 @@
 # @mark1russell7/vex-mcp
 
+## 0.13.0
+
+### Minor Changes
+
+- d7eb247: The release train: the ranges of @procedures/client, @procedures/mcp-server change to a version outside the old range.
+
+### Patch Changes
+
+- Updated dependencies [e00a48f]
+  - @mark1russell7/vex-compiler@0.13.0
+  - @mark1russell7/vex@0.13.0
+  - @mark1russell7/vex-domains@0.13.0
+
 ## 0.12.0
 
 ### Minor Changes

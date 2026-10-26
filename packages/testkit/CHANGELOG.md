@@ -1,5 +1,11 @@
 # @mark1russell7/vex-testkit
 
+## 0.13.0
+
+### Patch Changes
+
+- @mark1russell7/vex@0.13.0
+
 ## 0.12.0
 
 ### Minor Changes

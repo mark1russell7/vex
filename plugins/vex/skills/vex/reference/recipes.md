@@ -117,7 +117,7 @@ const m = emitModule(share, { domains: [NumDomain], schema: { fields: { v: "numb
 m.ok; // => true
 ```
 
-A module of a tree takes the option `space: "tree"` (from the next release). Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The module has the move `parent` and the axes of a tree.
+A module of a tree takes the option `space: "tree"` (from 0.11.2). Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The module has the move `parent` and the axes of a tree.
 
 ```ts doctest
 import { app, axes, each, ref } from "@mark1russell7/vex";
@@ -133,7 +133,7 @@ m.ok && m.source.includes("export function run(records, vars, parents)"); // => 
 
 A host gives the records in an array, and the parents in an array of the same length: `run([{ salary: 10 }, { salary: 5 }], {}, [-1, 0])` gives the values 15 and 5.
 
-`emitSheetModule` prints the formula columns of a sheet as a module (from the next release). A column that a formula reads before its formula needs its kind in `kinds`. This column reads itself, so it needs its kind.
+`emitSheetModule` prints the formula columns of a sheet as a module (from 0.11.2). A column that a formula reads before its formula needs its kind in `kinds`. This column reads itself, so it needs its kind.
 
 ```ts doctest
 import { app, axes, cell, each, ref } from "@mark1russell7/vex";

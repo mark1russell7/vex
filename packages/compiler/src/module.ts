@@ -2881,6 +2881,20 @@ class Printer {
   }
 }
 
+/**
+ * This function gives the reason that a module cannot take a loop that names its items with `as` (AXIS.LIST.ITEM), or
+ * `undefined`. Tier 1 evaluates such a program. It uses a stack, not recursion.
+ */
+function itemsReason(expr: Expr): string | undefined {
+  const todo: Expr[] = [expr];
+  for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
+    // Only a loop, each or fold, has the field "as".
+    if ((x as { readonly as?: unknown }).as !== undefined) return 'the program has a loop that names its items with "as", and a module does not have these names yet';
+    todo.push(...children(x));
+  }
+  return undefined;
+}
+
 /** This function gives the name of the function of a module, and its space, or the reason that the options are not valid. */
 function runOf(options: ModuleOptions): Run | { readonly reason: string } {
   const name = options.name ?? "run";
@@ -3000,7 +3014,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   if (!read.ok) return { ok: false, reason: read.error.message };
   const expr = read.value;
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
-  const shape = shapeError(expr);
+  const shape = shapeError(expr) ?? itemsReason(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
   const p = new Printer(expr, options);
   let value: Code;
@@ -3076,7 +3090,7 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   });
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
-    const shape = shapeError(f.expr);
+    const shape = shapeError(f.expr) ?? itemsReason(f.expr);
     if (shape !== undefined) return { ok: false, reason: `${formulaText(f)}: ${shape}` };
   }
   const kinds = new Map<string, Kind | undefined>();

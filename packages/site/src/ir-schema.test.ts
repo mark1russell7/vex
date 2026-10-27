@@ -1,7 +1,8 @@
 /**
  * The JSON Schema of the IR in public/ir.schema.json, against the function isExpr of @mark1russell7/vex. The two accept
  * the same values, so a program that a model writes from the schema is a program that Vex accepts. One rule is not in
- * the schema: each name of the step of a loop is a name of its init.
+ * the schema: each name of the step of a loop is a name of its init. Two rules of the names `as` are not in the schema
+ * too: they need the axis `list`, and a name of `as` is not a name of `init`.
  */
 import { readFileSync } from "node:fs";
 import { isExpr, type Expr } from "@mark1russell7/vex";
@@ -32,6 +33,16 @@ describe("the JSON Schema of the IR (IR.JSON)", () => {
     expect([validate({ ...loop, limit: 100_001 }), isExpr({ ...loop, limit: 100_001 })]).toEqual([false, false]);
   });
 
+  it("DOC.CONSTRUCT: the schema cannot tell the axis or the init of the names as, but isExpr can", () => {
+    const list = { t: "list", list: { tag: "var", name: "xs" } };
+    const loop = { tag: "each", axis: list, as: ["x", "i"], body: { tag: "var", name: "x" } };
+    expect([validate(loop), isExpr(loop)]).toEqual([true, true]);
+    expect([validate({ ...loop, axis: { t: "all" } }), isExpr({ ...loop, axis: { t: "all" } })]).toEqual([true, false]);
+    const fold = { tag: "fold", axis: list, as: ["x"], init: { x: { tag: "lit", value: 0 } }, step: {}, result: { tag: "lit", value: 0 } };
+    expect([validate(fold), isExpr(fold)]).toEqual([true, false]);
+    for (const as of [[], ["x", "x"], ["x", "i", "j"], [1], "x"]) expect([validate({ ...loop, as }), isExpr({ ...loop, as })]).toEqual([false, false]);
+  });
+
   it("IR.JSON: the schema and isExpr agree on random JSON values and on broken expressions", () => {
     const broken = fc.oneof(
       fc.jsonValue(),
@@ -43,6 +54,13 @@ describe("the JSON Schema of the IR (IR.JSON)", () => {
           fc.record({ t: fc.constant("list"), list: fc.constantFrom({ tag: "var", name: "xs" }, { tag: "nope" }, 5) }, { requiredKeys: ["t"] }),
           fc.record({ t: fc.constant("reverse"), axis: fc.record({ t: fc.constant("list"), list: fc.constantFrom({ tag: "var", name: "xs" }, [1]) }, { requiredKeys: ["t"] }) }),
         ),
+        body: fc.constant({ tag: "lit", value: 1 }),
+      }),
+      // AXIS.LIST.ITEM: the names "as" of a loop over a list, valid or broken.
+      fc.record({
+        tag: fc.constant("each"),
+        axis: fc.record({ t: fc.constant("list"), list: fc.constant({ tag: "var", name: "xs" }) }),
+        as: fc.constantFrom(["x"], ["x", "i"], [], ["x", "x"], ["x", "i", "j"], [1], "x", null),
         body: fc.constant({ tag: "lit", value: 1 }),
       }),
       // FN.BIND: a function is only a binding of let, with distinct names of parameters.

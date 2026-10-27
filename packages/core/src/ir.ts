@@ -3,6 +3,8 @@
  * shape as the expressions of `render`.
  */
 
+import { itemNamesError } from "./item-names.ts";
+
 /**
  * One move of an address. The moves of an address apply in order, from the focus of the evaluation. The key of `key`
  * and the position of `index` can be an expression, which evaluates before the moves (NAV.COMPUTED).
@@ -48,8 +50,8 @@ export type Expr =
   | { readonly tag: "let"; readonly bind: Readonly<Record<string, Expr>>; readonly body: Expr }
   | { readonly tag: "var"; readonly name: string }
   | { readonly tag: "rec"; readonly fields: Readonly<Record<string, Expr>> }
-  | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr; readonly at?: Addr }
-  | { readonly tag: "fold"; readonly axis: Axis; readonly init: Names; readonly step: Names; readonly result: Expr; readonly at?: Addr }
+  | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr; readonly at?: Addr; readonly as?: ItemNames }
+  | { readonly tag: "fold"; readonly axis: Axis; readonly init: Names; readonly step: Names; readonly result: Expr; readonly at?: Addr; readonly as?: ItemNames }
   | { readonly tag: "iterate"; readonly limit: number; readonly init: Names; readonly step: Names; readonly until?: Expr; readonly result: Expr }
   | { readonly tag: "fn"; readonly params: readonly string[]; readonly body: Expr }
   | { readonly tag: "call"; readonly fn: string; readonly args: readonly Expr[] }
@@ -57,6 +59,12 @@ export type Expr =
 
 /** The names of a loop and an expression for each (LOOP.NAMES). */
 export type Names = Readonly<Record<string, Expr>>;
+
+/**
+ * The names of the items of a loop over the axis `list`. The first name holds the value of the item, and the second
+ * its position (AXIS.LIST.ITEM, AXIS.LIST.INDEX). The body of `each` and the steps of `fold` see them (AXIS.LIST.SCOPE).
+ */
+export type ItemNames = readonly [item: string] | readonly [item: string, index: string];
 
 /** The largest number of steps of `iterate` (ITERATE.LIMIT). */
 export const MAX_ITERATIONS = 100_000;
@@ -96,18 +104,23 @@ export const rec = (fields: Readonly<Record<string, Expr>>): ExprOf<"rec"> => ({
 
 /**
  * This function evaluates `body` once for each target of `axis`. The result is a list. With `at`, the axis finds its
- * targets from the key of that address, not from the focus.
+ * targets from the key of that address, not from the focus. With `as`, the body of a loop over the axis `list` reads the
+ * value of each item and its position by these names (AXIS.LIST.ITEM, AXIS.LIST.INDEX).
  */
-export function each(axis: Axis, body: Expr, at?: Addr): ExprOf<"each"> {
-  return at === undefined || at.length === 0 ? { tag: "each", axis, body } : { tag: "each", axis, body, at };
+export function each(axis: Axis, body: Expr, at?: Addr, as?: ItemNames): ExprOf<"each"> {
+  const named = as === undefined ? {} : { as };
+  return at === undefined || at.length === 0 ? { tag: "each", axis, body, ...named } : { tag: "each", axis, body, at, ...named };
 }
 
 /**
  * This function makes a fold: a step at each target of `axis`, in order. `init` gives the names and their first
- * values, and `step` gives the next values. `result` gives the value from the last values (LOOP.NAMES, FOLD.ORDER).
+ * values, and `step` gives the next values. `result` gives the value from the last values (LOOP.NAMES, FOLD.ORDER). With
+ * `as`, the steps of a fold over the axis `list` read the value of each item and its position by these names
+ * (AXIS.LIST.ITEM, AXIS.LIST.INDEX).
  */
-export function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Addr): ExprOf<"fold"> {
-  return at === undefined || at.length === 0 ? { tag: "fold", axis, init, step, result } : { tag: "fold", axis, init, step, result, at };
+export function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Addr, as?: ItemNames): ExprOf<"fold"> {
+  const named = as === undefined ? {} : { as };
+  return at === undefined || at.length === 0 ? { tag: "fold", axis, init, step, result, ...named } : { tag: "fold", axis, init, step, result, at, ...named };
 }
 
 /**
@@ -277,6 +290,8 @@ export function shapeError(u: unknown): string | undefined {
   if (bad.axis) return "the expression has an axis that is not valid";
   if (typeof tag === "string" && !TAGS.has(tag)) return `the expression has a node with the tag "${tag}", and this version of Vex does not know it`;
   if (tag === "fn") return "the expression has a function outside the bindings of a let, or a function with parameters that are not distinct names";
+  const named = tag === "each" || tag === "fold" ? itemNamesError(bad.u as Readonly<Record<string, unknown>>) : undefined;
+  if (named !== undefined) return `the expression has a node "${String(tag)}" with names "as" that are not valid: ${named}`;
   return typeof tag === "string" ? `the expression has a node "${tag}" with parts that are not valid` : "the expression has a part that is not a node";
 }
 
@@ -375,7 +390,7 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
         break;
       case "each": {
         const at = addrParts(u["at"], moveNumber);
-        if (at === undefined) return item;
+        if (at === undefined || itemNamesError(u) !== undefined) return item;
         push(true, [u["axis"]]);
         push(false, [u["body"], ...at]);
         break;
@@ -383,7 +398,7 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
       case "fold": {
         const at = addrParts(u["at"], moveNumber);
         const names = loopParts(u);
-        if (at === undefined || names === undefined) return item;
+        if (at === undefined || names === undefined || itemNamesError(u) !== undefined) return item;
         push(true, [u["axis"]]);
         push(false, [...names, ...at]);
         break;

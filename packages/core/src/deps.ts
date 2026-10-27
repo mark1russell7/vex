@@ -93,7 +93,9 @@ export function deps(e: Expr): readonly Dependency[] {
         const source = rule.names as { readonly keysAt?: readonly Key[]; readonly listAt?: readonly Key[] };
         // Stryker disable next-line ArrayDeclaration: each rule of the scopes of Vex gives its names with keysAt or listAt
         const at = (source.keysAt ?? source.listAt ?? []).reduce<unknown>((x, k) => (x as Readonly<Record<string, unknown>>)[String(k)], around.doc.value);
-        const names = source.keysAt !== undefined ? Object.keys(at as object) : (at as readonly string[]);
+        // A loop without the names `as` of its items has no list there (AXIS.LIST.SCOPE).
+        // Stryker disable next-line ArrayDeclaration: a name that no program binds does not hide a function
+        const names = source.keysAt !== undefined ? Object.keys(at as object) : ((at as readonly string[] | undefined) ?? []);
         if (!names.includes(name)) continue;
         // Only a binding of a let is a function (FN.BIND), and the map has only the documents of the functions.
         found = fnVisits.get((at as Readonly<Record<string, unknown>>)[name]);

@@ -13,26 +13,29 @@
  * | `fn` | `{ "type": "fn", "value": { "params", "body" } }` |
  * | `call` | `{ "type": "call", "value": { "fn": { "type": "ref", "value": ["names", name] }, "args" } }` |
  * | `rec` | `{ "type": "record", "value": { ...fields } }` |
- * | `each` | `{ "type": "each", "value": { "axis", "body", "at"? } }` |
- * | `fold` | `{ "type": "fold", "value": { "axis", "init", "step", "result", "at"? } }` |
+ * | `each` | `{ "type": "each", "value": { "axis", "as"?, "body", "at"? } }` |
+ * | `fold` | `{ "type": "fold", "value": { "axis", "as"?, "init", "step", "result", "at"? } }` |
  * | `iterate` | `{ "type": "iterate", "value": { "limit", "init", "step", "until"?, "result" } }` |
  * | `ext` | `{ "type": ["ext", ...keys], "value": data }` |
  * | a move | `{ "type": ["moves", kind], "value": v }` |
  * | an axis | `{ "type": ["axes", name], "value": { ...parameters } }` |
  *
  * The address `at` of `each` and `fold` is a reference from `self` with moves only. An empty address is no address.
+ * The field `as` of `each` and `fold` names the item of a loop over the axis `list`, and then its index (AXIS.LIST.SCOPE).
  *
  * The kernel checks a document by the contracts of `VEX_WORLD` (DOC.CHECK). A contract gives the shape of a kind, the
  * data of its fields and the kinds of each position. Then `fromDocument` reads the expression. It checks only the grammar
- * of Vex: the steps of a reference, the address, the function of a call and the names of a loop.
+ * of Vex: the steps of a reference, the address, the function of a call and the names of a loop. It also checks the
+ * names of the items.
  */
 import { check, isEnvelope, typeName, typePath, type Envelope, type Issue, type Key, type Machine } from "@mark1russell7/coeval";
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { isStackOverflow, vexError, type VexError } from "./errors.ts";
-import { app, call, each, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Addr, type Axis, type Expr, type Move, type Names } from "./ir.ts";
+import { app, call, each, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Addr, type Axis, type Expr, type ItemNames, type Move, type Names } from "./ir.ts";
 import { MAX_DOCUMENT_DEPTH, TERM_KINDS, vexChecker } from "./kernel.ts";
 import { fail, ok, type Result } from "./result.ts";
+import { itemNamesError } from "./item-names.ts";
 import { WriteStop, writeDocument, type WriteOptions } from "./write.ts";
 
 export type { Envelope, Json } from "@mark1russell7/coeval";
@@ -169,11 +172,16 @@ class Reader {
       }
       case "record":
         return rec(this.#names(u.value, at));
-      case "each":
-        return each(this.#axis(f["axis"] as Envelope, into(at, "axis")), this.term(f["body"], into(at, "body")), this.#address(f["at"], into(at, "at")));
+      case "each": {
+        const axis = this.#axis(f["axis"] as Envelope, into(at, "axis"));
+        const as = this.#items(f, axis, at);
+        return each(axis, this.term(f["body"], into(at, "body")), this.#address(f["at"], into(at, "at")), as);
+      }
       case "fold": {
         const [init, step] = this.#loop(f, at);
-        return fold(this.#axis(f["axis"] as Envelope, into(at, "axis")), init, step, this.term(f["result"], into(at, "result")), this.#address(f["at"], into(at, "at")));
+        const axis = this.#axis(f["axis"] as Envelope, into(at, "axis"));
+        const as = this.#items(f, axis, at);
+        return fold(axis, init, step, this.term(f["result"], into(at, "result")), this.#address(f["at"], into(at, "at")), as);
       }
       default: {
         // iterate: the contract gives a whole number from 0 to MAX_ITERATIONS for the limit (ITERATE.LIMIT).
@@ -226,6 +234,15 @@ class Reader {
     const step = this.#names(f["step"], into(at, "step"));
     const extra = Object.keys(step).find((name) => !Object.hasOwn(init, name));
     return extra === undefined ? [init, step] : bad(into(into(at, "step"), extra), `the name "${extra}" of step is not a name of init`);
+  }
+
+  /**
+   * This method reads the names `as` of a loop (AXIS.LIST.SCOPE). The contract gives a list of distinct texts. The
+   * grammar of Vex needs one or two names, the axis `list` and no name of `init`.
+   */
+  #items(f: Readonly<Record<string, unknown>>, axis: Axis, at: string): ItemNames | undefined {
+    const reason = itemNamesError({ as: f["as"], axis, init: f["init"] });
+    return reason === undefined ? (f["as"] as ItemNames | undefined) : bad(into(at, "as"), reason);
   }
 
   /** This method reads a reference: the fields of `self` after its moves, or a name of `names` (DOC.REF). */

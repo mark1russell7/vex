@@ -149,8 +149,8 @@ describe("COMPILE.MODULE.LIST.CALL: a call whose value is a list", () => {
     );
     const source = expectSame(e, MANY);
     expect(source.match(/const fn\d+ =/g)).toHaveLength(5);
-    // The keys of a literal go through the call, so the axis list gives the reason of a list with such keys.
-    expect(reasonOf(withFns(op("sum", each(axes.list(call("same", LIT)), n))))).toBe('the axis "list" over a list with the keys of a literal');
+    // The keys of a literal go through the call, so a read of a record at such a key gives a reason.
+    expect(reasonOf(withFns(op("sum", each(axes.list(call("same", LIT)), n))))).toBe('the axis "list" reads a record at a key of a literal or of "fill"');
     expectSame(withFns(op("sum", each(axes.list(call("same", ns)), n))));
   });
 

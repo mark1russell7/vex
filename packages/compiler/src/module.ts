@@ -70,7 +70,7 @@ export interface SheetModuleOptions extends ModuleOptions {
 
 /**
  * The kind of a column of lists in a module of a sheet (COMPILE.MODULE.SHEET.LIST): the kind of the items, which can be
- * a list too. With `texts`, a key of an item can be the text of a key of a list literal.
+ * a list too. With `texts`, a key of an item can be a key of a list literal or of `fill`, not the key of a record.
  */
 export interface ListKind {
   readonly list: Kind | ListKind;
@@ -106,13 +106,13 @@ interface Value {
 
 /**
  * The facts of a list of the code: the kind of the values of its items, if the printer knows it. The key of an item is
- * the position of its record, or the text of the key of a list literal (LIST.LITERAL).
+ * the position of its record or the text of the key of a list literal (LIST.LITERAL). It can also be a position of `fill`.
  */
 interface ListInfo {
   readonly item: Kind | undefined;
   /** For a list of lists (LIST.FLAT): the facts of each list that is the value of an item. Each item of such a list is an array. */
   readonly inner?: ListInfo | undefined;
-  /** True when a key can be the text of a key of a literal. The focus of the axis list must be the position of a record. */
+  /** True when a key can be a key of a literal or of `fill`. The axis list cannot read a record at such a key. */
   readonly texts?: boolean;
   /** True for a list without items: the empty literal, and a list from it. Such a list fits each list. */
   readonly empty?: boolean;
@@ -255,7 +255,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "NT" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "NT" | "FI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "WO" | "FL" | "GT" | "IX";
@@ -319,6 +319,16 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  }",
     "  if (s && o.length < l.length) F();",
     "  return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();",
+    "}",
+  ].join("\n"),
+  // fill (LIST.FILL, COMPILE.MODULE.FILL): n items with the value v, and the keys 0 to n - 1. A count that is not a whole
+  // number from 0 to 100000, or a missing value, is the error of the interpreter. Each item can share the array of a list.
+  FI: [
+    "function FI(n, v) {",
+    "  if (!(Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined)) F();",
+    "  const o = [];",
+    "  for (let i = 0; i < n; i++) o.push([i, v]);",
+    "  return o;",
     "}",
   ].join("\n"),
   // The ops that build a list (LIST.BUILD) keep the key and the value of each item. A key is a position or a text, so
@@ -766,7 +776,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
-  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"],
+  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"], FI: ["F"],
   DR: ["V", "F"], AP: ["V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
@@ -822,8 +832,11 @@ const BUILD_OPS: ReadonlySet<string> = new Set(["append", "without", "flat", "ge
 /** The helper of each op of `#build`. */
 const BUILD_HELPERS: Readonly<Record<string, BuildHelper>> = { append: "AP", without: "WO", flat: "FL", get: "GT", indexOf: "IX" };
 
-/** The list ops whose value is a list (LIST.SORT, LIST.TAKE and LIST.BUILD). */
-const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "append", "without", "flat"]);
+/**
+ * The ops whose value is a list: the list ops of LIST.SORT, LIST.TAKE and LIST.BUILD, and `fill` (LIST.FILL). A domain
+ * can have the op `fill`. Then the op of the domain gives no list, and the place of a list gives a reason.
+ */
+const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "append", "without", "flat", "fill"]);
 
 /**
  * The scope of `listy`. `name` tells if a name holds a list, and `fn` gives the bound function of a name. `cell` tells
@@ -900,9 +913,12 @@ function paramsIn(f: ListFn, args: readonly Expr[], scope: ListScope): ListScope
   return { ...f.scope, name: (name) => lists.get(name) ?? f.scope.name(name) };
 }
 
-/** This function tells if an expression has a list literal with an item, so a key of the list can be a text (LIST.LITERAL). */
-function hasKeyedLiteral(e: Expr): boolean {
-  return (e.tag === "lit" && isVexList(e.value) && e.value.items.length > 0) || children(e).some(hasKeyedLiteral);
+/**
+ * This function tells if an expression has a list literal with an item (LIST.LITERAL), or `fill` (LIST.FILL). Then a key
+ * of a list of the expression can be a key that is not the position of a record.
+ */
+function hasTextKeys(e: Expr): boolean {
+  return (e.tag === "lit" && isVexList(e.value) && e.value.items.length > 0) || (e.tag === "app" && e.op === "fill") || children(e).some(hasTextKeys);
 }
 
 /**
@@ -1941,7 +1957,19 @@ class Printer {
     const deps = depsOf(...raw);
     // The interpreter evaluates each argument, also after an error.
     const values = this.#inOrder(this.#settle(raw, deps, args), true);
+    if (op === "fill" && this.#facts.own(op)) return this.#fill(values, deps);
     return this.#opCall(op, values, deps);
+  }
+
+  /**
+   * This method prints `fill(n, value)` without a domain with the op (LIST.FILL, COMPILE.MODULE.FILL). The helper `FI`
+   * gets each value, so an error of an argument after the value is the error of the op. The keys are not the positions
+   * of records, so the axis `list` over the list cannot read a record at its keys.
+   */
+  #fill(values: readonly Code[], deps: ReadonlySet<number>): Code {
+    const value = values[1]?.v;
+    const list: ListInfo = { item: value?.kind, inner: value?.list, texts: true };
+    return { s: stmtsOf(...values), v: { code: `${this.use("FI")}(${values.map((x) => x.v.code).join(", ")})`, kind: undefined, safe: false, deps, list } };
   }
 
   /**
@@ -2097,6 +2125,8 @@ class Printer {
     readonly startSafe: boolean;
     readonly tests: readonly Expr[];
     readonly inner: Ctx;
+    /** True when a target can be a key that is not the position of a record: a key of a literal or of `fill`. */
+    readonly texts: boolean;
   } {
     const { base: outer, tests } = testsOf(axis);
     // The reverse order of an axis is a loop from its end (AXIS.REVERSE). The validation keeps a base axis inside.
@@ -2109,14 +2139,14 @@ class Printer {
     if (base.t === "list") {
       if (at.length > 0) throw new NotStandalone('the axis "list" with an address');
       const list = this.#hoist(this.#listOf(base.list, ctx), hasLoop(base.list));
-      // The focus of a target is the position of a record, so a list with the keys of a literal has no loop of a module.
-      if ((list.v.list as ListInfo).texts === true) throw new NotStandalone('the axis "list" over a list with the keys of a literal');
+      // A key of a literal or of fill is not the position of a record. Such a focus is a key of a list of the code only.
+      const texts = (list.v.list as ListInfo).texts === true;
       const a = this.fresh("A");
       const q = this.fresh("q");
       const head = reverse ? `for (let ${q} = ${a}.length - 1; ${q} >= 0; ${q}--) {` : `for (let ${q} = 0; ${q} < ${a}.length; ${q}++) {`;
       const key = [`const ${j} = ${a}[${q}][0];`];
       const check = [`if (${a}[${q}][1] === E) ${this.use("F")}();`];
-      return { s: [...list.s, `const ${a} = ${list.v.code};`], j, head, key, check, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner };
+      return { s: [...list.s, `const ${a} = ${list.v.code};`], j, head, key, check, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts };
     }
     const s: string[] = [];
     let lo = "0";
@@ -2138,13 +2168,13 @@ class Printer {
     if (this.#tree && isTreeAxis(base)) {
       const range = this.#treeRange(base, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: range.skip, fixed: false, start, startSafe, tests, inner };
+      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false };
     }
     // In a graph space, the targets of an axis of a graph are an array of positions. A graph has no offsets and no tree.
     if (this.#graph && GRAPH_AXES.has(base.t)) {
       const range = this.#graphRange(base.t, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: undefined, fixed: false, start, startSafe, tests, inner };
+      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false };
     }
     if (this.#graph && base.t === "window") throw new NotStandalone('the axis "window" in a graph space');
     if (base.t === "others") skip = f;
@@ -2154,7 +2184,15 @@ class Printer {
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
-    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], skip, fixed: f === undefined, start, startSafe, tests, inner };
+    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false };
+  }
+
+  /**
+   * This method gives a reason when a part of a loop of the axis `list` reads at a target that is not a record. The
+   * interpreter reads the record of such a key, and a module has no record for it.
+   */
+  #readsNoTarget(texts: boolean, level: number, deps: readonly ReadonlySet<number>[]): void {
+    if (texts && deps.some((d) => d.has(level))) throw new NotStandalone('the axis "list" reads a record at a key of a literal or of "fill"');
   }
 
   /**
@@ -2212,11 +2250,12 @@ class Printer {
   #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
     const { strict, step } = this.#foldOptions(op, rest);
     const at = target.at ?? [];
-    const { s, j, head, key, check, skip, fixed, start, startSafe, tests, inner } = this.#targetLoop(target.axis, at, ctx);
+    const { s, j, head, key, check, skip, fixed, start, startSafe, tests, inner, texts } = this.#targetLoop(target.axis, at, ctx);
     const { level } = inner;
     // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run.
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
     const body = this.#hoist(this.expr(target.body, inner), hasLoop(target.body));
+    this.#readsNoTarget(texts, level, [body, ...testCodes].map((x) => x.v.deps));
     // A count of all the items, whose body cannot fail, is the count of the records. A safe body covers its statements.
     // V-063: a body that reads a cell keeps its loop. The search of the run must see each read, so a cell that reads
     // itself gives `#CYCLE!`.
@@ -2333,11 +2372,12 @@ class Printer {
    */
   #eachList(e: ExprOf<"each">, ctx: Ctx): Code {
     const at = e.at ?? [];
-    const { s, j, head, key, check, skip, start, startSafe, tests, inner } = this.#targetLoop(e.axis, at, ctx);
+    const { s, j, head, key, check, skip, start, startSafe, tests, inner, texts } = this.#targetLoop(e.axis, at, ctx);
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
     // The value of an item can be a list, for flat (LIST.FLAT). The facts of the list tell it.
     if (this.#wantList.has(e)) this.#wantList.add(e.body);
     const body = this.#hoist(this.expr(e.body, inner), hasLoop(e.body));
+    this.#readsNoTarget(texts, inner.level, [body, ...testCodes].map((x) => x.v.deps));
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== inner.level));
     const list = this.fresh("L");
     const v = this.fresh("x");
@@ -2348,7 +2388,7 @@ class Printer {
       ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
       ...(safeItem ? [...item, `${list}.push([${j}, ${body.v.code}]);`] : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", `  ${v} = E;`, "}", `${list}.push([${j}, ${v}]);`]),
     ];
-    return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: { item: body.v.kind, inner: body.v.list } } };
+    return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: { item: body.v.kind, inner: body.v.list, texts } } };
   }
 
   /**
@@ -2445,8 +2485,8 @@ class Printer {
     const env = new Map(ctx.env);
     const vars = new Map<string, Name>();
     const deps = new Set<number>();
-    // A step with a list literal can give a name the keys of the literal (LOOP.LIST).
-    const keyed = Object.values(step).some(hasKeyedLiteral);
+    // A step with a list literal or fill can give a name the keys of the literal or of fill (LOOP.LIST).
+    const keyed = Object.values(step).some(hasTextKeys);
     for (const [name, x] of Object.entries(init)) {
       // A name of a loop can hold a list (LOOP.LIST). Its first list fixes the kind of the items, if it has one.
       this.#wantList.add(x);
@@ -2522,6 +2562,7 @@ class Printer {
     // The interpreter evaluates the tests at each target before the first step, so a module of a sheet does not have them.
     if (tests.some((x) => x.v.deps.has(CELLS))) throw new NotStandalone("a test of the axis of a fold reads a cell");
     const step = this.#loopStep(e.step, { ...t.inner, env: names.env }, names.vars);
+    this.#readsNoTarget(t.texts, t.inner.level, [...tests.map((x) => x.v.deps), step.deps]);
     const result = this.expr(e.result, { ...ctx, env: names.env });
     const body = [
       ...t.key,

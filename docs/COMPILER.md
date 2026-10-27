@@ -257,7 +257,7 @@ The status on 2026-10-17:
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
 - Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 gives a reason for a program with lists, and tier 1 evaluates it. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
 - The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 and a module give a reason for them, and tier 1 evaluates the program.
-- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives a reason for `indexOf` and `fill`. A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3. An array is not a list of a module. The kinds of `fill` and of an array do not decide an op of a module.
+- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives a reason for `indexOf` and `fill`. A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
 - Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 gives a reason for them, and tier 1 evaluates the program.
 - Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus the force layouts of Graph and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
 - Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops come from `XYDomain`, because a module cannot copy the methods of `Vec2Domain`.
@@ -268,7 +268,7 @@ The decisions of the third block:
 - `get` keeps an index of the keys on the array of the list. The array does not change after the op that makes it. Thus a step that reads each key of a list of `n` items costs O(n), as in the interpreter.
 - A list op over a `let` with literal options is the list op over the body of the `let`. A builder sheet prints `sum(let($0 = 0, each(…)))`. Thus the `each` stays one loop with a running value.
 - The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus an op on a `get` of a name whose first list is empty gives a reason.
-- The focus of the axis `list` is the position of a record. Thus the axis `list` over a list with the keys of a literal gives a reason.
+- The focus of the axis `list` is the position of a record. A key of a literal is not such a position. Since COMPILE.MODULE.FILL, the axis `list` over such keys gives a reason only when it reads a record at a target.
 - Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list gives a reason. Since 2026-10-26, the value of a program and the branches of `if` and `ifError` can be lists ("Lists in cells" below). Since 2026-10-26, a module has graph spaces and `reduce`, so the force pilot is a module ("Graph spaces and reduce" below).
 
 The decisions of the second block:
@@ -862,10 +862,7 @@ The measure pass of ireko gives a shape to each subtree that a tidy strategy rea
 
 The merge is a chain of folds over lists. It gives the ends of the valid bands, sorts them and removes the repeated cuts. Then it gives one band for each cut with an active band, and it joins neighbor bands with the same interval. Last, it halves the list until the limit holds. The comparisons keep the first of two equal values, as the comparisons of ireko do. Thus a negative zero has the bits of ireko.
 
-The program works around two gaps of a module. Each workaround is Vex, not code of the host:
-
-- A name of a loop whose first value is the empty literal has no kind of items. Then `sortBy` gives the reason "the kinds of the items of "sortBy" do not decide the op "from" of the option by". The program starts each such name with `take(list, 0)` of a list of one band, which has the kind.
-- A module does not have `fill` ("the kinds of the values of "fill" do not decide its op"). The axis `window(0, 0)` makes the list of one value.
+A name of a loop whose first value is the empty literal has no kind of items. Then `sortBy` gives the reason "the kinds of the items of "sortBy" do not decide the op "from" of the option by". The program starts each such name with `fill(0, value)`, an empty list whose items have the kind of the value. `fill(1, value)` makes the list of one value (COMPILE.MODULE.FILL). Before, the axis `window(0, 0)` made it.
 
 The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`, and each step copies the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
 
@@ -889,3 +886,24 @@ The shapes pilot found that the value of a call cannot be a list in a module. Be
 | After, with one function `merge` | 29879 | 7029 |
 
 A tree of 111 nodes with three children for each node took approximately 5.3 ms before and 3.7 ms after. A tree of 13 nodes took approximately 0.08 ms in both. A test of one more function for the whole axis gave 27810 bytes, but 7117 bytes after gzip. Thus the pilot keeps only the function `merge`.
+
+#### fill (COMPILE.MODULE.FILL)
+
+The shapes pilot made each list of one value with the axis `window(0, 0)`, because a module did not have `fill`. The reason was "the kinds of the values of "fill" do not decide its op". The interpreter has `fill` (LIST.FILL), so the module has it too.
+
+- The interpreter takes `fill` of a domain first. `own` of the facts tells that no domain and no function of the host has the op. Then the kinds of the values do not change the op.
+- The helper `FI` gives `n` items with the value and the keys 0 to `n - 1`. A count that is not a whole number from 0 to 100000, or a missing value, gives the error of the interpreter.
+- The value can be a list, so `fill` can give a list of lists. Each item shares the array of the list.
+- A step of a loop with `fill` can give a list to a name that starts with the empty literal. A step with a list literal can too.
+- With a domain that has `fill`, a place of a list gives a reason, for example "a list op on a value that is not a list".
+
+The keys of `fill` are not the keys of records, as the keys of a literal are not. Before, the axis `list` over a list with the keys of a literal gave a reason. Since this change, the axis gives a reason only when a part of the loop reads a record at a target. The reason is "the axis "list" reads a record at a key of a literal or of "fill"". A part reads at a target when its levels of keys have the level of the target. The loops of the shapes pilot read only names and `nth`, so they take the lists of `fill`.
+
+The sizes and the times are from 2026-10-27, measured with the same script on a busy machine at commit 838f00d and after the change. The script prints the module of `SHAPE_COLUMNS` and gives its bytes and its bytes after gzip with the default level. The trees have three or ten children for each node:
+
+| The module of `SHAPE_COLUMNS` | Bytes | Gzip | 13 nodes | 111 nodes |
+|---|---|---|---|---|
+| Before, with `window(0, 0)` | 29879 | 7029 | 0.12 ms | 1.05 ms |
+| After, with `fill` | 17049 | 4412 | 0.10 ms | 0.76 to 0.85 ms |
+
+The module of the axis `window(0, 0)` in a tree reads the siblings of each node. `fill` reads no part of the tree, so the module has no siblings and no window loop.

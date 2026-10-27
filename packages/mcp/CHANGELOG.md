@@ -1,5 +1,24 @@
 # @mark1russell7/vex-mcp
 
+## 0.15.0
+
+### Minor Changes
+
+- 7339b7e: The release train: the ranges of @procedures/client, @procedures/mcp-server change to a version outside the old range.
+
+### Patch Changes
+
+- 535409b: `sortBy` has the option `by` (LIST.SORT.BY). `sortBy(list, { by: "from" })` sorts the items by the result of the op `from` on the value of each item. A standalone module has the option too (COMPILE.MODULE.SORT.BY). The catalog of the MCP server tells it.
+- Updated dependencies [6b566b2]
+- Updated dependencies [7fb316d]
+- Updated dependencies [282f3fb]
+- Updated dependencies [abe3624]
+- Updated dependencies [1403f2b]
+- Updated dependencies [535409b]
+  - @mark1russell7/vex-compiler@0.13.4
+  - @mark1russell7/vex@0.13.4
+  - @mark1russell7/vex-domains@0.13.4
+
 ## 0.14.0
 
 ### Minor Changes

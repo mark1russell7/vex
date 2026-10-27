@@ -1,5 +1,11 @@
 # @mark1russell7/vex
 
+## 0.13.4
+
+### Patch Changes
+
+- 535409b: `sortBy` has the option `by` (LIST.SORT.BY). `sortBy(list, { by: "from" })` sorts the items by the result of the op `from` on the value of each item. A standalone module has the option too (COMPILE.MODULE.SORT.BY). The catalog of the MCP server tells it.
+
 ## 0.13.3
 
 No changes in this release.

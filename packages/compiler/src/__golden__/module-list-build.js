@@ -35,7 +35,15 @@ function IX(l, x, s) {
   for (let i = 0; i < o.length; i++) if (o[i][1] === x) return i;
   return F();
 }
-function NT(l, i, s) { const o = V(l, s); return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F(); }
+function NT(l, i, s) {
+  let o = l.vw;
+  if (o === undefined) {
+    o = l.filter((x) => x[1] !== E);
+    l.vw = o;
+  }
+  if (s && o.length < l.length) F();
+  return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();
+}
 function SB(l, s) {
   const o = V(l, s);
   const t = o.length > 0 ? typeof o[0][1] : "number";

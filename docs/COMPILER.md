@@ -810,9 +810,11 @@ The value of a program can be a list too (COMPILE.MODULE.LIST.RESULT). Before, `
 
 A property compares random sheets with lists over arrays and trees with `SheetRun` (P17). The column of lists of each sheet reads itself at the parent, the children or the siblings. Thus some modules have the search. The lists have error items, empty lists and lists of lists. A second property compares random programs whose value is a list with the interpreter.
 
+`nth` keeps the items with values on the array of its list, as `get` keeps its index (COMPILE.MODULE.NTH.INDEX). Thus a loop that reads each item of a list of `n` items with `nth` costs O(n), not O(n squared). The list of a `let` can be a key of a node of the memo. Thus a loop over the records can read it with `nth`.
+
 These parts are not in a module yet:
 
-- A body of the axis `list` reads the record at the key of each item, not the value of the item. A loop with `nth` reads each value, but each `nth` costs O(n). A band of a shape of ireko also needs a domain whose ops give its fields.
+- A body of the axis `list` reads the record at the key of each item, not the value of the item. A band of a shape of ireko also needs a domain whose ops give its fields.
 - `sortBy` sorts the values. It cannot sort records or the values of a domain by a field. The merge of the bands of a shape sorts the bands by `from`.
 - A record with a list in a field, for example a shape with `rows` and `columns`, gives a reason. A sheet keeps the two lists in two columns.
 - The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.

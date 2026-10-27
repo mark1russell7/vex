@@ -21,7 +21,8 @@
  * (COMPILE.MODULE.GRAPH). A list is an array of pairs of a key and a value. The list ops, `reduce`, list literals and
  * lists as names of loops are in a module (COMPILE.MODULE.LIST, COMPILE.MODULE.REDUCE). The value of a program can be a
  * list, and the run gives it as a `vex.list` (COMPILE.MODULE.LIST.RESULT). An op and a record get each list of an
- * argument or a field as a `vex.list` too (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). The kinds of each op site must decide its op.
+ * argument or a field as a `vex.list` too (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). The value of a call
+ * can be a list (COMPILE.MODULE.LIST.CALL). The kinds of each op site must decide its op.
  * Another construct gives a reason, not code.
  *
  * `emitSheetModule` prints the formula columns of a sheet as one module (COMPILE.MODULE.SHEET). Each column is an array
@@ -242,6 +243,8 @@ interface CallScope {
 interface Spec {
   readonly name: string;
   readonly kind: Kind | undefined;
+  /** The facts of the list of the body, for a function whose value is a list (COMPILE.MODULE.LIST.CALL). */
+  readonly list: ListInfo | undefined;
   readonly safe: boolean;
   readonly deps: ReadonlySet<number>;
   readonly origin: number;
@@ -823,10 +826,27 @@ const BUILD_HELPERS: Readonly<Record<string, BuildHelper>> = { append: "AP", wit
 const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "append", "without", "flat"]);
 
 /**
- * This function tells if an expression gives a list. An each, a list literal and a list op of `LIST_RESULTS` give a
- * list. A name of a list, and a let or a loop whose result is a list, give a list too. `isName` tells if a name outside the expression holds a list.
+ * The scope of `listy`. `name` tells if a name holds a list, and `fn` gives the bound function of a name. `cell` tells
+ * if a read of a cell gives a list.
  */
-function listy(e: Expr, isName: (name: string) => boolean, isCell: (e: ExprOf<"ext">) => boolean): boolean {
+interface ListScope {
+  readonly name: (name: string) => boolean;
+  readonly fn: (name: string) => ListFn | undefined;
+  readonly cell: (e: ExprOf<"ext">) => boolean;
+}
+
+/** A bound function for `listy`: its node, and the scope of its binding (FN.BIND). */
+interface ListFn {
+  readonly fn: ExprOf<"fn">;
+  readonly scope: ListScope;
+}
+
+/**
+ * This function tells if an expression gives a list. An each, a list literal and a list op of `LIST_RESULTS` give a
+ * list. A name of a list, and a let or a loop whose result is a list, give a list too. A call gives a list when the
+ * body of its function gives one (COMPILE.MODULE.LIST.CALL). The scope tells the names and the functions outside the expression.
+ */
+function listy(e: Expr, scope: ListScope): boolean {
   switch (e.tag) {
     case "each":
       return true;
@@ -834,17 +854,22 @@ function listy(e: Expr, isName: (name: string) => boolean, isCell: (e: ExprOf<"e
       return isVexList(e.value);
     case "app":
       // A branch of if and ifError can be a list (COMPILE.MODULE.LIST.RESULT).
-      return LIST_RESULTS.has(e.op) || ((e.op === "if" || e.op === "ifError") && e.args.slice(e.op === "if" ? 1 : 0).some((x) => listy(x, isName, isCell)));
+      return LIST_RESULTS.has(e.op) || ((e.op === "if" || e.op === "ifError") && e.args.slice(e.op === "if" ? 1 : 0).some((x) => listy(x, scope)));
     case "var":
-      return isName(e.name);
+      return scope.name(e.name);
     case "let":
-      return listy(e.body, namesIn(e.bind, isName, isCell), isCell);
+      return listy(e.body, scopeIn(e.bind, scope));
     case "fold":
     case "iterate":
-      return listy(e.result, namesIn(e.init, isName, isCell), isCell);
+      return listy(e.result, scopeIn(e.init, scope));
     case "ext":
-      return isCell(e);
-    case "call":
+      return scope.cell(e);
+    case "call": {
+      // A call of no function gives a reason in the printer. A value or a parameter with the name of a function makes
+      // the printer give that reason too, so the scope does not hide the function.
+      const f = scope.fn(e.fn);
+      return f !== undefined && listy(f.fn.body, paramsIn(f, e.args, scope));
+    }
     case "fn":
     case "rec":
     case "ref":
@@ -852,10 +877,27 @@ function listy(e: Expr, isName: (name: string) => boolean, isCell: (e: ExprOf<"e
   }
 }
 
-/** This function tells if a name holds a list in the scope of some bindings. A binding hides a name outside, and a function is not a list. */
-function namesIn(bind: Readonly<Record<string, Expr>>, isName: (name: string) => boolean, isCell: (e: ExprOf<"ext">) => boolean): (name: string) => boolean {
-  const lists = new Map(Object.entries(bind).map(([name, x]) => [name, x.tag !== "fn" && listy(x, isName, isCell)]));
-  return (name) => lists.get(name) ?? isName(name);
+/**
+ * This function gives the scope of some bindings. A value hides a name outside, and a function is not a list. A
+ * function sees the scope outside the bindings, so it cannot call itself.
+ */
+function scopeIn(bind: Readonly<Record<string, Expr>>, scope: ListScope): ListScope {
+  const lists = new Map<string, boolean>();
+  const fns = new Map<string, ListFn>();
+  for (const [name, x] of Object.entries(bind)) {
+    if (x.tag === "fn") fns.set(name, { fn: x, scope });
+    lists.set(name, listy(x, scope));
+  }
+  return { name: (name) => lists.get(name) ?? scope.name(name), fn: (name) => fns.get(name) ?? scope.fn(name), cell: scope.cell };
+}
+
+/**
+ * This function gives the scope of the body of a function at a call. The body sees the scope of the binding of the
+ * function, and each parameter holds a list when its argument does.
+ */
+function paramsIn(f: ListFn, args: readonly Expr[], scope: ListScope): ListScope {
+  const lists = new Map(args.map((x, i) => [f.fn.params[i], listy(x, scope)]));
+  return { ...f.scope, name: (name) => lists.get(name) ?? f.scope.name(name) };
 }
 
 /** This function tells if an expression has a list literal with an item, so a key of the list can be a text (LIST.LITERAL). */
@@ -1386,8 +1428,8 @@ class Printer {
       this.#keyOf.set(c, this.#constKey(e, ctx));
       this.#constant.add(e);
     }
-    // A list is a value only at a place that takes a list: a result, a binding, an argument and a field take one. A
-    // condition, an argument of and or of or, and a key of get take no list.
+    // A list is a value only at a place that takes a list: a result, a binding, an argument, a field and the body of a
+    // function take one. A condition, an argument of and or of or, and a key of get take no list.
     if (c.v.list !== undefined && !this.#wantList.has(e)) throw new NotStandalone("a list is a value of the program");
     return this.#columnar(e, c, ctx) ? this.#column(e, c, ctx) : c;
   }
@@ -1405,7 +1447,19 @@ class Printer {
     // A key of a node of the memo is a name of its function, and the name keeps the facts of a list.
     const key = ctx.keys.get(e);
     if (key !== undefined) return key.list !== undefined;
-    return listy(e, (name) => ctx.env.get(name)?.list !== undefined, (x) => this.#cellList(x) !== undefined);
+    return listy(e, this.#scopeOf(ctx));
+  }
+
+  /** This method gives the scope of `listy` at a node: the names and the bound functions of its context. */
+  #scopeOf(ctx: Ctx): ListScope {
+    return {
+      name: (name) => ctx.env.get(name)?.list !== undefined,
+      fn: (name) => {
+        const bound = ctx.fns.get(name);
+        return bound === undefined ? undefined : { fn: bound.fn, scope: this.#scopeOf(bound.ctx) };
+      },
+      cell: (x) => this.#cellList(x) !== undefined,
+    };
   }
 
   /** This method gives the facts of the list of a read of a cell. A read of a column that holds no list gives undefined. */
@@ -1810,7 +1864,7 @@ class Printer {
     const levels = (d: number): readonly number[] => (d === spec.origin ? [ctx.originLevel] : d === spec.focus ? [ctx.level] : d === spec.param ? [] : [d]);
     const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap(levels)]);
     const position = spec.deps.has(spec.origin) ? [ctx.focus, ctx.origin] : spec.deps.has(spec.focus) ? [ctx.focus] : [];
-    return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps } };
+    return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps, list: spec.list } };
   }
 
   /**
@@ -1833,6 +1887,9 @@ class Printer {
     bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]), list: (args[i] as Arg).list }));
     const scope: CallScope = { param, focus, repeats: nestsLoops(bound.fn.body), names: new Set(names), decls: [], root: bound.fn.body };
     this.#scopes.push(scope);
+    // The value of a call can be a list, as the value of a let can (COMPILE.MODULE.LIST.CALL). The call is at a place
+    // that takes a list, or it gives the reason.
+    this.#wantList.add(bound.fn.body);
     const body = this.expr(bound.fn.body, { origin: o, focus: k, level: focus, originLevel: origin, env, fns: bound.ctx.fns, keys: new Map() });
     this.#scopes.pop();
     const markers = new Set([origin, focus, param]);
@@ -1846,7 +1903,7 @@ class Printer {
     const decl = s.length === 0 ? [`${head} ${body.v.code};`] : [`${head} {`, ...ind(s), `  return ${body.v.code};`, "};"];
     (global ? this.run : bound.decls).push(...decl);
     if (!global) bound.local = true;
-    const spec: Spec = { name, kind: body.v.kind, safe: body.v.safe, deps: body.v.deps, origin, focus, param, global };
+    const spec: Spec = { name, kind: body.v.kind, list: body.v.list, safe: body.v.safe, deps: body.v.deps, origin, focus, param, global };
     bound.specs.set(sig, spec);
     return spec;
   }

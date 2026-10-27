@@ -115,6 +115,7 @@ function filterReads(body: () => void, measure: (l: readonly unknown[]) => numbe
   try {
     body();
   } finally {
+    // oxlint-disable-next-line eslint/no-extend-native -- the test puts back the filter of the array.
     Object.defineProperty(Array.prototype, "filter", filter);
   }
   return sum;
@@ -147,7 +148,7 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
       inner: iterate(2, { acc: NONE }, { acc: op("append", acc, folded(LIT, op("append", acc, one(n)))) }, acc),
     };
     for (const [name, e] of Object.entries(forms)) {
-      for (const records of [RECORDS, MANY, []]) expect(owns(expectSame(e, records)), name).toBe(true);
+      for (const records of [RECORDS, MANY, []]) expect({ name, owns: owns(expectSame(e, records)) }).toStrictEqual({ name, owns: true });
     }
     // An error in the step at one key is the value of the loop at that key only.
     const errorInStep = iterate(3, { acc: NONE }, { acc: op("append", acc, one(op("divide", lit(1), w))) }, acc);
@@ -174,8 +175,8 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
     for (const [name, e] of Object.entries(fallBacks)) {
       for (const records of [RECORDS, MANY]) {
         const source = expectSame(e, records);
-        expect(owns(source), name).toBe(false);
-        expect(source, name).not.toContain("let undefined");
+        expect({ name, owns: owns(source) }).toStrictEqual({ name, owns: false });
+        expect(source).not.toContain("let undefined");
       }
     }
     // The name `acc` appends to its own list, and the name `c` reads only itself, so `acc` still appends in place.
@@ -261,9 +262,9 @@ describe("COMPILE.MODULE.NTH.INDEX: count and first read the items with values o
     expect(source).toContain("FS(");
   });
 
-  it("COMPILE.MODULE.NTH.INDEX: a loop that counts one list at each key filters the list once", () => {
-    // The list is the same array at each key, so the first count keeps its items with values and each later count reads them.
-    const e = let_({ ys: inv }, op("sum", each(axes.all, op("add", op("count", op("if", b, v("ys"), v("ys"))), guard(op("first", op("if", b, v("ys"), v("ys"))), 0)))));
+  it("COMPILE.MODULE.NTH.INDEX: count, first and nth of one list filter the list once", () => {
+    // The list is the same array at each key. The first op keeps its items with values, and each later op reads them.
+    const e = let_({ ys: inv }, op("sum", each(axes.all, op("add", op("add", op("count", v("ys")), guard(op("first", v("ys")), 0)), guard(op("nth", v("ys"), op("abs", n)), 0)))));
     expectSame(e, MANY);
     const clean = Array.from({ length: 300 }, (_x, i) => ({ id: String(i), n: i % 7, w: 1, b: i % 2 === 0, xs: list() }));
     const m = make(sourceOf(e));

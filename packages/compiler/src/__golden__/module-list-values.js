@@ -7,18 +7,24 @@ const E = {};
 function F() { throw E; }
 function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
-function G(x) { return x === E ? F() : x; }
-function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
-function V(l, s) { if (s && l.some((x) => x[1] === E)) F(); return l.filter((x) => x[1] !== E); }
-function NT(l, i, s) {
+function VW(l) {
   let o = l.vw;
   if (o === undefined) {
     o = l.filter((x) => x[1] !== E);
     l.vw = o;
   }
+  return o;
+}
+function CT(l, s) { const o = VW(l); return s && o.length < l.length ? F() : o.length; }
+function FS(l, s) { const o = VW(l); return (s && o.length < l.length) || o.length === 0 ? F() : o[0][1]; }
+function G(x) { return x === E ? F() : x; }
+function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
+function NT(l, i, s) {
+  const o = VW(l);
   if (s && o.length < l.length) F();
   return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();
 }
+function V(l, s) { if (s && l.some((x) => x[1] === E)) F(); return l.filter((x) => x[1] !== E); }
 function SB(l, s) {
   const o = V(l, s);
   const t = o.length > 0 ? typeof o[0][1] : "number";
@@ -27,7 +33,6 @@ function SB(l, s) {
 }
 function T(f) { try { return f(); } catch { return E; } }
 function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }
-function U(x) { return typeof x === "number" ? x : F(); }
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
@@ -69,39 +74,39 @@ export function run(records, vars) {
   } catch {
     c49 = E;
   }
-  let c74;
+  let c62;
   try {
-    const L72 = [];
-    for (let j71 = 0; j71 < n; j71++) {
-      L72.push([j71, R[j71]["b"]]);
+    const L60 = [];
+    for (let j59 = 0; j59 < n; j59++) {
+      L60.push([j59, R[j59]["b"]]);
     }
-    c74 = SB(L72, false);
+    c62 = SB(L60, false);
   } catch {
-    c74 = E;
+    c62 = E;
   }
-  const c104 = T(() => TK(G(c3), 2, false));
-  const fn114 = (k112, o113) => R[o113]["n"];
-  const A122 = c13;
-  const L124 = [];
-  for (let q123 = 0; q123 < A122.length; q123++) {
-    const j121 = A122[q123][0];
-    let x125;
+  const c80 = T(() => TK(G(c3), 2, false));
+  const fn90 = (k88, o89) => R[o89]["n"];
+  const A98 = c13;
+  const L100 = [];
+  for (let q99 = 0; q99 < A98.length; q99++) {
+    const j97 = A98[q99][0];
+    let x101;
     try {
-      if (A122[q123][1] === E) F();
-      x125 = R[j121]["n"];
+      if (A98[q99][1] === E) F();
+      x101 = R[j97]["n"];
     } catch {
-      x125 = E;
+      x101 = E;
     }
-    L124.push([j121, x125]);
+    L100.push([j97, x101]);
   }
-  const c126 = L124;
-  const L131 = [];
-  for (let j130 = 0; j130 < n; j130++) {
-    if (!R[j130]["b"]) continue;
-    L131.push([j130, R[j130]["n"]]);
+  const c102 = L100;
+  const L104 = [];
+  for (let j103 = 0; j103 < n; j103++) {
+    if (!R[j103]["b"]) continue;
+    L104.push([j103, R[j103]["n"]]);
   }
-  const c133 = L131;
-  let c145;
+  const c106 = L104;
+  let c118;
   try {
     const A15 = G(c3);
     let a17, n18 = 0;
@@ -116,11 +121,11 @@ export function run(records, vars) {
       }
       if (n18++ === 0) a17 = x19;
     }
-    c145 = (n18 === 0 ? F() : a17);
+    c118 = (n18 === 0 ? F() : a17);
   } catch {
-    c145 = E;
+    c118 = E;
   }
-  let c146;
+  let c119;
   try {
     const A21 = G(c3);
     let a23, n24 = 0;
@@ -135,11 +140,11 @@ export function run(records, vars) {
       }
       if (n24++ === 0) a23 = x25;
     }
-    c146 = (n24 === 0 ? F() : a23);
+    c119 = (n24 === 0 ? F() : a23);
   } catch {
-    c146 = E;
+    c119 = E;
   }
-  const c147 = L(() => {
+  const c120 = L(() => {
     let l26 = 0;
     const A28 = G(c3);
     for (let q29 = 0; q29 < A28.length; q29++) {
@@ -150,7 +155,7 @@ export function run(records, vars) {
     }
     return l26;
   });
-  let c148;
+  let c121;
   try {
     const A32 = G(c3);
     let n35 = 0;
@@ -166,176 +171,121 @@ export function run(records, vars) {
       }
       n35++;
     }
-    c148 = n35;
+    c121 = n35;
   } catch {
-    c148 = E;
+    c121 = E;
   }
-  let c149;
+  let c122;
   try {
     let a43, n44 = 0;
     for (const [, x45] of TK(G(c3), 2, false)) {
       if (x45 === E) continue;
       a43 = n44++ === 0 ? x45 : Math.max(a43, x45);
     }
-    c149 = (n44 === 0 ? F() : a43);
+    c122 = (n44 === 0 ? F() : a43);
   } catch {
-    c149 = E;
+    c122 = E;
   }
-  const c150 = T(() => NT(G(c3), 1, false));
-  let c151;
+  const c123 = T(() => NT(G(c3), 1, false));
+  const c124 = T(() => FS(G(c49), false));
+  const c125 = T(() => CT(SB(c13, false), false));
+  let t50;
   try {
-    let a50, n51 = 0;
-    for (const [, x52] of G(c49)) {
-      if (x52 === E) continue;
-      if (n51++ === 0) a50 = x52;
-    }
-    c151 = (n51 === 0 ? F() : a50);
+    t50 = CT(SB(c13, true), false);
   } catch {
-    c151 = E;
+    t50 = -1;
   }
-  let c152;
+  const c126 = t50;
+  let t51;
   try {
-    let n54 = 0;
-    for (const [, x55] of SB(c13, false)) {
-      if (x55 === E) continue;
-      n54++;
-    }
-    c152 = n54;
+    t51 = NT(c13, 0, true);
   } catch {
-    c152 = E;
+    t51 = -1;
   }
-  let t59;
-  try {
-    let n57 = 0;
-    for (const [, x58] of SB(c13, true)) {
-      if (x58 === E) continue;
-      n57++;
-    }
-    t59 = n57;
-  } catch {
-    t59 = -1;
-  }
-  const c153 = t59;
-  let t60;
-  try {
-    t60 = NT(c13, 0, true);
-  } catch {
-    t60 = -1;
-  }
-  const c154 = t60;
-  const c155 = L(() => {
-    let t66;
+  const c127 = t51;
+  const c128 = L(() => {
+    let t57;
     try {
-      let l61 = 0;
-      const A63 = c13;
-      for (let q64 = 0; q64 < A63.length; q64++) {
-        const j62 = A63[q64][0];
-        if (A63[q64][1] === E) F();
-        const t65 = k_number((l61) + (1));
-        l61 = t65;
+      let l52 = 0;
+      const A54 = c13;
+      for (let q55 = 0; q55 < A54.length; q55++) {
+        const j53 = A54[q55][0];
+        if (A54[q55][1] === E) F();
+        const t56 = k_number((l52) + (1));
+        l52 = t56;
       }
-      t66 = l61;
+      t57 = l52;
     } catch {
-      t66 = -1;
+      t57 = -1;
     }
-    return t66;
+    return t57;
   });
-  let t70;
+  let t58;
   try {
-    let n68 = 0;
-    for (const [, x69] of TK(G(c3), -1, false)) {
-      if (x69 === E) continue;
-      n68++;
-    }
-    t70 = n68;
+    t58 = CT(TK(G(c3), -1, false), false);
   } catch {
-    t70 = -1;
+    t58 = -1;
   }
-  const c156 = t70;
-  let t78;
+  const c129 = t58;
+  let t63;
   try {
-    let n76 = 0;
-    for (const [, x77] of G(c74)) {
-      if (x77 === E) continue;
-      n76++;
-    }
-    t78 = n76;
+    t63 = CT(G(c62), false);
   } catch {
-    t78 = -1;
+    t63 = -1;
   }
-  const c157 = t78;
-  let t82;
+  const c130 = t63;
+  let t64;
   try {
-    let n80 = 0;
-    for (const [, x81] of TK(G(c3), null, false)) {
-      if (x81 === E) continue;
-      n80++;
-    }
-    t82 = n80;
+    t64 = CT(TK(G(c3), null, false), false);
   } catch {
-    t82 = -1;
+    t64 = -1;
   }
-  const c158 = t82;
-  let t83;
+  const c131 = t64;
+  let t65;
   try {
-    t83 = NT(G(c3), null, false);
+    t65 = NT(G(c3), null, false);
   } catch {
-    t83 = -1;
+    t65 = -1;
   }
-  const c159 = t83;
-  let t87;
+  const c132 = t65;
+  let t66;
   try {
-    let n85 = 0;
-    for (const [, x86] of c13) {
-      if (x86 === E) F();
-      n85++;
-    }
-    t87 = n85;
+    t66 = CT(c13, true);
   } catch {
-    t87 = -1;
+    t66 = -1;
   }
-  const c160 = t87;
-  let c161;
+  const c133 = t66;
+  let c134;
   try {
-    const A105 = G(c104);
-    let n108 = 0;
-    for (let q106 = 0; q106 < A105.length; q106++) {
-      const j103 = A105[q106][0];
-      let x109;
+    const A81 = G(c80);
+    let n84 = 0;
+    for (let q82 = 0; q82 < A81.length; q82++) {
+      const j79 = A81[q82][0];
+      let x85;
       try {
-        if (A105[q106][1] === E) F();
-        x109 = R[j103]["n"];
+        if (A81[q82][1] === E) F();
+        x85 = R[j79]["n"];
       } catch {
         continue;
       }
-      n108++;
+      n84++;
     }
-    c161 = n108;
+    c134 = n84;
   } catch {
-    c161 = E;
+    c134 = E;
   }
-  const c162 = T(() => k_number((n) + (1)));
-  let c163;
+  const c135 = T(() => k_number((n) + (1)));
+  const c136 = T(() => CT(c102, false));
+  let c137;
   try {
-    let n128 = 0;
-    for (const [, x129] of c126) {
-      if (x129 === E) continue;
-      n128++;
+    let a107 = 0;
+    for (const [, x109] of c106) {
+      if (x109 === E) continue;
+      a107 += x109;
     }
-    c163 = n128;
+    c137 = k_number(a107);
   } catch {
-    c163 = E;
-  }
-  let c164;
-  try {
-    let a134 = 0;
-    for (const [, x136] of c133) {
-      if (x136 === E) continue;
-      a134 += x136;
-    }
-    c164 = k_number(a134);
-  } catch {
-    c164 = E;
+    c137 = E;
   }
   const out = [];
   for (let o = 0; o < n; o++) {
@@ -357,54 +307,49 @@ export function run(records, vars) {
         if (x42 === E) continue;
         a40 += x42; n41++;
       }
-      const f89 = o;
-      const h90 = Math.min(n, f89 + Math.min(0, n) + 1);
-      let n92 = 0;
-      for (let j88 = Math.max(0, f89 + Math.max(-1, -n)); j88 < h90; j88++) {
-        const x93 = R[j88]["n"];
-        n92++;
+      const f68 = o;
+      const h69 = Math.min(n, f68 + Math.min(0, n) + 1);
+      let n71 = 0;
+      for (let j67 = Math.max(0, f68 + Math.max(-1, -n)); j67 < h69; j67++) {
+        const x72 = R[j67]["n"];
+        n71++;
       }
-      let n95 = 0;
-      for (const [, x96] of TK(G(c3), n92, false)) {
-        if (x96 === E) continue;
-        n95++;
+      const f74 = o;
+      const h75 = Math.min(n, f74 + Math.min(1, n) + 1);
+      let n77 = 0;
+      for (let j73 = Math.max(0, f74 + Math.max(0, -n)); j73 < h75; j73++) {
+        const x78 = R[j73]["n"];
+        n77++;
       }
-      const f98 = o;
-      const h99 = Math.min(n, f98 + Math.min(1, n) + 1);
-      let n101 = 0;
-      for (let j97 = Math.max(0, f98 + Math.max(0, -n)); j97 < h99; j97++) {
-        const x102 = R[j97]["n"];
-        n101++;
-      }
-      const L115 = [];
-      for (let j111 = 0; j111 < n; j111++) {
-        let x116;
+      const L91 = [];
+      for (let j87 = 0; j87 < n; j87++) {
+        let x92;
         try {
-          x116 = k_number((R[j111]["n"]) + (fn114(j111, o)));
+          x92 = k_number((R[j87]["n"]) + (fn90(j87, o)));
         } catch {
-          x116 = E;
+          x92 = E;
         }
-        L115.push([j111, x116]);
+        L91.push([j87, x92]);
       }
-      const b117 = L115;
-      let a118 = 0;
-      for (const [, x120] of b117) {
-        if (x120 === E) continue;
-        a118 += x120;
+      const b93 = L91;
+      let a94 = 0;
+      for (const [, x96] of b93) {
+        if (x96 === E) continue;
+        a94 += x96;
       }
-      const f138 = o;
-      const L139 = [];
-      for (let j137 = 0; j137 < n; j137++) {
-        if (j137 === f138) continue;
-        L139.push([j137, R[j137]["n"]]);
+      const f111 = o;
+      const L112 = [];
+      for (let j110 = 0; j110 < n; j110++) {
+        if (j110 === f111) continue;
+        L112.push([j110, R[j110]["n"]]);
       }
-      const b141 = L139;
-      let a142 = 0;
-      for (const [, x144] of b141) {
-        if (x144 === E) continue;
-        a142 += x144;
+      const b114 = L112;
+      let a115 = 0;
+      for (const [, x117] of b114) {
+        if (x117 === E) continue;
+        a115 += x117;
       }
-      out.push(({ "firstW": G(c145), "lastW": G(c146), "digits": G(c147()), "tested": G(c148), "sum": k_number(a37), "mean": (n41 === 0 ? F() : k_number(a40 / n41)), "top": G(c149), "second": G(c150), "texts": G(c151), "lenient": G(c152), "strict": c153, "nth": c154, "errorItem": G(c155()), "badCount": c156, "badKind": c157, "noCount": c158, "noPosition": c159, "strictCount": c160, "counted": n95, "positioned": NT(G(c3), n101, false), "listCount": G(c161), "records": G(c162), "perKey": k_number(a118), "withErrors": G(c163), "safeTest": G(c164), "others": k_number(a142) }));
+      out.push(({ "firstW": G(c118), "lastW": G(c119), "digits": G(c120()), "tested": G(c121), "sum": k_number(a37), "mean": (n41 === 0 ? F() : k_number(a40 / n41)), "top": G(c122), "second": G(c123), "texts": G(c124), "lenient": G(c125), "strict": c126, "nth": c127, "errorItem": G(c128()), "badCount": c129, "badKind": c130, "noCount": c131, "noPosition": c132, "strictCount": c133, "counted": CT(TK(G(c3), n71, false), false), "positioned": NT(G(c3), n77, false), "listCount": G(c134), "records": G(c135), "perKey": k_number(a94), "withErrors": G(c136), "safeTest": G(c137), "others": k_number(a115) }));
     } catch {
       out.push(VEX_ERROR);
     }

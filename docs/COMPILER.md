@@ -847,7 +847,7 @@ The module keeps only the sentinel of an error. Thus an error item of such a lis
 These parts are not in a module yet:
 
 - A list as the receiver of an op that is not a list op of the module gives a reason. The list ops `keys`, `values` and `errors` give a reason too.
-- The value of an op or of a call is not a list in a module. Thus an op of a domain cannot give a list to the list ops.
+- The value of an op of a domain is not a list in a module. The kind of a result cannot tell a list, so the module does not know the facts of its items. Such an op gives the reason "the op "spread" does not declare the kind of its result", with the name of the op.
 - Vex has no op that reads a field of a record. Only an op of a domain reads the lists of a record, and a record is not the receiver of an op in a module.
 - A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
 - The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.
@@ -856,18 +856,36 @@ These parts are not in a module yet:
 
 The measure pass of ireko gives a shape to each subtree that a tidy strategy reads. A leaf and a nested node have the shape of their box. A linked node with children joins its box with the moved shapes of its children. The join merges the bands with a sweep over the cut points, and `coarsen` keeps at most 64 bands on each axis.
 
-`SHAPE_COLUMNS` of `@vex/pilots` is a sheet over the tree with all of this pass. The column `need` reads the parent, so the fill visits the tree from the root. The columns `rows` and `cols` hold lists of bands and read the children, so the fill visits the tree from the leaves. Thus the module has no search.
+`SHAPE_COLUMNS` of `@vex/pilots` is a sheet over the tree with all of this pass. The column `need` reads the parent, so the fill visits the tree from the root. The column `shape` holds the two lists of bands and reads the children, so the fill visits the tree from the leaves. The columns `rows` and `cols` read the two lists of `shape`. Thus the module has no search.
 
 `shapesTree` copies `engine/shape.ts` of ireko and the shapes part of `engine/measure.ts`. A property compares the module with `shapesTree` on random trees, also with negative zeros and small limits. A second property compares `SheetRun` with `shapesTree`. The bits are the same.
 
 The merge is a chain of folds over lists. It gives the ends of the valid bands, sorts them and removes the repeated cuts. Then it gives one band for each cut with an active band, and it joins neighbor bands with the same interval. Last, it halves the list until the limit holds. The comparisons keep the first of two equal values, as the comparisons of ireko do. Thus a negative zero has the bits of ireko.
 
-The program works around three gaps of a module. Each workaround is Vex, not code of the host:
+The program works around two gaps of a module. Each workaround is Vex, not code of the host:
 
-- The value of a call is not a list in a module ("a list is a value of the program"). Thus the merge is an expression of the pilot, and the sheet has it two times: once for the rows and once for the columns.
 - A name of a loop whose first value is the empty literal has no kind of items. Then `sortBy` gives the reason "the kinds of the items of "sortBy" do not decide the op "from" of the option by". The program starts each such name with `take(list, 0)` of a list of one band, which has the kind.
 - A module does not have `fill` ("the kinds of the values of "fill" do not decide its op"). The axis `window(0, 0)` makes the list of one value.
 
-The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`, and each step copies the list. The module of the sheet has 45207 bytes and 9521 bytes after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
+The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`, and each step copies the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
 
 ireko does not use the module yet. The strategy of a node reads the shapes of its children before it gives their offsets, and a shape needs the offsets. Thus one sheet for the tree needs the strategies as Vex programs. A module for one node needs the shapes of the children as input, but a field of the schema cannot be a list.
+
+#### Lists of calls (COMPILE.MODULE.LIST.CALL)
+
+The shapes pilot found that the value of a call cannot be a list in a module. Before, a module gave the reason "a list is a value of the program" for such a call. Thus the sheet had the merge of the bands two times, once for each axis. The interpreter has calls whose value is a list, so the module has them too.
+
+- The body of a function is a place that takes a list. The printed function gives the array of the list, or it throws the sentinel of an error.
+- The place of the call takes the list as a list: a list op, the axis `list` and a fold over it. A field and an argument of an op get a `vex.list` (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD).
+- The printer must know where a list flows before it prints the call. Thus the static test of a list reads the body of the function, with the lists of the arguments.
+- The facts of the list of the body depend on the arguments. Each kind of the arguments already has its own function (COMPILE.MODULE.LIST.ARG), so each function has one set of facts.
+- A list of a call at a place that takes no list gives the reason "a list is a value of the program", as each other list does.
+
+`SHAPE_COLUMNS` has one function `merge`, and the formula of the column `shape` calls it for the rows and for the columns. The column holds a list of the two lists. The sizes and the times are from 2026-10-27, measured on a busy machine at commit 1b78937 and after the change:
+
+| The module of `SHAPE_COLUMNS` | Bytes | Gzip |
+|---|---|---|
+| Before, with the merge two times | 44932 | 9475 |
+| After, with one function `merge` | 29879 | 7029 |
+
+A tree of 111 nodes with three children for each node took approximately 5.3 ms before and 3.7 ms after. A tree of 13 nodes took approximately 0.08 ms in both. A test of one more function for the whole axis gave 27810 bytes, but 7117 bytes after gzip. Thus the pilot keeps only the function `merge`.

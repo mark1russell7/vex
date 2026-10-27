@@ -87,7 +87,7 @@ describe("the ireko shapes pilot", () => {
       records.length,
     );
 
-  it("COMPILE.MODULE.SHEET.LIST COMPILE.MODULE.TREE: the module gives the shapes pass of ireko on random trees, with the same bits", () => {
+  it("COMPILE.MODULE.SHEET.LIST COMPILE.MODULE.TREE COMPILE.MODULE.LIST.CALL: the module gives the shapes pass of ireko on random trees, with the same bits", () => {
     fc.assert(
       fc.property(tree(12), fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 5 })), (records, limit) => {
         expect(run(records, limit)).toStrictEqual(shapesTree(records, limit));

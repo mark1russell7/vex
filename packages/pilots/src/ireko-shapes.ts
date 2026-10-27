@@ -6,10 +6,10 @@
  *
  * `shapesTree` follows the code of ireko step by step. It copies `boxShape`, `moveShape`, `joinShapes`, `mergeBands`
  * and `coarsen` of `engine/shape.ts`, and the shapes part of `engine/measure.ts`. `SHAPE_COLUMNS` is a sheet over the
- * tree with the same pass. The column `need` goes down the tree. The columns `rows` and `cols` hold lists of bands, and
- * they go up the tree. The tests compare the two, with the same bits. ireko has the MIT license and the same author.
+ * tree with the same pass. The column `need` goes down the tree. The column `shape` holds the two lists of bands, and it
+ * goes up the tree. The columns `rows` and `cols` read its lists. The tests compare the two, with the same bits. ireko has the MIT license and the same author.
  */
-import { app, axes, cell, each, fold, iterate, let_, lit, ref, space, v, vexList, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axes, call, cell, each, fn, fold, iterate, let_, lit, ref, space, v, vexList, type Expr, type Space } from "@mark1russell7/vex";
 import type { ListKind, Schema, SheetModuleOptions } from "@mark1russell7/vex-compiler";
 import { BAND_DOMAINS, type Band } from "./ireko-band.ts";
 
@@ -259,28 +259,27 @@ const pairs = over(
 );
 
 /**
- * The merge of the bands of the expression `bands`, as `mergeBands` of ireko with the limit of the variable `limit`.
- * Each part is a list in a name, because the value of a call is not a list in a module.
+ * The function `merge` of the bands of its parameter `bands`, as `mergeBands` of ireko with the limit of the variable
+ * `limit`. Its value is a list (COMPILE.MODULE.LIST.CALL), so the formula of a shape calls it once for each axis.
  */
-const merge = (bands: Expr): Expr =>
+const MERGE = fn(
+  ["bands"],
   let_(
-    { bands },
+    { starts: op("sortBy", v("bands"), lit({ by: "from" })), cuts },
     let_(
-      { starts: op("sortBy", v("bands"), lit({ by: "from" })), cuts },
+      { segments },
       let_(
-        { segments },
-        let_(
-          { out: joined },
-          // Each step halves the number of bands, so 64 steps cover each list of the sheet.
-          iterate(64, { out: v("out") }, { out: pairs }, v("out"), op("lte", op("count", v("out")), v("limit"))),
-        ),
+        { out: joined },
+        // Each step halves the number of bands, so 64 steps cover each list of the sheet.
+        iterate(64, { out: v("out") }, { out: pairs }, v("out"), op("lte", op("count", v("out")), v("limit"))),
       ),
     ),
-  );
+  ),
+);
 
-/** The names of one axis of a shape: the column, and the fields of a record along the axis and across it. */
+/** The names of one axis of a shape: its position in a shape, and the fields of a record along the axis and across it. */
 interface ShapeAxis {
-  readonly column: string;
+  readonly index: number;
   readonly offset: string;
   readonly cross: string;
   readonly size: string;
@@ -290,43 +289,52 @@ interface ShapeAxis {
   readonly extent: string;
   readonly crossExtent: string;
 }
-const ROWS: ShapeAxis = { column: "rows", offset: "oy", cross: "ox", size: "h", crossSize: "w", at: "ey", crossAt: "ex", extent: "eh", crossExtent: "ew" };
-const COLS: ShapeAxis = { column: "cols", offset: "ox", cross: "oy", size: "w", crossSize: "h", at: "ex", crossAt: "ey", extent: "ew", crossExtent: "eh" };
+const ROWS: ShapeAxis = { index: 0, offset: "oy", cross: "ox", size: "h", crossSize: "w", at: "ey", crossAt: "ex", extent: "eh", crossExtent: "ew" };
+const COLS: ShapeAxis = { index: 1, offset: "ox", cross: "oy", size: "w", crossSize: "h", at: "ex", crossAt: "ey", extent: "ew", crossExtent: "eh" };
 
 /** The band of a box of the size `size` along the axis and `cross` across it, at the origin: `boxShape` of ireko. */
 const box = (size: Expr, cross: Expr): Expr => op("band", lit(0), size, lit(0), cross);
 
 /**
  * The shape of a node on one axis. A node without a need has no bands. A linked node with children joins its box with
- * the shapes of its children, moved by their offsets. Each other node has the band of its box.
+ * the shapes of its children, moved by their offsets. Each other node has the band of its box. The join calls the
+ * function `merge` of the formula.
  */
 function shapeOf(a: ShapeAxis): Expr {
   const own = single(box(ref(a.size), ref(a.crossSize)));
   // At a child: its shape, or the band of its extent, moved by its offset. Inside the loop over the bands, a field
   // reads at the key of a band, so the names hold the offset of the child.
   const child = let_(
-    { part: op("if", cell("need"), cell(a.column), single(op("move", box(ref(a.extent), ref(a.crossExtent)), ref(a.at), ref(a.crossAt)))), along: ref(a.offset), across: ref(a.cross) },
+    { part: op("if", cell("need"), op("nth", cell("shape"), lit(a.index)), single(op("move", box(ref(a.extent), ref(a.crossExtent)), ref(a.at), ref(a.crossAt)))), along: ref(a.offset), across: ref(a.cross) },
     moved("part", v("along"), v("across")),
   );
   const parts = each(axes.children, child);
   const linked = op("and", ref("linked"), op("gt", op("count", each(axes.children, lit(0))), lit(0)));
-  return op("if", op("not", cell("need")), EMPTY, op("if", linked, merge(op("append", own, op("flat", parts))), own));
+  return op("if", op("not", cell("need")), EMPTY, op("if", linked, call("merge", op("append", own, op("flat", parts))), own));
 }
 
 /**
- * The sheet of the shapes pass. `need` reads the parent, so it fills the tree from the root. `rows` and `cols` read the
- * children, so they fill the tree from the leaves. Each list of bands has the order of `from`.
+ * The shape of a node: a list of two lists of bands, the rows and the columns. Both axes call one function `merge`, so
+ * a module has the merge once.
+ */
+const SHAPE = let_({ merge: MERGE }, let_({ rows: shapeOf(ROWS), cols: shapeOf(COLS) }, op("append", single(v("rows")), single(v("cols")))));
+
+/**
+ * The sheet of the shapes pass. `need` reads the parent, so it fills the tree from the root. `shape` reads the
+ * children, so it fills the tree from the leaves. `rows` and `cols` read the two lists of `shape`. Each list of bands
+ * has the order of `from`.
  */
 export const SHAPE_COLUMNS: ReadonlyMap<string, Expr> = new Map<string, Expr>([
   ["need", op("if", ROOT, lit(false), op("or", ref("wants", [PARENT]), op("and", cell("need", [PARENT]), ref("linked", [PARENT]))))],
-  ["rows", shapeOf(ROWS)],
-  ["cols", shapeOf(COLS)],
+  ["shape", SHAPE],
+  ["rows", op("nth", cell("shape"), lit(ROWS.index))],
+  ["cols", op("nth", cell("shape"), lit(COLS.index))],
 ]);
 
 const BANDS: ListKind = { list: "domain:Band" };
 
-/** The kinds of the columns. The columns of bands read themselves at the children, so they need their kinds. */
-export const SHAPE_KINDS: NonNullable<SheetModuleOptions["kinds"]> = { need: "boolean", rows: BANDS, cols: BANDS };
+/** The kinds of the columns. The column `shape` reads itself at the children, so it needs its kind. */
+export const SHAPE_KINDS: NonNullable<SheetModuleOptions["kinds"]> = { need: "boolean", shape: { list: BANDS }, rows: BANDS, cols: BANDS };
 
 /** The kinds of the fields of a record and of the variable `limit`, for the compiler (docs/COMPILER.md §3.2). */
 export const SHAPE_SCHEMA: Schema = {

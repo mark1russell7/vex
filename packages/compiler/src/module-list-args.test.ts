@@ -159,8 +159,8 @@ describe("COMPILE.MODULE.LIST.ARG: a list as an argument of an op or of a call",
     const source = sourceOf(e);
     // Three kinds of lists give three functions: a list of numbers, a list with keys of text and an empty list.
     expect(source.match(/const fn\d+ =/g)).toHaveLength(3);
-    // The value of a call is not a list in a module.
-    expect(reasonOf(let_({ f: fn(["l"], v("l")) }, op("sum", call("f", ns))))).toBe("a list is a value of the program");
+    // The value of a call can be a list too (COMPILE.MODULE.LIST.CALL, module-list-calls.test.ts).
+    expectSame(let_({ f: fn(["l"], v("l")) }, op("sum", call("f", ns))));
   });
 
   it("COMPILE.MODULE.LIST.ARG: a list as the receiver of an op, and a parameter that the kinds do not decide, give a reason", () => {

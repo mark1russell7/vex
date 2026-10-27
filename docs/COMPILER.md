@@ -851,6 +851,8 @@ These parts are not in a module yet:
 - Vex has no op that reads a field of a record. Only an op of a domain reads the lists of a record, and a record is not the receiver of an op in a module.
 - A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
 - The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.
+- A variable of the schema cannot be a list. Only a field of the schema can be a list (COMPILE.MODULE.LIST.INPUT).
+- A field of a list kind takes only a `vex.list`. A plain array in such a field is against the schema, although the interpreter takes a plain array as a list (LIST.ARRAY).
 
 #### The shapes pilot (the engine)
 
@@ -866,7 +868,7 @@ A name of a loop whose first value is the empty literal has no kind of items. Th
 
 The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`, and each step copies the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
 
-ireko does not use the module yet. The strategy of a node reads the shapes of its children before it gives their offsets, and a shape needs the offsets. Thus one sheet for the tree needs the strategies as Vex programs. A module for one node needs the shapes of the children as input, but a field of the schema cannot be a list.
+ireko does not use the module yet. The strategy of a node reads the shapes of its children before it gives their offsets, and a shape needs the offsets. Thus one sheet for the tree needs the strategies as Vex programs. A module for one node is the other way: it takes the shapes of the children as input ("Lists in the input" below).
 
 #### Lists of calls (COMPILE.MODULE.LIST.CALL)
 
@@ -907,3 +909,20 @@ The sizes and the times are from 2026-10-27, measured with the same script on a 
 | After, with `fill` | 17049 | 4412 | 0.10 ms | 0.76 to 0.85 ms |
 
 The module of the axis `window(0, 0)` in a tree reads the siblings of each node. `fill` reads no part of the tree, so the module has no siblings and no window loop.
+
+#### Lists in the input (COMPILE.MODULE.LIST.INPUT)
+
+The measure loop of ireko measures one node at a time. A module for one node needs the shapes of the children as input. Before, a field of the schema could have only the kind of a value. A program that used such a field as a list gave the reason "the kinds of the values of "count" do not decide its op". The interpreter reads a `vex.list` in a field as a list, so the module does too.
+
+- A field of the schema can have a `ListKind`, for example `{ list: "domain:Band" }` or `{ list: { list: "number" } }`. The type `Schema` of `@mark1russell7/vex-compiler` takes such a kind.
+- The record holds a `vex.list`. The check of the run reads each list once with the helper `LI`, into the array of the list of the module. An error item holds the sentinel.
+- `LI` checks the shape of `isVexList`, the depth of the kind and the kind of each item. A primitive kind has a test of the JavaScript type, and a domain has the copy of its `is`.
+- Another value, an item of another kind, an item without a value or an error item of `#DEPTH!` throws a `VexContractError`. A list op of the interpreter does not skip `#DEPTH!`, but the sentinel of the module does. Thus the check refuses it.
+- A plain array is against the schema. The interpreter gives a plain array to an op and to a record as it is, but the module gives a `vex.list`.
+- The keys of the input are text, so the axis `list` over such a list cannot read a record at its keys. The reason is "the axis "list" reads a record at a key of a literal or of "fill"". The body of the axis has the focus at a key of an item, so a name outside the loop holds the list.
+- An item of the run has the error `VEX_ERROR`, not the error of the input. A list of the input in the value of the run is a new frozen `vex.list`, not the object of the input.
+- Tier 2 does not check the kind of a field of a list kind. Thus it keeps the semantics of the interpreter.
+
+`NODE_SHAPE` of `@vex/pilots` is the shapes pass for one linked node with children. Each record is a child, with its offset and the two lists of bands of its shape. The variables are the box of the node and the limit. A property compares the module with `joinShapes` of ireko, with the same bits. The module has 13481 bytes and 3666 bytes after gzip with the default level, before a minifier (2026-10-27).
+
+The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shape of ireko has no end -0, so the property gives no such end.

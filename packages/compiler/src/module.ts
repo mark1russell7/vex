@@ -22,7 +22,8 @@
  * lists as names of loops are in a module (COMPILE.MODULE.LIST, COMPILE.MODULE.REDUCE). The value of a program can be a
  * list, and the run gives it as a `vex.list` (COMPILE.MODULE.LIST.RESULT). An op and a record get each list of an
  * argument or a field as a `vex.list` too (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). The value of a call
- * can be a list (COMPILE.MODULE.LIST.CALL). The kinds of each op site must decide its op.
+ * can be a list (COMPILE.MODULE.LIST.CALL). A field of the schema can have a list kind, and the record then holds a
+ * `vex.list` (COMPILE.MODULE.LIST.INPUT). The kinds of each op site must decide its op.
  * Another construct gives a reason, not code.
  *
  * `emitSheetModule` prints the formula columns of a sheet as one module (COMPILE.MODULE.SHEET). Each column is an array
@@ -31,7 +32,7 @@
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
 import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, lit, moveExpr, nestingOf, rec, shapeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
-import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
+import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
 
@@ -68,14 +69,7 @@ export interface SheetModuleOptions extends ModuleOptions {
   readonly budget?: number;
 }
 
-/**
- * The kind of a column of lists in a module of a sheet (COMPILE.MODULE.SHEET.LIST): the kind of the items, which can be
- * a list too. With `texts`, a key of an item can be a key of a list literal or of `fill`, not the key of a record.
- */
-export interface ListKind {
-  readonly list: Kind | ListKind;
-  readonly texts?: boolean;
-}
+export type { ListKind } from "./facts.ts";
 
 /** The source of a standalone module, or the reason that the program cannot be one. */
 export type Emitted = { readonly ok: true; readonly source: string } | { readonly ok: false; readonly reason: string };
@@ -255,7 +249,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "NT" | "FI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "NT" | "FI" | "LI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "WO" | "FL" | "GT" | "IX";
@@ -328,6 +322,30 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  if (!(Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined)) F();",
     "  const o = [];",
     "  for (let i = 0; i < n; i++) o.push([i, v]);",
+    "  return o;",
+    "}",
+  ].join("\n"),
+  // A list of a field of the input (COMPILE.MODULE.LIST.INPUT): the array of a `vex.list` whose items have lists to the
+  // depth `h`, and values that pass the test `t`. The shape is the shape of `isVexList`. An error item holds the sentinel.
+  // An input that is not such a list, or an error item of `#DEPTH!`, gives undefined, so the check of the run fails.
+  LI: [
+    "function LI(x, h, t) {",
+    "  if (typeof x !== \"object\" || x === null || x.kind !== \"vex.list\" || !Array.isArray(x.items)) return undefined;",
+    "  const o = [];",
+    "  for (let i = 0; i < x.items.length; i++) {",
+    "    const it = x.items[i];",
+    "    const r = typeof it === \"object\" && it !== null ? it.result : undefined;",
+    "    if (typeof r !== \"object\" || r === null || typeof it.key !== \"string\") return undefined;",
+    "    if (r.ok === true) {",
+    "      const v = h > 0 ? LI(r.value, h - 1, t) : r.value !== undefined && t(r.value) ? r.value : undefined;",
+    "      if (v === undefined) return undefined;",
+    "      o.push([it.key, v]);",
+    "    } else {",
+    "      const e = r.error;",
+    "      if (r.ok !== false || typeof e !== \"object\" || e === null || typeof e.code !== \"string\" || typeof e.kind !== \"string\" || typeof e.message !== \"string\" || !Array.isArray(e.path) || e.kind === \"depth\") return undefined;",
+    "      o.push([it.key, E]);",
+    "    }",
+    "  }",
     "  return o;",
     "}",
   ].join("\n"),
@@ -776,7 +794,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
-  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"], FI: ["F"],
+  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"], FI: ["F"], LI: [],
   DR: ["V", "F"], AP: ["V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
@@ -840,12 +858,13 @@ const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "ap
 
 /**
  * The scope of `listy`. `name` tells if a name holds a list, and `fn` gives the bound function of a name. `cell` tells
- * if a read of a cell gives a list.
+ * if a read of a cell gives a list, and `field` tells if a read of a field gives a list (COMPILE.MODULE.LIST.INPUT).
  */
 interface ListScope {
   readonly name: (name: string) => boolean;
   readonly fn: (name: string) => ListFn | undefined;
   readonly cell: (e: ExprOf<"ext">) => boolean;
+  readonly field: (e: ExprOf<"ref">) => boolean;
 }
 
 /** A bound function for `listy`: its node, and the scope of its binding (FN.BIND). */
@@ -877,6 +896,8 @@ function listy(e: Expr, scope: ListScope): boolean {
       return listy(e.result, scopeIn(e.init, scope));
     case "ext":
       return scope.cell(e);
+    case "ref":
+      return scope.field(e);
     case "call": {
       // A call of no function gives a reason in the printer. A value or a parameter with the name of a function makes
       // the printer give that reason too, so the scope does not hide the function.
@@ -885,7 +906,6 @@ function listy(e: Expr, scope: ListScope): boolean {
     }
     case "fn":
     case "rec":
-    case "ref":
       return false;
   }
 }
@@ -901,7 +921,7 @@ function scopeIn(bind: Readonly<Record<string, Expr>>, scope: ListScope): ListSc
     if (x.tag === "fn") fns.set(name, { fn: x, scope });
     lists.set(name, listy(x, scope));
   }
-  return { name: (name) => lists.get(name) ?? scope.name(name), fn: (name) => fns.get(name) ?? scope.fn(name), cell: scope.cell };
+  return { ...scope, name: (name) => lists.get(name) ?? scope.name(name), fn: (name) => fns.get(name) ?? scope.fn(name) };
 }
 
 /**
@@ -1232,6 +1252,8 @@ class Printer {
   readonly helpers = new Set<Helper>();
   /** The declarations at the top of the module: the functions of the domains and the checks of the results. */
   readonly top = new Map<string, string>();
+  /** The array of the lists of each field of the input that the program reads (COMPILE.MODULE.LIST.INPUT). */
+  readonly inputs = new Map<string, string>();
   /** The statements at the start of a run: the constants of the run and the functions of the memo. */
   readonly run: string[] = [];
   /** The variables of the schema that the program reads. */
@@ -1360,7 +1382,23 @@ class Printer {
    */
   against(kind: Kind, input: string): string {
     const primitive = primitiveOf(kind);
-    if (primitive !== undefined) return `typeof ${input} !== "${primitive}"`;
+    return primitive === undefined ? `!${this.#isOf(kind)}(${input})` : `typeof ${input} !== "${primitive}"`;
+  }
+
+  /**
+   * This method gives the name of a test of the kind of an item of a list of the input (COMPILE.MODULE.LIST.INPUT). The
+   * test of a primitive type checks the JavaScript type, and the test of a domain is the copy of its `is`.
+   */
+  test(kind: Kind): string {
+    const primitive = primitiveOf(kind);
+    if (primitive === undefined) return this.#isOf(kind);
+    const name = `is_${primitive}`;
+    this.top.set(name, `const ${name} = (x) => typeof x === "${primitive}";`);
+    return name;
+  }
+
+  /** This method gives the name of the copy of the test `is` of the domain of a kind. */
+  #isOf(kind: Kind): string {
     const d = this.#domains.findIndex((x) => kindOfDomain(x) === kind);
     const domain = this.#domains[d];
     if (domain === undefined) throw new NotStandalone(`the schema has the kind ${kind}, and no domain has it`);
@@ -1369,7 +1407,7 @@ class Printer {
       const src = copied(domain.is, [[...SAMPLES.number, ...SAMPLES.string, ...SAMPLES.boolean, null, {}, [], ...this.#samples(kind)]], `the test "is" of the domain ${domain.name}`);
       this.top.set(name, `const ${name} = ${src};`);
     }
-    return `!${name}(${input})`;
+    return name;
   }
 
   /** This method gives a new name for the code. */
@@ -1475,6 +1513,7 @@ class Printer {
         return bound === undefined ? undefined : { fn: bound.fn, scope: this.#scopeOf(bound.ctx) };
       },
       cell: (x) => this.#cellList(x) !== undefined,
+      field: (x) => typeof this.#schema.fields?.[x.path.join(".")] === "object",
     };
   }
 
@@ -1745,6 +1784,8 @@ class Printer {
     const [field, ...more] = e.path;
     const kind = field === undefined ? undefined : this.#schema.fields?.[field];
     if (field === undefined || more.length > 0 || !isFieldName(field) || kind === undefined) throw new NotStandalone(`a read of a field that is not in the schema: "${e.path.join(".")}"`);
+    // The check of the run keeps the array of each list of the input (COMPILE.MODULE.LIST.INPUT).
+    const input = typeof kind === "object" ? this.#input(field) : undefined;
     // A move to the origin cannot fail, and the schema has the field in each record.
     const at = e.at ?? [];
     const safe = at.every((m) => m.t === "origin");
@@ -1752,7 +1793,18 @@ class Printer {
     const deps = this.#addressDeps(at, ctx, values);
     // The interpreter evaluates the expressions of the address before its moves, and the first error stops them.
     const parts = this.#inOrder(this.#settle(values, deps), false);
-    return { s: stmtsOf(...parts), v: { code: `R[${this.#address(at, ctx, parts)}][${JSON.stringify(field)}]`, kind, safe, deps } };
+    const address = this.#address(at, ctx, parts);
+    if (typeof kind === "object") return { s: stmtsOf(...parts), v: { code: `${input as string}[${address}]`, kind: undefined, safe, deps, list: listOfKind(kind, true) } };
+    return { s: stmtsOf(...parts), v: { code: `R[${address}][${JSON.stringify(field)}]`, kind, safe, deps } };
+  }
+
+  /** This method gives the name of the array of the lists of a field of the input. */
+  #input(field: string): string {
+    const known = this.inputs.get(field);
+    if (known !== undefined) return known;
+    const name = this.fresh("LF");
+    this.inputs.set(field, name);
+    return name;
   }
 
   /** This method gives the code of the expressions of the computed moves of an address. They evaluate at the node. */
@@ -2774,6 +2826,19 @@ function reasonOf(thrown: unknown): Emitted {
 }
 
 /**
+ * This function gives the code of the check of a field of a record `r` at the position `i`. The check of a list keeps
+ * the array of the list when the program reads the field (COMPILE.MODULE.LIST.INPUT). The code is true for a field
+ * against the schema.
+ */
+function fieldCheck(p: Printer, field: string, kind: Kind | ListKind): string {
+  const input = `r[${JSON.stringify(field)}]`;
+  if (typeof kind !== "object") return p.against(kind, input);
+  const read = `${p.use("LI")}(${input}, ${String(depthOf(listOfKind(kind)))}, ${p.test(leafOf(kind))})`;
+  const keep = p.inputs.get(field);
+  return `${keep === undefined ? read : `(${keep}[i] = ${read})`} === undefined`;
+}
+
+/**
  * This function gives the text of a module: the declarations, the helpers, and the function of the run. The run checks
  * its input, computes the parts of the tree and the constants of the run, and then gives the statements `body`.
  */
@@ -2790,7 +2855,7 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   let fieldChecks: string;
   let varChecks: string;
   try {
-    fieldChecks = fields.map(([f, k]) => ` || ${p.against(k, `r[${JSON.stringify(f)}]`)}`).join("");
+    fieldChecks = fields.map(([f, k]) => ` || ${fieldCheck(p, f, k)}`).join("");
     varChecks = vars.map(([v, k]) => ` || ${p.against(k, `vars[${JSON.stringify(v)}]`)}`).join("");
   } catch (thrown) {
     return reasonOf(thrown);
@@ -2826,6 +2891,7 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
     "  const n = R.length;",
+    ...[...p.inputs.values()].map((x) => `  const ${x} = [];`),
     "  for (let i = 0; i < n; i++) {",
     "    const r = R[i];",
     `    if (typeof r !== "object" || r === null${fieldChecks}) C(\`the record \${i} does not keep the schema\`);`,
@@ -2892,10 +2958,13 @@ const kindText = (k: Kind | undefined, l?: ListInfo): string => (l === undefined
 const depthOf = (l: ListInfo): number => (l.inner === undefined ? 0 : 1 + depthOf(l.inner));
 
 /** This function gives the facts of the lists of a column from the kind of the option `kinds` (COMPILE.MODULE.SHEET.LIST). */
-const listOfKind = (k: ListKind): ListInfo => {
-  const texts = k.texts === true;
-  return typeof k.list === "object" ? { item: undefined, inner: listOfKind(k.list), texts } : { item: k.list, texts };
+const listOfKind = (k: ListKind, all = false): ListInfo => {
+  const texts = all || k.texts === true;
+  return typeof k.list === "object" ? { item: undefined, inner: listOfKind(k.list, all), texts } : { item: k.list, texts };
 };
+
+/** This function gives the kind of the items at the bottom of a list kind. */
+const leafOf = (k: ListKind): Kind => (typeof k.list === "object" ? leafOf(k.list) : k.list);
 
 /**
  * This function gives the facts of the lists of a column from the list of its first formula. The other cells of the

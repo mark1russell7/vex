@@ -96,12 +96,16 @@ describe("COMPILE.MODULE.FILL: fill in a module", () => {
       // A list of lists: each item holds the list of the value.
       flat: op("sum", op("flat", op("fill", lit(2), ns))),
       inner: op("sum", op("flat", op("take", op("fill", lit(2), ns), lit(1)))),
-      // A count of 0 gives an empty list, and the largest count gives 100000 items.
+      // A count of 0 gives an empty list.
       empty: op("count", op("fill", lit(0), n)),
       negZero: op("count", op("fill", lit(-0), n)),
-      largest: op("count", op("fill", lit(100_000), lit(1))),
     });
     for (const records of [RECORDS, RECORDS.slice(0, 1), [], MANY]) expectSame(e, records);
+  });
+
+  it("COMPILE.MODULE.FILL LIST.FILL: the largest count gives 100000 items", () => {
+    // One record only: the interpreter makes 100000 items at each record, and the mutation lane runs it instrumented.
+    expectSame(rec({ largest: op("count", op("fill", lit(100_000), lit(1))) }), RECORDS.slice(0, 1));
   });
 
   it("COMPILE.MODULE.FILL LIST.FILL: a bad count, a missing value and an error of an argument give the error of the interpreter", () => {

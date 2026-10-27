@@ -6,6 +6,7 @@
 export * from "./grid.ts";
 export * from "./layout-audit.ts";
 export * from "./ireko-band.ts";
+export * from "./ireko-shapes.ts";
 export * from "./ireko-grid.ts";
 export * from "./ireko-radial.ts";
 export * from "./ireko-audit.ts";

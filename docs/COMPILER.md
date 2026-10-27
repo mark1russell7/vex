@@ -851,3 +851,23 @@ These parts are not in a module yet:
 - Vex has no op that reads a field of a record. Only an op of a domain reads the lists of a record, and a record is not the receiver of an op in a module.
 - A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
 - The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.
+
+#### The shapes pilot (the engine)
+
+The measure pass of ireko gives a shape to each subtree that a tidy strategy reads. A leaf and a nested node have the shape of their box. A linked node with children joins its box with the moved shapes of its children. The join merges the bands with a sweep over the cut points, and `coarsen` keeps at most 64 bands on each axis.
+
+`SHAPE_COLUMNS` of `@vex/pilots` is a sheet over the tree with all of this pass. The column `need` reads the parent, so the fill visits the tree from the root. The columns `rows` and `cols` hold lists of bands and read the children, so the fill visits the tree from the leaves. Thus the module has no search.
+
+`shapesTree` copies `engine/shape.ts` of ireko and the shapes part of `engine/measure.ts`. A property compares the module with `shapesTree` on random trees, also with negative zeros and small limits. A second property compares `SheetRun` with `shapesTree`. The bits are the same.
+
+The merge is a chain of folds over lists. It gives the ends of the valid bands, sorts them and removes the repeated cuts. Then it gives one band for each cut with an active band, and it joins neighbor bands with the same interval. Last, it halves the list until the limit holds. The comparisons keep the first of two equal values, as the comparisons of ireko do. Thus a negative zero has the bits of ireko.
+
+The program works around three gaps of a module. Each workaround is Vex, not code of the host:
+
+- The value of a call is not a list in a module ("a list is a value of the program"). Thus the merge is an expression of the pilot, and the sheet has it two times: once for the rows and once for the columns.
+- A name of a loop whose first value is the empty literal has no kind of items. Then `sortBy` gives the reason "the kinds of the items of "sortBy" do not decide the op "from" of the option by". The program starts each such name with `take(list, 0)` of a list of one band, which has the kind.
+- A module does not have `fill` ("the kinds of the values of "fill" do not decide its op"). The axis `window(0, 0)` makes the list of one value.
+
+The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`, and each step copies the list. The module of the sheet has 45207 bytes and 9521 bytes after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
+
+ireko does not use the module yet. The strategy of a node reads the shapes of its children before it gives their offsets, and a shape needs the offsets. Thus one sheet for the tree needs the strategies as Vex programs. A module for one node needs the shapes of the children as input, but a field of the schema cannot be a list.

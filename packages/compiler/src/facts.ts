@@ -118,15 +118,22 @@ export type StaticSite =
 
 const STATIC_FREE: StaticSite = Object.freeze({ t: "free" });
 
+/** The positions of the lists of a site without lists. */
+const NO_LISTS: ReadonlySet<number> = new Set();
+
 /** This function gives the kind of the result of an op of a domain, if the op declares it. */
 function returnsOf(domain: AnyDomain, kind: ReturnKind | undefined): Kind | undefined {
   if (kind === "domain") return kindOfDomain(domain);
   return kind === "any" ? undefined : kind;
 }
 
-/** This function tells if an argument of a kind fits a parameter, or `undefined` if the kind of the argument is unknown. */
-function fits(domain: AnyDomain, param: ParamKind | undefined, arg: Kind | undefined): boolean | undefined {
+/**
+ * This function tells if an argument of a kind fits a parameter, or `undefined` if the kind of the argument is unknown.
+ * A list fits only `any`, and the test `is` of a domain without a primitive type can accept it (COMPILE.MODULE.LIST.ARG).
+ */
+function fits(domain: AnyDomain, param: ParamKind | undefined, arg: Kind | undefined, list: boolean): boolean | undefined {
   if (param === undefined || param === "any") return true;
+  if (list) return param === "domain" && domain.primitive === undefined ? undefined : false;
   if (arg === undefined) return undefined;
   return arg === (param === "domain" ? kindOfDomain(domain) : param);
 }
@@ -152,9 +159,9 @@ export interface Facts {
   /**
    * This function gives the op of a site with the kinds of its values, the receiver first. When the kinds do not decide
    * the op, it gives `undefined`. Each domain before the op must declare a primitive type. Then the interpreter takes
-   * the same op at each run.
+   * the same op at each run. `lists` has the positions of the values that are lists, after the receiver.
    */
-  staticSite(name: string, kinds: readonly (Kind | undefined)[]): StaticSite | undefined;
+  staticSite(name: string, kinds: readonly (Kind | undefined)[], lists?: ReadonlySet<number>): StaticSite | undefined;
   /**
    * This function gives the index of the domain that checks a result of a kind. When no domain accepts such a value,
    * it gives -1. When a domain without a primitive type comes first, it gives `undefined`.
@@ -169,7 +176,7 @@ export function factsOf(options: Options): Facts {
   const last = domains.findLastIndex((d) => d.valid !== undefined);
   return {
     checks: domains.slice(0, last + 1).map((d) => d.valid !== undefined),
-    staticSite(name, kinds) {
+    staticSite(name, kinds, lists = NO_LISTS) {
       const [self, ...args] = kinds;
       // A primitive value is not a list, so a list op name is an op of a domain here, as in the interpreter.
       if (self === undefined) return undefined;
@@ -184,8 +191,9 @@ export function factsOf(options: Options): Facts {
           continue;
         }
         // A lifted number goes through fromScalar: the site keeps the dispatch of the runtime.
-        if (d.fromScalar !== undefined && args.some((a, j) => a !== "string" && a !== "boolean" && liftsAt(e.spec.liftScalar, j))) return undefined;
-        const ok = args.map((a, j) => fits(d, e.spec.params?.[j], a));
+        // A list is not a number, so the interpreter does not lift it.
+        if (d.fromScalar !== undefined && args.some((a, j) => a !== "string" && a !== "boolean" && !lists.has(j + 1) && liftsAt(e.spec.liftScalar, j))) return undefined;
+        const ok = args.map((a, j) => fits(d, e.spec.params?.[j], a, lists.has(j + 1)));
         if (ok.includes(undefined)) return undefined;
         return { t: "fn", domain: i, bad: ok.includes(false), returns: returnsOf(d, e.spec.returns) };
       }

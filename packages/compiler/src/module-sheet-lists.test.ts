@@ -120,14 +120,15 @@ describe("COMPILE.MODULE.LIST.RESULT: a list as the value of a program", () => {
     expect(errors).toStrictEqual([{ kind: "vex.list", items: [{ key: "0", result: { ok: false, error: loaded.VEX_ERROR } }] }]);
   });
 
-  it("COMPILE.MODULE.LIST.RESULT: if and ifError take lists as branches, and a list in an argument or in one branch gives a reason", () => {
+  it("COMPILE.MODULE.LIST.RESULT COMPILE.MODULE.LIST.ARG: if and ifError take lists as branches, and a list in one branch gives a reason", () => {
     const xs = each(axes.all, ref("v"));
     const some = op("gt", ref("v"), lit(1));
     for (const e of [op("if", some, xs, each(axes.window(0, 0), inv)), op("ifError", op("take", xs, op("subtract", ref("v"), lit(2))), lit(vexList([]))), op("sum", op("if", some, xs, lit(vexList([])))), op("count", op("ifError", lit(vexList([])), xs))]) {
       expectSame(e, RECORDS);
     }
-    expect(programReason(op("add", lit(1), op("take", xs, lit(1))))).toBe("a list is a value of the program");
-    expect(programReason(op("add", lit(1), op("if", some, xs, xs)))).toBe("a list is a value of the program");
+    // A list in an argument of add is the error of the interpreter, because add takes a number.
+    expectSame(op("add", lit(1), op("take", xs, lit(1))), RECORDS);
+    expectSame(op("add", lit(1), op("if", some, xs, xs)), RECORDS);
     expect(programReason(op("if", some, xs, lit(1)))).toBe('"if" of a list and a value that is not a list');
     // A first value that cannot fail is the value of ifError, so the second value does not decide the kind.
     expectSame(op("sum", op("ifError", xs, lit(1))), RECORDS);
@@ -214,7 +215,7 @@ describe("COMPILE.MODULE.SHEET.LIST: a column of lists", () => {
     expectSameSheet(make(grown), own, RECORDS, undefined);
   });
 
-  it("COMPILE.MODULE.SHEET.LIST: a list that does not fit its column, a list in an argument and a column without its kind give a reason", () => {
+  it("COMPILE.MODULE.SHEET.LIST: a list that does not fit its column, a list as the receiver of an op and a column without its kind give a reason", () => {
     const xs = each(axes.all, ref("v"));
     // A column that reads itself needs its kind, also a column of lists.
     expect(sheetReason(SHAPES, TREE)).toBe('a formula reads the column "shape" before its formula, so the column needs its kind in the option kinds');
@@ -231,8 +232,11 @@ describe("COMPILE.MODULE.SHEET.LIST: a column of lists", () => {
     // A cell formula must fit the list of the first formula of its column.
     const cells: CellFormulas = new Map([["a", new Map<string, Expr>([["0", each(axes.all, op("gt", ref("v"), lit(0)))]])]]);
     expect(sheetReason(new Map([["a", xs]]), { ...NUM, cells })).toBe('the formula of the cell "a" at "0" gives a value of the kind list of boolean, not of the kind list of number of its column');
-    // A list is not an argument of an op, and a column of lists from an empty literal has items without a kind.
-    expect(sheetReason(new Map([["a", xs], ["b", op("add", cell("a"), lit(1))]]), NUM)).toBe("a list is a value of the program");
+    // A list is not the receiver of an op, and a column of lists from an empty literal has items without a kind.
+    expect(sheetReason(new Map([["a", xs], ["b", op("add", cell("a"), lit(1))]]), NUM)).toBe('a list as the receiver of the op "add"');
+    // A list after the receiver is an argument (COMPILE.MODULE.LIST.ARG). add takes a number, so each cell has the error.
+    const arg = new Map([["a", xs], ["b", op("add", lit(1), cell("a"))]]);
+    expectSameSheet(make(sheetSource(arg, NUM)), arg, RECORDS, undefined);
     expect(sheetReason(new Map([["a", lit(vexList([]))], ["b", op("sum", cell("a"))]]), NUM)).toBe("");
     // An extension that is not a read of a cell is not a list.
     expect(sheetReason(new Map([["b", op("sum", ext("note", null))]]), NUM)).toBe('the extension "note"');

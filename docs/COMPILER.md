@@ -799,7 +799,7 @@ A shared fold must evaluate before the formula of its first column, outside the 
 The measure pilot found that a cell of a module cannot hold a list. Thus a sheet cannot send the shapes or the lists of the children from one node to the next. The interpreter has lists as values of cells, so the module has them too.
 
 - A column of a sheet module can hold a list (COMPILE.MODULE.SHEET.LIST). Its array has the array of the list at each key, or the sentinel of an error. A list does not change after the op that makes it, so two cells can share one array.
-- A read of a cell of such a column is a list. A formula reads it with the list ops, `get`, `indexOf`, the axis `list`, a `let` and the names of a loop. A list in an argument of an op still gives the reason "a list is a value of the program".
+- A read of a cell of such a column is a list. A formula reads it with the list ops, `get`, `indexOf`, the axis `list`, a `let` and the names of a loop. A formula can also give it to an op as an argument (COMPILE.MODULE.LIST.ARG).
 - A column of lists that a formula reads before its own formula needs its kind in `kinds`. The kind is a `ListKind`, for example `{ list: "number" }` or `{ list: { list: "number" } }`. The option `texts` lets a key of an item be a key of a list literal.
 - Each formula of the column must give a list that fits the kind of the column, as a step of a loop does (LOOP.LIST). The empty literal fits each column of lists.
 - The first formula of a column without a kind gives the kind. An empty list of that formula does not tell that the other cells are empty, so the items of such a column have no kind.
@@ -831,8 +831,23 @@ The merge of the bands of a shape sorts the bands by `from`. Thus `sortBy` has t
 - The sort values follow LIST.SORT, and the items keep their keys and values. An error of the op is the error of the module.
 - A `by` that is not a literal text, or items without one kind, give a reason. An empty list applies no op.
 
+#### Lists in arguments and in fields (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD)
+
+The shapes pass of ireko gives shapes to ops, and a shape keeps two lists of bands. Before, a module gave the reason "a list is a value of the program" for a list in an argument of an op or in a field of a record. The interpreter has both, so the module has them too.
+
+- An argument of an op after its receiver can be a list (COMPILE.MODULE.LIST.ARG). The function of the op gets a `vex.list`, as in the interpreter. The keys are text, and the list and its items are frozen.
+- The helper `LV` makes the `vex.list` from the array of the list. The array keeps it, so a constant list costs one conversion for each run, not one for each key.
+- The static site of the op takes the positions of the lists. A list fits a parameter `any`. A parameter of a primitive type gives the error of the interpreter. A parameter `domain` of a domain without a primitive type gives a reason, because its test `is` can accept a list.
+- The check of the copy of an op takes three samples of each list. The samples have no items, values of the kind of the items, or an error item. An op with a list has no inline form.
+- An argument of a call can be a list. The facts of the list are a part of the signature of the call, so each kind of list has its own function.
+- A field of a record can be a list (COMPILE.MODULE.LIST.FIELD). The record holds a `vex.list`. Thus a record in the value of the run, in a list or in an argument has the form of the interpreter.
+
+The module keeps only the sentinel of an error. Thus an error item of such a list has the error `VEX_ERROR`, as in a list of the value of the run. An op that reads the error of an item gets `VEX_ERROR`, not the error of the interpreter.
+
 These parts are not in a module yet:
 
+- A list as the receiver of an op that is not a list op of the module gives a reason. The list ops `keys`, `values` and `errors` give a reason too.
+- The value of an op or of a call is not a list in a module. Thus an op of a domain cannot give a list to the list ops.
+- Vex has no op that reads a field of a record. Only an op of a domain reads the lists of a record, and a record is not the receiver of an op in a module.
 - A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
-- A record with a list in a field, for example a shape with `rows` and `columns`, gives a reason. A sheet keeps the two lists in two columns.
 - The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.

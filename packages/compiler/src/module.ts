@@ -20,7 +20,8 @@
  * move `parent` and the axes of a tree (COMPILE.MODULE.TREE). A graph space has the axes of a graph
  * (COMPILE.MODULE.GRAPH). A list is an array of pairs of a key and a value. The list ops, `reduce`, list literals and
  * lists as names of loops are in a module (COMPILE.MODULE.LIST, COMPILE.MODULE.REDUCE). The value of a program can be a
- * list, and the run gives it as a `vex.list` (COMPILE.MODULE.LIST.RESULT). The kinds of each op site must decide its op.
+ * list, and the run gives it as a `vex.list` (COMPILE.MODULE.LIST.RESULT). An op and a record get each list of an
+ * argument or a field as a `vex.list` too (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). The kinds of each op site must decide its op.
  * Another construct gives a reason, not code.
  *
  * `emitSheetModule` prints the formula columns of a sheet as one module (COMPILE.MODULE.SHEET). Each column is an array
@@ -28,7 +29,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isVexList, lit, moveExpr, nestingOf, rec, shapeError, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
+import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, lit, moveExpr, nestingOf, rec, shapeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -137,11 +138,12 @@ interface Name {
   readonly list?: ListInfo | undefined;
 }
 
-/** An argument of a call: its code, its kind and its levels. */
+/** An argument of a call: its code, its kind, its levels and the facts of its list (COMPILE.MODULE.LIST.ARG). */
 interface Arg {
   readonly code: string;
   readonly kind: Kind | undefined;
   readonly deps: ReadonlySet<number>;
+  readonly list: ListInfo | undefined;
 }
 
 /** The levels of a constant of the run. */
@@ -262,7 +264,7 @@ type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
 type GraphHelper = "GR" | "GI" | "RB";
 
 /** The helpers of a sheet (COMPILE.MODULE.SHEET): the state of a run of a sheet, and the order of the keys of a tree. */
-type SheetHelper = "SH" | "KO" | "DO" | "LO" | "LC";
+type SheetHelper = "SH" | "KO" | "DO" | "LO" | "LC" | "LV";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -460,6 +462,18 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
   // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
   LO: 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
+  // A list in an argument of an op or in a field of a record (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD): a frozen
+  // `vex.list`, as the interpreter gives. The array keeps it, so each later read of the list gives the same object.
+  LV: [
+    "function LV(l, h) {",
+    "  let o = l.vl;",
+    "  if (o === undefined) {",
+    '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LV(v, h - 1) : v } }))) });',
+    "    l.vl = o;",
+    "  }",
+    "  return o;",
+    "}",
+  ].join("\n"),
   // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`.
   LC: "function LC(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LO(d[k], h); return d; }",
   SH: [
@@ -756,7 +770,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
-  SH: [], KO: [], DO: [], LO: [], LC: ["LO"],
+  SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [],
 };
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
@@ -1372,7 +1386,8 @@ class Printer {
       this.#keyOf.set(c, this.#constKey(e, ctx));
       this.#constant.add(e);
     }
-    // A list is a value only at a place that takes a list. A result, an argument and a field take no list.
+    // A list is a value only at a place that takes a list: a result, a binding, an argument and a field take one. A
+    // condition, an argument of and or of or, and a key of get take no list.
     if (c.v.list !== undefined && !this.#wantList.has(e)) throw new NotStandalone("a list is a value of the program");
     return this.#columnar(e, c, ctx) ? this.#column(e, c, ctx) : c;
   }
@@ -1512,12 +1527,15 @@ class Printer {
         return this.#call(e, ctx);
       case "rec": {
         const names = Object.keys(e.fields);
-        const raw = Object.values(e.fields).map((x) => this.expr(x, ctx));
+        const exprs = Object.values(e.fields);
+        // A field can hold a list (COMPILE.MODULE.LIST.FIELD).
+        for (const x of exprs) this.#wantList.add(x);
+        const raw = exprs.map((x) => this.expr(x, ctx));
         const deps = depsOf(...raw);
         // The interpreter evaluates each field, also after an error.
-        const fields = this.#inOrder(this.#settle(raw, deps, Object.values(e.fields)), true);
+        const fields = this.#inOrder(this.#settle(raw, deps, exprs), true);
         // A record of a module is a new object, so it needs no freeze.
-        const code = `({ ${fields.map((x, i) => `${names[i] === "__proto__" ? '["__proto__"]' : JSON.stringify(names[i])}: ${x.v.code}`).join(", ")} })`;
+        const code = `({ ${fields.map((x, i) => `${names[i] === "__proto__" ? '["__proto__"]' : JSON.stringify(names[i])}: ${this.#plain(x.v)}`).join(", ")} })`;
         return { s: stmtsOf(...fields), v: { code, kind: undefined, safe: fields.every((x) => x.v.safe), deps } };
       }
       case "app":
@@ -1768,20 +1786,24 @@ class Printer {
     if (bound.fn.params.length !== e.args.length) throw new NotStandalone(`a call of "${e.fn}" with ${String(e.args.length)} arguments, not ${String(bound.fn.params.length)}`);
     const s: string[] = [];
     const args = e.args.map((x): Arg => {
+      // An argument can be a list, as a binding of a let can (COMPILE.MODULE.LIST.ARG).
+      this.#wantList.add(x);
       const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
+      const { kind, deps, list } = c.v;
       // A value that cannot throw is the argument itself. A read of a name that can hold the error passes the name.
       if (c.v.safe) {
         s.push(...c.s);
-        return { code: c.v.code, kind: c.v.kind, deps: c.v.deps };
+        return { code: c.v.code, kind, deps, list };
       }
       // Stryker disable next-line ConditionalExpression: the statements with a read of a name bind other names and do not throw, so the read alone has the same value
-      if (c.s.length === 0 && c.v.held !== undefined) return { code: c.v.held, kind: c.v.kind, deps: c.v.deps };
+      if (c.s.length === 0 && c.v.held !== undefined) return { code: c.v.held, kind, deps, list };
       const b = this.fresh("b");
       s.push(...this.#store(b, c));
-      return { code: b, kind: c.v.kind, deps: c.v.deps };
+      return { code: b, kind, deps, list };
     });
-    // Each parameter can hold the error of its argument, so one function serves the arguments of one kind.
-    const sig = JSON.stringify(args.map((a) => a.kind ?? null));
+    // Each parameter can hold the error of its argument, so one function serves the arguments of one kind. The facts of
+    // a list are a part of its kind.
+    const sig = JSON.stringify(args.map((a) => (a.list === undefined ? (a.kind ?? null) : { list: a.list })));
     const spec = bound.specs.get(sig) ?? this.#printFn(bound, args, sig);
     // Each marker becomes the levels at the call. The levels of the arguments count for each call, because their
     // statements read their keys, so the marker of the parameters gives no level.
@@ -1808,7 +1830,7 @@ class Printer {
     const o = this.fresh("o");
     const env = new Map(bound.ctx.env);
     // A parameter hides a function of its name, because a read looks at the values first.
-    bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]) }));
+    bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]), list: (args[i] as Arg).list }));
     const scope: CallScope = { param, focus, repeats: nestsLoops(bound.fn.body), names: new Set(names), decls: [], root: bound.fn.body };
     this.#scopes.push(scope);
     const body = this.expr(bound.fn.body, { origin: o, focus: k, level: focus, originLevel: origin, env, fns: bound.ctx.fns, keys: new Map() });
@@ -1856,6 +1878,8 @@ class Printer {
     if (head !== undefined && (op === "sortBy" || op === "take" || (op === "drop" && this.#isList(head, ctx)))) return this.#order(op, head, rest, ctx);
     if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) return this.#build(op, head, rest, ctx);
     if (head !== undefined && (FOLD_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, rest, ctx);
+    // An argument can be a list (COMPILE.MODULE.LIST.ARG).
+    for (const x of args) this.#wantList.add(x);
     const raw = args.map((x) => this.expr(x, ctx));
     const deps = depsOf(...raw);
     // The interpreter evaluates each argument, also after an error.
@@ -1863,9 +1887,28 @@ class Printer {
     return this.#opCall(op, values, deps);
   }
 
+  /**
+   * This method gives the code of a value outside the list ops: a list is a `vex.list`, as in the interpreter
+   * (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). An error item has the error `VEX_ERROR`.
+   */
+  #plain(v: Value): string {
+    return v.list === undefined ? v.code : `${this.use("LV")}(${v.code}, ${String(depthOf(v.list))})`;
+  }
+
+  /** This method gives the samples of a list of the facts `l`: no items, items with values, and an error item. */
+  #listSamples(l: ListInfo): readonly unknown[] {
+    const values = l.inner !== undefined ? [vexList([])] : l.item === undefined ? SAMPLES.number : this.#samples(l.item);
+    const items = values.map((value, i) => ({ key: String(i), result: { ok: true as const, value } }));
+    // An error item of a module has the error VEX_ERROR, which is not an error value of the interpreter.
+    return [vexList([]), vexList(items), vexList([{ key: "0", result: { ok: false, error: { vexError: true } as never } }])];
+  }
+
   /** This method prints the call of the op of a domain on some values, from the static site of their kinds. */
   #opCall(op: string, values: readonly Code[], deps: ReadonlySet<number>): Code {
-    const site = this.#facts.staticSite(op, values.map((x) => x.v.kind));
+    const lists = new Set(values.flatMap((x, i) => (x.v.list === undefined ? [] : [i])));
+    // A list op of the interpreter that a module does not have, and an op of a domain, cannot take a list as the receiver.
+    if (lists.has(0)) throw new NotStandalone(isListOp(op) ? `the list op "${op}"` : `a list as the receiver of the op "${op}"`);
+    const site = this.#facts.staticSite(op, values.map((x) => x.v.kind), lists);
     if (site?.t !== "fn") throw new NotStandalone(`the kinds of the values of "${op}" do not decide its op`);
     if (site.bad) return { s: stmtsOf(...values), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
     if (site.returns === undefined) throw new NotStandalone(`the op "${op}" does not declare the kind of its result`);
@@ -1876,14 +1919,15 @@ class Printer {
       // A static site of a domain has the function of the op of that domain.
       const fn = (d.ops[op] as { fn: (...a: never[]) => unknown }).fn;
       const kinds = values.map((x) => x.v.kind).filter((k): k is Kind => k !== undefined);
-      const src = copied(fn, kinds.map((k) => this.#samples(k)), `the op "${op}" of the domain ${d.name}`);
+      const each = values.flatMap((x) => (x.v.list !== undefined ? [this.#listSamples(x.v.list)] : x.v.kind === undefined ? [] : [this.#samples(x.v.kind)]));
+      const src = copied(fn, each, `the op "${op}" of the domain ${d.name}`);
       // An inline form cannot throw for primitive values only.
-      this.#forms.set(name, kinds.every((k) => primitiveOf(k) !== undefined) ? inlineForm(src) : undefined);
+      this.#forms.set(name, lists.size === 0 && kinds.every((k) => primitiveOf(k) !== undefined) ? inlineForm(src) : undefined);
       this.top.set(name, `const ${name} = ${src};`);
     }
     const form = this.#forms.get(name);
     // An inline form takes each argument once, or a plain argument more often, so each argument evaluates once.
-    const inline = form !== undefined && form.params.length === values.length && values.every((x, i) => form.uses[i] === 1 || (x.v.plain === true && x.v.safe && (form.uses[i] as number) > 0));
+    const inline = form !== undefined && lists.size === 0 && form.params.length === values.length && values.every((x, i) => form.uses[i] === 1 || (x.v.plain === true && x.v.safe && (form.uses[i] as number) > 0));
     if (inline) {
       const text = form.parts.map((x) => (typeof x === "number" ? `(${(values[x] as Code).v.code})` : x)).join("");
       const checked = this.check(site.returns);
@@ -1892,7 +1936,7 @@ class Printer {
     }
     this.#called.add(name);
     // An exception of the op is an error of Vex: the boundary around the op catches it.
-    const code = this.#checked(site.returns, `${name}(${values.map((x) => x.v.code).join(", ")})`);
+    const code = this.#checked(site.returns, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`);
     return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: false, deps } };
   }
 

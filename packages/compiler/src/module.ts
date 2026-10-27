@@ -250,7 +250,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "TK" | "NT" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "NT" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "WO" | "FL" | "GT" | "IX";
@@ -291,6 +291,15 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
     "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
     "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "}",
+  ].join("\n"),
+  // The option by of sortBy (LIST.SORT.BY): the function f gives the sort value of each item with a value, in order.
+  SK: [
+    "function SK(l, s, f) {",
+    "  const o = V(l, s).map((x) => [x, f(x[1])]);",
+    "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
+    "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map((x) => x[0]);",
     "}",
   ].join("\n"),
   TK: "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
@@ -740,7 +749,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
-  SB: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"],
+  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"],
   DR: ["V", "F"], AP: ["V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
@@ -2249,13 +2258,31 @@ class Printer {
     const list = this.#listOf(head, ctx);
     // A missing count is the literal null, which is not a whole number, so take and drop give their error.
     const exprs = [head, ...(op === "sortBy" ? [] : [rest[0] ?? lit(null)])];
-    const strict = this.#strict(op, rest.slice(exprs.length - 1));
+    const options = rest.slice(exprs.length - 1);
+    const strict = this.#strict(op, options, op === "sortBy" ? ["strict", "by"] : ["strict"]);
+    const by = op === "sortBy" ? this.#sortValue(options, list.v.list as ListInfo) : undefined;
     const raw = [list, ...exprs.slice(1).map((x) => this.expr(x, ctx))];
     const deps = depsOf(...raw);
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
-    const helper = op === "sortBy" ? "SB" : op === "take" ? "TK" : "DR";
+    const helper = by !== undefined ? "SK" : op === "sortBy" ? "SB" : op === "take" ? "TK" : "DR";
+    const args = [...parts.map((x) => x.v.code), String(strict), ...(by === undefined ? [] : [by])];
     // The new list has some items of the list, so it keeps the facts of the list.
-    return { s: stmtsOf(...parts), v: { code: `${this.use(helper)}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: undefined, safe: false, deps, list: list.v.list } };
+    return { s: stmtsOf(...parts), v: { code: `${this.use(helper)}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: list.v.list } };
+  }
+
+  /**
+   * This method gives the function of the option `by` of `sortBy` (COMPILE.MODULE.SORT.BY), or undefined without the
+   * option. The function applies the op of the static site of the kind of the items. An empty list applies no op.
+   */
+  #sortValue(options: readonly Expr[], info: ListInfo): string | undefined {
+    const by = (options[0] as { readonly value?: { readonly by?: unknown } } | undefined)?.value?.by;
+    if (by === undefined) return undefined;
+    if (typeof by !== "string") throw new NotStandalone('the option "by" of "sortBy" is not a literal text');
+    if (info.empty === true) return undefined;
+    if (info.item === undefined) throw new NotStandalone(`the kinds of the items of "sortBy" do not decide the op "${by}" of the option by`);
+    const x = this.fresh("x");
+    const value = this.#opCall(by, [bare({ code: x, kind: info.item, safe: true, deps: NO_DEPS, plain: true })], NO_DEPS);
+    return `((${x}) => ${value.v.code})`;
   }
 
   /**

@@ -686,9 +686,10 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
     case "first":
       return vs.length > 0 ? vs[0] : empty();
     case "sortBy": {
-      const kind = typeof vs[0];
-      if (vs.some((x) => typeof x !== kind || (kind !== "number" && kind !== "string") || Number.isNaN(x))) stop("kind-mismatch", '"sortBy" needs numbers without NaN or texts, all of one kind');
-      return vexList(good.map((it, i) => ({ it, i })).toSorted((a, b) => compare(vs[a.i], vs[b.i])).map(({ it }) => it));
+      const ks = sortValues(o, vs, domains);
+      const kind = typeof ks[0];
+      if (ks.some((x) => typeof x !== kind || (kind !== "number" && kind !== "string") || Number.isNaN(x))) stop("kind-mismatch", '"sortBy" needs numbers without NaN or texts, all of one kind');
+      return vexList(good.map((it, i) => ({ it, i })).toSorted((a, b) => compare(ks[a.i], ks[b.i])).map(({ it }) => it));
     }
     case "take":
     case "drop":
@@ -743,6 +744,20 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
     default:
       return reduce(rest[0], vs, o, domains);
   }
+}
+
+/**
+ * This function gives the sort values of `sortBy` (LIST.SORT.BY). Without the option `by`, they are the values. With
+ * it, the op of that name applies to each value, in order, and the first error stops the sort.
+ */
+function sortValues(o: unknown, vs: readonly unknown[], domains: readonly AnyDomain[]): readonly unknown[] {
+  const by = (o as { readonly by?: unknown } | null | undefined)?.by;
+  if (by === undefined) return vs;
+  if (typeof by !== "string") return stop("kind-mismatch", '"sortBy" needs an op name in the option "by"');
+  return vs.map((x) => {
+    const found = domains.filter((d) => accepts(d, x)).map((d) => opOf(d, x, by)).find((f) => f !== undefined);
+    return found === undefined ? stop("unknown-op", `no domain gives "${by}" for a ${describe(x)}`) : callFound(found, by, x, [], domains);
+  });
 }
 
 /** This function compares two numbers or two texts for `sortBy`. Equal values keep their order (LIST.SORT). */

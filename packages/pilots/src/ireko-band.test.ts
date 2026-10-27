@@ -54,6 +54,10 @@ const PROGRAMS: Readonly<Record<string, Expr>> = {
   // A divide by zero and an infinite offset give errors. ifError catches them.
   errors: rec({ caught: op("ifError", op("from", op("move", own, d, lit(0))), lit(-1)), width: op("max", op("band", y, h, x, op("divide", w, d))) }),
   raised: op("to", op("move", b, d, d)),
+  // The merge of the bands of a shape sorts the bands by from (COMPILE.MODULE.SORT.BY). An infinite offset gives an error item.
+  sorted: let_({ rows: op("sortBy", each(axes.all, b), lit({ by: "from" })) }, fields(op("nth", v("rows"), lit(0)))),
+  sortedList: op("sortBy", each(axes.all, op("move", b, d, lit(0))), lit({ by: "from" })),
+  sortedStrict: op("ifError", op("from", op("first", op("sortBy", each(axes.all, op("move", b, d, lit(0))), lit({ by: "from", strict: true })))), lit(-1)),
 };
 
 const ROWS: readonly Row[] = [
@@ -133,6 +137,21 @@ describe("the band domain of ireko", () => {
       }),
       { numRuns: 60 },
     );
+  });
+
+  it("COMPILE.MODULE.SORT.BY: a module sorts the bands by from, with the values of the interpreter", () => {
+    for (const [name, program] of Object.entries(PROGRAMS).filter(([key]) => key.startsWith("sorted"))) {
+      expect({ [name]: loaded(name).run(copyOf(ROWS), { gap: 4 }) }).toStrictEqual({ [name]: evaluated(program, ROWS, { gap: 4 }, loaded(name).VEX_ERROR) });
+    }
+    expect(loaded("sorted").run(ROWS, { gap: 4 })[2]).toStrictEqual({ from: 0, to: 40, min: 0, max: 120 });
+    // The third band moves by an infinite offset, so its item is an error, and the sort skips it.
+    const list = loaded("sortedList").run(ROWS, { gap: 4 })[0] as { readonly items: readonly { readonly key: string; readonly result: { readonly value: Band } }[] };
+    expect(list.items.map((item) => [item.key, item.result.value.from])).toStrictEqual([
+      ["0", 5],
+      ["1", 30],
+      ["3", 57.5],
+    ]);
+    expect(loaded("sortedStrict").run(ROWS, { gap: 4 })).toStrictEqual([-1, -1, -1, -1]);
   });
 
   it("COMPILE.MODULE.BAND: a module checks the kind of a field of bands with a copy of the test of the domain", () => {

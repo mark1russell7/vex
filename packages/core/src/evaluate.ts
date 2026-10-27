@@ -777,7 +777,7 @@ class Compiler {
     };
     switch (op) {
       case "sortBy":
-        return this.#sortBy(okItems, okValues, f, path);
+        return this.#sortBy(okItems, okValues, optsArg, f, path);
       case "take":
       case "drop": {
         const n = whole();
@@ -882,21 +882,50 @@ class Compiler {
   }
 
   /**
-   * This method sorts the items of a list by their values, from the smallest (LIST.SORT). The sort is stable. The values
-   * are all numbers without NaN, or all texts. Texts compare by their UTF-16 code units.
+   * This method sorts the items of a list by their sort values, from the smallest (LIST.SORT). The sort is stable. The
+   * sort values are all numbers without NaN, or all texts. Texts compare by their UTF-16 code units. Without the option
+   * `by`, the sort value of an item is its value (LIST.SORT.BY).
    */
-  #sortBy(items: readonly ListItem[], values: readonly unknown[], f: Frame, path: readonly number[]): Result<VexList> {
-    const kind = typeof values[0];
-    const bad = values.findIndex((x) => typeof x !== kind || (kind !== "number" && kind !== "string") || Number.isNaN(x));
-    if (bad >= 0) return this.#err("kind-mismatch", `"sortBy" needs numbers without NaN or texts, all of one kind, but an item is ${Number.isNaN(values[bad]) ? "NaN" : `a ${describeType(values[bad])}`}`, f, path, { op: "sortBy" });
-    const order = values.map((_x, i) => i).toSorted((i, j) => {
-      const a = values[i] as number | string;
-      const b = values[j] as number | string;
+  #sortBy(items: readonly ListItem[], values: readonly unknown[], opts: unknown, f: Frame, path: readonly number[]): Result<VexList> {
+    const by = (opts as { readonly by?: unknown } | null | undefined)?.by;
+    const sorted = by === undefined ? ok(values) : this.#sortValues(by, values, f, path);
+    if (!sorted.ok) return sorted;
+    const keys = sorted.value;
+    const kind = typeof keys[0];
+    const bad = keys.findIndex((x) => typeof x !== kind || (kind !== "number" && kind !== "string") || Number.isNaN(x));
+    if (bad >= 0) {
+      const what = typeof by === "string" ? `"${by}" of an item` : "an item";
+      return this.#err("kind-mismatch", `"sortBy" needs numbers without NaN or texts, all of one kind, but ${what} is ${Number.isNaN(keys[bad]) ? "NaN" : `a ${describeType(keys[bad])}`}`, f, path, { op: "sortBy" });
+    }
+    const order = keys.map((_x, i) => i).toSorted((i, j) => {
+      const a = keys[i] as number | string;
+      const b = keys[j] as number | string;
       // The sort of Node reads only a negative result, and the sort of another engine needs the whole comparison.
       // Stryker disable next-line ConditionalExpression,EqualityOperator: see the comment above
       return a < b ? -1 : a > b ? 1 : 0;
     });
     return ok(vexList(order.map((i) => items[i] as ListItem)));
+  }
+
+  /**
+   * This method gives the sort value of each item for the option `by` of `sortBy` (LIST.SORT.BY). The op of the name
+   * `by` applies to the value of each item, in the order of the list. The first error is the result.
+   */
+  #sortValues(by: unknown, values: readonly unknown[], f: Frame, path: readonly number[]): Result<readonly unknown[]> {
+    if (typeof by !== "string") return this.#err("kind-mismatch", `the option "by" of "sortBy" needs an op name, but got a ${describeType(by)}`, f, path, { op: "sortBy" });
+    const out: unknown[] = [];
+    for (const x of values) {
+      let op: ResolvedOp | undefined;
+      for (const d of this.#domains) {
+        op = safeIs(d, x) ? resolveOp(d, x, by) : undefined;
+        if (op !== undefined) break;
+      }
+      if (op === undefined) return this.#err("unknown-op", `no domain gives "${by}" for a ${describeType(x)}`, f, path, { op: by });
+      const r = this.#call(op, by, [], f, path);
+      if (!r.ok) return r;
+      out.push(r.value);
+    }
+    return ok(out);
   }
 
   /**

@@ -3,7 +3,7 @@
  * `get`, `indexOf`, list literals, lists through a let and lists as the state of a loop (COMPILE.MODULE.LIST).
  */
 import { app, axes, each, evaluate, fold, iterate, let_, lit, rec, ref, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
-import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
+import { BoolDomain, NumDomain, TextDomain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { emitModule, type ModuleOptions } from "./module.ts";
@@ -241,6 +241,77 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
   });
 });
 
+/** The options of the tests of the option by: the records have a point `p` of `XYDomain`. */
+const XY_OPTIONS: ModuleOptions = { domains: [NumDomain, BoolDomain, TextDomain, XYDomain], schema: { fields: { id: "string", n: "number", w: "number", b: "boolean", p: "domain:XY" }, vars: { a: "number", k: "string" } } };
+const POINTS = RECORDS.map((r, i) => ({ ...r, p: { x: [2, -1, 2, 0][i], y: [0, 5, -3, 1][i] } }));
+const ps = each(axes.all, ref("p"));
+/** This function gives the options of `sortBy` with the op `name` (LIST.SORT.BY). */
+const by = (name: string, more: Readonly<Record<string, unknown>> = {}): Expr => lit({ by: name, ...more });
+/** This function gives the reason that a program over points cannot be a module, or "" for a module. */
+const reasonXY = (e: Expr): string => reasonOf(e, XY_OPTIONS);
+/** This function gives the keys of the items of a list of a module. */
+const keysOfList = (l: unknown): unknown => (l as { readonly items: readonly { readonly key: string }[] }).items.map((x) => x.key);
+
+/** This function compares the module of a program over points with the interpreter at each key. */
+const same = (e: Expr, records: readonly unknown[] = POINTS): void => {
+  const m = make(sourceOf(e, XY_OPTIONS));
+  const got = m.run(structuredClone(records), VARS);
+  const sp = space.array(records);
+  const expected = sp.keys.map((origin) => {
+    const r = evaluate(e, { space: sp, origin, vars: VARS, domains: XY_OPTIONS.domains ?? [] });
+    return r.ok ? r.value : m.VEX_ERROR;
+  });
+  expect(got).toStrictEqual(expected);
+};
+
+describe("COMPILE.MODULE.SORT.BY: sortBy with the option by in a module", () => {
+  it("COMPILE.MODULE.SORT.BY LIST.SORT.BY: a module sorts by the op of the kind of the items, with the values of the interpreter", () => {
+    const programs = {
+      // The points by x and by y: the list itself, with its keys and its values.
+      byX: op("sortBy", ps, by("x")),
+      byY: op("first", op("sortBy", ps, by("y"))),
+      // Numbers by an op of NumDomain, and texts by an op of TextDomain, with numbers and texts as sort values.
+      byAbs: op("nth", op("sortBy", ns, by("abs")), lit(1)),
+      byUpper: op("sortBy", each(axes.all, id), by("upper")),
+      byLength: op("first", op("sortBy", each(axes.all, id), by("length"))),
+      // LIST.LENIENT skips the error item of w = 0, and strict gives it.
+      lenient: op("count", op("sortBy", inv, by("negate"))),
+      strict: guard(op("count", op("sortBy", inv, by("negate", { strict: true })))),
+      // An op that fails, and sort values that are booleans, give the error.
+      fails: guard(op("count", op("sortBy", ns, by("sqrt")))),
+      booleans: guard(op("count", op("sortBy", each(axes.all, ref("b")), by("not")))),
+      // An empty list applies no op, also an op that no domain has.
+      empty: op("count", op("sortBy", EMPTY, by("nope"))),
+      none: op("count", op("sortBy", each(axes.where(axes.all, lit(false)), n), by("sqrt"))),
+    };
+    for (const e of Object.values(programs)) for (const records of [POINTS, POINTS.slice(0, 2), []]) same(e, records);
+    // The values themselves, so the test does not only compare two wrong runs.
+    const run = (e: Expr): readonly unknown[] => make(sourceOf(e, XY_OPTIONS)).run(structuredClone(POINTS), VARS);
+    expect(keysOfList(run(programs.byX)[0])).toStrictEqual(["1", "3", "0", "2"]);
+    expect(run(programs.byY)[0]).toStrictEqual({ x: 2, y: -3 });
+    expect(run(programs.byAbs)[0]).toBe(-1);
+    expect(keysOfList(run(programs.byUpper)[0])).toStrictEqual(["2", "0", "1", "3"]);
+    expect(run(programs.byLength)[0]).toBe("1");
+    expect(run(programs.lenient)[0]).toBe(3);
+    expect(run(programs.strict)[0]).toBe(-1);
+    expect(run(programs.fails)[0]).toBe(-1);
+    expect(run(programs.booleans)[0]).toBe(-1);
+    expect(run(programs.empty)[0]).toBe(0);
+    expect(sourceOf(programs.byX, XY_OPTIONS)).toContain("function SK(l, s, f) {");
+    expect(sourceOf(programs.empty, XY_OPTIONS)).not.toContain("function SK(");
+  });
+
+  it("COMPILE.MODULE.SORT.BY: a by that is not a literal text, or an op that the kinds do not decide, gives a reason", () => {
+    expect(reasonXY(op("sortBy", ps, lit({ by: 1 })))).toBe('the option "by" of "sortBy" is not a literal text');
+    expect(reasonXY(op("count", op("sortBy", EMPTY, lit({ by: null }))))).toBe('the option "by" of "sortBy" is not a literal text');
+    expect(reasonXY(op("sortBy", ps, by("x", { domain: "XY" })))).toBe('the options of "sortBy" are not a literal with strict or by');
+    expect(reasonXY(op("sortBy", ps, v("k")))).toBe('the options of "sortBy" are not a literal with strict or by');
+    expect(reasonXY(op("take", ps, lit(1), by("x")))).toBe('the options of "take" are not a literal with strict');
+    expect(reasonXY(op("count", op("sortBy", op("append", ns, each(axes.all, id)), by("abs"))))).toBe('the kinds of the items of "sortBy" do not decide the op "abs" of the option by');
+    expect(reasonXY(op("sortBy", ps, by("nope")))).toBe(undecided("nope"));
+  });
+});
+
 /** A record of the property: an id that names a key, or not. */
 const record = fc.record({
   id: fc.constantFrom("0", "1", "2", "x"),
@@ -260,6 +331,8 @@ describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: 60_00
     fc.tuple(base, base, opts).map(([l, m, o]) => op("append", l, m, ...o)),
     fc.tuple(base, base, opts).map(([l, m, o]) => op("without", l, m, ...o)),
     fc.tuple(base, fc.integer({ min: 0, max: 2 })).map(([l, k]) => op("take", op("sortBy", op("append", l, ns)), lit(k))),
+    // LIST.SORT.BY: the sort values come from an op of NumDomain. sqrt and ln fail for some numbers.
+    fc.tuple(base, fc.constantFrom("abs", "negate", "floor", "sqrt", "ln"), fc.integer({ min: 0, max: 3 }), fc.boolean()).map(([l, o, k, st]) => op("take", op("sortBy", op("append", l, ns), lit({ by: o, ...(st ? { strict: true } : {}) })), lit(k))),
     fc.tuple(fc.constantFrom(axes.window(-1, 0), axes.all, axes.where(axes.all, ref("b"))), opts).map(([a, o]) => op("flat", each(axes.all, each(a, op("divide", n, w))), ...o)),
   );
   const list: fc.Arbitrary<Expr> = fc.oneof(built, fc.tuple(built, built).map(([l, m]) => op("append", op("drop", l, lit(1)), m)));

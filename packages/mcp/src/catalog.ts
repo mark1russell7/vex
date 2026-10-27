@@ -131,6 +131,7 @@ These ops apply to each value. They are not ops of a domain.
 | \`any\`, \`all\`, \`none\` | A boolean from a list of booleans |
 | \`reduce(list, op)\` | The left fold of the list with the op of the domain of the items, for example \`reduce(sizes, "max")\` |
 | \`sortBy(list)\` | A list with the items in the order of their values, from the smallest. The values are numbers or texts. |
+| \`sortBy(list, { by })\` | A list with the items in the order of the results of the op \`by\` on their values, for example \`sortBy(bands, { by: "from" })\`. The results are numbers or texts. |
 | \`take(list, n)\` | A list of the first \`n\` items |
 | \`nth(list, i)\` | The value of the item at the position \`i\`, from 0 |
 | \`drop(list, n)\` | A list of the items after the first \`n\` items |

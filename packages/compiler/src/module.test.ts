@@ -340,7 +340,7 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(reasonOf(n, { schema: {} })).toBe(field("n"));
     expect(reasonOf(v("free"))).toBe('a variable that is not in the schema: "free"');
     expect(reasonOf(v("a"), { schema: {} })).toBe('a variable that is not in the schema: "a"');
-    expect(reasonOf(op("add", n, each(axes.all, n)))).toBe("a list is a value of the program");
+    expect(reasonOf(op("abs", each(axes.all, n)))).toBe('a list as the receiver of the op "abs"');
     expect(reasonOf(ext("note", null))).toBe('the extension "note"');
     expect(reasonOf(op("add", n, lit(null)))).toBe(undecided("add"));
     expect(reasonOf(op("count"))).toBe(undecided("count"));
@@ -364,7 +364,7 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(reasonOf(op("sum", each(axes.all, n)), { domains: [Vec2Domain, NumDomain], schema: SCHEMA })).toBe("a domain without a primitive type comes before the domain of a number");
     expect(reasonOf(n, { ...OPTIONS, name: "not a name" })).toBe('the name "not a name" is not a JavaScript name');
     // A node of the memo that keeps its items gives the reasons of a list op too.
-    expect(reasonOf(where(op("eq", n, K), w, "keys"))).toBe("a list is a value of the program");
+    expect(reasonOf(where(op("eq", n, K), w, "keys"))).toBe('the list op "keys"');
     expect(reasonOf(op("count", each(axes.where(axes.children, op("eq", n, K)), w)))).toBe('the axis "children"');
     expect(reasonOf(op("sum", each(axes.where(axes.all, op("eq", n, K)), w), lit("x")))).toBe(badOptions("sum"));
     expect(reasonOf(op("count", each(axes.where(axes.where(axes.all, op("and")), op("eq", n, K)), w)))).toBe("an and without arguments");
@@ -1081,8 +1081,9 @@ describe("COMPILE.MODULE: the text of a module", () => {
     // A list is a value only at a place that takes one. The value of the program is such a place (COMPILE.MODULE.LIST.RESULT).
     expect(reasonOf(each(axes.all, n))).toBe("");
     expect(reasonOf(let_({ xs: sorted }, v("xs")))).toBe("");
-    expect(reasonOf(op("add", lit(1), op("take", sorted, lit(1))))).toBe("a list is a value of the program");
-    expect(reasonOf(op("add", lit(1), let_({ a: lit(1) }, sorted)))).toBe("a list is a value of the program");
+    // An argument of an op takes a list too (COMPILE.MODULE.LIST.ARG). add takes a number, so the list is an error.
+    for (const x of [op("add", lit(1), op("take", sorted, lit(1))), op("add", lit(1), let_({ a: lit(1) }, sorted))]) expectSame(make(sourceOf(x)), x);
+    expect(reasonOf(op("abs", op("take", sorted, lit(1))))).toBe('a list as the receiver of the op "abs"');
     expect(reasonOf(op("count", op("sortBy", lit(5))))).toBe("a list op on a value that is not a list");
     expect(reasonOf(op("count", v("a")))).toBe('the kinds of the values of "count" do not decide its op');
     // A list of each key in a loop: the memo does not follow the axis list, so each key has its own list.

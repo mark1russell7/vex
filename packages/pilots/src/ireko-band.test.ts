@@ -140,8 +140,8 @@ describe("the band domain of ireko", () => {
   });
 
   it("COMPILE.MODULE.SORT.BY: a module sorts the bands by from, with the values of the interpreter", () => {
-    for (const name of ["sorted", "sortedList", "sortedStrict"]) {
-      expect({ [name]: loaded(name).run(copyOf(ROWS), { gap: 4 }) }).toStrictEqual({ [name]: evaluated(PROGRAMS[name], ROWS, { gap: 4 }, loaded(name).VEX_ERROR) });
+    for (const [name, program] of Object.entries(PROGRAMS).filter(([key]) => key.startsWith("sorted"))) {
+      expect({ [name]: loaded(name).run(copyOf(ROWS), { gap: 4 }) }).toStrictEqual({ [name]: evaluated(program, ROWS, { gap: 4 }, loaded(name).VEX_ERROR) });
     }
     expect(loaded("sorted").run(ROWS, { gap: 4 })[2]).toStrictEqual({ from: 0, to: 40, min: 0, max: 120 });
     // The third band moves by an infinite offset, so its item is an error, and the sort skips it.

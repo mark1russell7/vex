@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { fromDocument, toDocument } from "./document.ts";
-import { defineDomain } from "./domain.ts";
+import { defineDomain, type AnyDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
 import { vexError } from "./errors.ts";
 import { app, axes, axisExprs, call, children, each, fn, fold, isExpr, iterate, let_, lit, rec, ref, v, type Expr } from "./ir.ts";
@@ -107,6 +107,104 @@ describe("lists as values", () => {
     expect(error(evaluate(sortV, { space: space.array([{ v: 2 }, { v: Number.NaN }]), origin: "0" })).message).toBe('"sortBy" needs numbers without NaN or texts, all of one kind, but an item is NaN');
     expect(error(evaluate(sortV, { space: space.array([{ v: true }]), origin: "0" })).message).toBe('"sortBy" needs numbers without NaN or texts, all of one kind, but an item is a boolean');
     expect(error(evaluate(app("sortBy", each(axes.all, lit(null))), { space: mixed, origin: "0" }))).toMatchObject({ op: "sortBy", message: '"sortBy" needs numbers without NaN or texts, all of one kind, but an item is a null' });
+  });
+
+  describe("LIST.SORT.BY: sortBy with the option by", () => {
+    /** A band with a start, an end and a name, as the bands of the shapes of ireko. */
+    class Band {
+      constructor(
+        readonly from: number,
+        readonly to: number,
+        readonly name: string,
+      ) {}
+    }
+    let calls = 0;
+    const BandD = defineDomain({
+      name: "Band",
+      is: (u: unknown): u is Band => u instanceof Band,
+      ops: {
+        from: {
+          fn: (b: Band): number => {
+            calls++;
+            return b.from;
+          },
+        },
+        name: { fn: (b: Band): string => b.name },
+        wide: { fn: (b: Band): boolean => b.to - b.from > 5 },
+        mixed: { fn: (b: Band): number | string => (b.from > 2 ? b.from : b.name) },
+        nan: { fn: (): number => Number.NaN },
+        boom: {
+          fn: (): number => {
+            throw new Error("boom");
+          },
+        },
+      },
+    });
+    /** A domain that accepts each value and has no op of the bands. */
+    const Any = defineDomain({ name: "Any", is: (_u: unknown): _u is unknown => true, ops: { other: { fn: (): number => 0 } } });
+    const bands = space.array([{ b: new Band(3, 4, "c") }, { b: new Band(1, 9, "b") }, { b: new Band(3, 5, "a") }, { b: new Band(0, 2, "d") }, { n: 1 }]);
+    const bs = each(axes.all, ref("b"));
+    const sortB = (opts: unknown, list: Expr = bs, domains: readonly AnyDomain[] = [Num, BandD]): ReturnType<typeof evaluate> => evaluate(app("sortBy", list, lit(opts)), { space: bands, origin: "0", domains });
+    const sortKeys = (opts: unknown, list?: Expr): readonly string[] => keysOf(sortB(opts, list));
+
+    it("LIST.SORT.BY: the sort values come from the op, the sort is stable, and the items keep their keys and values", () => {
+      calls = 0;
+      // The record 4 has no field b, so its item is an error, and LIST.LENIENT skips it.
+      expect(sortKeys({ by: "from" })).toEqual(["3", "1", "0", "2"]);
+      expect(calls).toBe(4);
+      const list = value(sortB({ by: "from" })) as VexList;
+      expect(list.items.map((item) => (item.result.ok ? (item.result.value as Band).name : "?"))).toEqual(["d", "b", "c", "a"]);
+      expect(sortKeys({ by: "name" })).toEqual(["2", "1", "0", "3"]);
+      // Without by, and with by undefined, the sort values are the values. Bands are not numbers or texts.
+      expect(error(sortB({})).code).toBe("#VALUE!");
+      expect(error(sortB({ by: undefined })).message).toBe('"sortBy" needs numbers without NaN or texts, all of one kind, but an item is a Band');
+    });
+
+    it("LIST.SORT.BY: the op of the first domain that accepts the value and has the op gives the sort value", () => {
+      expect(keysOf(sortB({ by: "from" }, bs, [Any, BandD, Num]))).toEqual(["3", "1", "0", "2"]);
+      expect(keysOf(sortB({ by: "from" }, bs, [BandD, Num]))).toEqual(["3", "1", "0", "2"]);
+    });
+
+    it("LIST.SORT.BY: with strict, the first error item is the result, before an op applies", () => {
+      calls = 0;
+      expect(error(sortB({ by: "from", strict: true }))).toMatchObject({ code: "#N/A" });
+      expect(calls).toBe(0);
+      expect(error(sortB({ by: "boom", strict: true })).code).toBe("#N/A");
+    });
+
+    it("LIST.SORT.BY: an empty list gives an empty list, and no op applies", () => {
+      const none = each(axes.where(axes.all, lit(false)), ref("b"));
+      expect(sortKeys({ by: "boom" }, none)).toEqual([]);
+      expect(sortKeys({ by: "nope" }, none)).toEqual([]);
+    });
+
+    it("LIST.SORT.BY: a name that is not a text gives #VALUE!, also for an empty list", () => {
+      const none = each(axes.where(axes.all, lit(false)), ref("b"));
+      expect(error(sortB({ by: 1 }))).toMatchObject({ code: "#VALUE!", op: "sortBy", message: 'the option "by" of "sortBy" needs an op name, but got a number' });
+      expect(error(sortB({ by: null }, none)).message).toBe('the option "by" of "sortBy" needs an op name, but got a null');
+    });
+
+    it("LIST.SORT.BY: a value without the op in its domains gives #NAME?", () => {
+      expect(error(sortB({ by: "nope" }))).toMatchObject({ code: "#NAME?", op: "nope", message: 'no domain gives "nope" for a Band' });
+      expect(error(sortB({ by: "other" }))).toMatchObject({ code: "#NAME?", message: 'no domain gives "other" for a Band' });
+      const ns = each(axes.all, lit(2));
+      expect(error(sortB({ by: "from" }, ns))).toMatchObject({ code: "#NAME?", message: 'no domain gives "from" for a number' });
+    });
+
+    it("LIST.SORT.BY: the first error of an op, in the order of the list, is the result", () => {
+      expect(error(sortB({ by: "boom" }))).toMatchObject({ code: "#CALC!", op: "boom", message: '"boom" threw an exception' });
+      expect(error(sortB({ by: "nan" }))).toMatchObject({ code: "#NUM!", message: '"nan" gave NaN' });
+      // The number comes first, so its missing op is the error, before the exception of the band.
+      const first = let_({ l: app("append", each(axes.all, lit(2)), bs) }, app("sortBy", v("l"), lit({ by: "boom" })));
+      expect(error(evaluate(first, { space: bands, origin: "0", domains: [Num, BandD] })).code).toBe("#NAME?");
+      const second = let_({ l: app("append", bs, each(axes.all, lit(2))) }, app("sortBy", v("l"), lit({ by: "boom" })));
+      expect(error(evaluate(second, { space: bands, origin: "0", domains: [Num, BandD] })).code).toBe("#CALC!");
+    });
+
+    it("LIST.SORT.BY: sort values that are not numbers without NaN or texts of one kind give #VALUE!", () => {
+      expect(error(sortB({ by: "wide" }))).toMatchObject({ code: "#VALUE!", op: "sortBy", message: '"sortBy" needs numbers without NaN or texts, all of one kind, but "wide" of an item is a boolean' });
+      expect(error(sortB({ by: "mixed" })).message).toBe('"sortBy" needs numbers without NaN or texts, all of one kind, but "mixed" of an item is a string');
+    });
   });
 
   it("LIST.TAKE LIST.NTH: the first items of a list, and the value at a position", () => {

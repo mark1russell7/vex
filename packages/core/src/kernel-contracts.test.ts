@@ -61,6 +61,9 @@ function both(e: Expr, opts: CompileOptions, at: Space = s, origin = "A"): reado
   return [plain(evaluate(e, { ...opts, space: at, origin })), plain(k.run({ space: at, origin }))];
 }
 
+/** This function gives the keys of a list of `sortBy` with some options (LIST.SORT.BY). */
+const sortBy = (opts: unknown, list: Expr = each(axes.all, ref("n"))): Expr => app("keys", app("sortBy", list, lit(opts)));
+
 describe("the messages of the kernel tier (EVAL.REFERENCE)", () => {
   const cases: readonly (readonly [Expr, string, unknown])[] = [
     [ref([]), "N", ["#N/A", 'the record at "N" has no value', "missing-field"]],
@@ -85,6 +88,9 @@ describe("the messages of the kernel tier (EVAL.REFERENCE)", () => {
     [app("any", ns), "A", ["#VALUE!", '"any" needs booleans', "kind-mismatch"]],
     [app("first", none), "A", ["#N/A", '"first" has no values to work with', "empty"]],
     [app("sortBy", each(axes.all, app("if", ref("b"), ref("n"), ref("t")))), "A", ["#VALUE!", '"sortBy" needs numbers without NaN or texts, all of one kind', "kind-mismatch"]],
+    [app("sortBy", ns, lit({ by: 1 })), "A", ["#VALUE!", '"sortBy" needs an op name in the option "by"', "kind-mismatch"]],
+    [app("sortBy", ns, lit({ by: "nope" })), "A", ["#NAME?", 'no domain gives "nope" for a number', "unknown-op"]],
+    [app("sortBy", each(axes.all, ref("th")), lit({ by: "nan" })), "A", ["#NUM!", '"nan" gave NaN', "not-finite"]],
     [app("take", ns, lit(-1)), "A", ["#VALUE!", '"take" needs a whole number from 0', "kind-mismatch"]],
     [app("drop", ns, lit("1")), "A", ["#VALUE!", '"drop" needs a whole number from 0', "kind-mismatch"]],
     [app("nth", ns, lit(5)), "A", ["#N/A", '"nth" has no item at the position 5', "empty"]],
@@ -227,6 +233,26 @@ describe("the rare paths of the machine (EVAL.REFERENCE)", () => {
       [1, 1, 2, 3, 3],
       [1, 1, 2, 3, 3],
     ]);
+  });
+
+  it("LIST.SORT.BY: the kernel sorts by the op of the option by, as tier 1 does", () => {
+    const Neg = defineDomain({ name: "Neg", is: (u: unknown): u is number => typeof u === "number", ops: { neg: { fn: (a: number): number => -a }, odd: { fn: (a: number): boolean => a % 2 === 1 } } });
+    const AllNumbers = defineDomain({ name: "AllNumbers", is: (u: unknown): u is number => typeof u === "number", ops: {} });
+    // A domain of texts with the op neg does not accept a number, so its op does not apply.
+    const Texts = defineDomain({ name: "Texts", is: (u: unknown): u is string => typeof u === "string", ops: { neg: { fn: (): string => "x" } } });
+    const rows = space.array([{ n: 3 }, { n: 1 }, { n: 2 }, { n: 1 }, {}]);
+    const run = (e: Expr): readonly [unknown, unknown] => both(e, { domains: [Texts, AllNumbers, Neg] }, rows, "0");
+    expect(run(sortBy({ by: "neg" }))).toEqual([
+      ["0", "2", "1", "3"],
+      ["0", "2", "1", "3"],
+    ]);
+    expect(run(sortBy({}))).toEqual([
+      ["1", "3", "2", "0"],
+      ["1", "3", "2", "0"],
+    ]);
+    expect(run(sortBy({ by: "neg", strict: true }))).toEqual(["#N/A", "#N/A"]);
+    expect(run(sortBy({ by: "odd" }))).toEqual(["#VALUE!", "#VALUE!"]);
+    expect(run(sortBy({ by: "nope" }, each(axes.where(axes.all, lit(false)), ref("n"))))).toEqual([[], []]);
   });
 
   it("LIST.REDUCE CALL.METHOD: reduce takes the first domain that has the op, after a domain of the value without it", () => {

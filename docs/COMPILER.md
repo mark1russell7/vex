@@ -825,9 +825,14 @@ A shape of ireko is two lists of bands. `BandDomain` of the pilots holds one ban
 
 The domain is in the private pilots. Thus the API of `vex-domains` does not change, and a generated module of ireko holds the copies of the ops. A test compares the modules of programs over bands with the interpreter, also for errors.
 
+The merge of the bands of a shape sorts the bands by `from`. Thus `sortBy` has the option `by` (LIST.SORT.BY, COMPILE.MODULE.SORT.BY). `sortBy(bands, { by: "from" })` sorts the items by the result of the op `from` on each value:
+
+- The kind of the items gives the static site of the op, and the module copies its function, as for each other op. The helper `SK` applies the op to each item with a value.
+- The sort values follow LIST.SORT, and the items keep their keys and values. An error of the op is the error of the module.
+- A `by` that is not a literal text, or items without one kind, give a reason. An empty list applies no op.
+
 These parts are not in a module yet:
 
 - A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
-- `sortBy` sorts the values. It cannot sort records or the values of a domain by a field. The merge of the bands of a shape sorts the bands by `from`.
 - A record with a list in a field, for example a shape with `rows` and `columns`, gives a reason. A sheet keeps the two lists in two columns.
 - The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.

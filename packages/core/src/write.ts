@@ -50,6 +50,9 @@ const NONE: readonly Job[] = [];
 const term = (e: Expr): Job => ({ t: "term", e });
 const envelope = (e: Expr): Job => ({ t: "envelope", e });
 
+/** This function gives the field `as` of a loop: a new list of its names, or no field (AXIS.LIST.SCOPE). */
+const itemsOf = (as: readonly string[] | undefined): { readonly as?: Json } => (as === undefined ? {} : { as: [...as] });
+
 /** This function gives a record from names and the documents of their values, from an index of the documents. */
 function namesOf(names: readonly string[], docs: readonly Json[], from: number): JsonRecord {
   const out: Record<string, Json> = {};
@@ -148,7 +151,8 @@ class Writer {
             const axis = docs[0] as Json;
             const body = docs[1] as Json;
             const address = at.make(docs.slice(2));
-            return this.#keep(typed("each", reads ? { body, axis, ...address } : { axis, body, ...address }), e);
+            const as = itemsOf(e.as);
+            return this.#keep(typed("each", reads ? { body, axis, ...as, ...address } : { axis, ...as, body, ...address }), e);
           },
         };
       }
@@ -164,7 +168,8 @@ class Writer {
             const names = { init: namesOf(init, docs, 1), step: namesOf(step, docs, 1 + init.length) };
             const result = docs[after] as Json;
             const address = at.make(docs.slice(after + 1));
-            return this.#keep(typed("fold", reads ? { ...names, axis, ...address, result } : { axis, ...names, result, ...address }), e);
+            const as = itemsOf(e.as);
+            return this.#keep(typed("fold", reads ? { ...names, axis, ...as, ...address, result } : { axis, ...as, ...names, result, ...address }), e);
           },
         };
       }

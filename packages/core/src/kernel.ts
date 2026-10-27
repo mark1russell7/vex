@@ -74,6 +74,9 @@ const move = (walker: string, parts: PartShape): Kind => ({ verbs: { eval: "form
 /** The scope of a loop: the names of `init`, for the steps, the test `until` and the result (LOOP.NAMES). */
 const LOOP_SCOPE = [{ names: { keysAt: ["init"] }, in: [["step", "*"], ["until"], ["result"]] }] as const;
 
+/** The names of the items of a loop over the axis `list`: one or two distinct texts (AXIS.LIST.SCOPE). */
+const ITEM_NAMES: PartShape = { shape: "list", item: { shape: "text" }, distinct: true };
+
 /**
  * This function gives the world of Vex. The module uses it one time, and the annotation `__PURE__` lets a bundler
  * remove the world from a program that does not use it.
@@ -101,11 +104,17 @@ function worldOfVex(): World {
         summary: "A function of a let. Its body evaluates at the position of each call.",
       },
       call: { verbs: { eval: "vex.call" }, parts: closed({ fn: { shape: "term", kinds: [["ref"]] }, args: TERMS }, ["fn", "args"]), summary: "A call of a function of a let." },
-      each: { verbs: { eval: "vex.each" }, parts: closed({ axis: AXIS, body: TERM, at: ADDRESS }, ["axis", "body"]), summary: "The body at each target of an axis: a list." },
+      each: {
+        verbs: { eval: "vex.each" },
+        parts: closed({ axis: AXIS, as: ITEM_NAMES, body: TERM, at: ADDRESS }, ["axis", "body"]),
+        // The names of the items are names of the body only. The test of where does not see them (AXIS.LIST.SCOPE).
+        scope: [{ names: { listAt: ["as"] }, in: [["body"]] }],
+        summary: "The body at each target of an axis: a list.",
+      },
       fold: {
         verbs: { eval: "vex.fold" },
-        parts: closed({ axis: AXIS, init: NAMES, step: NAMES, result: TERM, at: ADDRESS }, ["axis", "init", "step", "result"]),
-        scope: LOOP_SCOPE,
+        parts: closed({ axis: AXIS, as: ITEM_NAMES, init: NAMES, step: NAMES, result: TERM, at: ADDRESS }, ["axis", "init", "step", "result"]),
+        scope: [...LOOP_SCOPE, { names: { listAt: ["as"] }, in: [["step", "*"]] }],
         summary: "A step at each target of an axis, in order, and a result.",
       },
       iterate: {
@@ -312,10 +321,15 @@ const WALKERS: Readonly<Record<string, Walker>> = {
  * (`vexDefinitions`).
  */
 
-/** A target of an axis: its key, or its key and an error (AXIS.WHERE, AXIS.LIST). */
+/**
+ * A target of an axis: its key, or its key and an error (AXIS.WHERE, AXIS.LIST). A target of the axis `list` also has
+ * the value of its item and its position as `nth` counts it (AXIS.LIST.ITEM, AXIS.LIST.INDEX).
+ */
 interface Target {
   readonly key: string;
   readonly error?: VexError;
+  readonly value?: unknown;
+  readonly index?: number;
 }
 
 /** The value of an axis document: the targets from a position. `table` names the table of the axis table. */
@@ -375,7 +389,9 @@ const axisEvaluator: EvalFn = ({ typePath, value, context }) => {
         // LIST.ARRAY: an array is a list with the positions as keys.
         const items = asList(r.value, missing);
         if (items === undefined) return failed("kind-mismatch", `the axis "list" needs a list, not a ${describe(r.value)}`);
-        return ok(items.items.map(({ key, result }) => (result.ok ? { key } : { key, error: result.error })));
+        // The index counts the items with a value, as nth does: nth skips the error items (LIST.LENIENT).
+        let index = 0;
+        return ok(items.items.map(({ key, result }): Target => (result.ok ? { key, value: result.value, index: index++ } : { key, error: result.error })));
       },
     });
   }
@@ -418,7 +434,8 @@ function whereTargets(base: Targets, test: Part, ctx: Context, from: Place): Out
     }
     const r = test.evaluate({ ...ctx, self: placeOf(base, from, t.key) });
     if (!r.ok) out.push({ key: t.key, error: toVexError(r.error) });
-    else if (r.value === true) out.push({ key: t.key });
+    // The target keeps the value and the index of its item (AXIS.LIST.ITEM).
+    else if (r.value === true) out.push(t);
     else if (r.value !== false) out.push({ key: t.key, error: vexError("kind-mismatch", `the test of "where" gave a ${typeof r.value}, not a boolean`) });
   }
   return ok(out);
@@ -462,6 +479,22 @@ function bindAll(record: Part | undefined, ctx: Context, names: Readonly<Record<
   return ok(out);
 }
 
+/**
+ * This function adds the names `as` of a loop to the names of a body or of a step. The first name holds the value of
+ * the item, and the second its index (AXIS.LIST.ITEM, AXIS.LIST.INDEX). A loop without `as` keeps its names.
+ */
+function withItem(names: Readonly<Record<string, unknown>>, as: readonly string[] | undefined, t: Target): Readonly<Record<string, unknown>> {
+  if (as === undefined) return names;
+  const out: Record<string, unknown> = { ...names };
+  const [item, index] = as;
+  setName(out, item as string, t.value);
+  if (index !== undefined) setName(out, index, t.index);
+  return out;
+}
+
+/** This function gives the names `as` of a loop, or `undefined` (AXIS.LIST.SCOPE). */
+const itemNamesOf = (value: unknown): readonly string[] | undefined => (value as { readonly as?: readonly string[] }).as;
+
 /** The evaluators of the loops: each, fold and iterate (LOOP.NAMES, FOLD.ORDER, ITERATE.LIMIT). */
 const LOOPS: Readonly<Record<string, EvalFn>> = {
   "vex.each": ({ value, context }) => {
@@ -469,7 +502,11 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
     if (!found.ok) return found;
     const { axis, from, targets } = found.value;
     const body = partAt(value, "body");
-    const items: ListItem[] = targets.map(({ key, error }) => ({ key, result: error === undefined ? toVexResult(body.evaluate({ ...context, self: placeOf(axis, from, key) })) : vexFail(error) }));
+    const as = itemNamesOf(value);
+    const items: ListItem[] = targets.map((t) => ({
+      key: t.key,
+      result: t.error === undefined ? toVexResult(body.evaluate({ ...context, self: placeOf(axis, from, t.key), names: withItem(context.names, as, t) })) : vexFail(t.error),
+    }));
     return ok(vexList(items));
   },
 
@@ -482,9 +519,11 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
     const found = targetsOf(value, context);
     if (!found.ok) return found;
     const { axis, from, targets } = found.value;
-    for (const { key, error } of targets) {
-      if (error !== undefined) return { ok: false, error: toKernelError(error) };
-      const next = bindAll(step, { ...context, self: placeOf(axis, from, key), names }, names);
+    const as = itemNamesOf(value);
+    for (const t of targets) {
+      if (t.error !== undefined) return { ok: false, error: toKernelError(t.error) };
+      // The step sees the names of the item, and the next names do not keep them (AXIS.LIST.SCOPE).
+      const next = bindAll(step, { ...context, self: placeOf(axis, from, t.key), names: withItem(names, as, t) }, names);
       if (!next.ok) return next;
       names = next.value;
     }

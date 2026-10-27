@@ -105,14 +105,16 @@ The builder makes an expression: a tree of plain data. Code can make the same tr
 | `let_(bind, body)` and `v(name)` | Names and their values |
 | `fn(params, body)` and `call(name, ...args)` | A function as a binding of `let`, and a call of it. The body evaluates at the position of the call. |
 | `rec(fields)` | A record of values |
-| `each(axis, body, at?)` | A list: `body` at each target of `axis` |
-| `fold(axis, init, step, result, at?)` | A loop over the targets of `axis`, in order |
+| `each(axis, body, at?, as?)` | A list: `body` at each target of `axis` |
+| `fold(axis, init, step, result, at?, as?)` | A loop over the targets of `axis`, in order |
 | `iterate(limit, init, step, result, until?)` | A loop of at most `limit` steps |
 | `ext(kind, data)` | The value of an extension handler |
 
 The moves are `key(k)`, `index(i)`, `offset(...d)`, `other`, `origin` and `parent`. `key` and `index` also take an expression. The axes are in `axes`, for example `axes.all`, `axes.others`, `axes.window(from, to)`, `axes.reverse(axis)`, `axes.list(expr)` and `axes.where(axis, test)`. In the builder, the option `reverse: true` of an axis gives the reverse order.
 
-A list is a value. Bind it with `let_`, sort it with `sortBy`, and loop over its items in their order with `axes.list(v(name))`. To sort by an op, write `sortBy(list, { by: "from" })` (the next release). `take(list, n)` gives the first items, and `nth(list, i)` gives one value. In the builder, a list chain has `sortBy()`, `take(n)`, `nth(i)` and `each(body)`, and `root.fn(kinds, body)` with `functions(fns, body)` makes and binds functions.
+A list is a value. Bind it with `let_`, sort it with `sortBy`, and loop over its items in their order with `axes.list(v(name))`. To sort by an op, write `sortBy(list, { by: "from" })` (the next release). `take(list, n)` gives the first items, and `nth(list, i)` gives one value.
+
+Over `axes.list`, the argument `as: [item, index]` of `each` and `fold` names the value of each item and its position (the next release). The test of `where` does not see these names. In the builder, a list chain has `sortBy()`, `take(n)`, `nth(i)` and `each(body)`, and `root.fn(kinds, body)` with `functions(fns, body)` makes and binds functions.
 
 Four list ops build lists. Each item keeps its key and its value. `drop(list, n)` gives the items after the first `n` items. `append(list, other)` joins two lists. `without(list, other)` removes the items with a key of `other`. `flat(list)` joins the lists that are the values of the items.
 

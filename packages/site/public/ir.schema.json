@@ -231,6 +231,16 @@
         "axis": {
           "$ref": "#/$defs/axis"
         },
+        "as": {
+          "description": "The names of the item and of its index, for the axis 'list' only. The names are visible in 'body' and 'step', not in the test of 'where'.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true
+        },
         "body": {
           "$ref": "#/$defs/expr"
         },
@@ -258,6 +268,16 @@
         },
         "axis": {
           "$ref": "#/$defs/axis"
+        },
+        "as": {
+          "description": "The names of the item and of its index, for the axis 'list' only. The names are visible in 'body' and 'step', not in the test of 'where'.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true
         },
         "init": {
           "type": "object",

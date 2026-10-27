@@ -1,7 +1,7 @@
 import { fromDocument, isDocument, type Envelope } from "./document.ts";
 import { liftsAt, resolveOp, type AnyDomain, type ParamKind, type ResolvedOp } from "./domain.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
-import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type Move } from "./ir.ts";
+import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
 import { fail, ok, type Result } from "./result.ts";
@@ -184,6 +184,33 @@ const baseAxis = (a: Axis): Exclude<Axis, { readonly t: "where" }> => (a.t === "
 
 /** A compiled node: it evaluates in a frame of a run. */
 type Node = (f: Frame, c: Ctx) => Result<unknown>;
+
+/**
+ * A target of an axis: its key, and the error of a test of `where` or of an error item. A target of the axis `list` also
+ * has the value of its item and its position as `nth` counts it (AXIS.LIST.ITEM, AXIS.LIST.INDEX).
+ */
+interface Target {
+  readonly key: string;
+  readonly test?: Result<unknown>;
+  readonly value?: unknown;
+  readonly index?: number;
+}
+
+/** The targets of an axis from a frame, or the error of the axis. */
+type Targets = (f: Frame, c: Ctx) => Result<readonly Target[]>;
+
+/**
+ * This function adds the names `as` of a loop to the names of a body or of a step. The first name holds the value of
+ * the item, and the second its index (AXIS.LIST.ITEM, AXIS.LIST.INDEX). A loop without `as` keeps its names.
+ */
+function withItem(env: Env, as: ItemNames | undefined, t: Target): Env {
+  if (as === undefined) return env;
+  const out = new Map(env);
+  const [item, index] = as;
+  out.set(item, ok(t.value));
+  if (index !== undefined) out.set(index, ok(t.index));
+  return out;
+}
 
 /** The static facts of a node for its trace events. */
 interface Info {
@@ -451,9 +478,10 @@ class Compiler {
       }
       const ts = targets(from, inner);
       if (!ts.ok) return this.#emit(c, info, f, ts);
-      const items: ListItem[] = ts.value.map(({ key, test }) => {
+      const items: ListItem[] = ts.value.map((t) => {
+        const { key, test } = t;
         if (test !== undefined && !test.ok) return { key, result: test };
-        return { key, result: body({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env: f.env }, inner) };
+        return { key, result: body({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env: withItem(f.env, e.as, t) }, inner) };
       });
       return this.#emit(c, info, f, ok(vexList(items)));
     };
@@ -465,7 +493,7 @@ class Compiler {
    */
   #names(e: ExprOf<"fold"> | ExprOf<"iterate">, path: readonly number[]): {
     readonly first: (f: Frame, c: Ctx) => Result<Map<string, Result<unknown>>>;
-    readonly next: (f: Frame, c: Ctx) => Result<Map<string, Result<unknown>>>;
+    readonly next: (f: Frame, c: Ctx, names?: Env) => Result<Map<string, Result<unknown>>>;
   } {
     const inits = Object.entries(e.init).map(([name, x], i) => [name, this.node(x, [...path, i])] as const);
     const steps = Object.entries(e.step).map(([name, x], i) => [name, this.node(x, [...path, inits.length + i])] as const);
@@ -479,15 +507,16 @@ class Compiler {
         }
         return ok(env);
       },
-      // Each value of a step reads the values before the step, so the names change only after all the values.
-      next: (f, c) => {
+      // Each value of a step reads the values before the step, so the names change only after all the values. The new
+      // names come from `names` when the frame has more names, for example the names of an item (AXIS.LIST.SCOPE).
+      next: (f, c, names = f.env) => {
         const values: (readonly [string, Result<unknown>])[] = [];
         for (const [name, n] of steps) {
           const r = n(f, c);
           if (!r.ok) return r;
           values.push([name, r]);
         }
-        const env = new Map(f.env);
+        const env = new Map(names);
         for (const [name, r] of values) env.set(name, r);
         return ok(env);
       },
@@ -526,9 +555,10 @@ class Compiler {
       }
       const ts = targets(from, inner);
       if (!ts.ok) return this.#emit(c, info, f, ts);
-      for (const { key, test } of ts.value) {
+      for (const t of ts.value) {
+        const { key, test } = t;
         if (test !== undefined && !test.ok) return this.#emit(c, info, f, test);
-        const after = names.next({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env }, inner);
+        const after = names.next({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env: withItem(env, e.as, t) }, inner, env);
         if (!after.ok) return this.#emit(c, info, f, after);
         env = after.value;
       }
@@ -573,7 +603,7 @@ class Compiler {
   }
 
   /** This method compiles the targets of an axis. For `where`, a failed test keeps the target with its error. */
-  #targets(a: Axis, path: readonly number[], counter: { next: number }): (f: Frame, c: Ctx) => Result<readonly { readonly key: string; readonly test?: Result<unknown> }[]> {
+  #targets(a: Axis, path: readonly number[], counter: { next: number }): Targets {
     if (a.t === "table") return (_f, c) => ok(c.space.keys.map((key) => ({ key })));
     const base = a.t === "reverse" ? a.axis : a;
     if (base.t === "list") return this.#listTargets(base.list, a.t === "reverse", path, counter);
@@ -591,7 +621,7 @@ class Compiler {
     return (f, c) => {
       const ts = inner(f, c);
       if (!ts.ok) return ts;
-      const out: { key: string; test?: Result<unknown> }[] = [];
+      const out: Target[] = [];
       for (const t of ts.value) {
         if (t.test !== undefined && !t.test.ok) {
           out.push(t);
@@ -600,7 +630,8 @@ class Compiler {
         const at: Frame = { pos: { origin: sameOrigin ? t.key : f.pos.origin, focus: t.key }, env: f.env };
         const r = test(at, c);
         if (!r.ok) out.push({ key: t.key, test: r });
-        else if (r.value === true) out.push({ key: t.key });
+        // The target keeps the value and the index of its item (AXIS.LIST.ITEM).
+        else if (r.value === true) out.push(t);
         else if (r.value !== false) {
           out.push({ key: t.key, test: this.#err("kind-mismatch", `the test of "where" gave a ${typeof r.value}, not a boolean`, at, testPath) });
         }
@@ -613,7 +644,7 @@ class Compiler {
    * This method compiles the targets of the axis list (AXIS.LIST): the keys of the items of a list, in its order. The
    * expression evaluates at the key of the address. An error item keeps its target with its error.
    */
-  #listTargets(list: Expr, reverse: boolean, path: readonly number[], counter: { next: number }): (f: Frame, c: Ctx) => Result<readonly { readonly key: string; readonly test?: Result<unknown> }[]> {
+  #listTargets(list: Expr, reverse: boolean, path: readonly number[], counter: { next: number }): Targets {
     const node = this.node(list, [...path, counter.next++]);
     return (f, c) => {
       const r = node(f, c);
@@ -621,7 +652,9 @@ class Compiler {
       // LIST.ARRAY: an array is a list with the positions as keys.
       const listed = asList(r.value, this.#missing(f, path));
       if (listed === undefined) return this.#err("kind-mismatch", `the axis "list" needs a list, not a ${describeType(r.value)}`, f, path);
-      const items = listed.items.map(({ key, result }) => (result.ok ? { key } : { key, test: result }));
+      // The index counts the items with a value, as nth does: nth skips the error items (LIST.LENIENT).
+      let index = 0;
+      const items = listed.items.map(({ key, result }): Target => (result.ok ? { key, value: result.value, index: index++ } : { key, test: result }));
       return ok(reverse ? items.toReversed() : items);
     };
   }

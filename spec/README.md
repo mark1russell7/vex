@@ -54,8 +54,8 @@ An expression is plain JSON data. It has one of these kinds.
 | `let` | `bind`, `body` | the body, with names bound to the values of the bindings |
 | `var` | `name` | the value of a bound name |
 | `rec` | `fields` | a record of the values of the fields |
-| `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address |
-| `fold` | `axis`, `init`, `step`, `result`, `at` | the result, after a step at each target of the axis |
+| `each` | `axis`, `body`, `at`, `as` | a list: the body at each target of the axis, from the key of the address |
+| `fold` | `axis`, `init`, `step`, `result`, `at`, `as` | the result, after a step at each target of the axis |
 | `iterate` | `limit`, `init`, `step`, `until`, `result` | the result, after the steps |
 | `ext` | `kind`, `data` | the value of an extension handler |
 
@@ -79,8 +79,8 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 | `fn` | `{ "type": "fn", "value": { "params": texts, "body": term } }` |
 | `call` | `{ "type": "call", "value": { "fn": reference, "args": terms } }` |
 | `rec` | `{ "type": "record", "value": { ...fields } }` |
-| `each` | `{ "type": "each", "value": { "axis", "body", "at" } }` |
-| `fold` | `{ "type": "fold", "value": { "axis", "init", "step", "result", "at" } }` |
+| `each` | `{ "type": "each", "value": { "axis", "as", "body", "at" } }` |
+| `fold` | `{ "type": "fold", "value": { "axis", "as", "init", "step", "result", "at" } }` |
 | `iterate` | `{ "type": "iterate", "value": { "limit", "init", "step", "until", "result" } }` |
 | `ext` | `{ "type": ["ext", ...keys], "value": data }` |
 | a move | `{ "type": ["moves", kind], "value": v }` |
@@ -93,7 +93,7 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[DOC.REF]** A reference is a path from a root. A reference from `self` has the moves of its address and then the segments of its path. A reference from `names` has one step: a name of a `let`, a function, a loop or the caller. Vex reads from no other root.
 - **[DOC.MOVE]** The value of the move `key` or `index` is a term. A text key and a number position are fixed. Another term is a computed key or position, for example a term in an envelope. A literal of another kind gives `#VALUE!` at run time (NAV.COMPUTED). The value of `offset` is the list of its numbers. The value of `other`, `origin` and `parent` is `null`.
 - **[DOC.ADDRESS]** The field `at` of `each` and `fold` is a reference from `self` with moves only. An empty address and no address are the same expression, and the document has no field `at` for them.
-- **[DOC.CONSTRUCT]** The constructs `let`, `fn`, `record`, `each`, `fold` and `iterate` have the fields of the table, and no other fields. Only `at` and `until` are optional. `limit` and `params` are data, not terms.
+- **[DOC.CONSTRUCT]** The constructs `let`, `fn`, `record`, `each`, `fold` and `iterate` have the fields of the table, and no other fields. Only `at`, `as` and `until` are optional. `as` is a list of one or two names. It needs the axis `list`, also inside `reverse` and `where`. Its two names are not the same, and a name of `init` is not a name of `as`. `limit` and `params` are data, not terms.
 - **[DOC.CALL]** The field `fn` of `call` is a reference to a name: `{ "type": "ref", "value": ["names", name] }`. Thus a call applies a function that a `let` binds.
 - **[DOC.AXIS]** The value of an axis is a record of its parameters, with the same names as the fields of the axis. An axis without parameters has the value `{}`. `list` and `test` are terms, and `axis` is an axis.
 - **[DOC.EXT]** The type of an extension is `["ext", ...keys]`. The keys are the kind, split at its dots. The value is the data, without a change.
@@ -160,6 +160,9 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[AXIS.WINDOW]** The axis `window(from, to)` has the targets of the moves `offset(d)` for each whole number `d` from `from` to `to`, in order. The offset 0 is the focus, and an offset outside the space has no target. In a tree space, the offsets go among the siblings. In a space where an offset with one number is not valid, the axis gives `#REF!`.
 - **[AXIS.REVERSE]** The axis `reverse(axis)` has the targets of `axis` in the reverse order, from the last to the first. The inner axis is a base axis: not `where`, `reverse` or `table`. A test goes outside it: `where(reverse(axis), test)`. A fold over it starts at the last target, and an error of the inner axis is the error of the reverse order.
 - **[AXIS.LIST]** The axis `list(expr)` has the keys of the items of the list that `expr` gives as targets, in the order of the list. `expr` evaluates at the key of the address, before the targets. A value that is not a list gives `#VALUE!`. An error item gives an error item for its target. A key that is not in the space has no record. The axis `reverse` can contain the axis `list`.
+- **[AXIS.LIST.ITEM]** In `each` or `fold` over the axis `list`, the field `as: [item]` binds the name `item` to the value of the item of each target. An error item gives an error item for its target, as AXIS.LIST tells. There, the body or the step does not evaluate, and the names bind nothing. In a fold, that error is the value of the fold.
+- **[AXIS.LIST.INDEX]** The second name of `as: [item, index]` binds the position of the item, from 0, as `nth` counts. LIST.LENIENT applies: the error items do not count. Thus `nth(list, index)` gives the item. Under `reverse`, the index is the position in the list, not in the order of the loop.
+- **[AXIS.LIST.SCOPE]** The names of `as` are visible only in `body` and in each `step`. They hide an outer name of the same name. The test of `where`, the list, the address, `init` and `result` do not see them. There, the name refers to the outer binding, or gives `#NAME?`.
 - **[AXIS.TABLE]** The axis `table(name)` has each key of the table `name` of the evaluation as a target, in key order. Its body and its test evaluate in the space of that table, and there the origin is the target. A value of the space of the origin goes in through a variable. An evaluation without that table gives `#REF!`.
 - **[AXIS.GRAPH]** In a graph space, the axis `successors` has the ends of the edges from the focus, in the order of the edges. `predecessors` has the keys with an edge to the focus, in key order. `reachable` has each key that a path of one or more edges reaches, once, in the order of a breadth-first search, without the focus. In a tree space, the edges go from a parent to its children. In another space, each of these axes gives `#REF!`.
 - **[AXIS.WHERE]** The axis `where(axis, test)` keeps the targets of `axis` where `test` gives `true`. A test that fails, or that does not give a boolean, gives an error item for that target.

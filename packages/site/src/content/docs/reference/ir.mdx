@@ -157,7 +157,7 @@ An array of a field or of a name is a list where a list op or the axis `list` ne
 | `indexOf(list, value)` | the position of the first item with the value, from 0, as `nth` counts. The value is a number, a text or a boolean. A value that no item has gives `#N/A`. |
 | `fill(n, value)` | a list of `n` items with the value. The keys are the positions. `n` is a whole number from 0 to 100000. |
 
-Thus a stack of a layout needs no functions of the host. The fractions, the keys of the slots and the bounds are names of the run. The body of the axis `list` reads the fields of each target, not the values of the items. Thus the fold below counts the items, and `nth` reads the value at each position.
+Thus a stack of a layout needs no functions of the host. The fractions, the keys of the slots and the bounds are names of the run. Without `as`, the body of the axis `list` reads the fields of each target, not the values of the items. Thus the fold below counts the items, and `nth` reads the value at each position.
 
 ```ts doctest
 import { app, axes, evaluate, fold, let_, lit, ref, space, v, type Expr } from "@mark1russell7/vex";
@@ -178,6 +178,33 @@ run(app("values", app("fill", lit(4), lit(0.25))), "0"); // => { ok: true, value
 ```
 
 Tier 2 and a standalone module do not have lists yet. Thus they give a reason for `indexOf` and `fill`, and tier 1 evaluates the program. A list op of tier 2 on an array also goes to tier 1, so each tier gives the same result.
+
+### The names of the items
+
+The field `as` of `each` and `fold` gives names to the value of each item and to its index (AXIS.LIST.ITEM). It needs the axis `list`, also inside `reverse` and `where`.
+
+- `as: [item]` binds `item` to the value of the item of each target.
+- `as: [item, index]` also binds `index` to the position of the item, from 0, as `nth` counts (AXIS.LIST.INDEX). The error items do not count, and `reverse` does not change the index.
+- The names are visible in the body of `each` and in each step of `fold` (AXIS.LIST.SCOPE). The test of `where`, `init` and `result` do not see them.
+- An error item gives an error item for its target, and the body does not evaluate. In a fold, the error is the value of the fold.
+
+To keep only some items, put the test in the body. The body gives a list of one item or an empty list, and `flat` joins these lists.
+
+```ts doctest
+import { app, axes, each, evaluate, fold, lit, space, v } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+const one = space.array([{ n: 0 }]);
+const run = (e: Parameters<typeof evaluate>[0]) => evaluate(e, { space: one, origin: "0", domains: [NumDomain], vars: { ws: [3, 5, 2] } });
+// Each value plus its index, and the sum of the values.
+run(app("values", each(axes.list(v("ws")), app("add", v("w"), v("i")), undefined, ["w", "i"]))); // => { ok: true, value: [3, 6, 4] }
+run(fold(axes.list(v("ws")), { s: lit(0) }, { s: app("add", v("s"), v("w")) }, v("s"), undefined, ["w"])); // => { ok: true, value: 10 }
+// The values that are more than 2, in the order of the list.
+const keep = app("if", app("gt", v("w"), lit(2)), app("fill", lit(1), v("w")), app("fill", lit(0), v("w")));
+run(app("values", app("flat", each(axes.list(v("ws")), keep, undefined, ["w"])))); // => { ok: true, value: [3, 5] }
+```
+
+Tier 2 and a standalone module do not have these names yet. They give a reason, and tier 1 evaluates the program.
 
 ## Programs are data
 
@@ -217,8 +244,8 @@ Each term is an envelope `{ type, value }`. Another JSON value in the place of a
 | `fn(params, body)` | `{ type: "fn", value: { params, body } }` |
 | `call(name, ...args)` | `{ type: "call", value: { fn: { type: "ref", value: ["names", name] }, args } }` |
 | `rec(fields)` | `{ type: "record", value: fields }` |
-| `each(axis, body, at)` | `{ type: "each", value: { axis, body, at } }`. `at` is a reference from `self` with moves only. |
-| `fold(axis, init, step, result, at)` | `{ type: "fold", value: { axis, init, step, result, at } }` |
+| `each(axis, body, at, as)` | `{ type: "each", value: { axis, as, body, at } }`. `at` is a reference from `self` with moves only. `as` is a list of texts. |
+| `fold(axis, init, step, result, at, as)` | `{ type: "fold", value: { axis, as, init, step, result, at } }` |
 | `iterate(limit, init, step, result, until)` | `{ type: "iterate", value: { limit, init, step, until, result } }` |
 | `ext(kind, data)` | `{ type: ["ext", ...keys], value: data }` |
 
@@ -236,7 +263,7 @@ The kernel is also the reference tier of Vex (`EVAL.REFERENCE`). `kernelPlan` ev
 import { app, fromDocument, kernelPlan, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 
-// The contract of each permits only the fields axis, body and at.
+// The contract of each permits only the fields axis, as, body and at.
 const extra = { type: "each", value: { axis: { type: ["axes", "all"], value: {} }, body: 1, extra: 1 } };
 fromDocument(extra).ok; // => false
 const plan = kernelPlan(app("add", ref("n"), ref("n")), { domains: [NumDomain] });

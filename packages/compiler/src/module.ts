@@ -195,6 +195,16 @@ interface Ctx {
 }
 
 /**
+ * A name of a loop whose step appends to its own list (COMPILE.MODULE.APPEND.OWN). It has the name, its read in the
+ * loop and the variable of the array of its last append. The printer makes the variable at the first append that uses it.
+ */
+interface Owner {
+  readonly name: string;
+  readonly read: Name;
+  w: string | undefined;
+}
+
+/**
  * A bound function of the printer (FN.BIND): its node and the context of its binding. It also has one printed
  * JavaScript function for each signature of the arguments of its calls.
  */
@@ -249,10 +259,10 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "NT" | "FI" | "LI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
-type BuildHelper = "DR" | "AP" | "WO" | "FL" | "GT" | "IX";
+type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX";
 
 /** The helpers of a tree space (COMPILE.MODULE.TREE). */
 type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
@@ -302,19 +312,28 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "}",
   ].join("\n"),
   TK: "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
-  // nth keeps the items with values on the array, as GT keeps its index. Thus a loop that reads each item of a list of n
-  // items costs O(n), not O(n squared) (COMPILE.MODULE.NTH.INDEX).
-  NT: [
-    "function NT(l, i, s) {",
+  // The items with values of a list stay on its array, as GT keeps its index. Thus a loop that reads each item of a list
+  // of n items with nth costs O(n), not O(n squared). count and first read them too (COMPILE.MODULE.NTH.INDEX).
+  VW: [
+    "function VW(l) {",
     "  let o = l.vw;",
     "  if (o === undefined) {",
     "    o = l.filter((x) => x[1] !== E);",
     "    l.vw = o;",
     "  }",
+    "  return o;",
+    "}",
+  ].join("\n"),
+  NT: [
+    "function NT(l, i, s) {",
+    "  const o = VW(l);",
     "  if (s && o.length < l.length) F();",
     "  return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();",
     "}",
   ].join("\n"),
+  // count and first of a list that is not an each. With strict, an error item is the error of the op.
+  CT: "function CT(l, s) { const o = VW(l); return s && o.length < l.length ? F() : o.length; }",
+  FS: "function FS(l, s) { const o = VW(l); return (s && o.length < l.length) || o.length === 0 ? F() : o[0][1]; }",
   // fill (LIST.FILL, COMPILE.MODULE.FILL): n items with the value v, and the keys 0 to n - 1. A count that is not a whole
   // number from 0 to 100000, or a missing value, is the error of the interpreter. Each item can share the array of a list.
   FI: [
@@ -351,8 +370,13 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   // The ops that build a list (LIST.BUILD) keep the key and the value of each item. A key is a position or a text, so
   // `without` and `get` compare the text of each key. A list is an array that does not change after the op that makes it.
+  // The one exception is the array of AO during its loop, which no other part reads (COMPILE.MODULE.APPEND.OWN).
   DR: "function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }",
   AP: "function AP(l, o, s) { return V(l, s).concat(V(o, s)); }",
+  // append into the list of a name of a loop (COMPILE.MODULE.APPEND.OWN). w is the array of the last append of the name
+  // in this run of the loop, and no other part reads it. Such an array has no error items, so V(l, s) is a copy of l.
+  // Each other list gets the copy of AP. V(o, s) throws before the first push, so an error does not change l.
+  AO: "function AO(l, o, s, w) { if (l !== w) return AP(l, o, s); for (const x of V(o, s)) l.push(x); return l; }",
   WO: [
     "function WO(l, o, s) {",
     "  const a = V(l, s), g = new Map();",
@@ -794,8 +818,8 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
-  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], NT: ["V", "F"], FI: ["F"], LI: [],
-  DR: ["V", "F"], AP: ["V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
+  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], VW: [], NT: ["VW", "F"], CT: ["VW", "F"], FS: ["VW", "F"], FI: ["F"], LI: [],
+  DR: ["V", "F"], AP: ["V"], AO: ["AP", "V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
@@ -981,6 +1005,25 @@ const NUMBER_STEPS: ReadonlySet<string> = new Set(["sum", "mean", "min", "max"])
 const listKind = (op: string, item: Kind | undefined): Kind | undefined => (NUMBER_LIST_OPS.has(op) ? "number" : BOOLEAN_LIST_OPS.has(op) ? "boolean" : item);
 
 const LOOPS = new WeakMap<Expr, boolean>();
+
+/**
+ * This function tells if the step of the name `name` of a loop appends to the list of the name (COMPILE.MODULE.APPEND.OWN).
+ * It puts the append nodes of the form into `out`. The form is a read of the name,
+ * `append(form, X)`, `if(c, form, form)` or a let with the form as its body. No other part of the form reads the name:
+ * not `X`, not `c` and not a binding of a let.
+ */
+function ownForm(e: Expr, name: string, out: Expr[]): boolean {
+  const free = (x: Expr): boolean => !namesOf(x).has(name);
+  if (e.tag === "var") return e.name === name;
+  if (e.tag === "let") return Object.values(e.bind).every(free) && ownForm(e.body, name, out);
+  if (e.tag !== "app" || e.args.length === 0) return false;
+  const [head, ...rest] = e.args as [Expr, ...Expr[]];
+  // An if without three arguments gives a reason (#if), so the form does not check the count.
+  if (e.op === "if") return free(head) && rest.every((x) => ownForm(x, name, out));
+  if (e.op !== "append" || !rest.every(free) || !ownForm(head, name, out)) return false;
+  out.push(e);
+  return true;
+}
 
 /** This function gives the names that an expression reads, also the names that it binds itself. */
 function namesOf(e: Expr, out = new Set<string>()): Set<string> {
@@ -1278,6 +1321,8 @@ class Printer {
   #loops = 1_000_000;
   /** The node of the memo whose function the printer prints, so it prints the node itself. */
   #inside: Expr | undefined;
+  /** The owner of each append node of the step of a loop that the printer prints (COMPILE.MODULE.APPEND.OWN). */
+  readonly #own = new Map<Expr, Owner>();
   readonly #structures = new Map<string, string>();
   readonly #kinds = new Map<string, Kind | undefined>();
   readonly #ops = new Map<string, number>();
@@ -2001,7 +2046,7 @@ class Printer {
     if (FOLD_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) return this.#let(head, ctx, (body) => app(op, body, ...rest));
     // sortBy and take are list ops for each receiver. Each other list op needs a list, and a domain can have its name.
     if (head !== undefined && (op === "sortBy" || op === "take" || (op === "drop" && this.#isList(head, ctx)))) return this.#order(op, head, rest, ctx);
-    if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) return this.#build(op, head, rest, ctx);
+    if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) return this.#build(op, head, rest, ctx, this.#own.get(e));
     if (head !== undefined && (FOLD_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, rest, ctx);
     // An argument can be a list (COMPILE.MODULE.LIST.ARG).
     for (const x of args) this.#wantList.add(x);
@@ -2480,9 +2525,10 @@ class Printer {
 
   /**
    * This method prints append, without and flat (LIST.BUILD), get (LIST.GET) and indexOf (LIST.INDEXOF) over the array
-   * of a list. Each list that the op reads follows LIST.LENIENT, as in the interpreter.
+   * of a list. Each list that the op reads follows LIST.LENIENT, as in the interpreter. An append with an owner appends
+   * into the array of its name, if the name in the context is the name of the loop (COMPILE.MODULE.APPEND.OWN).
    */
-  #build(op: string, head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
+  #build(op: string, head: Expr, rest: readonly Expr[], ctx: Ctx, owner: Owner | undefined): Code {
     const list = this.#listOf(head, ctx);
     const info = list.v.list as ListInfo;
     const two = op === "append" || op === "without";
@@ -2494,10 +2540,11 @@ class Printer {
     const deps = depsOf(...raw);
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
     const helper = BUILD_HELPERS[op] as BuildHelper;
-    const value = (kind: Kind | undefined, facts: ListInfo | undefined): Code => ({
-      s: stmtsOf(...parts),
-      v: { code: `${this.use(helper)}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind, safe: false, deps, list: facts },
-    });
+    const args = [...parts.map((x) => x.v.code), String(strict)];
+    // A function of the program can share a node with the step, but its body has its own names (FN.BIND).
+    const w = owner !== undefined && ctx.env.get(owner.name) === owner.read ? (owner.w ??= this.fresh("w")) : undefined;
+    const code = w === undefined ? `${this.use(helper)}(${args.join(", ")})` : `(${w} = ${this.use("AO")}(${[...args, w].join(", ")}))`;
+    const value = (kind: Kind | undefined, facts: ListInfo | undefined): Code => ({ s: stmtsOf(...parts), v: { code, kind, safe: false, deps, list: facts } });
     if (op === "get") return value(info.item, info.inner);
     if (op === "indexOf") return value("number", undefined);
     if (op === "without") return value(undefined, info);
@@ -2521,6 +2568,10 @@ class Printer {
     const { item, inner } = list.v.list as ListInfo;
     // The value of an item of a list of lists is a list, so nth and first give a list (LIST.FLAT).
     if (op === "nth") return { s: stmtsOf(...parts), v: { code: `${this.use("NT")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: item, safe: false, deps, list: inner } };
+    // count and first read the items with values on the array of the list, as nth does (COMPILE.MODULE.NTH.INDEX). Thus
+    // a step of a loop that counts a list of n items costs O(1) after the first count.
+    if (op === "count") return { s: l.s, v: { code: `${this.use("CT")}(${l.v.code}, ${String(strict)})`, kind: "number", safe: false, deps, list: undefined } };
+    if (op === "first") return { s: l.s, v: { code: `${this.use("FS")}(${l.v.code}, ${String(strict)})`, kind: item, safe: false, deps, list: inner } };
     const r = this.#reduction(op, item, step);
     const { v } = r;
     const s = [...l.s, r.init, `for (const [, ${v}] of ${l.v.code}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
@@ -2556,8 +2607,35 @@ class Printer {
     return { s, env, vars, deps };
   }
 
-  /** This method gives the statements of one step of a loop: each new value first, and then each name gets its value. */
-  #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>): { readonly s: string[]; readonly deps: ReadonlySet<number> } {
+  /**
+   * This method gives the statements of one step of a loop: each new value first, and then each name gets its value.
+   * `init` has the statements before the loop: the variable of each name that appends to its own list
+   * (COMPILE.MODULE.APPEND.OWN). Each such name has the form of `ownForm`, and no step of another name and no `until`
+   * reads it. The tests of a fold read only the names outside the fold, so they cannot read it.
+   */
+  #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>, until?: Expr): { readonly s: string[]; readonly deps: ReadonlySet<number>; readonly init: readonly string[] } {
+    const owners: Owner[] = [];
+    const nodes: Expr[] = [];
+    const steps = Object.entries(step);
+    for (const [name, x] of steps) {
+      const own: Expr[] = [];
+      const others = [...steps.filter(([k]) => k !== name).map(([, y]) => y), ...(until === undefined ? [] : [until])];
+      if (!ownForm(x, name, own) || others.some((y) => namesOf(y).has(name))) continue;
+      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined };
+      for (const node of own) this.#own.set(node, owner);
+      owners.push(owner);
+      nodes.push(...own);
+    }
+    try {
+      const { s, deps } = this.#steps(step, inner, vars);
+      return { s, deps, init: owners.flatMap((o) => (o.w === undefined ? [] : [`let ${o.w} = null;`])) };
+    } finally {
+      for (const node of nodes) this.#own.delete(node);
+    }
+  }
+
+  /** This method gives the statements of one step of a loop, without the variables of COMPILE.MODULE.APPEND.OWN. */
+  #steps(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>): { readonly s: string[]; readonly deps: ReadonlySet<number> } {
     const s: string[] = [];
     const sets: string[] = [];
     const deps = new Set<number>();
@@ -2587,7 +2665,7 @@ class Printer {
     // A loop at a place that takes a list gives its result there (LOOP.LIST).
     if (this.#wantList.has(e)) this.#wantList.add(e.result);
     const until = e.until === undefined ? undefined : this.expr(e.until, inner);
-    const step = this.#loopStep(e.step, inner, names.vars);
+    const step = this.#loopStep(e.step, inner, names.vars, e.until);
     const result = this.expr(e.result, inner);
     const k = this.fresh("k");
     const body = [
@@ -2597,7 +2675,7 @@ class Printer {
     ];
     const inside = [...(until?.v.deps ?? []), ...step.deps, ...result.v.deps].filter((d) => d !== loop);
     const deps = new Set([...names.deps, ...inside]);
-    return { s: [...names.s, `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+    return { s: [...names.s, ...step.init, `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
   }
 
   /**
@@ -2625,7 +2703,7 @@ class Printer {
     ];
     const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level);
     const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
-    return { s: [...names.s, ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+    return { s: [...names.s, ...step.init, ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
   }
 
   /**

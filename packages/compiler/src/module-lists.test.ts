@@ -172,9 +172,9 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
   it("COMPILE.MODULE.LIST: a construct that a module does not have gives a precise reason", () => {
     const record = lit(vexList([item("a", { x: 1 })]));
     expect(reasonOf(op("count", record))).toBe("a literal is not a number, a text, a boolean or null");
-    // The focus of the axis list is the position of a record, so a list with the keys of a literal gives a reason.
-    expect(reasonOf(op("count", each(axes.list(LIT), n)))).toBe('the axis "list" over a list with the keys of a literal');
-    expect(reasonOf(fold(axes.list(op("append", ns, LIT)), { d: lit(0) }, { d: n }, v("d")))).toBe('the axis "list" over a list with the keys of a literal');
+    // A key of a literal is not the position of a record, so a read of a record at such a target gives a reason.
+    expect(reasonOf(op("count", each(axes.list(LIT), n)))).toBe('the axis "list" reads a record at a key of a literal or of "fill"');
+    expect(reasonOf(fold(axes.list(op("append", ns, LIT)), { d: lit(0) }, { d: n }, v("d")))).toBe('the axis "list" reads a record at a key of a literal or of "fill"');
     expect(reasonOf(op("count", op("flat", ns)))).toBe('"flat" over a list whose items are not lists');
     expect(reasonOf(op("count", op("append", nested(), ns)))).toBe('"append" of a list of lists and a list of values');
     expect(reasonOf(op("count", op("append", ns, nested())))).toBe('"append" of a list of lists and a list of values');

@@ -228,7 +228,7 @@ describe("COMPILE.MODULE.SHEET.LIST: a column of lists", () => {
     const keyed = lit(vexList([item("a", 1)]));
     expect(sheetReason(new Map([["a", keyed]]), { ...NUM, kinds: { a: { list: "number" } } })).toBe('the formula of the column "a" gives a value of the kind list of number, not of the kind list of number of its column');
     expect(sheetReason(new Map([["a", keyed]]), { ...NUM, kinds: { a: { list: "number", texts: true } } })).toBe("");
-    expect(sheetReason(new Map([["a", keyed], ["b", op("sum", each(axes.list(cell("a")), ref("v")))]]), NUM)).toBe('the axis "list" over a list with the keys of a literal');
+    expect(sheetReason(new Map([["a", keyed], ["b", op("sum", each(axes.list(cell("a")), ref("v")))]]), NUM)).toBe('the axis "list" reads a record at a key of a literal or of "fill"');
     // A cell formula must fit the list of the first formula of its column.
     const cells: CellFormulas = new Map([["a", new Map<string, Expr>([["0", each(axes.all, op("gt", ref("v"), lit(0)))]])]]);
     expect(sheetReason(new Map([["a", xs]]), { ...NUM, cells })).toBe('the formula of the cell "a" at "0" gives a value of the kind list of boolean, not of the kind list of number of its column');

@@ -167,6 +167,11 @@ export interface Facts {
    * it gives -1. When a domain without a primitive type comes first, it gives `undefined`.
    */
   checkOf(kind: Kind): number | undefined;
+  /**
+   * This function tells if no domain and no function of the host has the op `name`. Then the interpreter takes its own
+   * op for each receiver, for example `fill` (LIST.FILL).
+   */
+  own(name: string): boolean;
 }
 
 /** This function gives the facts of a set of options. */
@@ -206,6 +211,9 @@ export function factsOf(options: Options): Facts {
         if (takes) return i;
       }
       return -1;
+    },
+    own(name) {
+      return domains.every((d) => entryOf(d, name) === undefined) && !(fns !== undefined && Object.hasOwn(fns, name));
     },
     site(name, arity) {
       // Without values, the interpreter takes no op of a domain. A list op can have a list as its receiver.

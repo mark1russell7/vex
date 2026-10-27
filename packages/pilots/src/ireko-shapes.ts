@@ -158,16 +158,16 @@ const next = (i: string): Expr => op("add", v(i), lit(1));
 const ZERO = op("band", lit(0), lit(0), lit(0), lit(0));
 
 /**
- * The list of one value. The axis `window(0, 0)` has one target: the focus. Each item of a list of the sheet has the key
- * of a node, so the focus is always a key of the tree. A module does not have `fill`, so `fill(1, x)` is not possible.
+ * The list of one value: `fill(1, x)` (LIST.FILL, COMPILE.MODULE.FILL). Its key is "0", not the key of a node. Thus a
+ * loop over such a list reads no record at its keys.
  */
-const single = (x: Expr): Expr => each(axes.window(0, 0), x);
+const single = (x: Expr): Expr => op("fill", lit(1), x);
 
 /**
- * An empty list whose items have the kind of `x`. A module takes the kind of the items of a name of a loop from its
- * first list. The empty literal has no kind of items, so `sortBy` with the option `by` cannot read such a list.
+ * An empty list whose items have the kind of `x`: `fill(0, x)`. A module takes the kind of the items of a name of a loop
+ * from its first list. The empty literal has no kind of items, so `sortBy` with the option `by` cannot read such a list.
  */
-const none = (x: Expr): Expr => op("take", single(x), lit(0));
+const none = (x: Expr): Expr => op("fill", lit(0), x);
 const NO_BANDS = none(ZERO);
 const NO_NUMBERS = none(lit(0));
 
@@ -302,8 +302,8 @@ const box = (size: Expr, cross: Expr): Expr => op("band", lit(0), size, lit(0), 
  */
 function shapeOf(a: ShapeAxis): Expr {
   const own = single(box(ref(a.size), ref(a.crossSize)));
-  // At a child: its shape, or the band of its extent, moved by its offset. Inside the loop over the bands, a field
-  // reads at the key of a band, so the names hold the offset of the child.
+  // At a child: its shape, or the band of its extent, moved by its offset. The loop over the bands reads no record at
+  // the key of a band, so the names hold the offset of the child.
   const child = let_(
     { part: op("if", cell("need"), op("nth", cell("shape"), lit(a.index)), single(op("move", box(ref(a.extent), ref(a.crossExtent)), ref(a.at), ref(a.crossAt)))), along: ref(a.offset), across: ref(a.cross) },
     moved("part", v("along"), v("across")),
@@ -331,10 +331,11 @@ export const SHAPE_COLUMNS: ReadonlyMap<string, Expr> = new Map<string, Expr>([
   ["cols", op("nth", cell("shape"), lit(COLS.index))],
 ]);
 
-const BANDS: ListKind = { list: "domain:Band" };
+/** A list of bands. Its keys come from `fill`, so they are not the keys of nodes. */
+const BANDS: ListKind = { list: "domain:Band", texts: true };
 
 /** The kinds of the columns. The column `shape` reads itself at the children, so it needs its kind. */
-export const SHAPE_KINDS: NonNullable<SheetModuleOptions["kinds"]> = { need: "boolean", shape: { list: BANDS }, rows: BANDS, cols: BANDS };
+export const SHAPE_KINDS: NonNullable<SheetModuleOptions["kinds"]> = { need: "boolean", shape: { list: BANDS, texts: true }, rows: BANDS, cols: BANDS };
 
 /** The kinds of the fields of a record and of the variable `limit`, for the compiler (docs/COMPILER.md §3.2). */
 export const SHAPE_SCHEMA: Schema = {

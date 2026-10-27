@@ -434,7 +434,7 @@ describe("the tiers", () => {
     expect(fromCore(tiered(own, { domains: [Pick] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 31 });
   });
 
-  it("LIST.ARRAY LIST.INDEXOF LIST.FILL COMPILE.FALLBACK: a list op on an array, indexOf and fill give the result of tier 1, and a module has indexOf over a list", () => {
+  it("LIST.ARRAY LIST.INDEXOF LIST.FILL COMPILE.FALLBACK COMPILE.MODULE.FILL: a list op on an array, indexOf and fill give the result of tier 1, and a module has indexOf over a list and fill", () => {
     const s = space.array([{ n: 3, fr: [0.2, 0.3] }, { n: 1, fr: [] }, { n: 2, fr: [1, null] }]);
     const names = { a: [3, 1, 2], keys: ["x", "y"] };
     const ns = each(axes.all, ref("n"));
@@ -457,7 +457,8 @@ describe("the tiers", () => {
     expect(emitModule(app("indexOf", ns, lit(1)), { domains: [NumDomain], schema }).ok).toBe(true);
     // An array is not a list of a module, so indexOf over an array gives a reason.
     expect(emitModule(app("indexOf", variable("keys"), lit("y")), { domains: [NumDomain], schema }).ok).toBe(false);
-    expect(emitModule(app("count", app("fill", lit(2), lit(1))), { domains: [NumDomain], schema }).ok).toBe(false);
+    // A module has fill since COMPILE.MODULE.FILL.
+    expect(emitModule(app("count", app("fill", lit(2), lit(1))), { domains: [NumDomain], schema }).ok).toBe(true);
     // Tier 2 takes a list op on a field or a name. A run with an array goes to tier 1, which reads the array as a list.
     for (const e of [app("sum", ref("fr")), app("count", variable("a")), app("max", variable("a")), app("add", app("count", ref("fr")), lit(1))]) {
       const p = tiered(e, { domains: [NumDomain] });

@@ -26,7 +26,7 @@ function files(dir: string, test: (f: string) => boolean): readonly string[] {
   return out;
 }
 
-const testFiles = ["core", "domains", "testkit", "compiler", "site", "formula"]
+const testFiles = ["core", "domains", "testkit", "compiler", "site", "formula", "pilots"]
   .map((p) => join(repo, "packages", p))
   .filter((p) => {
     try {

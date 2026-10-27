@@ -812,9 +812,22 @@ A property compares random sheets with lists over arrays and trees with `SheetRu
 
 `nth` keeps the items with values on the array of its list, as `get` keeps its index (COMPILE.MODULE.NTH.INDEX). Thus a loop that reads each item of a list of `n` items with `nth` costs O(n), not O(n squared). The list of a `let` can be a key of a node of the memo. Thus a loop over the records can read it with `nth`.
 
+#### Bands (COMPILE.MODULE.BAND)
+
+A shape of ireko is two lists of bands. `BandDomain` of the pilots holds one band as plain data: the four numbers `from`, `to`, `min` and `max`. Each op is a function that reads no name outside itself, so a module copies it (§8.2).
+
+- The op `band` of `BandNumDomain` makes a band from four numbers. The ops `from`, `to`, `min` and `max` give the fields.
+- `move` adds an offset along the axis and an offset across it, as `moveShape` and the two moves of `tree` do.
+- `flip` mirrors a band across the row, as `flip` of `tree` does.
+- `join` gives the band that covers two bands, as `coarsen` and the sweep of `mergeBands` do.
+- `overlaps` is the test of `pack` of `tree`: two bands overlap when each one starts before the other one ends.
+- A list of bands is a value of a module, as the rows of a shape are. `nth` and `get` read a band of it, and `reduce` with `join` covers all of it.
+
+The domain is in the private pilots. Thus the API of `vex-domains` does not change, and a generated module of ireko holds the copies of the ops. A test compares the modules of programs over bands with the interpreter, also for errors.
+
 These parts are not in a module yet:
 
-- A body of the axis `list` reads the record at the key of each item, not the value of the item. A band of a shape of ireko also needs a domain whose ops give its fields.
+- A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
 - `sortBy` sorts the values. It cannot sort records or the values of a domain by a field. The merge of the bands of a shape sorts the bands by `from`.
 - A record with a list in a field, for example a shape with `rows` and `columns`, gives a reason. A sheet keeps the two lists in two columns.
 - The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.

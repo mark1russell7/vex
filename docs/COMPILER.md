@@ -810,7 +810,24 @@ The value of a program can be a list too (COMPILE.MODULE.LIST.RESULT). Before, `
 
 A property compares random sheets with lists over arrays and trees with `SheetRun` (P17). The column of lists of each sheet reads itself at the parent, the children or the siblings. Thus some modules have the search. The lists have error items, empty lists and lists of lists. A second property compares random programs whose value is a list with the interpreter.
 
-`nth` keeps the items with values on the array of its list, as `get` keeps its index (COMPILE.MODULE.NTH.INDEX). Thus a loop that reads each item of a list of `n` items with `nth` costs O(n), not O(n squared). The list of a `let` can be a key of a node of the memo. Thus a loop over the records can read it with `nth`.
+`nth` keeps the items with values on the array of its list, as `get` keeps its index (COMPILE.MODULE.NTH.INDEX). Thus a loop that reads each item of a list of `n` items with `nth` costs O(n), not O(n squared). `count` and `first` of a list read the same items. Thus a step of a loop that counts a list costs O(1) after the first count. The list of a `let` can be a key of a node of the memo. Thus a loop over the records can read it with `nth`.
+
+#### Appends to the list of a loop (COMPILE.MODULE.APPEND.OWN)
+
+A list is an array that does not change after the op that makes it. Thus `append` copies its two lists, and a fold with one `append` at each step costs O(n squared). The shapes pilot has such folds, and its module was 44 to 55 times slower than the code of ireko on big trees.
+
+A step of a name of a loop can append to the list of the name. The module then adds the items to an array of the loop, and it does not copy the list again. The form of such a step is one of these:
+
+- a read of the name, for example `acc`
+- `append(step, X)`, also with the option `strict`
+- `if(c, step, step)`
+- a `let` with such a step as its body
+
+No other part of the loop can read the name. These parts are `X`, `c`, the bindings of a `let`, the steps of the other names and the test `until` of `iterate`. The tests of a fold read only the names outside the fold. Another step gives the old helper `AP`, which copies the two lists.
+
+The helper `AO` gets the array `w` of the last append of the name in this run of the loop. When the list is not `w`, `AO` is `AP`: the first append copies the list, and the copy has no error items. When the list is `w`, `AO` adds the items with values of `X` to it. `V` checks `X` before the first push, so an error item of `X` with `strict` does not change the array. The variable `w` starts at `null` before each run of the loop. Thus a list literal, a list of the input and the list of an earlier run do not change.
+
+Each step gives the values and the errors of `AP`. An error item of the first list is not in the copy, or with `strict` it is the error of the first append. An error of a step is the error of the loop, so a loop does not continue after an append that fails. No part reads `w` during the loop. Thus `nth`, `count`, `first` and `get` cannot keep a stale view of it. A function of the program can share a node with a step. The module then uses `AP` in the body of the function, because the name in that body is another name.
 
 #### Bands (COMPILE.MODULE.BAND)
 
@@ -866,7 +883,7 @@ The merge is a chain of folds over lists. It gives the ends of the valid bands, 
 
 A name of a loop whose first value is the empty literal has no kind of items. Then `sortBy` gives the reason "the kinds of the items of "sortBy" do not decide the op "from" of the option by". The program starts each such name with `fill(0, value)`, an empty list whose items have the kind of the value. `fill(1, value)` makes the list of one value (COMPILE.MODULE.FILL). Before, the axis `window(0, 0)` made it.
 
-The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`, and each step copies the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
+The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`. Before COMPILE.MODULE.APPEND.OWN, each step copied the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
 
 ireko does not use the module yet. The strategy of a node reads the shapes of its children before it gives their offsets, and a shape needs the offsets. Thus one sheet for the tree needs the strategies as Vex programs. A module for one node is the other way: it takes the shapes of the children as input ("Lists in the input" below).
 

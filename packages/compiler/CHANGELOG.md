@@ -1,5 +1,18 @@
 # @mark1russell7/vex-compiler
 
+## 0.13.4
+
+### Patch Changes
+
+- 6b566b2: A standalone module has `fill` when no domain has the op (COMPILE.MODULE.FILL). Its run gives the values and the errors of the interpreter, also for a list of lists. The axis `list` over the keys of a literal or of `fill` gives a reason only when it reads a record at a target.
+- 7fb316d: In a module of `emitModule`, an argument of an op after its receiver can be a list (COMPILE.MODULE.LIST.ARG). The op gets a frozen `vex.list`, as in the interpreter. An argument of a call can be a list too. A field of a record can be a list, and the record holds it as a `vex.list` (COMPILE.MODULE.LIST.FIELD). Before, such a program gave the reason "a list is a value of the program". A list as the receiver of an op gives the reason `a list as the receiver of the op "<name>"`, and the list ops `keys`, `values` and `errors` give `the list op "<name>"`.
+- 282f3fb: In a module of `emitModule` and `emitSheetModule`, the value of a call can be a list (COMPILE.MODULE.LIST.CALL). A list op, the axis `list`, a fold, a field and an argument of an op take the list of a call. Before, such a program gave the reason "a list is a value of the program". Each kind of the arguments has its own function, with the facts of its list. A list of a call at a place that takes no list still gives that reason. An op of a domain whose value is a list still gives a reason, because the kind of a result cannot tell a list.
+- abe3624: In a module of `emitModule`, `nth` keeps the items with values on the array of its list (COMPILE.MODULE.NTH.INDEX). Thus a loop that reads each item of a list with `nth` costs O(n), not O(n squared). The list of a `let` can be a key of a node of the memo. Thus a loop over the records can read that list with `nth`. Before, such a program gave the reason "a list is a value of the program".
+- 1403f2b: In a module of `emitModule` and `emitSheetModule`, a field of the schema can have a list kind (COMPILE.MODULE.LIST.INPUT), for example `{ list: "domain:Band" }`. The record holds a `vex.list`, and the program uses the field as a list. The run gives the values of the interpreter. Another value, an item of another kind and an error item of `#DEPTH!` throw a `VexContractError`. The type `Schema` takes such a kind, and `ListKind` moves to `facts.ts`. Before, such a program gave the reason "the kinds of the values of "count" do not decide its op".
+- 535409b: `sortBy` has the option `by` (LIST.SORT.BY). `sortBy(list, { by: "from" })` sorts the items by the result of the op `from` on the value of each item. A standalone module has the option too (COMPILE.MODULE.SORT.BY). The catalog of the MCP server tells it.
+- Updated dependencies [535409b]
+  - @mark1russell7/vex@0.13.4
+
 ## 0.13.3
 
 ### Patch Changes

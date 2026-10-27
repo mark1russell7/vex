@@ -1,5 +1,12 @@
 # @mark1russell7/vex-domains
 
+## 0.13.4
+
+### Patch Changes
+
+- Updated dependencies [535409b]
+  - @mark1russell7/vex@0.13.4
+
 ## 0.13.3
 
 ### Patch Changes

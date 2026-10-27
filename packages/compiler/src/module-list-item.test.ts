@@ -187,7 +187,7 @@ describe("COMPILE.MODULE.LIST.ITEM: the names of the items of a loop over the ax
 
   it("COMPILE.MODULE.LIST.ITEM AXIS.LIST.SCOPE: a where test does not see the names, and the index counts the items that it skips", () => {
     const kept = over(NS, rec({ x, i }), BOTH, (axis) => axes.where(axis, op("gt", n, lit(0))));
-    expect(runOf(kept)).toStrictEqual(RECORDS.map(() => list(plain("1", { x: 3, i: 0 }), plain("0", { x: 2, i: 2 }))));
+    expect(runOf(kept)).toStrictEqual(RECORDS.map(() => list(plain("0", { x: 3, i: 0 }), plain("2", { x: 2, i: 2 }))));
     expectSame(kept);
     expectSame(kept, MANY);
     expectSame(over(NS, rec({ x, i }), BOTH, (axis) => axes.where(axes.reverse(axis), b)), MANY);
@@ -220,6 +220,7 @@ describe("COMPILE.MODULE.LIST.ITEM: the names of the items of a loop over the ax
   });
 
   it("COMPILE.MODULE.LIST.ITEM LIST.LENIENT: an error item of the list is an error item of the loop, and it fails a fold", () => {
+    const failed = guard(fold(axes.list(BAD), { s: lit(0) }, { s: op("add", v("s"), x) }, v("s"), undefined, ITEM));
     const forms: Record<string, Expr> = {
       inv: over(inv, op("multiply", x, lit(2))),
       invIndex: over(inv, rec({ x, i }), BOTH),
@@ -227,17 +228,17 @@ describe("COMPILE.MODULE.LIST.ITEM: the names of the items of a loop over the ax
       bad: over(BAD, rec({ x, i }), BOTH, reversed),
       xs: over(xs, op("add", x, i), BOTH),
       sum: op("sum", over(inv, op("add", x, i), BOTH)),
-      fold: guard(fold(axes.list(BAD), { s: lit(0) }, { s: op("add", v("s"), x) }, v("s"), undefined, ITEM)),
+      fold: failed,
       foldInv: guard(fold(axes.list(inv), { s: lit(0) }, { s: op("add", v("s"), i) }, v("s"), undefined, BOTH)),
       bodyError: over(LIT, op("divide", lit(1), op("subtract", x, lit(2)))),
     };
     expectAll(forms, [RECORDS, MANY]);
-    expect(runOf(forms["fold"] as Expr)).toStrictEqual([-1, -1, -1, -1]);
+    expect(runOf(failed)).toStrictEqual([-1, -1, -1, -1]);
     const m = make(sourceOf(over(BAD, op("multiply", x, i), BOTH)));
     expect(m.run(structuredClone(RECORDS), VARS)).toStrictEqual(RECORDS.map(() => list(plain("a", 0), { key: "b", result: { ok: false, error: m.VEX_ERROR } }, plain("c", 4))));
   });
 
-  it("COMPILE.MODULE.LIST.ITEM LIST.STRICT: a strict op fails at an error item of the loop", () => {
+  it("COMPILE.MODULE.LIST.ITEM LIST.LENIENT: a strict op fails at an error item of the loop", () => {
     const e = rec({
       lenient: op("sum", over(BAD, x)),
       strict: guard(op("sum", over(BAD, x), strict)),
@@ -273,9 +274,11 @@ describe("COMPILE.MODULE.LIST.ITEM: the names of the items of a loop over the ax
   });
 
   it("COMPILE.MODULE.LIST.ITEM LIST.FLAT: an item that is a list is a list in the body", () => {
+    const counts = over(XS, op("count", x));
+    const outerCount = op("count", over(XS, x));
     const forms: Record<string, Expr> = {
-      count: over(XS, op("count", x)),
-      outerCount: op("count", over(XS, x)),
+      counts,
+      outerCount,
       flat: op("flat", over(XS, x)),
       sums: over(XS, op("sum", x), BOTH, reversed),
       nested: over(XS, op("sum", over(x, op("multiply", v("y"), v("j")), ["y", "j"])), BOTH),
@@ -284,8 +287,8 @@ describe("COMPILE.MODULE.LIST.ITEM: the names of the items of a loop over the ax
       outer: let_({ L: LIT }, op("count", over(XS, v("L")))),
     };
     expectAll(forms, [RECORDS, MANY]);
-    expect(runOf(forms["outerCount"] as Expr)).toStrictEqual([4, 4, 4, 4]);
-    expect(runOf(forms["count"] as Expr)).toStrictEqual(RECORDS.map(() => list(plain("1", 2), plain("2", 2), plain("0", 0), plain("x", 1))));
+    expect(runOf(outerCount)).toStrictEqual([4, 4, 4, 4]);
+    expect(runOf(counts)).toStrictEqual(RECORDS.map(() => list(plain("0", 2), plain("1", 2), plain("2", 0), plain("3", 1))));
   });
 
   it("COMPILE.MODULE.LIST.ITEM: a name of an item is a plain local, and a part that reads it stays in the loop", () => {

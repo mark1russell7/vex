@@ -947,13 +947,13 @@ The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shap
 
 #### The names of the items (COMPILE.MODULE.LIST.ITEM)
 
-The field `as` of `each` and `fold` names the value and the index of each item of the axis `list` (AXIS.LIST.ITEM). Before this change, a module gave the reason "the program has a loop that names its items with "as", and a module does not have these names yet". Tier 1 evaluated the program. The module has the names now.
+The field `as` of `each` and `fold` names the value and the index of each item of the axis `list` (AXIS.LIST.ITEM). Before this change, a module gave the reason "the program has a loop that names its items with "as", and a module does not have these names yet". Tier 1 evaluated the program. Since 2026-10-27, the module has the names.
 
 - The loop of the axis `list` reads the pair of each item from the array of the list. The check of the sentinel comes first. Then a constant holds the value of the item, and another constant holds its index.
 - An error item throws at its check, so the names bind nothing. In `each`, the item is an error item. A list op skips it, or with `strict` it is the error of the op. In `fold`, the error is the value of the fold.
 - The index counts the items with a value, as `nth` does. In the order of the list, it counts up from 0. Under `reverse`, it counts down from the number of these items. A test of `where` that is false does not change the count.
 - Only the body of `each` and the steps of `fold` read the names (AXIS.LIST.SCOPE). The tests of `where`, the list, `init` and `result` read the names outside the loop. Thus a name of `as` hides a name of a `let` or of a loop only in the body and in the steps.
-- The names have a level of their own. Thus a part that reads them stays in the loop. A read of a name is not a read of the target, so a loop over the keys of a literal or of `fill` can read them.
+- The names have a level of their own. Thus a part that reads them stays in the loop. A read of a name is not a read of the target. Thus a loop over the keys of a literal or of `fill` can read the names.
 - The value of an item keeps the facts of its list. Thus an item that is a list is a list in the body. The printer knows these facts only in the loop. So a list op over such an `each` goes over its array when the body can give a list.
-- A name of `as` is never a name of `init`. Thus a step that appends to its own list and reads a name of `as` keeps the append of COMPILE.MODULE.APPEND.OWN.
+- A name of `as` is not a name of `init` (the check of the document). Thus a step that appends to its own list and reads a name of `as` keeps the append of COMPILE.MODULE.APPEND.OWN.
 - Tier 2 still gives a reason for each program with the axis `list`.

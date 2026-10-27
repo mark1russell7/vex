@@ -3,7 +3,6 @@
  * the value of each item and its position. Each test compares tier 1 with the kernel.
  */
 import { check } from "@mark1russell7/coeval";
-import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { fromDocument, toDocument, type Envelope } from "./document.ts";
@@ -48,6 +47,12 @@ const l = v("l");
 const L = { l: [10, null, 30, 40] };
 const doc = (e: Expr): Envelope => value(toDocument(e, [Num]));
 
+/** This function gives the document of a loop with another field `as`. */
+function withAs(e: Expr, as: unknown): unknown {
+  const d = doc(e);
+  return { ...d, value: { ...(d.value as Readonly<Record<string, unknown>>), as } };
+}
+
 describe("the names of the items of a loop over a list (AXIS.LIST.ITEM)", () => {
   it("AXIS.LIST.ITEM: the item name holds the value of the item of each target", () => {
     expect(both(each(axes.list(l), app("add", v("x"), lit(1)), undefined, ["x"]), L)).toEqual([["0", 11], ["1", "#N/A"], ["2", 31], ["3", 41]]);
@@ -88,17 +93,19 @@ describe("the index of an item (AXIS.LIST.INDEX)", () => {
   });
 
   it("AXIS.LIST.INDEX: the item at each index equals nth of the list at that index, in each tier", () => {
-    const arrays = fc.array(fc.option(fc.integer({ min: -9, max: 9 }), { nil: null }), { maxLength: 6 });
-    fc.assert(
-      fc.property(arrays, fc.boolean(), (xs, back) => {
+    // Each array of at most 4 items from 1, -2 and null, in both orders.
+    let arrays: (number | null)[][] = [[]];
+    for (let n = 0; n < 4; n++) arrays = [...arrays, ...arrays.filter((a) => a.length === n).flatMap((a) => [1, -2, null].map((x) => [...a, x]))];
+    expect(arrays).toHaveLength(121);
+    for (const xs of arrays) {
+      for (const back of [false, true]) {
         const axis = back ? axes.reverse(axes.list(l)) : axes.list(l);
         const named = both(each(axis, v("x"), undefined, ["x", "i"]), { l: xs });
         expect(both(each(axis, app("nth", l, v("i")), undefined, ["x", "i"]), { l: xs })).toEqual(named);
         const keys = xs.map((_x, i) => String(i));
         expect((named as readonly (readonly [string, unknown])[]).map(([key]) => key)).toEqual(back ? keys.toReversed() : keys);
-      }),
-      { numRuns: 200 },
-    );
+      }
+    }
   });
 });
 
@@ -175,10 +182,6 @@ describe("the field as of a document (DOC.CONSTRUCT)", () => {
   });
 
   it("DOC.CONSTRUCT: a document with a field as that is not valid gives an error at the field", () => {
-    const withAs = (e: Expr, as: unknown): unknown => {
-      const d = doc(e);
-      return { ...d, value: { ...(d.value as Readonly<Record<string, unknown>>), as } };
-    };
     for (const as of [["x", "x"], [], 7]) expect(fromDocument(withAs(each(axes.list(l), v("x")), as), [Num]).ok).toBe(false);
     const r = fromDocument(withAs(each(axes.all, lit(1)), ["x"]), [Num]);
     expect(r.ok ? undefined : r.error.message).toContain('"as" needs the axis "list"');

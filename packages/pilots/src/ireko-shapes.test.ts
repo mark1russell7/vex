@@ -1,9 +1,9 @@
-import { isVexList, SheetRun } from "@mark1russell7/vex";
-import { emitSheetModule } from "@mark1russell7/vex-compiler";
+import { evaluate, isVexList, SheetRun, space } from "@mark1russell7/vex";
+import { emitModule, emitSheetModule } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BandDomain, type Band } from "./ireko-band.ts";
-import { boxShape, joinShapes, MAX_BANDS, mergeBands, moveShape, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapeSpace, shapesTree, type Shape, type ShapeRecord } from "./ireko-shapes.ts";
+import { boxShape, joinShapes, MAX_BANDS, mergeBands, moveShape, NODE_SCHEMA, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapeSpace, shapesTree, type Shape, type ShapeRecord } from "./ireko-shapes.ts";
 
 type Columns = Readonly<Record<string, readonly unknown[]>>;
 type Run = (records: unknown, vars: unknown, parents: unknown) => Columns;
@@ -173,5 +173,72 @@ describe("the ireko shapes pilot", () => {
       { from: 5, to: 10, min: 0, max: 30 },
       { from: 10, to: 15, min: 20, max: 30 },
     ]);
+  });
+});
+
+/** A child of a node for the module of one node: its offset, and its shape as two lists of bands. */
+interface Child {
+  readonly ox: number;
+  readonly oy: number;
+  readonly shape: Shape;
+}
+
+/** This function gives a list of bands as a `vex.list` of plain data. */
+const listOf = (bands: readonly Band[]): object => ({ kind: "vex.list", items: bands.map((b, k) => ({ key: String(k), result: { ok: true, value: b } })) });
+
+/** This function gives the record of a child, as the measure loop of ireko gives it to the module of one node. */
+const childRecord = (c: Child): object => ({ ox: c.ox, oy: c.oy, rows: listOf(c.shape.rows), cols: listOf(c.shape.columns) });
+
+/** This function gives the shape of a node from the shapes of its children, as the measure pass of ireko. */
+const reference = (kids: readonly Child[], w: number, h: number, limit: number): Shape => joinShapes([boxShape(w, h), ...kids.map((c) => moveShape(c.shape, c.ox, c.oy))], limit);
+
+/** This function gives the shape of a node from the value of the module of one node: a list of two lists of bands. */
+const nodeShape = (value: unknown): Shape => {
+  if (!isVexList(value)) throw new Error("The shape is not a list.");
+  const [rows, cols] = value.items.map((x) => (x.result.ok ? x.result.value : undefined));
+  return { rows: bandsOf(rows, "rows"), columns: bandsOf(cols, "cols") };
+};
+
+/**
+ * An end of a band. The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shape of ireko has no
+ * end -0: a box starts at 0, and a sum is -0 only for two terms -0. Thus an end here is not -0.
+ */
+const end = coord.map((x) => (x === 0 ? 0 : x));
+const band = fc.record({ from: end, to: end, min: coord, max: coord });
+const child = fc.record({ ox: coord, oy: coord, shape: fc.record({ rows: fc.array(band, { maxLength: 4 }), columns: fc.array(band, { maxLength: 4 }) }) });
+
+describe("the ireko shapes pilot for one node", () => {
+  const m = emitModule(NODE_SHAPE, { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" });
+  if (!m.ok) throw new Error(m.reason);
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
+  const run = new Function(`${m.source.replaceAll(/^export /gm, "")}
+return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[];
+
+  it("COMPILE.MODULE.LIST.INPUT: the module of one node reads the shapes of the children as input, and gives the join of ireko with the same bits", () => {
+    expect(m.source).not.toContain("import");
+    fc.assert(
+      fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), size, size, fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 4 })), (kids, w, h, limit) => {
+        const values = run(kids.map(childRecord), { w, h, limit });
+        expect(values).toHaveLength(kids.length);
+        for (const value of values) expect(nodeShape(value)).toStrictEqual(reference(kids, w, h, limit));
+      }),
+      { numRuns: 30 },
+    );
+  });
+
+  it("COMPILE.MODULE.LIST.INPUT: the module of one node gives the value of the interpreter on a fixed node", () => {
+    const kids: Child[] = [
+      { ox: 0, oy: 30, shape: boxShape(10, 10) },
+      { ox: 20, oy: 15, shape: moveShape(boxShape(30, 5), 2, -0) },
+      { ox: 60, oy: 30, shape: { rows: [], columns: [{ from: 0, to: 4, min: 1, max: 2 }] } },
+    ];
+    const records = kids.map(childRecord);
+    const vars = { w: 100, h: 20, limit: 2 };
+    const expected = evaluate(NODE_SHAPE, { space: space.array(records), origin: "0", vars, domains: SHAPE_DOMAINS });
+    if (!expected.ok) throw new Error(expected.error.message);
+    expect(nodeShape(run(records, vars)[0])).toStrictEqual(nodeShape(expected.value));
+    expect(nodeShape(expected.value)).toStrictEqual(reference(kids, 100, 20, 2));
+    // A child whose list holds no band is against the schema.
+    expect(() => run([{ ...records[0], rows: { kind: "vex.list", items: [{ key: "0", result: { ok: true, value: 1 } }] } }], vars)).toThrow("the record 0 does not keep the schema");
   });
 });

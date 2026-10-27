@@ -46,15 +46,26 @@ export type Kind = PrimitiveKind | `domain:${string}`;
 /** This function gives the kind of the values of a domain. */
 export const kindOfDomain = (d: AnyDomain): Kind => d.primitive ?? `domain:${d.name}`;
 
-/** This function gives a kind if it is a primitive type, else `undefined`. */
-export const primitiveOf = (k: Kind | undefined): PrimitiveKind | undefined => (k === "number" || k === "string" || k === "boolean" ? k : undefined);
+/** This function gives a kind if it is a primitive type, else `undefined`. A kind of a list is not a primitive type. */
+export const primitiveOf = (k: Kind | ListKind | undefined): PrimitiveKind | undefined => (k === "number" || k === "string" || k === "boolean" ? k : undefined);
+
+/**
+ * The kind of a list: the kind of its items, which can be a list too. A column of lists of a module of a sheet has such a
+ * kind (COMPILE.MODULE.SHEET.LIST). With `texts`, a key of an item can be a key of a list literal or of `fill`, not the
+ * key of a record. A field of the schema can have such a kind too (COMPILE.MODULE.LIST.INPUT).
+ */
+export interface ListKind {
+  readonly list: Kind | ListKind;
+  readonly texts?: boolean;
+}
 
 /**
  * The kinds that a host declares (docs/COMPILER.md §3.2): the kind of each field of the records, and of each variable of
  * the run. A read of a declared field or variable checks the kind. When the check fails, tier 1 evaluates the program.
+ * A field can hold a list (COMPILE.MODULE.LIST.INPUT). Tier 2 does not check the kind of such a field.
  */
 export interface Schema {
-  readonly fields?: Readonly<Record<string, Kind>>;
+  readonly fields?: Readonly<Record<string, Kind | ListKind>>;
   readonly vars?: Readonly<Record<string, Kind>>;
 }
 

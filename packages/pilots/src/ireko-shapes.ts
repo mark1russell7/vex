@@ -8,6 +8,9 @@
  * and `coarsen` of `engine/shape.ts`, and the shapes part of `engine/measure.ts`. `SHAPE_COLUMNS` is a sheet over the
  * tree with the same pass. The column `need` goes down the tree. The column `shape` holds the two lists of bands, and it
  * goes up the tree. The columns `rows` and `cols` read its lists. The tests compare the two, with the same bits. ireko has the MIT license and the same author.
+ *
+ * `NODE_SHAPE` is the pass for one linked node. Its records are the children, and their shapes are lists of the input
+ * (COMPILE.MODULE.LIST.INPUT).
  */
 import { app, axes, call, cell, each, fn, fold, iterate, let_, lit, ref, space, v, vexList, type Expr, type Space } from "@mark1russell7/vex";
 import type { ListKind, Schema, SheetModuleOptions } from "@mark1russell7/vex-compiler";
@@ -277,9 +280,13 @@ const MERGE = fn(
   ),
 );
 
-/** The names of one axis of a shape: its position in a shape, and the fields of a record along the axis and across it. */
+/**
+ * The names of one axis of a shape: its position in a shape, and the fields of a record along the axis and across it.
+ * `field` is the field of the bands of a child in `NODE_SHAPE`.
+ */
 interface ShapeAxis {
   readonly index: number;
+  readonly field: string;
   readonly offset: string;
   readonly cross: string;
   readonly size: string;
@@ -289,8 +296,8 @@ interface ShapeAxis {
   readonly extent: string;
   readonly crossExtent: string;
 }
-const ROWS: ShapeAxis = { index: 0, offset: "oy", cross: "ox", size: "h", crossSize: "w", at: "ey", crossAt: "ex", extent: "eh", crossExtent: "ew" };
-const COLS: ShapeAxis = { index: 1, offset: "ox", cross: "oy", size: "w", crossSize: "h", at: "ex", crossAt: "ey", extent: "ew", crossExtent: "eh" };
+const ROWS: ShapeAxis = { index: 0, field: "rows", offset: "oy", cross: "ox", size: "h", crossSize: "w", at: "ey", crossAt: "ex", extent: "eh", crossExtent: "ew" };
+const COLS: ShapeAxis = { index: 1, field: "cols", offset: "ox", cross: "oy", size: "w", crossSize: "h", at: "ex", crossAt: "ey", extent: "ew", crossExtent: "eh" };
 
 /** The band of a box of the size `size` along the axis and `cross` across it, at the origin: `boxShape` of ireko. */
 const box = (size: Expr, cross: Expr): Expr => op("band", lit(0), size, lit(0), cross);
@@ -351,3 +358,28 @@ export function shapeSpace(records: readonly ShapeRecord[]): Space {
   const parents = Object.fromEntries(records.flatMap((r, i) => (r.p < 0 ? [] : [[String(i), String(r.p)]])));
   return space.tree(Object.fromEntries(records.map((r, i) => [String(i), r])), parents);
 }
+
+/**
+ * The shape of one node on one axis, from the shapes of its children (COMPILE.MODULE.LIST.INPUT). Each record is a
+ * child. Its field `field` holds its bands, and its offset moves them. The box of the node comes from the variables.
+ */
+function nodeShapeOf(a: ShapeAxis): Expr {
+  const own = single(box(v(a.size), v(a.crossSize)));
+  const child = let_({ part: ref(a.field), along: ref(a.offset), across: ref(a.cross) }, moved("part", v("along"), v("across")));
+  return call("merge", op("append", own, op("flat", each(axes.all, child))));
+}
+
+/**
+ * The shape of one linked node with children, as the measure loop of ireko computes it for each node. The records are
+ * the children, and each one holds its shape as two lists of bands. The value at each record is the shape of the node.
+ */
+export const NODE_SHAPE: Expr = let_({ merge: MERGE }, let_({ rows: nodeShapeOf(ROWS), cols: nodeShapeOf(COLS) }, op("append", single(v("rows")), single(v("cols")))));
+
+/**
+ * The schema of `NODE_SHAPE`. Each child has an offset and two lists of bands. The variables are the box of the node and
+ * the limit of the bands.
+ */
+export const NODE_SCHEMA: Schema = {
+  fields: { ox: "number", oy: "number", rows: BANDS, cols: BANDS },
+  vars: { w: "number", h: "number", limit: "number" },
+};

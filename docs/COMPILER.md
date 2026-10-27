@@ -269,6 +269,7 @@ The decisions of the third block:
 - A list op over a `let` with literal options is the list op over the body of the `let`. A builder sheet prints `sum(let($0 = 0, each(…)))`. Thus the `each` stays one loop with a running value.
 - The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus an op on a `get` of a name whose first list is empty gives a reason.
 - The focus of the axis `list` is the position of a record. A key of a literal is not such a position. Since COMPILE.MODULE.FILL, the axis `list` over such keys gives a reason only when it reads a record at a target.
+- Since 2026-10-27, a loop over the axis `list` can name its items with `as` (COMPILE.MODULE.LIST.ITEM, §13.3, "The names of the items").
 - Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list gives a reason. Since 2026-10-26, the value of a program and the branches of `if` and `ifError` can be lists ("Lists in cells" below). Since 2026-10-26, a module has graph spaces and `reduce`, so the force pilot is a module ("Graph spaces and reduce" below).
 
 The decisions of the second block:
@@ -943,3 +944,16 @@ The measure loop of ireko measures one node at a time. A module for one node nee
 `NODE_SHAPE` of `@vex/pilots` is the shapes pass for one linked node with children. Each record is a child, with its offset and the two lists of bands of its shape. The variables are the box of the node and the limit. A property compares the module with `joinShapes` of ireko, with the same bits. The module has 13481 bytes and 3666 bytes after gzip with the default level, before a minifier (2026-10-27).
 
 The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shape of ireko has no end -0, so the property gives no such end.
+
+#### The names of the items (COMPILE.MODULE.LIST.ITEM)
+
+The field `as` of `each` and `fold` names the value and the index of each item of the axis `list` (AXIS.LIST.ITEM). Before this change, a module gave the reason "the program has a loop that names its items with "as", and a module does not have these names yet". Tier 1 evaluated the program. The module has the names now.
+
+- The loop of the axis `list` reads the pair of each item from the array of the list. The check of the sentinel comes first. Then a constant holds the value of the item, and another constant holds its index.
+- An error item throws at its check, so the names bind nothing. In `each`, the item is an error item. A list op skips it, or with `strict` it is the error of the op. In `fold`, the error is the value of the fold.
+- The index counts the items with a value, as `nth` does. In the order of the list, it counts up from 0. Under `reverse`, it counts down from the number of these items. A test of `where` that is false does not change the count.
+- Only the body of `each` and the steps of `fold` read the names (AXIS.LIST.SCOPE). The tests of `where`, the list, `init` and `result` read the names outside the loop. Thus a name of `as` hides a name of a `let` or of a loop only in the body and in the steps.
+- The names have a level of their own. Thus a part that reads them stays in the loop. A read of a name is not a read of the target, so a loop over the keys of a literal or of `fill` can read them.
+- The value of an item keeps the facts of its list. Thus an item that is a list is a list in the body. The printer knows these facts only in the loop. So a list op over such an `each` goes over its array when the body can give a list.
+- A name of `as` is never a name of `init`. Thus a step that appends to its own list and reads a name of `as` keeps the append of COMPILE.MODULE.APPEND.OWN.
+- Tier 2 still gives a reason for each program with the axis `list`.

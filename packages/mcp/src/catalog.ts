@@ -145,6 +145,9 @@ These ops apply to each value. They are not ops of a domain.
 | \`get(list, key)\` | The value of the first item with the key \`key\`. A key that no item has gives \`#N/A\`. |
 | \`indexOf(list, value)\` | The position of the first item with the value, from 0, as \`nth\` counts. The value is a number, a text or a boolean. A value that no item has gives \`#N/A\`. |
 | \`fill(n, value)\` | A list of \`n\` items with the value, from 0 to 100000 items. The keys are the positions. |
+| \`distinct(list)\` | A list of the first item of each value, in order. The values are numbers, texts or booleans. |
+| \`group(list, keys)\` | A list with one item for each text of \`keys\`, in order. Its value is the list of the items at the positions of that text. |
+| \`join(list, sep)\` | The texts of the items, with the text \`sep\` between them |
 
 A list op skips error items. The option \`{ strict: true }\` gives the first error. A literal can be a list, for example the empty list \`{ "kind": "vex.list", "items": [] }\`, and a name of a loop can hold a list.
 

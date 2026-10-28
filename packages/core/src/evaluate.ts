@@ -872,6 +872,7 @@ class Compiler {
     const optsArg = WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
     const strict = (optsArg as ListOptions | null | undefined)?.strict === true;
     if (op === "get") return this.#get(list, rest[0], strict, f, path);
+    if (op === "group") return this.#group(list, rest[0], strict, f, path);
     const good = goodItems(list, strict);
     if (!good.ok) return good;
     const okItems = good.value;
@@ -917,6 +918,26 @@ class Compiler {
       }
       case "flat":
         return this.#flat(okValues, strict, f, path);
+      case "distinct": {
+        // The first item of each value, in the order of the list (LIST.DISTINCT). === compares the values, as for
+        // indexOf, so each NaN stays.
+        const seen = new Set<unknown>();
+        const out: ListItem[] = [];
+        for (let i = 0; i < okValues.length; i++) {
+          const x = okValues[i];
+          if (!isIndexValue(x)) return this.#err("kind-mismatch", `"distinct" needs numbers, texts or booleans, but an item is a ${describeType(x)}`, f, path, { op });
+          if (Number.isNaN(x) || !seen.has(x)) out.push(okItems[i] as ListItem);
+          seen.add(x);
+        }
+        return ok(checkedList(out));
+      }
+      case "join": {
+        // The texts of the items with the text sep between them (LIST.JOIN).
+        const sep = rest[0];
+        if (typeof sep !== "string") return this.#err("kind-mismatch", `"join" needs a text separator, not a ${describeType(sep)}`, f, path, { op });
+        const bad = okValues.find((x) => typeof x !== "string");
+        return bad === undefined ? ok(okValues.join(sep)) : this.#err("kind-mismatch", `"join" needs texts, but an item is a ${describeType(bad)}`, f, path, { op });
+      }
       case "indexOf": {
         const x = rest[0];
         if (!isIndexValue(x)) return this.#err("kind-mismatch", `"indexOf" needs a number, a text or a boolean, not a ${describeType(x)}`, f, path, { op });
@@ -984,6 +1005,36 @@ class Compiler {
     if (stop !== undefined) return fail(stop);
     if (typeof key !== "string") return this.#err("kind-mismatch", `"get" needs a text key, not a ${describeType(key)}`, f, path, { op: "get" });
     return index.values.has(key) ? ok(index.values.get(key)) : this.#err("missing-field", `the list has no item with the key ${JSON.stringify(key)}`, f, path, { op: "get" });
+  }
+
+  /**
+   * This method gives the groups of a list (LIST.GROUP). The item at a position has the key at the same position of
+   * `keys`, so the two lists must have the same number of items. A pair with an error item or an error key is not in a
+   * group (LIST.LENIENT). Each key gives one item, in the order of its first pair, and its value is a list of its items.
+   */
+  #group(list: VexList, keys: unknown, strict: boolean, f: Frame, path: readonly number[]): Result<VexList> {
+    const good = goodItems(list, strict);
+    if (!good.ok) return good;
+    const listed = asList(keys, this.#missing(f, path));
+    if (listed === undefined) return this.#err("kind-mismatch", `"group" needs a list of keys as its second argument, not a ${describeType(keys)}`, f, path, { op: "group" });
+    const goodKeys = goodItems(listed, strict);
+    if (!goodKeys.ok) return goodKeys;
+    const { items } = list;
+    const keyItems = listed.items;
+    if (keyItems.length !== items.length) return this.#err("kind-mismatch", `"group" needs one key for each item, but the list has ${String(items.length)} items and ${String(keyItems.length)} keys`, f, path, { op: "group" });
+    const groups = new Map<string, ListItem[]>();
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] as ListItem;
+      const k = (keyItems[i] as ListItem).result;
+      if (!it.result.ok || !k.ok) continue;
+      if (typeof k.value !== "string") return this.#err("kind-mismatch", `"group" needs text keys, but a key is a ${describeType(k.value)}`, f, path, { op: "group" });
+      const g = groups.get(k.value);
+      if (g === undefined) groups.set(k.value, [it]);
+      else g.push(it);
+    }
+    const out: ListItem[] = [];
+    for (const [key, g] of groups) out.push({ key, result: ok(checkedList(g)) });
+    return ok(checkedList(out));
   }
 
   /**
@@ -1083,7 +1134,7 @@ class Compiler {
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf"]);
+const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf", "group", "join"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that

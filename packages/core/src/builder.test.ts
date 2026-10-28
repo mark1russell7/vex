@@ -556,6 +556,31 @@ describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER, BUILD.
     expect(() => ns.without("w")).toThrow("without needs a list chain");
   });
 
+  it("BUILD.LIST.GROUP: distinct, group and join on a list chain", () => {
+    const team = vex(Num).over(space.array([{ t: "x", n: 1 }, { t: "y", n: 2 }, { t: "x", n: 3 }]));
+    const ts = team.start(0).each((c) => c.from("t"));
+    const ns = team.start(0).each((c) => c.from("n"));
+    expectTypeOf(ts.distinct().values().result("0")).toEqualTypeOf<Result<readonly string[]>>();
+    expect(optionalValue(ts.distinct().values().at("0"))).toEqual(["x", "y"]);
+    expect(optionalValue(ns.distinct().keys().at("0"))).toEqual(["0", "1", "2"]);
+    expect(ts.distinct({ strict: true }).program).toEqual(app("distinct", ts.program, lit({ strict: true })));
+    // Each group is a list, so flat joins the groups again, in the order of the groups.
+    const groups = ns.group(ts);
+    expectTypeOf(groups.flat().values().result("0")).toEqualTypeOf<Result<readonly number[]>>();
+    expect(optionalValue(groups.flat().values().at("0"))).toEqual([1, 3, 2]);
+    expect(optionalValue(groups.count().at("0"))).toBe(2);
+    expect(ns.group(ts, { strict: true }).program).toEqual(app("group", ns.program, ts.program, lit({ strict: true })));
+    // join gives a text. A chain of a text gives the separator.
+    expectTypeOf(ts.join(", ").result("0")).toEqualTypeOf<Result<string>>();
+    expect(optionalValue(ts.distinct().join(", ").at("0"))).toBe("x, y");
+    expect(optionalValue(ts.join(team.from("t")).at("1"))).toBe("xyyyx");
+    expect(ts.join("-", { strict: true }).program).toEqual(app("join", ts.program, lit("-"), lit({ strict: true })));
+    // @ts-expect-error -- join needs a list chain of texts
+    ns.join(", ");
+    // @ts-expect-error -- group needs a list chain of keys
+    expect(() => ns.group("t")).toThrow("group needs a list chain");
+  });
+
   it("BUILD.LIST.LOOP: a name of a loop with a list chain as its first value is a list chain, and get reads a value by key", () => {
     const ns = rows.start(0).each((c) => c.from("n"));
     // A stack: the step removes the first item, and the result reads the keys that stay.

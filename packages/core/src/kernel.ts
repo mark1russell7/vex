@@ -673,7 +673,7 @@ function callFound(found: Found, op: string, self: unknown, args: readonly unkno
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf"]);
+const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf", "group", "join"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that
@@ -704,10 +704,31 @@ function flat(vs: readonly unknown[], strict: boolean): unknown {
   return vexList(out);
 }
 
+/**
+ * This function gives the groups of `group(list, keys)` (LIST.GROUP). The item at a position has the key at the same
+ * position. A pair with an error item or an error key is not in a group.
+ */
+function group(items: readonly ListItem[], keys: unknown, strict: boolean): unknown {
+  goodOf(items, strict);
+  const list = asList(keys, missing);
+  if (list === undefined) return stop("kind-mismatch", `"group" needs a list of keys, not a ${describe(keys)}`);
+  goodOf(list.items, strict);
+  if (list.items.length !== items.length) return stop("kind-mismatch", '"group" needs one key for each item');
+  const groups = new Map<string, ListItem[]>();
+  items.forEach((it, i) => {
+    const k = (list.items[i] as ListItem).result;
+    if (!it.result.ok || !k.ok) return;
+    if (typeof k.value !== "string") stop("kind-mismatch", '"group" needs text keys');
+    groups.set(k.value as string, [...(groups.get(k.value as string) ?? []), it]);
+  });
+  return vexList([...groups].map(([key, g]): ListItem => ({ key, result: vexOk(vexList(g)) })));
+}
+
 /** This function applies a list op (LIST.*). The error items are skipped, except with `{ strict: true }`, and except `#DEPTH!`. */
 function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[], domains: readonly AnyDomain[]): unknown {
   const o = WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
   const strict = (o as { strict?: unknown } | null | undefined)?.strict === true;
+  if (op === "group") return group(items, rest[0], strict);
   const good = goodOf(items, strict);
   const vs = good.map((it) => (it.result.ok ? it.result.value : undefined));
   const nums = (): readonly number[] => (vs.every((x) => typeof x === "number") ? vs : stop("kind-mismatch", `"${op}" needs numbers`));
@@ -753,6 +774,18 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
       if (typeof key !== "string") return stop("kind-mismatch", `"get" needs a text key, not a ${describe(key)}`);
       const i = good.findIndex((it) => it.key === key);
       return i >= 0 ? vs[i] : stop("missing-field", `the list has no item with the key ${JSON.stringify(key)}`);
+    }
+    case "distinct": {
+      // The first item of each value, by ===, as for indexOf. Thus each NaN stays (LIST.DISTINCT).
+      if (!vs.every(isIndexValue)) return stop("kind-mismatch", '"distinct" needs numbers, texts or booleans');
+      const keep = vs.map((x, i) => vs.indexOf(x) === i || Number.isNaN(x));
+      return vexList(good.filter((_it, i) => keep[i]));
+    }
+    case "join": {
+      // The texts of the items with the text sep between them (LIST.JOIN).
+      const sep = rest[0];
+      if (typeof sep !== "string") return stop("kind-mismatch", `"join" needs a text separator, not a ${describe(sep)}`);
+      return vs.every((x) => typeof x === "string") ? vs.join(sep) : stop("kind-mismatch", '"join" needs texts');
     }
     case "indexOf": {
       // The position of the first value, among the items with a value (LIST.INDEXOF).

@@ -240,8 +240,8 @@ importers:
   packages/core:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.14.0
+        version: 0.14.0
     devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue
@@ -551,8 +551,8 @@ importers:
   tools/mutation:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.14.0
+        version: 0.14.0
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains
@@ -1582,6 +1582,9 @@ packages:
     peerDependenciesMeta:
       zod:
         optional: true
+
+  '@mark1russell7/coeval@0.14.0':
+    resolution: {integrity: sha512-98JZ3BKi9vd8wj43QRvEW8ymYrlqG6YBZTg2EQ9VDFI+VwBf7n8K8pWJlZXtk2N+zEYGkBIoRh2eC7a7Kij8Yw==}
 
   '@mark1russell7/coeval@0.9.0':
     resolution: {integrity: sha512-V4eUVtC9i0xngEXEkBICa52QVPm4BDUhPJEP7QevsErpnlxhv8VkBmY/wnLUa1l4HBgKDyp8QDqxPxjkn5/E5g==}
@@ -5571,6 +5574,8 @@ snapshots:
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
     optionalDependencies:
       zod: 4.6.7
+
+  '@mark1russell7/coeval@0.14.0': {}
 
   '@mark1russell7/coeval@0.9.0': {}
 

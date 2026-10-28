@@ -1,5 +1,14 @@
 # @mark1russell7/vex-testkit
 
+## 0.14.0
+
+### Patch Changes
+
+- Updated dependencies [d41464f]
+- Updated dependencies [82ecf84]
+- Updated dependencies [c304087]
+  - @mark1russell7/vex@0.14.0
+
 ## 0.13.4
 
 ### Patch Changes

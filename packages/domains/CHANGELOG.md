@@ -1,5 +1,15 @@
 # @mark1russell7/vex-domains
 
+## 0.14.0
+
+### Patch Changes
+
+- 6e06bd7: A JSON domain reads the kinds and fields of a JSON value (JSON.KIND, JSON.FIELD). `JsonDomain` has the ops `kind`, `kinds`, `fields` and `field`. Put it last in the list of domains. The catalog of the MCP server lists it.
+- Updated dependencies [d41464f]
+- Updated dependencies [82ecf84]
+- Updated dependencies [c304087]
+  - @mark1russell7/vex@0.14.0
+
 ## 0.13.4
 
 ### Patch Changes

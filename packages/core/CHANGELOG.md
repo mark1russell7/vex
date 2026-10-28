@@ -1,5 +1,16 @@
 # @mark1russell7/vex
 
+## 0.14.0
+
+### Minor Changes
+
+- c304087: The release train: the ranges of @mark1russell7/coeval change to a version outside the old range.
+
+### Patch Changes
+
+- d41464f: The builder writes the item names of a list loop (BUILD.LIST.ITEM). The body of `each` of a list chain also gets a chain of the value of the item and a chain of its index. The step of `fold` gets the index after the item.
+- 82ecf84: A loop over a list can name the item and its index (AXIS.LIST.ITEM). The optional field `as` of `each` and `fold` binds the value of each item, and then its position as `nth` counts it (AXIS.LIST.INDEX). The names are visible in the body and in each step, not in the test of `where` (AXIS.LIST.SCOPE). An error item stays an error item. Tier 2 gives a reason for such a program, and tier 1 evaluates it.
+
 ## 0.13.4
 
 ### Patch Changes

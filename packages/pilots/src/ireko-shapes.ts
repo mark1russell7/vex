@@ -9,6 +9,9 @@
  * tree with the same pass. The column `need` goes down the tree. The column `shape` holds the two lists of bands, and it
  * goes up the tree. The columns `rows` and `cols` read its lists. The tests compare the two, with the same bits. ireko has the MIT license and the same author.
  *
+ * A band of a box that overflows has an infinite end, and ireko keeps it. An op that gives an infinite number gives
+ * `#NUM!` (CALL.RESULT). Thus the program compares the ends only with the ops of `BandDomain`, and it keeps such a band.
+ *
  * `NODE_SHAPE` is the pass for one linked node. Its records are the children, and their shapes are lists of the input
  * (COMPILE.MODULE.LIST.INPUT).
  */
@@ -188,42 +191,46 @@ const keep = (list: Expr, as: ItemNames, body: Expr): Expr => op("flat", loop(li
 const over = (list: Expr, as: ItemNames, init: Readonly<Record<string, Expr>>, step: Readonly<Record<string, Expr>>, result: Expr): Expr =>
   fold(axes.list(list), init, step, result, undefined, as);
 
-/** The test of `mergeBands` of ireko: a band with a size on each axis. */
-const valid = (b: Expr): Expr => op("and", op("gt", op("to", b), op("from", b)), op("gte", op("max", b), op("min", b)));
+/** The test of `mergeBands` of ireko: a band with a size on each axis. The op `sized` compares the ends inside the band. */
+const valid = (b: Expr): Expr => op("sized", b);
 
 /** The list `list` with each band moved: `along` on the axis of the list, and `across` on the other axis. */
 const moved = (list: string, along: Expr, across: Expr): Expr => loop(v(list), ["b"], op("move", v("b"), along, across));
 
 /**
- * The events of the sweep over the bands in the name `bands`, in the order of their positions. Each valid band gives
- * two events. Its start event is the band itself, at its `from`. Its end event is a band from `to` to `to`, at its
- * `to`. An end event has no size, so the test `to > from` tells the two kinds apart.
- *
- * The events go into the list in the order of the cuts of ireko, and `sortBy` keeps the order of equal positions. Thus the first event at a position
- * has the cut value of ireko, and the start events keep the order of the bands of ireko.
+ * The events of the sweep over the bands in the name `bands`, before the sort. Each valid band gives two events. Its
+ * start event is the band itself, at its `from`. Its end event is the band `end(b)` from `to` to `to`, at its `to`.
+ * An end event has no size, so the op `sized` tells the two kinds apart.
  */
-const events = op(
-  "sortBy",
-  keep(v("bands"), ["b"], op("if", valid(v("b")), op("append", single(v("b")), single(op("band", op("to", v("b")), op("to", v("b")), lit(0), lit(0)))), NO_BANDS)),
-  lit({ by: "from" }),
+const UNSORTED = keep(v("bands"), ["b"], op("if", valid(v("b")), op("append", single(v("b")), single(op("end", v("b")))), NO_BANDS));
+
+/** The events in the name `raw` on one side: -1 at `-Infinity`, 0 at a finite position and 1 at `Infinity`. */
+const onSide = (side: number): Expr => keep(v("raw"), ["e"], op("if", op("eq", op("side", v("e")), lit(side)), single(v("e")), NO_BANDS));
+
+/**
+ * The events of the sweep over the bands in the name `bands`, in the order of their positions.
+ *
+ * The events go into the list in the order of the cuts of ireko, and each step keeps the order of equal positions.
+ * Thus the first event at a position has the cut value of ireko, and the start events keep the order of the bands of
+ * ireko.
+ *
+ * A band that overflows has an infinite end. An infinite key of `sortBy` gives `#NUM!` (CALL.RESULT), so only the
+ * events at a finite position go through `sortBy`. The events at `-Infinity` come before them, and the events at
+ * `Infinity` come after them.
+ */
+const events = let_(
+  { raw: UNSORTED },
+  op("append", op("append", onSide(-1), op("sortBy", onSide(0), lit({ by: "from" }))), onSide(1)),
 );
 
 /**
- * The band from the position in the name `x` to the position `to`, across the open bands. `min` and `max` keep the
- * first of two equal values, as the comparisons of ireko do. Thus -0 and 0 keep the order of the open bands.
+ * The band from the start of the event in the name `x` to the start of the event `to`, across the open bands. The name
+ * `c` holds the lowest `min` and the highest `max` of the open bands. The op `widen` keeps the first of two equal
+ * values, as the comparisons of ireko do. Thus -0 and 0 keep the order of the open bands. The ends stay inside the
+ * bands, so the program gets no infinite end as a number.
  */
 const span = (to: Expr): Expr =>
-  over(
-    v("open"),
-    ["b"],
-    { any: lit(false), lo: lit(0), hi: lit(0) },
-    {
-      any: lit(true),
-      lo: op("if", op("or", op("not", v("any")), op("lt", op("min", v("b")), v("lo"))), op("min", v("b")), v("lo")),
-      hi: op("if", op("or", op("not", v("any")), op("gt", op("max", v("b")), v("hi"))), op("max", v("b")), v("hi")),
-    },
-    op("band", v("x"), to, v("lo"), v("hi")),
-  );
+  over(v("open"), ["b"], { any: lit(false), c: ZERO }, { any: lit(true), c: op("if", v("any"), op("widen", v("c"), v("b")), v("b")) }, op("cut", v("c"), v("x"), to));
 
 /** The names of the join of a segment: the flag of the last band, the last band and the list of the bands before it. */
 interface Joined {
@@ -237,14 +244,15 @@ interface Joined {
  * holds the last band, and the name `held` tells if it exists. A segment that continues the last band with the same
  * interval extends it, as the sweep of ireko does. Another segment moves the last band to the list `out` and becomes
  * the last band. The step of `out` appends to its own list, so a module appends in O(1) (COMPILE.MODULE.APPEND.OWN).
+ * The ops `continues` and `extend` compare and copy the ends inside the bands.
  */
 const absorb = (): Joined => {
   const seg = v("seg");
   const pend = v("pend");
-  const same = op("and", v("held"), op("and", op("eq", op("to", pend), op("from", seg)), op("and", op("eq", op("min", pend), op("min", seg)), op("eq", op("max", pend), op("max", seg)))));
+  const same = op("and", v("held"), op("continues", pend, seg));
   return {
     held: op("or", v("held"), v("emit")),
-    pend: op("if", v("emit"), op("if", same, op("band", op("from", pend), op("to", seg), op("min", pend), op("max", pend)), seg), pend),
+    pend: op("if", v("emit"), op("if", same, op("extend", pend, seg), seg), pend),
     out: op("if", op("and", v("emit"), op("and", v("held"), op("not", same))), op("append", v("out"), single(pend)), v("out")),
   };
 };
@@ -252,7 +260,9 @@ const absorb = (): Joined => {
 /**
  * The merged bands of the name `bands`, before the limit: one fold over the sorted events, as the sweep of ireko.
  *
- * - The name `x` holds the position of the current cut, and the name `open` holds the open bands in the order of ireko.
+ * - The name `x` holds the first event at the current cut, and the name `open` holds the open bands in the order of
+ *   ireko. The ops `aligned` and `outlasts` compare the positions inside the bands, so the program gets no infinite
+ *   end as a number.
  * - An event at a new position closes the segment from `x` to its position. If a band is open, the name `seg` gets the
  *   band of the segment, and the name `emit` is true. Then the bands that end at the new position close.
  * - A start event opens its band.
@@ -264,18 +274,18 @@ const absorb = (): Joined => {
 const sweep = over(
   v("events"),
   ["e"],
-  { has: lit(false), x: lit(0), open: NO_BANDS, emit: lit(false), seg: ZERO, held: lit(false), pend: ZERO, out: NO_BANDS },
+  { has: lit(false), x: ZERO, open: NO_BANDS, emit: lit(false), seg: ZERO, held: lit(false), pend: ZERO, out: NO_BANDS },
   (() => {
     const e = v("e");
-    const pos = op("from", e);
-    const moves = op("and", v("has"), op("not", op("eq", pos, v("x"))));
-    const still = keep(v("open"), ["b"], op("if", op("gt", op("to", v("b")), pos), single(v("b")), NO_BANDS));
+    const moves = op("and", v("has"), op("not", op("aligned", e, v("x"))));
+    const still = keep(v("open"), ["b"], op("if", op("outlasts", v("b"), e), single(v("b")), NO_BANDS));
     return {
       has: lit(true),
-      x: op("if", op("and", v("has"), op("not", moves)), v("x"), pos),
-      open: let_({ base: op("if", moves, still, v("open")) }, op("if", op("gt", op("to", e), pos), op("append", v("base"), single(e)), v("base"))),
+      x: op("if", op("and", v("has"), op("not", moves)), v("x"), e),
+      // A start event is a valid band, so it has a size. An end event has no size.
+      open: let_({ base: op("if", moves, still, v("open")) }, op("if", valid(e), op("append", v("base"), single(e)), v("base"))),
       emit: op("and", moves, op("gt", op("count", v("open")), lit(0))),
-      seg: op("if", op("and", moves, op("gt", op("count", v("open")), lit(0))), span(pos), ZERO),
+      seg: op("if", op("and", moves, op("gt", op("count", v("open")), lit(0))), span(e), ZERO),
       ...absorb(),
     };
   })(),

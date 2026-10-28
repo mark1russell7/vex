@@ -62,7 +62,11 @@ function sheetShapes(records: readonly ShapeRecord[], limit: number): (Shape | u
 /** A whole number, a number with a fraction, or a negative zero: the bits of each one count. */
 const coord = fc.oneof(fc.integer({ min: -60, max: 60 }), fc.double({ min: -60, max: 60, noNaN: true, noDefaultInfinity: true }), fc.constant(-0));
 const size = fc.oneof(fc.integer({ min: 0, max: 40 }), fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true }));
-const node = fc.record({ wants: fc.boolean(), linked: fc.boolean(), w: size, h: size, ox: coord, oy: coord, ex: coord, ey: coord, ew: size, eh: size });
+/** An infinite number, as ireko keeps on a band that overflows. */
+const infinite = fc.constantFrom(Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY);
+/** A size, or sometimes `Infinity`: the box of a node that overflows. */
+const extent = fc.oneof({ arbitrary: size, weight: 9 }, { arbitrary: fc.constant(Number.POSITIVE_INFINITY), weight: 1 });
+const node = fc.record({ wants: fc.boolean(), linked: fc.boolean(), w: extent, h: extent, ox: coord, oy: coord, ex: coord, ey: coord, ew: extent, eh: extent });
 
 /**
  * A tree in the pre-order of ireko, with up to `most` nodes. Each node after the root has a parent before it. A choice
@@ -138,6 +142,36 @@ describe("the ireko shapes pilot", () => {
     expect(run([leaf(-1, { wants: true }), leaf(0, { h: 0 }), leaf(1, { w: 0, h: 0 })], MAX_BANDS)[1]).toStrictEqual({ rows: [], columns: [{ from: 0, to: 10, min: 0, max: 0 }] });
   });
 
+  it("CALL.RESULT: the sheet keeps the infinite ends of a box that overflows, in the module and in SheetRun, as ireko", () => {
+    const inf = Number.POSITIVE_INFINITY;
+    // The child a1 of the node a has an infinite width, and the nested child a2 has an infinite height.
+    const records: ShapeRecord[] = [
+      leaf(-1, { wants: true, w: 100, h: 20 }),
+      leaf(0, { w: 10, h: 10 }),
+      leaf(1, { w: inf, h: 5, ox: 3, oy: 15 }),
+      leaf(1, { linked: false, w: 4, h: inf, ox: 0, oy: 30 }),
+      leaf(3, { w: 2, h: 2 }),
+    ];
+    const reference = shapesTree(records);
+    expect(reference[1]).toStrictEqual({
+      rows: [
+        { from: 0, to: 10, min: 0, max: 10 },
+        { from: 15, to: 20, min: 3, max: inf },
+        { from: 30, to: inf, min: 0, max: 4 },
+      ],
+      columns: [
+        { from: 0, to: 4, min: 0, max: inf },
+        { from: 4, to: 10, min: 0, max: 20 },
+        { from: 10, to: inf, min: 15, max: 20 },
+      ],
+    });
+    expect(run(records, MAX_BANDS)).toStrictEqual(reference);
+    expect(sheetShapes(records, MAX_BANDS)).toStrictEqual(reference);
+    // With the limit 1, each axis joins into one band, and the infinite ends stay.
+    expect(run(records, 1)).toStrictEqual(shapesTree(records, 1));
+    expect(run(records, 1)[1]?.columns).toStrictEqual([{ from: 0, to: inf, min: 0, max: inf }]);
+  });
+
   it("gives the shape of a deep linked chain and of a wide row of leaves, past the limit of the bands", () => {
     const chain = [leaf(-1, { wants: true }), ...Array.from({ length: 40 }, (_, i) => leaf(i, { ox: 3, oy: 12 }))];
     expect(run(chain, MAX_BANDS)).toStrictEqual(shapesTree(chain));
@@ -201,10 +235,12 @@ const nodeShape = (value: unknown): Shape => {
 
 /**
  * An end of a band. The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shape of ireko has no
- * end -0: a box starts at 0, and a sum is -0 only for two terms -0. Thus an end here is not -0.
+ * end -0: a box starts at 0, and a sum is -0 only for two terms -0. Thus an end here is not -0. An end is sometimes
+ * infinite, as on a band that overflows.
  */
-const end = coord.map((x) => (x === 0 ? 0 : x));
-const band = fc.record({ from: end, to: end, min: coord, max: coord });
+const end = fc.oneof({ arbitrary: coord.map((x) => (x === 0 ? 0 : x)), weight: 9 }, { arbitrary: infinite, weight: 1 });
+const across = fc.oneof({ arbitrary: coord, weight: 9 }, { arbitrary: infinite, weight: 1 });
+const band = fc.record({ from: end, to: end, min: across, max: across });
 const child = fc.record({ ox: coord, oy: coord, shape: fc.record({ rows: fc.array(band, { maxLength: 4 }), columns: fc.array(band, { maxLength: 4 }) }) });
 
 describe("the ireko shapes pilot for one node", () => {
@@ -217,7 +253,7 @@ return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[]
   it("COMPILE.MODULE.LIST.INPUT: the module of one node reads the shapes of the children as input, and gives the join of ireko with the same bits", () => {
     expect(m.source).not.toContain("import");
     fc.assert(
-      fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), size, size, fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 4 })), (kids, w, h, limit) => {
+      fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), extent, extent, fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 4 })), (kids, w, h, limit) => {
         const values = run(kids.map(childRecord), { w, h, limit });
         expect(values).toHaveLength(kids.length);
         for (const value of values) expect(nodeShape(value)).toStrictEqual(reference(kids, w, h, limit));
@@ -261,5 +297,47 @@ return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[]
     });
     expect(shapes[0]).toStrictEqual(empty);
     expect(shapes[2]).toStrictEqual({ rows: [{ from: 0, to: 8, min: 0, max: 10 }], columns: [{ from: 0, to: 10, min: 0, max: 8 }] });
+  });
+
+  it("CALL.RESULT: the module of one node and the interpreter keep the bands with infinite ends, as ireko", () => {
+    const inf = Number.POSITIVE_INFINITY;
+    // Each node: its children, its box and the rows of ireko.
+    const nodes: readonly (readonly [readonly Child[], number, number, readonly Band[]])[] = [
+      // The case of the tracker item SHAPEINF: a band to Infinity and a band with an infinite max.
+      [
+        [{ ox: 0, oy: 0, shape: { rows: [{ from: 0, to: inf, min: 0, max: 5 }, { from: 3, to: 8, min: -1, max: inf }], columns: [] } }],
+        1,
+        1,
+        [
+          { from: 0, to: 3, min: 0, max: 5 },
+          { from: 3, to: 8, min: -1, max: inf },
+          { from: 8, to: inf, min: 0, max: 5 },
+        ],
+      ],
+      // A band from -Infinity with a min of -Infinity, a band of all the axis, and a band from Infinity, which has no size.
+      [
+        [{ ox: 2, oy: 1, shape: { rows: [{ from: -inf, to: 4, min: -inf, max: 0 }, { from: -inf, to: inf, min: 1, max: 2 }, { from: inf, to: inf, min: 0, max: 1 }], columns: [] } }],
+        10,
+        4,
+        [
+          { from: -inf, to: 0, min: -inf, max: 4 },
+          { from: 0, to: 4, min: -inf, max: 10 },
+          { from: 4, to: 5, min: -inf, max: 4 },
+          { from: 5, to: inf, min: 3, max: 4 },
+        ],
+      ],
+      // A box of the node that overflows on both axes covers the box of its child.
+      [[{ ox: 0, oy: 6, shape: boxShape(2, 2) }], inf, inf, [{ from: 0, to: inf, min: 0, max: inf }]],
+    ];
+    for (const [kids, w, h, rows] of nodes) {
+      const records = kids.map(childRecord);
+      const vars = { w, h, limit: MAX_BANDS };
+      const interpreted = evaluate(NODE_SHAPE, { space: space.array(records), origin: "0", vars, domains: SHAPE_DOMAINS });
+      if (!interpreted.ok) throw new Error(interpreted.error.message);
+      const shape = reference(kids, w, h, MAX_BANDS);
+      expect(nodeShape(interpreted.value)).toStrictEqual(shape);
+      expect(nodeShape(run(records, vars)[0])).toStrictEqual(shape);
+      expect(shape.rows).toStrictEqual(rows);
+    }
   });
 });

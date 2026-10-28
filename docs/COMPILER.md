@@ -839,6 +839,8 @@ A shape of ireko is two lists of bands. `BandDomain` of the pilots holds one ban
 - `flip` mirrors a band across the row, as `flip` of `tree` does.
 - `join` gives the band that covers two bands, as `coarsen` and the sweep of `mergeBands` do.
 - `overlaps` is the test of `pack` of `tree`: two bands overlap when each one starts before the other one ends.
+- A field of a band can be `Infinity` or `-Infinity`, as on a band of ireko that overflows. The check `valid` refuses only `NaN`. An op that gives an infinite field as a number gives `#NUM!` (CALL.RESULT).
+- The ops `sized`, `end`, `side`, `aligned`, `outlasts`, `widen`, `cut`, `continues` and `extend` are the steps of the sweep of `mergeBands`. They compare the ends inside the op, so the merge keeps the infinite ends.
 - A list of bands is a value of a module, as the rows of a shape are. `nth` and `get` read a band of it, and `reduce` with `join` covers all of it.
 
 The domain is in the private pilots. Thus the API of `vex-domains` does not change, and a generated module of ireko holds the copies of the ops. A test compares the modules of programs over bands with the interpreter, also for errors.
@@ -848,6 +850,8 @@ The merge of the bands of a shape sorts the bands by `from`. Thus `sortBy` has t
 - The kind of the items gives the static site of the op, and the module copies its function, as for each other op. The helper `SK` applies the op to each item with a value.
 - The sort values follow LIST.SORT, and the items keep their keys and values. An error of the op is the error of the module.
 - A `by` that is not a literal text, or items without one kind, give a reason. An empty list applies no op.
+
+An infinite sort value gives `#NUM!` (CALL.RESULT). Thus the merge sorts only the events at a finite position. The events at `-Infinity` come before them, and the events at `Infinity` come after them.
 
 #### Lists in arguments and in fields (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD)
 

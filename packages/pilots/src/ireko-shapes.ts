@@ -12,7 +12,7 @@
  * `NODE_SHAPE` is the pass for one linked node. Its records are the children, and their shapes are lists of the input
  * (COMPILE.MODULE.LIST.INPUT).
  */
-import { app, axes, call, cell, each, fn, fold, iterate, let_, lit, ref, space, v, vexList, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axes, call, cell, each, fn, fold, iterate, let_, lit, ref, space, v, vexList, type Expr, type ItemNames, type Space } from "@mark1russell7/vex";
 import type { ListKind, Schema, SheetModuleOptions } from "@mark1russell7/vex-compiler";
 import { BAND_DOMAINS, type Band } from "./ireko-band.ts";
 
@@ -167,97 +167,100 @@ const ZERO = op("band", lit(0), lit(0), lit(0), lit(0));
 const single = (x: Expr): Expr => op("fill", lit(1), x);
 
 /**
- * An empty list whose items have the kind of `x`: `fill(0, x)`. A module takes the kind of the items of a name of a loop
+ * An empty list whose items have the kind of `x`: `fill(0, x)`. A module takes the kind of the items of a name of a fold
  * from its first list. The empty literal has no kind of items, so `sortBy` with the option `by` cannot read such a list.
+ * A filter gives this list for an item that it does not keep, so its value has the kind of its items.
  */
 const none = (x: Expr): Expr => op("fill", lit(0), x);
 const NO_BANDS = none(ZERO);
 const NO_NUMBERS = none(lit(0));
 
 /**
- * A loop over the items of the list in the name `list`, in order. The name `i` is the position of the item, and `nth`
- * reads it. The body of the axis `list` reads the record at the key of an item, not the value of the item.
+ * A map over the items of the list `list`, in order. The names of `as` hold the item and its position
+ * (AXIS.LIST.ITEM, AXIS.LIST.INDEX). The value is a list with one item for each item.
  */
-const over = (list: string, init: Readonly<Record<string, Expr>>, step: (item: Expr) => Readonly<Record<string, Expr>>, result: Expr): Expr =>
-  fold(axes.list(v(list)), { i: lit(0), ...init }, { i: next("i"), ...step(op("nth", v(list), v("i"))) }, result);
+const loop = (list: Expr, as: ItemNames, body: Expr): Expr => each(axes.list(list), body, undefined, as);
+
+/**
+ * A filter over the items of the list `list`. Its body gives a list of one item or an empty list, and `flat` joins
+ * these lists. Thus each item costs one step, and the filter does not append to a long list.
+ */
+const keep = (list: Expr, as: ItemNames, body: Expr): Expr => op("flat", loop(list, as, body));
+
+/** A fold over the items of the list `list`, in order. Its steps read the item and its position through the names of `as`. */
+const over = (list: Expr, as: ItemNames, init: Readonly<Record<string, Expr>>, step: Readonly<Record<string, Expr>>, result: Expr): Expr =>
+  fold(axes.list(list), init, step, result, undefined, as);
 
 /** The test of `mergeBands` of ireko: a band with a size on each axis. */
 const valid = (b: Expr): Expr => op("and", op("gt", op("to", b), op("from", b)), op("gte", op("max", b), op("min", b)));
 
 /** The list `list` with each band moved: `along` on the axis of the list, and `across` on the other axis. */
-const moved = (list: string, along: Expr, across: Expr): Expr => over(list, { acc: NO_BANDS }, (b) => ({ acc: op("append", v("acc"), single(op("move", b, along, across))) }), v("acc"));
+const moved = (list: string, along: Expr, across: Expr): Expr => loop(v(list), ["b"], op("move", v("b"), along, across));
 
 /**
  * The cut points of the bands in the name `bands`: the two ends of each valid band, from the smallest, each value once.
  * The ends go into the list in the order of ireko, so a sort that keeps the order keeps the first of two equal ends.
+ * An end stays when it is the first end or when it is not equal to the end before it.
  */
 const cuts = let_(
-  {
-    ends: over(
-      "bands",
-      { acc: NO_NUMBERS },
-      (b) => ({ acc: let_({ b }, op("if", valid(v("b")), op("append", op("append", v("acc"), single(op("from", v("b")))), single(op("to", v("b")))), v("acc"))) }),
-      v("acc"),
-    ),
-  },
+  { ends: keep(v("bands"), ["b"], op("if", valid(v("b")), op("append", single(op("from", v("b"))), single(op("to", v("b")))), NO_NUMBERS)) },
   let_(
     { sorted: op("sortBy", v("ends")) },
-    over(
-      "sorted",
-      { acc: NO_NUMBERS },
-      (x) => ({ acc: op("if", op("or", op("eq", v("i"), lit(0)), op("not", op("eq", x, op("nth", v("sorted"), op("subtract", v("i"), lit(1)))))), op("append", v("acc"), single(x)), v("acc")) }),
-      v("acc"),
-    ),
+    keep(v("sorted"), ["x", "i"], op("if", op("or", op("eq", v("i"), lit(0)), op("not", op("eq", v("x"), op("nth", v("sorted"), op("subtract", v("i"), lit(1)))))), single(v("x")), NO_NUMBERS)),
   ),
 );
 
 /**
- * The band of the cut at the position `i` of the name `cuts`: from the cut to the next cut, across the active bands. A
- * band of the name `starts` is active when it starts at the cut or before and ends after the cut. `min` and `max` keep
- * the first of two equal values, as the comparisons of ireko do. The list is empty when no band is active.
+ * The band of the cut in the name `c`: from the cut to the next cut, across the active bands. The name `i` holds the
+ * position of the cut in the name `cuts`. A band of the name `starts` is active when it starts at the cut or before and ends after the cut. `min`
+ * and `max` keep the first of two equal values, as the comparisons of ireko do. The list is empty when no band is
+ * active.
  */
 const segment = let_(
-  { from: op("nth", v("cuts"), v("i")), to: op("nth", v("cuts"), next("i")) },
-  fold(
-    axes.list(v("starts")),
-    { j: lit(0), any: lit(false), lo: lit(0), hi: lit(0) },
+  { from: v("c"), to: op("nth", v("cuts"), next("i")) },
+  over(
+    v("starts"),
+    ["b"],
+    { any: lit(false), lo: lit(0), hi: lit(0) },
     (() => {
-      const b = op("nth", v("starts"), v("j"));
+      const b = v("b");
       const active = op("and", valid(b), op("and", op("lte", op("from", b), v("from")), op("gt", op("to", b), v("from"))));
       return {
-        j: next("j"),
         any: op("or", v("any"), active),
         lo: op("if", op("and", active, op("or", op("not", v("any")), op("lt", op("min", b), v("lo")))), op("min", b), v("lo")),
         hi: op("if", op("and", active, op("or", op("not", v("any")), op("gt", op("max", b), v("hi")))), op("max", b), v("hi")),
       };
     })(),
-    op("if", v("any"), single(op("band", v("from"), v("to"), v("lo"), v("hi"))), EMPTY),
+    op("if", v("any"), single(op("band", v("from"), v("to"), v("lo"), v("hi"))), NO_BANDS),
   ),
 );
 
-/** The bands of each segment with an active band, in the order of the cuts. */
-const segments = over("cuts", { acc: NO_BANDS }, () => ({ acc: op("if", op("lt", next("i"), op("count", v("cuts"))), op("append", v("acc"), segment), v("acc")) }), v("acc"));
+/** The bands of each segment with an active band, in the order of the cuts. The last cut starts no segment. */
+const segments = keep(v("cuts"), ["c", "i"], op("if", op("lt", next("i"), op("count", v("cuts"))), segment, NO_BANDS));
 
 /** The segments with neighbor bands of the same interval joined, as the sweep of ireko. The name `p` holds the last band. */
 const joined = over(
-  "segments",
+  v("segments"),
+  ["s"],
   { has: lit(false), p: ZERO, acc: NO_BANDS },
-  (s) => {
+  (() => {
+    const s = v("s");
     const same = op("and", v("has"), op("and", op("eq", op("to", v("p")), op("from", s)), op("and", op("eq", op("min", v("p")), op("min", s)), op("eq", op("max", v("p")), op("max", s)))));
     return {
       has: lit(true),
       p: op("if", same, op("band", op("from", v("p")), op("to", s), op("min", v("p")), op("max", v("p"))), s),
       acc: op("if", op("and", v("has"), op("not", same)), op("append", v("acc"), single(v("p"))), v("acc")),
     };
-  },
+  })(),
   op("if", v("has"), op("append", v("acc"), single(v("p"))), v("acc")),
 );
 
-/** One step of `coarsen` of ireko: each pair of neighbor bands becomes one band that covers both. */
+/** One step of `coarsen` of ireko: each pair of neighbor bands becomes one band that covers both. The name `a` holds the first band of a pair. */
 const pairs = over(
-  "out",
+  v("out"),
+  ["b"],
   { odd: lit(false), a: ZERO, acc: NO_BANDS },
-  (b) => ({ odd: op("not", v("odd")), a: b, acc: op("if", v("odd"), op("append", v("acc"), single(op("join", v("a"), b))), v("acc")) }),
+  { odd: op("not", v("odd")), a: v("b"), acc: op("if", v("odd"), op("append", v("acc"), single(op("join", v("a"), v("b")))), v("acc")) },
   op("if", v("odd"), op("append", v("acc"), single(v("a"))), v("acc")),
 );
 

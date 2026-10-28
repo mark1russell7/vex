@@ -1,5 +1,21 @@
 # @mark1russell7/vex-mcp
 
+## 0.15.1
+
+### Patch Changes
+
+- d41464f: The catalog describes `as`: the names of the item and its index in a loop over a list.
+- 6e06bd7: A JSON domain reads the kinds and fields of a JSON value (JSON.KIND, JSON.FIELD). `JsonDomain` has the ops `kind`, `kinds`, `fields` and `field`. Put it last in the list of domains. The catalog of the MCP server lists it.
+- Updated dependencies [6a67959]
+- Updated dependencies [d41464f]
+- Updated dependencies [6e06bd7]
+- Updated dependencies [82ecf84]
+- Updated dependencies [f3bc451]
+- Updated dependencies [c304087]
+  - @mark1russell7/vex-compiler@0.14.0
+  - @mark1russell7/vex@0.14.0
+  - @mark1russell7/vex-domains@0.14.0
+
 ## 0.15.0
 
 ### Minor Changes

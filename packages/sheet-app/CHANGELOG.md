@@ -1,5 +1,15 @@
 # @vex/sheet-app
 
+## 0.2.17
+
+### Patch Changes
+
+- Updated dependencies [0e25e96]
+- Updated dependencies [be7202e]
+- Updated dependencies [320b3f5]
+  - @mark1russell7/vex@0.15.0
+  - @mark1russell7/vex-domains@0.15.0
+
 ## 0.2.16
 
 ### Patch Changes

@@ -2,6 +2,14 @@
 
 ## 0.14.0
 
+### Breaking Changes
+
+- The runtime dependency `@mark1russell7/coeval` changes from `^0.8.0` to `^0.9.0`. In coeval 0.9.0, equal profiles share one frozen formula kit (K41). Do these steps:
+  - An app that uses only Vex needs no change. Change its range of each package of the group to `^0.14.0`, because `^0.13.0` does not include 0.14.0.
+  - An app that also imports coeval, for example to give `VEX_WORLD` or `toKernelError` to its own kernel, changes its range of coeval to `^0.9.0`. Else the app gets two copies of coeval, and their types do not agree.
+  - An app that changes an evaluator of the formula kit of coeval after it gets it must not do that now. The evaluators are frozen. Make a new profile.
+  - 0.14.0 replaces the planned 0.13.5. No 0.13.5 was released.
+
 ### Patch Changes
 
 - 6a67959: A fold that appends gives a list in linear time (COMPILE.MODULE.APPEND.OWN). In a module of `emitModule`, a step of a name of `fold` or `iterate` can append to the list of the name. When no other part of the loop reads the name, the first append copies the list. Each later append adds its items to that copy. Before, each step copied the whole list, so n appends cost O(n squared). Also, `count` and `first` of a list read the items with values that `nth` keeps (COMPILE.MODULE.NTH.INDEX). The values and the errors stay the values and the errors of the interpreter.

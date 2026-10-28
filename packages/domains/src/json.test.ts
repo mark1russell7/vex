@@ -35,7 +35,9 @@ describe("the domain of JSON values (JsonDomain)", () => {
 
   it("JSON.KINDS: gives the kind of each item by position, with null for null, undefined and a hole, and keeps the repeats", () => {
     // The position 1 is a hole.
-    const holes: readonly unknown[] = Object.assign(new Array<unknown>(9), { 0: 1, 2: "x", 3: null, 4: undefined, 5: [2], 6: { a: 1 }, 7: true, 8: 1 });
+    const sparse: unknown[] = [];
+    sparse.length = 9;
+    const holes: readonly unknown[] = Object.assign(sparse, { 0: 1, 2: "x", 3: null, 4: undefined, 5: [2], 6: { a: 1 }, 7: true, 8: 1 });
     expect(1 in holes).toBe(false);
     expect(kinds.fn(holes)).toEqual(["number", "null", "string", "null", "null", "array", "object", "boolean", "number"]);
     expect(kinds.fn([])).toEqual([]);

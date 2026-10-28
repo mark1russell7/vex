@@ -33,7 +33,7 @@ LocalDate.of(2026, 13, 1).toString(); // => "2027-01-01"
 
 ## JSON values
 
-`JsonDomain` reads JSON data, for example the documents of a database. It accepts texts, finite numbers, booleans, arrays and plain objects. Put it last in the list of domains, so that `add` and `eq` go to the domains of numbers and texts first. `kind` gives the kind of a value. `kinds` gives the kind of each item or field, with `"null"` for `null`. `fields` gives the keys of an object, and `field` gives the value of one key.
+`JsonDomain` reads JSON data, for example the documents of a database. It accepts texts, finite numbers, booleans, arrays and plain objects. Put it last in the list of domains. Then `add` and `eq` go to the domains of numbers and texts first. `kind` gives the kind of a value. `kinds` gives the kind of each item or field, with `"null"` for `null`. `fields` gives the keys of an object, and `field` gives the value of one key.
 
 The schema pilot of `@vex/pilots` uses these ops. Its program gives one record for each field path of the documents, with the distinct kinds and the count of the documents with the path.
 

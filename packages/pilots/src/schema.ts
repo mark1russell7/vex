@@ -1,6 +1,6 @@
 /**
- * The schema pilot (EXAMPLE.SCHEMA). The app Graph shows the schema of a collection: for each field path of up to 20
- * sample documents, the kinds of its values and the number of documents with the path. Its functions `inferSchema` and
+ * The schema pilot (EXAMPLE.SCHEMA). The app Graph shows the schema of a collection. For each field path of up to 20
+ * sample documents, it shows the kinds of the values and the number of documents with the path. Its functions `inferSchema` and
  * `valueKind` do this in TypeScript. `SCHEMA_PROGRAM` is one Vex program that gives the same records, with the ops of
  * `JsonDomain`.
  *

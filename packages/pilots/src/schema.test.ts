@@ -35,6 +35,9 @@ function inferSchema(docs: readonly unknown[]): FieldSchema[] {
   return [...fields].map(([path, f]) => ({ path, kinds: [...f.kinds], count: f.docs.size }));
 }
 
+// The pilots have no types of Node, so the test reads the clock and the log through globalThis.
+const { performance: clock, console: log } = globalThis as unknown as { readonly performance: { now(): number }; readonly console: { info(message: string): void } };
+
 /** Random JSON values up to the depth 4. The keys collide on purpose: "x.y" next to x: { y }, "", __proto__ and constructor. */
 const KEYS = ["a", "b", "x", "y", "x.y", "", "_id", "__proto__", "constructor"] as const;
 const arbs = fc.letrec<{ json: unknown; array: unknown[]; object: Record<string, unknown> }>((tie) => ({
@@ -101,13 +104,13 @@ describe("the schema pilot", () => {
   });
 
   it("EXAMPLE.SCHEMA: gives the records of inferSchema for 20 documents of 30 fields, the size of a sample of Graph", () => {
-    const docs = Array.from({ length: 20 }, (_, d) => Object.fromEntries(Array.from({ length: 30 }, (_, f) => [`f${f}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
+    const docs = Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${f}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
     const want = inferSchema(docs);
     expect(schemaOf(docs)).toEqual(want);
     const runs = 5;
-    const start = performance.now();
+    const start = clock.now();
     for (let i = 0; i < runs; i++) schemaOf(docs);
-    console.info(`the schema of 20 documents of 30 fields takes ${((performance.now() - start) / runs).toFixed(1)} ms in the interpreter`);
+    log.info(`the schema of 20 documents of 30 fields takes ${((clock.now() - start) / runs).toFixed(1)} ms in the interpreter`);
     expect(want).toHaveLength(30);
   });
 });

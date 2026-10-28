@@ -23,8 +23,8 @@ export type JsonOps = {
 /**
  * The domain of JSON values, for example the documents of a database. Each op is a function of plain data, so a
  * standalone module can copy the domain. Put `JsonDomain` last in the list of domains. Then `add`, `eq` and the other
- * ops of `NumDomain`, `TextDomain` and `BoolDomain` come first. The domain does not use the names `keys`, `get` and
- * `values`, because these names are list ops, and a domain op comes before a list op on an array.
+ * ops of `NumDomain`, `TextDomain` and `BoolDomain` come first. The names `keys`, `get` and `values` are list ops. A
+ * domain op comes before a list op on an array, so the domain does not use these names.
  */
 export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json", JsonValue, JsonOps>({
   name: "Json",

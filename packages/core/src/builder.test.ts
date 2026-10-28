@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
-import { app, axes, each, index, lit, parent, ref } from "./ir.ts";
+import { app, axes, each, index, lit, parent, ref, v as varOf } from "./ir.ts";
 import { ok } from "./result.ts";
 import { isSome, type Optional, type Result } from "./result.ts";
 import { space } from "./space.ts";
@@ -602,5 +602,76 @@ describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER, BUILD.
     expect(optionalValue(people.list().append(one).keys().at("ann"))).toEqual(["bob"]);
     // @ts-expect-error -- "zed" is not a key of the space
     people.list([["zed", 1]]);
+  });
+
+  it("BUILD.LIST.ITEM: the body of each of a list chain gets the item and its index, and the step of fold gets the index", () => {
+    // The values of byW are 1, 2 and 3, at the keys 1, 2 and 0.
+    const byW = rows.start(0).each((c) => c.from("w")).sortBy();
+    const scaled = byW.each((_t, w, i) => w._.times(10)._.plus(i));
+    expectTypeOf(scaled.values().result("0")).toEqualTypeOf<Result<readonly number[]>>();
+    expect(optionalValue(scaled.values().at("0"))).toEqual([10, 21, 32]);
+    expect(scaled.program).toEqual(each(axes.list(byW.program), app("plus", app("times", varOf("$item0"), lit(10)), varOf("$index0")), undefined, ["$item0", "$index0"]));
+    // The field as has only the names that the body reads. The body still reads the fields of the target.
+    const plusN = byW.each((t, w) => t.from("n")._.plus(w));
+    expect(optionalValue(plusN.values().at("0"))).toEqual([11, 22, 33]);
+    expect(plusN.program).toEqual(each(axes.list(byW.program), app("plus", ref("n"), varOf("$item0")), undefined, ["$item0"]));
+    expect(byW.each((t) => t.from("n")).program).toEqual(each(axes.list(byW.program), ref("n")));
+    const positions = byW.each((_t, _w, i) => i);
+    expectTypeOf(positions.values().result("0")).toEqualTypeOf<Result<readonly number[]>>();
+    expect(positions.program).toEqual(each(axes.list(byW.program), varOf("$index0"), undefined, ["$item0", "$index0"]));
+    // The index is the position in the list, also from its end and with a test (AXIS.LIST.INDEX).
+    expect(optionalValue(byW.each((_t, _w, i) => i, { reverse: true }).values().at("0"))).toEqual([2, 1, 0]);
+    expect(optionalValue(byW.each((_t, w, i) => w._.plus(i), { where: (t) => t.from("w")._.gt(1) }).values().at("0"))).toEqual([3, 5]);
+    // A list of texts gives a chain of a text, and no domain of the root has the op times for a text.
+    const texts = rows.list([["0", "a"], ["1", "b"]]);
+    expectTypeOf(texts.each((_t, s) => s).values().result("0")).toEqualTypeOf<Result<readonly string[]>>();
+    expect(optionalValue(texts.each((_t, s) => s).values().at("0"))).toEqual(["a", "b"]);
+    // @ts-expect-error -- the item is a text, and no domain of the root has ops for a text
+    texts.each((_t, s) => s._.times(2));
+  });
+
+  it("BUILD.LIST.ITEM: fold reads the item and the index, and a loop inside a body has other names", () => {
+    const byW = rows.start(0).each((c) => c.from("w")).sortBy();
+    // 1 * 0 + 2 * 1 + 3 * 2: the item comes from each, and the index from the step.
+    const weighted = byW.each((_t, w) => w).fold({ s: 0 }, (x, w, i) => ({ s: x.s._.plus(w._.times(i)) }), (x) => x.s);
+    expectTypeOf(weighted.result("0")).toEqualTypeOf<Result<number>>();
+    expect(optionalValue(weighted.at("0"))).toBe(8);
+    expect(weighted.program).toMatchObject({ tag: "fold", as: ["$item0", "$index0"] });
+    // A step that reads only the index adds both names. A step that reads no index keeps the names of each.
+    const count = byW.each((t) => t.from("n")).fold({ s: 0 }, (x, _n, i) => ({ s: x.s._.plus(i) }), (x) => x.s);
+    expect(optionalValue(count.at("0"))).toBe(3);
+    expect(count.program).toMatchObject({ tag: "fold", as: ["$item0", "$index0"] });
+    // One name of the step that reads the index is enough.
+    const two = byW.each((t) => t.from("n")).fold({ s: 0, k: 0 }, (x, _n, i) => ({ s: x.s._.plus(i), k: x.k._.plus(1) }), (x) => x.s._.times(x.k));
+    expect(optionalValue(two.at("0"))).toBe(9);
+    const again = byW.each((_t, _w, i) => i).fold({ s: 0 }, (x, i, j) => ({ s: x.s._.plus(i)._.plus(j) }), (x) => x.s);
+    expect(optionalValue(again.at("0"))).toBe(6);
+    expect(again.program).toMatchObject({ tag: "fold", as: ["$item0", "$index0"] });
+    const items = byW.each((_t, w) => w).fold({ s: 0 }, (x, w) => ({ s: x.s._.plus(w) }), (x) => x.s);
+    expect(optionalValue(items.at("0"))).toBe(6);
+    expect(items.program).toMatchObject({ tag: "fold", as: ["$item0"] });
+    expect("as" in byW.each((t) => t.from("n")).fold({ s: 0 }, (x, n) => ({ s: x.s._.plus(n) }), (x) => x.s).program).toBe(false);
+    // Only the axis list has an index.
+    const ns = rows.start(0).each((c) => c.from("n"));
+    expect(() => ns.fold({ s: 0 }, (x, _n, i) => ({ s: x.s._.plus(i) }), (x) => x.s)).toThrow(new TypeError("the index of a fold needs the axis list: go over the items of a list with each first"));
+    expect(optionalValue(ns.fold({ s: 0 }, (x, n) => ({ s: x.s._.plus(n) }), (x) => x.s).at("0"))).toBe(60);
+    // The inner loop reads the item a of the outer loop: each a gives a * (1 + 2 + 3).
+    const products = byW.each((_t, a) => byW.each((_u, b) => a._.times(b)).sum());
+    expect(optionalValue(products.values().at("0"))).toEqual([6, 12, 18]);
+    expect(products.program).toEqual(each(axes.list(byW.program), app("sum", each(axes.list(byW.program), app("times", varOf("$item0"), varOf("$item1")), undefined, ["$item1"])), undefined, ["$item0"]));
+    // A fold in a body and a loop in a step get the next names too.
+    const inner = byW.each((_t, a) => byW.each((t) => t.from("n")).fold({ s: 0 }, (x, _n, i) => ({ s: x.s._.plus(i)._.plus(a) }), (x) => x.s));
+    expect(optionalValue(inner.values().at("0"))).toEqual([6, 9, 12]);
+    expect(JSON.stringify(inner.program)).toContain('"as":["$item1","$index1"]');
+    const stepLoop = byW.each((_t, w) => w).fold({ s: 0 }, (x, w) => ({ s: x.s._.plus(byW.each((_u, b) => b._.times(w)).sum()) }), (x) => x.s);
+    expect(optionalValue(stepLoop.at("0"))).toBe(36);
+    expect(JSON.stringify(stepLoop.program)).toContain('"as":["$item1"]');
+    // After a body that throws, the names start at 0 again.
+    expect(() =>
+      byW.each(() => {
+        throw new Error("no body");
+      }),
+    ).toThrow("no body");
+    expect(byW.each((_t, w) => w).program).toMatchObject({ as: ["$item0"] });
   });
 });

@@ -38,6 +38,10 @@ A list op skips error items. The option `{ strict: true }` gives the first error
 
 An array of a field or of a name is a list where a list op or the axis `list` needs one. The keys are the positions, from `"0"`. Thus `count(fr)`, `nth(fr, 1)` and `take(fr, 2)` read the array `fr`. A domain or a function of the host with the op comes first.
 
+## The names of a loop over a list
+
+Over the axis `list`, the field `as: [item]` or `as: [item, index]` of `each` and `fold` names the value of each item, and then its position from 0. The body of `each` and the steps of `fold` see these names. The test of `where`, `init` and `result` do not see them. For example, `each(axes.list(v("sizes")), app("multiply", v("w"), v("i")), undefined, ["w", "i"])` gives each size times its position. In the builder, the body of `each` of a list chain gets the item and the index after the chain of the target: `sizes.each((c, w, i) => w._.multiply(i))`. The step of `fold` gets the index after the item.
+
 ## `NumDomain`
 
 Numbers. A result that is not finite gives `#NUM!`. The values are of the type `number`.

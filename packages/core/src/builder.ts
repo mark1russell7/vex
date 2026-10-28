@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec, PrimitiveKind } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { app, call as callExpr, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
+import { app, call as callExpr, children, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { ok, toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -385,16 +385,17 @@ export interface ListChain<Ctx extends ChainContext, U> {
   readonly program: Expr;
   /**
    * This method folds the items in the order of the axis (FOLD.ORDER). `init` gives the names and their first values.
-   * `step` gives the next values from the names and the item, a chain at the target. `result` gives the value.
+   * `step` gives the next values from the names and the item, a chain at the target. `result` gives the value. In a
+   * fold over the axis `list`, `step` also gets the index of the item (BUILD.LIST.ITEM).
    */
   fold<const I extends Readonly<Record<string, unknown>>, V>(
     init: I,
-    step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>) => NoInfer<LoopStep<Ctx, I>>,
+    step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>, index: ChainOf<Ctx, number>) => NoInfer<LoopStep<Ctx, I>>,
     result: (vars: LoopVars<Ctx, I>) => ListChain<Ctx, V>,
   ): ListChain<Ctx, V>;
   fold<const I extends Readonly<Record<string, unknown>>, R>(
     init: I,
-    step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>) => NoInfer<LoopStep<Ctx, I>>,
+    step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>, index: ChainOf<Ctx, number>) => NoInfer<LoopStep<Ctx, I>>,
     result: (vars: LoopVars<Ctx, I>) => ArgInput<R, Ctx, false>,
   ): ChainOf<Ctx, R>;
   count(opts?: ListOpts): ChainOf<Ctx, number>;
@@ -433,9 +434,10 @@ export interface ListChain<Ctx extends ChainContext, U> {
   flat<V>(this: ListChain<Ctx, VexList<V>>, opts?: ListOpts): ListChain<Ctx, V>;
   /**
    * The axis list (AXIS.LIST): the body evaluates at the key of each item, in the order of the list. The body reads the
-   * fields of the record of the item. The chain of the body has no value of its own.
+   * fields of the record of the item. The chain of the body has no value of its own. The body also gets a chain of the
+   * value of the item and a chain of its index, from 0 (BUILD.LIST.ITEM).
    */
-  each<V>(body: (c: ChainOf<Ctx, null>) => AxisBody<Ctx, V>, opts?: AxisOpts<Ctx, null>): ListChain<Ctx, V>;
+  each<V>(body: (c: ChainOf<Ctx, null>, item: ChainOf<Ctx, U>, index: ChainOf<Ctx, number>) => AxisBody<Ctx, V>, opts?: AxisOpts<Ctx, null>): ListChain<Ctx, V>;
   /** The list at the origin `k`: one item for each target of the axis, with its key and its result. */
   result(k: Ctx["keys"]): Result<VexList<U>>;
   /** The list at the origin `k`, as an `Optional`. */
@@ -630,6 +632,41 @@ function stepExprs(step: Readonly<Record<string, unknown>>, unique: ReadonlyMap<
     out[name] = toExpr(a, addr);
   }
   return out;
+}
+
+/**
+ * The number of the open bodies of `each` and steps of `fold` of a list chain. The names `as` of a loop end with this
+ * number, so a loop inside a body has other names than the loop around it (BUILD.LIST.ITEM).
+ */
+let itemDepth = 0;
+
+/** This function gives the value of `build`, with the next number for the names `as` inside it. */
+function inItemLoop<T>(build: () => T): T {
+  itemDepth += 1;
+  try {
+    return build();
+  } finally {
+    itemDepth -= 1;
+  }
+}
+
+/** This function tells if the expression reads the name, in one of its parts. It uses a stack, not recursion. */
+function reads(e: Expr, name: string): boolean {
+  const todo: Expr[] = [e];
+  for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
+    if (x.tag === "var" && x.name === name) return true;
+    todo.push(...children(x));
+  }
+  return false;
+}
+
+/**
+ * This function gives the names `as` of a fold whose step reads the index. The axis must be `list`. The name of the item
+ * of the loop of `each` stays, so the item of the step keeps its value (BUILD.LIST.ITEM).
+ */
+function foldItemNames(loop: { readonly axis: Axis; readonly as?: ItemNames }, index: string): ItemNames {
+  if (listOf(loop.axis) === undefined) throw new TypeError("the index of a fold needs the axis list: go over the items of a list with each first");
+  return [loop.as?.[0] ?? `$item${itemDepth}`, index];
 }
 
 const PROXY_RESERVED = new Set(["then", "catch", "finally", "toJSON", "valueOf", "toString", "constructor", "inspect", "asymmetricMatch", "$$typeof", "nodeType"]);
@@ -867,7 +904,7 @@ class ListChainImpl {
   }
   fold(
     init: Readonly<Record<string, unknown>>,
-    step: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>, item: ChainImpl) => Readonly<Record<string, unknown>>,
+    step: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>, item: ChainImpl, index: ChainImpl) => Readonly<Record<string, unknown>>,
     result: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>) => unknown,
   ): ChainImpl | ListChainImpl {
     // The list of an axis is a let of the start value around the axis, and the list of `each` of a list is the axis
@@ -877,9 +914,12 @@ class ListChainImpl {
     if (loop.tag !== "each") throw new TypeError("fold needs the list of an axis: go over the items of the list with each first");
     const names = new ChainImpl({ ...this.#s, expr: lit(null) }).loopNames(init);
     const item = new ChainImpl({ ...this.#s, expr: loop.body, addr: [] });
-    const next = stepExprs(step(names.vars, item), names.unique, []);
+    // The names as of the loop of each stay. A step that reads the index adds a name for it (BUILD.LIST.ITEM).
+    const index = loop.as?.[1] ?? `$index${itemDepth}`;
+    const next = stepExprs(inItemLoop(() => step(names.vars, item, new ChainImpl({ ...this.#s, expr: v(index), addr: [] }))), names.unique, []);
+    const as = Object.values(next).some((x) => reads(x, index)) ? foldItemNames(loop, index) : loop.as;
     const r = result(names.vars);
-    const folded = foldExpr(loop.axis, names.first, next, toExpr(r, this.#s.addr), loop.at);
+    const folded = foldExpr(loop.axis, names.first, next, toExpr(r, this.#s.addr), loop.at, as);
     return chainOf({ ...this.#s, expr: e.tag === "let" ? let_(e.bind, folded) : folded }, r);
   }
 
@@ -955,13 +995,18 @@ class ListChainImpl {
   flat(opts?: ListOpts): ListChainImpl {
     return this.#list("flat", [], opts);
   }
-  each(body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
-    // The chain of the body is at the key of the item, and it has no value of its own.
-    const start = new ChainImpl({ ...this.#s, expr: lit(null), addr: [], depth: this.#s.depth + 1 });
+  each(body: (c: ChainImpl, item: ChainImpl, index: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
+    // The chains of the body are at the key of the item. The chain of the body has no value of its own.
+    const inner: State = { ...this.#s, addr: [], depth: this.#s.depth + 1 };
+    const start = new ChainImpl({ ...inner, expr: lit(null) });
     const list: Axis = { t: "list", list: this.#s.expr };
     const ordered: Axis = opts?.reverse === true ? { t: "reverse", axis: list } : list;
     const axis: Axis = opts?.where === undefined ? ordered : { t: "where", axis: ordered, test: opts.where(start).program };
-    return new ListChainImpl({ ...this.#s, expr: each(axis, body(start).program) });
+    const names = [`$item${itemDepth}`, `$index${itemDepth}`] as const;
+    const program = inItemLoop(() => body(start, new ChainImpl({ ...inner, expr: v(names[0]) }), new ChainImpl({ ...inner, expr: v(names[1]) })).program);
+    // BUILD.LIST.ITEM: the field as has only the names that the body reads.
+    const as: ItemNames | undefined = reads(program, names[1]) ? names : reads(program, names[0]) ? [names[0]] : undefined;
+    return new ListChainImpl({ ...this.#s, expr: each(axis, program, undefined, as) });
   }
   result(k: string): Result<unknown> {
     return evaluate(this.#s.expr, evalOptions(this.#s, k));

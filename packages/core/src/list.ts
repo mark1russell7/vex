@@ -1,3 +1,4 @@
+import { CHECKED } from "./checked.ts";
 import type { Result } from "./result.ts";
 
 /** One item of a list: the key of the target and the result of the body there. */
@@ -14,9 +15,6 @@ export interface VexList<T = unknown> {
 
 /** This function makes a list. */
 export const vexList = <T>(items: readonly ListItem<T>[]): VexList<T> => Object.freeze({ kind: "vex.list", items: Object.freeze([...items]) });
-
-/** The lists that passed the check of `isVexList` and cannot change. Each list of `vexList` is frozen. */
-const CHECKED = new WeakSet<object>();
 
 /** This function tells if a value is an error value: a text `code`, `kind` and `message`, and a `path` (LIST.SHAPE). */
 const isErrorValue = (u: unknown): boolean => {

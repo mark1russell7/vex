@@ -299,13 +299,14 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   K: 'function K(k, n) { return typeof k === "string" && /^(0|[1-9]\\d*)$/.test(k) && +k < n ? +k : F(); }',
   // The ops on the order of a list (LIST.SORT, LIST.TAKE, LIST.NTH) work on the items with values. With strict, an
   // error item is the error of the op. A sort is stable, and the values are numbers without NaN or texts of one kind.
-  V: "function V(l, s) { if (s && l.some((x) => x[1] === E)) F(); return l.filter((x) => x[1] !== E); }",
+  // V gives the array of VW, so a list without error items is not copied (COMPILE.MODULE.LIST.SHARE). No op changes it.
+  V: "function V(l, s) { const o = VW(l); if (s && o.length < l.length) F(); return o; }",
   SB: [
     "function SB(l, s) {",
     "  const o = V(l, s);",
     "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
     "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "  return o.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
     "}",
   ].join("\n"),
   // The option by of sortBy (LIST.SORT.BY): the function f gives the sort value of each item with a value, in order.
@@ -320,11 +321,12 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   TK: "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
   // The items with values of a list stay on its array, as GT keeps its index. Thus a loop that reads each item of a list
   // of n items with nth costs O(n), not O(n squared). count and first read them too (COMPILE.MODULE.NTH.INDEX).
+  // A list without error items is its own array of items with values.
   VW: [
     "function VW(l) {",
     "  let o = l.vw;",
     "  if (o === undefined) {",
-    "    o = l.filter((x) => x[1] !== E);",
+    "    o = l.some((x) => x[1] === E) ? l.filter((x) => x[1] !== E) : l;",
     "    l.vw = o;",
     "  }",
     "  return o;",
@@ -380,9 +382,10 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   DR: "function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }",
   AP: "function AP(l, o, s) { return V(l, s).concat(V(o, s)); }",
   // append into the list of a name of a loop (COMPILE.MODULE.APPEND.OWN). w is the array of the last append of the name
-  // in this run of the loop, and no other part reads it. Such an array has no error items, so V(l, s) is a copy of l.
-  // Each other list gets the copy of AP. V(o, s) throws before the first push, so an error does not change l.
-  AO: "function AO(l, o, s, w) { if (l !== w) return AP(l, o, s); for (const x of V(o, s)) l.push(x); return l; }",
+  // in this run of the loop, and no other part reads it. Such an array has no error items, so VW of it is the array.
+  // Each other list gets the copy of AP. V(o, s) throws before the first push, so an error does not change l. The loop
+  // reads n items, so it ends also if a is l.
+  AO: "function AO(l, o, s, w) { if (l !== w) return AP(l, o, s); const a = V(o, s), n = a.length; for (let i = 0; i < n; i++) l.push(a[i]); return l; }",
   WO: [
     "function WO(l, o, s) {",
     "  const a = V(l, s), g = new Map();",
@@ -823,7 +826,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"],
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
-  V: ["F"],
+  V: ["VW", "F"],
   SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], VW: [], NT: ["VW", "F"], CT: ["VW", "F"], FS: ["VW", "F"], FI: ["F"], LI: [],
   DR: ["V", "F"], AP: ["V"], AO: ["AP", "V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.

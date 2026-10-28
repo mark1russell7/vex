@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { JsonDomain, type JsonValue } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
-import { schemaOf, type FieldSchema } from "./schema.ts";
+import { schemaOf, type JsonFieldSchema } from "./schema.ts";
 
 // A copy of `valueKind` and `inferSchema` of Graph (stage-schema.ts). The pilot must keep this behavior, so do not
 // change these functions to fit the program.
@@ -15,7 +15,7 @@ function valueKind(value: unknown): string {
   const t = typeof value;
   return t === "string" || t === "number" || t === "boolean" ? t : t === "object" ? "object" : "string";
 }
-function inferSchema(docs: readonly unknown[]): FieldSchema[] {
+function inferSchema(docs: readonly unknown[]): JsonFieldSchema[] {
   const fields = new Map<string, { kinds: Set<string>; docs: Set<number> }>();
   const note = (p: string, k: string, d: number): void => {
     let f = fields.get(p);
@@ -86,7 +86,7 @@ describe("the schema pilot", () => {
       "notadoc",
       { a: { b: { c: {} } }, "x.y": 1, x: { y: "t" } },
     ];
-    const expected: FieldSchema[] = [
+    const expected: JsonFieldSchema[] = [
       { path: "a.b.c", kinds: ["object"], count: 2 },
       { path: "z", kinds: ["array<number|null|string|array|object>", "null"], count: 2 },
       { path: "e", kinds: ["array"], count: 1 },
@@ -99,7 +99,7 @@ describe("the schema pilot", () => {
 
   it("EXAMPLE.SCHEMA: skips null and array documents, and reads the keys __proto__, constructor and the empty key as Graph does", () => {
     const docs = [null, [1, 2], JSON.parse('{"__proto__":{"p":1},"":{"q":[null]},"constructor":"c"}') as unknown, 7];
-    const expected: FieldSchema[] = [
+    const expected: JsonFieldSchema[] = [
       { path: "__proto__.p", kinds: ["number"], count: 1 },
       // After an empty key, the path of Graph has no dot.
       { path: "q", kinds: ["array<null>"], count: 1 },

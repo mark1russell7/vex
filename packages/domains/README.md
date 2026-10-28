@@ -20,7 +20,7 @@ npm install @mark1russell7/vex @mark1russell7/vex-domains
 | `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt`, `vec2`, `xy`, `date` |
 | `BoolDomain` | booleans | `and`, `or`, `xor`, `not` |
 | `TextDomain` | texts | `concat`, `length`, `upper`, `lower`, `trim`, `contains` |
-| `JsonDomain` | JSON data: texts, numbers, booleans, arrays and plain objects. Put it last. | `kind`, `kinds`, `fields`, `field` |
+| `JsonDomain` | JSON data: texts, numbers, booleans, arrays and plain objects. Put it last. | `kind`, `kinds`, `fields`, `field`, `leaves` |
 | `ColorDomain` | `Color`: an RGB color | `mix`, `add`, `multiply`, `luminance`, `relativeLuminance`, `contrast` |
 | `AngleDomain` | `Angle`: an angle | `add`, `normalize`, `sin`, `cos`, `degrees` |
 | `FnDomain`, `MaybeDomain` | Two example domains: function wrappers and `Maybe` | `invoke`, `map`, `chain`, `valueOr` |
@@ -48,6 +48,19 @@ import { NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 const items = vex(NumDomain, Vec2Domain).over(space.array([{ w: 10, h: 20 }, { w: 30, h: 5 }]));
 const cell = items.start(0).each((t) => t.from("w")._.vec2(t.from("h"))).reduce("max")._.max(1);
 cell.at("0"); // => { tag: "some", value: new Vec2(30, 20) }
+```
+
+## The schema of JSON documents
+
+`SCHEMA_PROGRAM` is a Vex program that finds the schema of a list of JSON documents. It reads the documents from the name `docs`, and `SCHEMA_DOMAINS` gives its domains. It gives one `JsonFieldSchema` record for each field path, in the order that the paths first occur. A record has the path, the distinct kinds and the count of the documents with the path.
+
+The program goes into an object that is not empty at a depth under 3. It does not go into an array. `schemaOf(docs)` evaluates the program, and it throws when the program gives an error.
+
+```ts doctest
+import { schemaOf } from "@mark1russell7/vex-domains";
+
+const docs = [{ id: 1, tags: ["a", 2], meta: { by: null } }, { id: "2", meta: {} }];
+schemaOf(docs); // => [{ path: "id", kinds: ["number", "string"], count: 2 }, { path: "tags", kinds: ["array<string|number>"], count: 1 }, { path: "meta.by", kinds: ["null"], count: 1 }, { path: "meta", kinds: ["object"], count: 1 }]
 ```
 
 The page [Vectors](https://mark1russell7.github.io/vex/learn/vectors/) tells more. The [domains page](https://mark1russell7.github.io/vex/reference/domains/) lists each op with its laws.

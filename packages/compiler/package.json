@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/vex-compiler",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "The Vex compiler: generated JavaScript for Vex programs, at run time and at build time, with the results of the interpreter.",
   "keywords": [
     "vex",

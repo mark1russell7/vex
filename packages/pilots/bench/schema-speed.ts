@@ -6,8 +6,12 @@
  * type stripping. It prints one line for each case. With `BENCH_OUT=<file>`, it also writes the records as JSON.
  *
  * Each case runs `RUNS` times (default 40) after `WARM` runs (default 10). Thus the numbers are of the warm interpreter,
- * as in Graph after its first samples. `COLD=1` adds two cold cases: the first run of the pilot in the process, and
- * the case of `schema.test.ts`, the mean of 5 runs after one.
+ * as in Graph after its first samples. `COLD=1` adds the cold case of `schema.test.ts`: the mean of 5 runs after one.
+ * `schema-cold.ts` measures the first sample in new processes.
+ *
+ * Two cases are references in the same run: `TypeScript inferSchema` and `calibration`, a fixed JavaScript work of
+ * Map, filter and object steps. Each line gives the ratio of its median to the median of `calibration`. The runners of
+ * CI differ by up to 1.4x, and the ratio removes most of that difference. `README.md` tells how to read the numbers.
  *
  * The script fails (exit 1) when a result is not the same as the result of the copy of `inferSchema` of Graph. The
  * time does not make it fail.
@@ -137,6 +141,17 @@ const exprs: Readonly<Record<string, Expr>> = {
 const cases: Record<string, () => unknown> = Object.fromEntries(Object.entries(exprs).map(([name, e]) => [name, () => evaluate(e, opts)]));
 cases["compile alone"] = () => compile(SCHEMA_PROGRAM, { domains: SCHEMA_DOMAINS });
 cases["TypeScript inferSchema"] = () => inferSchema(docs);
+// A fixed work of plain JavaScript, of the kinds of steps of the interpreter. Its time follows the speed of the runner.
+const CAL_ITEMS = Object.freeze(Array.from({ length: 600 }, (_x, i) => Object.freeze({ k: `p${String(i % 30)}`, n: i })));
+cases["calibration"] = () => {
+  let size = 0;
+  for (let r = 0; r < 1200; r++) {
+    const seen = new Map<string, number>();
+    for (const x of CAL_ITEMS.filter((y) => y.n % 2 === r % 2)) seen.set(x.k, (seen.get(x.k) ?? 0) + x.n);
+    size += seen.size;
+  }
+  return size;
+};
 // The cases that must give the records of inferSchema.
 const SAME = new Set(["pilot (evaluate)", "rewrite (c): one fold", "TypeScript inferSchema"]);
 
@@ -151,10 +166,6 @@ interface Measure {
 
 const out: Measure[] = [];
 if (process.env["COLD"] === "1") {
-  // The first run of the pilot in this process, before any other evaluation: the time of Graph at a page open.
-  const t1 = performance.now();
-  const first = evaluate(SCHEMA_PROGRAM, opts);
-  out.push({ name: "cold: first run of the pilot", median: performance.now() - t1, min: Number.NaN, p90: Number.NaN, check: checkOf(first, true) });
   // The case of schema.test.ts: one run, then the mean of 5 runs.
   const fresh = wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], rec({ path: v("p"), kinds: app("values", call("distinct", loop(mine, ["n"], field(v("n"), "kind")))), count: app("count", call("distinct", loop(mine, ["n"], field(v("n"), "doc")))) })))));
   evaluate(fresh, opts);
@@ -179,12 +190,14 @@ for (const [name, run] of Object.entries(cases)) {
   out.push({ name, median: at(0.5), min: at(0), p90: at(0.9), check });
 }
 const pilot = out.find((o) => o.name === "pilot (evaluate)")?.median ?? Number.NaN;
+const cal = out.find((o) => o.name === "calibration")?.median ?? Number.NaN;
+const ts = out.find((o) => o.name === "TypeScript inferSchema")?.median ?? Number.NaN;
 for (const o of out) {
-  console.info(`${o.name.padEnd(40)} median ${o.median.toFixed(2).padStart(8)} ms  min ${o.min.toFixed(2).padStart(8)}  share of the pilot ${((100 * o.median) / pilot).toFixed(0).padStart(4)} %  same as Graph: ${o.check}`);
+  console.info(`${o.name.padEnd(40)} median ${o.median.toFixed(2).padStart(8)} ms  min ${o.min.toFixed(2).padStart(8)}  share of the pilot ${((100 * o.median) / pilot).toFixed(0).padStart(4)} %  per calibration ${(o.median / cal).toFixed(3).padStart(7)}  per TypeScript ${(o.median / ts).toFixed(1).padStart(7)}  same as Graph: ${o.check}`);
 }
-console.info(`target: 5 ms for one sample. The warm pilot needs a factor of ${(pilot / 5).toFixed(1)} on this machine.`);
+console.info(`target: 5 ms for one sample, ${(5 / cal).toFixed(3)} per calibration. The warm pilot needs a factor of ${(pilot / 5).toFixed(1)} on this runner.`);
 const file = process.env["BENCH_OUT"];
-if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ node: process.version, runs: RUNS, warm: WARM, cases: out }, null, 2));
+if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
 // A result that is not the result of Graph fails the step. The numbers stay in the report.
 const wrong = out.filter((o) => o.check !== "true" && o.check !== "n/a");
 if (wrong.length > 0) {

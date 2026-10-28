@@ -1,5 +1,6 @@
+import { CHECKED } from "./checked.ts";
 import { fromDocument, isDocument, type Envelope } from "./document.ts";
-import { liftsAt, resolveOp, type AnyDomain, type ParamKind, type ResolvedOp } from "./domain.ts";
+import { findMethod, isOpName, liftsAt, resolveOp, type AnyDomain, type OpSpec, type ParamKind, type PrimitiveKind, type ResolvedOp } from "./domain.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
 import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
@@ -41,7 +42,41 @@ export interface EvalOptions {
   readonly trace?: TraceSink;
 }
 
-type Env = ReadonlyMap<string, Result<unknown>>;
+/** The names of a frame: a map of the variables of the caller, or a scope inside it. */
+interface Env {
+  get(name: string): Result<unknown> | undefined;
+}
+
+/**
+ * A scope: the names of one `let`, a function, an item or a loop. It is in front of the outer names, and it does not
+ * copy them. A name of a scope hides an outer name of the same name. The names of one
+ * scope are distinct (FN.BIND, LOOP.NAMES, AXIS.LIST.SCOPE).
+ */
+class Scope implements Env {
+  readonly #outer: Env;
+  readonly #names: readonly string[];
+  readonly #values: readonly Result<unknown>[];
+
+  constructor(outer: Env, names: readonly string[], values: readonly Result<unknown>[]) {
+    this.#outer = outer;
+    this.#names = names;
+    this.#values = values;
+  }
+
+  get(name: string): Result<unknown> | undefined {
+    const at = this.#names.indexOf(name);
+    return at >= 0 ? this.#values[at] : this.#outer.get(name);
+  }
+
+  /** This method gives a copy of this scope with the values `values` at the positions `at` (LOOP.NAMES). */
+  with(at: readonly number[], values: readonly Result<unknown>[]): Scope {
+    const next = [...this.#values];
+    at.forEach((position, i) => {
+      next[position] = values[i] as Result<unknown>;
+    });
+    return new Scope(this.#outer, this.#names, next);
+  }
+}
 
 interface Frame {
   readonly pos: Position;
@@ -82,9 +117,9 @@ export interface Program {
 class Closure {
   readonly params: readonly string[];
   readonly body: Node;
-  readonly env: ReadonlyMap<string, Result<unknown>>;
+  readonly env: Env;
 
-  constructor(params: readonly string[], body: Node, env: ReadonlyMap<string, Result<unknown>>) {
+  constructor(params: readonly string[], body: Node, env: Env) {
     this.params = params;
     this.body = body;
     this.env = env;
@@ -185,6 +220,26 @@ const baseAxis = (a: Axis): Exclude<Axis, { readonly t: "where" }> => (a.t === "
 /** A compiled node: it evaluates in a frame of a run. */
 type Node = (f: Frame, c: Ctx) => Result<unknown>;
 
+/** This function evaluates the nodes in order. The first error stops it and is the result. */
+function allValues(ns: readonly Node[], f: Frame, c: Ctx): Result<Result<unknown>[]> {
+  const values: Result<unknown>[] = [];
+  for (const n of ns) {
+    const r = n(f, c);
+    if (!r.ok) return r;
+    values.push(r);
+  }
+  return ok(values);
+}
+
+/** The primitive types of KIND.PRIMITIVE. */
+const PRIMITIVE_TYPES: readonly PrimitiveKind[] = ["number", "string", "boolean"];
+
+/** The spec of an op without an entry in the op table of a domain with `methods: "all"`. */
+const NO_SPEC: OpSpec<unknown> = Object.freeze({});
+
+/** The function of an op: the receiver comes first, then the arguments. */
+type OpFn = (self: unknown, ...args: readonly unknown[]) => unknown;
+
 /**
  * A target of an axis: its key, and the error of a test of `where` or of an error item. A target of the axis `list` also
  * has the value of its item and its position as `nth` counts it (AXIS.LIST.ITEM, AXIS.LIST.INDEX).
@@ -204,12 +259,8 @@ type Targets = (f: Frame, c: Ctx) => Result<readonly Target[]>;
  * the item, and the second its index (AXIS.LIST.ITEM, AXIS.LIST.INDEX). A loop without `as` keeps its names.
  */
 function withItem(env: Env, as: ItemNames | undefined, t: Target): Env {
-  if (as === undefined) return env;
-  const out = new Map(env);
-  const [item, index] = as;
-  out.set(item, ok(t.value));
-  if (index !== undefined) out.set(index, ok(t.index));
-  return out;
+  // A scope with one name reads only the first value.
+  return as === undefined ? env : new Scope(env, as, [ok(t.value), ok(t.index)]);
 }
 
 /** The static facts of a node for its trace events. */
@@ -225,12 +276,21 @@ class Compiler {
   readonly #extensions: Readonly<Record<string, ExtHandler>> | undefined;
   /** The index of the keys of each list that `get` read (LIST.GET). A list does not change, so its index stays right. */
   readonly #keyIndex = new WeakMap<VexList, KeyIndex>();
+  /**
+   * The domains that can accept a value of each primitive type, in order (KIND.PRIMITIVE). These are the domains of
+   * that type and the domains without a primitive type.
+   */
+  readonly #ofType = new Map<string, readonly AnyDomain[]>();
+  /** The domains without a primitive type. Only they can accept a value of another type, for example an object. */
+  readonly #open: readonly AnyDomain[];
 
   constructor(opts: CompileOptions) {
     // Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value
     this.#domains = opts.domains ?? [];
     this.#fns = opts.fns;
     this.#extensions = opts.extensions;
+    this.#open = this.#domains.filter((d) => d.primitive === undefined);
+    for (const t of PRIMITIVE_TYPES) this.#ofType.set(t, this.#domains.filter((d) => d.primitive === undefined || d.primitive === t));
   }
 
   #err(kind: ErrorKind, message: string, f: Frame, path: readonly number[], extra: { op?: string; causes?: readonly VexError[]; thrown?: unknown } = {}): Result<never> {
@@ -246,7 +306,11 @@ class Compiler {
   #fill(values: readonly unknown[], f: Frame, path: readonly number[]): Result<VexList> {
     const [n, value] = values;
     if (!isFillCount(n)) return this.#err("kind-mismatch", `"fill" needs a whole number from 0 to 100000, not ${describeType(n)}`, f, path, { op: "fill" });
-    return value === undefined ? this.#err("bad-expression", '"fill" needs argument 2', f, path, { op: "fill" }) : ok(fillList(n, value));
+    if (value === undefined) return this.#err("bad-expression", '"fill" needs argument 2', f, path, { op: "fill" });
+    // Each item of the list has the value, so the list has the shape of LIST.SHAPE.
+    const list = fillList(n, value);
+    CHECKED.add(list);
+    return ok(list);
   }
 
   #emit(c: Ctx, info: Info, f: Frame, result: Result<unknown>, reads?: readonly Read[]): Result<unknown> {
@@ -289,12 +353,14 @@ class Compiler {
       case "call":
         return this.#callFn(e, info);
       case "let": {
-        const binds = Object.entries(e.bind).map(([name, be], i): readonly [string, Node] => [name, this.node(be, [...path, i])]);
+        const names = Object.keys(e.bind);
+        const binds = this.#nodes(Object.values(e.bind), path);
         const body = this.node(e.body, [...path, binds.length]);
         return (f, c) => {
-          const env = new Map(f.env);
-          for (const [name, n] of binds) env.set(name, n(f, c));
-          return this.#emit(c, info, f, body({ pos: f.pos, env }, c));
+          // Each binding evaluates with the outer names, so a binding does not see the other bindings.
+          const values: Result<unknown>[] = [];
+          for (const n of binds) values.push(n(f, c));
+          return this.#emit(c, info, f, body({ pos: f.pos, env: new Scope(f.env, names, values) }, c));
         };
       }
       case "rec": {
@@ -354,9 +420,9 @@ class Compiler {
       const callee = bound.value;
       if (!(callee instanceof Closure)) return this.#emit(c, info, f, this.#err("kind-mismatch", `the name "${e.fn}" is a value, not a function`, f, path));
       if (callee.params.length !== args.length) return this.#emit(c, info, f, this.#err("bad-expression", `the function "${e.fn}" takes ${String(callee.params.length)} arguments, not ${String(args.length)}`, f, path));
-      const env = new Map(callee.env);
-      callee.params.forEach((p, i) => env.set(p, (args[i] as Node)(f, c)));
-      return this.#emit(c, info, f, callee.body({ pos: f.pos, env }, c));
+      const values: Result<unknown>[] = [];
+      for (const n of args) values.push(n(f, c));
+      return this.#emit(c, info, f, callee.body({ pos: f.pos, env: new Scope(callee.env, callee.params, values) }, c));
     };
   }
 
@@ -492,33 +558,25 @@ class Compiler {
    * functions give the first values, and the values after one step. The first error stops each of them.
    */
   #names(e: ExprOf<"fold"> | ExprOf<"iterate">, path: readonly number[]): {
-    readonly first: (f: Frame, c: Ctx) => Result<Map<string, Result<unknown>>>;
-    readonly next: (f: Frame, c: Ctx, names?: Env) => Result<Map<string, Result<unknown>>>;
+    readonly first: (f: Frame, c: Ctx) => Result<Scope>;
+    readonly next: (f: Frame, c: Ctx, scope: Scope) => Result<Scope>;
   } {
-    const inits = Object.entries(e.init).map(([name, x], i) => [name, this.node(x, [...path, i])] as const);
-    const steps = Object.entries(e.step).map(([name, x], i) => [name, this.node(x, [...path, inits.length + i])] as const);
+    const names = Object.keys(e.init);
+    const inits = this.#nodes(Object.values(e.init), path);
+    const steps = Object.values(e.step).map((x, i) => this.node(x, [...path, inits.length + i]));
+    // Each name of a step is a name of init (LOOP.NAMES), so a step changes the value at a position of the scope.
+    const at = Object.keys(e.step).map((name) => names.indexOf(name));
     return {
       first: (f, c) => {
-        const env = new Map(f.env);
-        for (const [name, n] of inits) {
-          const r = n(f, c);
-          if (!r.ok) return r;
-          env.set(name, r);
-        }
-        return ok(env);
+        const values = allValues(inits, f, c);
+        return values.ok ? ok(new Scope(f.env, names, values.value)) : values;
       },
       // Each value of a step reads the values before the step, so the names change only after all the values. The new
-      // names come from `names` when the frame has more names, for example the names of an item (AXIS.LIST.SCOPE).
-      next: (f, c, names = f.env) => {
-        const values: (readonly [string, Result<unknown>])[] = [];
-        for (const [name, n] of steps) {
-          const r = n(f, c);
-          if (!r.ok) return r;
-          values.push([name, r]);
-        }
-        const env = new Map(names);
-        for (const [name, r] of values) env.set(name, r);
-        return ok(env);
+      // names come from `scope`, the scope of the loop, because the frame can have more names, for example the names of
+      // an item (AXIS.LIST.SCOPE).
+      next: (f, c, scope) => {
+        const values = allValues(steps, f, c);
+        return values.ok ? ok(scope.with(at, values.value)) : values;
       },
     };
   }
@@ -594,7 +652,7 @@ class Compiler {
           if (until !== undefined) return this.#emit(c, info, f, this.#err("limit", `"iterate" made its ${String(limit)} steps, and its test "until" is not true`, f, path));
           break;
         }
-        const after = names.next(frame, c);
+        const after = names.next(frame, c, env);
         if (!after.ok) return this.#emit(c, info, f, after);
         env = after.value;
       }
@@ -663,6 +721,8 @@ class Compiler {
     const { path } = info;
     const listOp = isListOp(op) ? op : undefined;
     const fn = this.#fns !== undefined && Object.hasOwn(this.#fns, op) ? this.#fns[op] : undefined;
+    // A name that cannot be an op name has no op, also with an own entry in an op table (resolveOp).
+    const named = isOpName(op);
     return (f, c) => {
       const all = this.#all(args, f, c, path, "arguments");
       if (!all.ok) return this.#emit(c, info, f, all);
@@ -676,8 +736,12 @@ class Compiler {
         for (const d of this.#domains) {
           if (!safeIs(d, self)) continue;
           accepted ??= d;
-          const resolved = resolveOp(d, self, op);
-          if (resolved !== undefined) return this.#emit(c, info, f, this.#call(resolved, op, values.slice(1), f, path));
+          // The rules of resolveOp, without a closure for each call: the function of the spec, or a method of the
+          // receiver for a declared op without a function, or for each op of a domain with `methods: "all"`.
+          const spec = named && Object.hasOwn(d.ops, op) ? (d.ops[op] as OpSpec<unknown>) : undefined;
+          if (spec?.fn !== undefined) return this.#emit(c, info, f, this.#call(d, spec, spec.fn as OpFn, self, op, values.slice(1), f, path));
+          const method = spec !== undefined || d.methods === "all" ? findMethod(self, op) : undefined;
+          if (method !== undefined) return this.#emit(c, info, f, this.#call(d, spec ?? NO_SPEC, (receiver, ...given) => method.apply(receiver, [...given]), self, op, values.slice(1), f, path));
         }
       }
       if (fn !== undefined) return this.#emit(c, info, f, this.#checkResult(this.#invoke(() => fn(...values), op, f, path), f, path, op));
@@ -729,8 +793,16 @@ class Compiler {
     }
   }
 
-  #call(op: ResolvedOp, name: string, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
-    const { domain, spec } = op;
+  /** This method starts an op that resolveOp found, for example a method of the receiver. */
+  #callResolved(op: ResolvedOp, self: unknown, name: string, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
+    return this.#call(op.domain, op.spec, (_self, ...args) => op.call(args), self, name, rest, f, path);
+  }
+
+  /**
+   * This method starts the op `name` of the domain `domain` with the receiver `self` and the arguments `rest`. It lifts
+   * the numbers, checks the arguments and checks the result.
+   */
+  #call(domain: AnyDomain, spec: OpSpec<unknown>, run: OpFn, self: unknown, name: string, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
     const lift = spec.liftScalar;
     const from = domain.fromScalar;
     let callArgs: readonly unknown[] = rest;
@@ -748,7 +820,13 @@ class Compiler {
         }
       }
     }
-    return this.#checkResult(this.#invoke(() => op.call(callArgs), name, f, path), f, path, name);
+    let value: unknown;
+    try {
+      value = run(self, ...callArgs);
+    } catch (thrown) {
+      return this.#threw(thrown, `"${name}" threw an exception`, f, path, { op: name });
+    }
+    return this.#checkResult(ok(value), f, path, name);
   }
 
   #invoke(run: () => unknown, op: string, f: Frame, path: readonly number[]): Result<unknown> {
@@ -759,6 +837,16 @@ class Compiler {
     }
   }
 
+  /**
+   * This method gives the first domain that accepts a value. It starts only the tests of the domains without a primitive
+   * type: a domain of the type of the value accepts it (KIND.PRIMITIVE).
+   */
+  #domainOf(value: unknown): AnyDomain | undefined {
+    const candidates = this.#ofType.get(typeof value) ?? this.#open;
+    for (const d of candidates) if (d.primitive !== undefined || testIs(d, value)) return d;
+    return undefined;
+  }
+
   /** This method checks the value that an op gave: no `undefined`, finite numbers, and valid domain values. */
   #checkResult(r: Result<unknown>, f: Frame, path: readonly number[], op: string): Result<unknown> {
     if (!r.ok) return r;
@@ -766,7 +854,7 @@ class Compiler {
     const extra = { op };
     if (value === undefined || value === null) return this.#err("undefined-result", `"${op}" gave no value`, f, path, extra);
     if (typeof value === "number" && !Number.isFinite(value)) return this.#err("not-finite", `"${op}" gave ${value}`, f, path, extra);
-    const d = this.#domains.find((dom) => safeIs(dom, value));
+    const d = this.#domainOf(value);
     if (d?.valid !== undefined) {
       let valid: boolean;
       try {
@@ -787,8 +875,8 @@ class Compiler {
     const good = goodItems(list, strict);
     if (!good.ok) return good;
     const okItems = good.value;
-    // Stryker disable next-line ConditionalExpression,ArrayDeclaration: each item of okItems has a value
-    const okValues = okItems.flatMap((it) => (it.result.ok ? [it.result.value] : []));
+    const okValues: unknown[] = [];
+    for (const it of okItems) okValues.push(valueOf(it));
     const numbers = (): Result<readonly number[]> => {
       const bad = okValues.find((x) => typeof x !== "number");
       return bad === undefined ? ok(okValues as readonly number[]) : this.#err("kind-mismatch", `"${op}" needs numbers, but an item is a ${describeType(bad)}`, f, path, { op });
@@ -815,17 +903,17 @@ class Compiler {
       case "drop": {
         const n = whole();
         if (!n.ok) return n;
-        return ok(vexList(op === "take" ? okItems.slice(0, n.value) : okItems.slice(n.value)));
+        return ok(checkedList(op === "take" ? okItems.slice(0, n.value) : okItems.slice(n.value)));
       }
       case "append": {
         const more = other();
-        return more.ok ? ok(vexList([...okItems, ...more.value])) : more;
+        return more.ok ? ok(checkedList([...okItems, ...more.value])) : more;
       }
       case "without": {
         const more = other();
         if (!more.ok) return more;
         const gone = new Set(more.value.map((it) => it.key));
-        return ok(vexList(okItems.filter((it) => !gone.has(it.key))));
+        return ok(checkedList(okItems.filter((it) => !gone.has(it.key))));
       }
       case "flat":
         return this.#flat(okValues, strict, f, path);
@@ -911,7 +999,7 @@ class Compiler {
       if (!good.ok) return good;
       out.push(...good.value);
     }
-    return ok(vexList(out));
+    return ok(checkedList(out));
   }
 
   /**
@@ -937,7 +1025,7 @@ class Compiler {
       // Stryker disable next-line ConditionalExpression,EqualityOperator: see the comment above
       return a < b ? -1 : a > b ? 1 : 0;
     });
-    return ok(vexList(order.map((i) => items[i] as ListItem)));
+    return ok(checkedList(order.map((i) => items[i] as ListItem)));
   }
 
   /**
@@ -954,7 +1042,7 @@ class Compiler {
         if (op !== undefined) break;
       }
       if (op === undefined) return this.#err("unknown-op", `no domain gives "${by}" for a ${describeType(x)}`, f, path, { op: by });
-      const r = this.#call(op, by, [], f, path);
+      const r = this.#callResolved(op, x, by, [], f, path);
       if (!r.ok) return r;
       out.push(r.value);
     }
@@ -986,7 +1074,7 @@ class Compiler {
       const d = this.#domains.find((dom) => safeIs(dom, acc) && resolveOp(dom, acc, opName) !== undefined);
       const op = d === undefined ? undefined : resolveOp(d, acc, opName);
       if (op === undefined) return this.#err("unknown-op", `no domain gives "${opName}" for a ${describeType(acc)}`, f, path, { op: opName });
-      const r = this.#call(op, opName, [values[i]], f, path);
+      const r = this.#callResolved(op, acc, opName, [values[i]], f, path);
       if (!r.ok) return r;
       acc = r.value;
     }
@@ -1002,12 +1090,34 @@ const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "n
  * error comes first (EVAL.DEPTH). With `strict`, the first error item is the result.
  */
 function goodItems(list: VexList, strict: boolean): Result<readonly ListItem[]> {
-  const depth = list.items.find((it) => !it.result.ok && isDepthError(it.result.error))?.result;
-  if (depth !== undefined && !depth.ok) return fail(depth.error);
-  const firstError = list.items.find((it) => !it.result.ok)?.result;
-  if (strict && firstError !== undefined && !firstError.ok) return fail(firstError.error);
-  return ok(list.items.filter((it) => it.result.ok));
+  const { items } = list;
+  let first: VexError | undefined;
+  for (const it of items) {
+    if (it.result.ok) continue;
+    if (isDepthError(it.result.error)) return fail(it.result.error);
+    first ??= it.result.error;
+  }
+  // A list without error items gives its own items: no copy. Nothing changes them: the items of `vexList` are frozen,
+  // and each list op makes a new array.
+  if (first === undefined) return ok(items);
+  if (strict) return fail(first);
+  const out: ListItem[] = [];
+  for (const it of items) if (it.result.ok) out.push(it);
+  return ok(out);
 }
+
+/**
+ * This function makes a list from the items of lists that passed the check of LIST.SHAPE, or from items of the same
+ * shape. Thus the list skips the check of `isVexList`.
+ */
+function checkedList(items: readonly ListItem[]): VexList {
+  const list = vexList(items);
+  CHECKED.add(list);
+  return list;
+}
+
+/** This function gives the value of an item with a value. */
+const valueOf = (it: ListItem): unknown => (it.result as { readonly value: unknown }).value;
 
 /** The index of the keys of a list (LIST.GET): the value of the first item of each key, and the first errors. */
 interface KeyIndex {
@@ -1039,9 +1149,18 @@ const FORBIDDEN_FIELDS = new Set(["__proto__", "constructor", "prototype"]);
 /** This function tells if a segment of a path can name a field. A compiler uses the same rule as the interpreter. */
 export const isFieldName = (seg: string): boolean => seg.length > 0 && !FORBIDDEN_FIELDS.has(seg);
 
-/** This function runs the `is` test of a domain. A test that throws counts as `false`. */
-// Stryker disable BlockStatement: an empty catch gives undefined, which also counts as false
+/**
+ * This function tells if a domain accepts a value. A domain with a primitive type accepts each value of that type and
+ * no other value (KIND.PRIMITIVE), so its test `is` does not start. For another domain, a test that throws counts as
+ * `false`.
+ */
 export function safeIs(d: AnyDomain, value: unknown): boolean {
+  return d.primitive !== undefined ? typeof value === d.primitive : testIs(d, value);
+}
+
+/** This function starts the `is` test of a domain. A test that throws counts as `false`. */
+// Stryker disable BlockStatement: an empty catch gives undefined, which also counts as false
+function testIs(d: AnyDomain, value: unknown): boolean {
   try {
     return d.is(value);
   } catch {

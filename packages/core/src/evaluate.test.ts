@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
 import { compile, evaluate, explain, type EvalOptions } from "./evaluate.ts";
-import { app, axes, each, ext, fold, index, key, let_, lit, offset as offsetMove, origin as toOrigin, other, parent, ref, rec, v, type Axis, type Expr } from "./ir.ts";
+import { app, axes, call as callFn, each, ext, fn, fold, index, iterate, key, let_, lit, offset as offsetMove, origin as toOrigin, other, parent, ref, rec, v, type Axis, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
-import { isVexList } from "./list.ts";
-import { fail, ok } from "./result.ts";
+import { isVexList, vexList } from "./list.ts";
+import { fail, ok, type Result } from "./result.ts";
 import { axisTargets, space, type Space } from "./space.ts";
-import { defineDomain } from "./domain.ts";
+import { defineDomain, type OpSpec, type PrimitiveKind } from "./domain.ts";
 import { error, Pt, PtDomain, value } from "./test-support.ts";
 import { vexError } from "./errors.ts";
 
@@ -648,5 +648,147 @@ describe("the edges of the interpreter", () => {
     expect(error(run(app("reduce", nothing, lit("subtract")))).code).toBe("#N/A");
     expect(error(run(app("reduce", nothing, lit("nope")))).code).toBe("#N/A");
     expect(value(run(app("reduce", pts, lit("subtract"))))).toEqual(new Pt(-3, -4));
+  });
+});
+
+const isNumber = (u: unknown): u is number => typeof u === "number";
+const listOf = (...results: readonly Result<unknown>[]) => vexList(results.map((result, i) => ({ key: String(i), result })));
+
+describe("the fast paths of the interpreter", () => {
+  const s = space.record({ A, B });
+  const run = (e: Expr, extra: Partial<EvalOptions> = {}) => evaluate(e, at(s, "A", extra));
+  const N = defineDomain({
+    name: "N",
+    primitive: "number",
+    is: isNumber,
+    valid: (n: number) => n >= 0,
+    ops: {
+      add: { fn: (a: number, b: number): number => a + b, params: ["number"] },
+      minus: { fn: (n: number): number => -n },
+      text: { fn: (n: number): string => (n === 0 ? "" : String(n)) },
+      odd: { fn: (n: number): boolean => n % 2 === 1 },
+    },
+  });
+
+  it("LIST.LENIENT EVAL.DEPTH: a strict op on a list without errors, the first of two errors, and #DEPTH! after another error", () => {
+    const first = vexError("empty", "the first error");
+    const vars = {
+      clean: listOf(ok(1), ok(2)),
+      two: listOf(ok(1), fail(first), fail(vexError("empty", "the second error"))),
+      deep: listOf(fail(first), fail(vexError("depth", "the call stack is full"))),
+    };
+    const strict = lit({ strict: true });
+    const go = (e: Expr) => run(e, { vars });
+    expect(value(go(app("count", v("clean"), strict)))).toBe(2);
+    expect(value(go(app("values", v("clean"), strict)))).toEqual([1, 2]);
+    expect(error(go(app("count", v("two"), strict))).message).toBe("the first error");
+    expect(value(go(app("count", v("two"))))).toBe(1);
+    expect(error(go(app("count", v("deep")))).code).toBe("#DEPTH!");
+    expect(error(go(app("count", v("deep"), strict))).code).toBe("#DEPTH!");
+  });
+
+  it("CALL.UNKNOWN-OP: an op is an own entry of the op table, and its name can be an op name", () => {
+    const twice: OpSpec<number> = { fn: (n: number): number => n * 2 };
+    const Own = defineDomain({ name: "Own", is: isNumber, ops: { constructor: twice, twice } });
+    const Inherited = defineDomain({ name: "Inherited", is: isNumber, ops: Object.create({ twice }) as Readonly<Record<string, OpSpec<number>>> });
+    expect(value(run(app("twice", lit(2)), { domains: [Own] }))).toBe(4);
+    expect(error(run(app("constructor", lit(2)), { domains: [Own] })).code).toBe("#NAME?");
+    expect(error(run(app("twice", lit(2)), { domains: [Inherited] })).code).toBe("#NAME?");
+  });
+
+  it("CALL.METHOD CALL.PARAMS CALL.THROW: a declared op without fn calls the method with the spec of the op", () => {
+    class Box {
+      readonly n: number;
+      constructor(n: number) {
+        this.n = n;
+      }
+      grow(k: number): Box {
+        return new Box(this.n + k);
+      }
+      peek(): number {
+        return this.n;
+      }
+      boom(): number {
+        throw new Error(`no value for ${String(this.n)}`);
+      }
+    }
+    const isBox = (u: unknown): u is Box => u instanceof Box;
+    const Declared = defineDomain({ name: "Declared", is: isBox, ops: { grow: { params: ["number"] }, boom: {} } });
+    const All = defineDomain({ name: "All", is: isBox, ops: {}, methods: "all" });
+    const vars = { b: new Box(1) };
+    expect(value(run(app("grow", v("b"), lit(2)), { vars, domains: [Declared] }))).toEqual(new Box(3));
+    expect(error(run(app("grow", v("b"), lit("2")), { vars, domains: [Declared] })).code).toBe("#VALUE!");
+    // Only a domain with `methods: "all"` gives a method that the op table does not declare.
+    expect(error(run(app("peek", v("b")), { vars, domains: [Declared] })).code).toBe("#NAME?");
+    expect(value(run(app("peek", v("b")), { vars, domains: [All] }))).toBe(1);
+    expect(value(run(app("peek", v("b")), { vars, domains: [Declared, All] }))).toBe(1);
+    const threw = { code: "#CALC!", op: "boom", message: '"boom" threw an exception' };
+    expect(error(run(app("boom", v("b")), { vars, domains: [Declared] }))).toMatchObject(threw);
+    const Thrower = defineDomain({
+      name: "Thrower",
+      is: isNumber,
+      ops: {
+        boom: {
+          fn: (): number => {
+            throw new Error("no value");
+          },
+        },
+      },
+    });
+    expect(error(run(app("boom", lit(1)), { domains: [Thrower] }))).toMatchObject(threw);
+  });
+
+  it("KIND.PRIMITIVE: the interpreter does not run the test `is` of a domain with a primitive type", () => {
+    let calls = 0;
+    const counted =
+      (t: PrimitiveKind) =>
+      (u: unknown): u is never => {
+        calls += 1;
+        return typeof u === t;
+      };
+    const Str = defineDomain({ name: "Str", primitive: "string", is: counted("string"), ops: { twice: { fn: (t: string): string => t + t } } });
+    const Bool = defineDomain({ name: "Bool", primitive: "boolean", is: counted("boolean"), ops: { flip: { fn: (b: boolean): boolean => !b } } });
+    const Num = defineDomain({ name: "Num", primitive: "number", is: counted("number"), ops: { twice: { fn: (n: number): number => n * 2 } } });
+    const domains = [Str, Bool, Num];
+    expect(value(run(app("twice", lit(2)), { domains }))).toBe(4);
+    expect(value(run(app("twice", lit("a")), { domains }))).toBe("aa");
+    expect(value(run(app("flip", lit(true)), { domains }))).toBe(false);
+    expect(calls).toBe(0);
+  });
+
+  it("KIND.PRIMITIVE CALL.RESULT: the check of a result uses the first domain that accepts the result", () => {
+    const Str = defineDomain({ name: "Str", primitive: "string", is: (u: unknown): u is string => typeof u === "string", valid: (t: string) => t.length > 0, ops: {} });
+    const Bool = defineDomain({ name: "Bool", primitive: "boolean", is: (u: unknown): u is boolean => typeof u === "boolean", valid: (b: boolean) => b, ops: {} });
+    // The domains of the other primitive types come first, and they do not check the result.
+    const domains = [Str, Bool, N];
+    expect(value(run(app("minus", lit(-1)), { domains }))).toBe(1);
+    expect(error(run(app("minus", lit(1)), { domains })).op).toBe("minus");
+    expect(value(run(app("text", lit(5)), { domains }))).toBe("5");
+    expect(error(run(app("text", lit(0)), { domains })).op).toBe("text");
+    expect(value(run(app("odd", lit(1)), { domains }))).toBe(true);
+    expect(error(run(app("odd", lit(2)), { domains })).op).toBe("odd");
+    // A domain without a primitive type comes first: its test decides, also for a number.
+    const Open = defineDomain({ name: "Open", is: isNumber, valid: () => false, ops: {} });
+    expect(error(run(app("minus", lit(-1)), { domains: [Open, N] })).op).toBe("minus");
+    const Nope = defineDomain({ name: "Nope", is: (u: unknown): u is string => u === "nope", ops: {} });
+    expect(error(run(app("minus", lit(1)), { domains: [Nope, N] })).op).toBe("minus");
+    expect(value(run(app("minus", lit(-1)), { domains: [Nope, N] }))).toBe(1);
+    // A domain with a primitive type does not accept an object.
+    expect(value(run(app("add", ref("position"), ref("size")), { domains: [N, PtDomain] }))).toEqual(new Pt(2, 2));
+  });
+
+  it("LET.BIND FN.BIND LOOP.NAMES AXIS.LIST.SCOPE: an inner name hides an outer name, and the other names stay", () => {
+    const vars = { x: 1, y: 2, it: 100, l: listOf(ok(1), ok(2), ok(3)) };
+    const go = (e: Expr) => value(run(e, { vars, domains: [N] }));
+    // A binding reads the outer names, not the other bindings.
+    expect(go(let_({ x: lit(10), z: v("x") }, rec({ x: v("x"), y: v("y"), z: v("z") })))).toEqual({ x: 10, y: 2, z: 1 });
+    expect(go(let_({ f: fn(["y", "x"], rec({ x: v("x"), y: v("y") })) }, callFn("f", lit(5), v("y"))))).toEqual({ x: 2, y: 5 });
+    // A step changes only its own name.
+    expect(go(fold(axes.all, { a: lit(0), b: lit(100) }, { b: app("add", v("b"), lit(1)) }, rec({ a: v("a"), b: v("b"), x: v("x") })))).toEqual({ a: 0, b: 102, x: 1 });
+    expect(go(iterate(3, { a: lit(0), b: lit(7) }, { a: app("add", v("a"), lit(1)) }, rec({ a: v("a"), b: v("b") })))).toEqual({ a: 3, b: 7 });
+    // The names of an item hide the outer names in the body and in each step, but not in the result.
+    expect(go(app("values", each(axes.list(v("l")), v("x"), undefined, ["x"])))).toEqual([1, 2, 3]);
+    expect(go(fold(axes.list(v("l")), { n: lit(0) }, { n: app("add", v("n"), v("it")) }, rec({ n: v("n"), it: v("it") }), undefined, ["it"]))).toEqual({ n: 6, it: 100 });
+    expect(go(fold(axes.list(v("l")), { n: lit(0) }, { n: app("add", v("n"), v("i")) }, v("n"), undefined, ["it", "i"]))).toBe(3);
   });
 });

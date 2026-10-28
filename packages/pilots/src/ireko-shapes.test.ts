@@ -241,4 +241,25 @@ return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[]
     // A child whose list holds no band is against the schema.
     expect(() => run([{ ...records[0], rows: { kind: "vex.list", items: [{ key: "0", result: { ok: true, value: 1 } }] } }], vars)).toThrow("the record 0 does not keep the schema");
   });
+
+  it("COMPILE.MODULE.APPEND.OWN LIST.SORT.BY: the sweep of the module of one node gives the join of ireko for no band, one band, touching bands and equal cuts", () => {
+    const empty: Shape = { rows: [], columns: [] };
+    const nodes: readonly (readonly [readonly Child[], number, number])[] = [
+      // No valid band, and one band.
+      [[{ ox: 0, oy: 0, shape: empty }], 0, 0],
+      [[{ ox: 0, oy: 0, shape: empty }], 10, 4],
+      // Two boxes that touch with the same interval, and two bands with the same cuts.
+      [[{ ox: 0, oy: 4, shape: boxShape(10, 4) }], 10, 4],
+      [[{ ox: 2, oy: 1, shape: boxShape(3, 2) }, { ox: 2, oy: 1, shape: boxShape(6, 1) }], 10, 4],
+      // An end and a start at one cut, and two bands that touch with different intervals.
+      [[{ ox: 0, oy: 0, shape: { rows: [{ from: 4, to: 9, min: 1, max: 2 }, { from: 9, to: 12, min: 0, max: 3 }], columns: [] } }], 10, 4],
+    ];
+    const shapes = nodes.map(([kids, w, h]) => {
+      const shape = nodeShape(run(kids.map(childRecord), { w, h, limit: MAX_BANDS })[0]);
+      expect(shape).toStrictEqual(reference(kids, w, h, MAX_BANDS));
+      return shape;
+    });
+    expect(shapes[0]).toStrictEqual(empty);
+    expect(shapes[2]).toStrictEqual({ rows: [{ from: 0, to: 8, min: 0, max: 10 }], columns: [{ from: 0, to: 10, min: 0, max: 8 }] });
+  });
 });

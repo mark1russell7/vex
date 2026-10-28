@@ -48,6 +48,11 @@ const expectFails = (e: Expr, code: string, messages: readonly [string, string],
     [code, messages[0]],
     [code, messages[1]],
   ]);
+  // A #VALUE! of these ops has the kind kind-mismatch in both tiers.
+  if (code !== "#VALUE!") return;
+  const kindOf = (r: { readonly ok: boolean; readonly error?: { readonly kind: string } }): unknown => r.error?.kind;
+  const at = { space: rows, origin: "0", vars: vars ?? {} };
+  expect([kindOf(evaluate(e, { ...OPTS, ...at })), kindOf(kernelPlan(e, OPTS).run(at))]).toEqual(["kind-mismatch", "kind-mismatch"]);
 };
 
 /** This function makes a list literal with a value or an error for each key. */

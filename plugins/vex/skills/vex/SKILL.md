@@ -112,9 +112,9 @@ The builder makes an expression: a tree of plain data. Code can make the same tr
 
 The moves are `key(k)`, `index(i)`, `offset(...d)`, `other`, `origin` and `parent`. `key` and `index` also take an expression. The axes are in `axes`, for example `axes.all`, `axes.others`, `axes.window(from, to)`, `axes.reverse(axis)`, `axes.list(expr)` and `axes.where(axis, test)`. In the builder, the option `reverse: true` of an axis gives the reverse order.
 
-A list is a value. Bind it with `let_`, sort it with `sortBy`, and loop over its items in their order with `axes.list(v(name))`. To sort by an op, write `sortBy(list, { by: "from" })` (the next release). `take(list, n)` gives the first items, and `nth(list, i)` gives one value.
+A list is a value. Bind it with `let_`, sort it with `sortBy`, and loop over its items in their order with `axes.list(v(name))`. To sort by an op, write `sortBy(list, { by: "from" })` (0.13.4). `take(list, n)` gives the first items, and `nth(list, i)` gives one value.
 
-Over `axes.list`, the argument `as: [item, index]` of `each` and `fold` names the value of each item and its position (the next release). The test of `where` does not see these names. In the builder, the body of `each` of a list chain gets the item and the index after the chain of the target. Thus `sizes.each((c, w, i) => w._.multiply(i))` gives each size times its index. The step of `fold` gets the index after the item (the next release). A list chain also has `sortBy()`, `take(n)`, `nth(i)` and `each(body)`, and `root.fn(kinds, body)` with `functions(fns, body)` makes and binds functions.
+Over `axes.list`, the argument `as: [item, index]` of `each` and `fold` names the value of each item and its position (0.14.0). The test of `where` does not see these names. In the builder, the body of `each` of a list chain gets the item and the index after the chain of the target. Thus `sizes.each((c, w, i) => w._.multiply(i))` gives each size times its index. The step of `fold` gets the index after the item (0.14.0). A list chain also has `sortBy()`, `take(n)`, `nth(i)` and `each(body)`, and `root.fn(kinds, body)` with `functions(fns, body)` makes and binds functions.
 
 Four list ops build lists. Each item keeps its key and its value. `drop(list, n)` gives the items after the first `n` items. `append(list, other)` joins two lists. `without(list, other)` removes the items with a key of `other`. `flat(list)` joins the lists that are the values of the items.
 
@@ -124,7 +124,7 @@ A name of `iterate` or `fold` can hold a list, and each step gives the next list
 
 An array of a field or of a name is a list where a list op or the axis `list` needs one. The keys are the positions, from `"0"`. Thus `count(fr)`, `nth(fr, s)` and `take(fr, s)` read a config array `fr`, and a layout needs no host functions for it. `indexOf(list, value)` gives the position of a number, a text or a boolean, and `fill(n, value)` makes a list of `n` equal items. A domain or a function of the host with the op comes first.
 
-`distinct(list)` keeps the first item of each value. `group(list, keys)` gives a list of lists, one for each text key at the same position. `join(list, sep)` joins texts. A list chain has `distinct()`, `group(keys)` and `join(sep)` (the next release). On a Vex list, these ops come before a function of the host with the same name.
+`distinct(list)` keeps the first item of each value. `group(list, keys)` gives a list of lists, one for each text key at the same position. `join(list, sep)` joins texts. A list chain has `distinct()`, `group(keys)` and `join(sep)` (0.15.0). On a Vex list, these ops come before a function of the host with the same name.
 
 Thus a force layout keeps all positions in one name of `iterate`, and each step reads the old positions by key. `get` takes the key as a value, so put the key of each record in a field, for example `id`. From 0.13.1, a standalone module runs these programs as plain loops. Tier 2 gives a reason for them, and tier 1 evaluates them. From 0.13.3, a cell of a sheet module and the value of a module can be a list.
 

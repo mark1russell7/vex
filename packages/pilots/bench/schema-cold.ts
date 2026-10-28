@@ -16,6 +16,8 @@
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type * as Vex from "@mark1russell7/vex";
+import type * as Pilot from "../src/schema.ts";
 
 /** The times in ms of the first sample of one new process. */
 interface Cold {
@@ -30,8 +32,8 @@ const PARTS = ["import", "compile", "first", "second"] as const;
 /** This function measures the first sample in this process, and prints the times as one line of JSON. */
 async function child(): Promise<void> {
   const t0 = performance.now();
-  const vex: typeof import("@mark1russell7/vex") = await import("@mark1russell7/vex");
-  const pilot: typeof import("../src/schema.ts") = await import("../src/schema.ts");
+  const vex: typeof Vex = await import("@mark1russell7/vex");
+  const pilot: typeof Pilot = await import("../src/schema.ts");
   const t1 = performance.now();
   const program = vex.compile(pilot.SCHEMA_PROGRAM, { domains: pilot.SCHEMA_DOMAINS });
   const t2 = performance.now();
@@ -67,7 +69,7 @@ function parent(): void {
   }
   const stats = Object.fromEntries(
     PARTS.map((part) => {
-      const ts = runs.map((r) => r[part]).sort((a, b) => a - b);
+      const ts = runs.map((r) => r[part]).toSorted((a, b) => a - b);
       return [part, { median: ts[Math.floor(ts.length / 2)] ?? Number.NaN, low: ts[0] ?? Number.NaN, high: ts.at(-1) ?? Number.NaN }];
     }),
   );

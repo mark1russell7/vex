@@ -70,7 +70,8 @@ function inferSchema(input: readonly unknown[]): readonly Row[] {
 // The input of the speed case of schema.test.ts: 20 documents of 30 fields.
 const docs = Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${String(f)}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
 
-// A copy of the pilot program, cut into stages, and the rewrite (c) with the ops that exist.
+// A copy of the pilot program before the list ops `distinct`, `group`, `join` and the op `leaves` (v1), cut into stages,
+// and the rewrite (c) of v1 with one fold.
 const EMPTY = lit(vexList([]));
 const loop = (list: Expr, as: ItemNames, body: Expr): Expr => each(axes.list(list), body, undefined, as);
 const one = (x: Expr): Expr => app("fill", lit(1), x);
@@ -92,6 +93,7 @@ const notes = app("flat", loop(v("docs"), ["d", "i"], loop(app("if", app("ifErro
 const paths = call("distinct", loop(v("notes"), ["n"], field(v("n"), "path")));
 const mine = app("flat", loop(v("notes"), ["n"], app("if", app("eq", field(v("n"), "path"), v("p")), one(v("n")), EMPTY)));
 const wrap = (body: Expr): Expr => let_({ distinct, joinBar }, let_({ arrayKind }, let_({ note }, let_({ level3: level(undefined) }, let_({ level2: level("level3") }, let_({ level1: level("level2") }, let_({ notes }, body)))))));
+const v1 = wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], rec({ path: v("p"), kinds: app("values", call("distinct", loop(mine, ["n"], field(v("n"), "kind")))), count: app("count", call("distinct", loop(mine, ["n"], field(v("n"), "doc")))) })))));
 const has = (list: Expr, x: Expr): Expr => app("ifError", app("gte", app("indexOf", list, x), lit(0)), lit(false));
 const upd = let_(
   { old: app("nth", v("rows"), v("j")) },
@@ -133,6 +135,7 @@ function checkOf(r: unknown, same: boolean): string {
 // Each expression is built one time, so each run hits the cache of compiled programs of evaluate.
 const exprs: Readonly<Record<string, Expr>> = {
   "pilot (evaluate)": SCHEMA_PROGRAM,
+  "pilot v1 (functions of the walk)": v1,
   "stage: walk only": wrap(app("count", v("notes"))),
   "stage: walk + distinct paths": wrap(app("count", paths)),
   "stage: walk + paths + filter per path": wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], app("count", mine))))),
@@ -153,7 +156,7 @@ cases["calibration"] = () => {
   return size;
 };
 // The cases that must give the records of inferSchema.
-const SAME = new Set(["pilot (evaluate)", "rewrite (c): one fold", "TypeScript inferSchema"]);
+const SAME = new Set(["pilot (evaluate)", "pilot v1 (functions of the walk)", "rewrite (c): one fold", "TypeScript inferSchema"]);
 
 /** The record of one case: the times in ms, and the check of its result. */
 interface Measure {
@@ -167,7 +170,7 @@ interface Measure {
 const out: Measure[] = [];
 if (process.env["COLD"] === "1") {
   // The case of schema.test.ts: one run, then the mean of 5 runs.
-  const fresh = wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], rec({ path: v("p"), kinds: app("values", call("distinct", loop(mine, ["n"], field(v("n"), "kind")))), count: app("count", call("distinct", loop(mine, ["n"], field(v("n"), "doc")))) })))));
+  const fresh = { ...SCHEMA_PROGRAM };
   evaluate(fresh, opts);
   const t0 = performance.now();
   let last: Result<unknown> | undefined;

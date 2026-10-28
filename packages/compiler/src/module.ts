@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, lit, moveExpr, nestingOf, rec, shapeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
+import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, lit, moveExpr, nestingOf, rec, shapeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -143,6 +143,12 @@ interface Arg {
 
 /** The levels of a constant of the run. */
 const NO_DEPS: ReadonlySet<number> = new Set();
+
+/** The names of the items of a loop without `as` (COMPILE.MODULE.LIST.ITEM). */
+const NO_NAMES: ReadonlyMap<string, Name> = new Map();
+
+/** This function gives the names of a body or of a step: the names `as` of the items hide the names outside (AXIS.LIST.SCOPE). */
+const withNames = (env: ReadonlyMap<string, Name>, items: ReadonlyMap<string, Name>): ReadonlyMap<string, Name> => new Map([...env, ...items]);
 
 /**
  * The level of a read of a cell (COMPILE.MODULE.SHEET). The results of the cells change in a run. Thus a value that reads
@@ -1549,6 +1555,19 @@ class Printer {
     return listy(e, this.#scopeOf(ctx));
   }
 
+  /**
+   * This method tells if the body of an each can give a list. The facts of the names `as` of its items come from its
+   * list, which the printer prints only in the loop. So here each such name can hold a list. Then a list op goes over the
+   * array of the each, and that array gives the value of the interpreter too (COMPILE.MODULE.LIST.ITEM).
+   */
+  #bodyList(e: ExprOf<"each">, ctx: Ctx): boolean {
+    if (e.as === undefined) return this.#isList(e.body, ctx);
+    // A list of the axis list is not in the memo, so the body is not a key of a node of the memo.
+    const scope = this.#scopeOf(ctx);
+    const names: readonly string[] = e.as;
+    return listy(e.body, { ...scope, name: (name) => names.includes(name) || scope.name(name) });
+  }
+
   /** This method gives the scope of `listy` at a node: the names and the bound functions of its context. */
   #scopeOf(ctx: Ctx): ListScope {
     return {
@@ -2040,7 +2059,7 @@ class Printer {
     const [head] = args;
     const rest = args.slice(1);
     // An each whose body is a list gives a list of lists (LIST.FLAT), so a list op over it goes over its array.
-    if (FOLD_OPS.has(op) && head?.tag === "each" && !this.#isList(head.body, ctx)) return this.#list(op, head, rest, ctx);
+    if (FOLD_OPS.has(op) && head?.tag === "each" && !this.#bodyList(head, ctx)) return this.#list(op, head, rest, ctx);
     // A list op over a let with only literal options is the list op over the body of the let, so an each in the body
     // is one loop with a running value, not an array. A builder sheet prints such a let, for example `sum(let($0 = 0, each(…)))`.
     if (FOLD_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) return this.#let(head, ctx, (body) => app(op, body, ...rest));
@@ -2206,9 +2225,10 @@ class Printer {
   /**
    * This method gives the loop over the targets of an axis: the statements before it, its bounds and the key that it
    * skips. `start` has the levels of the address, and `inner` is the position at a target. The axes all, others,
-   * window and list have a loop. In a tree space, the axes of a tree have a loop too.
+   * window and list have a loop. In a tree space, the axes of a tree have a loop too. With `as`, a loop over the axis
+   * list binds the value and the index of each item after its check (COMPILE.MODULE.LIST.ITEM).
    */
-  #targetLoop(axis: Axis, at: readonly Move[], ctx: Ctx): {
+  #targetLoop(axis: Axis, at: readonly Move[], ctx: Ctx, as?: ItemNames): {
     readonly s: string[];
     readonly j: string;
     /** The head of the loop, and the statements at the start of each item before the try and inside it. */
@@ -2224,6 +2244,9 @@ class Printer {
     readonly inner: Ctx;
     /** True when a target can be a key that is not the position of a record: a key of a literal or of `fill`. */
     readonly texts: boolean;
+    /** The names `as` of the items, and their level. Only the body of an each and the steps of a fold read them. */
+    readonly items: ReadonlyMap<string, Name>;
+    readonly item: number | undefined;
   } {
     const { base: outer, tests } = testsOf(axis);
     // The reverse order of an axis is a loop from its end (AXIS.REVERSE). The validation keeps a base axis inside.
@@ -2243,7 +2266,13 @@ class Printer {
       const head = reverse ? `for (let ${q} = ${a}.length - 1; ${q} >= 0; ${q}--) {` : `for (let ${q} = 0; ${q} < ${a}.length; ${q}++) {`;
       const key = [`const ${j} = ${a}[${q}][0];`];
       const check = [`if (${a}[${q}][1] === E) ${this.use("F")}();`];
-      return { s: [...list.s, `const ${a} = ${list.v.code};`], j, head, key, check, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts };
+      const s = [...list.s, `const ${a} = ${list.v.code};`];
+      const named = as === undefined ? undefined : this.#itemNames(as, list.v.list as ListInfo, `${a}[${q}][1]`, a, reverse);
+      if (named !== undefined) {
+        s.push(...named.s);
+        check.push(...named.check);
+      }
+      return { s, j, head, key, check, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level };
     }
     const s: string[] = [];
     let lo = "0";
@@ -2265,13 +2294,13 @@ class Printer {
     if (this.#tree && isTreeAxis(base)) {
       const range = this.#treeRange(base, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false };
+      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
     }
     // In a graph space, the targets of an axis of a graph are an array of positions. A graph has no offsets and no tree.
     if (this.#graph && GRAPH_AXES.has(base.t)) {
       const range = this.#graphRange(base.t, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false };
+      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
     }
     if (this.#graph && base.t === "window") throw new NotStandalone('the axis "window" in a graph space');
     if (base.t === "others") skip = f;
@@ -2281,7 +2310,34 @@ class Printer {
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
-    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false };
+    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+  }
+
+  /**
+   * This method binds the names `as` of a loop over the axis list (COMPILE.MODULE.LIST.ITEM). The statements come after
+   * the check of the item, so an error item fails before they bind a name (AXIS.LIST.ITEM). The first name holds the
+   * value of the item, with the facts of its list. The index counts the items with a value in the order of the list, as
+   * `nth` does (AXIS.LIST.INDEX). In the reverse order, it counts down from the number of these items. The names have a
+   * level of their own. Thus a part that reads them stays in the loop, and a key of a literal can still be a target.
+   */
+  #itemNames(as: ItemNames, info: ListInfo, value: string, a: string, reverse: boolean): { readonly s: readonly string[]; readonly check: readonly string[]; readonly items: ReadonlyMap<string, Name>; readonly level: number } {
+    // Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code
+    const level = this.#loops++;
+    const deps = new Set([level]);
+    const [item, index] = as;
+    const y = this.fresh("y");
+    const items = new Map<string, Name>([[item, { code: y, kind: info.item, lazy: false, deps, list: info.inner }]]);
+    const check = [`const ${y} = ${value};`];
+    const s: string[] = [];
+    if (index !== undefined) {
+      const i = this.fresh("i");
+      const z = this.fresh("z");
+      // The check before the index throws for an error item, so the count skips it.
+      s.push(`let ${z} = ${reverse ? `${this.use("CT")}(${a}, false)` : "0"};`);
+      check.push(`const ${i} = ${reverse ? `--${z}` : `${z}++`};`);
+      items.set(index, { code: i, kind: "number", lazy: false, deps });
+    }
+    return { s, check, items, level };
   }
 
   /**
@@ -2347,17 +2403,18 @@ class Printer {
   #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
     const { strict, step } = this.#foldOptions(op, rest);
     const at = target.at ?? [];
-    const { s, j, head, key, check, skip, fixed, start, startSafe, tests, inner, texts } = this.#targetLoop(target.axis, at, ctx);
+    const { s, j, head, key, check, skip, fixed, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(target.axis, at, ctx, target.as);
     const { level } = inner;
-    // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run.
+    // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run. The tests do not
+    // see the names of the items, and the body sees them (AXIS.LIST.SCOPE).
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
-    const body = this.#hoist(this.expr(target.body, inner), hasLoop(target.body));
+    const body = this.#hoist(this.expr(target.body, { ...inner, env: withNames(inner.env, items) }), hasLoop(target.body));
     this.#readsNoTarget(texts, level, [body, ...testCodes].map((x) => x.v.deps));
     // A count of all the items, whose body cannot fail, is the count of the records. A safe body covers its statements.
     // V-063: a body that reads a cell keeps its loop. The search of the run must see each read, so a cell that reads
     // itself gives `#CYCLE!`.
     if (op === "count" && fixed && tests.length === 0 && body.v.safe && !body.v.deps.has(CELLS)) return bare(plainValue("n", "number"));
-    const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== level));
+    const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== level && d !== own));
     const r = this.#reduction(op, body.v.kind, step);
     const { v } = r;
     s.push(r.init);
@@ -2469,13 +2526,14 @@ class Printer {
    */
   #eachList(e: ExprOf<"each">, ctx: Ctx): Code {
     const at = e.at ?? [];
-    const { s, j, head, key, check, skip, start, startSafe, tests, inner, texts } = this.#targetLoop(e.axis, at, ctx);
+    const { s, j, head, key, check, skip, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(e.axis, at, ctx, e.as);
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
     // The value of an item can be a list, for flat (LIST.FLAT). The facts of the list tell it.
     if (this.#wantList.has(e)) this.#wantList.add(e.body);
-    const body = this.#hoist(this.expr(e.body, inner), hasLoop(e.body));
+    // Only the body sees the names of the items (AXIS.LIST.SCOPE).
+    const body = this.#hoist(this.expr(e.body, { ...inner, env: withNames(inner.env, items) }), hasLoop(e.body));
     this.#readsNoTarget(texts, inner.level, [body, ...testCodes].map((x) => x.v.deps));
-    const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== inner.level));
+    const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== inner.level && d !== own));
     const list = this.fresh("L");
     const v = this.fresh("x");
     const item = [...check, ...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
@@ -2687,11 +2745,13 @@ class Printer {
     const loop = this.#loops++;
     const names = this.#loopNames(e.init, e.step, ctx, loop);
     if (this.#wantList.has(e)) this.#wantList.add(e.result);
-    const t = this.#targetLoop(e.axis, e.at ?? [], ctx);
+    const t = this.#targetLoop(e.axis, e.at ?? [], ctx, e.as);
     const tests = t.tests.map((x) => this.#hoist(this.expr(x, t.inner), hasLoop(x)));
     // The interpreter evaluates the tests at each target before the first step, so a module of a sheet does not have them.
     if (tests.some((x) => x.v.deps.has(CELLS))) throw new NotStandalone("a test of the axis of a fold reads a cell");
-    const step = this.#loopStep(e.step, { ...t.inner, env: names.env }, names.vars);
+    // Only the steps see the names of the items (AXIS.LIST.SCOPE). A name of `as` is not a name of `init`, so the read of
+    // each name of the fold stays its read, and an append into its own list keeps its owner (COMPILE.MODULE.APPEND.OWN).
+    const step = this.#loopStep(e.step, { ...t.inner, env: withNames(names.env, t.items) }, names.vars);
     this.#readsNoTarget(t.texts, t.inner.level, [...tests.map((x) => x.v.deps), step.deps]);
     const result = this.expr(e.result, { ...ctx, env: names.env });
     const body = [
@@ -2701,7 +2761,7 @@ class Printer {
       ...tests.flatMap((c) => [...c.s, `if (!${this.#boolean(c.v)}) continue;`]),
       ...step.s,
     ];
-    const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level);
+    const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level && d !== t.item);
     const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
     return { s: [...names.s, ...step.init, ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
   }
@@ -2881,20 +2941,6 @@ class Printer {
   }
 }
 
-/**
- * This function gives the reason that a module cannot take a loop that names its items with `as` (AXIS.LIST.ITEM), or
- * `undefined`. Tier 1 evaluates such a program. It uses a stack, not recursion.
- */
-function itemsReason(expr: Expr): string | undefined {
-  const todo: Expr[] = [expr];
-  for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
-    // Only a loop, each or fold, has the field "as".
-    if ((x as { readonly as?: unknown }).as !== undefined) return 'the program has a loop that names its items with "as", and a module does not have these names yet';
-    todo.push(...children(x));
-  }
-  return undefined;
-}
-
 /** This function gives the name of the function of a module, and its space, or the reason that the options are not valid. */
 function runOf(options: ModuleOptions): Run | { readonly reason: string } {
   const name = options.name ?? "run";
@@ -3014,7 +3060,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   if (!read.ok) return { ok: false, reason: read.error.message };
   const expr = read.value;
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
-  const shape = shapeError(expr) ?? itemsReason(expr);
+  const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
   const p = new Printer(expr, options);
   let value: Code;
@@ -3090,7 +3136,7 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   });
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
-    const shape = shapeError(f.expr) ?? itemsReason(f.expr);
+    const shape = shapeError(f.expr);
     if (shape !== undefined) return { ok: false, reason: `${formulaText(f)}: ${shape}` };
   }
   const kinds = new Map<string, Kind | undefined>();

@@ -1,5 +1,13 @@
 # @mark1russell7/vex-domains
 
+## 0.17.0
+
+### Patch Changes
+
+- 5394da6: `@mark1russell7/vex-domains` exports the schema program of JSON documents (EXAMPLE.SCHEMA): `SCHEMA_PROGRAM`, `SCHEMA_DOMAINS`, the function `schemaOf(docs)` and the type `JsonFieldSchema`.
+- Updated dependencies [a4ffc92]
+  - @mark1russell7/vex@0.17.0
+
 ## 0.16.0
 
 ### Patch Changes

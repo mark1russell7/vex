@@ -1,5 +1,11 @@
 # @mark1russell7/vex
 
+## 0.17.0
+
+### Minor Changes
+
+- a4ffc92: The core takes `@mark1russell7/coeval` `^0.15.0`, thus the types that it exports from coeval change, but no result of a Vex program changes.
+
 ## 0.16.0
 
 ### Minor Changes

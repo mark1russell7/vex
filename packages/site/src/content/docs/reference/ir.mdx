@@ -156,6 +156,9 @@ An array of a field or of a name is a list where a list op or the axis `list` ne
 |---|---|
 | `indexOf(list, value)` | the position of the first item with the value, from 0, as `nth` counts. The value is a number, a text or a boolean. A value that no item has gives `#N/A`. |
 | `fill(n, value)` | a list of `n` items with the value. The keys are the positions. `n` is a whole number from 0 to 100000. |
+| `distinct(list)` | the first item of each value, in order, with its key. The values are numbers, texts or booleans. |
+| `group(list, keys)` | one item for each text of `keys`, in the order of its first position. Its value is the list of the items at its positions. |
+| `join(list, sep)` | the texts of the items, with the text `sep` between them. An empty list gives the empty text. |
 
 Thus a stack of a layout needs no functions of the host. The fractions, the keys of the slots and the bounds are names of the run. Without `as`, the body of the axis `list` reads the fields of each target, not the values of the items. Thus the fold below counts the items, and `nth` reads the value at each position.
 
@@ -177,7 +180,7 @@ run(app("sum", app("take", v("fr"), lit(2))), "0"); // => { ok: true, value: 0.5
 run(app("values", app("fill", lit(4), lit(0.25))), "0"); // => { ok: true, value: [0.25, 0.25, 0.25, 0.25] }
 ```
 
-Tier 2 and a standalone module do not have lists yet. Thus they give a reason for `indexOf` and `fill`, and tier 1 evaluates the program. A list op of tier 2 on an array also goes to tier 1, so each tier gives the same result.
+Tier 2 and a standalone module do not have lists yet. Thus they give a reason for `indexOf`, `fill`, `distinct`, `group` and `join`, and tier 1 evaluates the program. A list op of tier 2 on an array also goes to tier 1, so each tier gives the same result.
 
 ### The names of the items
 

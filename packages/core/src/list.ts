@@ -52,15 +52,15 @@ export const isVexList = (u: unknown): u is VexList => {
 /**
  * The name of a core list op. `sortBy`, `take`, `drop`, `append`, `flat` and `without` give a list (LIST.BUILD), and
  * the other ops give a value. `get` gives the value at a key (LIST.GET), and `indexOf` gives the position of a value
- * (LIST.INDEXOF).
+ * (LIST.INDEXOF). `distinct` and `group` give a list, and `join` gives a text (LIST.DISTINCT, LIST.GROUP, LIST.JOIN).
  */
-export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf";
+export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf" | "distinct" | "group" | "join";
 
 /**
  * The names of the core list ops. They apply when the first argument is a list. They apply to an array too, when no
  * domain and no function of the host has the op for it (LIST.ARRAY).
  */
-export const LIST_OPS: ReadonlySet<string> = new Set<ListOp>(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without", "get", "indexOf"]);
+export const LIST_OPS: ReadonlySet<string> = new Set<ListOp>(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without", "get", "indexOf", "distinct", "group", "join"]);
 
 /** This function tells if a name is the name of a core list op. */
 export const isListOp = (op: string): op is ListOp => LIST_OPS.has(op);

@@ -432,6 +432,15 @@ export interface ListChain<Ctx extends ChainContext, U> {
   without<V>(other: ListChain<Ctx, V>, opts?: ListOpts): ListChain<Ctx, U>;
   /** The items of the lists that are the values of the items, in order (LIST.FLAT). The values must be lists. */
   flat<V>(this: ListChain<Ctx, VexList<V>>, opts?: ListOpts): ListChain<Ctx, V>;
+  /** The first item of each value, in the order of the list (LIST.DISTINCT). The values are numbers, texts or booleans. */
+  distinct(opts?: ListOpts): ListChain<Ctx, U>;
+  /**
+   * The groups of the items by the text keys of `keys` (LIST.GROUP). The key at a position is the key of the item at
+   * the same position. Each key gives one item, and its value is the list of its items (BUILD.LIST.GROUP).
+   */
+  group(keys: ListChain<Ctx, string>, opts?: ListOpts): ListChain<Ctx, VexList<U>>;
+  /** The texts of the items with the text `sep` between them (LIST.JOIN). A chain of a text gives the separator. */
+  join(this: ListChain<Ctx, string>, sep: string | ChainBase<Ctx, string>, opts?: ListOpts): ChainOf<Ctx, string>;
   /**
    * The axis list (AXIS.LIST): the body evaluates at the key of each item, in the order of the list. The body reads the
    * fields of the record of the item. The chain of the body has no value of its own. The body also gets a chain of the
@@ -994,6 +1003,15 @@ class ListChainImpl {
   }
   flat(opts?: ListOpts): ListChainImpl {
     return this.#list("flat", [], opts);
+  }
+  distinct(opts?: ListOpts): ListChainImpl {
+    return this.#list("distinct", [], opts);
+  }
+  group(keys: unknown, opts?: ListOpts): ListChainImpl {
+    return this.#list("group", [listProgram("group", keys)], opts);
+  }
+  join(sep: string | { readonly program: Expr }, opts?: ListOpts): ChainImpl {
+    return this.#op("join", [typeof sep === "string" ? lit(sep) : sep.program], opts);
   }
   each(body: (c: ChainImpl, item: ChainImpl, index: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
     // The chains of the body are at the key of the item. The chain of the body has no value of its own.

@@ -485,6 +485,41 @@ describe("the tiers", () => {
     expect(fromCore(tiered(app("sum", ref("fr")), { domains: [NumDomain] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 0.5 });
   });
 
+  it("LIST.DISTINCT LIST.GROUP LIST.JOIN COMPILE.FALLBACK: distinct, group and join go to tier 1, and a module gives a reason", () => {
+    const s = space.array([{ n: 3, t: "a" }, { n: 1, t: "b" }, { n: 3, t: "a" }]);
+    const names = { xs: ["p", "q", "p"] };
+    const ns = each(axes.all, ref("n"));
+    const ts = each(axes.all, ref("t"));
+    const schema = { fields: { n: "number", t: "string" } } as const;
+    const cases: readonly (readonly [Expr, string])[] = [
+      [app("count", app("distinct", ns)), "distinct"],
+      [app("values", app("distinct", variable("xs"))), "distinct"],
+      [app("count", app("group", ns, ts)), "group"],
+      [app("sum", app("flat", app("group", ns, ts))), "flat"],
+      [app("join", ts, lit("|")), "join"],
+      [app("join", variable("xs"), ref("t")), "join"],
+    ];
+    for (const [e, op] of cases) {
+      expect(generate(e, { domains: [NumDomain, TextDomain] })).toEqual({ ok: false, reason: `the program has the list op "${op}", and tier 2 does not have lists as values yet` });
+      const p = tiered(e, { domains: [NumDomain, TextDomain] });
+      expect(p.tier).toBe(1);
+      for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k, vars: names }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain, TextDomain], space: s, origin: k, vars: names })));
+    }
+    expect(fromCore(tiered(app("join", ts, lit("|")), { domains: [NumDomain] }).run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: "a|b|a" });
+    // A module does not have the three ops yet: a list as the receiver gives the reason of the list op.
+    const modules: readonly (readonly [Expr, string])[] = [
+      [app("count", app("distinct", ns)), "distinct"],
+      [app("first", app("distinct", ns)), "distinct"],
+      [app("count", app("group", ns, ts)), "group"],
+      [app("sum", app("flat", app("group", ns, ts))), "group"],
+      [app("join", ts, lit("|")), "join"],
+    ];
+    for (const [e, op] of modules) {
+      const m = emitModule(e, { domains: [NumDomain, TextDomain], schema });
+      expect(m.ok ? "" : m.reason).toBe(`the list op "${op}"`);
+    }
+  });
+
   it("COMPILE.FALLBACK: an exception in the lowering gives a reason, not an exception", () => {
     // A host domain whose op table throws when the compiler reads it.
     const broken = Object.defineProperty({ ...NumDomain }, "ops", {

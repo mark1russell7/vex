@@ -41,5 +41,6 @@ The four packages `vex`, `vex-domains`, `vex-testkit` and `vex-compiler` have on
 | A standalone module of a graph space: the option `space: "graph"` of `emitModule`, with the edges as positions and the axes of a graph. `reduce` in a module. The input `space: "graph"` of the tool `vex_module`. | 0.13.2 |
 | Lists as values in a standalone module: a list as the value of a program, a column of lists in `emitSheetModule` with a `ListKind` in `kinds`, and lists as branches of `if` and `ifError`. The run gives each list as a `vex.list`. | 0.13.3 |
 | The option `by` of `sortBy`: the items in the order of the results of an op on their values, also in a standalone module | the next release |
+| The list ops `distinct(list)`, `group(list, keys)` and `join(list, sep)`, and the list chain methods `distinct()`, `group(keys)` and `join(sep)` | the next release |
 
 A feature of the main branch that is not on npm yet has the version "the next release". Until it is on npm, a project can use it only from a local copy of the repository, for example with `pnpm link`. Do not write a workaround for a missing feature without a note. Tell the user which version has it.

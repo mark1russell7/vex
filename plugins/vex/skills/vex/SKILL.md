@@ -124,6 +124,8 @@ A name of `iterate` or `fold` can hold a list, and each step gives the next list
 
 An array of a field or of a name is a list where a list op or the axis `list` needs one. The keys are the positions, from `"0"`. Thus `count(fr)`, `nth(fr, s)` and `take(fr, s)` read a config array `fr`, and a layout needs no host functions for it. `indexOf(list, value)` gives the position of a number, a text or a boolean, and `fill(n, value)` makes a list of `n` equal items. A domain or a function of the host with the op comes first.
 
+`distinct(list)` keeps the first item of each value. `group(list, keys)` gives a list of lists, one for each text key at the same position. `join(list, sep)` joins texts. A list chain has `distinct()`, `group(keys)` and `join(sep)` (the next release). On a Vex list, these ops come before a function of the host with the same name.
+
 Thus a force layout keeps all positions in one name of `iterate`, and each step reads the old positions by key. `get` takes the key as a value, so put the key of each record in a field, for example `id`. From 0.13.1, a standalone module runs these programs as plain loops. Tier 2 gives a reason for them, and tier 1 evaluates them. From 0.13.3, a cell of a sheet module and the value of a module can be a list.
 
 ```ts doctest

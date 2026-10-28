@@ -6,7 +6,8 @@
  * type stripping. It prints one line for each case. With `BENCH_OUT=<file>`, it also writes the records as JSON.
  *
  * Each case runs `RUNS` times (default 40) after `WARM` runs (default 10). Thus the numbers are of the warm interpreter,
- * as in Graph after its first samples. `COLD=1` adds the cold case of `schema.test.ts`: the mean of 5 runs after one.
+ * as in Graph after its first samples. `COLD=1` adds two cold cases: the first run of the pilot in the process, and
+ * the case of `schema.test.ts`, the mean of 5 runs after one.
  *
  * The script fails (exit 1) when a result is not the same as the result of the copy of `inferSchema` of Graph. The
  * time does not make it fail.
@@ -150,6 +151,10 @@ interface Measure {
 
 const out: Measure[] = [];
 if (process.env["COLD"] === "1") {
+  // The first run of the pilot in this process, before any other evaluation: the time of Graph at a page open.
+  const t1 = performance.now();
+  const first = evaluate(SCHEMA_PROGRAM, opts);
+  out.push({ name: "cold: first run of the pilot", median: performance.now() - t1, min: Number.NaN, p90: Number.NaN, check: checkOf(first, true) });
   // The case of schema.test.ts: one run, then the mean of 5 runs.
   const fresh = wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], rec({ path: v("p"), kinds: app("values", call("distinct", loop(mine, ["n"], field(v("n"), "kind")))), count: app("count", call("distinct", loop(mine, ["n"], field(v("n"), "doc")))) })))));
   evaluate(fresh, opts);

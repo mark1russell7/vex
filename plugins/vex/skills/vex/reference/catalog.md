@@ -300,3 +300,4 @@ JSON data: texts, finite numbers, booleans, arrays and plain objects, for exampl
 | `kinds` | `kinds(JSON value)` | list |  |  |  |
 | `fields` | `fields(JSON value)` | list |  |  |  |
 | `field` | `field(JSON value, value)` | value |  |  |  |
+| `leaves` | `leaves(JSON value, number)` | list |  |  |  |

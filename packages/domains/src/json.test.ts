@@ -150,7 +150,9 @@ describe("the domain of JSON values (JsonDomain)", () => {
     expect(value(evaluate(app("count", app("leaves", lit({ a: { b: 1, c: 2 } }), lit(3))), { space: ONE, origin: "A", domains: DOMAINS }))).toBe(2);
   });
 
-  it("JSON.LEAVES: the function reads no name outside itself, so a copy of its source gives the same leaves", () => {
+  // The mutation lane puts the counters of Stryker into the source of the op. A copy of that source cannot read them, so
+  // this test runs only on the source that Stryker did not change.
+  it.skipIf(Function.prototype.toString.call(leaves.fn).includes("stryMutAct"))("JSON.LEAVES: the function reads no name outside itself, so a copy of its source gives the same leaves", () => {
     // oxlint-disable-next-line typescript/no-implied-eval -- the test copies the source of the op, as a module does.
     const copy = new Function(`"use strict"; return (${Function.prototype.toString.call(leaves.fn)});`) as () => typeof leaves.fn;
     const doc = JSON.parse('{"a":{"b":[1],"c":{"d":null}},"":{"e":"x"}}') as JsonValue;

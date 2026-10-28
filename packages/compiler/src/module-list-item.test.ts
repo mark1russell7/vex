@@ -300,6 +300,20 @@ describe("COMPILE.MODULE.LIST.ITEM: the names of the items of a loop over the ax
     for (const e of [memo, over(LIT, op("add", op("multiply", x, a), i), BOTH)]) expect(sourceOf(e)).not.toMatch(/G\(y\d+\)/);
   });
 
+  it("COMPILE.MODULE.LIST.ITEM COMPILE.FALLBACK: a module and a sheet module have the loops that tier 2 refuses", () => {
+    // These loops are the cases of tiers.test.ts. That test gets the domains that Stryker mutates, so the modules are here.
+    const sorted = op("sortBy", NS);
+    const cases: readonly Expr[] = [
+      op("sum", each(axes.list(sorted), op("add", x, i), undefined, BOTH)),
+      fold(axes.reverse(axes.list(sorted)), { s: lit(0) }, { s: op("add", v("s"), x) }, v("s"), undefined, ITEM),
+      let_({ y: op("sum", each(axes.where(axes.list(sorted), lit(true)), x, undefined, ITEM)) }, v("y")),
+    ];
+    for (const e of cases) {
+      expectSame(e);
+      expect(emitSheetModule(new Map([["c", e]]), OPTIONS).ok).toBe(true);
+    }
+  });
+
   it("COMPILE.MODULE.LIST.ITEM: a body that reads a record at a key of a literal still gives a reason", () => {
     expect(emitModule(op("sum", over(LIT, op("add", x, n))), OPTIONS)).toStrictEqual({ ok: false, reason: 'the axis "list" reads a record at a key of a literal or of "fill"' });
   });

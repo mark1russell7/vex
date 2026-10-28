@@ -3,7 +3,7 @@ import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russe
 import { arbChain, arbExpr, arbLiteral, arbOrigin, arbSpace, fromCore, fromReference, modelChain, referenceEvaluate, type ModelOptions } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { emitModule, emitSheetModule } from "./module.ts";
+import { emitModule } from "./module.ts";
 import { generate, tiered, type GenerateOptions } from "./tiers.ts";
 
 const DOMAINS = [Vec2Domain, NumDomain, BoolDomain] as const;
@@ -385,7 +385,7 @@ describe("the tiers", () => {
     }
   });
 
-  it("AXIS.LIST.ITEM AXIS.LIST.INDEX COMPILE.FALLBACK COMPILE.MODULE.LIST.ITEM: a loop with the names as goes to tier 1, and a module has it", () => {
+  it("AXIS.LIST.ITEM AXIS.LIST.INDEX COMPILE.FALLBACK: a loop with the names as goes to tier 1", () => {
     const s = space.array([{ n: 3 }, { n: 1 }, { n: 2 }]);
     const sorted = app("sortBy", each(axes.all, ref("n")));
     const cases: readonly Expr[] = [
@@ -395,8 +395,6 @@ describe("the tiers", () => {
     ];
     for (const e of cases) {
       expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason: 'the program has the axis "list", and tier 2 does not have lists as values yet' });
-      expect(emitModule(e, { domains: [NumDomain], schema: { fields: { n: "number" } } }).ok).toBe(true);
-      expect(emitSheetModule(new Map([["c", e]]), { domains: [NumDomain], schema: { fields: { n: "number" } } }).ok).toBe(true);
       const p = tiered(e, { domains: [NumDomain] });
       expect(p.tier).toBe(1);
       for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));

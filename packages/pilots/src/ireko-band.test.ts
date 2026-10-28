@@ -51,13 +51,28 @@ const PROGRAMS: Readonly<Record<string, Expr>> = {
   // A list of bands, as the rows of a shape: nth reads a band, and reduce joins them.
   nth: let_({ rows: each(axes.all, b) }, fields(op("nth", v("rows"), lit(1)))),
   reduce: op("reduce", each(axes.all, op("move", b, d, lit(0))), lit("join")),
-  // A divide by zero and an infinite offset give errors. ifError catches them.
+  // A divide by zero gives an error. An infinite offset gives a band with infinite ends, so the number from is an error.
+  // ifError catches them.
   errors: rec({ caught: op("ifError", op("from", op("move", own, d, lit(0))), lit(-1)), width: op("max", op("band", y, h, x, op("divide", w, d))) }),
   raised: op("to", op("move", b, d, d)),
-  // The merge of the bands of a shape sorts the bands by from (COMPILE.MODULE.SORT.BY). An infinite offset gives an error item.
+  // The merge of the bands of a shape sorts the bands by from (COMPILE.MODULE.SORT.BY). An infinite offset gives an
+  // infinite key, which is an error. A divide by zero gives an error item.
   sorted: let_({ rows: op("sortBy", each(axes.all, b), lit({ by: "from" })) }, fields(op("nth", v("rows"), lit(0)))),
   sortedList: op("sortBy", each(axes.all, op("move", b, d, lit(0))), lit({ by: "from" })),
+  sortedSkip: op("sortBy", each(axes.all, op("move", b, op("divide", w, d), lit(0))), lit({ by: "from" })),
   sortedStrict: op("ifError", op("from", op("first", op("sortBy", each(axes.all, op("move", b, d, lit(0))), lit({ by: "from", strict: true })))), lit(-1)),
+  // The ops of the sweep of mergeBands. An infinite offset gives a band with infinite ends.
+  sweep: rec({
+    sized: op("sized", op("move", b, d, lit(0))),
+    end: op("end", op("move", b, d, lit(0))),
+    side: op("side", op("move", b, d, lit(0))),
+    aligned: op("aligned", own, b),
+    outlasts: op("outlasts", b, first),
+    widen: op("widen", b, own),
+    cut: op("cut", b, first, own),
+    continues: op("continues", first, b),
+    extend: op("extend", first, b),
+  }),
 };
 
 const ROWS: readonly Row[] = [
@@ -120,11 +135,23 @@ describe("the band domain of ireko", () => {
     expect(run("pack")).toStrictEqual([124, 134, 0, 0]);
     expect(run("all")).toStrictEqual(Array.from({ length: 4 }, () => ({ from: 0, to: 100, min: -10, max: 201 })));
     expect(run("nth")).toStrictEqual(Array.from({ length: 4 }, () => ({ from: 30, to: 50, min: -10, max: 5 })));
-    // The third offset is infinite, so its moved band is an error. reduce skips that item without the option strict.
-    expect(run("reduce")).toStrictEqual(Array.from({ length: 4 }, () => ({ from: 5, to: 77.5, min: -10, max: 201 })));
-    // A divide by zero gives an invalid number. An infinite offset gives an invalid band, and ifError catches it.
+    // The third offset is infinite, so its moved band has infinite ends. That band is valid, and reduce joins it.
+    expect(run("reduce")).toStrictEqual(Array.from({ length: 4 }, () => ({ from: 5, to: Number.POSITIVE_INFINITY, min: -10, max: 201 })));
+    // A divide by zero gives an invalid number. An infinite offset gives an infinite from, and ifError catches it.
     expect(run("errors")).toStrictEqual([{ caught: 5, width: 24 }, error, { caught: -1, width: 0 }, { caught: -7.5, width: -0.4 }]);
     expect(run("raised")).toStrictEqual([45, 50, error, 77.5]);
+    const inf = Number.POSITIVE_INFINITY;
+    expect(run("sweep")[2]).toStrictEqual({
+      sized: false,
+      end: { from: inf, to: inf, min: 0, max: 0 },
+      side: 1,
+      aligned: true,
+      outlasts: true,
+      widen: { from: 100, to: 100, min: 3.5, max: 5.5 },
+      cut: { from: 0, to: 100, min: 3.5, max: 5.5 },
+      continues: false,
+      extend: { from: 0, to: 100, min: 0, max: 120 },
+    });
   });
 
   it("COMPILE.MODULE.BAND: the module gives the values of the interpreter for random records", () => {
@@ -144,12 +171,14 @@ describe("the band domain of ireko", () => {
       expect({ [name]: loaded(name).run(copyOf(ROWS), { gap: 4 }) }).toStrictEqual({ [name]: evaluated(program, ROWS, { gap: 4 }, loaded(name).VEX_ERROR) });
     }
     expect(loaded("sorted").run(ROWS, { gap: 4 })[2]).toStrictEqual({ from: 0, to: 40, min: 0, max: 120 });
-    // The third band moves by an infinite offset, so its item is an error, and the sort skips it.
-    const list = loaded("sortedList").run(ROWS, { gap: 4 })[0] as { readonly items: readonly { readonly key: string; readonly result: { readonly value: Band } }[] };
+    // The third band moves by an infinite offset, so its key is infinite, and the sort gives #NUM! (CALL.RESULT).
+    expect(loaded("sortedList").run(ROWS, { gap: 4 })).toStrictEqual(Array.from({ length: 4 }, () => loaded("sortedList").VEX_ERROR));
+    // The second band moves by a divide by zero, so its item is an error, and the sort skips it.
+    const list = loaded("sortedSkip").run(ROWS, { gap: 4 })[0] as { readonly items: readonly { readonly key: string; readonly result: { readonly value: Band } }[] };
     expect(list.items.map((item) => [item.key, item.result.value.from])).toStrictEqual([
-      ["0", 5],
-      ["1", 30],
-      ["3", 57.5],
+      ["0", 24],
+      ["3", 59.6],
+      ["2", 100],
     ]);
     expect(loaded("sortedStrict").run(ROWS, { gap: 4 })).toStrictEqual([-1, -1, -1, -1]);
   });
@@ -180,15 +209,41 @@ describe("the band domain of ireko", () => {
     expect(BandNumDomain.ops.band.fn(1, 2, 3, 4)).toStrictEqual({ from: 1, to: 2, min: 3, max: 4 });
   });
 
-  it("accepts only plain bands, checks that the fields are finite and keeps its laws", () => {
+  it("gives the steps of the sweep of mergeBands of ireko, also for infinite ends", () => {
+    const inf = Number.POSITIVE_INFINITY;
+    const o = BandDomain.ops;
+    const over: Band = { from: 0, to: inf, min: -inf, max: 5 };
+    const box: Band = { from: 3, to: 8, min: -1, max: inf };
+    // The end events of the two bands.
+    const overEnd: Band = { from: inf, to: inf, min: 0, max: 0 };
+    const boxEnd: Band = { from: 8, to: 8, min: 0, max: 0 };
+    // The filter of mergeBands: to > from and max >= min.
+    expect([over, box, { ...box, to: 3 }, { ...box, max: -2 }, { from: inf, to: inf, min: 0, max: 0 }].map((q) => o.sized.fn(q))).toStrictEqual([true, true, false, false, false]);
+    expect([o.end.fn(over), o.end.fn(box)]).toStrictEqual([overEnd, boxEnd]);
+    expect([{ ...over, from: -inf }, over, { ...over, from: inf }].map((q) => o.side.fn(q))).toStrictEqual([-1, 0, 1]);
+    expect([o.aligned.fn(over, { ...box, from: -0 }), o.aligned.fn(over, box), o.aligned.fn(overEnd, overEnd)]).toStrictEqual([true, false, true]);
+    // The filter of the open bands: b.to > from. An end at Infinity outlasts each finite position.
+    expect([o.outlasts.fn(over, boxEnd), o.outlasts.fn(box, boxEnd), o.outlasts.fn(over, overEnd)]).toStrictEqual([true, false, false]);
+    // widen keeps the field of its receiver for two equal values, so -0 stays before 0.
+    expect(o.widen.fn(over, box)).toStrictEqual({ from: 0, to: inf, min: -inf, max: inf });
+    expect(Object.is(o.widen.fn({ ...box, min: -0 }, { ...box, min: 0 }).min, -0)).toBe(true);
+    expect(o.cut.fn(box, over, overEnd)).toStrictEqual({ from: 0, to: inf, min: -1, max: inf });
+    expect([o.continues.fn(box, { from: 8, to: inf, min: -1, max: inf }), o.continues.fn(box, { ...box, from: 8, min: 0 })]).toStrictEqual([true, false]);
+    expect(o.extend.fn(box, over)).toStrictEqual({ from: 3, to: inf, min: -1, max: inf });
+  });
+
+  it("accepts only plain bands, refuses NaN fields, accepts infinite fields and keeps its laws", () => {
     expect([{ from: 0, to: 1, min: 0, max: 1 }, Object.assign(Object.create(null) as object, { from: 0, to: 1, min: 0, max: 1 })].map((u) => BandDomain.is(u))).toStrictEqual([true, true]);
     expect([{ from: 0, to: 1, min: 0 }, { from: 0, to: 1, min: 0, max: 1, x: 0 }, { from: "0", to: 1, min: 0, max: 1 }, { from: 0, to: "1", min: 0, max: 1 }, { from: 0, to: 1, min: "0", max: 1 }, { from: 0, to: 1, min: 0, max: "1" }, [0, 1, 0, 1], null, 1].map((u) => BandDomain.is(u))).toStrictEqual(Array.from({ length: 9 }, () => false));
     expect(["from", "to", "min", "max"].map((k) => BandDomain.valid?.({ from: 0, to: 1, min: 0, max: 1, [k]: Number.NaN }))).toStrictEqual([false, false, false, false]);
     expect(BandDomain.valid?.({ from: 0, to: 1, min: 0, max: 1 })).toBe(true);
+    // ireko keeps an infinite end on a band that overflows.
+    const infinities = [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+    expect(["from", "to", "min", "max"].flatMap((k) => infinities.map((value) => BandDomain.valid?.({ from: 0, to: 1, min: 0, max: 1, [k]: value })))).toStrictEqual(Array.from({ length: 8 }, () => true));
     expect(BandDomain.show?.({ from: 0, to: 40, min: -1, max: 2.5 })).toBe("[0, 40] at [-1, 2.5]");
-    expect(BandDomain.samples?.()).toHaveLength(4);
+    expect(BandDomain.samples?.()).toHaveLength(5);
     expect([1, -0, Number.NaN, "1", null].map((u) => BandNumDomain.is(u))).toStrictEqual([true, true, true, false, false]);
-    const small = fc.integer({ min: -20, max: 20 });
+    const small = fc.oneof(fc.integer({ min: -20, max: 20 }), fc.constantFrom(Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY));
     // fc.record can give an object without a prototype. The ops give plain objects, so the values of the check are plain too.
     expect(checkLaws(BandDomain, { arb: fc.record({ from: small, to: small, min: small, max: small }).map((r) => ({ ...r })) }).filter((r) => !r.ok)).toStrictEqual([]);
     expect(checkLaws(BandNumDomain, { arb: small, domains: [BandDomain] }).filter((r) => !r.ok)).toStrictEqual([]);

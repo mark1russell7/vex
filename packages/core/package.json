@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/vex",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Vex: typed spreadsheet formulas over domain objects. The kernel and the typed builder.",
   "keywords": [
     "typescript",

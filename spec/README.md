@@ -235,6 +235,16 @@ A layout rule often works along a main axis and a cross axis, for example the to
 - **[VEC2.SELECT]** `select(mask, a, b)` gives the component of `a` where the component of `mask` is not 0, and the component of `b` where it is 0. A number argument becomes a vector with that number twice.
 - **[VEC2.FINITE]** A `Vec2` with a component that is not finite is not valid, so an op that gives one gives `#NUM!`. Thus a bound cannot be infinite. An open bound uses `select`: `select(vec2(0, 1), max(v, lo), v)` bounds only y, and `select(hi, min(v, hi), v)` sets no bound where `hi` has a 0.
 
+### 7.2 The domain `JsonDomain`
+
+`JsonDomain` of `@mark1russell7/vex-domains` reads JSON data, for example the documents of a database. Each op is a function of plain data, so a standalone module can copy it. Put `JsonDomain` last in the list of domains. Then `add`, `eq` and the other ops of `NumDomain`, `TextDomain` and `BoolDomain` come first. The names `keys`, `get` and `values` are list ops, so the domain does not use them.
+
+- **[JSON.IS]** `JsonDomain` accepts a text, a finite number, a boolean, an array and a plain object. A plain object has the prototype `Object.prototype` or `null`. A list of Vex and the value of a class are not JSON values.
+- **[JSON.KIND]** `kind(v)` gives the kind of a JSON value: `"boolean"`, `"number"`, `"string"`, `"array"` or `"object"`.
+- **[JSON.KINDS]** `kinds(c)` gives the kind of each item of an array, in order, or of each field of an object, in the order of `fields`. A `null`, an `undefined` or a hole gives `"null"`. The result is an array with the repeats, and the list ops read it (LIST.ARRAY). An item that is not a JSON value gives `#CALC!`.
+- **[JSON.FIELDS]** `fields(o)` gives the keys of the object `o`, in the order of `Object.keys`. An array or another receiver that is not an object gives `#CALC!`.
+- **[JSON.FIELD]** `field(o, k)` gives the value of the own field `k` of the object `o`. A missing key, a field that is `null`, a key that is not a text and a receiver that is not an object give `#CALC!`. Thus an inherited member, for example `constructor`, is not a field.
+
 ## 8. The builder
 
 - **[BUILD.IMMUTABLE]** A builder call gives a new chain. An earlier chain does not change.
@@ -312,3 +322,4 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[EXAMPLE.NEAREST]** The minimum of the distances from the origin to the others is the distance to the nearest other record.
 - **[EXAMPLE.OFFSETS]** The reduction with `add` of the offsets from the origin to the others is the sum of the offsets.
 - **[EXAMPLE.TREE]** In a tree of people, the salary of a person plus the sum over `descendants` is the cost of the team of that person. The `count` over `ancestors` is the depth of the person.
+- **[EXAMPLE.SCHEMA]** A program of `JsonDomain` finds the schema of up to 20 JSON documents. It gives one record for each field path, in the order that the paths first occur. A record has the path, the distinct kinds and the count of the documents with the path. The program goes into an object that is not empty at a depth under 3, and it does not go into an array.

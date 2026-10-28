@@ -20,3 +20,4 @@ export * from "./loan.ts";
 export * from "./bom.ts";
 export * from "./grades.ts";
 export * from "./invoice.ts";
+export * from "./schema.ts";

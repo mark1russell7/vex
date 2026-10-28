@@ -20,6 +20,7 @@ npm install @mark1russell7/vex @mark1russell7/vex-domains
 | `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt`, `vec2`, `xy`, `date` |
 | `BoolDomain` | booleans | `and`, `or`, `xor`, `not` |
 | `TextDomain` | texts | `concat`, `length`, `upper`, `lower`, `trim`, `contains` |
+| `JsonDomain` | JSON data: texts, numbers, booleans, arrays and plain objects. Put it last. | `kind`, `kinds`, `fields`, `field` |
 | `ColorDomain` | `Color`: an RGB color | `mix`, `add`, `multiply`, `luminance`, `relativeLuminance`, `contrast` |
 | `AngleDomain` | `Angle`: an angle | `add`, `normalize`, `sin`, `cos`, `degrees` |
 | `FnDomain`, `MaybeDomain` | Two example domains: function wrappers and `Maybe` | `invoke`, `map`, `chain`, `valueOr` |

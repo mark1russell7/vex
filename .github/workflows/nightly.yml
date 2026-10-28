@@ -104,7 +104,9 @@ jobs:
       # The schema pilot of Graph in the interpreter (EXAMPLE.SCHEMA): the target is 5 ms for one sample. The step fails
       # only when a result is not the result of Graph. The time does not make it fail.
       - if: ${{ !cancelled() }}
-        run: BENCH_OUT=reports/schema-speed.json node packages/pilots/bench/schema-speed.ts | tee -a reports/bench.txt
+        run: COLD=1 BENCH_OUT=reports/schema-speed.json node packages/pilots/bench/schema-speed.ts | tee -a reports/bench.txt
+      - if: ${{ !cancelled() }}
+        run: BENCH_OUT=reports/schema-cold.json node packages/pilots/bench/schema-cold.ts | tee -a reports/bench.txt
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -112,6 +114,7 @@ jobs:
           path: |
             reports/bench.txt
             reports/schema-speed.json
+            reports/schema-cold.json
 
   typescript-next:
     name: typescript@next

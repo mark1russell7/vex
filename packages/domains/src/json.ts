@@ -12,12 +12,23 @@ export type JsonKind = "boolean" | "number" | "string" | "array" | "object";
 /** The kind of an item of an array or of a field of an object: the kind of a JSON value, or `"null"`. */
 export type JsonItemKind = JsonKind | "null";
 
+/**
+ * A leaf of the walk of `leaves` (JSON.LEAVES): the path of a field, the kind of its value, and the value. A leaf of the
+ * kind `"null"` has no value.
+ */
+export interface JsonLeaf {
+  readonly path: string;
+  readonly kind: JsonItemKind;
+  readonly value?: unknown;
+}
+
 /** The ops of `JsonDomain`. */
 export type JsonOps = {
   readonly kind: FnOp<JsonValue, (v: JsonValue) => JsonKind>;
   readonly kinds: FnOp<JsonValue, (c: JsonValue) => readonly JsonItemKind[]>;
   readonly fields: FnOp<JsonValue, (o: JsonValue) => readonly string[]>;
   readonly field: FnOp<JsonValue, (o: JsonValue, k: unknown) => unknown>;
+  readonly leaves: FnOp<JsonValue, (o: JsonValue, depth: number) => readonly JsonLeaf[]>;
 };
 
 /**
@@ -75,6 +86,35 @@ export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json
       },
       params: ["any"],
       returns: "any",
+    },
+    // The walk of the schema of Graph as a flat list (JSON.LEAVES). The function reads no name outside itself, so a
+    // module can copy it. A stack of the objects, not recursion, keeps the order of a recursive walk.
+    leaves: {
+      fn: (o: JsonValue, depth: number): readonly JsonLeaf[] => {
+        if (typeof o !== "object" || Array.isArray(o)) throw new Error(`"leaves" needs an object, not ${Array.isArray(o) ? "an array" : `a ${typeof o}`}`);
+        if (!Number.isSafeInteger(depth) || depth < 1 || depth > 100) throw new Error(`"leaves" needs a depth that is a whole number from 1 to 100, not ${String(depth)}`);
+        const out: JsonLeaf[] = [];
+        const stack = [{ at: o as Readonly<Record<string, unknown>>, keys: Object.keys(o), next: 0, prefix: "", level: 1 }];
+        for (let top = stack.at(-1); top !== undefined; top = stack.at(-1)) {
+          const key = top.keys[top.next++];
+          if (key === undefined) {
+            stack.pop();
+            continue;
+          }
+          const x = top.at[key];
+          const path = top.prefix === "" ? key : `${top.prefix}.${key}`;
+          let kind: JsonItemKind;
+          if (x === null || x === undefined) kind = "null";
+          else if (Array.isArray(x)) kind = "array";
+          else if (typeof x === "string" || typeof x === "boolean" || Number.isFinite(x) || [Object.prototype, null].includes(Object.getPrototypeOf(x) as object | null)) kind = typeof x as JsonKind;
+          else throw new Error(`"leaves" found a value that is not JSON at the path "${path}"`);
+          const inner = kind === "object" && top.level < depth ? Object.keys(x as object) : [];
+          if (inner.length > 0) stack.push({ at: x as Readonly<Record<string, unknown>>, keys: inner, next: 0, prefix: path, level: top.level + 1 });
+          else out.push(Object.freeze(kind === "null" ? { path, kind } : { path, kind, value: x }));
+        }
+        return Object.freeze(out);
+      },
+      params: ["number"],
     },
   },
 });

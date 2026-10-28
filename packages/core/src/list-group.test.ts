@@ -42,6 +42,9 @@ const expectSame = (e: Expr, want: unknown, vars?: Readonly<Record<string, unkno
   expect(both(e, vars, opts)).toEqual([want, want]);
 };
 
+/** This function gives the kind of the error of a result. */
+const kindOf = (r: { readonly ok: boolean; readonly error?: { readonly kind: string } }): unknown => r.error?.kind;
+
 /** This function checks the code of both tiers, and the message of each tier. */
 const expectFails = (e: Expr, code: string, messages: readonly [string, string], vars?: Readonly<Record<string, unknown>>): void => {
   expect(both(e, vars)).toEqual([
@@ -50,7 +53,6 @@ const expectFails = (e: Expr, code: string, messages: readonly [string, string],
   ]);
   // A #VALUE! of these ops has the kind kind-mismatch in both tiers.
   if (code !== "#VALUE!") return;
-  const kindOf = (r: { readonly ok: boolean; readonly error?: { readonly kind: string } }): unknown => r.error?.kind;
   const at = { space: rows, origin: "0", vars: vars ?? {} };
   expect([kindOf(evaluate(e, { ...OPTS, ...at })), kindOf(kernelPlan(e, OPTS).run(at))]).toEqual(["kind-mismatch", "kind-mismatch"]);
 };

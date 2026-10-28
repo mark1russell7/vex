@@ -114,7 +114,7 @@ The moves are `key(k)`, `index(i)`, `offset(...d)`, `other`, `origin` and `paren
 
 A list is a value. Bind it with `let_`, sort it with `sortBy`, and loop over its items in their order with `axes.list(v(name))`. To sort by an op, write `sortBy(list, { by: "from" })` (the next release). `take(list, n)` gives the first items, and `nth(list, i)` gives one value.
 
-Over `axes.list`, the argument `as: [item, index]` of `each` and `fold` names the value of each item and its position (the next release). The test of `where` does not see these names. In the builder, a list chain has `sortBy()`, `take(n)`, `nth(i)` and `each(body)`, and `root.fn(kinds, body)` with `functions(fns, body)` makes and binds functions.
+Over `axes.list`, the argument `as: [item, index]` of `each` and `fold` names the value of each item and its position (the next release). The test of `where` does not see these names. In the builder, the body of `each` of a list chain gets the item and the index after the chain of the target. Thus `sizes.each((c, w, i) => w._.multiply(i))` gives each size times its index. The step of `fold` gets the index after the item (the next release). A list chain also has `sortBy()`, `take(n)`, `nth(i)` and `each(body)`, and `root.fn(kinds, body)` with `functions(fns, body)` makes and binds functions.
 
 Four list ops build lists. Each item keeps its key and its value. `drop(list, n)` gives the items after the first `n` items. `append(list, other)` joins two lists. `without(list, other)` removes the items with a key of `other`. `flat(list)` joins the lists that are the values of the items.
 

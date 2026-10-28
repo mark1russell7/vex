@@ -92,6 +92,16 @@ byW.each((t) => t.from("n")).values().at("0"); // => some([10, 20, 30])
 byW.nth(0).at("0"); // => some(1)
 ```
 
+The body of `each` of a list chain also gets a chain of the item and a chain of its index, from 0 (BUILD.LIST.ITEM). In `fold`, the step gets the index after the item. The builder writes the field `as` of the IR only for the names that the body or the step reads.
+
+```ts doctest
+const rows = vex(NumDomain).over(space.array([{ w: 3 }, { w: 1 }, { w: 2 }]));
+const byW = rows.start(0).each((c) => c.from("w")).sortBy();
+
+byW.each((_c, w, i) => w._.multiply(10)._.add(i)).values().at("0"); // => some([10, 21, 32])
+byW.each((_c, w) => w).fold({ s: 0 }, (x, w, i) => ({ s: x.s._.add(w._.multiply(i)) }), (x) => x.s).at("0"); // => some(8)
+```
+
 A list chain also builds lists: `drop(n)`, `append(other)`, `without(other)` and `flat()`. The argument `other` is a list chain. The body of an axis can give a list chain. Then the value of each item is a list, and `flat()` joins these lists in order.
 
 ```ts doctest

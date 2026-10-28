@@ -243,6 +243,7 @@ A layout rule often works along a main axis and a cross axis, for example the to
 - **[JSON.KIND]** `kind(v)` gives the kind of a JSON value: `"boolean"`, `"number"`, `"string"`, `"array"` or `"object"`.
 - **[JSON.KINDS]** `kinds(c)` gives the kind of each item of an array, in order, or of each field of an object, in the order of `fields`. A `null`, an `undefined` or a hole gives `"null"`. The result is an array with the repeats, and the list ops read it (LIST.ARRAY). An item that is not a JSON value gives `#CALC!`.
 - **[JSON.FIELDS]** `fields(o)` gives the keys of the object `o`, in the order of `Object.keys`. An array or another receiver that is not an object gives `#CALC!`.
+- **[JSON.LEAVES]** `leaves(o, depth)` gives the leaves of the object `o`, in the order of a walk over its own fields, as `fields` reads them. The walk goes into an object with fields when the path of its field has fewer than `depth` keys. Each leaf is a record `{ path, kind, value }` with the kind of `kinds`, and a `"null"` leaf has no `value`. A path joins the keys with `.`, but after an empty path it is the key alone. A number `depth` that is not a whole number from 1 to 100 gives `#CALC!`. A receiver that is not an object, and a value that is not JSON, give `#CALC!` too.
 - **[JSON.FIELD]** `field(o, k)` gives the value of the own field `k` of the object `o`. A missing key, a field that is `null`, a key that is not a text and a receiver that is not an object give `#CALC!`. Thus an inherited member, for example `constructor`, is not a field.
 
 ## 8. The builder

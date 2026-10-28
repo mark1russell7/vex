@@ -35,7 +35,7 @@ LocalDate.of(2026, 13, 1).toString(); // => "2027-01-01"
 
 `JsonDomain` reads JSON data, for example the documents of a database. It accepts texts, finite numbers, booleans, arrays and plain objects. Put it last in the list of domains. Then `add` and `eq` go to the domains of numbers and texts first. `kind` gives the kind of a value. `kinds` gives the kind of each item or field, with `"null"` for `null`. `fields` gives the keys of an object, and `field` gives the value of one key.
 
-The schema pilot of `@vex/pilots` uses these ops. Its program gives one record for each field path of the documents, with the distinct kinds and the count of the documents with the path.
+`leaves(o, depth)` gives the leaves of the object `o` as a list of records with a `path`, a `kind` and a `value`. The walk goes into an object with fields while the path has fewer than `depth` keys. The schema pilot of `@vex/pilots` uses these ops. Its program gives one record for each field path of the documents, with the distinct kinds and the count of the documents with the path.
 
 ```ts doctest
 import { schemaOf } from "@vex/pilots";
@@ -43,5 +43,6 @@ import { schemaOf } from "@vex/pilots";
 const docs = [{ _id: "a", n: 1, tags: ["x"], o: { p: true } }, { _id: "b", n: "2", o: {} }];
 
 JsonDomain.ops.kinds.fn({ a: 1, b: null, c: [] }); // => ["number", "null", "array"]
+JsonDomain.ops.leaves.fn({ a: { b: 1 }, c: null }, 3); // => [{ path: "a.b", kind: "number", value: 1 }, { path: "c", kind: "null" }]
 schemaOf(docs).map((f) => `${f.path} ${f.kinds.join(",")} ${f.count}`); // => ["_id string 2", "n number,string 2", "tags array<string> 1", "o.p boolean 1", "o object 1"]
 ```

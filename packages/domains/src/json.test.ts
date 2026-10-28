@@ -12,7 +12,7 @@ const run = (self: unknown, op: string, ...args: readonly unknown[]): Result<unk
 const value = (r: Result<unknown>): unknown => (r.ok ? r.value : `${r.error.code} ${r.error.kind}`);
 /** The message of the exception of an op that threw, or the value of the op. */
 const thrown = (r: Result<unknown>): unknown => (r.ok ? r.value : r.error.thrown instanceof Error ? r.error.thrown.message : `${r.error.code} ${r.error.kind}`);
-const { kind, kinds, fields, field } = JsonDomain.ops;
+const { kind, kinds, fields, field, leaves } = JsonDomain.ops;
 
 describe("the domain of JSON values (JsonDomain)", () => {
   it("JSON.IS: accepts texts, finite numbers, booleans, arrays and plain objects, and nothing else", () => {
@@ -92,6 +92,72 @@ describe("the domain of JSON values (JsonDomain)", () => {
     expect(value(run({ a: 1 }, "field", "b"))).toBe("#CALC! threw");
   });
 
+  it("JSON.LEAVES: gives a leaf for each field in the order of a walk, and goes into an object with fields under the depth", () => {
+    const doc = { _id: "a", n: 1, tags: ["x", 2], o: { p: true, q: { r: { s: 1 } }, e: {} }, z: null, u: undefined };
+    expect(leaves.fn(doc, 3)).toEqual([
+      { path: "_id", kind: "string", value: "a" },
+      { path: "n", kind: "number", value: 1 },
+      { path: "tags", kind: "array", value: ["x", 2] },
+      { path: "o.p", kind: "boolean", value: true },
+      // The path o.q.r has 3 keys, so the walk does not go into its object.
+      { path: "o.q.r", kind: "object", value: { s: 1 } },
+      { path: "o.e", kind: "object", value: {} },
+      { path: "z", kind: "null" },
+      { path: "u", kind: "null" },
+    ]);
+    // A leaf of the kind null has no field value.
+    expect(Object.keys(leaves.fn({ z: null }, 1)[0] ?? {})).toEqual(["path", "kind"]);
+    expect(leaves.fn(doc, 1).map((l) => l.path)).toEqual(["_id", "n", "tags", "o", "z", "u"]);
+    expect(leaves.fn(doc, 2).map((l) => l.path)).toEqual(["_id", "n", "tags", "o.p", "o.q", "o.e", "z", "u"]);
+    expect(leaves.fn(doc, 4).map((l) => l.path)).toEqual(["_id", "n", "tags", "o.p", "o.q.r.s", "o.e", "z", "u"]);
+    expect(leaves.fn(doc, 100).map((l) => l.path)).toEqual(["_id", "n", "tags", "o.p", "o.q.r.s", "o.e", "z", "u"]);
+    expect(leaves.fn({}, 3)).toEqual([]);
+    // The result and each leaf are frozen.
+    const out = leaves.fn(doc, 3);
+    expect([Object.isFrozen(out), out.every((l) => Object.isFrozen(l))]).toEqual([true, true]);
+  });
+
+  it("JSON.LEAVES: reads own fields only, with the keys __proto__ and constructor, and after an empty path the path is the key alone", () => {
+    const parsed = JSON.parse('{"b":{"1":2,"a":[null]},"__proto__":{"p":1},"":{"q":{"":3}},"constructor":"c"}') as JsonValue;
+    expect(leaves.fn(parsed, 3)).toEqual([
+      { path: "b.1", kind: "number", value: 2 },
+      { path: "b.a", kind: "array", value: [null] },
+      { path: "__proto__.p", kind: "number", value: 1 },
+      // After the empty path of the key "", the path is the key q alone. The empty key after q adds the dot.
+      { path: "q.", kind: "number", value: 3 },
+      { path: "constructor", kind: "string", value: "c" },
+    ]);
+    expect(leaves.fn(Object.assign(Object.create(null) as object, { k: Object.assign(Object.create(null) as object, { m: 0 }) }) as JsonValue, 2)).toEqual([{ path: "k.m", kind: "number", value: 0 }]);
+    // An inherited field is not a field.
+    expect(leaves.fn(Object.create({ inherited: 1 }) as JsonValue, 3)).toEqual([]);
+  });
+
+  it("JSON.LEAVES: a receiver that is not an object, a bad depth or a value that is not JSON throws, and the interpreter gives #CALC!", () => {
+    expect(() => leaves.fn([1], 3)).toThrow('"leaves" needs an object, not an array');
+    expect(() => leaves.fn("ab", 3)).toThrow('"leaves" needs an object, not a string');
+    for (const d of [0, -1, 1.5, 101, Number.NaN]) expect(() => leaves.fn({ a: 1 }, d)).toThrow(`"leaves" needs a depth that is a whole number from 1 to 100, not ${String(d)}`);
+    expect(leaves.fn({ a: 1 }, 1)).toEqual([{ path: "a", kind: "number", value: 1 }]);
+    for (const bad of [Number.NaN, new Vec2(1, 2), (): number => 1, 1n]) expect(() => leaves.fn({ a: { b: bad } }, 3)).toThrow('"leaves" found a value that is not JSON at the path "a.b"');
+    // A cycle of objects stops at the depth.
+    const cycle: Record<string, unknown> = { n: 1 };
+    cycle["self"] = cycle;
+    expect(leaves.fn(cycle as JsonValue, 3).map((l) => l.path)).toEqual(["n", "self.n", "self.self.n", "self.self.self"]);
+    expect(value(run({ a: { b: 1 }, c: [] }, "leaves", 3))).toEqual([{ path: "a.b", kind: "number", value: 1 }, { path: "c", kind: "array", value: [] }]);
+    expect(thrown(run({ a: 1 }, "leaves", 0))).toBe('"leaves" needs a depth that is a whole number from 1 to 100, not 0');
+    expect(value(run([], "leaves", 3))).toBe("#CALC! threw");
+    expect(value(run({ a: 1 }, "leaves", "3"))).toBe("#VALUE! kind-mismatch");
+    // The result is an array of records, so the list ops and the axis list read it (LIST.ARRAY).
+    expect(value(evaluate(app("count", app("leaves", lit({ a: { b: 1, c: 2 } }), lit(3))), { space: ONE, origin: "A", domains: DOMAINS }))).toBe(2);
+  });
+
+  it("JSON.LEAVES: the function reads no name outside itself, so a copy of its source gives the same leaves", () => {
+    // oxlint-disable-next-line typescript/no-implied-eval -- the test copies the source of the op, as a module does.
+    const copy = new Function(`"use strict"; return (${Function.prototype.toString.call(leaves.fn)});`) as () => typeof leaves.fn;
+    const doc = JSON.parse('{"a":{"b":[1],"c":{"d":null}},"":{"e":"x"}}') as JsonValue;
+    expect(copy()(doc, 3)).toEqual(leaves.fn(doc, 3));
+    expect(() => copy()([], 3)).toThrow('"leaves" needs an object, not an array');
+  });
+
   it("JSON.IS: with JsonDomain last, add, eq and concat still go to the scalar domains, and a list op still reads an array", () => {
     expect([value(run(2, "add", 3)), value(run(2, "eq", 2)), value(run("a", "eq", "a")), value(run(true, "eq", false))]).toEqual([5, true, true, false]);
     expect([value(run("a", "concat", [1])), value(run("ab", "length")), value(run([1, 2, 3], "sum")), value(run([3, 1], "min"))]).toEqual(["a1", 2, 6, 1]);
@@ -102,7 +168,7 @@ describe("the domain of JSON values (JsonDomain)", () => {
   });
 
   it("declares the parameters and the results of its ops, and its samples are JSON values", () => {
-    expect([kind.params, kind.returns, kinds.params, kinds.returns, fields.params, fields.returns, field.params, field.returns]).toEqual([[], "string", [], undefined, [], undefined, ["any"], "any"]);
+    expect([kind.params, kind.returns, kinds.params, kinds.returns, fields.params, fields.returns, field.params, field.returns, leaves.params, leaves.returns]).toEqual([[], "string", [], undefined, [], undefined, ["any"], "any", ["number"], undefined]);
     const samples = JsonDomain.samples?.() ?? [];
     expect(samples).toEqual([{ a: 1, b: [true, null], c: { d: "x" } }, [1, "x", null, [2]], "x", 2, false]);
     expect(samples.every((s) => JsonDomain.is(s))).toBe(true);

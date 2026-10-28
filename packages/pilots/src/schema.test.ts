@@ -1,4 +1,5 @@
 import * as fc from "fast-check";
+import { JsonDomain, type JsonValue } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { schemaOf, type FieldSchema } from "./schema.ts";
 
@@ -33,6 +34,20 @@ function inferSchema(docs: readonly unknown[]): FieldSchema[] {
     if (isRec(d)) walk(d, "", 1, i);
   });
   return [...fields].map(([path, f]) => ({ path, kinds: [...f.kinds], count: f.docs.size }));
+}
+
+/** The notes of the walk of `inferSchema` for one document: the path and the kind of each leaf, in the order of the walk. */
+function graphNotes(doc: Readonly<Record<string, unknown>>): readonly (readonly [string, string, unknown])[] {
+  const out: (readonly [string, string, unknown])[] = [];
+  const walk = (val: Readonly<Record<string, unknown>>, prefix: string, depth: number): void => {
+    for (const [key, v] of Object.entries(val)) {
+      const p = prefix ? `${prefix}.${key}` : key;
+      if (isRec(v) && Object.keys(v).length && depth < 3) walk(v, p, depth + 1);
+      else out.push([p, valueKind(v), v ?? undefined]);
+    }
+  };
+  walk(doc, "", 1);
+  return out;
 }
 
 // The pilots have no types of Node, so the test reads the clock and the log through globalThis.
@@ -100,6 +115,18 @@ describe("the schema pilot", () => {
         expect(schemaOf(docs)).toEqual(inferSchema(docs));
       }),
       { numRuns: 100 },
+    );
+  });
+
+  it("JSON.LEAVES: leaves(d, 3) of JsonDomain gives the walk of inferSchema of Graph for random JSON documents", () => {
+    fc.assert(
+      fc.property(docsArb, (docs) => {
+        for (const d of docs.filter(isRec)) {
+          const notes = JsonDomain.ops.leaves.fn(d as JsonValue, 3).map((l) => [l.path, l.kind === "array" ? valueKind(l.value) : l.kind, l.value] as const);
+          expect(notes).toEqual(graphNotes(d));
+        }
+      }),
+      { numRuns: 200 },
     );
   });
 

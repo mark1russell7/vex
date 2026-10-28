@@ -206,3 +206,4 @@ Json (fromScalar -, valid -, encode -, methods -)
   kinds() | no lift | no laws | no identity | fn
   fields() | no lift | no laws | no identity | fn
   field(any) | no lift | no laws | no identity | fn
+  leaves(number) | no lift | no laws | no identity | fn

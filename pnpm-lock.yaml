@@ -240,8 +240,8 @@ importers:
   packages/core:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.9.0
+        version: 0.9.0
     devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue
@@ -310,7 +310,7 @@ importers:
     dependencies:
       '@mark1russell7/service':
         specifier: ^0.6.0
-        version: 0.6.1(ws@8.22.0)(zod@4.6.7)
+        version: 0.6.2(ws@8.22.0)(zod@4.6.7)
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -551,8 +551,8 @@ importers:
   tools/mutation:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.9.0
+        version: 0.9.0
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains
@@ -1586,6 +1586,9 @@ packages:
   '@mark1russell7/coeval@0.8.0':
     resolution: {integrity: sha512-luTZVua8cwNkVpC6ERtL90ukaXLtmye/RvSf3WXmFSNvDaiLRDYE6YQwuJDkUjYWhRBJ+u7lVkr0JhDpiFErhw==}
 
+  '@mark1russell7/coeval@0.9.0':
+    resolution: {integrity: sha512-V4eUVtC9i0xngEXEkBICa52QVPm4BDUhPJEP7QevsErpnlxhv8VkBmY/wnLUa1l4HBgKDyp8QDqxPxjkn5/E5g==}
+
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7':
     resolution: {gitHosted: true, integrity: sha512-hEpr79iwUOLCP6Pn6m8KHq200u4c2jM1npz+SIJQGrrT1fdUUAwgKCZgwOPiyiH5SA4QPXID7f1wCDz7T9HP7A==, tarball: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7}
     version: 1.0.0
@@ -1618,8 +1621,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.6.1':
-    resolution: {integrity: sha512-vmh3SHgsWbXe6jFsV6pBFLTF05rhqIVtPBrYjYW7Eu+u/BZIwsXwuUXWewNJwimJx5a42ZpWkpZpX140WQYMMg==}
+  '@mark1russell7/service@0.6.2':
+    resolution: {integrity: sha512-BnXOzHMdSPHs8Xh42qVXODxZRZE5iX3hdwoY6aDFxo4k5mCWWQSzRTChr+ly0gCtlLG6eNS+i1UkYR70Ox1yjg==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -5547,6 +5550,8 @@ snapshots:
 
   '@mark1russell7/coeval@0.8.0': {}
 
+  '@mark1russell7/coeval@0.9.0': {}
+
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7': {}
 
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/da04dd56699a2ae806ab64da5b1d677476afe69e': {}
@@ -5559,7 +5564,7 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/service@0.6.1(ws@8.22.0)(zod@4.6.7)':
+  '@mark1russell7/service@0.6.2(ws@8.22.0)(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.8.0(zod@4.6.7)
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
@@ -5726,7 +5731,7 @@ snapshots:
       '@mark1russell7/algebra': 0.8.0(zod@4.6.7)
       '@mark1russell7/coeval': 0.8.0
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
-      '@mark1russell7/service': 0.6.1(ws@8.22.0)(zod@4.6.7)
+      '@mark1russell7/service': 0.6.2(ws@8.22.0)(zod@4.6.7)
       '@types/ws': 8.18.2
       ws: 8.22.0
       zod: 4.6.7

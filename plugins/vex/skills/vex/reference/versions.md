@@ -43,7 +43,8 @@ The four packages `vex`, `vex-domains`, `vex-testkit` and `vex-compiler` have on
 | The option `by` of `sortBy`: the items in the order of the results of an op on their values, also in a standalone module | 0.13.4 |
 | The names of a loop over a list: the field `as: [item, index]` of `each` and `fold`, also in a standalone module and in the builder | 0.14.0 |
 | `JsonDomain`: the ops `kind`, `kinds`, `fields` and `field` over JSON values | 0.14.0 |
-| The list ops `distinct(list)`, `group(list, keys)` and `join(list, sep)`, and the list chain methods `distinct()`, `group(keys)` and `join(sep)` | the next release |
-| `leaves(o, depth)` of `JsonDomain`: the walk of an object as a list of leaves with a path, a kind and a value | the next release |
+| The list ops `distinct(list)`, `group(list, keys)` and `join(list, sep)`, and the list chain methods `distinct()`, `group(keys)` and `join(sep)` | 0.15.0 |
+| `leaves(o, depth)` of `JsonDomain`: the walk of an object as a list of leaves with a path, a kind and a value | 0.15.0 |
+| The schema program of JSON documents in `vex-domains`: `SCHEMA_PROGRAM`, `SCHEMA_DOMAINS`, `schemaOf(docs)` and the type `JsonFieldSchema` | the next release |
 
 A feature of the main branch that is not on npm yet has the version "the next release". Until it is on npm, a project can use it only from a local copy of the repository, for example with `pnpm link`. Do not write a workaround for a missing feature without a note. Tell the user which version has it.

@@ -69,7 +69,8 @@ function parent(): void {
   }
   const stats = Object.fromEntries(
     PARTS.map((part) => {
-      const ts = runs.map((r) => r[part]).toSorted((a, b) => a - b);
+      const ts = runs.map((r) => r[part]);
+      ts.sort((a, b) => a - b);
       return [part, { median: ts[Math.floor(ts.length / 2)] ?? Number.NaN, low: ts[0] ?? Number.NaN, high: ts.at(-1) ?? Number.NaN }];
     }),
   );

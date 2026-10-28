@@ -1,5 +1,5 @@
 import { defineDomain, type OpTable } from "@mark1russell7/vex";
-import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, JsonDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { assertLaws, checkLaws, structuralEqual } from "./laws.ts";
@@ -29,6 +29,12 @@ describe("P4 DOMAIN.LAWS: each declared law of each domain holds", () => {
   });
   it("XY", () => {
     expect(checkLaws(XYDomain, { arb: fc.tuple(small, small).map(([x, y]) => ({ x, y })) }).filter((r) => !r.ok)).toEqual([]);
+  });
+  it("Json: kind gives a text, and field gives a value", () => {
+    const arb = fc.oneof(fc.string({ maxLength: 4 }), small, fc.boolean(), fc.array(small, { maxLength: 3 }), fc.dictionary(fc.string({ maxLength: 2 }), small, { maxKeys: 3 }));
+    const results = checkLaws(JsonDomain, { arb, numRuns: 50 });
+    expect(results.map((r) => r.name)).toEqual(["Json.kind returns string", "Json.field returns any"]);
+    expect(results.filter((r) => !r.ok)).toEqual([]);
   });
   it("KIND.RETURNS: a result of the kind domain:Name is a value of the domain Name of the option domains", () => {
     // With the domain XY, the checker checks the op xy of NumDomain. Without it, the checker cannot check that op.

@@ -7,7 +7,7 @@
  * argument, and it gives the kind of the value.
  */
 import { domainOf, type AnyDomain, type OpSpec, type ParamKind } from "@mark1russell7/vex";
-import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, LiftedNDVectorDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, JsonDomain, LiftedNDVectorDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
 /** A domain of the catalog: its import name, the domain, the type of its values, a sample value and a short description. */
 export interface Entry {
@@ -31,16 +31,19 @@ export const CATALOG: readonly Entry[] = [
   { name: "ColorDomain", d: ColorDomain, type: "Color", sample: new Color(0.2, 0.4, 0.6), about: "RGB colors, with the WCAG ops of contrast." },
   { name: "AngleDomain", d: AngleDomain, type: "Angle", sample: Angle.fromDegrees(30), about: "Angles." },
   { name: "DateDomain", d: DateDomain, type: "LocalDate", sample: LocalDate.of(2026, 10, 16), about: "Days of the calendar, without a time. `date` of `NumDomain` makes a date." },
+  { name: "JsonDomain", d: JsonDomain, type: "JSON value", sample: { a: 1, b: [true, null] }, about: "JSON data: texts, finite numbers, booleans, arrays and plain objects, for example the documents of a database. Each op is a function, so a standalone module can copy the domain. Put it last, so that `add`, `eq` and the other ops of `NumDomain`, `TextDomain` and `BoolDomain` come first. `kinds` gives `\"null\"` for a `null` item. `field` of a missing key or of a `null` field gives `#CALC!`." },
 ];
 
 const ALL = CATALOG.map((x) => x.d);
 
 /** This function gives the type of a value: the type of its domain, or its JavaScript type. */
 function typeOf(u: unknown): string {
+  // An array is a list for the list ops (LIST.ARRAY), also when JsonDomain accepts it.
+  if (Array.isArray(u)) return "list";
   const d = domainOf(ALL, u);
   const entry = CATALOG.find((x) => x.d === d);
   if (entry !== undefined) return entry.type;
-  return Array.isArray(u) ? "list" : typeof u;
+  return typeof u;
 }
 
 /** This function gives a sample of a parameter. */
@@ -69,7 +72,8 @@ function resultOf(self: Entry, name: string, spec: OpSpec<unknown>): string {
   if (spec.returns === "domain") return self.type;
   // A result of another domain has the type of that domain.
   if (spec.returns?.startsWith("domain:") === true) return CATALOG.find((x) => `domain:${x.d.name}` === spec.returns)?.type ?? spec.returns;
-  if (spec.returns !== undefined && spec.returns !== "any") return spec.returns;
+  if (spec.returns === "any") return "value";
+  if (spec.returns !== undefined) return spec.returns;
   const params = paramsOf(self, name, spec);
   if (params === undefined) return "not declared";
   const args = params.map((k) => sampleOf(k, self));

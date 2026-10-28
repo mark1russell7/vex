@@ -289,3 +289,14 @@ Days of the calendar, without a time. `date` of `NumDomain` makes a date. The va
 | `lt` | `lt(LocalDate, LocalDate)` | boolean |  |  |  |
 | `lte` | `lte(LocalDate, LocalDate)` | boolean |  |  |  |
 | `eq` | `eq(LocalDate, LocalDate)` | boolean |  | commutative |  |
+
+## `JsonDomain`
+
+JSON data: texts, finite numbers, booleans, arrays and plain objects, for example the documents of a database. Each op is a function, so a standalone module can copy the domain. Put it last, so that `add`, `eq` and the other ops of `NumDomain`, `TextDomain` and `BoolDomain` come first. `kinds` gives `"null"` for a `null` item. `field` of a missing key or of a `null` field gives `#CALC!`. The values are of the type `JSON value`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `kind` | `kind(JSON value)` | string |  |  |  |
+| `kinds` | `kinds(JSON value)` | list |  |  |  |
+| `fields` | `fields(JSON value)` | list |  |  |  |
+| `field` | `field(JSON value, value)` | value |  |  |  |

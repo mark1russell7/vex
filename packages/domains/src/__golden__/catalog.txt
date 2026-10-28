@@ -200,3 +200,9 @@ Maybe (fromScalar -, valid -, encode -, methods -)
   map(?) | no lift | no laws | no identity | method
   chain(?) | no lift | no laws | no identity | method
   valueOr(?) | no lift | no laws | no identity | method
+
+Json (fromScalar -, valid -, encode -, methods -)
+  kind() | no lift | no laws | no identity | fn
+  kinds() | no lift | no laws | no identity | fn
+  fields() | no lift | no laws | no identity | fn
+  field(any) | no lift | no laws | no identity | fn

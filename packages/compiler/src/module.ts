@@ -58,6 +58,13 @@ export interface ModuleOptions {
    * (COMPILE.MODULE.FUSE.OFF). The default is true. In this version, the two values print the same code.
    */
   readonly fuse?: boolean;
+  /**
+   * The form of the lists of the input and of the result (COMPILE.MODULE.LIST.PLAIN). The default `envelope` gives each
+   * list as a `vex.list`. With `plain`, a list is an array of the values of its items, and an error item is `VEX_ERROR`.
+   * The key of an item of the input is the text of its position, and the result has no keys. A list in a record or in
+   * an argument of an op stays a `vex.list`.
+   */
+  readonly lists?: "envelope" | "plain";
 }
 
 /** The options of a module of a sheet (COMPILE.MODULE.SHEET): the options of a module, and the parts of a sheet. */
@@ -350,13 +357,13 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
  * lists that the facts prove clean. Thus it has no scan of `V`, no `VW` and no test of the sentinel.
  */
-type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LVC";
+type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LVC" | "LPC";
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX";
@@ -368,7 +375,7 @@ type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
 type GraphHelper = "GR" | "GI" | "RB";
 
 /** The helpers of a sheet (COMPILE.MODULE.SHEET): the state of a run of a sheet, and the order of the keys of a tree. */
-type SheetHelper = "SH" | "KO" | "DO" | "LO" | "LC" | "LV";
+type SheetHelper = "SH" | "KO" | "DO" | "LO" | "LC" | "LV" | "LCP";
 
 /** The helpers of the generated code. A module has only the helpers that it uses. */
 const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
@@ -464,6 +471,26 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "      if (r.ok !== false || typeof e !== \"object\" || e === null || typeof e.code !== \"string\" || typeof e.kind !== \"string\" || typeof e.message !== \"string\" || !Array.isArray(e.path) || e.kind === \"depth\") return undefined;",
     "      o.push([it.key, E]);",
     "    }",
+    "  }",
+    "  return o;",
+    "}",
+  ].join("\n"),
+  // A plain list of a field of the input (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with arrays to
+  // the depth `h`. The key of an item is its position. The value VEX_ERROR is an error item, also if `t` accepts it.
+  // Another value gives undefined, so the check of the run fails.
+  LA: [
+    "function LA(x, h, t) {",
+    "  if (!Array.isArray(x)) return undefined;",
+    "  const o = [];",
+    "  for (let i = 0; i < x.length; i++) {",
+    "    const y = x[i];",
+    "    if (y === VEX_ERROR) {",
+    "      o.push([i, E]);",
+    "      continue;",
+    "    }",
+    "    const v = h > 0 ? LA(y, h - 1, t) : y !== undefined && t(y) ? y : undefined;",
+    "    if (v === undefined) return undefined;",
+    "    o.push([i, v]);",
     "  }",
     "  return o;",
     "}",
@@ -620,6 +647,9 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
   // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
   LO: 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
+  // A plain list of a result (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with no keys. An error
+  // item is VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
+  LP: "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
   // A list in an argument of an op or in a field of a record (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD): a frozen
   // `vex.list`, as the interpreter gives. The array keeps it, so each later read of the list gives the same object.
   LV: [
@@ -693,6 +723,7 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   NTC: "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
   FSC: "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
   LOC: 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
+  LPC: "function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }",
   // LV and LVC keep one object on the array. A clean list gives the same object from both.
   LVC: [
     "function LVC(l, h) {",
@@ -706,6 +737,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`.
   LC: "function LC(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LO(d[k], h); return d; }",
+  // A plain column of lists (COMPILE.MODULE.LIST.PLAIN): each cell with a list gives an array.
+  LCP: "function LCP(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LP(d[k], h); return d; }",
   SH: [
     "function SH(n, cols, own, budget) {",
     "  const pg = (c, k) => {",
@@ -993,17 +1026,20 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
-  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], VW: [], NT: ["VW", "F"], CT: ["VW", "F"], FS: ["VW", "F"], FI: ["F"], LI: [],
+  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], VW: [], NT: ["VW", "F"], CT: ["VW", "F"], FS: ["VW", "F"], FI: ["F"], LI: [], LA: [], LP: [],
   DR: ["V", "F"], AP: ["V"], AO: ["AP", "V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
-  SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [],
-  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LVC: [],
+  SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [], LCP: ["LP"],
+  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LVC: [], LPC: [],
   SBI: ["F"], SKI: ["F"],
 };
+
+/** The clean form of each helper that gives a list of the code to the outside (COMPILE.MODULE.FUSE.CLEAN). */
+const CLEAN_FORMS = { LO: "LOC", LV: "LVC", LP: "LPC" } as const;
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
 type TreePart = "children" | "siblings" | "order";
@@ -1822,10 +1858,13 @@ class Printer {
     return l !== undefined;
   }
 
-  /** This method gives the code of a list in a `vex.list`: the helper `plain` or its clean form (COMPILE.MODULE.FUSE.CLEAN). */
-  envelope(v: Value, plain: "LO" | "LV"): string {
+  /**
+   * This method gives the code of a list in the form of the helper `form`: a `vex.list`, or a plain array for `LP`
+   * (COMPILE.MODULE.LIST.PLAIN). A list that the facts prove clean uses the clean form of the helper (COMPILE.MODULE.FUSE.CLEAN).
+   */
+  envelope(v: Value, form: "LO" | "LV" | "LP"): string {
     const list = v.list as ListInfo;
-    const helper = this.#clean(list, true) ? (plain === "LO" ? "LOC" : "LVC") : plain;
+    const helper = this.#clean(list, true) ? CLEAN_FORMS[form] : form;
     return `${this.use(helper)}(${v.code}, ${String(depthOf(list))})`;
   }
 
@@ -3792,14 +3831,17 @@ function runOf(options: ModuleOptions): Run | { readonly reason: string } {
   // The option fuse changes no code in this version, but a value that is not a boolean is an error of the caller.
   const fuse: unknown = options.fuse ?? true;
   if (typeof fuse !== "boolean") return { reason: `the option "fuse" is ${String(fuse)}, not true or false` };
-  return { name, tree: space === "tree", graph: space === "graph" };
+  const lists: unknown = options.lists ?? "envelope";
+  if (lists !== "envelope" && lists !== "plain") return { reason: `the option "lists" is ${String(lists)}, not "envelope" or "plain"` };
+  return { name, tree: space === "tree", graph: space === "graph", plain: lists === "plain" };
 }
 
-/** The function of a module: its name, and its space. */
+/** The function of a module: its name, its space, and true for the plain form of the lists (COMPILE.MODULE.LIST.PLAIN). */
 interface Run {
   readonly name: string;
   readonly tree: boolean;
   readonly graph: boolean;
+  readonly plain: boolean;
 }
 
 /** This function gives the reason of an error of the printer. Another exception is a defect, so it goes to the caller. */
@@ -3810,13 +3852,13 @@ function reasonOf(thrown: unknown): Emitted {
 
 /**
  * This function gives the code of the check of a field of a record `r` at the position `i`. The check of a list keeps
- * the array of the list when the program reads the field (COMPILE.MODULE.LIST.INPUT). The code is true for a field
- * against the schema.
+ * the array of the list when the program reads the field (COMPILE.MODULE.LIST.INPUT). With `plain`, the field holds a
+ * plain list (COMPILE.MODULE.LIST.PLAIN). The code is true for a field against the schema.
  */
-function fieldCheck(p: Printer, field: string, kind: Kind | ListKind): string {
+function fieldCheck(p: Printer, field: string, kind: Kind | ListKind, plain: boolean): string {
   const input = `r[${JSON.stringify(field)}]`;
   if (typeof kind !== "object") return p.against(kind, input);
-  const read = `${p.use("LI")}(${input}, ${String(depthOf(listOfKind(kind)))}, ${p.test(leafOf(kind))})`;
+  const read = `${p.use(plain ? "LA" : "LI")}(${input}, ${String(depthOf(listOfKind(kind)))}, ${p.test(leafOf(kind))})`;
   const keep = p.inputs.get(field);
   return `${keep === undefined ? read : `(${keep}[i] = ${read})`} === undefined`;
 }
@@ -3838,7 +3880,7 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   let fieldChecks: string;
   let varChecks: string;
   try {
-    fieldChecks = fields.map(([f, k]) => ` || ${fieldCheck(p, f, k)}`).join("");
+    fieldChecks = fields.map(([f, k]) => ` || ${fieldCheck(p, f, k, run.plain)}`).join("");
     varChecks = vars.map(([v, k]) => ` || ${p.against(k, `vars[${JSON.stringify(v)}]`)}`).join("");
   } catch (thrown) {
     return reasonOf(thrown);
@@ -3915,8 +3957,8 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   } catch (thrown) {
     return reasonOf(thrown);
   }
-  // A list gives a vex.list (COMPILE.MODULE.LIST.RESULT).
-  const result = value.v.list === undefined ? value.v.code : p.envelope(value.v, "LO");
+  // A list gives a vex.list (COMPILE.MODULE.LIST.RESULT), or a plain array (COMPILE.MODULE.LIST.PLAIN).
+  const result = value.v.list === undefined ? value.v.code : p.envelope(value.v, run.plain ? "LP" : "LO");
   const body = ["const out = [];", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out.push(${result});`, "  } catch {", "    out.push(VEX_ERROR);", "  }", "}", "return out;"];
   return printModule(p, options, run, body);
 }
@@ -4071,10 +4113,11 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
     fill = order.map((c) => `${headOf(c)} SS.f(${String(index.get(c))}, o);`);
   }
   if (run.tree) p.treeParts.add("children");
-  // A column of lists gives a vex.list in each cell with a list (COMPILE.MODULE.LIST.RESULT).
+  // A column of lists gives a vex.list in each cell with a list (COMPILE.MODULE.LIST.RESULT), or a plain array
+  // (COMPILE.MODULE.LIST.PLAIN).
   const resultOf = (c: string, read: string): string => {
     const l = lists.get(c);
-    return l === undefined ? read : `${p.use("LC")}(${read}, ${String(depthOf(l))})`;
+    return l === undefined ? read : `${p.use(run.plain ? "LCP" : "LC")}(${read}, ${String(depthOf(l))})`;
   };
   const body = [
     ...(direct ? [`const D = [${names.map(() => "new Array(n)").join(", ")}];`] : decls),

@@ -341,3 +341,49 @@ return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[]
     }
   });
 });
+
+/** This function gives the record of a child with plain lists: the arrays of the bands of its shape. */
+const plainRecord = (c: Child): object => ({ ox: c.ox, oy: c.oy, rows: c.shape.rows, cols: c.shape.columns });
+
+describe("the ireko shapes pilot for one node with plain lists", () => {
+  const m = emitModule(NODE_SHAPE, { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", lists: "plain" });
+  if (!m.ok) throw new Error(m.reason);
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
+  const loaded = new Function(`${m.source.replaceAll(/^export /gm, "")}
+return { nodeShape, VEX_ERROR };`)() as { readonly nodeShape: (records: unknown, vars: unknown) => readonly unknown[]; readonly VEX_ERROR: unknown };
+  const run = loaded.nodeShape;
+
+  it("COMPILE.MODULE.LIST.PLAIN: the module of one node reads the arrays of the bands, and gives the two arrays of the interpreter", () => {
+    expect(m.source).not.toContain("vex.list");
+    fc.assert(
+      fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), extent, extent, fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 4 })), (kids, w, h, limit) => {
+        const vars = { w, h, limit };
+        const values = run(kids.map(plainRecord), vars);
+        const interpreted = evaluate(NODE_SHAPE, { space: space.array(kids.map(childRecord)), origin: "0", vars, domains: SHAPE_DOMAINS });
+        if (!interpreted.ok) throw new Error(interpreted.error.message);
+        const shape = nodeShape(interpreted.value);
+        expect(shape).toStrictEqual(reference(kids, w, h, limit));
+        expect(values).toHaveLength(kids.length);
+        for (const value of values) expect(value).toStrictEqual([shape.rows, shape.columns]);
+      }),
+      { numRuns: 30 },
+    );
+  });
+
+  it("COMPILE.MODULE.LIST.PLAIN: an error item of a child is skipped as in the interpreter, and a list of the wrong shape is against the schema", () => {
+    const X = loaded.VEX_ERROR;
+    const box: Child = { ox: 2, oy: 1, shape: boxShape(3, 2) };
+    const vars = { w: 10, h: 4, limit: MAX_BANDS };
+    // The merge of the bands skips an error item, so the error band of a child adds nothing.
+    const values = run([{ ...plainRecord(box), rows: [X, ...box.shape.rows] }], vars);
+    expect(values).toStrictEqual(run([plainRecord(box)], vars));
+    const error = { code: "#VALUE!", kind: "value", message: "no band", path: [] };
+    const rows = { kind: "vex.list", items: [{ key: "0", result: { ok: false, error } }, ...box.shape.rows.map((value, k) => ({ key: String(k + 1), result: { ok: true, value } }))] };
+    const interpreted = evaluate(NODE_SHAPE, { space: space.array([{ ...childRecord(box), rows }]), origin: "0", vars, domains: SHAPE_DOMAINS });
+    if (!interpreted.ok) throw new Error(interpreted.error.message);
+    const shape = nodeShape(interpreted.value);
+    expect(values).toStrictEqual([[shape.rows, shape.columns]]);
+    expect(() => run([{ ...plainRecord(box), rows: childRecord(box) }], vars)).toThrow("the record 0 does not keep the schema");
+    expect(() => run([{ ...plainRecord(box), cols: [1] }], vars)).toThrow("the record 0 does not keep the schema");
+  });
+});

@@ -782,6 +782,7 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 | **P3 Assurance** | Conformance cases for each requirement ID, doc tests, the full property suite, TSTyche, golden traces, the Stryker lane, benchmarks | Each requirement has a test. Mutation score of 90 or more on the core. | parallel to P1–P2 |
 | **P4 Site** | D1, D2 and D3 from §10.6 | Each page passes the smoke test and ste-lint. The Lab runs each spec example. | 3–6 weeks, parallel |
 | **P5 Interop** | `sheet()` with `#CYCLE!`, `compile`, the Graph layout pilot, a shared Optional package, tsdown build, Changesets, npm release as `@mark1russell7/vex` | The pilot gives the same layout as the Graph code. The package passes publint and attw. | 2–3 weeks |
+| **COMPILE-FUSE** (priority 1, planned) | The fusion of list ops in standalone modules: one loop for a chain, lists without error items with no scan of `V`, one envelope for each run. The design is in [`COMPILER.md`](./COMPILER.md) §7.6. | P17 passes with the fusion on and off. The bench of the shapes module of ireko gives the module call at 1.4 times the hand code or less. | 1–2 weeks |
 
 **The first two weeks, in order:**
 
@@ -935,6 +936,7 @@ Decision D13 of coeval says that the languages evaluate through the kernel. The 
 - Done on 2026-10-25 (design D of the study of recursion, part 1): a standalone module takes a tree space (COMPILE.MODULE.TREE). Its run takes the parents, and it has the move `parent` and the axes of a tree. The engine of ireko walks a tree, so its passes can be modules. The formula columns of a sheet in a module are the next part.
 - Done on 2026-10-25 (design D, part 2): a standalone module takes the formula columns of a sheet (COMPILE.MODULE.SHEET). It fills the columns as arrays in the static order of `SheetRun.fill`. A cell on a cycle gives `VEX_ERROR`, with the budget of the stack of `SheetRun`. Design D is done.
 - Done on 2026-10-20: a program can be a document of [coeval](https://github.com/mark1russell7/coeval), the language base of the family (its decision D12). `toDocument` and `fromDocument` change an expression into a document and back. `compile`, `evaluate`, `explain`, `parse`, the compiler and the MCP tools take a document (spec §4.1, property P18). The helpers of coeval come from a dev dependency, and the build copies them. Thus `@mark1russell7/vex` has no runtime dependency.
+- Planned on 2026-10-28 (roadmap item COMPILE-FUSE, priority 1): the fusion of list ops in standalone modules ([`COMPILER.md`](./COMPILER.md) §7.6). With vex-compiler 0.17.2, the shapes module of ireko takes 2.76 times the time of the hand code, and a full layout takes 1.58 times. The gate of a full layout is 1.1. Allocation and the envelope are 0.79 of the profile of the module. A hand edit of the generated module on the branch `vex-shapes` of ireko comes first, and each step has its bench before a release.
 
 ---
 

@@ -69,6 +69,23 @@ The source has no name and no literal of the program. It reads each one from a l
 
 `tiered`, `generate` and `emitModule` take an expression or a document of coeval, as `toDocument` of `@mark1russell7/vex` gives it.
 
+### The options of a module
+
+`emitModule` and `emitSheetModule` take these options:
+
+| Option | What it does |
+|---|---|
+| `schema` | The kinds of the fields of the records and of the variables. A field can have a `ListKind`. |
+| `domains` | The domains of the ops of the program |
+| `name` | The name of the function of the module. The default is `run`. |
+| `space` | `"array"`, `"tree"` or `"graph"`. The default is `"array"`. |
+| `fuse` | `false` prints the code without the fusion of the list ops. The default is `true`. |
+| `lists` | `"envelope"` gives each list of the input and of the result as a `vex.list`. `"plain"` gives plain arrays of the values, with `VEX_ERROR` for an error item. The default is `"envelope"`. |
+
+`emitSheetModule` also takes `cells`, `kinds` and `budget`.
+
+With `lists: "plain"`, the key of an item of the input is the text of its position, and the result has no keys. A list in a record or in an argument of an op stays a `vex.list`. The module prints no types, so the host declares `T[]` for a list of `T`.
+
 ## Speed
 
 The speed gate compares tier 2 with hand-written loops. On 2026-10-13, the nearest other box was 1.0 to 1.1 times the loops, and the Game of Life was 1.05 to 1.13 times. Tier 1 was 80 and 120 times. The plan of the compiler is in [`docs/COMPILER.md`](https://github.com/mark1russell7/vex/blob/main/docs/COMPILER.md).

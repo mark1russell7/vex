@@ -137,6 +137,8 @@ A module of the build can operate without the interpreter. Then a failed check t
 
 A host that guarantees the kinds of its input uses standalone modules. ireko gives its strategies only finite numbers and plain rectangles. Thus ireko uses them. A module with the fallback imports the interpreter.
 
+A standalone module gives each list of its input and of its result as a `vex.list`. With the option `lists: "plain"`, these lists are plain arrays, with `VEX_ERROR` for an error item (COMPILE.MODULE.LIST.PLAIN, §13.3).
+
 ## 5. Safety of generated code
 
 A formula of a user goes into generated code. A name that goes into the code as text can become code. Thus:
@@ -1203,7 +1205,7 @@ The measure loop of ireko measures one node at a time. A module for one node nee
 - The record holds a `vex.list`. The check of the run reads each list once with the helper `LI`, into the array of the list of the module. An error item holds the sentinel.
 - `LI` checks the shape of `isVexList`, the depth of the kind and the kind of each item. A primitive kind has a test of the JavaScript type, and a domain has the copy of its `is`.
 - Another value, an item of another kind, an item without a value or an error item of `#DEPTH!` throws a `VexContractError`. A list op of the interpreter does not skip `#DEPTH!`, but the sentinel of the module does. Thus the check refuses it.
-- A plain array is against the schema. The interpreter gives a plain array to an op and to a record as it is, but the module gives a `vex.list`.
+- With the default form of the lists, a plain array is against the schema. The interpreter gives a plain array to an op and to a record as it is, but the module gives a `vex.list`. The option `lists: "plain"` reads plain arrays (COMPILE.MODULE.LIST.PLAIN).
 - The keys of the input are text, so the axis `list` over such a list cannot read a record at its keys. The reason is "the axis "list" reads a record at a key of a literal or of "fill"". The body of the axis has the focus at a key of an item, so a name outside the loop holds the list.
 - An item of the run has the error `VEX_ERROR`, not the error of the input. A list of the input in the value of the run is a new frozen `vex.list`, not the object of the input.
 - Tier 2 does not check the kind of a field of a list kind. Thus it keeps the semantics of the interpreter.
@@ -1211,6 +1213,27 @@ The measure loop of ireko measures one node at a time. A module for one node nee
 `NODE_SHAPE` of `@vex/pilots` is the shapes pass for one linked node with children. Each record is a child, with its offset and the two lists of bands of its shape. The variables are the box of the node and the limit. A property compares the module with `joinShapes` of ireko, with the same bits. The module has 13481 bytes and 3666 bytes after gzip with the default level, before a minifier (2026-10-27).
 
 The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shape of ireko has no end -0, so the property gives no such end.
+
+#### Plain lists (COMPILE.MODULE.LIST.PLAIN)
+
+The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 % in `LI`. `LOC` makes the `vex.list` of each list of the result, and `LI` reads the `vex.list` of each list of the input. The wrapper of ireko also makes the envelopes of the input and reads the envelopes of the result. The code of ireko uses plain arrays.
+
+`emitModule` and `emitSheetModule` have the option `lists`, with the default `"envelope"`. The default prints the same module as before, so the golden files and the hashes do not change. With `lists: "plain"`, the lists at the boundary of the run are plain arrays:
+
+- A field of the schema with a `ListKind` holds an array of the values of the items. A list of lists holds arrays to the depth of its kind.
+- The key of an item of the input is the text of its position: "0", "1" and on. This is the key that `listOf` of the wrapper of ireko gives. The interpreter gets the same list as a `vex.list` with these keys. Thus `get(xs, "1")` reads the second item.
+- The value `VEX_ERROR` of the module is an error item of the input, at each depth. The check compares the object itself, before the test of the kind. Thus a domain whose `is` accepts each object still gets an error item. An object `{ vexError: true }` that is not `VEX_ERROR` is a value.
+- The helper `LA` reads the input. Another value, an item of another kind, an item `undefined` or a hole throws a `VexContractError`, as for `LI`. A `vex.list` is against the schema.
+- The value of the run at a key is an array of the values of the items, in the order of the list. A list of lists gives arrays to the depth that `LOC` gives. A column of lists of a sheet gives an array in each cell.
+- The result has no keys. Each list of the result keeps the order of the interpreter, so a host that needs only the values reads them directly. A host that needs the keys uses the default form.
+- An error item of the result is `VEX_ERROR` itself, at its place in the array. An error of the value at a key is `VEX_ERROR` too. A value of the program is not `VEX_ERROR`, and a list is an array. Thus the host can tell each error from a value. The module does not change an error into a value.
+- A list in a record and a list in an argument of an op stay a frozen `vex.list` (COMPILE.MODULE.LIST.FIELD, COMPILE.MODULE.LIST.ARG). The interpreter gives them so, and the ops of the domains read them so.
+- The helper `LP` gives the result, and `LPC` is its clean form (COMPILE.MODULE.FUSE.CLEAN). The helper `LCP` gives a column of lists of a sheet.
+- The module prints no types. The host declares them: `T[]` for a list of `T`, and `T | typeof VEX_ERROR` for an item that can be an error.
+
+In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out.push(LPC(G(c136()), 1))` replaces `out.push(LOC(G(c136()), 1))`. The value at each key is `[rows, columns]`, two arrays of bands. The module has 12857 bytes, and the default module has 13463 bytes. The golden file `module-plain.js` keeps its text.
+
+A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
 
 #### The names of the items (COMPILE.MODULE.LIST.ITEM)
 

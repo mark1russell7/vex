@@ -770,8 +770,12 @@ const acc = v("acc");
 const adopts = (source: string): boolean => /let w\d+ = l\d+;/.test(source);
 /** This function tells if the variable of the appends of a name starts with null, so the first append copies the list. */
 const copies = (source: string): boolean => /let w\d+ = null;/.test(source);
+/** This function gives the count of the pushes of one item into the array of a name of a loop, with no check of the list. */
+const inPlace = (source: string): number => (source.match(/\.push\(\[0, .*?\]\), w\d+\)/g)?.length ?? 0) - (source.match(/\(w\d+\.push\(\[0, /g)?.length ?? 0);
+/** This function gives the count of the pushes of one item after the check `l === w`. Each check has a copy for another list. */
+const checked = (source: string): number => source.match(/\(l\d+ === (w\d+) \? \(\1\.push\(\[0, .*?\]\), \1\) : \(\1 = AOC?\(/g)?.length ?? 0;
 /** This function gives the count of the appends into the array of a name of a loop, in the step and in the result. */
-const owned = (source: string): number => source.match(/\(w\d+ = AOC?\(/g)?.length ?? 0;
+const owned = (source: string): number => (source.match(/\(w\d+ = AOC?\(/g)?.length ?? 0) + inPlace(source);
 /** This function gives an iteration of three steps with the one name `acc`. */
 const thrice = (init: Expr, step: Expr, result: Expr = acc, until?: Expr): Expr => iterate(3, { acc: init }, { acc: step }, result, until);
 /** This function gives a fold over a window with the one name `acc`. The window depends on the key, so the fold does too. */
@@ -994,11 +998,111 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
     // open reads its list in a binding, so open has no array of its own.
     expect(on.match(/let w\d+ = l\d+;/g)?.length).toBe(2);
     expect(on).not.toMatch(/let w\d+ = null;/);
-    // Two steps and three appends of the results push in place.
+    // Two steps and three appends of the results push in place. Each one pushes its one item, with no AOC and no FI.
     expect(owned(on)).toBe(5);
+    expect(inPlace(on)).toBe(5);
+    expect(checked(on)).toBe(0);
+    expect(on).not.toMatch(/AOC?\(|FI\(1, /);
     const off = sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false }));
     expect(off.match(/let w\d+ = null;/g)?.length).toBe(2);
     expect(owned(off)).toBe(2);
+    expect(inPlace(off)).toBe(0);
+  });
+
+  /** The list of one item of fill at each key. */
+  const atW = op("fill", lit(1), ref("w"));
+
+  it("COMPILE.MODULE.FUSE.ADOPT: an append of the one item of fill into the array of the loop pushes the item, with no FI and no AOC", () => {
+    // The first list near is a fused chain, so it uses no FI. Thus FI is in a module only where an append needs it.
+    // Each case has the count of the appends into the array of the loop, and the count of them in its step.
+    const loops: Record<string, readonly [Expr, number, number]> = {
+      step: [thrice(near, op("append", acc, atW)), 1, 1],
+      branch: [windowed(near, op("if", ref("b"), op("append", acc, atW), acc)), 1, 1],
+      chain: [thrice(near, op("append", op("append", acc, atW), op("fill", lit(1), n))), 2, 2],
+      result: [thrice(near, op("append", acc, atW), op("append", acc, op("fill", lit(1), n))), 2, 1],
+      relay: [thrice(near, op("append", acc, atW), let_({ o2: op("append", acc, atW) }, op("if", v("t"), op("append", v("o2"), atW), v("o2")))), 3, 1],
+      free: [thrice(near, let_({ z: n }, op("append", acc, op("fill", lit(1), v("z"))))), 1, 1],
+      list: [thrice(op("fill", lit(0), near), op("append", acc, op("fill", lit(1), near)), op("count", op("flat", acc))), 1, 1],
+    };
+    for (const [name, [e, count, steps]] of Object.entries(loops)) {
+      const on = printed(e, true);
+      expect({ name, inPlace: inPlace(on), checked: checked(on), owned: owned(on) }).toStrictEqual({ name, inPlace: count, checked: 0, owned: count });
+      expect({ name, helpers: /function (AOC?|FI)\(/.test(on) }).toStrictEqual({ name, helpers: name === "list" });
+      expect({ name, concats: concats(on) }).toStrictEqual({ name, concats: 0 });
+      // With fuse false, each append of a step calls AO with the list of FI, as in the version before.
+      const off = printed(e, false);
+      expect({ name, inPlace: inPlace(off), owned: owned(off) }).toStrictEqual({ name, inPlace: 0, owned: steps });
+      expect(off).toContain("FI(1, ");
+      expectSame(e);
+    }
+    // A node of fill can be the list of an append and also a list at another place. That place keeps FI.
+    const shared = thrice(near, op("append", acc, atW), op("add", op("count", acc), op("count", atW)));
+    expect(inPlace(printed(shared, true))).toBe(1);
+    expect(printed(shared, true)).toContain("function FI(");
+    expectSame(shared);
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT: an append of more than one item, or of a list that fill does not build at its place, keeps AOC", () => {
+    const keeps: Record<string, Expr> = {
+      two: thrice(near, op("append", acc, two)),
+      count: thrice(near, op("append", acc, op("fill", op("add", lit(0), lit(1)), ref("w")))),
+      constant: thrice(near, op("append", acc, op("fill", lit(1), lit(5)))),
+      lazy: thrice(near, op("append", acc, op("fill", lit(1), op("sum", each(axes.all, n))))),
+      literal: thrice(near, op("append", acc, lit(vexList([item("a", 1)])))),
+      twice: let_({ p: atW }, thrice(near, op("append", acc, v("p")), rec({ acc, p: v("p") }))),
+      // A third argument of fill evaluates, so its error is the error of fill.
+      third: thrice(near, op("append", acc, op("fill", lit(1), n, op("divide", lit(1), ref("w"))))),
+    };
+    for (const [name, e] of Object.entries(keeps)) {
+      const on = printed(e, true);
+      expect({ name, inPlace: inPlace(on), checked: checked(on), owned: owned(on) }).toStrictEqual({ name, inPlace: 0, checked: 0, owned: 1 });
+      expectSame(e);
+    }
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT: a list that can be another array at run time gets the check l === w, and the copy of AOC or AO", () => {
+    // The first list is a literal or can hold error items, so the first append copies it. A let of the step can bind the
+    // name to another list. Then the step gives that list, and the next append copies it.
+    const cases: Record<string, readonly [Expr, number]> = {
+      literal: [thrice(lit(vexList([item("a", 1)])), op("append", acc, atW)), 1],
+      empty: [windowed(NONE, op("if", ref("b"), op("append", acc, atW), acc)), 1],
+      input: [thrice(xs, op("append", acc, atW)), 1],
+      inputStrict: [op("ifError", thrice(xs, op("append", acc, atW, STRICT)), NONE), 1],
+      errors: [thrice(inv, op("append", acc, atW)), 1],
+      bad: [thrice(BAD, op("append", acc, fails)), 1],
+      shadowHead: [thrice(near, op("append", let_({ acc: two }, acc), atW)), 0],
+      shadowBody: [thrice(near, let_({ z: n }, op("append", let_({ acc: two }, acc), op("fill", lit(1), v("z"))))), 0],
+      shadowBranch: [
+        iterate(3, { i: lit(0), acc: near }, { i: op("add", v("i"), lit(1)), acc: op("if", op("eq", v("i"), lit(1)), let_({ acc: two }, op("append", acc, atW)), op("append", acc, op("fill", lit(1), n))) }, acc),
+        1,
+      ],
+    };
+    for (const [name, [e, count]] of Object.entries(cases)) {
+      const on = printed(e, true);
+      expect({ name, inPlace: inPlace(on), checked: checked(on) }).toStrictEqual({ name, inPlace: 0, checked: count });
+      expectSame(e);
+    }
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT FOLD.ERROR ITERATE.ERROR: an item that fails, an error item of a literal and the error items of the first list keep the errors of the interpreter", () => {
+    const failed = lit(vexList([errorItem("a")]));
+    const cases: Record<string, readonly [Expr, number, number]> = {
+      item: [thrice(near, op("append", acc, fails)), 1, 0],
+      afterPush: [thrice(near, op("append", op("append", acc, atW), fails)), 2, 0],
+      result: [thrice(near, op("append", acc, atW), op("append", acc, fails)), 2, 0],
+      fallBack: [op("ifError", thrice(near, op("append", acc, fails)), op("fill", lit(1), n)), 1, 0],
+      // The one item of the literal is an error item. AO skips it, and with strict it is the error of the append.
+      errorItem: [thrice(NONE, op("append", acc, failed)), 0, 0],
+      errorItemStrict: [op("ifError", thrice(NONE, op("append", acc, failed, STRICT)), NONE), 0, 0],
+      // The first copy of AO skips the error items of the first list, and with strict it raises the error.
+      first: [thrice(inv, op("append", acc, fails)), 0, 1],
+      firstStrict: [op("ifError", thrice(inv, op("append", acc, atW, STRICT)), NONE), 0, 1],
+    };
+    for (const [name, [e, direct, checks]] of Object.entries(cases)) {
+      const on = printed(e, true);
+      expect({ name, inPlace: inPlace(on), checked: checked(on) }).toStrictEqual({ name, inPlace: direct, checked: checks });
+      expectSame(e);
+    }
   });
 });
 
@@ -1014,6 +1118,8 @@ describe("COMPILE.MODULE.FUSE.ADOPT P17: random loops that append to the list of
         { arbitrary: fc.tuple(tie("form"), part, fc.boolean()).map(([x, y, s]) => op("append", x, y, ...(s ? [STRICT] : []))), weight: 3 },
         fc.tuple(cond, tie("form"), tie("form")).map(([c, yes, no]) => op("if", c, yes, no)),
         tie("form").map((body) => let_({ z: n }, body)),
+        // A let that binds the name again: the appends under it append to another list (COMPILE.MODULE.FUSE.ADOPT).
+        tie("form").map((body) => let_({ [h]: two }, body)),
       ),
     })).form;
   /** A random result: a form of the name, a let that binds a form to a new name, or a form that reads the old list. */

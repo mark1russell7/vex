@@ -300,7 +300,7 @@ The clean form does not move a part of the code. Thus each part evaluates in the
 - An append of several parts pushes each part into one output, in order. A part that is a source prints a loop that pushes its items.
 - `sortBy` with `by` collects the pairs of the item and its sort value in the loop of the stage before it. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
 - `LO` of a fused chain makes the items of the `vex.list` in the loop.
-- **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it. The rules of the adoption follow this list.
+- **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it. An append of `fill(1, x)` into that array pushes the item directly. The rules of the adoption follow this list.
 - **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LO` for each run. Each key gets that object.
 - The fused code uses no new global, so the test of `MODULE_GLOBALS` (V-060) does not change. It makes no own property on an array.
 
@@ -319,7 +319,17 @@ The variable `w` of a name of a loop holds the array of the last append (COMPILE
 
 With these rules, only `AO` holds the array of `w`. An error of a step stops the loop, so no part reads the array after the error. The value of the loop is not fresh, so the next op does not change the array.
 
-In `NODE_SHAPE`, the names `out` of the sweep and `acc` of the pairs start with `fill(0, x)`, so they take their first lists. Their steps push in place, and so do the three appends of their results. The name `open` keeps its copy, because its step reads the list in a binding. The append of each result pushes `FI(1, x)` into the array. The hand edit of ireko pushes the pair itself, so a later step can remove `FI` there.
+Step 6 also removes the list of one item of an append into `w`. These rules apply to the direct push:
+
+- The right list must be `fill(1, x)`, with the literal count 1 and two arguments. `fill` builds that list at the place of the append.
+- Then the append prints `l.push([0, x])`, with the key 0 of the interpreter. It makes no list of `FI` and uses no `AOC`.
+- The code of `x` throws on an error, so the pushed item is not an error item at any time. An error of `x` stops the loop, as before.
+- The name must take its first list, and no `let` on the path of the form binds the name again. Then the list of each append is `w`.
+- When a `let` can bind the name to another list, or the first list is not fresh, the push gets the check `l === w`. When the check fails, `AOC` or `AO` copies the list, as before.
+- A list of more than one item, a literal, a constant of the run and a list that a binding holds keep `AOC`. A literal of one item is a constant of the run, so it keeps `AOC` too.
+- `FI` is in the module only when a part prints it. A direct push with no check does not use `FI`.
+
+In `NODE_SHAPE`, the names `out` of the sweep and `acc` of the pairs start with `fill(0, x)`, so they take their first lists. Their steps push in place, and so do the three appends of their results. The name `open` keeps its copy, because its step reads the list in a binding. Each of these five appends pushes its item directly, as the hand edit of ireko does. Thus the module has no `AOC`, and only `fill(0, x)` uses `FI`.
 
 The chain of the cut points of the shapes module is an example. The program is `flat(each(list(p), if(sized(y), append(fill(1, y), fill(1, end(y))), empty)))`. Before the fusion, each band makes three arrays and three pairs, and `V` scans three lists:
 
@@ -404,7 +414,7 @@ Each step is one pull request. P17 and the golden files check each step, and the
 3. Print the clean form (COMPILE.MODULE.FUSE.CLEAN). Remove `V`, the test of the sentinel and `VW` where the facts hold. Done.
 4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). Done.
 5. Fuse the chains of `append`, and make `sortBy` a sink. Done. A chain fuses only when a part pushes its items, because a copy loop costs more than `concat`. In a sheet with a search, a chain that reads a cell keeps its arrays. The interpreter reads each cell of an append also after an error, and the fused chain stops at the first error.
-6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT). Done. A literal is not fresh, so a loop that starts with the empty literal keeps its first copy. That copy has no items, so its cost is small.
+6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT). Done. A literal is not fresh, so a loop that starts with the empty literal keeps its first copy. That copy has no items, so its cost is small. Then an append of `fill(1, x)` into the array pushes its item directly, with no `FI` and no `AOC`.
 7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions).
 8. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
 
@@ -416,7 +426,7 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-tree.js`, and a new file `.off.js` with the text of `fuse` false for each one |
 | 4 | `module-list-build.js`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
 | 5 | `module-fuse.js`. The programs of the other files have no chain of `append` with a part that pushes. |
-| 6 | `module-fuse.js`. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
+| 6 | `module-fuse.js`, also for the direct push. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
 | 7 | `module-fuse.js`, and each golden file of a module whose value is a list |
 
 #### Open questions

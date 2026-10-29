@@ -123,8 +123,11 @@ const BOTH: ItemNames = ["x", "i"];
 const over = (l: Expr, body: Expr, as: ItemNames = ITEM, wrap: (axis: Axis) => Axis = (axis) => axis): Expr => each(wrap(axes.list(l)), body, undefined, as);
 const reversed = (axis: Axis): Axis => axes.reverse(axis);
 
-/** The source must have an append into the list of a name, or must not have one. */
-const owns = (source: string): boolean => /\bAOC?\(/.test(source);
+/**
+ * The source must have an append into the list of a name, or must not have one. A direct push of one item into the
+ * array `wN` is also such an append (COMPILE.MODULE.FUSE.ADOPT).
+ */
+const owns = (source: string): boolean => /\bAOC?\(|\.push\(\[0, .*?\]\), w\d+\)/.test(source);
 
 /**
  * This function runs `body` and gives the sum of `measure` over each call of `Array.prototype.filter` and

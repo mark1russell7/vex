@@ -124,8 +124,11 @@ function scanReads(body: () => void, measure: (l: readonly unknown[]) => number)
   return sum;
 }
 
-/** The source must have an append into the list of a name, or must not have one. `AOC` is its clean form. */
-const owns = (source: string): boolean => /\bAOC?\(/.test(source);
+/**
+ * The source must have an append into the list of a name, or must not have one. `AOC` is its clean form. A direct push of
+ * one item into the array `wN` is also such an append (COMPILE.MODULE.FUSE.ADOPT).
+ */
+const owns = (source: string): boolean => /\bAOC?\(|\.push\(\[0, .*?\]\), w\d+\)/.test(source);
 
 describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name", () => {
   it("COMPILE.MODULE.APPEND.OWN LOOP.LIST: the forms of the step append into the list of the name, with the values of the interpreter (P17)", () => {

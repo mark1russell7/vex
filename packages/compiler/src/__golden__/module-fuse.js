@@ -4,7 +4,6 @@ export class VexContractError extends Error {}
 /** The value of a key where the program gives an error of Vex. */
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
-function AOC(l, o, w) { if (l !== w) return l.concat(o); const n = o.length; for (let i = 0; i < n; i++) l.push(o[i]); return l; }
 function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
 function FI(n, v) {
@@ -310,7 +309,7 @@ export function nodeShape(records, vars) {
         const t92 = t91;
         const t93 = (l59 || l57);
         const t94 = (l57 ? ((l59 && op_3_13(l60, l58)) ? k_domain_Band(op_3_14(l60, l58)) : l58) : l60);
-        const t96 = ((l57 && (l59 && (!((l59 && op_3_13(l60, l58)))))) ? (w95 = AOC(l61, FI(1, l60), w95)) : l61);
+        const t96 = ((l57 && (l59 && (!((l59 && op_3_13(l60, l58)))))) ? (l61.push([0, l60]), w95) : l61);
         l54 = t66;
         l55 = t67;
         l56 = t80;
@@ -329,11 +328,11 @@ export function nodeShape(records, vars) {
       }
       let b99;
       try {
-        b99 = ((l57 && (l59 && (!((l59 && op_3_13(l60, l58)))))) ? (w95 = AOC(l61, FI(1, l60), w95)) : l61);
+        b99 = ((l57 && (l59 && (!((l59 && op_3_13(l60, l58)))))) ? (l61.push([0, l60]), w95) : l61);
       } catch {
         b99 = E;
       }
-      b100 = (b97 ? (w95 = AOC(G(b99), FI(1, G(b98)), w95)) : G(b99));
+      b100 = (b97 ? (G(b99).push([0, G(b98)]), w95) : G(b99));
     } catch {
       b100 = E;
     }
@@ -351,12 +350,12 @@ export function nodeShape(records, vars) {
         const y108 = A106[q107][1];
         const t109 = (!(l102));
         const t110 = y108;
-        const t112 = (l102 ? (w111 = AOC(l104, FI(1, k_domain_Band(op_3_16(l103, y108))), w111)) : l104);
+        const t112 = (l102 ? (l104.push([0, k_domain_Band(op_3_16(l103, y108))]), w111) : l104);
         l102 = t109;
         l103 = t110;
         l104 = t112;
       }
-      const t113 = (l102 ? (w111 = AOC(l104, FI(1, l103), w111)) : l104);
+      const t113 = (l102 ? (l104.push([0, l103]), w111) : l104);
       l101 = t113;
     }
     return l101;

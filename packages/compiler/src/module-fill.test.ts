@@ -58,13 +58,14 @@ function asModule(value: unknown, error: unknown): unknown {
 function expectSame(e: Expr, records: readonly unknown[] = RECORDS, options: ModuleOptions = OPTIONS): string {
   const m = emitModule(e, options);
   if (!m.ok) throw new Error(m.reason);
-  const loaded = make(m.source);
   const s = space.array(records);
-  const expected = s.keys.map((origin) => {
-    const r = evaluate(e, { space: s, origin, vars: { a: 2 }, domains: options.domains ?? [] });
-    return r.ok ? asModule(r.value, loaded.VEX_ERROR) : loaded.VEX_ERROR;
-  });
-  expect(loaded.run(structuredClone(records), { a: 2 })).toStrictEqual(expected);
+  const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: { a: 2 }, domains: options.domains ?? [] }));
+  // The module of fuse false gives the same values (COMPILE.MODULE.FUSE.CLEAN).
+  const off = emitModule(e, { ...options, fuse: false });
+  for (const source of [m.source, off.ok ? off.source : ""]) {
+    const loaded = make(source);
+    expect(loaded.run(structuredClone(records), { a: 2 })).toStrictEqual(results.map((r) => (r.ok ? asModule(r.value, loaded.VEX_ERROR) : loaded.VEX_ERROR)));
+  }
   return m.source;
 }
 

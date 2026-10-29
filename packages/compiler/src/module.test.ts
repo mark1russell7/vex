@@ -456,9 +456,14 @@ describe("COMPILE.MODULE: a standalone module", () => {
 async function expectGolden(name: string, e: Expr, options: ModuleOptions = OPTIONS): Promise<void> {
   const source = sourceOf(e, options);
   await expect(source).toMatchFileSnapshot(`./__golden__/module-${name}.js`);
-  const m = make(source);
-  expectSame(m, e, RECORDS, VARS, options);
-  expectSame(m, e, MANY, VARS, options);
+  // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
+  const off = sourceOf(e, { ...options, fuse: false });
+  // A module that fusion does not change has no file of its own for fuse false.
+  await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? "" : ".off"}.js`);
+  for (const m of [make(source), make(off)]) {
+    expectSame(m, e, RECORDS, VARS, options);
+    expectSame(m, e, MANY, VARS, options);
+  }
 }
 
 /**
@@ -1386,13 +1391,17 @@ describe("COMPILE.MODULE.TREE: a module of a tree space", () => {
     });
     const source = sourceOf(e, TREE);
     await expect(source).toMatchFileSnapshot("./__golden__/module-tree.js");
-    const m = make(source);
-    expectSameTree(m, e, TREE_RECORDS, PARENTS);
-    // A flat tree, a chain, one root with each other key as its child, and an empty tree.
-    expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map(() => -1));
-    expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map((_r, i) => i - 1));
-    expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map((_r, i) => (i === 0 ? -1 : 0)));
-    expectSameTree(m, e, [], []);
+    // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
+    const off = sourceOf(e, { ...TREE, fuse: false });
+    await expect(off).toMatchFileSnapshot("./__golden__/module-tree.off.js");
+    for (const m of [make(source), make(off)]) {
+      expectSameTree(m, e, TREE_RECORDS, PARENTS);
+      // A flat tree, a chain, one root with each other key as its child, and an empty tree.
+      expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map(() => -1));
+      expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map((_r, i) => i - 1));
+      expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map((_r, i) => (i === 0 ? -1 : 0)));
+      expectSameTree(m, e, [], []);
+    }
   });
 
   it("COMPILE.MODULE.TREE: a module computes only the parts of the tree that the program reads", () => {
@@ -1660,9 +1669,10 @@ describe("COMPILE.MODULE: random programs", () => {
       (l, _i, opts) => let_({ xs: l }, op("first", each(axes.reverse(axes.list(v("xs"))), op("add", n, w)), ...opts)),
     ];
     const lists = fc.tuple(list, fc.constantFrom(...uses), fc.integer({ min: -1, max: 3 }), fc.boolean()).map(([l, use, i, strict]) => use(l, i, strict ? [lit({ strict: true })] : []));
+    // The clean form and the form of fuse false give the same values (COMPILE.MODULE.FUSE.CLEAN).
     fc.assert(
-      fc.property(lists, records, (e, rs) => {
-        expectSame(make(sourceOf(e)), e, rs, VARS);
+      fc.property(lists, records, fc.boolean(), (e, rs, fuse) => {
+        expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, rs, VARS);
       }),
     );
   });

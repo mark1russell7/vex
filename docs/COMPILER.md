@@ -181,7 +181,7 @@ A run knows which cell reads which cell. After a change of one record, only the 
 
 ### 7.6 Fusion of list ops
 
-This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 and 2 are done: the option `fuse` (COMPILE.MODULE.FUSE.OFF) and the facts of the lists (COMPILE.MODULE.FUSE.FACTS). The module does not fuse a chain yet. The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the other IDs stay in this section until their tests exist. Then they move to the spec.
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 3 are done: the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The module does not fuse a chain yet. The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the other IDs stay in this section until their tests exist. Then they move to the spec.
 
 #### The cost of a chain of list ops
 
@@ -264,10 +264,14 @@ The kind of an item alone cannot prove the fact, because a list of each kind can
 - The value of an `each` is clean when its body is `safe`, the fact of the printer for code that cannot throw.
 - A fused chain gives a clean list, because it pushes only items with values.
 - A name of a loop is clean when its first value is clean and each step gives a clean list.
-- The printer prints the first values of a loop before it knows the facts of the steps. Thus it examines the form of each step before the loop: a clean op, a literal without error items, `if`, `ifError`, `let` and the names.
+- The printer prints the first values of a loop before it knows the facts of the steps. Thus it examines the form of each step before the loop. The forms are a clean op, a literal without error items, `if`, `ifError`, `let`, an inner loop and the names.
+- A name of a `let` in a step has the fact of the form of its binding. The value of an inner loop has the fact of the form of its result, with the facts of its own names.
 - First, each name with a clean first list has the fact. Then the printer removes the fact from each name whose step does not prove it. It stops when no name changes. The items of a name of a loop do not keep the facts.
 - A list of the input and a cell of a column of lists are not clean.
-- In step 2, `clean` is not a part of the signature of a function or of a key of the memo. A part of the signature makes more functions, and that changes the printed code. Thus a parameter and a key of the memo are not clean. Step 3 adds `clean` to the signature (COMPILE.MODULE.LIST.CALL), and then the parameter of `merge` in the shapes module is clean.
+- With `fuse`, the fact `clean` of each list argument is a part of the signature of a function (COMPILE.MODULE.LIST.CALL). Thus the parameter of `merge` in the shapes module is clean. The facts of the items of a list of lists and the fact `fresh` are not a part of it.
+- A function for a list that is not clean also serves a clean list. Thus a call takes the function of its exact signature, else that function, else it prints a new one. A function prints at most two times for one set of kinds, and the shapes module prints `merge` once.
+- A key of the memo is not clean. In the shapes module, no node of the memo has a list key, and a part of the structure of the memo makes more nodes.
+- With `fuse` false, the signature is the signature of step 2, so the printed code does not change.
 
 The fact `fresh` tells that no other part of the code holds the array of the list. Only the value of `fill` is fresh in step 2, and a fused chain is fresh in step 4. A read of a name, the value of a call, a column of the run, a memo node and an item are not fresh. A branch of `if` is fresh only when both branches are fresh.
 
@@ -275,12 +279,17 @@ The printer also counts the reads of each list node, from the form of the progra
 
 A binding gets the count of the reads of its name. An argument of a call gets the count of the reads of its parameter. A read in the body of an `each` or of a function, in a test or in a step counts `Infinity`. The first values and the steps of a loop also get `Infinity`. The printer gives `Infinity` to each constant of the run, column of the run and node of the memo that it prints. The function `listFactsOf` of `module.ts` gives the facts of each list node to the tests.
 
-The fact `clean` removes the envelope where it holds:
+The fact `clean` removes the envelope where it holds (step 3, COMPILE.MODULE.FUSE.CLEAN). Each clean helper has the name of its helper and the last letter `C`:
 
-- `V(l, s)` of a clean list prints `l`, with no scan.
-- A loop over a clean list has no test `A[q][1] === E`.
-- `count`, `first` and `nth` of a clean list read the array with no `VW`. Thus no property `vw` goes on the array, which was the cost of 0.17.1.
-- `LO` and `LV` of a clean list do not test the sentinel at each item.
+- `V(l, s)` of a clean list is `l`, so `SBC`, `SKC`, `TKC`, `DRC`, `WOC` and `IXC` have no scan and no option `strict`. The append of two clean lists is `concat`, and `AOC` appends into the list of its name.
+- `flat` prints `FLC` only when the list and its items are clean. An op with two lists prints the clean form only when both lists are clean.
+- A loop over a clean list has no test `A[q][1] === E`. Thus a loop whose body cannot throw has no `try`.
+- A reduction over a clean list has no test of the sentinel.
+- `count` of a clean list is its `length`, and `first` and `nth` are `FSC` and `NTC`. They read the array with no `VW`. Thus no property `vw` goes on the array, which was the cost of 0.17.1.
+- `LOC` and `LVC` do not test the sentinel at each item. Each level of a list of lists must be clean.
+- `get` has no clean form, because `GT` has no scan of `V`.
+
+The clean form does not move a part of the code. Thus each part evaluates in the order of the plain form, and the order of the reads of the cells does not change.
 
 #### What a fusion emits
 
@@ -355,11 +364,10 @@ These IDs move to `spec/README.md` with the test that names each one:
 
 - `COMPILE.MODULE.FUSE`: A chain of list ops that obeys the rule of a fusion is one loop with one output. Its run gives the values and the errors of the interpreter.
 - `COMPILE.MODULE.FUSE.ITEM`: In a fused chain, an item that fails adds no item. With `strict`, it is the error of the chain. An error item of a source stays where the interpreter meets it.
-- `COMPILE.MODULE.FUSE.CLEAN`: A list that the facts prove clean has no scan of `V`, no test of the sentinel and no `VW`. The values and the errors do not change.
 - `COMPILE.MODULE.FUSE.ADOPT`: `AO` takes a fresh list as its own array, with no first copy. The values and the errors do not change.
 - `COMPILE.MODULE.FUSE.OUT`: A value of the run that does not depend on the key has one `vex.list` for each run.
 
-`COMPILE.MODULE.FUSE.OFF` and `COMPILE.MODULE.FUSE.FACTS` moved to `spec/README.md` with steps 1 and 2.
+`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3.
 
 #### Measure before a release
 
@@ -377,7 +385,7 @@ Each step is one pull request. P17 and the golden files check each step, and the
 
 1. Add the option `fuse` (COMPILE.MODULE.FUSE.OFF) with no effect, and a bench case for `SHAPE_COLUMNS` in `bench/gate.ts`. Done.
 2. Add the facts `clean`, `fresh` and the count of the reads of each list node (COMPILE.MODULE.FUSE.FACTS). Do not change the printed code. Done.
-3. Print the clean form (COMPILE.MODULE.FUSE.CLEAN). Remove `V`, the test of the sentinel and `VW` where the facts hold.
+3. Print the clean form (COMPILE.MODULE.FUSE.CLEAN). Remove `V`, the test of the sentinel and `VW` where the facts hold. Done.
 4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM).
 5. Fuse the chains of `append`, and make `sortBy` a sink.
 6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT).
@@ -389,7 +397,7 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | Step | Golden files of `packages/compiler/src/__golden__` |
 |---|---|
 | 1, 2 | None |
-| 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-helpers.txt`, `module-corpus.txt` |
+| 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-tree.js`, and a new file `.off.js` with the text of `fuse` false for each one |
 | 4, 5 | `module-list-build.js`, `module-list-loops.js`, `module-helpers.txt`, `module-corpus.txt`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
 | 6 | `module-list-loops.js`, `module-corpus.txt` |
 | 7 | `module-fuse.js`, and each golden file of a module whose value is a list |

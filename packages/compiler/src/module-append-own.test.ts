@@ -43,8 +43,8 @@ function make(source: string): Loaded {
 }
 
 /** This function gives the source of a program, and fails the test for a program that cannot be a module. */
-function sourceOf(e: Expr): string {
-  const m = emitModule(e, OPTIONS);
+function sourceOf(e: Expr, fuse = true): string {
+  const m = emitModule(e, { ...OPTIONS, fuse });
   if (!m.ok) throw new Error(m.reason);
   return m.source;
 }
@@ -60,8 +60,8 @@ function asModule(value: unknown, error: unknown): unknown {
  * This function compares the values of a module with the interpreter at each key (P17). It runs the module two times
  * on the same input, and the input must not change. It gives the source of the module.
  */
-function expectSame(e: Expr, records: readonly unknown[] = RECORDS): string {
-  const source = sourceOf(e);
+function expectSame(e: Expr, records: readonly unknown[] = RECORDS, fuse = true): string {
+  const source = sourceOf(e, fuse);
   const m = make(source);
   const s = space.array(records);
   const expected = s.keys.map((origin) => {
@@ -124,8 +124,8 @@ function scanReads(body: () => void, measure: (l: readonly unknown[]) => number)
   return sum;
 }
 
-/** The source must have an append into the list of a name, or must not have one. */
-const owns = (source: string): boolean => source.includes("AO(");
+/** The source must have an append into the list of a name, or must not have one. `AOC` is its clean form. */
+const owns = (source: string): boolean => /\bAOC?\(/.test(source);
 
 describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name", () => {
   it("COMPILE.MODULE.APPEND.OWN LOOP.LIST: the forms of the step append into the list of the name, with the values of the interpreter (P17)", () => {
@@ -151,7 +151,8 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
       inner: iterate(2, { acc: NONE }, { acc: op("append", acc, folded(LIT, op("append", acc, one(n)))) }, acc),
     };
     for (const [name, e] of Object.entries(forms)) {
-      for (const records of [RECORDS, MANY, []]) expect({ name, owns: owns(expectSame(e, records)) }).toStrictEqual({ name, owns: true });
+      // The clean form (COMPILE.MODULE.FUSE.CLEAN) and the form of fuse false give the same values.
+      for (const fuse of [true, false]) for (const records of [RECORDS, MANY, []]) expect({ name, fuse, owns: owns(expectSame(e, records, fuse)) }).toStrictEqual({ name, fuse, owns: true });
     }
     // An error in the step at one key is the value of the loop at that key only.
     const errorInStep = iterate(3, { acc: NONE }, { acc: op("append", acc, one(op("divide", lit(1), w))) }, acc);
@@ -201,8 +202,8 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
     // each new item about once, and a copy at each append reads n squared / 2 items: 200 million here.
     const plainLoop = iterate(20_000, { acc: NONE }, { acc: op("append", acc, one(lit(1))) }, op("count", acc));
     const nestedLoop = iterate(10_000, { acc: NONE }, { acc: op("append", op("append", acc, one(lit(1))), one(n)) }, op("count", acc));
-    for (const e of [plainLoop, nestedLoop]) {
-      const m = make(sourceOf(e));
+    for (const [e, fuse] of [plainLoop, nestedLoop].flatMap((x) => [[x, true], [x, false]] as const)) {
+      const m = make(sourceOf(e, fuse));
       let got: unknown;
       const read = scanReads(
         () => {
@@ -211,7 +212,8 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
         (l) => l.length,
       );
       expect(got).toStrictEqual([20_000]);
-      expect(read).toBeGreaterThan(0);
+      // The clean form counts the length of the array, so it scans no items (COMPILE.MODULE.FUSE.CLEAN).
+      expect(read > 0).toBe(!fuse);
       expect(read).toBeLessThan(100_000);
     }
   });
@@ -239,6 +241,7 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
         if (!emitModule(e, OPTIONS).ok) return;
         modules++;
         expectSame(e, records);
+        expectSame(e, records, false);
       }),
     );
     expect(modules).toBeGreaterThan(runs / 2);

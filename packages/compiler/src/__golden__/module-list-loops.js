@@ -4,10 +4,8 @@ export class VexContractError extends Error {}
 /** The value of a key where the program gives an error of Vex. */
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
+function AOC(l, o, w) { if (l !== w) return l.concat(o); const n = o.length; for (let i = 0; i < n; i++) l.push(o[i]); return l; }
 function F() { throw E; }
-function V(l, s) { if (!l.some((x) => x[1] === E)) return l; if (s) F(); return l.filter((x) => x[1] !== E); }
-function AP(l, o, s) { return V(l, s).concat(V(o, s)); }
-function AO(l, o, s, w) { if (l !== w) return AP(l, o, s); const a = V(o, s), n = a.length; for (let i = 0; i < n; i++) l.push(a[i]); return l; }
 function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function VW(l) {
@@ -19,7 +17,8 @@ function VW(l) {
   return o;
 }
 function CT(l, s) { const o = VW(l); return s && o.length < l.length ? F() : o.length; }
-function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }
+function DRC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(n) : F(); }
+function V(l, s) { if (!l.some((x) => x[1] === E)) return l; if (s) F(); return l.filter((x) => x[1] !== E); }
 function FL(l, s) {
   const o = [];
   for (const [, v] of V(l, s)) for (const x of V(v, s)) o.push(x);
@@ -95,7 +94,7 @@ export function run(records, vars) {
     let l59 = L57;
     for (let k61 = 0; ; k61++) {
       if (k61 === 1) break;
-      const t60 = DR(l59, 1, false);
+      const t60 = DRC(l59, 1);
       l59 = t60;
     }
     return l59;
@@ -144,12 +143,11 @@ export function run(records, vars) {
       for (let j32 = Math.max(0, f33 + Math.max(0, -n)); j32 < h34; j32++) {
         L35.push([j32, R[j32]["n"]]);
       }
-      const t37 = AP(L35, DR(l30, (R[j31]["b"] ? 0 : 1), false), false);
+      const t37 = L35.concat(DRC(l30, (R[j31]["b"] ? 0 : 1)));
       l30 = t37;
     }
     let a38 = 0;
     for (const [, x40] of l30) {
-      if (x40 === E) continue;
       a38 += U(x40);
     }
     return k_number(a38);
@@ -158,10 +156,10 @@ export function run(records, vars) {
     let l41 = [];
     let w44 = null;
     for (let j42 = 0; j42 < n; j42++) {
-      const t45 = (w44 = AO(l41, c43, false, w44));
+      const t45 = (w44 = AOC(l41, c43, w44));
       l41 = t45;
     }
-    return CT(l41, false);
+    return l41.length;
   });
   const c110 = L(() => {
     const L47 = [];
@@ -171,9 +169,9 @@ export function run(records, vars) {
     let l49 = L47;
     let l50 = 0;
     for (let k53 = 0; ; k53++) {
-      if (((CT(l49, false)) < (2))) break;
+      if (((l49.length) < (2))) break;
       if (k53 === 10) F();
-      const t51 = DR(l49, 1, false);
+      const t51 = DRC(l49, 1);
       const t52 = k_number((l50) + (1));
       l49 = t51;
       l50 = t52;
@@ -185,7 +183,6 @@ export function run(records, vars) {
     const A63 = G(c62());
     for (let q64 = 0; q64 < A63.length; q64++) {
       const j55 = A63[q64][0];
-      if (A63[q64][1] === E) F();
       const t65 = k_number((l54) + (R[j55]["w"]));
       l54 = t65;
     }
@@ -205,10 +202,10 @@ export function run(records, vars) {
     let l91 = L89;
     for (let k93 = 0; ; k93++) {
       if (k93 === 2) break;
-      const t92 = DR(l91, 1, false);
+      const t92 = DRC(l91, 1);
       l91 = t92;
     }
-    return CT(FL(l91, false), false);
+    return FL(l91, false).length;
   });
   const c113 = L(() => {
     let t106;
@@ -269,12 +266,11 @@ export function run(records, vars) {
         for (let j72 = Math.max(0, f73 + Math.max(0, -n)); j72 < h74; j72++) {
           L75.push([j72, R[j72]["w"]]);
         }
-        const t78 = (w77 = AO(l71, L75, false, w77));
+        const t78 = (w77 = AOC(l71, L75, w77));
         l71 = t78;
       }
       let a79 = 0;
       for (const [, x81] of l71) {
-        if (x81 === E) continue;
         a79 += x81;
       }
       out.push(({ "layout": t15, "count": G(c107()), "stack": G(c108()), "seen": G(c109()), "until": G(c110()), "overList": G(c111()), "perKey": k_number(a79), "lists": G(c112()), "error": G(c113()) }));

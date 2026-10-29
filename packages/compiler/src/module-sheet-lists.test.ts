@@ -70,8 +70,8 @@ function expectSameSheet(m: Loaded, columns: ReadonlyMap<string, Expr>, records:
 }
 
 /** This function compares the values of a module of a program with the interpreter at each key (P17). */
-function expectSame(e: Expr, records: readonly unknown[], parents?: readonly number[]): void {
-  const m = emitModule(e, parents === undefined ? NUM : { ...NUM, space: "tree" });
+function expectSame(e: Expr, records: readonly unknown[], parents?: readonly number[], fuse = true): void {
+  const m = emitModule(e, { ...NUM, ...(parents === undefined ? {} : { space: "tree" as const }), fuse });
   if (!m.ok) throw new Error(m.reason);
   const loaded = make(m.source);
   const s = parents === undefined ? space.array(records) : treeOf(records, parents);
@@ -108,7 +108,10 @@ describe("COMPILE.MODULE.LIST.RESULT: a list as the value of a program", () => {
     expectSame(each(axes.children, inv), RECORDS, PARENTS);
     // A list of the run is one array for each key, and each key gives its own vex.list.
     const m = emitModule(each(axes.all, ref("v")), NUM);
-    expect(m.ok && m.source).toContain("out.push(LO(c");
+    // The list is clean, so the run reads it with LOC, the clean form of LO (COMPILE.MODULE.FUSE.CLEAN).
+    expect(m.ok && m.source).toContain("out.push(LOC(c");
+    const off = emitModule(each(axes.all, ref("v")), { ...NUM, fuse: false });
+    expect(off.ok && off.source).toContain("out.push(LO(c");
     const loaded = make((m as { source: string }).source);
     const [first, second] = loaded.run([{ v: 1 }, { v: 0 }], {}) as unknown as unknown[];
     expect(first).toStrictEqual({ kind: "vex.list", items: [{ key: "0", result: { ok: true, value: 1 } }, { key: "1", result: { ok: true, value: 0 } }] });
@@ -323,6 +326,9 @@ function checkListSheet(columns: ReadonlyMap<string, Expr>, records: readonly un
   if (!m.ok) return { search: false, errorItem: false };
   const loaded = make(m.source);
   expectSameSheet(loaded, columns, records, parents);
+  // The module of fuse false gives the same results (COMPILE.MODULE.FUSE.CLEAN).
+  const off = emitSheetModule(columns, { ...(parents === undefined ? NUM : TREE), kinds: LIST_KINDS, fuse: false });
+  expectSameSheet(make((off as { readonly source: string }).source), columns, records, parents);
   const out = loaded.run(structuredClone(records), {}, parents);
   // An error item has the error VEX_ERROR, so its list is not a list of isVexList.
   const errorItem = [...(out["L"] ?? []), ...(out["N"] ?? [])].some((x) => (x as { readonly items?: readonly ListItem[] }).items?.some((y) => !y.result.ok) === true);
@@ -348,11 +354,11 @@ describe("COMPILE.MODULE.SHEET.LIST P17: random sheets with lists", { timeout: 6
   });
 
   it("P17 COMPILE.MODULE.LIST.RESULT: a module of a random program whose value is a list gives the values of the interpreter", () => {
-    fc.assert(fc.property(programs(false), rows, (e, rs) => {
-      expectSame(e, rs);
+    fc.assert(fc.property(programs(false), rows, fc.boolean(), (e, rs, fuse) => {
+      expectSame(e, rs, undefined, fuse);
     }), { numRuns: 150 });
-    fc.assert(fc.property(programs(true), trees, (e, [rs, parents]) => {
-      expectSame(e, rs, parents);
+    fc.assert(fc.property(programs(true), trees, fc.boolean(), (e, [rs, parents], fuse) => {
+      expectSame(e, rs, parents, fuse);
     }), { numRuns: 150 });
   });
 });

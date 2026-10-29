@@ -59,10 +59,15 @@ function expectSame(m: Loaded, e: Expr, records: readonly unknown[] = RECORDS, v
 async function expectGolden(name: string, e: Expr): Promise<void> {
   const source = sourceOf(e);
   await expect(source).toMatchFileSnapshot(`./__golden__/module-${name}.js`);
-  const m = make(source);
-  expectSame(m, e);
-  expectSame(m, e, RECORDS.slice(0, 2));
-  expectSame(m, e, []);
+  // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
+  const off = sourceOf(e, { ...OPTIONS, fuse: false });
+  // A module that fusion does not change has no file of its own for fuse false.
+  await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? "" : ".off"}.js`);
+  for (const m of [make(source), make(off)]) {
+    expectSame(m, e);
+    expectSame(m, e, RECORDS.slice(0, 2));
+    expectSame(m, e, []);
+  }
 }
 
 const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
@@ -319,7 +324,9 @@ describe("COMPILE.MODULE.SORT.BY: sortBy with the option by in a module", () => 
     expect(run(programs.fails)[0]).toBe(-1);
     expect(run(programs.booleans)[0]).toBe(-1);
     expect(run(programs.empty)[0]).toBe(0);
-    expect(sourceOf(programs.byX, XY_OPTIONS)).toContain("function SK(l, s, f) {");
+    // The list of the points is clean, so the module sorts it with SKC, the clean form of SK (COMPILE.MODULE.FUSE.CLEAN).
+    expect(sourceOf(programs.byX, XY_OPTIONS)).toContain("function SKC(l, f) {");
+    expect(sourceOf(programs.byX, { ...XY_OPTIONS, fuse: false })).toContain("function SK(l, s, f) {");
     expect(sourceOf(programs.empty, XY_OPTIONS)).not.toContain("function SK(");
   });
 
@@ -375,8 +382,8 @@ describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: 60_00
 
   it("P17 COMPILE.MODULE.LIST LOOP.LIST: a module with the list ops of design E gives the value of the interpreter at each key", () => {
     fc.assert(
-      fc.property(programs, records, fc.constantFrom("0", "1", "a", "x"), (e, rs, k) => {
-        expectSame(make(sourceOf(e)), e, rs, { a: 1, k });
+      fc.property(programs, records, fc.constantFrom("0", "1", "a", "x"), fc.boolean(), (e, rs, k, fuse) => {
+        expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, rs, { a: 1, k });
       }),
     );
   });

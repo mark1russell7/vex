@@ -467,7 +467,6 @@ export function run(records, vars, parents) {
       const b181 = L179;
       let a182 = 0;
       for (const [, x184] of b181) {
-        if (x184 === E) continue;
         a182 += x184;
       }
       out.push(({ "moves": ({ "parent": t0, "grand": t1, "next": t2, "prev": t3, "uncle": t4, "far": t5, "zero": R[SO(GP, SI, o, 0)]["n"], "two": t6, "half": t7, "fixed": c10, "root": c11 }), "axes": ({ "children": t18, "ancestors": t25, "descendants": t33, "siblings": t40, "window": t49, "wide": t58, "none": t67, "successors": t74, "predecessors": t81, "reachable": t88, "all": G(c98()), "others": k_number(a95) }), "reversed": ({ "children": t105, "descendants": t113, "ancestors": t120, "window": t129 }), "at": ({ "parent": t136, "cousins": t144, "next": t151 }), "team": k_number((R[o]["w"]) + (k_number(a157))), "depth": n165, "tested": n173, "list": k_number(a182), "memo": G(c196) }));

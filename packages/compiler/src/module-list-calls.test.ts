@@ -47,8 +47,8 @@ function make(source: string): Loaded {
 }
 
 /** This function gives the source of a program, and fails the test for a program that cannot be a module. */
-function sourceOf(e: Expr): string {
-  const m = emitModule(e, OPTIONS);
+function sourceOf(e: Expr, fuse = true): string {
+  const m = emitModule(e, { ...OPTIONS, fuse });
   if (!m.ok) throw new Error(m.reason);
   return m.source;
 }
@@ -69,13 +69,10 @@ function asModule(value: unknown, error: unknown): unknown {
 /** This function compares the values of a module with the interpreter at each key (P17). */
 function expectSame(e: Expr, records: readonly unknown[] = RECORDS): string {
   const source = sourceOf(e);
-  const m = make(source);
   const s = space.array(records);
-  const expected = s.keys.map((origin) => {
-    const r = evaluate(e, { space: s, origin, vars: { a: 2 }, domains: DOMAINS });
-    return r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR;
-  });
-  expect(m.run(structuredClone(records), { a: 2 })).toStrictEqual(expected);
+  const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: { a: 2 }, domains: DOMAINS }));
+  // The module of fuse false gives the same values (COMPILE.MODULE.FUSE.CLEAN).
+  for (const m of [make(source), make(sourceOf(e, false))]) expect(m.run(structuredClone(records), { a: 2 })).toStrictEqual(results.map((r) => (r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR)));
   return source;
 }
 

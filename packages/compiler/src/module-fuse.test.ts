@@ -1,10 +1,11 @@
 /**
  * The first steps of the fusion of list ops in standalone modules (docs/COMPILER.md §7.6, COMPILE-FUSE). The option
  * `fuse` prints the code with and without fusion (COMPILE.MODULE.FUSE.OFF). The printer keeps the facts `clean` and
- * `fresh` of each list, and the count of the reads of each list node (COMPILE.MODULE.FUSE.FACTS). The facts do not
- * change the printed code.
+ * `fresh` of each list, and the count of the reads of each list node (COMPILE.MODULE.FUSE.FACTS). With `fuse`, an op
+ * over a clean list has no scan for error items (COMPILE.MODULE.FUSE.CLEAN).
  */
-import { app, axes, call, cell, each, fn, fold, iterate, let_, lit, ref, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
+import { createHash } from "node:crypto";
+import { app, axes, call, cell, each, evaluate, fn, fold, isVexList, iterate, let_, lit, rec, ref, SheetRun, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { NODE_SCHEMA, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA } from "../../pilots/src/ireko-shapes.ts";
@@ -52,6 +53,9 @@ const short = (e: Expr, node: Expr, options: ModuleOptions = OPTIONS): Pick<List
   return { clean, fresh, reads };
 };
 
+/** This function gives the first 16 digits of the hash of a source. */
+const hash = (source: string): string => createHash("sha256").update(source).digest("hex").slice(0, 16);
+
 /** This function gives the count of the reads of the list of the name `ys` in a body. */
 const reads = (body: Expr): number => short(let_({ ys: one }, body), one).reads;
 
@@ -67,18 +71,18 @@ describe("COMPILE.MODULE.FUSE.OFF: the option fuse", () => {
     op("take", inv, lit(2)),
   ];
 
-  it("COMPILE.MODULE.FUSE.OFF: fuse true, fuse false and the default print the same module in this version", () => {
-    for (const e of programs) {
-      const base = sourceOf(emitModule(e, OPTIONS));
-      expect(sourceOf(emitModule(e, { ...OPTIONS, fuse: true }))).toBe(base);
-      expect(sourceOf(emitModule(e, { ...OPTIONS, fuse: false }))).toBe(base);
-    }
+  it("COMPILE.MODULE.FUSE.OFF: the default is fuse true, and fuse false prints the module of the version before fusion", () => {
+    for (const e of programs) expect(sourceOf(emitModule(e, { ...OPTIONS, fuse: true }))).toBe(sourceOf(emitModule(e, OPTIONS)));
     const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
     const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf" };
-    for (const fuse of [true, false]) {
-      expect(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse }))).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
-      expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse }))).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
-    }
+    expect(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: true }))).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
+    expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: true }))).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
+    // The hashes of the shapes of ireko in version 0.10 of the compiler, before step 3 of COMPILE-FUSE.
+    expect(hash(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false })))).toBe("58810f602515705f");
+    expect(hash(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false })))).toBe("91a25086213c18bd");
+    // The clean form changes the text of both modules.
+    expect(sourceOf(emitModule(NODE_SHAPE, node))).not.toBe(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false })));
+    expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes))).not.toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false })));
   });
 
   it("COMPILE.MODULE.FUSE.OFF: a value of fuse that is not a boolean gives a reason", () => {
@@ -134,8 +138,12 @@ describe("COMPILE.MODULE.FUSE.FACTS: the facts clean and fresh of each list", ()
     expect(used(safe)).toStrictEqual({ clean: true, inner: [], fresh: false, reads: 1 });
     // A division can throw, so the catch of an item can put the sentinel into the list.
     expect(used(inv).clean).toBe(false);
-    // The axis list tests each item for the sentinel, so each over a list is not clean.
-    expect(used(each(axes.list(one), lit(1))).clean).toBe(false);
+    // With fuse false, the axis list tests each item for the sentinel, so each over a list is not clean. With fuse, a
+    // clean list has no test (COMPILE.MODULE.FUSE.CLEAN), but a list that is not clean keeps it.
+    const overList = each(axes.list(one), lit(1));
+    expect(factOf(factsOf(op("count", op("append", overList, one)), { ...OPTIONS, fuse: false }), overList).clean).toBe(false);
+    expect(used(overList).clean).toBe(true);
+    expect(used(each(axes.list(ref("xs")), lit(1))).clean).toBe(false);
     // A test that is a safe boolean keeps the fact. A test that can throw removes it.
     expect(used(each(axes.where(axes.window(-1, 1), v("t")), lit(1))).clean).toBe(true);
     expect(used(each(axes.where(axes.window(-1, 1), op("gt", op("divide", lit(1), ref("w")), lit(0))), lit(1))).clean).toBe(false);
@@ -215,7 +223,8 @@ describe("COMPILE.MODULE.FUSE.FACTS: the names, the loops and the cells", () => 
     expect(short(twice, arg).reads).toBe(2);
     // A call of a name that is not a function gives a reason, and the analysis does not count its reads.
     expect(listFactsOf(() => emitModule(call("g", arg), OPTIONS)).emitted.ok).toBe(false);
-    // The parameter does not keep the facts of fusion of its argument, so one function serves each call.
+    // The parameter keeps only the fact clean of its argument (COMPILE.MODULE.FUSE.CLEAN). The node joins the facts of
+    // the function for the clean argument and of the function for the argument that is not clean.
     const param = v("l");
     const value = let_({ f: fn(["l"], op("append", param, one)) }, op("add", op("count", call("f", one)), op("count", call("f", inv))));
     expect(short(value, param).clean).toBe(false);
@@ -289,5 +298,215 @@ describe("COMPILE.MODULE.FUSE.FACTS: the names, the loops and the cells", () => 
     expect(sourceOf(emitted)).toBe(sourceOf(emitSheetModule(columns, SHEET)));
     expect(factOf(facts, read).clean).toBe(false);
     expect(factOf(facts, columns.get("shape") as Expr).clean).toBe(true);
+  });
+});
+
+type Run = (records: unknown, vars: unknown, parents?: unknown) => unknown;
+interface Loaded {
+  readonly run: Run;
+  readonly VEX_ERROR: unknown;
+}
+
+/** This function makes the module of a source with `new Function`, as a build loads it. */
+function make(source: string): Loaded {
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from the printer, as in a build.
+  return new Function(`${source.replaceAll(/^export /gm, "")}\nreturn { run, VEX_ERROR };`)() as Loaded;
+}
+
+/** This function gives a value of the interpreter in the form of a module: an error item has the error `VEX_ERROR`. */
+function asModule(value: unknown, error: unknown): unknown {
+  if (isVexList(value)) return { kind: "vex.list", items: value.items.map((x) => ({ key: x.key, result: x.result.ok ? { ok: true, value: asModule(x.result.value, error) } : { ok: false, error } })) };
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(Object.entries(value).map(([k, x]) => [k, asModule(x, error)]));
+}
+
+/** This function gives a list of the input, as plain data. An item with the value `undefined` is an error item. */
+const input = (...values: (number | undefined)[]): object => ({
+  kind: "vex.list",
+  items: values.map((x, i) => (x === undefined ? { key: String(i), result: { ok: false, error: { code: "#N/A", kind: "missing-field", message: "no value", path: [] } } } : { key: String(i), result: { ok: true, value: x } })),
+});
+/** The records of the tests. The record with `w` 0 gives an error item in `inv`, and two lists of `xs` have error items. */
+const RECORDS = [
+  { n: 3, w: 1, b: true, xs: input(3, 1, 2) },
+  { n: -1, w: 0, b: false, xs: input(5, undefined, -1) },
+  { n: 0, w: 2, b: true, xs: input() },
+  { n: 2, w: -1, b: false, xs: input(undefined) },
+];
+const VARS = { t: true };
+
+/** This function gives the source of a program with the option `fuse`. */
+const printed = (e: Expr, fuse: boolean): string => sourceOf(emitModule(e, { ...OPTIONS, fuse }));
+
+/** This function compares the modules of fuse true and of fuse false with the interpreter at each key (P17). */
+function expectSame(e: Expr, records: readonly unknown[] = RECORDS): void {
+  const s = space.array(records);
+  const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: VARS, domains: OPTIONS.domains ?? [] }));
+  for (const fuse of [true, false]) {
+    const m = make(printed(e, fuse));
+    const copy = structuredClone(records);
+    expect(m.run(copy, VARS)).toStrictEqual(results.map((r) => (r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR)));
+    expect(copy).toStrictEqual(records);
+  }
+}
+
+/** This function gives the count of the functions of the program in a source. */
+const functions = (source: string): number => source.match(/const fn\d+ = \(/g)?.length ?? 0;
+
+/** A clean list at each key: the list of `fill`. */
+const two = op("fill", lit(2), n);
+/** A list of the input, which can hold error items, so it is not clean. */
+const xs = ref("xs");
+
+/**
+ * The ops with a clean form. `clean` is a part of the code of the clean form, and `plain` is a part of the code of the
+ * plain form. A form without `clean` is the plain form without its test of the sentinel.
+ */
+const FORMS: readonly { readonly name: string; readonly of: (l: Expr) => Expr; readonly clean?: string; readonly plain: string }[] = [
+  { name: "sortBy", of: (l) => op("sortBy", l), clean: "SBC(", plain: "SB(" },
+  { name: "sortBy by", of: (l) => op("sortBy", l, lit({ by: "negate" })), clean: "SKC(", plain: "SK(" },
+  { name: "take", of: (l) => op("take", l, lit(1)), clean: "TKC(", plain: "TK(" },
+  { name: "drop", of: (l) => op("drop", l, lit(1)), clean: "DRC(", plain: "DR(" },
+  { name: "append", of: (l) => op("append", l, two), clean: ".concat(", plain: "AP(" },
+  { name: "without", of: (l) => op("without", l, two), clean: "WOC(", plain: "WO(" },
+  { name: "flat", of: (l) => op("flat", op("fill", lit(2), l)), clean: "FLC(", plain: "FL(" },
+  { name: "indexOf", of: (l) => op("ifError", op("indexOf", l, lit(1)), lit(-1)), clean: "IXC(", plain: "IX(" },
+  { name: "nth", of: (l) => op("ifError", op("nth", l, lit(1)), lit(-1)), clean: "NTC(", plain: "NT(" },
+  { name: "count", of: (l) => op("count", l), clean: ".length", plain: "CT(" },
+  { name: "first", of: (l) => op("ifError", op("first", l), lit(-1)), clean: "FSC(", plain: "FS(" },
+  { name: "sum", of: (l) => op("sum", l), plain: "=== E) continue;" },
+  { name: "each", of: (l) => each(axes.list(l), op("add", v("y"), lit(1)), undefined, ["y"]), plain: "[1] === E) F();" },
+  { name: "fold", of: (l) => fold(axes.list(l), { s: lit(0) }, { s: op("add", v("s"), v("y")) }, v("s"), undefined, ["y"]), plain: "[1] === E) F();" },
+  { name: "reverse", of: (l) => op("sum", each(axes.reverse(axes.list(l)), v("i"), undefined, ["y", "i"])), plain: "CT(" },
+  { name: "result", of: (l) => l, clean: "LOC(", plain: "LO(" },
+  { name: "record", of: (l) => rec({ l }), clean: "LVC(", plain: "LV(" },
+  { name: "own", of: (l) => fold(axes.all, { acc: l }, { acc: op("append", v("acc"), two) }, v("acc")), clean: "AOC(", plain: "AO(" },
+];
+
+describe("COMPILE.MODULE.FUSE.CLEAN: the clean form of the list ops", () => {
+  it("COMPILE.MODULE.FUSE.CLEAN: with fuse, an op over a clean list prints its clean form, and it gives the values of the interpreter", () => {
+    for (const { name, of, clean, plain } of FORMS) {
+      const on = printed(of(two), true);
+      const off = printed(of(two), false);
+      const dirty = printed(of(xs), true);
+      expect({ name, plain: on.includes(plain), clean: clean === undefined || on.includes(clean) }).toStrictEqual({ name, plain: false, clean: true });
+      // fuse false and a list that is not clean keep the plain form.
+      expect({ name, off: off.includes(plain), dirty: dirty.includes(plain) }).toStrictEqual({ name, off: true, dirty: true });
+      // The texts of the helpers hold `.concat(` and `.length`, so only the names of the helpers are not in the plain form.
+      const helper = clean?.startsWith(".") === false ? clean : "(none)";
+      expect({ name, off: off.includes(helper), dirty: dirty.includes(helper) }).toStrictEqual({ name, off: false, dirty: false });
+      for (const l of [two, xs]) expectSame(of(l));
+    }
+  });
+
+  it("COMPILE.MODULE.FUSE.CLEAN: an op with two lists or with lists of lists prints the clean form only when each list is clean", () => {
+    for (const [o, plain] of [["append", "AP("], ["without", "WO("]] as const) {
+      expect(printed(op("count", op(o, two, xs)), true)).toContain(plain);
+      expect(printed(op("count", op(o, xs, two)), true)).toContain(plain);
+      for (const [a, b] of [[two, xs], [xs, two], [two, two]] as const) expectSame(op(o, a, b));
+    }
+    // flat reads the items of each item, so a clean list of lists that are not clean keeps FL.
+    const nested = op("flat", op("fill", lit(2), xs));
+    expect(printed(nested, true)).toContain("FL(");
+    // The envelope of a list of lists reads each level, so each level must be clean.
+    expect(printed(op("fill", lit(2), xs), true)).toContain("LO(");
+    expect(printed(op("fill", lit(2), two), true)).toContain("LOC(");
+    // The empty list has no level of items, so flat has the clean form.
+    expect(printed(op("flat", lit(vexList([]))), true)).toContain("FLC(");
+    for (const e of [nested, op("fill", lit(2), xs), op("fill", lit(2), two), op("flat", lit(vexList([])))]) expectSame(e);
+  });
+
+  it("COMPILE.MODULE.FUSE.CLEAN: the strict ops over a clean list cannot fail, and the error items of the input stay errors", () => {
+    const strict = lit({ strict: true });
+    for (const l of [two, xs]) {
+      const forms = [op("count", l, strict), op("sum", l, strict), op("ifError", op("first", l, strict), lit(-2)), op("ifError", op("nth", l, lit(0), strict), lit(-2)), op("ifError", op("take", l, lit(1), strict), lit(vexList([]))), op("sortBy", l, strict)];
+      for (const e of forms) expectSame(e);
+    }
+    // The ops of LIST.BUILD remove the error items, so their value is clean, and the op after it has the clean form.
+    const built = op("count", op("append", xs, xs));
+    expect(printed(built, true)).toContain(".length");
+    expectSame(built);
+  });
+
+  it("COMPILE.MODULE.FUSE.CLEAN LIST.LITERAL: a literal with error items keeps the plain form, and gives the values of the interpreter", () => {
+    const good = lit(vexList([item("a", 1), item("b", 2)]));
+    const bad = lit(vexList([item("a", 1), errorItem("b"), item("c", 3)]));
+    const forms = (l: Expr): readonly Expr[] => [op("count", op("append", l, two)), let_({ ys: op("append", l, two) }, op("sum", each(axes.list(v("ys")), v("y"), undefined, ["y"]))), op("count", l), op("sum", l), l, op("sortBy", l)];
+    for (const e of [...forms(good), ...forms(bad)]) expectSame(e);
+    expect(printed(op("sortBy", good), true)).toContain("SBC(");
+    expect(printed(op("sortBy", bad), true)).toContain("SB(");
+  });
+
+  it("COMPILE.MODULE.FUSE.CLEAN SHEET.CELL: a cell of a column of lists keeps the plain form, and gives the results of SheetRun", () => {
+    const kinds = { shape: { list: "number" }, size: "number", total: "number", joined: "number", back: { list: "number" } } as const;
+    const options: SheetModuleOptions = { domains: [NumDomain], schema: { fields: { v: "number", n: "number" } }, kinds };
+    // The column shape has an error item at each key whose window holds the record with v 0.
+    const columns = new Map<string, Expr>([
+      ["shape", each(axes.window(-1, 1), op("divide", lit(1), ref("v")))],
+      ["size", op("count", cell("shape"))],
+      ["total", op("sum", cell("shape"))],
+      ["joined", op("count", op("append", cell("shape"), op("fill", lit(1), ref("n"))))],
+      ["back", op("sortBy", cell("shape"))],
+    ]);
+    const records = [
+      { v: 1, n: 2 },
+      { v: 0, n: 1 },
+      { v: 2, n: 0 },
+      { v: 4, n: 3 },
+      { v: 5, n: -1 },
+    ];
+    const s = space.array(records);
+    const run = new SheetRun(columns, { space: s, domains: [NumDomain] });
+    for (const fuse of [true, false]) {
+      const source = sourceOf(emitSheetModule(columns, { ...options, fuse }));
+      const m = make(source);
+      const results = (c: string): unknown[] =>
+        s.keys.map((k) => {
+          const r = run.cell(c, k);
+          return r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR;
+        });
+      expect(m.run(structuredClone(records), {})).toStrictEqual(Object.fromEntries([...columns.keys()].map((c) => [c, results(c)])));
+      // A read of a cell is not clean, and the append of a cell is clean.
+      expect(source).toContain("CT(");
+      expect(source).toContain("SB(");
+      expect(source.match(/CT\(/g)?.length).toBe(fuse ? 2 : 3);
+    }
+  });
+
+  it("COMPILE.MODULE.FUSE.CLEAN FN.CALL: the fact clean of a list is a part of the signature, and a function for a list that is not clean serves each call", () => {
+    const body = fn(["l"], op("add", op("count", v("l")), op("sum", v("l"))));
+    const calls = (first: Expr, ...rest: Expr[]): Expr => let_({ f: body }, rest.reduce((x, a) => op("add", x, call("f", a)), call("f", first)));
+    const three = op("fill", lit(3), n);
+    // Two clean arguments share the clean function, and its body has the clean form.
+    const cleanCalls = calls(two, three);
+    expect(functions(printed(cleanCalls, true))).toBe(1);
+    expect(printed(cleanCalls, true)).not.toContain("CT(");
+    // A call with a list that is not clean first prints the plain function, and a clean call after it takes it.
+    expect(functions(printed(calls(xs, two), true))).toBe(1);
+    expect(printed(calls(xs, two), true)).toContain("CT(");
+    // A clean call first prints the clean function, so a call after it with a list that is not clean prints the plain one.
+    expect(functions(printed(calls(two, xs), true))).toBe(2);
+    expect(functions(printed(calls(two, xs, three, xs), true))).toBe(2);
+    // With fuse false, one function serves each call.
+    for (const e of [calls(two, xs), calls(xs, two), cleanCalls]) expect(functions(printed(e, false))).toBe(1);
+    for (const e of [cleanCalls, calls(xs, two), calls(two, xs), calls(two, xs, three, xs)]) expectSame(e);
+  });
+
+  it("COMPILE.MODULE.FUSE.CLEAN COMPILE.MODULE.FUSE.FACTS: a name of a let and the value of a loop keep the fact clean of their form", () => {
+    const step = (acc: Expr): Expr => iterate(3, { acc: one }, { acc }, op("count", v("acc")));
+    expect(accClean(step(let_({ z: one }, v("z"))))).toBe(true);
+    expect(accClean(step(let_({ z: inv }, v("z"))))).toBe(false);
+    // A binding sees the names outside the let, so the name of the binding has the fact of the name of the loop.
+    expect(accClean(step(let_({ z: v("acc") }, v("z"))))).toBe(true);
+    // The value of an inner loop is clean when its result is clean with the facts of its own names.
+    expect(accClean(step(iterate(2, { q: v("acc") }, { q: op("append", v("q"), one) }, v("q"))))).toBe(true);
+    expect(accClean(step(iterate(2, { q: inv }, { q: v("q") }, v("q"))))).toBe(false);
+    expect(accClean(step(fold(axes.all, { q: v("acc") }, { q: op("append", v("q"), one) }, v("q"))))).toBe(true);
+    // The name of an item of a fold is not clean in the steps, and the result reads the names outside.
+    expect(accClean(step(fold(axes.list(op("fill", lit(2), inv)), { q: one }, { q: v("q2") }, v("q"), undefined, ["q2"])))).toBe(false);
+    expect(accClean(step(fold(axes.all, { q: inv }, { q: v("q") }, v("acc"))))).toBe(true);
+    // The form of a call does not prove its list clean.
+    expect(accClean(let_({ f: fn(["l"], v("l")) }, step(call("f", v("acc")))))).toBe(false);
+    const steps = [let_({ z: one }, v("z")), iterate(2, { q: v("acc") }, { q: op("append", v("q"), one) }, v("q")), fold(axes.all, { q: v("acc") }, { q: op("append", v("q"), one) }, v("q"))];
+    for (const acc of steps) expectSame(iterate(3, { acc: one }, { acc }, rec({ c: op("count", v("acc")), l: v("acc") })));
   });
 });

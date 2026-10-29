@@ -372,7 +372,7 @@ Each step is one pull request. P17 and the golden files check each step, and the
 4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM).
 5. Fuse the chains of `append`, and make `sortBy` a sink.
 6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT).
-7. Make one envelope for each run (COMPILE.MODULE.FUSE.OUT), after the decision of the owner on its form.
+7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions).
 8. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
 
 These golden files change. The files in `packages/core/src/__golden__` do not change, because they are the IR and the traces of tier 1:
@@ -387,7 +387,11 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 
 #### Open questions
 
-- **The form of one envelope for each run.** Today each key gets a new `vex.list` that is not frozen. One shared object changes its identity, and a change by the host shows at each key. The proposal is one frozen object, as `LV` gives. This is a breaking change of the value of the run, so the version is 0.18.0. The owner decides.
+- **The form of one envelope for each run (decided 2026-10-29).** The value of the run is one frozen `vex.list` for each run, as `LV` gives, and each key gets that object. These facts support the decision:
+  - The interpreter is the reference, and its `vexList` is frozen (`packages/core/src/list.ts`). The `LO` of today gives a list that is not frozen, so the frozen form agrees with the reference.
+  - The memo of a module already gives the same object at each origin (§13.2, the memo of each space). Thus the identity of a value is not a part of the contract.
+  - The host of ireko only reads the value (`valuesOf` in `shape-vex.ts`).
+  - A host that changes the value of the run gets a `TypeError` in strict code, or no change. The project treats this as a breaking change. Thus step 7 goes into a MINOR version (0.18.0 or later), with a changeset that tells the change.
 - **Values without keys.** In the shapes module, each list of `merge` after its first `each` has the key 0 for each item. An array of values without pairs removes most of the remaining allocation. But each helper then needs two forms. The work decides after the measure of step 5.
 - **The model of the full layout.** The model `1 + 0.26 × (module ratio - 1)` gives 1.46 for 2.76, but CI measured 1.58. The difference is approximately 0.12, and the wrapper `shape-vex.ts` of ireko is the probable cause. Thus the gate of 1.1 can also need a change of the wrapper.
 

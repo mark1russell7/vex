@@ -1,5 +1,12 @@
 # @vex/formula
 
+## 0.2.20
+
+### Patch Changes
+
+- @mark1russell7/vex@0.17.1
+  - @mark1russell7/vex-domains@0.17.1
+
 ## 0.2.19
 
 ### Patch Changes

@@ -63,13 +63,11 @@ function asModule(value: unknown, error: unknown): unknown {
 
 /** This function compares the values of a module with the interpreter at each key (P17). */
 function expectSame(e: Expr, records: readonly unknown[] = RECORDS, options: ModuleOptions = OPTIONS): Loaded {
-  const m = make(sourceOf(e, options));
   const s = space.array(records);
-  const expected = s.keys.map((origin) => {
-    const r = evaluate(e, { space: s, origin, vars: { a: 2 }, domains: options.domains ?? [] });
-    return r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR;
-  });
-  expect(m.run(structuredClone(records), { a: 2 })).toStrictEqual(expected);
+  const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: { a: 2 }, domains: options.domains ?? [] }));
+  // The module of fuse false gives the same values (COMPILE.MODULE.FUSE.CLEAN).
+  const [m, off] = [make(sourceOf(e, options)), make(sourceOf(e, { ...options, fuse: false }))] as const;
+  for (const x of [m, off]) expect(x.run(structuredClone(records), { a: 2 })).toStrictEqual(results.map((r) => (r.ok ? asModule(r.value, x.VEX_ERROR) : x.VEX_ERROR)));
   return m;
 }
 

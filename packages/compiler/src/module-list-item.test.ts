@@ -44,8 +44,8 @@ function make(source: string): Loaded {
 }
 
 /** This function gives the source of a program, and fails the test for a program that cannot be a module. */
-function sourceOf(e: Expr): string {
-  const m = emitModule(e, OPTIONS);
+function sourceOf(e: Expr, fuse = true): string {
+  const m = emitModule(e, { ...OPTIONS, fuse });
   if (!m.ok) throw new Error(m.reason);
   return m.source;
 }
@@ -69,10 +69,12 @@ function interpret(e: Expr, records: readonly unknown[], error: unknown): readon
 /** This function compares the values of a module with the interpreter at each key (P17), and gives the source. */
 function expectSame(e: Expr, records: readonly unknown[] = RECORDS): string {
   const source = sourceOf(e);
-  const m = make(source);
-  const input = structuredClone(records);
-  expect(m.run(input, VARS)).toStrictEqual(interpret(e, records, m.VEX_ERROR));
-  expect(input).toStrictEqual(records);
+  // The module of fuse false gives the same values (COMPILE.MODULE.FUSE.CLEAN).
+  for (const m of [make(source), make(sourceOf(e, false))]) {
+    const input = structuredClone(records);
+    expect(m.run(input, VARS)).toStrictEqual(interpret(e, records, m.VEX_ERROR));
+    expect(input).toStrictEqual(records);
+  }
   return source;
 }
 
@@ -122,7 +124,7 @@ const over = (l: Expr, body: Expr, as: ItemNames = ITEM, wrap: (axis: Axis) => A
 const reversed = (axis: Axis): Axis => axes.reverse(axis);
 
 /** The source must have an append into the list of a name, or must not have one. */
-const owns = (source: string): boolean => source.includes("AO(");
+const owns = (source: string): boolean => /\bAOC?\(/.test(source);
 
 /**
  * This function runs `body` and gives the sum of `measure` over each call of `Array.prototype.filter` and
@@ -263,17 +265,20 @@ describe("COMPILE.MODULE.LIST.ITEM: the names of the items of a loop over the ax
     // The interpreter copies the list at each append, so the test compares the count only. An append in place reads
     // each new item about once, and a copy at each append reads n squared / 2 items: 50 million here.
     const long = fold(axes.list(op("fill", lit(10_000), lit(1))), { acc: NONE }, { acc: op("append", v("acc"), one(op("add", x, i))) }, op("count", v("acc")), undefined, BOTH);
-    const m = make(sourceOf(long));
-    let got: unknown;
-    const read = scanReads(
-      () => {
-        got = m.run([RECORDS[0]], VARS);
-      },
-      (l) => l.length,
-    );
-    expect(got).toStrictEqual([10_000]);
-    expect(read).toBeGreaterThan(0);
-    expect(read).toBeLessThan(100_000);
+    for (const fuse of [true, false]) {
+      const m = make(sourceOf(long, fuse));
+      let got: unknown;
+      const read = scanReads(
+        () => {
+          got = m.run([RECORDS[0]], VARS);
+        },
+        (l) => l.length,
+      );
+      expect(got).toStrictEqual([10_000]);
+      // The clean form counts the length of the array, so it scans no items (COMPILE.MODULE.FUSE.CLEAN).
+      expect(read > 0).toBe(!fuse);
+      expect(read).toBeLessThan(100_000);
+    }
   });
 
   it("COMPILE.MODULE.LIST.ITEM LIST.FLAT: an item that is a list is a list in the body", () => {

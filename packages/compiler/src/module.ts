@@ -299,7 +299,13 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper;
+
+/**
+ * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
+ * lists that the facts prove clean. Thus it has no scan of `V`, no `VW` and no test of the sentinel.
+ */
+type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LVC";
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX";
@@ -568,6 +574,57 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  let o = l.vl;",
     "  if (o === undefined) {",
     '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LV(v, h - 1) : v } }))) });',
+    "    l.vl = o;",
+    "  }",
+    "  return o;",
+    "}",
+  ].join("\n"),
+  // The clean form (COMPILE.MODULE.FUSE.CLEAN): the facts prove that no item of a list holds the sentinel. Thus V gives
+  // the list itself, VW gives the list, and strict cannot fail. Each helper below is the helper without its last letter,
+  // with no scan, no test of the sentinel and no option strict. The other checks stay, so each error stays an error.
+  SBC: [
+    "function SBC(l) {",
+    "  const t = l.length > 0 ? typeof l[0][1] : \"number\";",
+    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  return l.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "}",
+  ].join("\n"),
+  SKC: [
+    "function SKC(l, f) {",
+    "  const o = l.map((x) => [x, f(x[1])]);",
+    "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
+    "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map((x) => x[0]);",
+    "}",
+  ].join("\n"),
+  TKC: "function TKC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(0, n) : F(); }",
+  DRC: "function DRC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(n) : F(); }",
+  // The loop reads n items, so it ends also if o is l.
+  AOC: "function AOC(l, o, w) { if (l !== w) return l.concat(o); const n = o.length; for (let i = 0; i < n; i++) l.push(o[i]); return l; }",
+  WOC: [
+    "function WOC(l, o) {",
+    "  const g = new Map();",
+    "  for (const [k] of o) g.set(`${k}`, 1);",
+    "  return l.filter((x) => !g.has(`${x[0]}`));",
+    "}",
+  ].join("\n"),
+  FLC: "function FLC(l) { const o = []; for (const [, v] of l) for (const x of v) o.push(x); return o; }",
+  IXC: [
+    "function IXC(l, x) {",
+    '  if (typeof x !== "number" && typeof x !== "string" && typeof x !== "boolean") F();',
+    "  for (let i = 0; i < l.length; i++) if (l[i][1] === x) return i;",
+    "  return F();",
+    "}",
+  ].join("\n"),
+  NTC: "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
+  FSC: "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
+  LOC: 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
+  // LV and LVC keep one object on the array. A clean list gives the same object from both.
+  LVC: [
+    "function LVC(l, h) {",
+    "  let o = l.vl;",
+    "  if (o === undefined) {",
+    '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LVC(v, h - 1) : v } }))) });',
     "    l.vl = o;",
     "  }",
     "  return o;",
@@ -870,6 +927,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
   SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [],
+  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LVC: [],
 };
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
@@ -1080,13 +1138,19 @@ function cleanForm(e: Expr, fact: (name: string) => boolean): boolean {
     case "var":
       return fact(e.name);
     case "let":
-      return cleanForm(e.body, (name) => !(name in e.bind) && fact(name));
+      // A binding sees the context of the let, so its form has the facts of the names outside.
+      return cleanForm(e.body, (name) => (name in e.bind ? cleanForm(e.bind[name] as Expr, fact) : fact(name)));
+    case "fold":
+    case "iterate": {
+      // The result of a loop sees the names of the loop, with the facts of their own fixpoint, and the names outside.
+      const firsts = new Map(Object.entries(e.init).map(([name, x]): [string, boolean] => [name, cleanForm(x, fact)]));
+      const clean = cleanNames(firsts, e.step, e.tag === "fold" ? (e.as ?? []) : [], fact);
+      return cleanForm(e.result, (name) => (name in e.init ? clean.has(name) : fact(name)));
+    }
     case "call":
     case "each":
     case "ext":
     case "fn":
-    case "fold":
-    case "iterate":
     case "rec":
     case "ref":
       return false;
@@ -1564,8 +1628,11 @@ class Printer {
   readonly #shared = new Set<Expr>();
   /** The node of each code that `expr` gives, while the printer notes the facts of fusion. */
   readonly #nodeOf = new WeakMap<Code, Expr>();
+  /** True when the printer prints the forms of fusion (COMPILE.MODULE.FUSE.OFF). `runOf` checks the option first. */
+  readonly #fuse: boolean;
 
   constructor(expr: Expr, options: ModuleOptions, sheet?: SheetInfo) {
+    this.#fuse = options.fuse !== false;
     this.#domains = options.domains ?? [];
     this.#facts = factsOf({ domains: this.#domains });
     this.#schema = options.schema;
@@ -1604,6 +1671,23 @@ class Printer {
   use(name: Helper): string {
     this.helpers.add(name);
     return name;
+  }
+
+  /**
+   * This method tells if the printer prints the clean form of a list (COMPILE.MODULE.FUSE.CLEAN). The option `fuse` must
+   * be true, and the facts must prove the list clean. With `levels`, each level of a list of lists must be clean too.
+   */
+  #clean(l: ListInfo | undefined, levels = false): boolean {
+    if (!this.#fuse) return false;
+    for (let x = l; x !== undefined; x = levels ? x.inner : undefined) if (x.clean !== true) return false;
+    return l !== undefined;
+  }
+
+  /** This method gives the code of a list in a `vex.list`: the helper `plain` or its clean form (COMPILE.MODULE.FUSE.CLEAN). */
+  envelope(v: Value, plain: "LO" | "LV"): string {
+    const list = v.list as ListInfo;
+    const helper = this.#clean(list, true) ? (plain === "LO" ? "LOC" : "LVC") : plain;
+    return `${this.use(helper)}(${v.code}, ${String(depthOf(list))})`;
   }
 
   /** This method gives the name of a part of the tree, for example `H` for the children, and marks the part as read. */
@@ -2232,10 +2316,10 @@ class Printer {
       return { code: b, kind, deps, list };
     });
     // Each parameter can hold the error of its argument, so one function serves the arguments of one kind. The facts of
-    // a list are a part of its kind.
-    // The facts of fusion are not a part of the signature, so the parameters do not keep them.
-    const sig = JSON.stringify(args.map((a) => (a.list === undefined ? (a.kind ?? null) : { list: plainList(a.list) })));
-    const spec = bound.specs.get(sig) ?? this.#printFn(bound, args, sig);
+    // a list are a part of its kind. With fuse, the fact clean of each list is a part too (COMPILE.MODULE.FUSE.CLEAN).
+    // The function of a list that is not clean also serves a clean list, so a call takes it if it exists.
+    const sig = this.#signature(args, this.#fuse);
+    const spec = bound.specs.get(sig) ?? bound.specs.get(this.#signature(args, false)) ?? this.#printFn(bound, args, sig);
     // Each marker becomes the levels at the call. The levels of the arguments count for each call, because their
     // statements read their keys, so the marker of the parameters gives no level.
     const levels = (d: number): readonly number[] => (d === spec.origin ? [ctx.originLevel] : d === spec.focus ? [ctx.level] : d === spec.param ? [] : [d]);
@@ -2261,7 +2345,7 @@ class Printer {
     const o = this.fresh("o");
     const env = new Map(bound.ctx.env);
     // A parameter hides a function of its name, because a read looks at the values first.
-    bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]), list: plainList((args[i] as Arg).list) }));
+    bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]), list: this.#paramList((args[i] as Arg).list, this.#fuse) }));
     const scope: CallScope = { param, focus, repeats: nestsLoops(bound.fn.body), names: new Set(names), decls: [], root: bound.fn.body };
     this.#scopes.push(scope);
     // The value of a call can be a list, as the value of a let can (COMPILE.MODULE.LIST.CALL). The call is at a place
@@ -2283,6 +2367,21 @@ class Printer {
     const spec: Spec = { name, kind: body.v.kind, list: body.v.list, safe: body.v.safe, deps: body.v.deps, origin, focus, param, global };
     bound.specs.set(sig, spec);
     return spec;
+  }
+
+  /**
+   * This method gives the facts of the list of a parameter. Only the fact clean of the list itself stays, and only with
+   * `clean`. The fact clean of the items of a list of lists makes more functions, so it does not stay. `fresh` does not
+   * hold for a parameter, because the caller holds its argument.
+   */
+  #paramList(l: ListInfo | undefined, clean: boolean): ListInfo | undefined {
+    const plain = plainList(l);
+    return plain !== undefined && clean && l?.clean === true ? { ...plain, clean: true } : plain;
+  }
+
+  /** This method gives the signature of the arguments of a call: the kind of each one, with the facts of each list. */
+  #signature(args: readonly Arg[], clean: boolean): string {
+    return JSON.stringify(args.map((a) => (a.list === undefined ? (a.kind ?? null) : { list: this.#paramList(a.list, clean) })));
   }
 
   #boolean(v: Value): string {
@@ -2339,7 +2438,7 @@ class Printer {
    * (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). An error item has the error `VEX_ERROR`.
    */
   #plain(v: Value): string {
-    return v.list === undefined ? v.code : `${this.use("LV")}(${v.code}, ${String(depthOf(v.list))})`;
+    return v.list === undefined ? v.code : this.envelope(v, "LV");
   }
 
   /** This method gives the samples of a list of the facts `l`: no items, items with values, and an error item. */
@@ -2486,6 +2585,8 @@ class Printer {
     readonly start: ReadonlySet<number>;
     /** True when the statements before the loop cannot throw. */
     readonly startSafe: boolean;
+    /** True when the statements of `check` cannot throw: no item is an error item (COMPILE.MODULE.FUSE.CLEAN). */
+    readonly checkSafe: boolean;
     readonly tests: readonly Expr[];
     readonly inner: Ctx;
     /** True when a target can be a key that is not the position of a record: a key of a literal or of `fill`. */
@@ -2511,14 +2612,16 @@ class Printer {
       const q = this.fresh("q");
       const head = reverse ? `for (let ${q} = ${a}.length - 1; ${q} >= 0; ${q}--) {` : `for (let ${q} = 0; ${q} < ${a}.length; ${q}++) {`;
       const key = [`const ${j} = ${a}[${q}][0];`];
-      const check = [`if (${a}[${q}][1] === E) ${this.use("F")}();`];
+      // The loop over a clean list has no test of the sentinel (COMPILE.MODULE.FUSE.CLEAN).
+      const clean = this.#clean(list.v.list);
+      const check = clean ? [] : [`if (${a}[${q}][1] === E) ${this.use("F")}();`];
       const s = [...list.s, `const ${a} = ${list.v.code};`];
       const named = as === undefined ? undefined : this.#itemNames(as, list.v.list as ListInfo, `${a}[${q}][1]`, a, reverse);
       if (named !== undefined) {
         s.push(...named.s);
         check.push(...named.check);
       }
-      return { s, j, head, key, check, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level };
+      return { s, j, head, key, check, checkSafe: clean, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level };
     }
     const s: string[] = [];
     let lo = "0";
@@ -2540,13 +2643,13 @@ class Printer {
     if (this.#tree && isTreeAxis(base)) {
       const range = this.#treeRange(base, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
     }
     // In a graph space, the targets of an axis of a graph are an array of positions. A graph has no offsets and no tree.
     if (this.#graph && GRAPH_AXES.has(base.t)) {
       const range = this.#graphRange(base.t, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
     }
     if (this.#graph && base.t === "window") throw new NotStandalone('the axis "window" in a graph space');
     if (base.t === "others") skip = f;
@@ -2556,7 +2659,7 @@ class Printer {
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
-    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], checkSafe: true, skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
   }
 
   /**
@@ -2579,7 +2682,9 @@ class Printer {
       const i = this.fresh("i");
       const z = this.fresh("z");
       // The check before the index throws for an error item, so the count skips it.
-      s.push(`let ${z} = ${reverse ? `${this.use("CT")}(${a}, false)` : "0"};`);
+      // The count of a clean list is its length (COMPILE.MODULE.FUSE.CLEAN).
+      const count = this.#clean(info) ? `${a}.length` : `${this.use("CT")}(${a}, false)`;
+      s.push(`let ${z} = ${reverse ? count : "0"};`);
       check.push(`const ${i} = ${reverse ? `--${z}` : `${z}++`};`);
       items.set(index, { code: i, kind: "number", lazy: false, deps });
     }
@@ -2649,7 +2754,7 @@ class Printer {
   #list(op: string, target: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): Code {
     const { strict, step } = this.#foldOptions(op, rest);
     const at = target.at ?? [];
-    const { s, j, head, key, check, skip, fixed, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(target.axis, at, ctx, target.as);
+    const { s, j, head, key, check, checkSafe, skip, fixed, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(target.axis, at, ctx, target.as);
     const { level } = inner;
     // Inside the loop, a constant of the run evaluates once, before the loop over the keys of the run. The tests do not
     // see the names of the items, and the body sees them (AXIS.LIST.SCOPE).
@@ -2666,7 +2771,7 @@ class Printer {
     s.push(r.init);
     const item = [...check, ...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
     // An item whose tests and body cannot fail needs no try.
-    const safeItem = check.length === 0 && body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
+    const safeItem = checkSafe && body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
     // The interpreter evaluates each item before the list op (COMPILE.MODULE.SHEET). When an item reads a cell, an error
     // of an item or of a step must not stop the reads of the next items. So the items go into an array first.
     if ([body, ...testCodes].some((x) => x.v.deps.has(CELLS)) && (strict || stepThrows(op, body.v.kind))) {
@@ -2772,7 +2877,7 @@ class Printer {
    */
   #eachList(e: ExprOf<"each">, ctx: Ctx): Code {
     const at = e.at ?? [];
-    const { s, j, head, key, check, skip, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(e.axis, at, ctx, e.as);
+    const { s, j, head, key, check, checkSafe, skip, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(e.axis, at, ctx, e.as);
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
     // The value of an item can be a list, for flat (LIST.FLAT). The facts of the list tell it.
     if (this.#wantList.has(e)) this.#wantList.add(e.body);
@@ -2783,7 +2888,7 @@ class Printer {
     const list = this.fresh("L");
     const v = this.fresh("x");
     const item = [...check, ...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
-    const safeItem = check.length === 0 && body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
+    const safeItem = checkSafe && body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
     const loop = [
       ...key,
       ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
@@ -2808,8 +2913,11 @@ class Printer {
     const raw = [list, ...exprs.slice(1).map((x) => this.expr(x, ctx))];
     const deps = depsOf(...raw);
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
-    const helper = by !== undefined ? "SK" : op === "sortBy" ? "SB" : op === "take" ? "TK" : "DR";
-    const args = [...parts.map((x) => x.v.code), String(strict), ...(by === undefined ? [] : [by])];
+    const plain = by !== undefined ? "SK" : op === "sortBy" ? "SB" : op === "take" ? "TK" : "DR";
+    // The clean form has no scan of V and no option strict (COMPILE.MODULE.FUSE.CLEAN).
+    const clean = this.#clean(list.v.list);
+    const helper = clean ? (`${plain}C` as const) : plain;
+    const args = [...parts.map((x) => x.v.code), ...(clean ? [] : [String(strict)]), ...(by === undefined ? [] : [by])];
     // The new list has some items of the list, so it keeps the facts of the list. V removes each error item.
     const facts: ListInfo = { ...(list.v.list as ListInfo), clean: true, fresh: false };
     return { s: stmtsOf(...parts), v: { code: `${this.use(helper)}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: facts } };
@@ -2846,11 +2954,9 @@ class Printer {
     const raw = [list, ...exprs.slice(1).map((x) => (two ? this.#listOf(x, ctx) : this.expr(x, ctx)))];
     const deps = depsOf(...raw);
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
-    const helper = BUILD_HELPERS[op] as BuildHelper;
-    const args = [...parts.map((x) => x.v.code), String(strict)];
     // A function of the program can share a node with the step, but its body has its own names (FN.BIND).
     const w = owner !== undefined && ctx.env.get(owner.name) === owner.read ? (owner.w ??= this.fresh("w")) : undefined;
-    const code = w === undefined ? `${this.use(helper)}(${args.join(", ")})` : `(${w} = ${this.use("AO")}(${[...args, w].join(", ")}))`;
+    const code = this.#buildCode(op, parts, strict, w);
     const value = (kind: Kind | undefined, facts: ListInfo | undefined): Code => ({ s: stmtsOf(...parts), v: { code, kind, safe: false, deps, list: facts } });
     if (op === "get") return value(info.item, info.inner);
     if (op === "indexOf") return value("number", undefined);
@@ -2864,6 +2970,24 @@ class Printer {
     return built(info.inner);
   }
 
+  /**
+   * This method gives the code of a list op of `#build`, with the variable `w` of an append into its own list. The clean
+   * form applies when the facts prove each list that the helper scans clean (COMPILE.MODULE.FUSE.CLEAN). Then the
+   * helper has no scan of V and no option strict. The append of two clean lists is `concat`. `get` scans no list, so
+   * it has no clean form.
+   */
+  #buildCode(op: string, parts: readonly Code[], strict: boolean, w: string | undefined): string {
+    const [l, o] = parts as [Code, Code | undefined];
+    const codes = parts.map((x) => x.v.code);
+    const info = l.v.list as ListInfo;
+    // flat scans the list and each list of its items. An empty list has no items.
+    const clean = op === "flat" ? this.#clean(info) && (info.inner === undefined || this.#clean(info.inner)) : op !== "get" && this.#clean(info) && (o?.v.list === undefined || this.#clean(o.v.list));
+    if (w !== undefined) return clean ? `(${w} = ${this.use("AOC")}(${[...codes, w].join(", ")}))` : `(${w} = ${this.use("AO")}(${[...codes, String(strict), w].join(", ")}))`;
+    if (!clean) return `${this.use(BUILD_HELPERS[op] as BuildHelper)}(${[...codes, String(strict)].join(", ")})`;
+    if (op === "append") return `${l.v.code}.concat(${(o as Code).v.code})`;
+    return `${this.use(`${BUILD_HELPERS[op] as "WO" | "FL" | "IX"}C`)}(${codes.join(", ")})`;
+  }
+
   /** This method prints a list op over a list that is not an each: a loop over its array, and nth (LIST.NTH). */
   #overList(op: string, head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
     const list = this.#listOf(head, ctx);
@@ -2875,15 +2999,19 @@ class Printer {
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
     const [l] = parts as [Code];
     const { item, inner } = list.v.list as ListInfo;
+    // A clean list is its own array of items with values, so the clean form reads it with no VW and no test of the
+    // sentinel (COMPILE.MODULE.FUSE.CLEAN). strict cannot fail.
+    const clean = this.#clean(list.v.list);
     // The value of an item of a list of lists is a list, so nth and first give a list (LIST.FLAT).
-    if (op === "nth") return { s: stmtsOf(...parts), v: { code: `${this.use("NT")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: item, safe: false, deps, list: inner } };
+    if (op === "nth") return { s: stmtsOf(...parts), v: { code: clean ? `${this.use("NTC")}(${parts.map((x) => x.v.code).join(", ")})` : `${this.use("NT")}(${[...parts.map((x) => x.v.code), String(strict)].join(", ")})`, kind: item, safe: false, deps, list: inner } };
     // count and first read the items with values on the array of the list, as nth does (COMPILE.MODULE.NTH.INDEX). Thus
-    // a step of a loop that counts a list of n items costs O(1) after the first count.
-    if (op === "count") return { s: l.s, v: { code: `${this.use("CT")}(${l.v.code}, ${String(strict)})`, kind: "number", safe: false, deps, list: undefined } };
-    if (op === "first") return { s: l.s, v: { code: `${this.use("FS")}(${l.v.code}, ${String(strict)})`, kind: item, safe: false, deps, list: inner } };
+    // a step of a loop that counts a list of n items costs O(1) after the first count. The length of an array cannot throw.
+    if (op === "count") return { s: l.s, v: clean ? { code: `${l.v.code}.length`, kind: "number", safe: l.v.safe, deps, list: undefined } : { code: `${this.use("CT")}(${l.v.code}, ${String(strict)})`, kind: "number", safe: false, deps, list: undefined } };
+    if (op === "first") return { s: l.s, v: { code: clean ? `${this.use("FSC")}(${l.v.code})` : `${this.use("FS")}(${l.v.code}, ${String(strict)})`, kind: item, safe: false, deps, list: inner } };
     const r = this.#reduction(op, item, step);
     const { v } = r;
-    const s = [...l.s, r.init, `for (const [, ${v}] of ${l.v.code}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
+    const test = clean ? [] : [`  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`];
+    const s = [...l.s, r.init, `for (const [, ${v}] of ${l.v.code}) {`, ...test, `  ${r.step}`, "}"];
     return { s, v: { code: r.result, kind: r.kind, safe: false, deps, list: op === "first" ? inner : undefined } };
   }
 
@@ -3349,7 +3477,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
     return reasonOf(thrown);
   }
   // A list gives a vex.list (COMPILE.MODULE.LIST.RESULT).
-  const result = value.v.list === undefined ? value.v.code : `${p.use("LO")}(${value.v.code}, ${String(depthOf(value.v.list))})`;
+  const result = value.v.list === undefined ? value.v.code : p.envelope(value.v, "LO");
   const body = ["const out = [];", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out.push(${result});`, "  } catch {", "    out.push(VEX_ERROR);", "  }", "}", "return out;"];
   return printModule(p, options, run, body);
 }

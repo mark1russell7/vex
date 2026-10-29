@@ -24,7 +24,7 @@ function NT(l, i, s) {
   if (s && o.length < l.length) F();
   return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();
 }
-function V(l, s) { const o = VW(l); if (s && o.length < l.length) F(); return o; }
+function V(l, s) { if (!l.some((x) => x[1] === E)) return l; if (s) F(); return l.filter((x) => x[1] !== E); }
 function SB(l, s) {
   const o = V(l, s);
   const t = o.length > 0 ? typeof o[0][1] : "number";

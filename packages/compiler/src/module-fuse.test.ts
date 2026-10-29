@@ -6,7 +6,7 @@
  */
 import { createHash } from "node:crypto";
 import * as fc from "fast-check";
-import { app, axes, call, cell, each, evaluate, fn, fold, isVexList, iterate, let_, lit, rec, ref, SheetRun, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
+import { app, axes, call, cell, each, evaluate, fn, fold, isVexList, iterate, let_, lit, offset, rec, ref, SheetRun, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { NODE_SCHEMA, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA } from "../../pilots/src/ireko-shapes.ts";
@@ -367,8 +367,9 @@ const xs = ref("xs");
  * plain form. A form without `clean` is the plain form without its test of the sentinel.
  */
 const FORMS: readonly { readonly name: string; readonly of: (l: Expr) => Expr; readonly clean?: string; readonly plain: string }[] = [
-  { name: "sortBy", of: (l) => op("sortBy", l), clean: "SBC(", plain: "SB(" },
-  { name: "sortBy by", of: (l) => op("sortBy", l, lit({ by: "negate" })), clean: "SKC(", plain: "SK(" },
+  // The array of fill is fresh, so sortBy sorts it in place (COMPILE.MODULE.FUSE).
+  { name: "sortBy", of: (l) => op("sortBy", l), clean: "SBI(", plain: "SB(" },
+  { name: "sortBy by", of: (l) => op("sortBy", l, lit({ by: "negate" })), clean: "SKI(", plain: "SK(" },
   { name: "take", of: (l) => op("take", l, lit(1)), clean: "TKC(", plain: "TK(" },
   { name: "drop", of: (l) => op("drop", l, lit(1)), clean: "DRC(", plain: "DR(" },
   { name: "append", of: (l) => op("append", l, two), clean: ".concat(", plain: "AP(" },
@@ -560,7 +561,7 @@ describe("COMPILE.MODULE.FUSE: flat over an each is one loop", () => {
     const flat = op("flat", each(axes.window(-1, 1), xs));
     expect(short(op("count", flat), flat)).toStrictEqual({ clean: true, fresh: true, reads: 1 });
     expect(printed(op("count", flat), true)).toContain(".length");
-    expect(printed(op("sortBy", flat), true)).toContain("SBC(");
+    expect(printed(op("sortBy", flat), true)).toContain("SBI(");
     for (const x of [op("count", flat), op("sortBy", flat)]) expectSame(x);
   });
 
@@ -633,7 +634,136 @@ describe("COMPILE.MODULE.FUSE.ITEM: the error items of a fused flat", () => {
   });
 });
 
-describe("COMPILE.MODULE.FUSE P17: random chains of flat over an each", () => {
+/** A list of one number at each key, from a fused flat over a window. */
+const near = op("flat", each(axes.window(-1, 1), op("fill", lit(1), ref("w"))));
+/** This function gives the count of the pushes of one item in a source. */
+const pushes = (source: string): number => source.match(/o\d+\.push\(\[0, /g)?.length ?? 0;
+/** This function gives an append with the option strict. */
+const strictly = (a: Expr, b: Expr): Expr => op("append", a, b, STRICT);
+
+describe("COMPILE.MODULE.FUSE: a chain of append is one output", () => {
+  it("COMPILE.MODULE.FUSE: with fuse, a chain with a part that pushes has no concat, and fuse false keeps concat", () => {
+    const chains = [op("append", one, near), op("append", op("append", one, op("fill", lit(1), ref("w"))), one), op("append", near, op("append", xs, one))];
+    for (const e of chains) {
+      expect(printed(e, true)).not.toMatch(/\.concat\(|\bAP\(/);
+      expect(printed(e, false)).toMatch(/\.concat\(|\bAP\(/);
+      for (const x of [e, op("count", e), op("sum", e)]) expectSame(x);
+    }
+    // Each fill pushes its item, and the loop of the flat pushes into the output of the chain.
+    expect(pushes(printed(chains[1], true))).toBe(3);
+    expect(printed(chains[0], true)).toMatch(/const o\d+ = o\d+;/);
+    // An append of two arrays has no part that pushes, so it keeps concat or AP.
+    expect(printed(op("append", two, two), true)).toContain(".concat(");
+    expect(printed(op("append", xs, two), true)).toContain("AP(");
+    // An options value that is not a literal falls back to the op, which gives the reason.
+    expect(emitModule(op("append", one, near, ref("n")), OPTIONS).ok).toBe(false);
+  });
+
+  it("COMPILE.MODULE.FUSE: a part that the program reads again keeps its array, and the chain copies its items", () => {
+    // The name ys is read two times, so the chain reads its array and a loop copies the items.
+    const twice = let_({ ys: near }, op("add", op("count", op("append", one, v("ys"))), op("count", v("ys"))));
+    const source = printed(twice, true);
+    expect(source).toMatch(/const z\d+ = /);
+    expect(source).not.toMatch(/\.concat\(|\bAP\(/);
+    // A list of the run that the program reads two times is a node of the memo, so the chain reads its value.
+    const run = each(axes.all, op("fill", lit(1), ref("w")));
+    const memo = op("add", op("count", op("append", one, op("flat", run))), op("sum", op("flat", run)));
+    expect(printed(memo, true)).toMatch(/const z\d+ = /);
+    // A constant of the run evaluates once, before the loop over the keys, and the chain copies its items.
+    const constant = op("append", one, op("flat", run));
+    expect(printed(constant, true)).toMatch(/const z\d+ = /);
+    for (const x of [twice, memo, constant]) expectSame(x);
+  });
+
+  it("COMPILE.MODULE.FUSE LIST.SORT: sortBy sorts a fresh array in place, and it copies each other array", () => {
+    const fresh = op("append", one, op("fill", lit(1), ref("w")));
+    expect(printed(op("sortBy", fresh), true)).toContain("SBI(");
+    expect(printed(op("sortBy", fresh, lit({ by: "negate" })), true)).toContain("SKI(");
+    // The value of AP and a name that is read two times are not fresh, so sortBy copies them.
+    expect(printed(op("sortBy", op("append", xs, xs)), true)).toContain("SBC(");
+    const shared = let_({ ys: fresh }, op("add", op("sum", op("sortBy", v("ys"))), op("count", v("ys"))));
+    expect(printed(shared, true)).toContain("SBC(");
+    expect(printed(shared, true)).not.toContain("SBI(");
+    // With fuse false, the helpers of the sort in place are not in the module.
+    expect(printed(op("sortBy", fresh), false)).not.toMatch(/SBI\(|SKI\(/);
+    for (const x of [op("sortBy", fresh), op("sortBy", fresh, lit({ by: "negate" })), shared, op("sortBy", op("append", xs, xs))]) expectSame(x);
+  });
+
+  it("COMPILE.MODULE.FUSE LIST.SORT: the sort in place keeps the order of the items with equal sort values", () => {
+    // The items with the value 1 have the keys 0, 0 and 2. A sort that is not stable can change their order.
+    const records = [
+      { n: 1, w: 1, b: true, xs: input(1, 2, 1) },
+      { n: 2, w: -2, b: false, xs: input(2, -2, 2, 1) },
+      { n: 0, w: 0, b: true, xs: input() },
+    ];
+    const lists = [op("append", one, xs), op("append", op("append", xs, one), op("fill", lit(1), ref("w")))];
+    for (const l of lists) {
+      expect(printed(op("sortBy", l), true)).toContain("SBI(");
+      expect(printed(op("sortBy", l, lit({ by: "abs" })), true)).toContain("SKI(");
+      for (const x of [op("sortBy", l), op("sortBy", l, lit({ by: "abs" })), op("sortBy", l, lit({ by: "negate" }))]) expectSame(x, records);
+    }
+  });
+
+  it("COMPILE.MODULE.FUSE.ITEM LIST.BUILD: an error item of a part is skipped, or it is the error of the chain with strict", () => {
+    for (const part of [xs, inv, BAD, near, NONE]) {
+      const forms: readonly [Expr, Expr][] = [[part, one], [one, part], [one, op("append", part, near)]];
+      for (const [a, b] of forms) for (const x of [op("append", a, b), op("count", op("append", a, b)), op("ifError", strictly(a, b), NONE)]) expectSame(x);
+    }
+    expect(printed(op("append", one, xs), true)).toMatch(/if \(z\d+\[i\]\[1\] !== E\) o\d+\.push/);
+    expect(printed(op("ifError", strictly(one, xs), NONE), true)).toMatch(/if \(z\d+\[i\]\[1\] === E\) F\(\);/);
+    // A strict append inside a lenient append applies strict to its own lists only.
+    const inner = op("append", strictly(one, xs), op("append", BAD, one));
+    expectSame(op("ifError", inner, NONE));
+  });
+
+  it("COMPILE.MODULE.FUSE.ITEM: a part that throws is the error of the chain, and a body that throws in a chain removes its items", () => {
+    const fails = op("fill", lit(1), op("divide", lit(1), ref("w")));
+    // A fill that throws after a push fails the chain, so the chain has no value at that key.
+    for (const e of [op("append", one, fails), op("append", fails, one), op("append", near, op("append", one, fails))]) expectSame(e);
+    // The body of the flat pushes n, and then it throws. The catch puts back the length of the output.
+    const body = op("flat", each(axes.window(-1, 1), op("append", op("fill", lit(1), ref("n")), fails)));
+    const chain = op("append", one, body);
+    const source = printed(chain, true);
+    expect(source).toMatch(/\.length = m\d+;/);
+    expect(pushes(source)).toBe(3);
+    const strict = op("ifError", op("append", one, op("flat", each(axes.window(-1, 1), op("append", one, fails)), STRICT)), NONE);
+    for (const x of [body, chain, op("count", chain), strict]) expectSame(x);
+  });
+
+  it("COMPILE.MODULE.FUSE SHEET.CELL: in a sheet with a search, a chain that reads a cell keeps concat, and each sheet gives the results of SheetRun", () => {
+    const kinds = { a: "number", next: "number", l: { list: "number", texts: true } } as const;
+    const options: SheetModuleOptions = { domains: [NumDomain], schema: { fields: { v: "number", n: "number" } }, kinds };
+    const direct = new Map<string, Expr>([
+      ["a", op("divide", lit(1), ref("v"))],
+      ["l", op("append", op("fill", lit(1), cell("a")), op("fill", lit(1), ref("n")))],
+    ]);
+    // The column next reads the cell after the key, so the sheet has a search.
+    const search = new Map<string, Expr>([
+      ["a", op("divide", lit(1), ref("v"))],
+      ["next", op("ifError", cell("next", [offset(1)]), ref("v"))],
+      ["l", op("append", op("fill", lit(1), cell("a")), op("fill", lit(1), cell("next")))],
+    ]);
+    const records = [
+      { v: 1, n: 2 },
+      { v: 0, n: 1 },
+      { v: 2, n: 0 },
+    ];
+    const s = space.array(records);
+    for (const [columns, fused] of [[direct, true], [search, false]] as const) {
+      const run = new SheetRun(columns, { space: s, domains: [NumDomain] });
+      const source = sourceOf(emitSheetModule(columns, options));
+      expect(pushes(source) > 0).toBe(fused);
+      const m = make(source);
+      const results = (c: string): unknown[] => s.keys.map((k) => {
+        const r = run.cell(c, k);
+        return r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR;
+      });
+      expect(m.run(structuredClone(records), {})).toStrictEqual(Object.fromEntries([...columns.keys()].map((c) => [c, results(c)])));
+    }
+  });
+});
+
+describe("COMPILE.MODULE.FUSE P17: random chains of flat over an each and of append", () => {
   const num = fc.constantFrom(n, ref("w"), op("divide", lit(1), ref("w")), op("subtract", n, lit(1)));
   const cond = fc.constantFrom(ref("b"), op("gt", n, lit(0)), op("gt", op("divide", lit(1), ref("w")), lit(0)), v("t"));
   const axis = fc.constantFrom(axes.all, axes.others, axes.window(-1, 1), axes.reverse(axes.all), axes.where(axes.all, ref("b")));
@@ -646,13 +776,16 @@ describe("COMPILE.MODULE.FUSE P17: random chains of flat over an each", () => {
       fc.tuple(fc.integer({ min: 0, max: 2 }), num).map(([k, x]) => op("fill", lit(k), x)),
       fc.tuple(cond, tie("list"), tie("list")).map(([c, a, b]) => op("if", c, a, b)),
       fc.tuple(cond, num).map(([c, x]) => op("if", c, op("fill", lit(1), x), NONE)),
-      fc.tuple(tie("list"), tie("list")).map(([a, b]) => op("append", a, b)),
+      fc.tuple(tie("list"), tie("list"), fc.boolean()).map(([a, b, s]) => op("append", a, b, ...(s ? [STRICT] : []))),
       fc.tuple(axis, tie("list"), fc.boolean()).map(([a, b, s]) => op("flat", each(a, b), ...(s ? [STRICT] : []))),
     ),
   })).list;
-  const chain = fc.tuple(axis, body, fc.boolean(), fc.constantFrom("count", "sum", "list")).map(([a, b, s, sink]) => {
-    const flat = op("flat", each(a, b), ...(s ? [STRICT] : []));
-    return sink === "list" ? op("ifError", flat, NONE) : op(sink, flat);
+  /** A random program: a flat over an each, or a chain of append at the root, with a sink. */
+  const chain = fc.tuple(axis, body, fc.boolean(), fc.boolean(), fc.constantFrom("count", "sum", "list", "sortBy", "sortBy by")).map(([a, b, s, root, sink]) => {
+    const list = root && b.tag === "app" && b.op === "append" ? b : op("flat", each(a, b), ...(s ? [STRICT] : []));
+    if (sink === "sortBy") return op("ifError", op("sortBy", list), NONE);
+    if (sink === "sortBy by") return op("ifError", op("sortBy", list, lit({ by: "abs" })), NONE);
+    return sink === "list" ? op("ifError", list, NONE) : op(sink, list);
   });
   const records = fc.array(fc.record({ n: fc.integer({ min: -2, max: 3 }), w: fc.constantFrom(0, 1, -1, 2), b: fc.boolean(), xs: fc.array(fc.option(fc.integer({ min: -2, max: 3 }), { nil: undefined }), { maxLength: 3 }).map((x) => input(...x)) }, { noNullPrototype: true }), { maxLength: 5 });
 

@@ -169,11 +169,28 @@ interface Pushed {
   readonly list: ListInfo | undefined;
 }
 
+/**
+ * A part of a fused loop before the decision about the constants of the run (COMPILE.MODULE.FUSE). Its function `s`
+ * gives its statements. With `settle`, a part that is a constant of the run evaluates once, before the loop over the keys.
+ */
+interface Part {
+  readonly s: (settle: boolean) => readonly string[];
+  readonly deps: ReadonlySet<number>;
+  readonly safe: boolean;
+  readonly list: ListInfo | undefined;
+}
+
 /** The tags of the nodes that can read at the focus. Only a node with one of them can be a column of the run. */
 const FOCUS_TAGS: ReadonlySet<string> = new Set(["ref", "ext", "call", "each", "fold"]);
 
 /** This function tells if an expression has a node that can read at the focus. */
 const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || children(e).some(readsFocus);
+
+/**
+ * This function tells if an expression has a node that can read a cell: a read of a cell or a call. The interpreter
+ * evaluates each list of an append, also after an error. Thus a search of a sheet sees each read of a cell.
+ */
+const readsCells = (e: Expr): boolean => e.tag === "ext" || e.tag === "call" || children(e).some(readsCells);
 
 /** This function tells if an expression is the literal 1. */
 const isOne = (e: Expr | undefined): boolean => e?.tag === "lit" && e.value === 1;
@@ -319,7 +336,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper;
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
@@ -615,6 +632,27 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
     "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
     "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map((x) => x[0]);",
+    "}",
+  ].join("\n"),
+  // The sort in place (COMPILE.MODULE.FUSE): a clean list that is fresh is its own sort buffer, so the sort makes no
+  // copy. No other part holds the array, so a failure leaves no changed list that a part reads. The sort is stable.
+  SBI: [
+    "function SBI(l) {",
+    "  const t = l.length > 0 ? typeof l[0][1] : \"number\";",
+    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  return l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "}",
+  ].join("\n"),
+  // The option by: each slot of the array holds the pair of its item and its sort value, in order, during the sort.
+  SKI: [
+    "function SKI(l, f) {",
+    "  const n = l.length;",
+    "  for (let i = 0; i < n; i++) l[i] = [l[i], f(l[i][1])];",
+    "  const t = n > 0 ? typeof l[0][1] : \"number\";",
+    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "  for (let i = 0; i < n; i++) l[i] = l[i][0];",
+    "  return l;",
     "}",
   ].join("\n"),
   TKC: "function TKC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(0, n) : F(); }",
@@ -948,6 +986,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   GI: [], RB: [],
   SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [],
   SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LVC: [],
+  SBI: ["F"], SKI: ["F"],
 };
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
@@ -1650,6 +1689,11 @@ class Printer {
   readonly #nodeOf = new WeakMap<Code, Expr>();
   /** True when the printer prints the forms of fusion (COMPILE.MODULE.FUSE.OFF). `runOf` checks the option first. */
   readonly #fuse: boolean;
+  /**
+   * The code of each fused loop, with the index of the statement that declares its output (COMPILE.MODULE.FUSE). A chain
+   * that reads the loop changes that statement, and then the loop pushes into the output of the chain.
+   */
+  readonly #outputs = new WeakMap<Code, number>();
 
   constructor(expr: Expr, options: ModuleOptions, sheet?: SheetInfo) {
     this.#fuse = options.fuse !== false;
@@ -2432,6 +2476,9 @@ class Printer {
     // With fuse, flat over an each is one loop with one output (COMPILE.MODULE.FUSE).
     const strict = op === "flat" && head?.tag === "each" ? this.#fusedStrict(head, rest, ctx) : undefined;
     if (strict !== undefined) return this.#flatEach(head as ExprOf<"each">, strict, ctx);
+    // With fuse, a chain of append with a part that pushes its items is one output (COMPILE.MODULE.FUSE).
+    const joined = op === "append" ? this.#appendStrict(e, ctx) : undefined;
+    if (joined !== undefined && args.slice(0, 2).some((x) => this.#pushes(x, ctx))) return this.#appendChain(e, joined, ctx);
     if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) return this.#build(op, head, rest, ctx, this.#own.get(e));
     if (head !== undefined && (FOLD_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, rest, ctx);
     // An argument can be a list (COMPILE.MODULE.LIST.ARG).
@@ -2977,7 +3024,93 @@ class Printer {
     }
     const out = [...s, `const ${o} = [];`, ...(flag === undefined ? [] : [`let ${flag} = false;`]), head, ...ind(loop), "}", ...(flag === undefined ? [] : [`if (${flag}) ${this.use("F")}();`])];
     const facts: ListInfo = { ...(body.list as ListInfo), clean: true, fresh: true };
-    return { s: out, v: { code: o, kind: undefined, safe: startSafe && (safeItem || !strict), deps, list: facts } };
+    const c: Code = { s: out, v: { code: o, kind: undefined, safe: startSafe && (safeItem || !strict), deps, list: facts } };
+    this.#outputs.set(c, s.length);
+    return c;
+  }
+
+  /**
+   * This method gives the option strict of the append `e` for a fused chain (COMPILE.MODULE.FUSE). This method gives
+   * undefined when the append cannot be a part of a chain. The option `fuse` must be true, both arguments must be lists, and the options must be
+   * a literal. An append into the list of its name keeps `AO` (COMPILE.MODULE.APPEND.OWN). In a sheet with a search, an
+   * append that can read a cell does not fuse, because the fused chain stops at the first failure.
+   */
+  #appendStrict(e: ExprOf<"app">, ctx: Ctx): boolean | undefined {
+    const [a, b] = e.args;
+    if (!this.#fuse || a === undefined || b === undefined || this.#own.has(e) || !this.#isList(a, ctx) || !this.#isList(b, ctx)) return undefined;
+    if (this.#sheet !== undefined && !this.#sheet.direct && readsCells(e)) return undefined;
+    try {
+      return this.#strict("append", e.args.slice(2));
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** This method gives the node `e` when a fused loop can print it as a stage, and undefined when the loop reads its array. */
+  #stageOf(e: Expr, ctx: Ctx): ExprOf<"app"> | undefined {
+    return e.tag === "app" && !this.#memo.has(e) && !ctx.keys.has(e) && !this.#constant.has(e) && (this.#work(e, ctx.fns) < COLUMN_WORK || !readsFocus(e)) ? e : undefined;
+  }
+
+  /**
+   * This method gives the option strict of the append `e` when it is a link of a fused chain, and undefined when it is
+   * not. A node of the memo, a key of a column and a constant of the run keep their arrays, because other parts read them.
+   */
+  #link(e: Expr, ctx: Ctx): boolean | undefined {
+    if (e.tag !== "app" || e.op !== "append" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e)) return undefined;
+    return this.#appendStrict(e, ctx);
+  }
+
+  /**
+   * This method tells if a part of an append pushes its items with no array of its own (COMPILE.MODULE.FUSE). These
+   * parts are `fill(1, v)`, `flat` over an each that fuses, and an append or an `if` with such a part. An append of two
+   * arrays keeps `concat`, because a loop that copies the items costs more. A `flat` and an append print their own
+   * loops, so they need no test of a stage.
+   */
+  #pushes(e: Expr, ctx: Ctx): boolean {
+    if (e.tag !== "app" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e)) return false;
+    const [head, ...rest] = e.args;
+    if (e.op === "flat") return head?.tag === "each" && this.#fusedStrict(head, rest, ctx) !== undefined;
+    if (e.op === "append") return this.#link(e, ctx) !== undefined && e.args.slice(0, 2).some((x) => this.#pushes(x, ctx));
+    if (this.#stageOf(e, ctx) === undefined) return false;
+    if (e.op === "fill") return rest.length === 1 && isOne(head) && this.#facts.own("fill");
+    return e.op === "if" && rest.length === 2 && rest.every((x) => this.#isList(x, ctx)) && rest.some((x) => this.#pushes(x, ctx));
+  }
+
+  /**
+   * This method prints a chain of append as one output array (COMPILE.MODULE.FUSE). Each part pushes its items into the
+   * output, in order. A part that fails is the error of the chain, as the error of a list is the error of append. The
+   * output has only items with values, and no other part holds its array, so it is clean and fresh.
+   */
+  #appendChain(e: ExprOf<"app">, strict: boolean, ctx: Ctx): Code {
+    const o = this.fresh("o");
+    const parts = this.#pushAppend(e, strict, ctx, o);
+    const c: Code = { s: [`const ${o} = [];`, ...parts.s], v: { code: o, kind: undefined, safe: parts.safe, deps: parts.deps, list: { ...(parts.list as ListInfo), clean: true, fresh: true } } };
+    this.#outputs.set(c, 0);
+    return c;
+  }
+
+  /**
+   * This method prints the statements that push the items of the lists of an append into the output `o`, in order. An
+   * append that is a stage gives the parts of its lists. The option `strict` of each append applies to the error items of
+   * its lists (LIST.BUILD).
+   *
+   * Each part prints before the decision about the constants of the run. A chain that is a constant of the run keeps its
+   * parts in its own code, because the module evaluates the chain once. In each other chain, and with `settle`, a part
+   * that is a constant of the run evaluates once, before the loop over the keys.
+   */
+  #pushAppend(e: ExprOf<"app">, strict: boolean, ctx: Ctx, o: string, settle?: boolean): Pushed {
+    const lists: { readonly e: Expr; readonly strict: boolean }[] = [];
+    const walk = (x: Expr, s: boolean): void => {
+      const joined = this.#link(x, ctx);
+      if (joined === undefined) lists.push({ e: x, strict: s });
+      else for (const y of (x as ExprOf<"app">).args.slice(0, 2)) walk(y, joined);
+    };
+    for (const x of e.args.slice(0, 2)) walk(x, strict);
+    const parts = lists.map((x) => this.#pushPart(x.e, ctx, o, x.strict));
+    const deps = new Set(parts.flatMap((x) => [...x.deps]));
+    const now = settle ?? deps.size > 0;
+    const list = parts.map((x) => x.list as ListInfo).reduce((a, b) => joinLists(a, b, "append"));
+    return { s: parts.flatMap((x) => x.s(now)), deps, safe: parts.every((x) => x.safe), list };
   }
 
   /**
@@ -2987,14 +3120,14 @@ class Printer {
    * - `if` with two lists pushes the items of the branch that its condition selects.
    * - `fill(1, x)` pushes one item with the key 0, as `FI` gives it.
    * - The empty literal pushes no item.
+   * - `append` pushes the items of its first list, then the items of its second list.
    *
-   * Each other list prints its array, and a loop pushes its items. A list that is not clean can hold error items. The
-   * loop skips them, and with `strict` such an item is an error. A node of the memo also prints its array. So does a
-   * constant of the run that the module printed before, and a node that can be a column of the run. Thus the module keeps
-   * these values for each read.
+   * Each other list prints its array, and a loop pushes its items (`#pushPart`).
    */
   #push(e: Expr, ctx: Ctx, o: string, strict: boolean): Pushed {
-    const stage = e.tag === "app" && !this.#memo.has(e) && !ctx.keys.has(e) && !this.#constant.has(e) && (this.#work(e, ctx.fns) < COLUMN_WORK || !readsFocus(e)) ? e : undefined;
+    const joined = this.#link(e, ctx);
+    if (joined !== undefined) return this.#pushAppend(e as ExprOf<"app">, joined, ctx, o, true);
+    const stage = this.#stageOf(e, ctx);
     if (stage?.op === "if" && stage.args.length === 3 && stage.args.slice(1).every((x) => this.#isList(x, ctx))) {
       const [c, a, b] = stage.args as [Expr, Expr, Expr];
       // The condition evaluates once for each run when it is a constant of the run.
@@ -3005,20 +3138,53 @@ class Printer {
       const s = [...cond.s, `if (${this.#boolean(cond.v)}) {`, ...ind(yes.s), ...(no.s.length === 0 ? [] : ["} else {", ...ind(no.s)]), "}"];
       return { s, deps: new Set([...cond.v.deps, ...yes.deps, ...no.deps]), safe: this.#safeBoolean(cond.v) && yes.safe && no.safe, list: branchLists("if", yes.list, no.list) };
     }
+    const part = this.#pushPart(e, ctx, o, strict);
+    return { ...part, s: part.s(true) };
+  }
+
+  /**
+   * This method prints a part of a fused loop that is not `if` or `append`: `fill(1, x)`, the empty literal or a list.
+   * The code of the part comes from `s`. With `settle`, a part that is a constant of the run evaluates once.
+   *
+   * A list prints its array, and a loop pushes its items. A list that is not clean can hold error items. The loop skips
+   * them, and with `strict` such an item is an error.
+   *
+   * A node of the memo also prints its array. So does a constant of the
+   * run that the module printed before, and a node that can be a column of the run. Thus the module keeps these values
+   * for each read. A fused loop that the module does not keep pushes into `o` itself.
+   */
+  #pushPart(e: Expr, ctx: Ctx, o: string, strict: boolean): Part {
+    const stage = this.#stageOf(e, ctx);
     if (stage?.op === "fill" && stage.args.length === 2 && isOne(stage.args[0]) && this.#facts.own("fill")) {
       const x = stage.args[1] as Expr;
       // The value can be a list, so fill gives a list of lists (COMPILE.MODULE.FILL).
       this.#wantList.add(x);
-      const value = this.#hoist(this.expr(x, ctx), hasLoop(x));
-      const list: ListInfo = { item: value.v.kind, inner: heldList(value.v.list), texts: true };
-      return { s: [...value.s, `${o}.push([0, ${value.v.code}]);`], deps: value.v.deps, safe: value.v.safe, list };
+      const raw = this.expr(x, ctx);
+      const list: ListInfo = { item: raw.v.kind, inner: heldList(raw.v.list), texts: true };
+      const s = (settle: boolean): readonly string[] => {
+        const value = settle ? this.#hoist(raw, hasLoop(x)) : raw;
+        return [...value.s, `${o}.push([0, ${value.v.code}]);`];
+      };
+      return { s, deps: raw.v.deps, safe: raw.v.safe, list };
     }
-    if (e.tag === "lit" && isVexList(e.value) && e.value.items.length === 0) return { s: [], deps: NO_DEPS, safe: true, list: this.#listLiteral(e.value).v.list };
-    const c = this.#hoist(this.#listOf(e, ctx), hasLoop(e));
-    const z = this.fresh("z");
-    const clean = this.#clean(c.v.list);
-    const each = clean ? `${o}.push(${z}[i]);` : strict ? `{ if (${z}[i][1] === E) ${this.use("F")}(); ${o}.push(${z}[i]); }` : `if (${z}[i][1] !== E) ${o}.push(${z}[i]);`;
-    return { s: [...c.s, `const ${z} = ${c.v.code};`, `for (let i = 0; i < ${z}.length; i++) ${each}`], deps: c.v.deps, safe: c.v.safe && (clean || !strict), list: c.v.list };
+    if (e.tag === "lit" && isVexList(e.value) && e.value.items.length === 0) {
+      const empty = this.#listLiteral(e.value);
+      // A literal is a constant of the module, as at each other place, so its facts tell that each run reads it.
+      this.#note(e, empty, true);
+      return { s: () => [], deps: NO_DEPS, safe: true, list: empty.v.list };
+    }
+    const raw = this.#listOf(e, ctx);
+    const clean = this.#clean(raw.v.list);
+    const s = (settle: boolean): readonly string[] => {
+      const c = settle ? this.#hoist(raw, hasLoop(e)) : raw;
+      // The output of a fused loop has only items with values, so the loop can push into `o` in place of its own output.
+      const at = this.#outputs.get(c);
+      if (at !== undefined) return c.s.map((x, i) => (i === at ? `const ${c.v.code} = ${o};` : x));
+      const z = this.fresh("z");
+      const each = clean ? `${o}.push(${z}[i]);` : strict ? `{ if (${z}[i][1] === E) ${this.use("F")}(); ${o}.push(${z}[i]); }` : `if (${z}[i][1] !== E) ${o}.push(${z}[i]);`;
+      return [...c.s, `const ${z} = ${c.v.code};`, `for (let i = 0; i < ${z}.length; i++) ${each}`];
+    };
+    return { s, deps: raw.v.deps, safe: raw.v.safe && (clean || !strict), list: raw.v.list };
   }
 
   /**
@@ -3038,10 +3204,13 @@ class Printer {
     const plain = by !== undefined ? "SK" : op === "sortBy" ? "SB" : op === "take" ? "TK" : "DR";
     // The clean form has no scan of V and no option strict (COMPILE.MODULE.FUSE.CLEAN).
     const clean = this.#clean(list.v.list);
-    const helper = clean ? (`${plain}C` as const) : plain;
+    // sortBy is the sink of a chain: a clean list that is fresh is its own sort buffer (COMPILE.MODULE.FUSE).
+    const inPlace = op === "sortBy" && clean && list.v.list?.fresh === true;
+    const helper = inPlace ? (by === undefined ? "SBI" : "SKI") : clean ? (`${plain}C` as const) : plain;
     const args = [...parts.map((x) => x.v.code), ...(clean ? [] : [String(strict)]), ...(by === undefined ? [] : [by])];
-    // The new list has some items of the list, so it keeps the facts of the list. V removes each error item.
-    const facts: ListInfo = { ...(list.v.list as ListInfo), clean: true, fresh: false };
+    // The new list has some items of the list, so it keeps the facts of the list. V removes each error item. A sort in
+    // place gives the array of its list, which no other part holds.
+    const facts: ListInfo = { ...(list.v.list as ListInfo), clean: true, fresh: inPlace };
     return { s: stmtsOf(...parts), v: { code: `${this.use(helper)}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: facts } };
   }
 

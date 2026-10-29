@@ -813,7 +813,7 @@ A property compares random sheets with lists over arrays and trees with `SheetRu
 
 `nth` keeps the items with values on the array of its list, as `get` keeps its index (COMPILE.MODULE.NTH.INDEX). Thus a loop that reads each item of a list of `n` items with `nth` costs O(n), not O(n squared). `count` and `first` of a list read the same items. Thus a step of a loop that counts a list costs O(1) after the first count. The list of a `let` can be a key of a node of the memo. Thus a loop over the records can read it with `nth`.
 
-A list op reads the items with values of a list from the same array (COMPILE.MODULE.LIST.SHARE). A list without error items is its own array of items with values, so `append`, `flat` and `sortBy` do not copy it first. In the shapes module of ireko, these copies were approximately 30 % of the time of a call. `sortBy` sorts a copy, and an append into the list of a loop reads a fixed count of items.
+A list op reads the items with values of a list from the same array (COMPILE.MODULE.LIST.SHARE). A list without error items is its own array of items with values, so `append`, `flat` and `sortBy` do not copy it first. `V` scans the list for an error item, and it does not keep a cache on the list. In 0.17.1 it kept the cache of `VW`, and the property on each new list made the shapes module of ireko slower. Without the cache, the module call on a tree of 1111 nodes takes 2.73 times the time of the hand code. With the copies, it took 3.45 times. `sortBy` sorts a copy, and an append into the list of a loop reads a fixed count of items.
 
 #### Appends to the list of a loop (COMPILE.MODULE.APPEND.OWN)
 

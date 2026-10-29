@@ -299,8 +299,9 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   K: 'function K(k, n) { return typeof k === "string" && /^(0|[1-9]\\d*)$/.test(k) && +k < n ? +k : F(); }',
   // The ops on the order of a list (LIST.SORT, LIST.TAKE, LIST.NTH) work on the items with values. With strict, an
   // error item is the error of the op. A sort is stable, and the values are numbers without NaN or texts of one kind.
-  // V gives the array of VW, so a list without error items is not copied (COMPILE.MODULE.LIST.SHARE). No op changes it.
-  V: "function V(l, s) { const o = VW(l); if (s && o.length < l.length) F(); return o; }",
+  // V gives a list without error items itself, so it is not copied (COMPILE.MODULE.LIST.SHARE). No op changes it. V does
+  // not keep the cache of VW: a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
+  V: "function V(l, s) { if (!l.some((x) => x[1] === E)) return l; if (s) F(); return l.filter((x) => x[1] !== E); }",
   SB: [
     "function SB(l, s) {",
     "  const o = V(l, s);",
@@ -826,7 +827,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"],
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
-  V: ["VW", "F"],
+  V: ["F"],
   SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], VW: [], NT: ["VW", "F"], CT: ["VW", "F"], FS: ["VW", "F"], FI: ["F"], LI: [],
   DR: ["V", "F"], AP: ["V"], AO: ["AP", "V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.

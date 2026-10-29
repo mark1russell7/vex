@@ -181,7 +181,9 @@ A run knows which cell reads which cell. After a change of one record, only the 
 
 ### 7.6 Fusion of list ops
 
-This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 3 are done: the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The module does not fuse a chain yet. The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the other IDs stay in this section until their tests exist. Then they move to the spec.
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 4 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The module does not fuse a chain of `append` yet.
+
+The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the other IDs stay in this section until their tests exist. Then they move to the spec.
 
 #### The cost of a chain of list ops
 
@@ -362,12 +364,10 @@ With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_dom
 
 These IDs move to `spec/README.md` with the test that names each one:
 
-- `COMPILE.MODULE.FUSE`: A chain of list ops that obeys the rule of a fusion is one loop with one output. Its run gives the values and the errors of the interpreter.
-- `COMPILE.MODULE.FUSE.ITEM`: In a fused chain, an item that fails adds no item. With `strict`, it is the error of the chain. An error item of a source stays where the interpreter meets it.
 - `COMPILE.MODULE.FUSE.ADOPT`: `AO` takes a fresh list as its own array, with no first copy. The values and the errors do not change.
 - `COMPILE.MODULE.FUSE.OUT`: A value of the run that does not depend on the key has one `vex.list` for each run.
 
-`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3.
+`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 adds the chains of `append` to `COMPILE.MODULE.FUSE`.
 
 #### Measure before a release
 
@@ -386,7 +386,7 @@ Each step is one pull request. P17 and the golden files check each step, and the
 1. Add the option `fuse` (COMPILE.MODULE.FUSE.OFF) with no effect, and a bench case for `SHAPE_COLUMNS` in `bench/gate.ts`. Done.
 2. Add the facts `clean`, `fresh` and the count of the reads of each list node (COMPILE.MODULE.FUSE.FACTS). Do not change the printed code. Done.
 3. Print the clean form (COMPILE.MODULE.FUSE.CLEAN). Remove `V`, the test of the sentinel and `VW` where the facts hold. Done.
-4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM).
+4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). Done.
 5. Fuse the chains of `append`, and make `sortBy` a sink.
 6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT).
 7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions).
@@ -398,7 +398,8 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 |---|---|
 | 1, 2 | None |
 | 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-tree.js`, and a new file `.off.js` with the text of `fuse` false for each one |
-| 4, 5 | `module-list-build.js`, `module-list-loops.js`, `module-helpers.txt`, `module-corpus.txt`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
+| 4 | `module-list-build.js`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
+| 5 | `module-list-build.js`, `module-list-loops.js`, `module-helpers.txt`, `module-corpus.txt` and `module-fuse.js` |
 | 6 | `module-list-loops.js`, `module-corpus.txt` |
 | 7 | `module-fuse.js`, and each golden file of a module whose value is a list |
 

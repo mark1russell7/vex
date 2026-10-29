@@ -11,11 +11,6 @@ function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }
 function DRC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(n) : F(); }
-function FL(l, s) {
-  const o = [];
-  for (const [, v] of V(l, s)) for (const x of V(v, s)) o.push(x);
-  return o;
-}
 function FLC(l) { const o = []; for (const [, v] of l) for (const x of v) o.push(x); return o; }
 function FSC(l) { return l.length === 0 ? F() : l[0][1]; }
 function G(x) { return x === E ? F() : x; }
@@ -88,362 +83,344 @@ export function run(records, vars) {
     L17.push([j16, x18]);
   }
   const c19 = L17;
-  let c101;
+  const o94 = [];
+  for (let j93 = 0; j93 < n; j93++) {
+    const f96 = j93;
+    const h97 = Math.min(n, f96 + Math.min(0, n) + 1);
+    const L98 = [];
+    for (let j95 = Math.max(0, f96 + Math.max(-1, -n)); j95 < h97; j95++) {
+      L98.push([j95, R[j95]["n"]]);
+    }
+    const z100 = L98;
+    for (let i = 0; i < z100.length; i++) o94.push(z100[i]);
+  }
+  const c101 = o94;
+  const o106 = [];
+  for (let j105 = 0; j105 < n; j105++) {
+    const f108 = j105;
+    const h109 = Math.min(n, f108 + Math.min(1, n) + 1);
+    const L110 = [];
+    for (let j107 = Math.max(0, f108 + Math.max(0, -n)); j107 < h109; j107++) {
+      L110.push([j107, R[j107]["n"]]);
+    }
+    const z112 = L110;
+    for (let i = 0; i < z112.length; i++) o106.push(z112[i]);
+  }
+  const c113 = o106;
+  const o116 = [];
+  for (let j115 = 0; j115 < n; j115++) {
+    const z120 = c19;
+    for (let i = 0; i < z120.length; i++) if (z120[i][1] !== E) o116.push(z120[i]);
+  }
+  const c121 = o116;
+  let c160;
   try {
-    const L99 = [];
-    for (let j93 = 0; j93 < n; j93++) {
-      const f95 = j93;
-      const h96 = Math.min(n, f95 + Math.min(0, n) + 1);
-      const L97 = [];
-      for (let j94 = Math.max(0, f95 + Math.max(-1, -n)); j94 < h96; j94++) {
-        L97.push([j94, R[j94]["n"]]);
+    const L158 = [];
+    for (let j152 = 0; j152 < n; j152++) {
+      const f154 = j152;
+      const h155 = Math.min(n, f154 + Math.min(1, n) + 1);
+      const L156 = [];
+      for (let j153 = Math.max(0, f154 + Math.max(0, -n)); j153 < h155; j153++) {
+        L156.push([j153, R[j153]["n"]]);
       }
-      L99.push([j93, L97]);
+      L158.push([j152, L156]);
     }
-    c101 = FLC(L99);
+    c160 = FSC(L158);
   } catch {
-    c101 = E;
+    c160 = E;
   }
-  let c113;
+  const L170 = [];
+  for (let j164 = 0; j164 < n; j164++) {
+    const f166 = j164;
+    const h167 = Math.min(n, f166 + Math.min(1, n) + 1);
+    const L168 = [];
+    for (let j165 = Math.max(0, f166 + Math.max(0, -n)); j165 < h167; j165++) {
+      L168.push([j165, R[j165]["n"]]);
+    }
+    L170.push([j164, L168]);
+  }
+  const c172 = L170.length;
+  let c181;
   try {
-    const L111 = [];
-    for (let j105 = 0; j105 < n; j105++) {
-      const f107 = j105;
-      const h108 = Math.min(n, f107 + Math.min(1, n) + 1);
-      const L109 = [];
-      for (let j106 = Math.max(0, f107 + Math.max(0, -n)); j106 < h108; j106++) {
-        L109.push([j106, R[j106]["n"]]);
+    const L179 = [];
+    for (let j173 = 0; j173 < n; j173++) {
+      const f175 = j173;
+      const h176 = Math.min(n, f175 + Math.min(1, n) + 1);
+      const L177 = [];
+      for (let j174 = Math.max(0, f175 + Math.max(0, -n)); j174 < h176; j174++) {
+        L177.push([j174, R[j174]["n"]]);
       }
-      L111.push([j105, L109]);
+      L179.push([j173, L177]);
     }
-    c113 = FLC(L111);
+    c181 = NTC(L179, 1);
   } catch {
-    c113 = E;
+    c181 = E;
   }
-  let c121;
+  const L188 = [];
+  for (let j182 = 0; j182 < n; j182++) {
+    const f184 = j182;
+    const h185 = Math.min(n, f184 + Math.min(0, n) + 1);
+    const L186 = [];
+    for (let j183 = Math.max(0, f184 + Math.max(-1, -n)); j183 < h185; j183++) {
+      L186.push([j183, R[j183]["w"]]);
+    }
+    L188.push([j182, L186]);
+  }
+  const c190 = L188;
+  let c200;
   try {
-    const L119 = [];
-    for (let j115 = 0; j115 < n; j115++) {
-      L119.push([j115, c19]);
-    }
-    c121 = FL(L119, false);
-  } catch {
-    c121 = E;
-  }
-  let c161;
-  try {
-    const L159 = [];
-    for (let j153 = 0; j153 < n; j153++) {
-      const f155 = j153;
-      const h156 = Math.min(n, f155 + Math.min(1, n) + 1);
-      const L157 = [];
-      for (let j154 = Math.max(0, f155 + Math.max(0, -n)); j154 < h156; j154++) {
-        L157.push([j154, R[j154]["n"]]);
-      }
-      L159.push([j153, L157]);
-    }
-    c161 = FSC(L159);
-  } catch {
-    c161 = E;
-  }
-  const L171 = [];
-  for (let j165 = 0; j165 < n; j165++) {
-    const f167 = j165;
-    const h168 = Math.min(n, f167 + Math.min(1, n) + 1);
-    const L169 = [];
-    for (let j166 = Math.max(0, f167 + Math.max(0, -n)); j166 < h168; j166++) {
-      L169.push([j166, R[j166]["n"]]);
-    }
-    L171.push([j165, L169]);
-  }
-  const c173 = L171.length;
-  let c182;
-  try {
-    const L180 = [];
-    for (let j174 = 0; j174 < n; j174++) {
-      const f176 = j174;
-      const h177 = Math.min(n, f176 + Math.min(1, n) + 1);
-      const L178 = [];
-      for (let j175 = Math.max(0, f176 + Math.max(0, -n)); j175 < h177; j175++) {
-        L178.push([j175, R[j175]["n"]]);
-      }
-      L180.push([j174, L178]);
-    }
-    c182 = NTC(L180, 1);
-  } catch {
-    c182 = E;
-  }
-  const L189 = [];
-  for (let j183 = 0; j183 < n; j183++) {
-    const f185 = j183;
-    const h186 = Math.min(n, f185 + Math.min(0, n) + 1);
-    const L187 = [];
-    for (let j184 = Math.max(0, f185 + Math.max(-1, -n)); j184 < h186; j184++) {
-      L187.push([j184, R[j184]["w"]]);
-    }
-    L189.push([j183, L187]);
-  }
-  const c191 = L189;
-  let c201;
-  try {
-    let a198 = 0;
-    for (let j197 = 0; j197 < n; j197++) {
-      let x200;
+    let a197 = 0;
+    for (let j196 = 0; j196 < n; j196++) {
+      let x199;
       try {
-        x200 = k_number((R[j197]["n"]) + (0));
+        x199 = k_number((R[j196]["n"]) + (0));
       } catch {
         continue;
       }
-      a198 += x200;
+      a197 += x199;
     }
-    c201 = k_number(a198);
+    c200 = k_number(a197);
   } catch {
-    c201 = E;
+    c200 = E;
   }
-  let c206;
+  let c205;
   try {
-    let a203 = 0;
-    for (let j202 = 0; j202 < n; j202++) {
-      let x205;
+    let a202 = 0;
+    for (let j201 = 0; j201 < n; j201++) {
+      let x204;
       try {
-        x205 = k_number((1) / (R[j202]["w"]));
+        x204 = k_number((1) / (R[j201]["w"]));
       } catch {
         F();
       }
-      a203 += x205;
+      a202 += x204;
     }
-    c206 = k_number(a203);
+    c205 = k_number(a202);
   } catch {
-    c206 = E;
+    c205 = E;
   }
-  const c209 = T(() => k_number((1) + (2)));
-  let n211 = 0;
-  for (let j208 = 0; j208 < n; j208++) {
-    let x212;
+  const c208 = T(() => k_number((1) + (2)));
+  let n210 = 0;
+  for (let j207 = 0; j207 < n; j207++) {
+    let x211;
     try {
-      if (!R[j208]["b"]) continue;
-      x212 = G(c209);
+      if (!R[j207]["b"]) continue;
+      x211 = G(c208);
     } catch {
       continue;
     }
-    n211++;
+    n210++;
   }
-  const c213 = n211;
-  const L218 = [];
-  for (let j217 = 0; j217 < n; j217++) {
-    let x219;
+  const c212 = n210;
+  const L217 = [];
+  for (let j216 = 0; j216 < n; j216++) {
+    let x218;
     try {
-      x219 = k_number((R[j217]["n"]) + (1));
+      x218 = k_number((R[j216]["n"]) + (1));
     } catch {
-      x219 = E;
+      x218 = E;
     }
-    L218.push([j217, x219]);
+    L217.push([j216, x218]);
   }
-  const c220 = L218;
-  const c222 = T(() => GT([["a", 1], ["b", 2], ["a", 3]], "a", false));
+  const c219 = L217;
+  const c221 = T(() => GT([["a", 1], ["b", 2], ["a", 3]], "a", false));
   let t5;
   try {
     t5 = GT([["a", 1], ["b", 2], ["a", 3]], "z", false);
   } catch {
     t5 = -1;
   }
-  const c223 = t5;
+  const c222 = t5;
   let t9;
   try {
     t9 = GT(c3, 1, false);
   } catch {
     t9 = -1;
   }
-  const c224 = t9;
-  const c225 = T(() => GT([["a", 1], ["b", E], ["c", 4]], "c", false));
+  const c223 = t9;
+  const c224 = T(() => GT([["a", 1], ["b", E], ["c", 4]], "c", false));
   let t10;
   try {
     t10 = GT([["a", 1], ["b", E], ["c", 4]], "c", true);
   } catch {
     t10 = -1;
   }
-  const c226 = t10;
+  const c225 = t10;
   let t11;
   try {
     t11 = GT([["a", 1], ["b", E], ["c", 4]], "b", false);
   } catch {
     t11 = -1;
   }
-  const c227 = t11;
+  const c226 = t11;
   let t15;
   try {
     t15 = GT(c3, null, false);
   } catch {
     t15 = -1;
   }
-  const c228 = t15;
+  const c227 = t15;
   let t20;
   try {
     t20 = GT(c19, v0, false);
   } catch {
     t20 = -1;
   }
-  const c229 = t20;
-  let c230;
+  const c228 = t20;
+  let c229;
   try {
     let a24 = 0;
     for (const [, x26] of DRC(c3, 1)) {
       a24 += x26;
     }
-    c230 = k_number(a24);
+    c229 = k_number(a24);
   } catch {
-    c230 = E;
+    c229 = E;
   }
-  const c231 = T(() => DRC(c3, 10).length);
+  const c230 = T(() => DRC(c3, 10).length);
   let t33;
   try {
     t33 = DRC(c3, -1).length;
   } catch {
     t33 = -1;
   }
-  const c232 = t33;
+  const c231 = t33;
   let t37;
   try {
     t37 = DRC(c3, null).length;
   } catch {
     t37 = -1;
   }
-  const c233 = t37;
+  const c232 = t37;
   let t41;
   try {
     t41 = DR(c19, 0, true).length;
   } catch {
     t41 = -1;
   }
-  const c234 = t41;
+  const c233 = t41;
   let t45;
   try {
     t45 = GT(DRC(c3, 1), "0", false);
   } catch {
     t45 = -1;
   }
-  const c235 = t45;
-  let c236;
+  const c234 = t45;
+  let c235;
   try {
     let a49 = 0;
     for (const [, x51] of c3.concat([["a", 1], ["b", 2], ["a", 3]])) {
       a49 += x51;
     }
-    c236 = k_number(a49);
+    c235 = k_number(a49);
   } catch {
-    c236 = E;
+    c235 = E;
   }
-  const c237 = T(() => GT([["a", 1], ["b", 2], ["a", 3]].concat(c3), "1", false));
+  const c236 = T(() => GT([["a", 1], ["b", 2], ["a", 3]].concat(c3), "1", false));
   let t61;
   try {
     t61 = AP(c3, c19, true).length;
   } catch {
     t61 = -1;
   }
-  const c238 = t61;
-  const c239 = T(() => AP(c19, [["a", 1], ["b", E], ["c", 4]], false).length);
-  const c240 = T(() => [].concat(c3.concat([])).length);
-  let c241;
+  const c237 = t61;
+  const c238 = T(() => AP(c19, [["a", 1], ["b", E], ["c", 4]], false).length);
+  const c239 = T(() => [].concat(c3.concat([])).length);
+  let c240;
   try {
     let a74 = 0;
     for (const [, x76] of WOC(c3, TKC(c3, 2))) {
       a74 += x76;
     }
-    c241 = k_number(a74);
+    c240 = k_number(a74);
   } catch {
-    c241 = E;
+    c240 = E;
   }
-  const c242 = T(() => WOC([["a", 1], ["b", 2], ["a", 3]].concat(c3), [["a", 1], ["b", 2], ["a", 3]]).length);
-  const c243 = T(() => WO(c3, c19, false).length);
+  const c241 = T(() => WOC([["a", 1], ["b", 2], ["a", 3]].concat(c3), [["a", 1], ["b", 2], ["a", 3]]).length);
+  const c242 = T(() => WO(c3, c19, false).length);
   let t92;
   try {
     t92 = WO(c3, c19, true).length;
   } catch {
     t92 = -1;
   }
-  const c244 = t92;
-  let c245;
+  const c243 = t92;
+  let c244;
   try {
     let a102 = 0;
-    for (const [, x104] of G(c101)) {
+    for (const [, x104] of c101) {
       a102 += x104;
     }
-    c245 = k_number(a102);
+    c244 = k_number(a102);
   } catch {
-    c245 = E;
+    c244 = E;
   }
   let t114;
   try {
-    t114 = GT(G(c113), "2", false);
+    t114 = GT(c113, "2", false);
   } catch {
     t114 = -1;
   }
-  const c246 = t114;
-  const c247 = T(() => G(c121).length);
-  let t128;
+  const c245 = t114;
+  const c246 = c121.length;
+  const c247 = c121.length;
+  const c248 = T(() => FLC([]).length);
+  const c249 = T(() => IXC([["a", 1], ["b", 2], ["a", 3]], 2));
+  let t135;
   try {
-    t128 = G(c121).length;
+    t135 = IXC(c3, 99);
   } catch {
-    t128 = -1;
+    t135 = -1;
   }
-  const c248 = t128;
-  const c249 = T(() => FLC([]).length);
-  const c250 = T(() => IXC([["a", 1], ["b", 2], ["a", 3]], 2));
-  let t136;
+  const c250 = t135;
+  let t139;
   try {
-    t136 = IXC(c3, 99);
+    t139 = IXC(c3, null);
   } catch {
-    t136 = -1;
+    t139 = -1;
   }
-  const c251 = t136;
-  let t140;
+  const c251 = t139;
+  let t143;
   try {
-    t140 = IXC(c3, null);
+    t143 = IXC(c3, null);
   } catch {
-    t140 = -1;
+    t143 = -1;
   }
-  const c252 = t140;
-  let t144;
+  const c252 = t143;
+  let t147;
   try {
-    t144 = IXC(c3, null);
+    t147 = IX(c19, 1, true);
   } catch {
-    t144 = -1;
+    t147 = -1;
   }
-  const c253 = t144;
-  let t148;
+  const c253 = t147;
+  let t151;
   try {
-    t148 = IX(c19, 1, true);
+    t151 = IX(c19, 1, false);
   } catch {
-    t148 = -1;
+    t151 = -1;
   }
-  const c254 = t148;
-  let t152;
+  const c254 = t151;
+  let c255;
   try {
-    t152 = IX(c19, 1, false);
-  } catch {
-    t152 = -1;
-  }
-  const c255 = t152;
-  let c256;
-  try {
-    let a162 = 0;
-    for (const [, x164] of G(c161)) {
-      a162 += x164;
+    let a161 = 0;
+    for (const [, x163] of G(c160)) {
+      a161 += x163;
     }
-    c256 = k_number(a162);
+    c255 = k_number(a161);
   } catch {
-    c256 = E;
+    c255 = E;
   }
-  const c257 = T(() => G(c182).length);
-  const c258 = T(() => FSC(SBC([["a", 1], ["b", 2], ["a", 3]])));
-  let t207;
+  const c256 = T(() => G(c181).length);
+  const c257 = T(() => FSC(SBC([["a", 1], ["b", 2], ["a", 3]])));
+  let t206;
   try {
-    t207 = G(c206);
+    t206 = G(c205);
   } catch {
-    t207 = -1;
+    t206 = -1;
   }
-  const c259 = t207;
-  const c260 = T(() => NTC(SBC(c3), 0));
+  const c258 = t206;
+  const c259 = T(() => NTC(SBC(c3), 0));
   const out = [];
   for (let o = 0; o < n; o++) {
     try {
@@ -453,35 +430,35 @@ export function run(records, vars) {
       } catch {
         t4 = -1;
       }
-      let t132;
+      let t131;
       try {
-        t132 = IXC(c3, R[o]["n"]);
+        t131 = IXC(c3, R[o]["n"]);
       } catch {
-        t132 = -1;
+        t131 = -1;
       }
-      let t196;
+      let t195;
       try {
-        let b192;
+        let b191;
         try {
-          b192 = GT(c191, R[o]["id"], false);
+          b191 = GT(c190, R[o]["id"], false);
         } catch {
-          b192 = E;
+          b191 = E;
         }
-        let a193 = 0;
-        for (const [, x195] of G(b192)) {
-          a193 += x195;
+        let a192 = 0;
+        for (const [, x194] of G(b191)) {
+          a192 += x194;
         }
-        t196 = k_number(a193);
+        t195 = k_number(a192);
       } catch {
-        t196 = -1;
+        t195 = -1;
       }
-      let t221;
+      let t220;
       try {
-        t221 = GT(c220, R[o]["id"], false);
+        t220 = GT(c219, R[o]["id"], false);
       } catch {
-        t221 = -1;
+        t220 = -1;
       }
-      out.push(({ "own": t4, "first": G(c222), "missing": c223, "notText": c224, "lenient": G(c225), "strictGet": c226, "errorKey": c227, "noKey": c228, "byVar": c229, "dropped": G(c230), "dropAll": G(c231), "dropBad": c232, "dropNone": c233, "dropStrict": c234, "dropKey": c235, "appended": G(c236), "appendFirst": G(c237), "appendStrict": c238, "appendLenient": G(c239), "appendEmpty": G(c240), "without": G(c241), "withoutLit": G(c242), "withoutLenient": G(c243), "withoutStrict": c244, "flat": G(c245), "flatKey": c246, "flatErrors": G(c247), "flatStrict": c248, "flatEmpty": G(c249), "index": t132, "indexLit": G(c250), "indexMissing": c251, "indexBad": c252, "indexNone": c253, "indexStrict": c254, "indexLenient": c255, "nestedFirst": G(c256), "nestedCount": c173, "nestedNth": G(c257), "nestedGet": t196, "sortedLit": G(c258), "sheet": G(c201), "sheetStrict": c259, "sheetNested": c213, "nthLet": G(c260), "getLet": t221 }));
+      out.push(({ "own": t4, "first": G(c221), "missing": c222, "notText": c223, "lenient": G(c224), "strictGet": c225, "errorKey": c226, "noKey": c227, "byVar": c228, "dropped": G(c229), "dropAll": G(c230), "dropBad": c231, "dropNone": c232, "dropStrict": c233, "dropKey": c234, "appended": G(c235), "appendFirst": G(c236), "appendStrict": c237, "appendLenient": G(c238), "appendEmpty": G(c239), "without": G(c240), "withoutLit": G(c241), "withoutLenient": G(c242), "withoutStrict": c243, "flat": G(c244), "flatKey": c245, "flatErrors": c246, "flatStrict": c247, "flatEmpty": G(c248), "index": t131, "indexLit": G(c249), "indexMissing": c250, "indexBad": c251, "indexNone": c252, "indexStrict": c253, "indexLenient": c254, "nestedFirst": G(c255), "nestedCount": c172, "nestedNth": G(c256), "nestedGet": t195, "sortedLit": G(c257), "sheet": G(c200), "sheetStrict": c258, "sheetNested": c212, "nthLet": G(c259), "getLet": t220 }));
     } catch {
       out.push(VEX_ERROR);
     }

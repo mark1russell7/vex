@@ -323,6 +323,8 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[COMPILE.MODULE.FUSE.OFF]** `emitModule` and `emitSheetModule` have the option `fuse`, with the default `true`. With `fuse: false`, they print the code without fusion. Thus a test and a bench can compare the two forms. A value that is not a boolean gives a reason.
 - **[COMPILE.MODULE.FUSE.FACTS]** The printer of a module keeps two facts of each list and the count of the reads of each list node. A list is `clean` when no item holds the error sentinel, and `fresh` when no other part holds its array. The facts are true for each run. With `fuse: false`, they do not change the printed code.
 - **[COMPILE.MODULE.FUSE.CLEAN]** With `fuse`, an op over a list that the facts prove clean has no scan for error items and no test of the sentinel. The fact `clean` of each list argument is a part of the signature of a function. The values, the errors and the order of the reads do not change.
+- **[COMPILE.MODULE.FUSE]** With `fuse`, `flat` over an `each` whose body is a list is one loop with one output. The module does not print the list of the `each`. A body of `if` pushes from its branch, and `fill(1, v)` pushes `v`. Its run gives the values and the errors of the interpreter. The output is clean and fresh.
+- **[COMPILE.MODULE.FUSE.ITEM]** In a fused chain, an item that fails adds no item. With `strict`, it is the error of the chain. An error item of a source stays where the interpreter meets it. A strict loop over cells reads each cell before it raises the error.
 - **[COMPILE.SOURCE]** `generate(e)` gives the same source for the same expression. The source has no name and no literal of the expression. It reads them from its constants, by index.
 
 ## 11. Examples

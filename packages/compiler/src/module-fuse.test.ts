@@ -5,6 +5,7 @@
  * over a clean list has no scan for error items (COMPILE.MODULE.FUSE.CLEAN).
  */
 import { createHash } from "node:crypto";
+import * as fc from "fast-check";
 import { app, axes, call, cell, each, evaluate, fn, fold, isVexList, iterate, let_, lit, rec, ref, SheetRun, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
@@ -108,8 +109,12 @@ describe("COMPILE.MODULE.FUSE.OFF: the option fuse", () => {
 
 describe("COMPILE.MODULE.FUSE.FACTS: the facts clean and fresh of each list", () => {
   it("COMPILE.MODULE.FUSE.FACTS LIST.BUILD: the value of append, flat, without, sortBy, take and drop is clean and not fresh", () => {
-    const lists = [op("append", inv, inv), op("flat", each(axes.window(0, 1), op("fill", lit(1), ref("w")))), op("without", inv, inv), op("sortBy", inv), op("take", inv, lit(2)), op("drop", inv, lit(1)), op("sortBy", inv, lit({ by: "negate" }))];
+    const flat = op("flat", each(axes.window(0, 1), op("fill", lit(1), ref("w"))));
+    const lists = [op("append", inv, inv), op("without", inv, inv), op("sortBy", inv), op("take", inv, lit(2)), op("drop", inv, lit(1)), op("sortBy", inv, lit({ by: "negate" }))];
     for (const list of lists) expect(short(op("count", list), list)).toStrictEqual({ clean: true, fresh: false, reads: 1 });
+    // With fuse, flat over an each is one loop with its own output, so it is fresh (COMPILE.MODULE.FUSE).
+    expect(short(op("count", flat), flat, { ...OPTIONS, fuse: false })).toStrictEqual({ clean: true, fresh: false, reads: 1 });
+    expect(short(op("count", flat), flat)).toStrictEqual({ clean: true, fresh: true, reads: 1 });
     // The list that each op reads can hold error items.
     expect(short(op("count", op("append", inv, inv)), inv)).toStrictEqual({ clean: false, fresh: false, reads: 1 });
   });
@@ -149,7 +154,7 @@ describe("COMPILE.MODULE.FUSE.FACTS: the facts clean and fresh of each list", ()
     expect(used(each(axes.where(axes.window(-1, 1), op("gt", op("divide", lit(1), ref("w")), lit(0))), lit(1))).clean).toBe(false);
     // An each of lists keeps the facts of the list of its body for its items.
     const nested = each(axes.window(-1, 1), op("fill", lit(1), ref("w")));
-    expect(factOf(factsOf(op("count", op("flat", nested))), nested).inner).toStrictEqual([true]);
+    expect(factOf(factsOf(op("count", op("flat", nested)), { ...OPTIONS, fuse: false }), nested).inner).toStrictEqual([true]);
   });
 
   it("COMPILE.MODULE.FUSE.FACTS COMPILE.MODULE.LIST.INPUT: a list of the input can hold error items, so it is not clean", () => {
@@ -508,5 +513,150 @@ describe("COMPILE.MODULE.FUSE.CLEAN: the clean form of the list ops", () => {
     expect(accClean(let_({ f: fn(["l"], v("l")) }, step(call("f", v("acc")))))).toBe(false);
     const steps = [let_({ z: one }, v("z")), iterate(2, { q: v("acc") }, { q: op("append", v("q"), one) }, v("q")), fold(axes.all, { q: v("acc") }, { q: op("append", v("q"), one) }, v("q"))];
     for (const acc of steps) expectSame(iterate(3, { acc: one }, { acc }, rec({ c: op("count", v("acc")), l: v("acc") })));
+  });
+});
+
+/** The empty list, the body of a filter that keeps no item. */
+const NONE = lit(vexList([]));
+/** A literal with an error item, as a source and as a body. */
+const BAD = lit(vexList([item("a", 1), errorItem("b"), item("c", 3)]));
+const STRICT = lit({ strict: true });
+/** This function gives flat over an each of `axes.all`. */
+const flatOf = (body: Expr, ...rest: Expr[]): Expr => op("flat", each(axes.all, body), ...rest);
+
+describe("COMPILE.MODULE.FUSE: flat over an each is one loop", () => {
+  it("COMPILE.MODULE.FUSE: with fuse, flat over an each prints one loop with one output, and fuse false keeps FL", () => {
+    const e = op("sum", flatOf(op("fill", lit(2), n)));
+    const on = printed(e, true);
+    expect(on).not.toMatch(/\bFLC?\(/);
+    expect(on).toContain("for (let i = 0; i < z");
+    expect(printed(e, false)).toMatch(/\bFLC?\(/);
+    // The filter form pushes the value of the target, and an empty list pushes nothing.
+    const filter = op("count", flatOf(op("if", op("gt", n, lit(0)), op("fill", lit(1), n), NONE)));
+    expect(printed(filter, true)).toMatch(/o\d+\.push\(\[0, /);
+    expect(printed(filter, true).split("export function run")[1]).not.toContain("else");
+    for (const x of [e, filter]) expectSame(x);
+  });
+
+  it("COMPILE.MODULE.FUSE: a name that is read again and a node of the memo do not fuse", () => {
+    // The list of the each is a name that the program reads two times, so flat reads the name and keeps FL.
+    const lists = each(axes.window(-1, 1), op("fill", lit(1), n));
+    const twice = let_({ ys: lists }, op("add", op("count", op("flat", v("ys"))), op("count", v("ys"))));
+    expect(printed(twice, true)).toMatch(/\bFLC?\(/);
+    // A list of the run that the program reads two times is a node of the memo, so flat reads its value.
+    const run = each(axes.all, op("fill", lit(1), ref("w")));
+    const memo = op("add", op("count", run), op("sum", op("flat", run)));
+    expect(printed(memo, true)).toMatch(/\bFLC?\(/);
+    // A node in a loop of each key prints at each read, so flat over it fuses.
+    const again = op("add", op("count", op("flat", lists)), op("count", lists));
+    expect(printed(again, true)).not.toMatch(/\bFLC?\(/);
+    // An options value that is not a literal falls back to the op, which gives the reason.
+    expect(emitModule(op("flat", lists, ref("n")), OPTIONS).ok).toBe(false);
+    for (const x of [twice, memo, again]) expectSame(x);
+  });
+
+  it("COMPILE.MODULE.FUSE: a fused flat is clean and fresh, so the op after it has the clean form", () => {
+    // A window depends on the key, so the flat is not a constant of the run, which a name holds.
+    const flat = op("flat", each(axes.window(-1, 1), xs));
+    expect(short(op("count", flat), flat)).toStrictEqual({ clean: true, fresh: true, reads: 1 });
+    expect(printed(op("count", flat), true)).toContain(".length");
+    expect(printed(op("sortBy", flat), true)).toContain("SBC(");
+    for (const x of [op("count", flat), op("sortBy", flat)]) expectSame(x);
+  });
+
+  it("COMPILE.MODULE.FUSE: the modules of NODE_SHAPE and of the shapes of ireko keep their golden code", async () => {
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const source = sourceOf(emitModule(NODE_SHAPE, node));
+    await expect(source).toMatchFileSnapshot("./__golden__/module-fuse.js");
+    // The fused chains: the two lists of the bands of the children, UNSORTED, the three sides and the bands that stay.
+    expect(source.match(/ = o\d+;$|\(o\d+\)|concat\(o\d+\)|^\s+\w+ = o\d+\.concat/gm)?.length).toBeGreaterThanOrEqual(5);
+    expect(source).not.toMatch(/\bFL\(/);
+    expect(source.match(/\.length = m\d+;/g)?.length).toBe(7);
+  });
+});
+
+describe("COMPILE.MODULE.FUSE.ITEM: the error items of a fused flat", () => {
+  it("COMPILE.MODULE.FUSE.ITEM: an error item of a list of the input is skipped, or it is the error with strict", () => {
+    const lenient = flatOf(xs);
+    expect(printed(lenient, true)).toMatch(/if \(z\d+\[i\]\[1\] !== E\) o\d+\.push/);
+    const strict = op("ifError", flatOf(xs, STRICT), NONE);
+    expect(printed(strict, true)).toMatch(/if \(z\d+\[i\]\[1\] === E\) F\(\);/);
+    for (const x of [lenient, strict, op("count", lenient), op("sum", lenient)]) expectSame(x);
+  });
+
+  it("COMPILE.MODULE.FUSE.ITEM LIST.LITERAL: a literal with an error item, as the body or as the source, gives the values of the interpreter", () => {
+    const forms = [flatOf(BAD), op("ifError", flatOf(BAD, STRICT), NONE), op("flat", each(axes.list(BAD), op("fill", lit(1), v("y")), undefined, ["y"])), op("ifError", op("flat", each(axes.list(BAD), op("fill", lit(1), v("y")), undefined, ["y"]), STRICT), NONE)];
+    for (const x of forms) expectSame(x);
+    expect(printed(flatOf(BAD), true)).toContain("!== E) o");
+  });
+
+  it("COMPILE.MODULE.FUSE.ITEM: a body that throws removes the items of its target, or it is the error with strict", () => {
+    const body = op("fill", lit(2), op("divide", lit(1), ref("w")));
+    const lenient = flatOf(body);
+    const strict = op("ifError", flatOf(body, STRICT), NONE);
+    // The lenient loop puts the length of the output back, and the strict loop raises the error.
+    expect(printed(lenient, true)).toMatch(/\.length = m\d+;/);
+    expect(printed(strict, true)).toMatch(/catch \{\n\s+F\(\);/);
+    // The branches of a filter can throw too: the condition, and the value of the target.
+    const filter = flatOf(op("if", op("gt", op("divide", lit(1), ref("w")), lit(0)), op("fill", lit(1), op("divide", n, ref("w"))), NONE));
+    for (const x of [lenient, strict, filter, op("ifError", op("flat", each(axes.all, op("if", op("gt", op("divide", lit(1), ref("w")), lit(0)), op("fill", lit(1), n), NONE)), STRICT), NONE)]) expectSame(x);
+  });
+
+  it("COMPILE.MODULE.FUSE.ITEM SHEET.CELL: a cell in the body gives the results of SheetRun, and a strict loop reads each cell", () => {
+    const options: SheetModuleOptions = { domains: [NumDomain], schema: { fields: { v: "number", n: "number" } }, kinds: { a: "number", l: { list: "number", texts: true }, s: { list: "number", texts: true }, k: { list: "number", texts: true } } };
+    const columns = new Map<string, Expr>([
+      ["a", op("divide", lit(1), ref("v"))],
+      ["l", op("flat", each(axes.window(-1, 1), op("fill", lit(1), cell("a"))))],
+      ["s", op("ifError", op("flat", each(axes.window(-1, 1), op("fill", lit(1), cell("a"))), STRICT), lit(vexList([])))],
+      // A list of the column of lists is not clean, so the loop tests each item.
+      ["k", op("flat", each(axes.window(-1, 0), cell("l")))],
+    ]);
+    const records = [
+      { v: 1, n: 2 },
+      { v: 0, n: 1 },
+      { v: 2, n: 0 },
+      { v: 4, n: 3 },
+    ];
+    const s = space.array(records);
+    const run = new SheetRun(columns, { space: s, domains: [NumDomain] });
+    for (const fuse of [true, false]) {
+      const source = sourceOf(emitSheetModule(columns, { ...options, fuse }));
+      const m = make(source);
+      // With strict, the fused loop reads the cell of each target before it raises the error.
+      expect(/if \(f\d+\) F\(\);/.test(source)).toBe(fuse);
+      const results = (c: string): unknown[] => s.keys.map((k) => {
+        const r = run.cell(c, k);
+        return r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR;
+      });
+      expect(m.run(structuredClone(records), {})).toStrictEqual(Object.fromEntries([...columns.keys()].map((c) => [c, results(c)])));
+    }
+  });
+});
+
+describe("COMPILE.MODULE.FUSE P17: random chains of flat over an each", () => {
+  const num = fc.constantFrom(n, ref("w"), op("divide", lit(1), ref("w")), op("subtract", n, lit(1)));
+  const cond = fc.constantFrom(ref("b"), op("gt", n, lit(0)), op("gt", op("divide", lit(1), ref("w")), lit(0)), v("t"));
+  const axis = fc.constantFrom(axes.all, axes.others, axes.window(-1, 1), axes.reverse(axes.all), axes.where(axes.all, ref("b")));
+  /** A random body: a list of each target, with filters, literals, lists of the input and inner chains. */
+  const body = fc.letrec<{ list: Expr }>((tie) => ({
+    list: fc.oneof(
+      { maxDepth: 3, depthSize: "small" },
+      num.map((x) => op("fill", lit(1), x)),
+      fc.constantFrom(xs, inv, BAD, NONE, one, two),
+      fc.tuple(fc.integer({ min: 0, max: 2 }), num).map(([k, x]) => op("fill", lit(k), x)),
+      fc.tuple(cond, tie("list"), tie("list")).map(([c, a, b]) => op("if", c, a, b)),
+      fc.tuple(cond, num).map(([c, x]) => op("if", c, op("fill", lit(1), x), NONE)),
+      fc.tuple(tie("list"), tie("list")).map(([a, b]) => op("append", a, b)),
+      fc.tuple(axis, tie("list"), fc.boolean()).map(([a, b, s]) => op("flat", each(a, b), ...(s ? [STRICT] : []))),
+    ),
+  })).list;
+  const chain = fc.tuple(axis, body, fc.boolean(), fc.constantFrom("count", "sum", "list")).map(([a, b, s, sink]) => {
+    const flat = op("flat", each(a, b), ...(s ? [STRICT] : []));
+    return sink === "list" ? op("ifError", flat, NONE) : op(sink, flat);
+  });
+  const records = fc.array(fc.record({ n: fc.integer({ min: -2, max: 3 }), w: fc.constantFrom(0, 1, -1, 2), b: fc.boolean(), xs: fc.array(fc.option(fc.integer({ min: -2, max: 3 }), { nil: undefined }), { maxLength: 3 }).map((x) => input(...x)) }, { noNullPrototype: true }), { maxLength: 5 });
+
+  it("P17 COMPILE.MODULE.FUSE COMPILE.MODULE.FUSE.ITEM: the modules of fuse true and of fuse false give the values of the interpreter", () => {
+    fc.assert(fc.property(chain, records, (e, rs) => expectSame(e, rs)), { numRuns: 300 });
   });
 });

@@ -158,6 +158,26 @@ interface Code {
   readonly v: Value;
 }
 
+/**
+ * The code of a list in a fused loop (COMPILE.MODULE.FUSE). It has the statements that push its items into the output
+ * of the loop, and their levels. It also has the fact that they cannot throw, and the facts of the list.
+ */
+interface Pushed {
+  readonly s: readonly string[];
+  readonly deps: ReadonlySet<number>;
+  readonly safe: boolean;
+  readonly list: ListInfo | undefined;
+}
+
+/** The tags of the nodes that can read at the focus. Only a node with one of them can be a column of the run. */
+const FOCUS_TAGS: ReadonlySet<string> = new Set(["ref", "ext", "call", "each", "fold"]);
+
+/** This function tells if an expression has a node that can read at the focus. */
+const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || children(e).some(readsFocus);
+
+/** This function tells if an expression is the literal 1. */
+const isOne = (e: Expr | undefined): boolean => e?.tag === "lit" && e.value === 1;
+
 /** A name of the program in the code: its variable, its kind, true when it can hold the error sentinel, and its levels. */
 interface Name {
   readonly code: string;
@@ -2409,6 +2429,9 @@ class Printer {
     if (FOLD_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) return this.#let(head, ctx, (body) => app(op, body, ...rest));
     // sortBy and take are list ops for each receiver. Each other list op needs a list, and a domain can have its name.
     if (head !== undefined && (op === "sortBy" || op === "take" || (op === "drop" && this.#isList(head, ctx)))) return this.#order(op, head, rest, ctx);
+    // With fuse, flat over an each is one loop with one output (COMPILE.MODULE.FUSE).
+    const strict = op === "flat" && head?.tag === "each" ? this.#fusedStrict(head, rest, ctx) : undefined;
+    if (strict !== undefined) return this.#flatEach(head as ExprOf<"each">, strict, ctx);
     if (head !== undefined && BUILD_OPS.has(op) && this.#isList(head, ctx)) return this.#build(op, head, rest, ctx, this.#own.get(e));
     if (head !== undefined && (FOLD_OPS.has(op) || op === "nth") && this.#isList(head, ctx)) return this.#overList(op, head, rest, ctx);
     // An argument can be a list (COMPILE.MODULE.LIST.ARG).
@@ -2897,6 +2920,105 @@ class Printer {
     // Only the catch of an item puts the sentinel into the list, so a safe item gives a clean list.
     const facts: ListInfo = { item: body.v.kind, inner: heldList(body.v.list), texts, clean: safeItem };
     return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: facts } };
+  }
+
+  /**
+   * This method gives the option strict of `flat` over the each `e` when the two ops fuse (COMPILE.MODULE.FUSE), and
+   * undefined when they do not fuse. The option `fuse` must be true, and the body of the each must give a list. The
+   * code reads a node of the memo again. It also reads a constant of the run that the module printed before. Thus these
+   * nodes do not fuse. Options that are not a literal give the reason of `flat`, so they do not fuse either.
+   */
+  #fusedStrict(e: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): boolean | undefined {
+    if (!this.#fuse || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e) || !this.#bodyList(e, ctx)) return undefined;
+    try {
+      return this.#strict("flat", rest);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * This method prints `flat` over an each as one loop with one output array (COMPILE.MODULE.FUSE). The body pushes the
+   * items of its list into the output. Thus the each has no array of its own, and `FL` and `V` do not scan a list.
+   *
+   * - The loop keeps the length of the output before each item. An item that fails sets the length back, so it adds no
+   *   item (COMPILE.MODULE.FUSE.ITEM). With `strict`, the failure is the error of `flat`.
+   * - An error item of the source fails at the check of the item, as in the each without fusion.
+   * - When an item reads a cell, a strict failure does not stop the loop. The search of the run must see each read, as
+   *   in the loop of an aggregate. Thus a flag holds the failure until the end of the loop.
+   *
+   * The output has only items with values, and no other part holds its array, so it is clean and fresh.
+   */
+  #flatEach(e: ExprOf<"each">, strict: boolean, ctx: Ctx): Code {
+    const { s, j, head, key, check, checkSafe, skip, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(e.axis, e.at ?? [], ctx, e.as);
+    const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
+    const o = this.fresh("o");
+    // Only the body sees the names of the items (AXIS.LIST.SCOPE).
+    const body = this.#push(e.body, { ...inner, env: withNames(inner.env, items) }, o, strict);
+    const parts = [body.deps, ...testCodes.map((x) => x.v.deps)];
+    this.#readsNoTarget(texts, inner.level, parts);
+    const deps = new Set([...start, ...parts.flatMap((d) => [...d])].filter((d) => d !== inner.level && d !== own));
+    const item = [...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
+    const safeItem = checkSafe && body.safe && testCodes.every((t) => this.#safeBoolean(t.v));
+    // The output keeps the key of each item of the body. Thus the loop needs the key of its target only for a read at
+    // the target, or for the target that the axis skips.
+    const at = new RegExp(String.raw`\b${j}\b`);
+    const skips = skip === undefined ? [] : [`if (${j} === ${skip}) continue;`];
+    const lead = [...([...skips, ...item].some((x) => at.test(x)) ? key : []), ...skips];
+    const flag = strict && !safeItem && parts.some((d) => d.has(CELLS)) ? this.fresh("f") : undefined;
+    let loop: string[];
+    if (safeItem) loop = [...lead, ...check, ...item];
+    else {
+      const m = strict ? undefined : this.fresh("m");
+      const caught = flag !== undefined ? `${flag} = true;` : m === undefined ? `${this.use("F")}();` : `${o}.length = ${m};`;
+      // A check that cannot throw comes before the try.
+      const [before, inside] = checkSafe ? [check, item] : [[], [...check, ...item]];
+      loop = [...lead, ...before, ...(m === undefined ? [] : [`const ${m} = ${o}.length;`]), "try {", ...ind(inside), "} catch {", `  ${caught}`, "}"];
+    }
+    const out = [...s, `const ${o} = [];`, ...(flag === undefined ? [] : [`let ${flag} = false;`]), head, ...ind(loop), "}", ...(flag === undefined ? [] : [`if (${flag}) ${this.use("F")}();`])];
+    const facts: ListInfo = { ...(body.list as ListInfo), clean: true, fresh: true };
+    return { s: out, v: { code: o, kind: undefined, safe: startSafe && (safeItem || !strict), deps, list: facts } };
+  }
+
+  /**
+   * This method prints the statements that push the items of the list of `e` into the output `o` of a fused loop
+   * (COMPILE.MODULE.FUSE). The forms of a stage are these:
+   *
+   * - `if` with two lists pushes the items of the branch that its condition selects.
+   * - `fill(1, x)` pushes one item with the key 0, as `FI` gives it.
+   * - The empty literal pushes no item.
+   *
+   * Each other list prints its array, and a loop pushes its items. A list that is not clean can hold error items. The
+   * loop skips them, and with `strict` such an item is an error. A node of the memo also prints its array. So does a
+   * constant of the run that the module printed before, and a node that can be a column of the run. Thus the module keeps
+   * these values for each read.
+   */
+  #push(e: Expr, ctx: Ctx, o: string, strict: boolean): Pushed {
+    const stage = e.tag === "app" && !this.#memo.has(e) && !ctx.keys.has(e) && !this.#constant.has(e) && (this.#work(e, ctx.fns) < COLUMN_WORK || !readsFocus(e)) ? e : undefined;
+    if (stage?.op === "if" && stage.args.length === 3 && stage.args.slice(1).every((x) => this.#isList(x, ctx))) {
+      const [c, a, b] = stage.args as [Expr, Expr, Expr];
+      // The condition evaluates once for each run when it is a constant of the run.
+      const cond = this.#hoist(this.expr(c, ctx), hasLoop(c));
+      const yes = this.#push(a, ctx, o, strict);
+      const no = this.#push(b, ctx, o, strict);
+      // A branch that pushes nothing prints no block.
+      const s = [...cond.s, `if (${this.#boolean(cond.v)}) {`, ...ind(yes.s), ...(no.s.length === 0 ? [] : ["} else {", ...ind(no.s)]), "}"];
+      return { s, deps: new Set([...cond.v.deps, ...yes.deps, ...no.deps]), safe: this.#safeBoolean(cond.v) && yes.safe && no.safe, list: branchLists("if", yes.list, no.list) };
+    }
+    if (stage?.op === "fill" && stage.args.length === 2 && isOne(stage.args[0]) && this.#facts.own("fill")) {
+      const x = stage.args[1] as Expr;
+      // The value can be a list, so fill gives a list of lists (COMPILE.MODULE.FILL).
+      this.#wantList.add(x);
+      const value = this.#hoist(this.expr(x, ctx), hasLoop(x));
+      const list: ListInfo = { item: value.v.kind, inner: heldList(value.v.list), texts: true };
+      return { s: [...value.s, `${o}.push([0, ${value.v.code}]);`], deps: value.v.deps, safe: value.v.safe, list };
+    }
+    if (e.tag === "lit" && isVexList(e.value) && e.value.items.length === 0) return { s: [], deps: NO_DEPS, safe: true, list: this.#listLiteral(e.value).v.list };
+    const c = this.#hoist(this.#listOf(e, ctx), hasLoop(e));
+    const z = this.fresh("z");
+    const clean = this.#clean(c.v.list);
+    const each = clean ? `${o}.push(${z}[i]);` : strict ? `{ if (${z}[i][1] === E) ${this.use("F")}(); ${o}.push(${z}[i]); }` : `if (${z}[i][1] !== E) ${o}.push(${z}[i]);`;
+    return { s: [...c.s, `const ${z} = ${c.v.code};`, `for (let i = 0; i < ${z}.length; i++) ${each}`], deps: c.v.deps, safe: c.v.safe && (clean || !strict), list: c.v.list };
   }
 
   /**

@@ -275,13 +275,15 @@ interface Ctx {
  * A name of a loop whose step appends to its own list (COMPILE.MODULE.APPEND.OWN). It has the name, its read in the
  * loop and the variable of the array of its last append. The printer makes the variable at the first append that uses it.
  * With `adopt`, the variable starts with the first list of the name, so the first append makes no copy
- * (COMPILE.MODULE.FUSE.ADOPT).
+ * (COMPILE.MODULE.FUSE.ADOPT). With `sure`, each append of the name gets the array of the variable as its list. Then
+ * an append of one item pushes the item with no check.
  */
 interface Owner {
   readonly name: string;
   readonly read: Name;
   w: string | undefined;
   readonly adopt: boolean;
+  readonly sure: boolean;
 }
 
 /**
@@ -1396,6 +1398,18 @@ function lastForm(e: Expr, name: string, out: Expr[], relays: Map<Expr, Relay>):
 }
 
 /**
+ * This function tells if a `let` of the form of `ownForm` binds the name `name` again. The appends under such a let
+ * append to another list. Then the value of the step can be a list that is not the array of the name
+ * (COMPILE.MODULE.FUSE.ADOPT).
+ */
+function shadows(e: Expr, name: string): boolean {
+  if (e.tag === "let") return Object.hasOwn(e.bind, name) || shadows(e.body, name);
+  if (e.tag !== "app") return false;
+  const [head, ...rest] = e.args as [Expr, ...Expr[]];
+  return e.op === "if" ? rest.some((x) => shadows(x, name)) : shadows(head, name);
+}
+
+/**
  * This function tells if an append into the list of a name of a loop can take the first list as its own array
  * (COMPILE.MODULE.FUSE.ADOPT). No other part of the code holds a fresh array. AO does not scan the array that it
  * takes, so the list must also be clean.
@@ -1706,6 +1720,12 @@ class Printer {
   readonly #own = new Map<Expr, Owner>();
   /** The owner of each relay `let` of the result of a loop that the printer prints (COMPILE.MODULE.FUSE.ADOPT). */
   readonly #relays = new Map<Expr, Relay & { readonly owner: Owner }>();
+  /**
+   * The second lists of the appends of an owner that the printer prints (COMPILE.MODULE.FUSE.ADOPT). A list of
+   * `fill(1, x)` gets the value of its print and the code of its one item. Such a print does not use `FI`, so a push of
+   * the item needs no `FI`.
+   */
+  readonly #ones = new Map<Expr | undefined, { readonly v: Value; readonly item: string } | undefined>();
   readonly #structures = new Map<string, string>();
   readonly #kinds = new Map<string, Kind | undefined>();
   readonly #ops = new Map<string, number>();
@@ -2403,7 +2423,7 @@ class Printer {
     // The binding of the relay is not a function, so the let binds its name.
     const relay = this.#relays.get(e);
     if (relay !== undefined) {
-      const owner: Owner = { name: relay.bind, read: env.get(relay.bind) as Name, w: relay.owner.w, adopt: relay.owner.adopt };
+      const owner: Owner = { name: relay.bind, read: env.get(relay.bind) as Name, w: relay.owner.w, adopt: relay.owner.adopt, sure: relay.owner.sure };
       for (const node of relay.nodes) this.#own.set(node, owner);
     }
     // A list op over a let is the list op over its body, in the scope of its bindings (`#app`).
@@ -2549,7 +2569,7 @@ class Printer {
     const deps = depsOf(...raw);
     // The interpreter evaluates each argument, also after an error.
     const values = this.#inOrder(this.#settle(raw, deps, args), true);
-    if (op === "fill" && this.#facts.own(op)) return this.#fill(values, deps);
+    if (op === "fill" && this.#facts.own(op)) return this.#fill(e, values, deps);
     return this.#opCall(op, values, deps);
   }
 
@@ -2558,11 +2578,16 @@ class Printer {
    * gets each value, so an error of an argument after the value is the error of the op. The keys are not the positions
    * of records, so the axis `list` over the list cannot read a record at its keys.
    */
-  #fill(values: readonly Code[], deps: ReadonlySet<number>): Code {
+  #fill(e: ExprOf<"app">, values: readonly Code[], deps: ReadonlySet<number>): Code {
     const value = values[1]?.v;
     // FI gives a new array of checked values, so the list is clean and fresh.
     const list: ListInfo = { item: value?.kind, inner: heldList(value?.list), texts: true, clean: true, fresh: true };
-    return { s: stmtsOf(...values), v: { code: `${this.use("FI")}(${values.map((x) => x.v.code).join(", ")})`, kind: undefined, safe: false, deps, list } };
+    // The one item of an append of an owner has the key 0, as FI gives it (COMPILE.MODULE.FUSE.ADOPT). The append uses FI
+    // only when it does not push the item.
+    const one = this.#ones.has(e) && values.length === 2 && isOne(e.args[0]);
+    const v: Value = { code: `${one ? "FI" : this.use("FI")}(${values.map((x) => x.v.code).join(", ")})`, kind: undefined, safe: false, deps, list };
+    if (one) this.#ones.set(e, { v, item: `[0, ${(value as Value).code}]` });
+    return { s: stmtsOf(...values), v };
   }
 
   /**
@@ -3304,12 +3329,24 @@ class Printer {
     // gives its error. A missing second list of append and without is not a list, so it gives a reason.
     const exprs = [head, ...(op === "flat" ? [] : [rest[0] ?? lit(null)])];
     const strict = this.#strict(op, rest.slice(exprs.length - 1));
+    // A function of the program can share a node with the step, but its body has its own names (FN.BIND).
+    const owned = owner !== undefined && ctx.env.get(owner.name) === owner.read;
+    // With fuse, an append of an owner can push the one item of `fill(1, x)` (COMPILE.MODULE.FUSE.ADOPT). Only `#fill`
+    // reads the mark of the node. An error of a print stops the module, so the mark needs no `finally`.
+    const right = owned && this.#fuse ? exprs[1] : undefined;
+    this.#ones.set(right, undefined);
     const raw = [list, ...exprs.slice(1).map((x) => (two ? this.#listOf(x, ctx) : this.expr(x, ctx)))];
+    const one = this.#ones.get(right);
+    this.#ones.delete(right);
     const deps = depsOf(...raw);
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
-    // A function of the program can share a node with the step, but its body has its own names (FN.BIND).
-    const w = owner !== undefined && ctx.env.get(owner.name) === owner.read ? (owner.w ??= this.fresh("w")) : undefined;
-    const code = this.#buildCode(op, parts, strict, w);
+    const w = owned ? (owner.w ??= this.fresh("w")) : undefined;
+    // The item is the item of the list of the append only if no other part holds the value of fill. The list of a sure
+    // owner is the array of w. A read of the name can be another list, so a check selects the push.
+    const item = one !== undefined && (parts[1] as Code).v === one.v ? one.item : undefined;
+    const push = item === undefined ? undefined : (owner as Owner).sure ? "sure" : (parts[0] as Code).v.code === (owner as Owner).read.code ? "check" : undefined;
+    if (one !== undefined && push !== "sure") this.use("FI");
+    const code = this.#buildCode(op, parts, strict, w, push === undefined ? undefined : { item: item as string, sure: push === "sure" });
     const value = (kind: Kind | undefined, facts: ListInfo | undefined): Code => ({ s: stmtsOf(...parts), v: { code, kind, safe: false, deps, list: facts } });
     if (op === "get") return value(info.item, info.inner);
     if (op === "indexOf") return value("number", undefined);
@@ -3329,13 +3366,19 @@ class Printer {
    * helper has no scan of V and no option strict. The append of two clean lists is `concat`. `get` scans no list, so
    * it has no clean form.
    */
-  #buildCode(op: string, parts: readonly Code[], strict: boolean, w: string | undefined): string {
+  #buildCode(op: string, parts: readonly Code[], strict: boolean, w: string | undefined, push?: { readonly item: string; readonly sure: boolean }): string {
     const [l, o] = parts as [Code, Code | undefined];
     const codes = parts.map((x) => x.v.code);
     const info = l.v.list as ListInfo;
     // flat scans the list and each list of its items. An empty list has no items.
     const clean = op === "flat" ? this.#clean(info) && (info.inner === undefined || this.#clean(info.inner)) : op !== "get" && this.#clean(info) && (o?.v.list === undefined || this.#clean(o.v.list));
-    if (w !== undefined) return clean ? `(${w} = ${this.use("AOC")}(${[...codes, w].join(", ")}))` : `(${w} = ${this.use("AO")}(${[...codes, String(strict), w].join(", ")}))`;
+    if (w !== undefined) {
+      // A list that is the array of w gets the one item with a push (COMPILE.MODULE.FUSE.ADOPT). With `sure`, the list is
+      // that array. Else a check at run time selects the push or the append of AO. The check reads the variable of the list.
+      if (push?.sure === true) return `(${l.v.code}.push(${push.item}), ${w})`;
+      const own = clean ? `(${w} = ${this.use("AOC")}(${[...codes, w].join(", ")}))` : `(${w} = ${this.use("AO")}(${[...codes, String(strict), w].join(", ")}))`;
+      return push === undefined ? own : `(${l.v.code} === ${w} ? (${w}.push(${push.item}), ${w}) : ${own})`;
+    }
     if (!clean) return `${this.use(BUILD_HELPERS[op] as BuildHelper)}(${[...codes, String(strict)].join(", ")})`;
     if (op === "append") return `${l.v.code}.concat(${(o as Code).v.code})`;
     return `${this.use(`${BUILD_HELPERS[op] as "WO" | "FL" | "IX"}C`)}(${codes.join(", ")})`;
@@ -3419,7 +3462,9 @@ class Printer {
       const own: Expr[] = [];
       const others = [...steps.filter(([k]) => k !== name).map(([, y]) => y), ...(until === undefined ? [] : [until])];
       if (!ownForm(x, name, own) || others.some((y) => namesOf(y).has(name))) continue;
-      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined, adopt: adopt.has(name) };
+      // The variable starts with the first list, and each value of the step is that list or the value of an append that
+      // pushes into it. Thus each append of the name gets the array of the variable (COMPILE.MODULE.FUSE.ADOPT).
+      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined, adopt: adopt.has(name), sure: adopt.has(name) && !shadows(x, name) };
       for (const node of own) this.#own.set(node, owner);
       owners.push(owner);
       nodes.push(...own);

@@ -179,6 +179,218 @@ The first form of this is done (§13.2). `SheetRun.fill` evaluates the cells in 
 
 A run knows which cell reads which cell. After a change of one record, only the cells that depend on it change. This is for the live editor of ireko and for the drag of a box in Graph.
 
+### 7.6 Fusion of list ops
+
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). The module does not have it yet. Its requirement IDs are planned, and no test names them yet. The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the IDs stay in this section until their tests exist. Then they move to the spec.
+
+#### The cost of a chain of list ops
+
+Each list op of a module makes a new array of `[key, value]` pairs. The next op reads that array once, and then no part reads it again. Before a list op reads a list, the helper `V` scans the list for the error sentinel `E`.
+
+The shapes module of ireko (`NODE_SHAPE`, the file `shape.generated.js` on the branch `vex-shapes` of ireko) has many such chains. For example, `fill` gives one band, `append` joins it to the bands of the children, and `flat` makes one list. Then `sortBy` sorts the cut points, and the list envelope `LO` gives the value of the run.
+
+The workflow `shapes-bench.yml` of ireko measured vex-compiler 0.17.2 on a tree of 1111 nodes. The module call takes 2.76 times the time of the hand code of ireko. A full layout takes 1.58 times, and the gate of a full layout is 1.1. A CPU profile of the module before 0.17.2 gave these shares of its self time:
+
+| Group | Share | Hot lines and parts |
+|---|---|---|
+| alloc | 0.47 | `AP` (append) 21 %, `V` 7 %, `FL` (flat) 4 %, `FI` (fill) 2.5 %, the pushes of pairs, the garbage collector |
+| envelope | 0.32 | `LO` (the list envelope) 8 %, `LI`, `G`, `CT`, `VW`, the checks `k_*` and `v_*`, the tests of the sentinel |
+| dispatch | 0.14 | `SK` (sortBy) 9 %, the loops of the bodies, `Q` and `L` |
+| bandops | 0.07 | The ops of `BandDomain` |
+
+The groups are the groups of `profile-summary.mjs` of ireko. That script puts `V` in alloc, because `V` is mainly a copy of a list. Three facts make most of this cost unnecessary:
+
+- Most lists exist only between two ops. Such a list needs no array of its own.
+- The value of `append`, `flat`, `drop`, `take`, `without`, `sortBy` and `fill` has no error items, because `V` removes each error item or raises the error. The next op does not know this fact, so `V` scans the list again.
+- The value of the shapes module does not depend on the key. The host reads only the value at the key 0, but `LO` makes the envelope again at each key.
+
+The module already makes one loop for an aggregate over an `each` (the method `#list` of `Printer`). These aggregates are `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first` and `reduce`. Fusion extends that loop to the ops that build a list.
+
+#### The roles of the ops
+
+A chain has a source, zero or more stages and one sink. A source is an array that exists before the chain. A stage reads each item once, in order, and gives zero or more items. A sink takes the items and gives the value of the chain.
+
+| Op | Role in a chain |
+|---|---|
+| A name, a constant of the run, a column, a cell, a list of the input | A source. The chain reads its array. |
+| `each` over the records or over an axis of the space | A source. Its loop gives the targets. |
+| `each` over the axis `list`, also with `where` and `as` (map) | A stage. It gives the value of the body for each item with a value. A false test of `where` gives no item. |
+| `fill(n, v)` | A source of `n` items with the value `v`. In a body, `fill(1, v)` is one item. |
+| The empty literal and a list literal | A source of fixed items |
+| `flat` | A stage. It gives the items of each list item, in order. |
+| `append(a, b)` | A stage. It gives the items of `a`, then the items of `b`. A chain of appends has one output. |
+| `if(c, a, b)` with two lists | A stage. It gives the items of the branch that `c` selects. |
+| Filter: `flat` over `each` with the body `if(c, fill(1, x), empty)` | A stage. Vex has no op `filter`, so the shapes pilot has this form. It gives `x` when `c` is true. |
+| `sortBy`, also with `by` | A sink. It collects the items into its buffer and sorts them. The sorted buffer is the source of the next chain. |
+| `count`, `sum`, `reduce` and the other aggregates | A sink with a running value, as in the module of today |
+| `fold` and `iterate` over the axis `list` | A sink in a later step. In the first steps, the list of a fold is a source. |
+| The list envelope (`LO`) | A sink. The loop makes the items of the `vex.list`. |
+| `get`, `indexOf`, `nth`, `without`, `drop`, `take`, `reverse` of `each` | A barrier in the first steps. The chain stops before the op, and the op reads an array. |
+
+#### The rule of a fusion
+
+A list fuses into the op that reads it when each of these conditions is true:
+
+- The op that makes the list is a source or a stage, and the op that reads it is a stage or a sink.
+- The program reads the list at one place, one time. A name that the program reads twice is a source, also the list of a node of the memo. A list that a loop reads at each step is a source too.
+- The list does not escape. It is not the value of a name of a loop, a cell, a column or a field of a record. It is also not an argument of an op, an argument of a call or the value of a call. The value of the run is the one exception (COMPILE.MODULE.FUSE.OUT).
+- The two ops are in the same body. A fusion does not cross the body of a function, the `try` block of `ifError`, or the body of `L`, `Q` or `T`.
+- The option `strict` of each op of the chain is a literal. Thus the printer knows the mode of each op.
+
+The list of the body of an `each` fuses into `flat` of that `each` by the same rule. Then the body pushes its items into the output of `flat`, and the `each` has no list of its own. A chain that obeys the rule becomes one loop over its source. Each stage becomes code in the body of that loop. The sink holds the one output: an array, a sort buffer or a running value.
+
+The shapes module shows the limit of the rule. The list of the cut points (`b25`) has three readers, so it is a source. Each of the three filters over it fuses, and so does the append of their three outputs.
+
+#### Error items stay correct
+
+The interpreter is the reference. A fused chain gives the values and the errors of the interpreter for each program (property P17). A module has one sentinel `E` for each error, so the order of two failures does not change the value. Each op of a module is pure: it gives a value or it throws, and it changes nothing. Thus a stage that starts earlier gives the same items. These rules keep the semantics:
+
+- **Lenient by default.** An item that fails in a stage gives no item downstream. A list op of the interpreter skips the error item of that stage in the same way (LIST.LENIENT).
+- **Strict.** With `strict` on the op that reads the stage, a failure raises the error with `F()`. Thus the whole chain gives the sentinel, as the strict op of the interpreter gives the error.
+- **No part of a failed item.** The loop keeps the length of the output before the code of each item. A failure sets the length back. Thus a body that pushes one item and fails at the second adds no item. In the interpreter, the whole value of that body is one error item.
+- **Error items of a source.** An error item of a list of the input or of a cell stays where the interpreter meets it. The loop skips it, or with `strict` it raises the error with `F()`.
+- **Sinks.** `sortBy` collects only the items with values, so it sorts the items of the interpreter. An error of its op `by` stays the error of the chain.
+- **Barriers keep the errors in place.** `ifError` is a barrier, so a fusion moves no failure into its `try` block or out of it.
+- **The stack.** The fused code calls fewer functions, so it uses less of the call stack. The budget of the stack of a sheet (`SH`) counts its own frames, so the budget does not change.
+
+#### The type proof: lists without error items
+
+The printer keeps the facts of each list in `ListInfo`. Fusion adds the fact `clean`: no item of the list holds the sentinel. `inner` keeps the fact for each level of a list of lists.
+
+The kind of an item alone cannot prove the fact, because a list of each kind can hold the sentinel. But the printer checks each value with `G` or a check `k_*` before it stores the value in a list. Only two places put the sentinel into a list: the catch of an item of `each`, and an error item of the input (`LI`). A cell of a column of lists holds the list of another formula, and the first steps do not keep its facts. Thus these rules prove the fact `clean`:
+
+- The value of `append`, `flat`, `drop`, `take`, `without` and `sortBy` is clean, because `V` removes each error item or raises the error.
+- The value of `fill` is clean, because its value is a checked value. A list literal is clean, because each item of a literal has a value (LIST.LITERAL).
+- The value of an `each` is clean when its body is `safe`, the fact of the printer for code that cannot throw.
+- A fused chain gives a clean list, because it pushes only items with values.
+- A name of a loop is clean when its first value is clean and each step gives a clean list. The printer assumes the fact for the name, and then checks each step with it.
+- `clean` is a field of `ListInfo`, so it is a part of the signature of a function (COMPILE.MODULE.LIST.CALL). Thus the parameter of `merge` in the shapes module is clean.
+- A list of the input and a cell of a column of lists are not clean.
+
+The fact `clean` removes the envelope where it holds:
+
+- `V(l, s)` of a clean list prints `l`, with no scan.
+- A loop over a clean list has no test `A[q][1] === E`.
+- `count`, `first` and `nth` of a clean list read the array with no `VW`. Thus no property `vw` goes on the array, which was the cost of 0.17.1.
+- `LO` and `LV` of a clean list do not test the sentinel at each item.
+
+#### What a fusion emits
+
+- One loop for each source, and one output array for each sink. A fused chain uses no `FI`, `AP`, `FL` or `V`.
+- `fill(1, v)` in a stage prints one push of `[0, v]`. `fill(n, v)` with a computed count prints the check of `FI` and a loop.
+- An append of several parts pushes each part into one output, in order. A part that is a source prints a loop that pushes its items.
+- `sortBy` with `by` collects the pairs of the item and its sort value in the loop of the stage before it. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
+- `LO` of a fused chain makes the items of the `vex.list` in the loop.
+- **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it.
+- **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LO` for each run. Each key gets that object.
+- The fused code uses no new global, so the test of `MODULE_GLOBALS` (V-060) does not change. It makes no own property on an array.
+
+The chain of the cut points of the shapes module is an example. The program is `flat(each(list(p), if(sized(y), append(fill(1, y), fill(1, end(y))), empty)))`. Before the fusion, each band makes three arrays and three pairs, and `V` scans three lists:
+
+```js
+const A = G(p);
+const L = [];
+for (let q = 0; q < A.length; q++) {
+  const j = A[q][0];
+  let x;
+  try {
+    if (A[q][1] === E) F();
+    const y = A[q][1];
+    x = op_sized(y) ? AP(FI(1, y), FI(1, k_domain_Band(op_end(y))), false) : G(c22);
+  } catch {
+    x = E;
+  }
+  L.push([j, x]);
+}
+const b = FL(L, false);
+```
+
+After the fusion, the chain is one loop with one output. `p` is the value of `append`, so it is clean, and the loop has no test of the sentinel:
+
+```js
+const A = G(p);
+const o = [];
+for (let q = 0; q < A.length; q++) {
+  const y = A[q][1];
+  const m = o.length;
+  try {
+    if (op_sized(y)) {
+      o.push([0, y]);
+      o.push([0, k_domain_Band(op_end(y))]);
+    } else {
+      const z = G(c22);
+      for (let i = 0; i < z.length; i++) o.push(z[i]);
+    }
+  } catch {
+    o.length = m; // flat is not strict: the item that failed adds no item
+  }
+}
+const b = o;
+```
+
+With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_domain_Band`) stays, because a band of NaN gives an error in the interpreter too.
+
+#### What does not fuse
+
+- A list with more than one read. Such a list is a source, as the list of a node of the memo or of a name of a loop is.
+- A list that escapes. It goes into a cell, a column, a field, an argument of an op or a call, or the value of a call.
+- A chain across the body of a function, across `ifError`, or across the body of a constant of the run or a column.
+- The barriers `get`, `indexOf`, `nth`, `without`, `drop`, `take` and `each` with `reverse`. `GT` keeps its index on the array, so `get` needs the array.
+- A chain with an option `strict` that is not a literal.
+- A list of the input, with its check `LI`. The check comes before the run, and it throws a `VexContractError`.
+- `fold` and `iterate` over the axis `list`, in the first steps. Their steps read the list in order, so they can be sinks later.
+- Tier 2 of the run time (`tiered`). Its lowering has its own fusion of the aggregates (`#fused` of `lower.ts`).
+
+#### Planned requirement IDs
+
+These IDs move to `spec/README.md` with the test that names each one:
+
+- `COMPILE.MODULE.FUSE`: A chain of list ops that obeys the rule of a fusion is one loop with one output. Its run gives the values and the errors of the interpreter.
+- `COMPILE.MODULE.FUSE.ITEM`: In a fused chain, an item that fails adds no item. With `strict`, it is the error of the chain. An error item of a source stays where the interpreter meets it.
+- `COMPILE.MODULE.FUSE.CLEAN`: A list that the facts prove clean has no scan of `V`, no test of the sentinel and no `VW`. The values and the errors do not change.
+- `COMPILE.MODULE.FUSE.ADOPT`: `AO` takes a fresh list as its own array, with no first copy. The values and the errors do not change.
+- `COMPILE.MODULE.FUSE.OUT`: A value of the run that does not depend on the key has one `vex.list` for each run.
+- `COMPILE.MODULE.FUSE.OFF`: With the option `fuse: false`, `emitModule` and `emitSheetModule` print the code without fusion. Thus a test and a bench can compare the two forms.
+
+#### Measure before a release
+
+A release that claims a speed gain carries its bench result in the pull request. The work measures in this order:
+
+1. Profile the module of 0.17.2 again with `shapes-bench.yml` of ireko. The shares above are from before 0.17.2.
+2. Edit the generated module of ireko by hand on the branch `vex-shapes`, as the bench-only commit `6aacd40` did.
+3. Start `shapes-bench.yml` three times, and record the medians of the module call and of the full layout.
+4. Continue only if the module call takes at least 25 % less time. Else, change this design first.
+5. Make the release only after the bench of the generated module gives the result of the hand edit.
+
+#### The steps of the work
+
+Each step is one pull request. P17 and the golden files check each step, and the step changes no value.
+
+1. Add the option `fuse` (COMPILE.MODULE.FUSE.OFF) with no effect, and a bench case for `SHAPE_COLUMNS` in `bench/gate.ts`.
+2. Add the facts `clean`, `fresh` and the count of the reads of each list node. Do not change the printed code.
+3. Print the clean form (COMPILE.MODULE.FUSE.CLEAN). Remove `V`, the test of the sentinel and `VW` where the facts hold.
+4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM).
+5. Fuse the chains of `append`, and make `sortBy` a sink.
+6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT).
+7. Make one envelope for each run (COMPILE.MODULE.FUSE.OUT), after the decision of the owner on its form.
+8. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
+
+These golden files change. The files in `packages/core/src/__golden__` do not change, because they are the IR and the traces of tier 1:
+
+| Step | Golden files of `packages/compiler/src/__golden__` |
+|---|---|
+| 1, 2 | None |
+| 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-helpers.txt`, `module-corpus.txt` |
+| 4, 5 | `module-list-build.js`, `module-list-loops.js`, `module-helpers.txt`, `module-corpus.txt`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
+| 6 | `module-list-loops.js`, `module-corpus.txt` |
+| 7 | `module-fuse.js`, and each golden file of a module whose value is a list |
+
+#### Open questions
+
+- **The form of one envelope for each run.** Today each key gets a new `vex.list` that is not frozen. One shared object changes its identity, and a change by the host shows at each key. The proposal is one frozen object, as `LV` gives. This is a breaking change of the value of the run, so the version is 0.18.0. The owner decides.
+- **Values without keys.** In the shapes module, each list of `merge` after its first `each` has the key 0 for each item. An array of values without pairs removes most of the remaining allocation. But each helper then needs two forms. The work decides after the measure of step 5.
+- **The model of the full layout.** The model `1 + 0.26 × (module ratio - 1)` gives 1.46 for 2.76, but CI measured 1.58. The difference is approximately 0.12, and the wrapper `shape-vex.ts` of ireko is the probable cause. Thus the gate of 1.1 can also need a change of the wrapper.
+
 ## 8. Bounded iteration
 
 Vex has no loop, so each program ends. The language keeps this property, and it gets **bounded** iteration:
@@ -367,6 +579,7 @@ The owner made these decisions on 2026-10-16:
 | C3 ireko | The kinds (§3.2) and `returns` on the ops of the built-in domains, then the inline forms (§7.1), `grid` as a Vex program, standalone modules in the build of ireko, then the closed form of `radial` and the audits | The golden files of ireko do not change, and its benchmarks hold |
 | C4 Iteration | `fold`, `iterate`, domain kernels, then `tree` and `layers` of ireko | Each construct passes each stage, and the layouts of ireko do not change |
 | C5 Later | Cell reads in the generated code (§7.4), other back ends, recalculation (§7.5) | A decision of the owner |
+| C6 Fusion (planned) | The fusion of list ops in modules (§7.6): one loop for a chain, lists without error items, one envelope for each run | P17 passes with the option `fuse` on and off, and the module of the shapes of ireko is at 1.4 times the hand code or less |
 
 A separate item: the mutation score of the test kit was 95.47 %, near the gate of 95 %. Tests for its survivors gave it 99.5 % (2026-10-15).
 

@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, lit, moveExpr, nestingOf, rec, shapeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, listOf, lit, moveExpr, nestingOf, rec, shapeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -53,6 +53,11 @@ export interface ModuleOptions {
    * (COMPILE.MODULE.GRAPH). Each entry is an array of the positions of the ends of the edges from its record, in order.
    */
   readonly space?: "array" | "tree" | "graph";
+  /**
+   * True to fuse the chains of list ops into loops (`COMPILER.md` §7.6), and false for the code without fusion
+   * (COMPILE.MODULE.FUSE.OFF). The default is true. In this version, the two values print the same code.
+   */
+  readonly fuse?: boolean;
 }
 
 /** The options of a module of a sheet (COMPILE.MODULE.SHEET): the options of a module, and the parts of a sheet. */
@@ -110,6 +115,35 @@ interface ListInfo {
   readonly texts?: boolean;
   /** True for a list without items: the empty literal, and a list from it. Such a list fits each list. */
   readonly empty?: boolean;
+  /** True when no item of the list holds the error sentinel (COMPILE.MODULE.FUSE.FACTS). Fusion uses this fact. */
+  readonly clean?: boolean;
+  /** True when no other part of the code holds the array of the list, so an op can take the array as its own. */
+  readonly fresh?: boolean;
+}
+
+/** This function gives the facts of a list without the facts of fusion. A signature and a key of the memo use them. */
+function plainList(l: ListInfo | undefined): ListInfo | undefined {
+  if (l === undefined) return undefined;
+  const { clean: _clean, fresh: _fresh, ...rest } = l;
+  return { ...rest, inner: plainList(l.inner) };
+}
+
+/** This function gives the facts of a list that another part of the code can hold: the list is not fresh. */
+function heldList(l: ListInfo | undefined): ListInfo | undefined {
+  return l?.fresh === true ? { ...l, fresh: false } : l;
+}
+
+/**
+ * The facts of fusion of a list node of a program (COMPILE.MODULE.FUSE.FACTS). They are `clean` for the list and for
+ * each level of its items, `fresh` and the count of the reads of its value. A count of `Infinity` tells that a loop, a
+ * memo node or the loop over the keys reads the value again. The tests of the analysis read these facts.
+ */
+export interface ListFacts {
+  readonly clean: boolean;
+  /** The fact `clean` of each level of a list of lists, from the outside in. */
+  readonly inner: readonly boolean[];
+  readonly fresh: boolean;
+  readonly reads: number;
 }
 
 /** The op of each step of `reduce` (COMPILE.MODULE.REDUCE): the name of the op, and the value of the option `domain`. */
@@ -980,11 +1014,13 @@ function hasTextKeys(e: Expr): boolean {
  * `if` from its two branches. An empty list fits each list. The op `op` names the op in the reason.
  */
 function joinLists(a: ListInfo, b: ListInfo, op: string): ListInfo {
-  if (a.empty === true) return b;
-  if (b.empty === true) return a;
+  // The value can be the array of the empty list, so it is fresh only when both lists are fresh.
+  if (a.empty === true) return { ...b, clean: a.clean === true && b.clean === true, fresh: false };
+  if (b.empty === true) return { ...a, clean: a.clean === true && b.clean === true, fresh: false };
   if ((a.inner === undefined) !== (b.inner === undefined)) throw new NotStandalone(`"${op}" of a list of lists and a list of values`);
   const texts = a.texts === true || b.texts === true;
-  return { item: join(a.item, b.item), inner: a.inner === undefined ? undefined : joinLists(a.inner, b.inner as ListInfo, op), texts };
+  const inner = a.inner === undefined ? undefined : joinLists(a.inner, b.inner as ListInfo, op);
+  return { item: join(a.item, b.item), inner, texts, clean: a.clean === true && b.clean === true, fresh: a.fresh === true && b.fresh === true };
 }
 
 /** This function gives the facts of the list of `if` or `ifError` from its two branches. Two values that are not lists give undefined. */
@@ -1003,6 +1039,165 @@ function fits(name: ListInfo, step: ListInfo): boolean {
   if (name.item !== undefined && step.item !== name.item) return false;
   if (step.texts === true && name.texts !== true) return false;
   return name.inner === undefined ? step.inner === undefined : step.inner !== undefined && fits(name.inner, step.inner);
+}
+
+/**
+ * This function gives the names of a loop with a clean list (COMPILE.MODULE.FUSE.FACTS). A name is clean when its first
+ * list is clean and each step gives a clean list. The function first assumes the fact for each name with a clean first
+ * list. Then it removes each name whose step does not prove the fact, until no name changes. A name of an item in
+ * `items` hides each other name. `outer` gives the fact of a name outside the loop.
+ */
+function cleanNames(firsts: ReadonlyMap<string, boolean>, step: Names, items: readonly string[], outer: (name: string) => boolean): ReadonlySet<string> {
+  const clean = new Set([...firsts].flatMap(([name, c]) => (c ? [name] : [])));
+  const fact = (name: string): boolean => !items.includes(name) && (firsts.has(name) ? clean.has(name) : outer(name));
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const name of clean) {
+      const x = step[name];
+      if (x !== undefined && !cleanForm(x, fact)) {
+        clean.delete(name);
+        changed = true;
+      }
+    }
+  }
+  return clean;
+}
+
+/** The list ops whose value is clean, because `V` removes each error item or `FI` checks each value. */
+const CLEAN_OPS: ReadonlySet<string> = new Set(["append", "flat", "drop", "take", "without", "sortBy", "fill"]);
+
+/**
+ * This function tells if the form of an expression proves that its list is clean, with the facts `fact` of the names.
+ * It does not print the expression, so it knows only the clean ops, the literals, `if`, `ifError`, `let` and names.
+ */
+function cleanForm(e: Expr, fact: (name: string) => boolean): boolean {
+  switch (e.tag) {
+    case "app":
+      if (CLEAN_OPS.has(e.op)) return true;
+      return (e.op === "if" || e.op === "ifError") && e.args.slice(e.op === "if" ? 1 : 0).every((x) => cleanForm(x, fact));
+    case "lit":
+      return isVexList(e.value) && e.value.items.every((it) => it.result.ok);
+    case "var":
+      return fact(e.name);
+    case "let":
+      return cleanForm(e.body, (name) => !(name in e.bind) && fact(name));
+    case "call":
+    case "each":
+    case "ext":
+    case "fn":
+    case "fold":
+    case "iterate":
+    case "rec":
+    case "ref":
+      return false;
+  }
+}
+
+/** This function gives the count of the reads of a part that a loop or a function can evaluate again. */
+const again = (n: number): number => (n > 0 ? Infinity : 0);
+
+/** This function adds the counts of the reads of the parts `xs`. */
+const refsIn = (xs: readonly Expr[], name: string): number => xs.reduce((n, x) => n + refsOf(x, name), 0);
+
+/**
+ * This function counts the reads of the name `name` in an expression. A read in the body of an `each`, of a step of
+ * a loop or of a function counts `Infinity`. Such a part can evaluate many times. A name of the expression
+ * hides the name.
+ */
+function refsOf(e: Expr, name: string): number {
+  switch (e.tag) {
+    case "var":
+      return e.name === name ? 1 : 0;
+    case "let":
+      return refsIn(Object.values(e.bind), name) + (name in e.bind ? 0 : refsOf(e.body, name));
+    case "fn":
+      return e.params.includes(name) ? 0 : again(refsOf(e.body, name));
+    case "each": {
+      // Only the body sees the names of the items (AXIS.LIST.SCOPE). The tests of the axis evaluate for each item.
+      const list = listOf(e.axis);
+      const tests = axisExprs(e.axis).filter((x) => x !== list);
+      const own = list === undefined ? [] : [list];
+      return refsIn([...own, ...addrExprs(e.at)], name) + again(refsIn(tests, name)) + (e.as?.includes(name) === true ? 0 : again(refsOf(e.body, name)));
+    }
+    case "fold":
+    case "iterate": {
+      // The steps and the result see the names of the loop. The tests of a fold read only the names outside the fold.
+      const hidden = name in e.init;
+      const steps = [...Object.values(e.step), ...(e.tag === "iterate" && e.until !== undefined ? [e.until] : [])];
+      const once = e.tag === "fold" ? [...(listOf(e.axis) === undefined ? [] : [listOf(e.axis) as Expr]), ...addrExprs(e.at)] : [];
+      const tests = e.tag === "fold" ? axisExprs(e.axis).filter((x) => x !== listOf(e.axis)) : [];
+      const item = e.tag === "fold" && e.as?.includes(name) === true;
+      return refsIn([...Object.values(e.init), ...once], name) + again(refsIn(tests, name)) + (hidden || item ? 0 : again(refsIn(steps, name))) + (hidden ? 0 : refsOf(e.result, name));
+    }
+    case "app":
+    case "call":
+    case "ext":
+    case "lit":
+    case "rec":
+    case "ref":
+      return refsIn(children(e), name);
+  }
+}
+
+/**
+ * This function counts the reads of the value of each node of a program, from its form (COMPILE.MODULE.FUSE.FACTS).
+ * The parent of a node reads its value once. A branch of `if` and of `ifError`, the body of a `let` and the result of
+ * a loop give their value to their parent. Thus they get the count of the parent. A loop reads its first values and its
+ * steps at each step, so they get `Infinity`. A binding gets the count of the reads of its name. An argument of a call
+ * gets the count of the reads of its parameter. The printer adds the parts that the code reads again (`#shared`).
+ */
+function readCounts(root: Expr): ReadonlyMap<Expr, number> {
+  const out = new Map<Expr, number>();
+  const visit = (e: Expr, reads: number, fns: ReadonlyMap<string, ExprOf<"fn">>): void => {
+    // A node at two places of the program evaluates at each place, so each place reads its own value.
+    out.set(e, Math.max(out.get(e) ?? 0, reads));
+    const all = (xs: readonly Expr[], n: number): void => {
+      for (const x of xs) visit(x, n, fns);
+    };
+    switch (e.tag) {
+      case "app": {
+        // The branches of if and of ifError give their value to the parent.
+        const first = e.op === "if" ? 1 : e.op === "ifError" ? 0 : e.args.length;
+        e.args.forEach((x, i) => visit(x, i < first ? 1 : reads, fns));
+        return;
+      }
+      case "let": {
+        // A binding sees the context of the let, so a function cannot call itself. A value hides a function of its name.
+        const inner = new Map(fns);
+        for (const [name, x] of Object.entries(e.bind)) {
+          if (x.tag === "fn") inner.set(name, x);
+          else inner.delete(name);
+          visit(x, x.tag === "fn" ? 1 : refsOf(e.body, name), fns);
+        }
+        visit(e.body, reads, inner);
+        return;
+      }
+      case "call": {
+        const fn = fns.get(e.fn);
+        e.args.forEach((x, i) => {
+          const param = fn?.params[i];
+          visit(x, param === undefined ? Infinity : refsOf((fn as ExprOf<"fn">).body, param), fns);
+        });
+        return;
+      }
+      case "fold":
+      case "iterate": {
+        const names = new Set([...Object.values(e.init), ...Object.values(e.step)]);
+        for (const x of children(e)) visit(x, x === e.result ? reads : names.has(x) ? Infinity : 1, fns);
+        return;
+      }
+      case "each":
+      case "ext":
+      case "fn":
+      case "lit":
+      case "rec":
+      case "ref":
+      case "var":
+        all(children(e), 1);
+    }
+  };
+  visit(root, 1, new Map());
+  return out;
 }
 
 /** This function tells if the step of a list op throws for a value of the kind `kind`, which is the wrong kind. */
@@ -1360,6 +1555,15 @@ class Printer {
   readonly #wantList = new WeakSet<Expr>();
   /** The facts of the list of each function of the memo whose value is a list. */
   readonly #lists = new Map<string, ListInfo | undefined>();
+  /** True when a test of the analysis reads the facts of fusion (`listFactsOf`), and the facts of each list node. */
+  readonly #noting: boolean;
+  readonly #noted = new Map<Expr, Omit<ListFacts, "reads">>();
+  /** The count of the reads of the value of each node, from the form of the program (`readCounts`). */
+  readonly #reads: ReadonlyMap<Expr, number>;
+  /** The nodes whose value the code reads again: a constant of the run, a column and a node of the memo. */
+  readonly #shared = new Set<Expr>();
+  /** The node of each code that `expr` gives, while the printer notes the facts of fusion. */
+  readonly #nodeOf = new WeakMap<Code, Expr>();
 
   constructor(expr: Expr, options: ModuleOptions, sheet?: SheetInfo) {
     this.#domains = options.domains ?? [];
@@ -1369,6 +1573,32 @@ class Printer {
     this.#tree = options.space === "tree";
     this.#graph = options.space === "graph";
     this.#sheet = sheet;
+    this.#noting = recorder !== undefined;
+    this.#reads = this.#noting ? readCounts(expr) : new Map();
+    recorder?.push(this);
+  }
+
+  /** This method gives the facts of fusion of each list node that the printer printed (COMPILE.MODULE.FUSE.FACTS). */
+  listFacts(): ReadonlyMap<Expr, ListFacts> {
+    const out = new Map<Expr, ListFacts>();
+    // A part that the code reads again holds the array of the node, so the node is not fresh. Each node of a list is a
+    // node of the program, but a node without a count gets the safe count.
+    for (const [e, f] of this.#noted) out.set(e, this.#shared.has(e) ? { ...f, fresh: false, reads: Infinity } : { ...f, reads: this.#reads.get(e) ?? Infinity });
+    return out;
+  }
+
+  /** This method notes the facts of fusion of the list of a node. A node that prints at two places gets the facts of both. */
+  #note(e: Expr, c: Code, memo: boolean): void {
+    const list = c.v.list;
+    if (!this.#noting || list === undefined) return;
+    this.#nodeOf.set(c, e);
+    if (memo) this.#shared.add(e);
+    const inner: boolean[] = [];
+    for (let l = list.inner; l !== undefined; l = l.inner) inner.push(l.clean === true);
+    const old = this.#noted.get(e);
+    const clean = list.clean === true && (old?.clean ?? true);
+    const fresh = list.fresh === true && (old?.fresh ?? true);
+    this.#noted.set(e, { clean, inner: old === undefined ? inner : inner.map((x, i) => x && old.inner[i] === true), fresh });
   }
 
   use(name: Helper): string {
@@ -1477,7 +1707,8 @@ class Printer {
 
   /** This method gives the code of a name: a read that throws the error of its value, if it can hold an error. */
   #read(name: Name): Value {
-    const base = { kind: name.kind, deps: name.deps, plain: true, list: name.list };
+    // A name holds its list, so a read of the name is not fresh.
+    const base = { kind: name.kind, deps: name.deps, plain: true, list: heldList(name.list) };
     return name.lazy ? { ...base, code: `${this.use("G")}(${name.code})`, safe: false, held: name.code } : { ...base, code: name.code, safe: true };
   }
 
@@ -1504,6 +1735,9 @@ class Printer {
    */
   #hoist(c: Code, lazy = false): Code {
     if (c.v.deps.size > 0 || (c.v.plain === true && c.s.length === 0)) return c;
+    // The loop over the keys reads each constant of the run again.
+    const node = this.#nodeOf.get(c);
+    if (node !== undefined) this.#shared.add(node);
     const key = this.#keyOf.get(c);
     const hit = key === undefined ? undefined : this.#constants.get(key);
     if (hit !== undefined) return hit;
@@ -1540,7 +1774,9 @@ class Printer {
     // A list is a value only at a place that takes a list: a result, a binding, an argument, a field and the body of a
     // function take one. A condition, an argument of and or of or, and a key of get take no list.
     if (c.v.list !== undefined && !this.#wantList.has(e)) throw new NotStandalone("a list is a value of the program");
-    return this.#columnar(e, c, ctx) ? this.#column(e, c, ctx) : c;
+    const out = this.#columnar(e, c, ctx) ? this.#column(e, c, ctx) : c;
+    this.#note(e, out, keys !== undefined);
+    return out;
   }
 
   /** This method gives the code of a list at a place that takes a list (LIST.VALUE): an each, a name, sortBy or take. */
@@ -1596,7 +1832,9 @@ class Printer {
     const kinds = values.flatMap((x) => (x === undefined ? [] : [x.kind]));
     const code = `[${l.items.map((it, i) => `[${JSON.stringify(it.key)}, ${values[i]?.code ?? "E"}]`).join(", ")}]`;
     const has = l.items.length > 0;
-    return bare({ code, kind: undefined, safe: true, deps: NO_DEPS, list: { item: kinds.reduce(join, kinds[0]), texts: has, empty: !has } });
+    // An error item of the literal holds the sentinel, so only a literal without error items is clean.
+    const clean = values.every((x) => x !== undefined);
+    return bare({ code, kind: undefined, safe: true, deps: NO_DEPS, list: { item: kinds.reduce(join, kinds[0]), texts: has, empty: !has, clean } });
   }
 
   /**
@@ -1683,7 +1921,9 @@ class Printer {
       this.#columns.set(key, name);
     }
     this.#columned.add(e);
-    return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps, list: c.v.list });
+    // Each key of the column reads the array of the column again.
+    this.#shared.add(e);
+    return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps, list: heldList(c.v.list) });
   }
 
   #node(e: Expr, ctx: Ctx): Code {
@@ -1993,14 +2233,15 @@ class Printer {
     });
     // Each parameter can hold the error of its argument, so one function serves the arguments of one kind. The facts of
     // a list are a part of its kind.
-    const sig = JSON.stringify(args.map((a) => (a.list === undefined ? (a.kind ?? null) : { list: a.list })));
+    // The facts of fusion are not a part of the signature, so the parameters do not keep them.
+    const sig = JSON.stringify(args.map((a) => (a.list === undefined ? (a.kind ?? null) : { list: plainList(a.list) })));
     const spec = bound.specs.get(sig) ?? this.#printFn(bound, args, sig);
     // Each marker becomes the levels at the call. The levels of the arguments count for each call, because their
     // statements read their keys, so the marker of the parameters gives no level.
     const levels = (d: number): readonly number[] => (d === spec.origin ? [ctx.originLevel] : d === spec.focus ? [ctx.level] : d === spec.param ? [] : [d]);
     const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap(levels)]);
     const position = spec.deps.has(spec.origin) ? [ctx.focus, ctx.origin] : spec.deps.has(spec.focus) ? [ctx.focus] : [];
-    return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps, list: spec.list } };
+    return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps, list: heldList(spec.list) } };
   }
 
   /**
@@ -2020,7 +2261,7 @@ class Printer {
     const o = this.fresh("o");
     const env = new Map(bound.ctx.env);
     // A parameter hides a function of its name, because a read looks at the values first.
-    bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]), list: (args[i] as Arg).list }));
+    bound.fn.params.forEach((p, i) => env.set(p, { code: names[i] as string, kind: (args[i] as Arg).kind, lazy: true, deps: new Set([param]), list: plainList((args[i] as Arg).list) }));
     const scope: CallScope = { param, focus, repeats: nestsLoops(bound.fn.body), names: new Set(names), decls: [], root: bound.fn.body };
     this.#scopes.push(scope);
     // The value of a call can be a list, as the value of a let can (COMPILE.MODULE.LIST.CALL). The call is at a place
@@ -2088,7 +2329,8 @@ class Printer {
    */
   #fill(values: readonly Code[], deps: ReadonlySet<number>): Code {
     const value = values[1]?.v;
-    const list: ListInfo = { item: value?.kind, inner: value?.list, texts: true };
+    // FI gives a new array of checked values, so the list is clean and fresh.
+    const list: ListInfo = { item: value?.kind, inner: heldList(value?.list), texts: true, clean: true, fresh: true };
     return { s: stmtsOf(...values), v: { code: `${this.use("FI")}(${values.map((x) => x.v.code).join(", ")})`, kind: undefined, safe: false, deps, list } };
   }
 
@@ -2547,7 +2789,9 @@ class Printer {
       ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
       ...(safeItem ? [...item, `${list}.push([${j}, ${body.v.code}]);`] : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", `  ${v} = E;`, "}", `${list}.push([${j}, ${v}]);`]),
     ];
-    return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: { item: body.v.kind, inner: body.v.list, texts } } };
+    // Only the catch of an item puts the sentinel into the list, so a safe item gives a clean list.
+    const facts: ListInfo = { item: body.v.kind, inner: heldList(body.v.list), texts, clean: safeItem };
+    return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: facts } };
   }
 
   /**
@@ -2566,8 +2810,9 @@ class Printer {
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
     const helper = by !== undefined ? "SK" : op === "sortBy" ? "SB" : op === "take" ? "TK" : "DR";
     const args = [...parts.map((x) => x.v.code), String(strict), ...(by === undefined ? [] : [by])];
-    // The new list has some items of the list, so it keeps the facts of the list.
-    return { s: stmtsOf(...parts), v: { code: `${this.use(helper)}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: list.v.list } };
+    // The new list has some items of the list, so it keeps the facts of the list. V removes each error item.
+    const facts: ListInfo = { ...(list.v.list as ListInfo), clean: true, fresh: false };
+    return { s: stmtsOf(...parts), v: { code: `${this.use(helper)}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: facts } };
   }
 
   /**
@@ -2609,12 +2854,14 @@ class Printer {
     const value = (kind: Kind | undefined, facts: ListInfo | undefined): Code => ({ s: stmtsOf(...parts), v: { code, kind, safe: false, deps, list: facts } });
     if (op === "get") return value(info.item, info.inner);
     if (op === "indexOf") return value("number", undefined);
-    if (op === "without") return value(undefined, info);
-    if (op === "append") return value(undefined, joinLists(info, (parts[1] as Code).v.list as ListInfo, op));
+    // V removes each error item, so the value of without, append and flat is clean.
+    const built = (facts: ListInfo): Code => value(undefined, { ...facts, clean: true, fresh: false });
+    if (op === "without") return built(info);
+    if (op === "append") return built(joinLists(info, (parts[1] as Code).v.list as ListInfo, op));
     // flat: the value of each item must be a list, so a list of values gives a reason. An empty list gives an empty list.
-    if (info.empty === true) return value(undefined, info);
+    if (info.empty === true) return built(info);
     if (info.inner === undefined) throw new NotStandalone('"flat" over a list whose items are not lists');
-    return value(undefined, info.inner);
+    return built(info.inner);
   }
 
   /** This method prints a list op over a list that is not an each: a loop over its array, and nth (LIST.NTH). */
@@ -2645,26 +2892,31 @@ class Printer {
    * node. Inside the loop, each name has the level `loop`. Thus a part that reads a name stays in the loop. A loop that
    * reads no key of the run is a constant of the run.
    */
-  #loopNames(init: Names, step: Names, ctx: Ctx, loop: number): { readonly s: string[]; readonly env: Map<string, Name>; readonly vars: ReadonlyMap<string, Name>; readonly deps: Set<number> } {
+  #loopNames(init: Names, step: Names, ctx: Ctx, loop: number, items: readonly string[] = []): { readonly s: string[]; readonly env: Map<string, Name>; readonly vars: ReadonlyMap<string, Name>; readonly deps: Set<number> } {
     const s: string[] = [];
     const env = new Map(ctx.env);
     const vars = new Map<string, Name>();
     const deps = new Set<number>();
     // A step with a list literal or fill can give a name the keys of the literal or of fill (LOOP.LIST).
     const keyed = Object.values(step).some(hasTextKeys);
-    for (const [name, x] of Object.entries(init)) {
+    const firsts = Object.entries(init).map(([name, x]): [string, Code, string] => {
       // A name of a loop can hold a list (LOOP.LIST). Its first list fixes the kind of the items, if it has one.
       this.#wantList.add(x);
       const c = this.expr(x, ctx);
-      const facts = c.v.list;
-      if (c.v.kind === undefined && facts === undefined) throw new NotStandalone(`the first value of the name "${name}" of a loop has no kind`);
+      if (c.v.kind === undefined && c.v.list === undefined) throw new NotStandalone(`the first value of the name "${name}" of a loop has no kind`);
       const v = this.fresh("l");
       s.push(...c.s, `let ${v} = ${c.v.code};`);
-      const list = facts === undefined ? undefined : { item: facts.item, inner: facts.inner, texts: facts.texts === true || keyed };
+      for (const d of c.v.deps) deps.add(d);
+      return [name, c, v];
+    });
+    const clean = cleanNames(new Map(firsts.map(([name, c]) => [name, c.v.list?.clean === true])), step, items, (name) => ctx.env.get(name)?.list?.clean === true);
+    for (const [name, c, v] of firsts) {
+      const facts = c.v.list;
+      // A step can give the items of a list a new value, so the facts of fusion of the items do not stay.
+      const list = facts === undefined ? undefined : { item: facts.item, inner: plainList(facts.inner), texts: facts.texts === true || keyed, clean: clean.has(name) };
       const read: Name = { code: v, kind: c.v.kind, lazy: false, deps: new Set([loop]), list };
       env.set(name, read);
       vars.set(name, read);
-      for (const d of c.v.deps) deps.add(d);
     }
     return { s, env, vars, deps };
   }
@@ -2747,7 +2999,8 @@ class Printer {
   #fold(e: ExprOf<"fold">, ctx: Ctx): Code {
     // Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code
     const loop = this.#loops++;
-    const names = this.#loopNames(e.init, e.step, ctx, loop);
+    // The names of the items hide the names outside the fold in the steps (AXIS.LIST.SCOPE).
+    const names = this.#loopNames(e.init, e.step, ctx, loop, e.as);
     if (this.#wantList.has(e)) this.#wantList.add(e.result);
     const t = this.#targetLoop(e.axis, e.at ?? [], ctx, e.as);
     const tests = t.tests.map((x) => this.#hoist(this.expr(x, t.inner), hasLoop(x)));
@@ -2785,7 +3038,7 @@ class Printer {
       keys.map((k, i): [Expr, Name] => {
         const x = (values[i] as Code).v;
         const p = varying.indexOf(k);
-        return [k, p < 0 ? this.#nameOf(x) : { code: params[p] as string, kind: x.kind, lazy: true, deps: new Set([1]), list: x.list }];
+        return [k, p < 0 ? this.#nameOf(x) : { code: params[p] as string, kind: x.kind, lazy: true, deps: new Set([1]), list: plainList(x.list) }];
       }),
     );
     const outer = this.#inside;
@@ -2798,7 +3051,7 @@ class Printer {
     }
     // The kinds of the keys decide the ops in the node, so they are a part of the structure. Each key of the function
     // can hold the error sentinel, so the nodes with a safe key and the nodes without one share it.
-    const tokens = new Map(keys.map((k, i): [Expr, object] => [k, varying.includes(k) ? { "#": varying.indexOf(k), kind: (values[i] as Code).v.kind, list: (values[i] as Code).v.list } : { "@": (names.get(k) as Name).code }]));
+    const tokens = new Map(keys.map((k, i): [Expr, object] => [k, varying.includes(k) ? { "#": varying.indexOf(k), kind: (values[i] as Code).v.kind, list: plainList((values[i] as Code).v.list) } : { "@": (names.get(k) as Name).code }]));
     const structure = canonical(e, (x) => tokens.get(x as Expr));
     let fn = this.#structures.get(structure);
     if (fn === undefined) {
@@ -2813,7 +3066,7 @@ class Printer {
         // The loop of the node gives statements.
         const body = this.expr(e, bodyCtx);
         this.#kinds.set(fn, body.v.kind);
-        this.#lists.set(fn, body.v.list);
+        this.#lists.set(fn, heldList(body.v.list));
         this.run.push(`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});");
       }
     }
@@ -2945,12 +3198,33 @@ class Printer {
   }
 }
 
+/** The printers that `listFactsOf` collects, or undefined when no test of the analysis runs. */
+let recorder: Printer[] | undefined;
+
+/**
+ * This function gives the facts of fusion of each list node of the modules that `emit` prints (COMPILE.MODULE.FUSE.FACTS),
+ * and the result of `emit`. The tests of the analysis use it. The facts do not change the printed code.
+ */
+export function listFactsOf(emit: () => Emitted): { readonly emitted: Emitted; readonly facts: ReadonlyMap<Expr, ListFacts> } {
+  const printers: Printer[] = [];
+  recorder = printers;
+  try {
+    const emitted = emit();
+    return { emitted, facts: new Map(printers.flatMap((p) => [...p.listFacts()])) };
+  } finally {
+    recorder = undefined;
+  }
+}
+
 /** This function gives the name of the function of a module, and its space, or the reason that the options are not valid. */
 function runOf(options: ModuleOptions): Run | { readonly reason: string } {
   const name = options.name ?? "run";
   if (!/^[A-Za-z_$][\w$]*$/.test(name)) return { reason: `the name "${name}" is not a JavaScript name` };
   const space = options.space ?? "array";
   if (space !== "array" && space !== "tree" && space !== "graph") return { reason: `the space "${String(space)}" is not "array", "tree" or "graph"` };
+  // The option fuse changes no code in this version, but a value that is not a boolean is an error of the caller.
+  const fuse: unknown = options.fuse ?? true;
+  if (typeof fuse !== "boolean") return { reason: `the option "fuse" is ${String(fuse)}, not true or false` };
   return { name, tree: space === "tree", graph: space === "graph" };
 }
 

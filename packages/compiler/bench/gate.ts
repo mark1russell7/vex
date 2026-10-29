@@ -13,9 +13,10 @@ import type { Space } from "@mark1russell7/vex";
 import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, radialArrange, radialRun, type RadialInput } from "../../pilots/src/ireko-radial.ts";
+import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapesTree, type ShapeRecord } from "../../pilots/src/ireko-shapes.ts";
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
-import { emitModule, tiered } from "../src/index.ts";
+import { emitModule, emitSheetModule, tiered } from "../src/index.ts";
 
 /** This function gives the time of one call of `f` in one sample of 30 ms, in microseconds. */
 function sample(f: () => void): number {
@@ -138,12 +139,36 @@ const treeCase = (n: number): { readonly title: string; readonly compiled: { rea
   return { title: `a tree module, the team and the depth of each of ${String(n)} nodes`, compiled: { run: () => teamModule(records, {}, parents), tier: 2, fallbacks: () => 0 }, hand: () => teamHand(records, parents), limit: 3 };
 };
 
+// The shapes pass of ireko as a module of a sheet, against the hand code of the pilot (COMPILE-FUSE, COMPILER.md §7.6).
+// The module has the option fuse, so each step of the fusion shows its gain in this case.
+const shapesModule = ((): TreeRun => {
+  const m = emitSheetModule(SHAPE_COLUMNS, { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", fuse: true });
+  if (!m.ok) throw new Error(m.reason);
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitSheetModule, as in the build of ireko.
+  const load = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn shapesOf;`) as () => TreeRun;
+  return load();
+})();
+
+const shapesCase = (branch: number, depth: number): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limit: number } => {
+  // A root and `depth` levels of `branch` children. Each node wants its shape, and each mode is linked.
+  const n = Array.from({ length: depth + 1 }, (_, d) => branch ** d).reduce((a, b) => a + b, 0);
+  const records = Array.from({ length: n }, (_, i): ShapeRecord => {
+    const w = 10 + ((i * 37) % 90);
+    const h = 10 + ((i * 53) % 70);
+    return { p: i === 0 ? -1 : Math.floor((i - 1) / branch), wants: true, linked: true, w, h, ox: (i % branch) * 12, oy: 20 + (i % 7), ex: 0, ey: 0, ew: w, eh: h };
+  });
+  const parents = records.map((r) => r.p);
+  const vars = { limit: MAX_BANDS };
+  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapesModule(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limit: 6 };
+};
+
 const CASES = [
   { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limit: 2 },
   { title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limit: 1.5 },
   radialCase(12, "linked"),
   radialCase(60, "nested"),
   treeCase(1000),
+  shapesCase(10, 3),
 ] as const;
 
 let failed = false;

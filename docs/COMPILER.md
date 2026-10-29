@@ -181,7 +181,7 @@ A run knows which cell reads which cell. After a change of one record, only the 
 
 ### 7.6 Fusion of list ops
 
-This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). The module does not have it yet. Its requirement IDs are planned, and no test names them yet. The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the IDs stay in this section until their tests exist. Then they move to the spec.
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 and 2 are done: the option `fuse` (COMPILE.MODULE.FUSE.OFF) and the facts of the lists (COMPILE.MODULE.FUSE.FACTS). The module does not fuse a chain yet. The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the other IDs stay in this section until their tests exist. Then they move to the spec.
 
 #### The cost of a chain of list ops
 
@@ -260,12 +260,20 @@ The printer keeps the facts of each list in `ListInfo`. Fusion adds the fact `cl
 The kind of an item alone cannot prove the fact, because a list of each kind can hold the sentinel. But the printer checks each value with `G` or a check `k_*` before it stores the value in a list. Only two places put the sentinel into a list: the catch of an item of `each`, and an error item of the input (`LI`). A cell of a column of lists holds the list of another formula, and the first steps do not keep its facts. Thus these rules prove the fact `clean`:
 
 - The value of `append`, `flat`, `drop`, `take`, `without` and `sortBy` is clean, because `V` removes each error item or raises the error.
-- The value of `fill` is clean, because its value is a checked value. A list literal is clean, because each item of a literal has a value (LIST.LITERAL).
+- The value of `fill` is clean, because its value is a checked value. A list literal is clean when it has no error items. The printer puts `E` at the place of an error item of a literal (LIST.LITERAL).
 - The value of an `each` is clean when its body is `safe`, the fact of the printer for code that cannot throw.
 - A fused chain gives a clean list, because it pushes only items with values.
-- A name of a loop is clean when its first value is clean and each step gives a clean list. The printer assumes the fact for the name, and then checks each step with it.
-- `clean` is a field of `ListInfo`, so it is a part of the signature of a function (COMPILE.MODULE.LIST.CALL). Thus the parameter of `merge` in the shapes module is clean.
+- A name of a loop is clean when its first value is clean and each step gives a clean list.
+- The printer prints the first values of a loop before it knows the facts of the steps. Thus it examines the form of each step before the loop: a clean op, a literal without error items, `if`, `ifError`, `let` and the names.
+- First, each name with a clean first list has the fact. Then the printer removes the fact from each name whose step does not prove it. It stops when no name changes. The items of a name of a loop do not keep the facts.
 - A list of the input and a cell of a column of lists are not clean.
+- In step 2, `clean` is not a part of the signature of a function or of a key of the memo. A part of the signature makes more functions, and that changes the printed code. Thus a parameter and a key of the memo are not clean. Step 3 adds `clean` to the signature (COMPILE.MODULE.LIST.CALL), and then the parameter of `merge` in the shapes module is clean.
+
+The fact `fresh` tells that no other part of the code holds the array of the list. Only the value of `fill` is fresh in step 2, and a fused chain is fresh in step 4. A read of a name, the value of a call, a column of the run, a memo node and an item are not fresh. A branch of `if` is fresh only when both branches are fresh.
+
+The printer also counts the reads of each list node, from the form of the program (`readCounts` of `module.ts`). The parent of a node reads its value once. A branch of `if` and of `ifError`, the body of a `let` and the result of a loop give their value to the parent. Thus they get the count of the parent.
+
+A binding gets the count of the reads of its name. An argument of a call gets the count of the reads of its parameter. A read in the body of an `each` or of a function, in a test or in a step counts `Infinity`. The first values and the steps of a loop also get `Infinity`. The printer gives `Infinity` to each constant of the run, column of the run and node of the memo that it prints. The function `listFactsOf` of `module.ts` gives the facts of each list node to the tests.
 
 The fact `clean` removes the envelope where it holds:
 
@@ -350,7 +358,8 @@ These IDs move to `spec/README.md` with the test that names each one:
 - `COMPILE.MODULE.FUSE.CLEAN`: A list that the facts prove clean has no scan of `V`, no test of the sentinel and no `VW`. The values and the errors do not change.
 - `COMPILE.MODULE.FUSE.ADOPT`: `AO` takes a fresh list as its own array, with no first copy. The values and the errors do not change.
 - `COMPILE.MODULE.FUSE.OUT`: A value of the run that does not depend on the key has one `vex.list` for each run.
-- `COMPILE.MODULE.FUSE.OFF`: With the option `fuse: false`, `emitModule` and `emitSheetModule` print the code without fusion. Thus a test and a bench can compare the two forms.
+
+`COMPILE.MODULE.FUSE.OFF` and `COMPILE.MODULE.FUSE.FACTS` moved to `spec/README.md` with steps 1 and 2.
 
 #### Measure before a release
 
@@ -366,8 +375,8 @@ A release that claims a speed gain carries its bench result in the pull request.
 
 Each step is one pull request. P17 and the golden files check each step, and the step changes no value.
 
-1. Add the option `fuse` (COMPILE.MODULE.FUSE.OFF) with no effect, and a bench case for `SHAPE_COLUMNS` in `bench/gate.ts`.
-2. Add the facts `clean`, `fresh` and the count of the reads of each list node. Do not change the printed code.
+1. Add the option `fuse` (COMPILE.MODULE.FUSE.OFF) with no effect, and a bench case for `SHAPE_COLUMNS` in `bench/gate.ts`. Done.
+2. Add the facts `clean`, `fresh` and the count of the reads of each list node (COMPILE.MODULE.FUSE.FACTS). Do not change the printed code. Done.
 3. Print the clean form (COMPILE.MODULE.FUSE.CLEAN). Remove `V`, the test of the sentinel and `VW` where the facts hold.
 4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM).
 5. Fuse the chains of `append`, and make `sortBy` a sink.

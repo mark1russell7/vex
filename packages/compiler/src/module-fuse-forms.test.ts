@@ -3,7 +3,7 @@
  * a program push their items into one output, and the facts of the lists (COMPILE.MODULE.FUSE.FACTS). Each program
  * also gives the values of the interpreter (P17).
  */
-import { app, axes, call, cell, each, evaluate, fn, fold, isVexList, iterate, let_, lit, rec, ref, SheetRun, space, v, vexList, type CellFormulas, type Expr, type ListItem } from "@mark1russell7/vex";
+import { app, axes, call, cell, each, evaluate, fn, fold, index, isVexList, iterate, let_, lit, rec, ref, SheetRun, space, v, vexList, type CellFormulas, type Expr, type ListItem } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { emitModule, emitSheetModule, listFactsOf, type Emitted, type ListFacts, type ModuleOptions, type SheetModuleOptions } from "./module.ts";
@@ -57,14 +57,14 @@ const VARS = { t: true };
 function expectSame(e: Expr, options: ModuleOptions = OPTIONS): string {
   const s = space.array(RECORDS);
   const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: VARS, domains: options.domains ?? [] }));
-  const sources = [true, false].map((fuse) => sourceOf(emitModule(e, { ...options, fuse })));
-  for (const source of sources) {
+  const fused = sourceOf(emitModule(e, { ...options, fuse: true }));
+  for (const source of [fused, sourceOf(emitModule(e, { ...options, fuse: false }))]) {
     const m = make(source);
     const copy = structuredClone(RECORDS);
     expect(m.run(copy, VARS)).toStrictEqual(results.map((r) => (r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR)));
     expect(copy).toStrictEqual(RECORDS);
   }
-  return sources[0] as string;
+  return fused;
 }
 
 /** This function gives the count of the fused outputs of a source: the arrays `o` of the chains and of the loops. */
@@ -164,14 +164,19 @@ describe("COMPILE.MODULE.FUSE: a chain of append in a sheet with a search", () =
   });
 });
 
+/** This function gives the count of the reads of the list of the name `ys` in a body. */
+const reads = (body: Expr, list: Expr = one()): number => factOf(let_({ ys: list }, body), list).reads;
+
 describe("COMPILE.MODULE.FUSE.FACTS: the counts of the reads", () => {
-  /** This function gives the count of the reads of the list of the name `ys` in a body. */
-  const reads = (body: Expr, list: Expr = one()): number => factOf(let_({ ys: list }, body), list).reads;
   const ys = v("ys");
 
   it("COMPILE.MODULE.FUSE.FACTS: a let in the body adds the reads of its bindings and of its body", () => {
     expect(reads(let_({ a: op("count", ys) }, op("add", v("a"), op("count", ys))))).toBe(2);
     expect(reads(rec({ a: op("count", ys) }))).toBe(1);
+    // The address of a reference evaluates once.
+    expect(reads(ref("n", [index(op("count", ys))]))).toBe(1);
+    const list = one();
+    expect(factOf(ref("n", [index(op("count", list))]), list).reads).toBe(1);
   });
 
   it("COMPILE.MODULE.FUSE.FACTS: a read in a step of a fold or of an iterate has no bound", () => {
@@ -250,15 +255,15 @@ describe("COMPILE.MODULE.FUSE.FACTS: the facts of the branches of if", () => {
   });
 });
 
-describe("COMPILE.MODULE.FUSE.FACTS: the clean names of a loop", () => {
-  /** This function gives the fact clean of the read of the name `acc` in the result of a loop. */
-  const cleanAcc = (step: Expr, first: Expr = two()): boolean => {
-    const read = v("acc");
-    const loop = iterate(2, { acc: first }, { acc: step }, op("count", read));
-    expectSame(loop);
-    return factOf(loop, read).clean;
-  };
+/** This function gives the fact clean of the read of the name `acc` in the result of a loop. */
+const cleanAcc = (step: Expr, first: Expr = two()): boolean => {
+  const read = v("acc");
+  const loop = iterate(2, { acc: first }, { acc: step }, op("count", read));
+  expectSame(loop);
+  return factOf(loop, read).clean;
+};
 
+describe("COMPILE.MODULE.FUSE.FACTS: the clean names of a loop", () => {
   it("COMPILE.MODULE.FUSE.FACTS LIST.BUILD: a step of a clean op keeps the name clean", () => {
     for (const step of [op("take", v("acc"), lit(1)), op("without", v("acc"), two()), op("sortBy", v("acc")), op("drop", v("acc"), lit(1))]) expect(cleanAcc(step)).toBe(true);
   });

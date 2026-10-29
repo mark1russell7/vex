@@ -560,6 +560,7 @@ class Lowerer {
         nonEmpty();
         return local(acc);
       // listReason stops a program with these ops before the lowering, so this case is defensive.
+      // Stryker disable StringLiteral,ConditionalExpression: listReason stops these ops before the lowering
       case "sortBy":
       case "take":
       case "nth":
@@ -572,6 +573,7 @@ class Lowerer {
       case "distinct":
       case "group":
       case "join":
+        // Stryker restore StringLiteral,ConditionalExpression
         /* v8 ignore next -- @preserve */
         // Stryker disable next-line all: listReason stops these ops before the lowering
         throw new Unsupported(`the list op "${op}"`);

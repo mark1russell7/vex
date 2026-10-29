@@ -200,6 +200,7 @@ const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || children(e).so
 const readsCells = (e: Expr): boolean => e.tag === "ext" || e.tag === "call" || children(e).some(readsCells);
 
 /** This function tells if an expression is the literal 1. */
+// Stryker disable next-line OptionalChaining: each caller gives an argument.
 const isOne = (e: Expr | undefined): boolean => e?.tag === "lit" && e.value === 1;
 
 /** A name of the program in the code: its variable, its kind, true when it can hold the error sentinel, and its levels. */
@@ -1258,12 +1259,14 @@ function cleanForm(e: Expr, fact: (name: string) => boolean): boolean {
       const clean = cleanNames(firsts, e.step, e.tag === "fold" ? (e.as ?? []) : [], fact);
       return cleanForm(e.result, (name) => (name in e.init ? clean.has(name) : fact(name)));
     }
+    // Stryker disable StringLiteral,ConditionalExpression: without its case, the switch gives undefined, and each caller reads undefined as false.
     case "call":
     case "each":
     case "ext":
     case "fn":
     case "rec":
     case "ref":
+    // Stryker restore StringLiteral,ConditionalExpression
       return false;
   }
 }
@@ -1300,6 +1303,7 @@ function refsOf(e: Expr, name: string): number {
       const hidden = name in e.init;
       const steps = [...Object.values(e.step), ...(e.tag === "iterate" && e.until !== undefined ? [e.until] : [])];
       const once = e.tag === "fold" ? [...(listOf(e.axis) === undefined ? [] : [listOf(e.axis) as Expr]), ...addrExprs(e.at)] : [];
+      // Stryker disable next-line ArrayDeclaration: refsOf of a string gives NaN, and again(NaN) gives 0.
       const tests = e.tag === "fold" ? axisExprs(e.axis).filter((x) => x !== listOf(e.axis)) : [];
       const item = e.tag === "fold" && e.as?.includes(name) === true;
       return refsIn([...Object.values(e.init), ...once], name) + again(refsIn(tests, name)) + (hidden || item ? 0 : again(refsIn(steps, name))) + (hidden ? 0 : refsOf(e.result, name));
@@ -1362,11 +1366,14 @@ function readCounts(root: Expr): ReadonlyMap<Expr, number> {
         return;
       }
       case "each":
+      // Stryker disable next-line StringLiteral: an extension has no children.
       case "ext":
       case "fn":
+      // Stryker disable next-line StringLiteral: a literal has no children.
       case "lit":
       case "rec":
       case "ref":
+      // Stryker disable next-line StringLiteral: a variable has no children.
       case "var":
         all(children(e), 1);
     }

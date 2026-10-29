@@ -11,7 +11,7 @@ const NO_CELLS = new Map<string, ReadonlyMap<string, Expr>>();
 /** This function gives the columns and the directions of the reads of the column `c` in the formula `e`. */
 function readsIn(e: Expr, c = "c"): { readonly columns: readonly string[]; readonly directions: readonly Direction[] } {
   const r = readsOf(new Map([[c, e]]), NO_CELLS, c);
-  return { columns: [...r.columns].sort(), directions: [...r.directions].sort() };
+  return { columns: [...r.columns].toSorted(), directions: [...r.directions].toSorted() };
 }
 
 describe("COMPILE.MODULE.SHEET: the data of a cell reference", () => {

@@ -181,7 +181,7 @@ A run knows which cell reads which cell. After a change of one record, only the 
 
 ### 7.6 Fusion of list ops
 
-This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 5 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE).
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 6 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT).
 
 The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the other IDs stay in this section until their tests exist. Then they move to the spec.
 
@@ -300,9 +300,26 @@ The clean form does not move a part of the code. Thus each part evaluates in the
 - An append of several parts pushes each part into one output, in order. A part that is a source prints a loop that pushes its items.
 - `sortBy` with `by` collects the pairs of the item and its sort value in the loop of the stage before it. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
 - `LO` of a fused chain makes the items of the `vex.list` in the loop.
-- **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it.
+- **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it. The rules of the adoption follow this list.
 - **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LO` for each run. Each key gets that object.
 - The fused code uses no new global, so the test of `MODULE_GLOBALS` (V-060) does not change. It makes no own property on an array.
+
+#### The rules of the adoption
+
+The variable `w` of a name of a loop holds the array of the last append (COMPILE.MODULE.APPEND.OWN). `AO` pushes into its list only when the list is `w`. Each other list gets a copy. Step 6 changes only the first value of `w` and the appends that use it:
+
+- The step of the name has the form of COMPILE.MODULE.APPEND.OWN, so no other part of the loop reads the name.
+- The first list of the name must be clean and fresh. Then `w` starts with that list, and the first append pushes into it. Each other first list starts `w` with `null`, as before.
+- These lists are not fresh: a read of a name, a literal, a constant of the run and a node of the memo. A column, a cell, the value of a call and a list of the input are not fresh too. A list that can hold error items is not clean.
+- After the loop, an append of the result can push into `w`. The result is a read of the name, an `append` of such a form, an `if` of two such forms or a `let`.
+- No other part of the result reads the name. Thus no part reads the old list after the push.
+- A `let` of the result can bind such a form to a new name, as `out2` of the sweep of `NODE_SHAPE`. Then the body is a form of the new name, and no other binding reads the name of the loop.
+- An `ifError` of the result is not a form. Thus its fallback reads the list without the items of the failed append.
+- The check `l !== w` stays at run time. It covers a loop with no step and a first list that is not fresh.
+
+With these rules, only `AO` holds the array of `w`. An error of a step stops the loop, so no part reads the array after the error. The value of the loop is not fresh, so the next op does not change the array.
+
+In `NODE_SHAPE`, the names `out` of the sweep and `acc` of the pairs start with `fill(0, x)`, so they take their first lists. Their steps push in place, and so do the three appends of their results. The name `open` keeps its copy, because its step reads the list in a binding. The append of each result pushes `FI(1, x)` into the array. The hand edit of ireko pushes the pair itself, so a later step can remove `FI` there.
 
 The chain of the cut points of the shapes module is an example. The program is `flat(each(list(p), if(sized(y), append(fill(1, y), fill(1, end(y))), empty)))`. Before the fusion, each band makes three arrays and three pairs, and `V` scans three lists:
 
@@ -362,12 +379,11 @@ With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_dom
 
 #### Planned requirement IDs
 
-These IDs move to `spec/README.md` with the test that names each one:
+This ID moves to `spec/README.md` with the test that names it:
 
-- `COMPILE.MODULE.FUSE.ADOPT`: `AO` takes a fresh list as its own array, with no first copy. The values and the errors do not change.
 - `COMPILE.MODULE.FUSE.OUT`: A value of the run that does not depend on the key has one `vex.list` for each run.
 
-`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID.
+`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6.
 
 #### Measure before a release
 
@@ -388,7 +404,7 @@ Each step is one pull request. P17 and the golden files check each step, and the
 3. Print the clean form (COMPILE.MODULE.FUSE.CLEAN). Remove `V`, the test of the sentinel and `VW` where the facts hold. Done.
 4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). Done.
 5. Fuse the chains of `append`, and make `sortBy` a sink. Done. A chain fuses only when a part pushes its items, because a copy loop costs more than `concat`. In a sheet with a search, a chain that reads a cell keeps its arrays. The interpreter reads each cell of an append also after an error, and the fused chain stops at the first error.
-6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT).
+6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT). Done. A literal is not fresh, so a loop that starts with the empty literal keeps its first copy. That copy has no items, so its cost is small.
 7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions).
 8. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
 
@@ -400,7 +416,7 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-tree.js`, and a new file `.off.js` with the text of `fuse` false for each one |
 | 4 | `module-list-build.js`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
 | 5 | `module-fuse.js`. The programs of the other files have no chain of `append` with a part that pushes. |
-| 6 | `module-list-loops.js`, `module-corpus.txt` |
+| 6 | `module-fuse.js`. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
 | 7 | `module-fuse.js`, and each golden file of a module whose value is a list |
 
 #### Open questions

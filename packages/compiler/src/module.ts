@@ -274,11 +274,23 @@ interface Ctx {
 /**
  * A name of a loop whose step appends to its own list (COMPILE.MODULE.APPEND.OWN). It has the name, its read in the
  * loop and the variable of the array of its last append. The printer makes the variable at the first append that uses it.
+ * With `adopt`, the variable starts with the first list of the name, so the first append makes no copy
+ * (COMPILE.MODULE.FUSE.ADOPT).
  */
 interface Owner {
   readonly name: string;
   readonly read: Name;
   w: string | undefined;
+  readonly adopt: boolean;
+}
+
+/**
+ * A `let` in the result of a loop that binds the list of an owner to the name `bind` (COMPILE.MODULE.FUSE.ADOPT). The
+ * append nodes in `nodes` append to the list of `bind` in the body of the let. They get the owner when the let prints.
+ */
+interface Relay {
+  readonly bind: string;
+  readonly nodes: readonly Expr[];
 }
 
 /**
@@ -456,11 +468,13 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   // The ops that build a list (LIST.BUILD) keep the key and the value of each item. A key is a position or a text, so
   // `without` and `get` compare the text of each key. A list is an array that does not change after the op that makes it.
-  // The one exception is the array of AO during its loop, which no other part reads (COMPILE.MODULE.APPEND.OWN).
+  // The one exception is the array of AO of a loop, which no other part reads (COMPILE.MODULE.APPEND.OWN).
   DR: "function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }",
   AP: "function AP(l, o, s) { return V(l, s).concat(V(o, s)); }",
   // append into the list of a name of a loop (COMPILE.MODULE.APPEND.OWN). w is the array of the last append of the name
   // in this run of the loop, and no other part reads it. Such an array has no error items, so VW of it is the array.
+  // With fuse, w can start with a first list that is clean and fresh (COMPILE.MODULE.FUSE.ADOPT). An append in the result
+  // of the loop can use w too, when no part reads the list after it.
   // Each other list gets the copy of AP. V(o, s) throws before the first push, so an error does not change l. The loop
   // reads n items, so it ends also if a is l.
   AO: "function AO(l, o, s, w) { if (l !== w) return AP(l, o, s); const a = V(o, s), n = a.length; for (let i = 0; i < n; i++) l.push(a[i]); return l; }",
@@ -1353,6 +1367,45 @@ function ownForm(e: Expr, name: string, out: Expr[]): boolean {
   return true;
 }
 
+/**
+ * This function tells if the result of a loop appends to the list of the name `name` as its last reader
+ * (COMPILE.MODULE.FUSE.ADOPT). It puts the append nodes of the form into `out`. The form is the form of `ownForm`. A
+ * `let` can also bind the form to a new name. Then no other binding and not the body reads `name`, and the body is a
+ * form of the new name. Such a let goes into `relays`. No other part of the form reads the name, so no part reads the
+ * old list after an append.
+ */
+function lastForm(e: Expr, name: string, out: Expr[], relays: Map<Expr, Relay>): boolean {
+  const free = (x: Expr): boolean => !namesOf(x).has(name);
+  if (e.tag === "var") return e.name === name;
+  if (e.tag === "let") {
+    const held = Object.entries(e.bind).filter(([, x]) => !free(x));
+    // A binding of the name hides the name of the loop in the body.
+    if (held.length === 0) return !Object.hasOwn(e.bind, name) && lastForm(e.body, name, out, relays);
+    const [bind, x] = held[0] as [string, Expr];
+    const nodes: Expr[] = [];
+    if (held.length > 1 || (bind !== name && !free(e.body)) || !lastForm(x, name, out, relays) || !lastForm(e.body, bind, nodes, relays)) return false;
+    relays.set(e, { bind, nodes });
+    return true;
+  }
+  if (e.tag !== "app" || e.args.length === 0) return false;
+  const [head, ...rest] = e.args as [Expr, ...Expr[]];
+  if (e.op === "if") return free(head) && rest.every((x) => lastForm(x, name, out, relays));
+  if (e.op !== "append" || !rest.every(free) || !lastForm(head, name, out, relays)) return false;
+  out.push(e);
+  return true;
+}
+
+/**
+ * This function tells if an append into the list of a name of a loop can take the first list as its own array
+ * (COMPILE.MODULE.FUSE.ADOPT). No other part of the code holds a fresh array. AO does not scan the array that it
+ * takes, so the list must also be clean.
+ */
+function adoptable(l: ListInfo | undefined): boolean {
+  if (l?.fresh !== true) return false;
+  // Stryker disable next-line ConditionalExpression: each fresh list of the printer is clean, but the test keeps AO correct for a new fresh list
+  return l.clean === true;
+}
+
 /** This function gives the names that an expression reads, also the names that it binds itself. */
 function namesOf(e: Expr, out = new Set<string>()): Set<string> {
   if (e.tag === "var") out.add(e.name);
@@ -1651,6 +1704,8 @@ class Printer {
   #inside: Expr | undefined;
   /** The owner of each append node of the step of a loop that the printer prints (COMPILE.MODULE.APPEND.OWN). */
   readonly #own = new Map<Expr, Owner>();
+  /** The owner of each relay `let` of the result of a loop that the printer prints (COMPILE.MODULE.FUSE.ADOPT). */
+  readonly #relays = new Map<Expr, Relay & { readonly owner: Owner }>();
   readonly #structures = new Map<string, string>();
   readonly #kinds = new Map<string, Kind | undefined>();
   readonly #ops = new Map<string, number>();
@@ -2343,6 +2398,13 @@ class Printer {
       root?.names.add(b);
       // The statements of the binding read its keys, so the let is not a constant of the run.
       deps = new Set([...deps, ...c.v.deps]);
+    }
+    // The body of a relay appends to the list of the bound name, into the array of the owner (COMPILE.MODULE.FUSE.ADOPT).
+    // The binding of the relay is not a function, so the let binds its name.
+    const relay = this.#relays.get(e);
+    if (relay !== undefined) {
+      const owner: Owner = { name: relay.bind, read: env.get(relay.bind) as Name, w: relay.owner.w, adopt: relay.owner.adopt };
+      for (const node of relay.nodes) this.#own.set(node, owner);
     }
     // A list op over a let is the list op over its body, in the scope of its bindings (`#app`).
     const inner = wrap === undefined ? e.body : wrap(e.body);
@@ -3311,7 +3373,7 @@ class Printer {
    * node. Inside the loop, each name has the level `loop`. Thus a part that reads a name stays in the loop. A loop that
    * reads no key of the run is a constant of the run.
    */
-  #loopNames(init: Names, step: Names, ctx: Ctx, loop: number, items: readonly string[] = []): { readonly s: string[]; readonly env: Map<string, Name>; readonly vars: ReadonlyMap<string, Name>; readonly deps: Set<number> } {
+  #loopNames(init: Names, step: Names, ctx: Ctx, loop: number, items: readonly string[] = []): { readonly s: string[]; readonly env: Map<string, Name>; readonly vars: ReadonlyMap<string, Name>; readonly deps: Set<number>; readonly adopt: ReadonlySet<string> } {
     const s: string[] = [];
     const env = new Map(ctx.env);
     const vars = new Map<string, Name>();
@@ -3337,16 +3399,19 @@ class Printer {
       env.set(name, read);
       vars.set(name, read);
     }
-    return { s, env, vars, deps };
+    // With fuse, an append into the list of a name can take a first list that is clean and fresh as its own array
+    // (COMPILE.MODULE.FUSE.ADOPT).
+    const adopt = new Set(this.#fuse ? firsts.flatMap(([name, c]) => (adoptable(c.v.list) ? [name] : [])) : []);
+    return { s, env, vars, deps, adopt };
   }
 
   /**
    * This method gives the statements of one step of a loop: each new value first, and then each name gets its value.
-   * `init` has the statements before the loop: the variable of each name that appends to its own list
-   * (COMPILE.MODULE.APPEND.OWN). Each such name has the form of `ownForm`, and no step of another name and no `until`
-   * reads it. The tests of a fold read only the names outside the fold, so they cannot read it.
+   * `owners` has each name that appends to its own list (COMPILE.MODULE.APPEND.OWN). Each such name has the form of
+   * `ownForm`, and no step of another name and no `until` reads it. The tests of a fold read only the names outside the
+   * fold, so they cannot read it. A name in `adopt` has a first list that its appends can take (COMPILE.MODULE.FUSE.ADOPT).
    */
-  #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>, until?: Expr): { readonly s: string[]; readonly deps: ReadonlySet<number>; readonly init: readonly string[] } {
+  #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>, adopt: ReadonlySet<string>, until?: Expr): { readonly s: string[]; readonly deps: ReadonlySet<number>; readonly owners: readonly Owner[] } {
     const owners: Owner[] = [];
     const nodes: Expr[] = [];
     const steps = Object.entries(step);
@@ -3354,17 +3419,55 @@ class Printer {
       const own: Expr[] = [];
       const others = [...steps.filter(([k]) => k !== name).map(([, y]) => y), ...(until === undefined ? [] : [until])];
       if (!ownForm(x, name, own) || others.some((y) => namesOf(y).has(name))) continue;
-      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined };
+      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined, adopt: adopt.has(name) };
       for (const node of own) this.#own.set(node, owner);
       owners.push(owner);
       nodes.push(...own);
     }
     try {
       const { s, deps } = this.#steps(step, inner, vars);
-      return { s, deps, init: owners.flatMap((o) => (o.w === undefined ? [] : [`let ${o.w} = null;`])) };
+      return { s, deps, owners };
     } finally {
       for (const node of nodes) this.#own.delete(node);
     }
+  }
+
+  /**
+   * This method prints the result of a loop. With fuse, an append of the result to the list of an owner appends into
+   * the array of the loop (COMPILE.MODULE.FUSE.ADOPT). The form of the result is the form of `lastForm`, so no part
+   * reads the old list after the append. Only an owner whose step made its variable can do so, because the variable
+   * holds only arrays that no other part holds. Each part of the result outside the form does not read the name. Thus
+   * an inner loop there has no node and no relay of the form.
+   */
+  #loopResult(result: Expr, ctx: Ctx, owners: readonly Owner[]): Code {
+    const nodes: Expr[] = [];
+    const lets: Expr[] = [];
+    for (const owner of this.#fuse ? owners : []) {
+      const own: Expr[] = [];
+      const relays = new Map<Expr, Relay>();
+      if (owner.w === undefined || !lastForm(result, owner.name, own, relays)) continue;
+      for (const node of own) this.#own.set(node, owner);
+      for (const [l, r] of relays) this.#relays.set(l, { ...r, owner });
+      nodes.push(...own);
+      lets.push(...relays.keys());
+    }
+    try {
+      return this.expr(result, ctx);
+    } finally {
+      for (const node of nodes) this.#own.delete(node);
+      for (const l of lets) {
+        for (const node of (this.#relays.get(l) as Relay).nodes) this.#own.delete(node);
+        this.#relays.delete(l);
+      }
+    }
+  }
+
+  /**
+   * This method gives the statements before a loop: the variable of each owner that its appends use. The variable of an
+   * owner with `adopt` starts with the array of the first list (COMPILE.MODULE.FUSE.ADOPT), and each other one with null.
+   */
+  #ownVars(owners: readonly Owner[]): readonly string[] {
+    return owners.flatMap((o) => (o.w === undefined ? [] : [`let ${o.w} = ${o.adopt ? o.read.code : "null"};`]));
   }
 
   /** This method gives the statements of one step of a loop, without the variables of COMPILE.MODULE.APPEND.OWN. */
@@ -3398,8 +3501,8 @@ class Printer {
     // A loop at a place that takes a list gives its result there (LOOP.LIST).
     if (this.#wantList.has(e)) this.#wantList.add(e.result);
     const until = e.until === undefined ? undefined : this.expr(e.until, inner);
-    const step = this.#loopStep(e.step, inner, names.vars, e.until);
-    const result = this.expr(e.result, inner);
+    const step = this.#loopStep(e.step, inner, names.vars, names.adopt, e.until);
+    const result = this.#loopResult(e.result, inner, step.owners);
     const k = this.fresh("k");
     const body = [
       ...(until === undefined ? [] : [...until.s, `if (${this.#boolean(until.v)}) break;`]),
@@ -3408,7 +3511,7 @@ class Printer {
     ];
     const inside = [...(until?.v.deps ?? []), ...step.deps, ...result.v.deps].filter((d) => d !== loop);
     const deps = new Set([...names.deps, ...inside]);
-    return { s: [...names.s, ...step.init, `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+    return { s: [...names.s, ...this.#ownVars(step.owners), `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
   }
 
   /**
@@ -3427,9 +3530,9 @@ class Printer {
     if (tests.some((x) => x.v.deps.has(CELLS))) throw new NotStandalone("a test of the axis of a fold reads a cell");
     // Only the steps see the names of the items (AXIS.LIST.SCOPE). A name of `as` is not a name of `init`, so the read of
     // each name of the fold stays its read, and an append into its own list keeps its owner (COMPILE.MODULE.APPEND.OWN).
-    const step = this.#loopStep(e.step, { ...t.inner, env: withNames(names.env, t.items) }, names.vars);
+    const step = this.#loopStep(e.step, { ...t.inner, env: withNames(names.env, t.items) }, names.vars, names.adopt);
     this.#readsNoTarget(t.texts, t.inner.level, [...tests.map((x) => x.v.deps), step.deps]);
-    const result = this.expr(e.result, { ...ctx, env: names.env });
+    const result = this.#loopResult(e.result, { ...ctx, env: names.env }, step.owners);
     const body = [
       ...t.key,
       ...(t.skip === undefined ? [] : [`if (${t.j} === ${t.skip}) continue;`]),
@@ -3439,7 +3542,7 @@ class Printer {
     ];
     const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level && d !== t.item);
     const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
-    return { s: [...names.s, ...step.init, ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+    return { s: [...names.s, ...this.#ownVars(step.owners), ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
   }
 
   /**

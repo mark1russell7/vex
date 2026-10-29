@@ -764,6 +764,288 @@ describe("COMPILE.MODULE.FUSE: a chain of append is one output", () => {
   });
 });
 
+/** The name of a loop that appends to its own list, in the tests of COMPILE.MODULE.FUSE.ADOPT. */
+const acc = v("acc");
+/** This function tells if the variable of the appends of a name starts with the first list of the name. */
+const adopts = (source: string): boolean => /let w\d+ = l\d+;/.test(source);
+/** This function tells if the variable of the appends of a name starts with null, so the first append copies the list. */
+const copies = (source: string): boolean => /let w\d+ = null;/.test(source);
+/** This function gives the count of the appends into the array of a name of a loop, in the step and in the result. */
+const owned = (source: string): number => source.match(/\(w\d+ = AOC?\(/g)?.length ?? 0;
+/** This function gives an iteration of three steps with the one name `acc`. */
+const thrice = (init: Expr, step: Expr, result: Expr = acc, until?: Expr): Expr => iterate(3, { acc: init }, { acc: step }, result, until);
+/** This function gives a fold over a window with the one name `acc`. The window depends on the key, so the fold does too. */
+const windowed = (init: Expr, step: Expr, result: Expr = acc): Expr => fold(axes.window(-1, 1), { acc: init }, { acc: step }, result);
+/** A list that throws at the record with `w` 0. */
+const fails = op("fill", lit(1), op("divide", lit(1), ref("w")));
+
+/**
+ * This function runs a module at each record and gives the count of the calls of `Array.prototype.concat`. The clean
+ * form of an append copies a list with `concat`, so the count is the count of the copies. The body has no assertion,
+ * because an assertion can call `concat` too.
+ */
+function concats(source: string, records: readonly unknown[] = RECORDS): number {
+  const m = make(source);
+  const d = Object.getOwnPropertyDescriptor(Array.prototype, "concat") as PropertyDescriptor;
+  const original = d.value as (...args: unknown[]) => unknown;
+  let count = 0;
+  // oxlint-disable-next-line eslint/no-extend-native -- the test counts the copies of a list, and it restores concat.
+  Object.defineProperty(Array.prototype, "concat", {
+    ...d,
+    value(this: unknown, ...args: unknown[]): unknown {
+      count++;
+      return Reflect.apply(original, this, args);
+    },
+  });
+  try {
+    m.run(structuredClone(records), VARS);
+  } finally {
+    // oxlint-disable-next-line eslint/no-extend-native -- the test puts back concat.
+    Object.defineProperty(Array.prototype, "concat", d);
+  }
+  return count;
+}
+
+describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its own array", () => {
+  it("COMPILE.MODULE.FUSE.ADOPT LOOP.LIST: a first list that is clean and fresh is the array of the appends, so the loop makes no copy", () => {
+    const inits: readonly Expr[] = [one, two, near, op("fill", lit(0), n), op("sortBy", two), op("if", v("t"), one, two), let_({ z: n }, op("fill", lit(1), v("z"))), op("append", one, near)];
+    for (const init of inits) {
+      const loops = [thrice(init, op("append", acc, one)), windowed(init, op("if", ref("b"), op("append", acc, op("fill", lit(1), ref("w"))), acc)), thrice(init, op("append", op("append", acc, one), two))];
+      for (const e of loops) {
+        const on = printed(e, true);
+        expect(adopts(on)).toBe(true);
+        expect(concats(on)).toBe(0);
+        // With fuse false, the first append copies the list, as in the version before.
+        const off = printed(e, false);
+        expect(adopts(off)).toBe(false);
+        expect(copies(off)).toBe(true);
+        expectSame(e);
+      }
+    }
+    // A literal is never fresh, so its first append copies it: one copy at each key.
+    const literal = thrice(lit(vexList([item("a", 1)])), op("append", acc, one));
+    expect(copies(printed(literal, true))).toBe(true);
+    expect(concats(printed(literal, true))).toBe(RECORDS.length);
+    expectSame(literal);
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT: a first list that another part holds, or that can hold error items, keeps the first copy", () => {
+    // A name, a constant of the run, a node of the memo, a column of the run and the value of a call are held by other
+    // parts. A list of the input and an each that can throw can hold error items.
+    const sorted = op("sortBy", each(axes.where(axes.all, op("eq", n, v("k"))), ref("w")));
+    const heavy = op("max", op("abs", op("subtract", ref("w"), op("divide", n, lit(2)))), op("abs", op("add", ref("w"), op("multiply", n, lit(3)))));
+    const column = op("fill", lit(2), heavy);
+    const inColumn = let_({ k: one }, op("sum", each(axes.window(-1, 1), op("count", thrice(column, op("append", acc, v("k")))))));
+    const held: Record<string, Expr> = {
+      twice: let_({ x: one }, thrice(v("x"), op("append", acc, one), rec({ acc, x: v("x") }))),
+      constant: let_({ x: op("fill", lit(2), lit(1)) }, thrice(v("x"), op("append", acc, one), rec({ acc, x: v("x") }))),
+      memo: let_({ k: n }, thrice(sorted, op("append", acc, one), op("sum", acc))),
+      column: inColumn,
+      call: let_({ f: fn(["m"], op("fill", lit(2), v("m"))) }, thrice(call("f", n), op("append", acc, one))),
+      input: thrice(xs, op("append", acc, one)),
+      inputStrict: op("ifError", thrice(xs, op("append", acc, one, STRICT)), NONE),
+      errors: thrice(inv, op("append", acc, one)),
+      appended: thrice(op("append", xs, xs), op("append", acc, one)),
+    };
+    for (const [name, e] of Object.entries(held)) {
+      const source = printed(e, true);
+      expect({ name, adopts: adopts(source), copies: copies(source) }).toStrictEqual({ name, adopts: false, copies: true });
+      expectSame(e);
+    }
+    expect(printed(inColumn, true)).toContain("Q((");
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT COMPILE.MODULE.APPEND.OWN: a name that another part of the loop reads has no array of its own", () => {
+    // The step of c reads acc, the test reads acc, and the step of acc reads its list in a binding, as open in NODE_SHAPE.
+    const readers: Record<string, Expr> = {
+      otherName: fold(axes.window(-1, 1), { acc: one, c: one }, { acc: op("append", acc, one), c: acc }, rec({ acc, c: v("c") })),
+      until: thrice(one, op("append", acc, one), acc, op("gt", op("count", acc), lit(2))),
+      binding: thrice(one, let_({ base: op("if", ref("b"), op("drop", acc, lit(1)), acc) }, op("append", v("base"), one))),
+      inX: thrice(one, op("append", acc, op("fill", lit(1), op("count", acc)))),
+    };
+    for (const [name, e] of Object.entries(readers)) {
+      const source = printed(e, true);
+      expect({ name, owned: owned(source), adopts: adopts(source) }).toStrictEqual({ name, owned: 0, adopts: false });
+      expectSame(e);
+    }
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT: the last append of the result pushes into the array of the loop, also through a let that binds the list", () => {
+    const last = (body: Expr): Expr => let_({ o2: op("if", ref("b"), op("append", acc, one), acc) }, body);
+    const results: Record<string, readonly [Expr, number]> = {
+      append: [op("append", acc, op("fill", lit(1), ref("w"))), 1],
+      branch: [op("if", ref("b"), op("append", acc, one), acc), 1],
+      chain: [op("append", op("append", acc, one), two), 2],
+      relay: [last(op("if", v("t"), op("append", v("o2"), one), v("o2"))), 2],
+      relays: [last(let_({ o3: op("append", v("o2"), one) }, op("append", v("o3"), two))), 3],
+      rebind: [let_({ acc: op("append", acc, one) }, op("append", acc, two)), 2],
+      free: [let_({ z: n, y: ref("w") }, op("append", acc, op("fill", lit(1), op("add", v("z"), v("y"))))), 1],
+    };
+    for (const [name, [result, count]] of Object.entries(results)) {
+      for (const init of [one, lit(vexList([item("a", 1)]))]) {
+        const e = thrice(init, op("append", acc, one), result);
+        const source = printed(e, true);
+        expect({ name, owned: owned(source) }).toStrictEqual({ name, owned: 1 + count });
+        // A loop over a fresh first list copies no list. The literal gets one copy at each key.
+        expect({ name, concats: concats(source) }).toStrictEqual({ name, concats: init === one ? 0 : RECORDS.length });
+        expect(owned(printed(e, false))).toBe(1);
+        expectSame(e);
+      }
+    }
+    // A fold as the pairs of NODE_SHAPE: its result appends the last item of an odd count.
+    const pairs = fold(
+      axes.window(-1, 1),
+      { odd: lit(false), a: lit(0), acc: op("fill", lit(0), lit(0)) },
+      { odd: op("not", v("odd")), a: ref("w"), acc: op("if", v("odd"), op("append", acc, op("fill", lit(1), op("add", v("a"), ref("w")))), acc) },
+      op("if", v("odd"), op("append", acc, op("fill", lit(1), v("a"))), acc),
+    );
+    expect(owned(printed(pairs, true))).toBe(2);
+    expectSame(pairs);
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT: a result that reads the old list after an append, or that restores it after an error, copies the list", () => {
+    const count = op("fill", lit(1), op("count", acc));
+    const keeps: Record<string, Expr> = {
+      readAfter: op("append", op("append", acc, one), count),
+      inTest: op("if", op("gt", op("count", acc), lit(1)), op("append", acc, one), acc),
+      itself: op("append", acc, acc),
+      record: rec({ a: op("append", acc, one), b: acc }),
+      restore: op("ifError", op("append", op("append", acc, one), fails), acc),
+      bodyReads: let_({ b: op("append", acc, one) }, op("append", v("b"), count)),
+      twoBindings: let_({ b: op("append", acc, one), c: op("count", acc) }, op("append", v("b"), op("fill", lit(1), v("c")))),
+      readsBinding: let_({ b: op("append", acc, one) }, op("append", v("b"), op("fill", lit(1), op("count", v("b"))))),
+      notAList: let_({ b: op("append", acc, one) }, rec({ b: v("b"), c: op("count", v("b")) })),
+      bodyNotAForm: let_({ b: op("append", acc, one) }, op("sortBy", v("b"))),
+      restoreBinding: let_({ b: op("append", acc, one) }, op("ifError", op("append", v("b"), fails), v("b"))),
+      shadow: let_({ acc: one }, op("append", acc, op("fill", lit(1), ref("w")))),
+      otherLeaf: op("if", ref("b"), op("append", acc, one), two),
+    };
+    for (const [name, result] of Object.entries(keeps)) {
+      const e = thrice(one, op("append", acc, one), result);
+      expect({ name, owned: owned(printed(e, true)) }).toStrictEqual({ name, owned: 1 });
+      expectSame(e);
+    }
+    // The let binds a new list to the name, so its append is a chain of COMPILE.MODULE.FUSE that pushes its item.
+    expect(pushes(printed(thrice(one, op("append", acc, one), keeps["shadow"]), true))).toBe(1);
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT FOLD.ERROR ITERATE.ERROR: an error of a step, of an item or of the result gives the values and the errors of the interpreter", () => {
+    const errors: Record<string, Expr> = {
+      // The step pushes one item, and then it throws, so the loop fails at that key.
+      midStep: thrice(one, op("append", op("append", acc, one), fails)),
+      fallBack: op("ifError", thrice(one, op("append", op("append", acc, one), fails)), op("fill", lit(1), n)),
+      // The fallback is the node of the first list, so a change of the array of the loop would show in it.
+      sameNode: op("ifError", thrice(two, op("append", acc, fails)), two),
+      sameNodeAfter: rec({ a: op("ifError", thrice(two, op("append", acc, one), op("append", acc, fails)), NONE), b: two }),
+      limit: thrice(one, op("append", acc, one), acc, op("gt", n, lit(10))),
+      errorItems: thrice(one, op("append", op("append", acc, BAD), inv)),
+      inputItems: thrice(near, op("append", acc, xs)),
+      strictItems: op("ifError", thrice(one, op("append", acc, inv, STRICT)), NONE),
+      strictResult: op("ifError", thrice(one, op("append", acc, one), op("append", acc, xs, STRICT)), NONE),
+      resultThrows: thrice(one, op("append", acc, one), op("append", op("append", acc, one), fails)),
+      inItem: op("flat", each(axes.window(-1, 1), thrice(one, op("append", acc, fails)))),
+      inItemStrict: op("ifError", op("flat", each(axes.window(-1, 1), thrice(one, op("append", acc, fails))), STRICT), NONE),
+    };
+    for (const [name, e] of Object.entries(errors)) {
+      expect({ name, adopts: adopts(printed(e, true)) }).toStrictEqual({ name, adopts: true });
+      expectSame(e);
+    }
+    // The list of a fold is the node of the first list too, but each read prints its own array.
+    const list = op("fill", lit(2), n);
+    const over = fold(axes.list(list), { acc: list }, { acc: op("append", acc, op("fill", lit(1), v("y"))) }, acc, undefined, ["y"]);
+    expect(adopts(printed(over, true))).toBe(true);
+    expectSame(over);
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT SHEET.CELL: a cell is not fresh, and a sheet with a fresh first list gives the results of SheetRun", () => {
+    const kinds = { a: "number", l: { list: "number", texts: true }, own: { list: "number", texts: true }, fresh: { list: "number", texts: true } } as const;
+    const options: SheetModuleOptions = { domains: [NumDomain], schema: { fields: { v: "number", n: "number" } }, kinds };
+    const columns = new Map<string, Expr>([
+      ["a", op("divide", lit(1), ref("v"))],
+      ["l", op("fill", lit(2), ref("n"))],
+      ["own", thrice(cell("l"), op("append", acc, op("fill", lit(1), ref("n"))))],
+      ["fresh", thrice(op("fill", lit(1), cell("a")), op("append", acc, op("fill", lit(1), cell("a"))), op("append", acc, op("fill", lit(1), ref("n"))))],
+    ]);
+    const records = [
+      { v: 1, n: 2 },
+      { v: 0, n: 1 },
+      { v: 2, n: 0 },
+    ];
+    const s = space.array(records);
+    const run = new SheetRun(columns, { space: s, domains: [NumDomain] });
+    for (const fuse of [true, false]) {
+      const source = sourceOf(emitSheetModule(columns, { ...options, fuse }));
+      // The column own reads the cell of l, so it copies. The column fresh takes its first list.
+      expect(source.match(/let w\d+ = l\d+;/g)?.length ?? 0).toBe(fuse ? 1 : 0);
+      expect(source.match(/let w\d+ = null;/g)?.length).toBe(fuse ? 1 : 2);
+      const m = make(source);
+      const results = (c: string): unknown[] => s.keys.map((k) => {
+        const r = run.cell(c, k);
+        return r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR;
+      });
+      expect(m.run(structuredClone(records), {})).toStrictEqual(Object.fromEntries([...columns.keys()].map((c) => [c, results(c)])));
+    }
+  });
+
+  it("COMPILE.MODULE.FUSE.ADOPT: the accumulators of NODE_SHAPE take their first lists, and the open bands keep their copy", () => {
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const on = sourceOf(emitModule(NODE_SHAPE, node));
+    // The names out of the sweep and acc of the pairs start with fill(0), so both take their first lists. The step of
+    // open reads its list in a binding, so open has no array of its own.
+    expect(on.match(/let w\d+ = l\d+;/g)?.length).toBe(2);
+    expect(on).not.toMatch(/let w\d+ = null;/);
+    // Two steps and three appends of the results push in place.
+    expect(owned(on)).toBe(5);
+    const off = sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false }));
+    expect(off.match(/let w\d+ = null;/g)?.length).toBe(2);
+    expect(owned(off)).toBe(2);
+  });
+});
+
+describe("COMPILE.MODULE.FUSE.ADOPT P17: random loops that append to the list of a name", () => {
+  const part = fc.constantFrom(one, op("fill", lit(1), ref("w")), fails, BAD, inv, xs, NONE, near);
+  const cond = fc.constantFrom(ref("b"), op("gt", n, lit(0)), op("gt", op("divide", lit(1), ref("w")), lit(0)), v("t"));
+  /** This function gives a random form of COMPILE.MODULE.APPEND.OWN over the name `h`. */
+  const form = (h: string): fc.Arbitrary<Expr> =>
+    fc.letrec<{ form: Expr }>((tie) => ({
+      form: fc.oneof(
+        { maxDepth: 3, depthSize: "small" },
+        fc.constant(v(h)),
+        { arbitrary: fc.tuple(tie("form"), part, fc.boolean()).map(([x, y, s]) => op("append", x, y, ...(s ? [STRICT] : []))), weight: 3 },
+        fc.tuple(cond, tie("form"), tie("form")).map(([c, yes, no]) => op("if", c, yes, no)),
+        tie("form").map((body) => let_({ z: n }, body)),
+      ),
+    })).form;
+  /** A random result: a form of the name, a let that binds a form to a new name, or a form that reads the old list. */
+  const result = fc.oneof(
+    form("acc"),
+    fc.tuple(form("acc"), form("o2")).map(([x, body]) => let_({ o2: x }, body)),
+    fc.tuple(form("acc"), part).map(([x, y]) => op("ifError", op("append", x, y, STRICT), acc)),
+    form("acc").map((x) => op("append", x, op("fill", lit(1), op("count", acc)))),
+  );
+  const init = fc.constantFrom(one, two, near, op("fill", lit(0), n), op("if", v("t"), one, two), NONE, xs, inv, op("append", xs, one));
+  const loops = fc.tuple(fc.constantFrom("iterate", "window", "list"), init, form("acc"), result).map(([kind, first, step, last]) => {
+    if (kind === "iterate") return thrice(first, step, last);
+    if (kind === "window") return windowed(first, step, last);
+    return fold(axes.list(two), { acc: first }, { acc: step }, last, undefined, ["y"]);
+  });
+
+  it("P17 COMPILE.MODULE.FUSE.ADOPT COMPILE.MODULE.APPEND.OWN: the modules of fuse true and of fuse false give the values of the interpreter", () => {
+    let modules = 0;
+    let runs = 0;
+    fc.assert(
+      fc.property(loops, (e) => {
+        runs++;
+        if (!emitModule(e, OPTIONS).ok) return;
+        modules++;
+        expectSame(e);
+      }),
+      { numRuns: 300 },
+    );
+    expect(modules).toBeGreaterThan(runs / 2);
+  });
+});
+
 describe("COMPILE.MODULE.FUSE P17: random chains of flat over an each and of append", () => {
   const num = fc.constantFrom(n, ref("w"), op("divide", lit(1), ref("w")), op("subtract", n, lit(1)));
   const cond = fc.constantFrom(ref("b"), op("gt", n, lit(0)), op("gt", op("divide", lit(1), ref("w")), lit(0)), v("t"));

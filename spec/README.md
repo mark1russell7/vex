@@ -327,6 +327,7 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 
   A chain of `append` with a part that pushes is also one output, and each part pushes its items in order. A part that the module keeps for other reads gives its array, and a loop copies its items. In a sheet with a search, a chain that reads a cell keeps its arrays. `sortBy` over a clean and fresh list sorts that array in place, in the stable order of the interpreter.
 - **[COMPILE.MODULE.FUSE.ITEM]** In a fused chain, an item that fails adds no item. With `strict`, it is the error of the chain. An error item of a source stays where the interpreter meets it. A strict loop over cells reads each cell before it raises the error.
+- **[COMPILE.MODULE.FUSE.ADOPT]** With `fuse`, an append into the list of its name (COMPILE.MODULE.APPEND.OWN) takes a clean and fresh first list as its own array. Thus the first append makes no copy. An append of the result of the loop pushes into the array of the loop when no other part of the result reads the list. A `let` of the result can bind that append to a new name. The values and the errors do not change.
 - **[COMPILE.SOURCE]** `generate(e)` gives the same source for the same expression. The source has no name and no literal of the expression. It reads them from its constants, by index.
 
 ## 11. Examples

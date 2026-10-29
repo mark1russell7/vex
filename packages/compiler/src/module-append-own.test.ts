@@ -97,26 +97,29 @@ const guard = (e: Expr, x = -1): Expr => op("ifError", e, lit(x));
 const folded = (init: Expr, step: Expr, result: Expr = acc): Expr => fold(axes.all, { acc: init }, { acc: step }, result);
 
 /**
- * This function runs `body` and gives the sum of `measure` over each call of `Array.prototype.filter`. An assertion
- * calls filter too, so `body` has no assertion.
+ * This function runs `body` and gives the sum of `measure` over each call of `Array.prototype.filter` and
+ * `Array.prototype.some`. These are the two scans of the items of a list. An assertion calls them too, so `body` has no
+ * assertion.
  */
-function filterReads(body: () => void, measure: (l: readonly unknown[]) => number): number {
-  const filter = Object.getOwnPropertyDescriptor(Array.prototype, "filter") as PropertyDescriptor;
-  const original = filter.value as (...args: unknown[]) => unknown;
+function scanReads(body: () => void, measure: (l: readonly unknown[]) => number): number {
+  const saved = (["filter", "some"] as const).map((name) => [name, Object.getOwnPropertyDescriptor(Array.prototype, name) as PropertyDescriptor] as const);
   let sum = 0;
-  // oxlint-disable-next-line eslint/no-extend-native -- the test counts the reads of filter, and it restores filter.
-  Object.defineProperty(Array.prototype, "filter", {
-    ...filter,
-    value(this: readonly unknown[], ...args: unknown[]): unknown {
-      sum += measure(this);
-      return Reflect.apply(original, this, args);
-    },
-  });
+  for (const [name, d] of saved) {
+    const original = d.value as (...args: unknown[]) => unknown;
+    // oxlint-disable-next-line eslint/no-extend-native -- the test counts the scans of a list, and it restores them.
+    Object.defineProperty(Array.prototype, name, {
+      ...d,
+      value(this: readonly unknown[], ...args: unknown[]): unknown {
+        sum += measure(this);
+        return Reflect.apply(original, this, args);
+      },
+    });
+  }
   try {
     body();
   } finally {
-    // oxlint-disable-next-line eslint/no-extend-native -- the test puts back the filter of the array.
-    Object.defineProperty(Array.prototype, "filter", filter);
+    // oxlint-disable-next-line eslint/no-extend-native -- the test puts back the scans of the array.
+    for (const [name, d] of saved) Object.defineProperty(Array.prototype, name, d);
   }
   return sum;
 }
@@ -201,7 +204,7 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
     for (const e of [plainLoop, nestedLoop]) {
       const m = make(sourceOf(e));
       let got: unknown;
-      const read = filterReads(
+      const read = scanReads(
         () => {
           got = m.run([RECORDS[0]], VARS);
         },
@@ -270,7 +273,7 @@ describe("COMPILE.MODULE.NTH.INDEX: count and first read the items with values o
     const m = make(sourceOf(e));
     let got: readonly unknown[] = [];
     // The check of the input can call filter too, so the bound is small, not 1. One filter at each key gives 300.
-    const calls = filterReads(
+    const calls = scanReads(
       () => {
         got = m.run(clean, VARS);
       },

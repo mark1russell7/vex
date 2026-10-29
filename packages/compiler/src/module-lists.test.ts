@@ -226,18 +226,40 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
     const clean = Array.from({ length: 300 }, (_x, i) => ({ id: String(i), n: i % 7, w: 1, b: true }));
     const m = make(source);
     for (const records of [many, clean.slice(0, 40), RECORDS]) expectSame(m, e, records);
-    // The run of 300 keys calls filter once for the one list, not once for each key.
+    // The run of 300 keys scans the one list once, not once for each key. The list has no error items, so the scan is
+    // the some of VW, and no filter copies the list (COMPILE.MODULE.LIST.SHARE).
     const filter = vi.spyOn(Array.prototype, "filter");
+    const some = vi.spyOn(Array.prototype, "some");
     try {
       m.run(clean, VARS);
-      expect(filter).toHaveBeenCalledTimes(1);
+      expect(some).toHaveBeenCalledTimes(1);
+      expect(filter).toHaveBeenCalledTimes(0);
     } finally {
       filter.mockRestore();
+      some.mockRestore();
     }
     // The list of the let is a key of a node of the memo. A list that changes at each key is a key of its function.
     const window = let_({ xs: each(axes.window(-1, 1), w) }, op("sum", each(axes.all, op("ifError", op("nth", v("xs"), n), lit(0)))));
     const twice = let_({ xs: inv, ys: ns }, op("add", op("sum", each(axes.all, op("ifError", op("nth", v("xs"), n), lit(0)))), op("sum", each(axes.all, op("nth", v("ys"), op("abs", n))))));
     for (const p of [window, twice]) for (const records of [many, RECORDS]) expectSame(make(sourceOf(p)), p, records);
+  });
+
+  it("COMPILE.MODULE.LIST.SHARE LIST.SORT LIST.APPEND LIST.FLAT: a list op reads a list without error items from its array", () => {
+    // The list of the let is one array. sortBy before nth must not change it, and the append and flat of it give the
+    // values of the interpreter. A list with an error item still gives the error of strict.
+    const sorted = let_({ xs: ns }, op("add", op("nth", op("sortBy", v("xs")), lit(0)), op("multiply", lit(10), op("nth", v("xs"), lit(0)))));
+    const appended = let_({ xs: ns }, op("add", op("count", op("append", v("xs"), v("xs"))), op("count", op("flat", nested()))));
+    const strictBad = guard(op("count", op("append", BAD, LIT, strict)));
+    for (const e of [sorted, appended, strictBad]) expectSame(make(sourceOf(e)), e);
+    const clean = Array.from({ length: 300 }, (_x, i) => ({ id: String(i), n: i % 7, w: 1, b: true }));
+    const m = make(sourceOf(appended));
+    const filter = vi.spyOn(Array.prototype, "filter");
+    try {
+      m.run(clean, VARS);
+      expect(filter).toHaveBeenCalledTimes(0);
+    } finally {
+      filter.mockRestore();
+    }
   });
 });
 

@@ -4,19 +4,19 @@ export class VexContractError extends Error {}
 /** The value of a key where the program gives an error of Vex. */
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
-function F() { throw E; }
-function V(l, s) { if (s && l.some((x) => x[1] === E)) F(); return l.filter((x) => x[1] !== E); }
-function AP(l, o, s) { return V(l, s).concat(V(o, s)); }
-function B(x) { return typeof x === "boolean" ? x : F(); }
-function C(m) { throw new VexContractError(m); }
 function VW(l) {
   let o = l.vw;
   if (o === undefined) {
-    o = l.filter((x) => x[1] !== E);
+    o = l.some((x) => x[1] === E) ? l.filter((x) => x[1] !== E) : l;
     l.vw = o;
   }
   return o;
 }
+function F() { throw E; }
+function V(l, s) { const o = VW(l); if (s && o.length < l.length) F(); return o; }
+function AP(l, o, s) { return V(l, s).concat(V(o, s)); }
+function B(x) { return typeof x === "boolean" ? x : F(); }
+function C(m) { throw new VexContractError(m); }
 function CT(l, s) { const o = VW(l); return s && o.length < l.length ? F() : o.length; }
 function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }
 function FL(l, s) {
@@ -54,7 +54,7 @@ function SB(l, s) {
   const o = V(l, s);
   const t = o.length > 0 ? typeof o[0][1] : "number";
   for (const [, v] of o) if (typeof v !== t || (t !== "number" && t !== "string") || v !== v) F();
-  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  return o.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
 }
 function T(f) { try { return f(); } catch { return E; } }
 function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }

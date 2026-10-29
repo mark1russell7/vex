@@ -10,7 +10,7 @@ function C(m) { throw new VexContractError(m); }
 function VW(l) {
   let o = l.vw;
   if (o === undefined) {
-    o = l.filter((x) => x[1] !== E);
+    o = l.some((x) => x[1] === E) ? l.filter((x) => x[1] !== E) : l;
     l.vw = o;
   }
   return o;
@@ -24,12 +24,12 @@ function NT(l, i, s) {
   if (s && o.length < l.length) F();
   return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();
 }
-function V(l, s) { if (s && l.some((x) => x[1] === E)) F(); return l.filter((x) => x[1] !== E); }
+function V(l, s) { const o = VW(l); if (s && o.length < l.length) F(); return o; }
 function SB(l, s) {
   const o = V(l, s);
   const t = o.length > 0 ? typeof o[0][1] : "number";
   for (const [, v] of o) if (typeof v !== t || (t !== "number" && t !== "string") || v !== v) F();
-  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  return o.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
 }
 function T(f) { try { return f(); } catch { return E; } }
 function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }

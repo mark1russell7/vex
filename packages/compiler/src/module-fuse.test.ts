@@ -643,15 +643,16 @@ const strictly = (a: Expr, b: Expr): Expr => op("append", a, b, STRICT);
 
 describe("COMPILE.MODULE.FUSE: a chain of append is one output", () => {
   it("COMPILE.MODULE.FUSE: with fuse, a chain with a part that pushes has no concat, and fuse false keeps concat", () => {
-    const chains = [op("append", one, near), op("append", op("append", one, op("fill", lit(1), ref("w"))), one), op("append", near, op("append", xs, one))];
-    for (const e of chains) {
+    const withFlat = op("append", one, near);
+    const fills = op("append", op("append", one, op("fill", lit(1), ref("w"))), one);
+    for (const e of [withFlat, fills, op("append", near, op("append", xs, one))]) {
       expect(printed(e, true)).not.toMatch(/\.concat\(|\bAP\(/);
       expect(printed(e, false)).toMatch(/\.concat\(|\bAP\(/);
       for (const x of [e, op("count", e), op("sum", e)]) expectSame(x);
     }
     // Each fill pushes its item, and the loop of the flat pushes into the output of the chain.
-    expect(pushes(printed(chains[1], true))).toBe(3);
-    expect(printed(chains[0], true)).toMatch(/const o\d+ = o\d+;/);
+    expect(pushes(printed(fills, true))).toBe(3);
+    expect(printed(withFlat, true)).toMatch(/const o\d+ = o\d+;/);
     // An append of two arrays has no part that pushes, so it keeps concat or AP.
     expect(printed(op("append", two, two), true)).toContain(".concat(");
     expect(printed(op("append", xs, two), true)).toContain("AP(");

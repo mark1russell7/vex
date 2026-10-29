@@ -11,3 +11,7 @@ for (const p of ["core", "domains", "testkit", "compiler"]) {
 // A standalone module copies the text of each op function. Stryker adds its counters to the functions of
 // work/domains, so the tests of the modules read a copy of the domains that Stryker does not mutate.
 cpSync(`${here}../../packages/domains/src`, `${here}work/domains-plain`, { recursive: true, filter: (f) => !f.endsWith(".test.ts") });
+// The tests of the fusion (module-fuse.test.ts) read the shapes pilot of ireko by the path "../../pilots/src". From
+// work/compiler, that path is pilots/src of this folder. Stryker does not mutate the pilot.
+rmSync(`${here}pilots`, { recursive: true, force: true });
+cpSync(`${here}../../packages/pilots/src`, `${here}pilots/src`, { recursive: true, filter: (f) => !f.endsWith(".test.ts") });

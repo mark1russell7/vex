@@ -20,7 +20,7 @@ import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, sha
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { emitModule, emitSheetModule, tiered } from "../src/index.ts";
-import { paired, runnerLine } from "../../core/bench/measure.ts";
+import { envLine, paired } from "../../core/bench/measure.ts";
 
 /** This function gives a run of a program at each key of a space, in tier 2. */
 function atEachKey(program: { readonly program: Parameters<typeof tiered>[0] }, s: Space, domains: Parameters<typeof tiered>[1] = { domains: [PtDomain] }): { readonly run: () => void; readonly tier: 1 | 2; readonly fallbacks: () => number } {
@@ -141,20 +141,20 @@ const CASES = [
   shapesCase(10, 3),
 ] as const;
 
-console.info(runnerLine());
+console.info(envLine("process"));
 let failed = false;
 for (const { title, compiled, hand, limit } of CASES) {
-  // The arms alternate in this process, with the order swapped at each pair (core/bench/measure.ts).
-  const { ratio, a: v, b: h } = paired(compiled.run, hand);
+  // The arms alternate in this process, with the order reversed in odd rounds, and a copy of the base gives the noise floor (core/bench/measure.ts).
+  const { ratio, a: v, b: h, noise } = paired(compiled.run, hand);
   const ok = ratio <= limit && compiled.tier === 2 && compiled.fallbacks() === 0;
   failed ||= !ok;
-  console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, limit ${limit})`);
+  console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
 }
 {
   // The limit 2.6 is between the growth of O(n), 2, and the growth of O(n²), 4.
-  const { ratio, a: v, b: h } = paired(large.run, small.run);
+  const { ratio, a: v, b: h, noise } = paired(large.run, small.run);
   const ok = ratio <= 2.6 && large.tier === 2 && large.fallbacks() === 0;
   failed ||= !ok;
-  console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (limit 2.6)`);
+  console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (limit 2.6), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
 }
 process.exit(failed ? 1 : 0);

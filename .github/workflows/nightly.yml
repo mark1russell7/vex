@@ -44,6 +44,9 @@ jobs:
 
   mutation:
     name: mutation (${{ matrix.package }})
+    # The lane starts after the other jobs, so the workflow holds at most 3 runner slots (max-parallel below).
+    needs: [properties, bench, typescript-next, links]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     # The lane mutates the four published packages, one package or one part of the core or the compiler on each
     # runner (tools/mutation/stryker.config.mjs).
@@ -151,6 +154,10 @@ jobs:
 
   links:
     name: links of the docs
+    # The workflow holds at most 3 runner slots: properties, speed and typescript@next run first, then this job, then
+    # the mutation lane. A job of the order starts also when a job before it failed.
+    needs: typescript-next
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

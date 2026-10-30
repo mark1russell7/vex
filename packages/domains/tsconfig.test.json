@@ -6,8 +6,12 @@
     "emitDeclarationOnly": false,
     "declaration": false,
     "declarationMap": false,
-    "isolatedDeclarations": false
+    "isolatedDeclarations": false,
+    "rootDir": "${configDir}"
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*",
+    "*.config.ts"
+  ],
   "exclude": []
 }

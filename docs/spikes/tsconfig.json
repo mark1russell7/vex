@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.repo.json",
+  "compilerOptions": {
+    "typeRoots": [
+      "../../packages/core/node_modules/@types"
+    ],
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "*.ts"
+  ],
+  "exclude": []
+}

@@ -47,6 +47,12 @@ for (const pkg of readdirSync(`${root}packages`, { encoding: "utf8" })) {
   }
 }
 
+// No disable at all means that the script read the wrong folder: the sources have more than 100 disables.
+if (found.length === 0) {
+  console.error(`disables: no "Stryker disable" comment in ${root}packages/*/src. The script expected the sources of the packages there.`);
+  process.exit(1);
+}
+
 // Each disable gives its reason after a colon: "Stryker disable next-line <Mutator>: <reason>".
 const noReason = found.filter((d) => !/Stryker disable [^:]+: \S/.test(d.comment));
 for (const d of noReason) console.error(`a disable without a reason: ${d.file}: ${d.comment}`);

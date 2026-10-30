@@ -13,7 +13,7 @@
     "build": "pnpm --filter @mark1russell7/vex --filter @mark1russell7/vex-domains --filter @mark1russell7/vex-testkit --filter @mark1russell7/vex-compiler --filter @mark1russell7/vex-mcp run build",
     "check:packages": "pnpm build && node scripts/check-packages.mjs",
     "changeset": "changeset",
-    "typecheck": "pnpm -r run typecheck",
+    "typecheck": "pnpm -r run typecheck && tsc -p tsconfig.repo.json && tsc -p docs/spikes/tsconfig.json",
     "test": "pnpm -r run test",
     "test:coverage": "vitest run --coverage",
     "test:docs": "pnpm --filter @vex/site run test:docs",

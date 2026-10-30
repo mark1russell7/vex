@@ -59,8 +59,8 @@ export interface ArmRatios {
   readonly median: number;
   readonly p10: number;
   readonly p90: number;
-  /** The share of the inputs whose ratio is outside [p10, p90] of the A/A arm. */
-  readonly moved: number;
+  /** The share of the inputs whose ratio is outside [p10, p90] of the A/A arm. Without the A/A arm, it is null. */
+  readonly moved: number | null;
   /** The median ratio of the inputs of each group. */
   readonly groups: Readonly<Record<string, number>>;
   readonly groupMean: number;
@@ -82,6 +82,8 @@ export interface InputReport {
 export interface PairedReport {
   readonly schema: "paired-time/1";
   readonly mode: Mode;
+  /** The context of the run: `BENCH_MODE`, else `ci` or `local`, and the flags of Node.js. */
+  readonly context?: string;
   readonly env: Env;
   readonly base: string;
   readonly arms: readonly string[];
@@ -174,11 +176,11 @@ function reportOf<I>(options: PairedOptions<I>, arms: readonly Arm<I>[], times: 
       const gs = Object.values(groups);
       const groupMean = gs.reduce((s, x) => s + x, 0) / gs.length;
       const groupSD = gs.length < 2 ? 0 : Math.sqrt(gs.reduce((s, x) => s + (x - groupMean) ** 2, 0) / (gs.length - 1));
-      const moved = aa.length === 0 ? Number.NaN : rs.filter((x) => x < noiseFloor.p10 || x > noiseFloor.p90).length / rs.length;
+      const moved = aa.length === 0 ? null : rs.filter((x) => x < noiseFloor.p10 || x > noiseFloor.p90).length / rs.length;
       return [a.id, { inputs: rs.length, median: median(rs), p10: quantile(rs, 0.1), p90: quantile(rs, 0.9), moved, groups, groupMean, groupSD }];
     }),
   );
-  return { schema: "paired-time/1", mode: options.mode, env: env(), base, arms: arms.map((a) => a.id), inputs, ratios, noiseFloor };
+  return { schema: "paired-time/1", mode: options.mode, context: context(), env: env(), base, arms: arms.map((a) => a.id), inputs, ratios, noiseFloor };
 }
 
 /** This function starts one child of mode `fresh` and gives its line of JSON. The time of the start does not count. */

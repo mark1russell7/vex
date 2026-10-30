@@ -41,6 +41,16 @@ export interface PairedOptions<I> {
   readonly mode: Mode;
   /** With `true` (the default), a second copy of the base with the id `<base>~aa` gives the noise floor. */
   readonly aa?: boolean;
+  /** For tests, mode `process`: the clock in ms. The default is `performance.now`. */
+  readonly clock?: () => number;
+  /** For tests, mode `fresh`: the start of one child. The default starts the command as a process. */
+  readonly startChild?: (command: readonly string[], input: string, warmup: number) => Promise<ChildResult>;
+}
+
+/** The line of JSON of one child of mode `fresh`: its time in ms, and its memory peak in bytes. */
+export interface ChildResult {
+  readonly ms: number;
+  readonly peakRss?: number;
 }
 
 /** The machine of a run. `cpu` is the model of the first CPU. */
@@ -184,7 +194,7 @@ function reportOf<I>(options: PairedOptions<I>, arms: readonly Arm<I>[], times: 
 }
 
 /** This function starts one child of mode `fresh` and gives its line of JSON. The time of the start does not count. */
-async function child(command: readonly string[], input: string, warmup: number): Promise<{ readonly ms: number; readonly peakRss?: number }> {
+async function child(command: readonly string[], input: string, warmup: number): Promise<ChildResult> {
   const [file, ...args] = command;
   if (file === undefined) throw new RangeError("measureIsolated: an arm of mode fresh needs a command.");
   return new Promise((resolve, reject) => {
@@ -211,6 +221,7 @@ async function child(command: readonly string[], input: string, warmup: number):
 /** This function measures in one process. Each round runs the arms in turn on each input, reversed in odd rounds. */
 function inProcess<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): PairedReport {
   const warmup = options.warmup ?? 1;
+  const clock = options.clock ?? (() => performance.now());
   const times = options.inputs.map(() => new Map<string, number[]>(arms.map((a) => [a.id, []])));
   for (let round = 0; round < options.repeats; round++) {
     // The type-aware lint does not have Array#toReversed, and reverse() changes only the copy.
@@ -222,9 +233,9 @@ function inProcess<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): Paire
         if (run === undefined) throw new RangeError(`measureIsolated: the arm ${arm.id} of mode process needs run.`);
         const value = input.value as I;
         for (let w = 0; w < warmup; w++) run(value);
-        const t0 = performance.now();
+        const t0 = clock();
         run(value);
-        times[i]?.get(arm.id)?.push(performance.now() - t0);
+        times[i]?.get(arm.id)?.push(clock() - t0);
       }
     });
   }
@@ -234,15 +245,17 @@ function inProcess<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): Paire
 /** This function measures with a new process for each arm in each round. The order turns by one place at each round. */
 async function inFresh<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): Promise<PairedReport> {
   const warmup = options.warmup ?? 1;
+  const start = options.startChild ?? child;
   const times = options.inputs.map(() => new Map<string, number[]>(arms.map((a) => [a.id, []])));
   const rss = options.inputs.map(() => new Map<string, number[]>(arms.map((a) => [a.id, []])));
   for (let round = 0; round < options.repeats; round++) {
     const order = arms.map((_a, k) => arms[(k + round) % arms.length]).filter((a) => a !== undefined);
+    // Each input takes all of its arms before the next input, so no whole pass lies between two arms of one input.
     for (const [i, input] of options.inputs.entries()) {
       for (const arm of order) {
         // The children run one at a time: two children at one time change the times of each other.
         // oxlint-disable-next-line no-await-in-loop
-        const r = await child(arm.command ?? [], input.id, warmup);
+        const r = await start(arm.command ?? [], input.id, warmup);
         times[i]?.get(arm.id)?.push(r.ms);
         if (r.peakRss !== undefined) rss[i]?.get(arm.id)?.push(r.peakRss);
       }

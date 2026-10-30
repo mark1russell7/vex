@@ -22,12 +22,11 @@
     "playwright.config.ts",
     "vitest.config.ts",
     "vitest.doctest.config.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    ".astro/types.d.ts"
   ],
   "exclude": [
-    "src/content.config.ts",
     "dist",
-    ".astro",
     "src/**/*.test.ts",
     "src/**/*.test.tsx"
   ]

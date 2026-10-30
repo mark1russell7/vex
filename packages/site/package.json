@@ -12,7 +12,7 @@
     "preview": "astro preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
+    "typecheck": "astro sync && tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test:e2e": "playwright test",
     "test:docs": "tsx scripts/doctest.ts && tsc -p tsconfig.doctest.json && vitest run -c vitest.doctest.config.ts"
   },

@@ -51,12 +51,6 @@
           "tools/mutation/*.mjs"
         ],
         "reason": "The goldens are output of the compiler, compared byte for byte. plugins/vex/mcp.mjs runs on the Node of each user of the plugin, which can be older than 22.18 (no TypeScript). The other scripts and configs become TypeScript in the item TYPED-SCRIPTS (2026-10-30)."
-      },
-      "typed-files": {
-        "ignore": [
-          "packages/site/src/content.config.ts"
-        ],
-        "reason": "It imports astro:content, a module that only astro sync makes. The site build loads it."
       }
     }
   }

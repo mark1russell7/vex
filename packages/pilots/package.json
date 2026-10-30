@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
   },
   "devDependencies": {
-    "@mark1russell7/cue": "github:mark1russell7/cue",
+    "@mark1russell7/cue": "github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7",
     "@mark1russell7/vex-compiler": "workspace:*",
     "@mark1russell7/vex-testkit": "workspace:*",
     "@types/node": "^26.6.4",

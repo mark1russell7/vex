@@ -1,0 +1,506 @@
+[
+  {
+    "file": "packages/compiler/src/facts.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a node that is not an app has no field op, so the set does not have it"
+  },
+  {
+    "file": "packages/compiler/src/lower.ts",
+    "comment": "// Stryker disable next-line UnaryOperator: with +0 as the special key, 0 and -0 still get different constants"
+  },
+  {
+    "file": "packages/compiler/src/lower.ts",
+    "comment": "// Stryker disable next-line all: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/lower.ts",
+    "comment": "// Stryker disable StringLiteral,ConditionalExpression: listReason stops these ops before the lowering"
+  },
+  {
+    "file": "packages/compiler/src/lower.ts",
+    "comment": "// Stryker disable next-line all: listReason stops these ops before the lowering"
+  },
+  {
+    "file": "packages/compiler/src/lower.ts",
+    "comment": "// Stryker disable next-line BooleanLiteral: a value without a flag always exists, so each constant gives the same entries"
+  },
+  {
+    "file": "packages/compiler/src/memo.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a test that is not an expression reads nothing, and it has no keys"
+  },
+  {
+    "file": "packages/compiler/src/memo.ts",
+    "comment": "// Stryker disable next-line StringLiteral: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/memo.ts",
+    "comment": "// Stryker disable next-line StringLiteral: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/memo.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: after the check, each part has its keys, so no one reads the default list"
+  },
+  {
+    "file": "packages/compiler/src/memo.ts",
+    "comment": "// Stryker disable StringLiteral,ConditionalExpression: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/memo.ts",
+    "comment": "// Stryker disable StringLiteral,ConditionalExpression: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line OptionalChaining: each caller gives an argument."
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable StringLiteral,ConditionalExpression: without its case, the switch gives undefined, and each caller reads undefined as false."
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: refsOf of a string gives NaN, and again(NaN) gives 0."
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line StringLiteral: an extension has no children."
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line StringLiteral: a literal has no children."
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line StringLiteral: a variable has no children."
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: each fresh list of the printer is clean, but the test keeps AO correct for a new fresh list"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a value that is not a scope has no field repeats or root, so it acts as no scope"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a check of a kind is always the same, so the map only saves time"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a node that is not a call has no field fn, so the map gives undefined"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a node that is not a call has no field fn, so the map gives undefined"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line all: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,StringLiteral: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,StringLiteral: see #address"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,StringLiteral: see #address"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,StringLiteral: see #address"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,StringLiteral: see #address"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line UpdateOperator: the numbers of the bindings only need to be distinct"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: the statements with a read of a name bind other names and do not throw, so the read alone has the same value"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ArithmeticOperator,UpdateOperator: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: the form of an op is always the same, so the map only saves time"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: the copy of an identity is always the same, so the test only saves time"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line CallExpression: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: fixAddr gives the same fixed moves, so the test only saves an array"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a call of undefined throws, and the catch also gives F"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,BooleanLiteral: see the comments above"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line UnaryOperator: with +0 as the special key, 0 and -0 still get different entries"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line BooleanLiteral: a read that makes the levels only uses memory"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable ConditionalExpression,BlockStatement,CallExpression: a miss of the cache only reads the op tables again"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a call of undefined throws, and the program gives F for it too"
+  },
+  {
+    "file": "packages/compiler/src/sheet-order.ts",
+    "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/sheet-order.ts",
+    "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/sheet-order.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,LogicalOperator: see the comment above"
+  },
+  {
+    "file": "packages/compiler/src/sheet-order.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
+  },
+  {
+    "file": "packages/core/src/builder.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same"
+  },
+  {
+    "file": "packages/core/src/builder.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same"
+  },
+  {
+    "file": "packages/core/src/builder.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same"
+  },
+  {
+    "file": "packages/core/src/builder.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same"
+  },
+  {
+    "file": "packages/core/src/builder.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same"
+  },
+  {
+    "file": "packages/core/src/builder.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same"
+  },
+  {
+    "file": "packages/core/src/codec.ts",
+    "comment": "// Stryker disable next-line EqualityOperator: here u is an infinity, so u > 0 and u >= 0 are the same test"
+  },
+  {
+    "file": "packages/core/src/deps.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: each document of the writer has a type of the world, so each visit has a type path"
+  },
+  {
+    "file": "packages/core/src/deps.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: the reads come from the references, not from the form of a literal"
+  },
+  {
+    "file": "packages/core/src/deps.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the writer tests only the mode \"json\", and each other mode keeps the value"
+  },
+  {
+    "file": "packages/core/src/deps.ts",
+    "comment": "// Stryker disable next-line OptionalChaining: each document around a call is a term or a function, so it has a kind"
+  },
+  {
+    "file": "packages/core/src/deps.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: each rule of the scopes of Vex gives its names with keysAt or listAt"
+  },
+  {
+    "file": "packages/core/src/deps.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a name that no program binds does not hide a function"
+  },
+  {
+    "file": "packages/core/src/document.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain encodes no value"
+  },
+  {
+    "file": "packages/core/src/document.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the writer tests only the order \"reads\", and each other order is the order of DOC.CONSTRUCT"
+  },
+  {
+    "file": "packages/core/src/document.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain decodes no value"
+  },
+  {
+    "file": "packages/core/src/document.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: the check of coeval gives each issue the keys of its value"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a missed hit only compiles again"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,EqualityOperator: resolveAddr of [] gives the focus too"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,EqualityOperator: resolveAddr of [] gives the focus too"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,EqualityOperator: resolveAddr of [] gives the focus too"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,EqualityOperator: the loop finds no domain for undefined"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a new index of the same list has the same values"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,EqualityOperator: see the comment above"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable BlockStatement: an empty catch gives undefined, which also counts as false"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line all: see the comment above"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: without the test, undefined.length throws, and the catch gives the same text"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain shows no value"
+  },
+  {
+    "file": "packages/core/src/evaluate.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,OptionalChaining: without a domain, d.show throws, and the catch gives the same text"
+  },
+  {
+    "file": "packages/core/src/json.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain encodes no value"
+  },
+  {
+    "file": "packages/core/src/json.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain decodes no value"
+  },
+  {
+    "file": "packages/core/src/kernel.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: an axis document fails only when the call stack of the engine is full"
+  },
+  {
+    "file": "packages/core/src/kernel.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: an axis document fails only when the call stack of the engine is full"
+  },
+  {
+    "file": "packages/core/src/kernel.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a sum needs no domain, and a text in the list accepts no value"
+  },
+  {
+    "file": "packages/core/src/kernel.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a mean needs no domain, and a text in the list accepts no value"
+  },
+  {
+    "file": "packages/core/src/kernel.ts",
+    "comment": "// Stryker disable next-line StringLiteral: ifError replaces the error of a missing first argument, so no one sees this name"
+  },
+  {
+    "file": "packages/core/src/kernel.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value"
+  },
+  {
+    "file": "packages/core/src/kernel.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value"
+  },
+  {
+    "file": "packages/core/src/list.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,BlockStatement: the cache holds only lists that pass the check again"
+  },
+  {
+    "file": "packages/core/src/plan.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value"
+  },
+  {
+    "file": "packages/core/src/plan.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the writer tests only the mode \"json\" and the order \"reads\""
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,LogicalOperator: see the comment above"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: the search never reads below the root of a component"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line all: the placeholder is not a cell, so the search reads none of its fields"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: without formulas of cells, the lookup gives undefined anyway"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,LogicalOperator: members.length > 1 implies root.reread"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line CallExpression: a finished cell has a result, and a read looks for the result first"
+  },
+  {
+    "file": "packages/core/src/sheet.ts",
+    "comment": "// Stryker disable next-line all: a warm-up changes no result, only the depth of the recursion (SHEET.ORDER)"
+  },
+  {
+    "file": "packages/core/src/space.ts",
+    "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
+  },
+  {
+    "file": "packages/core/src/space.ts",
+    "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
+  },
+  {
+    "file": "packages/core/src/space.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,OptionalChaining: a root has no list to push to"
+  },
+  {
+    "file": "packages/core/src/space.ts",
+    "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
+  },
+  {
+    "file": "packages/core/src/space.ts",
+    "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
+  },
+  {
+    "file": "packages/core/src/space.ts",
+    "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
+  },
+  {
+    "file": "packages/core/src/space.ts",
+    "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
+  },
+  {
+    "file": "packages/core/src/write.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the writer tests only the kind \"envelope\", so each other kind is the kind \"term\""
+  },
+  {
+    "file": "packages/core/src/write.ts",
+    "comment": "// Stryker disable next-line ArrowFunction: a spread of no value adds no fields, as a spread of an empty record does"
+  },
+  {
+    "file": "packages/domains/src/angle.ts",
+    "comment": "// Stryker disable next-line ArithmeticOperator: x + π and x - π differ by 2π, so the result after mod 2π is the same"
+  },
+  {
+    "file": "packages/domains/src/date.ts",
+    "comment": "// Stryker disable next-line EqualityOperator: the year 0 takes the first branch, so y < 0 and y <= 0 are the same in the second"
+  },
+  {
+    "file": "packages/domains/src/vec2.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: a list with a text gives NaN components, like the empty list"
+  },
+  {
+    "file": "packages/testkit/src/builder-model.ts",
+    "comment": "// Stryker disable next-line UpdateOperator: fresh-- also gives a new name at each call"
+  },
+  {
+    "file": "packages/testkit/src/compare.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a primitive has a prototype that is not plain, so it gives itself either way"
+  },
+  {
+    "file": "packages/testkit/src/reference-sheet.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: the search never reads below the root of a component"
+  },
+  {
+    "file": "packages/testkit/src/reference-sheet.ts",
+    "comment": "// Stryker disable next-line all: the placeholder at the top is not a cell, so the search reads none of its fields"
+  },
+  {
+    "file": "packages/testkit/src/reference-sheet.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression,LogicalOperator: members.length > 1 implies visit.reread"
+  },
+  {
+    "file": "packages/testkit/src/reference-sheet.ts",
+    "comment": "// Stryker disable next-line CallExpression,OptionalChaining: a finished cell has a result, and a read looks for the result first"
+  }
+]

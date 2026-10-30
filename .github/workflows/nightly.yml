@@ -64,6 +64,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # Stryker with Vitest 4.1, in tools/mutation, until Stryker supports Vitest 5
+      # The number of the disabled mutants of each file. A new disable must also go into tools/mutation/disables.json.
+      - name: The disabled mutants
+        shell: bash
+        run: node tools/mutation/disables.mjs | tee -a "$GITHUB_STEP_SUMMARY"
       - run: pnpm --filter @vex/mutation run mutation
         env:
           VEX_MUTATE: ${{ matrix.package }}
@@ -145,7 +149,7 @@ jobs:
   links:
     name: links of the docs
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -154,10 +158,28 @@ jobs:
           persist-credentials: false
       # Only the web links: the relative links of the site pages resolve at build time.
       # The journal LMCS does not answer the runners of GitHub: two nights of timeouts, but 200 from a local check.
+      # Each link that fails gets 4 more tries, with a longer wait before each try (lychee doubles the wait).
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: >-
-            --no-progress --scheme https --scheme http --max-retries 2 --timeout 30 --accept "200..=299,403,429"
-            --exclude "^https://lmcs\.episciences\.org/"
+            --no-progress --scheme https --scheme http --max-retries 4 --retry-wait-time 5 --timeout 30
+            --accept "200..=299,403,429" --exclude "^https://lmcs\.episciences\.org/"
             README.md "spec/**/*.md" "docs/*.md" "packages/*/README.md" "packages/site/src/content/**/*.mdx"
-          fail: true
+          output: lychee/out.md
+          fail: false
+      # A broken link (an answer that is not in --accept) always fails the job. A host that does not answer is a
+      # timeout: it fails the scheduled run, and it is a warning on a run that a person starts for a branch. Thus a
+      # slow outside service (shields.io on 2026-10-30) does not make the evidence run of a pull request red.
+      - name: The broken links and the timeouts
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          errors=$(grep -E '^\| .*Errors' lychee/out.md | grep -oE '[0-9]+' | head -1)
+          timeouts=$(grep -E '^\| .*Timeouts' lychee/out.md | grep -oE '[0-9]+' | head -1)
+          echo "errors: ${errors:-none found}, timeouts: ${timeouts:-none found}"
+          if [ -z "$errors" ] || [ -z "$timeouts" ]; then echo "::error::lychee/out.md has no summary table"; exit 1; fi
+          if [ "$errors" -gt 0 ]; then echo "::error::$errors broken links"; exit 1; fi
+          if [ "$timeouts" -gt 0 ]; then
+            if [ "$EVENT" = "schedule" ]; then echo "::error::$timeouts links timed out"; exit 1; fi
+            echo "::warning::$timeouts links timed out. This fails only the scheduled run."
+          fi

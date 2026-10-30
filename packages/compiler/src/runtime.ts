@@ -294,8 +294,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     // One step of `reduce`: the first domain that accepts the accumulator and has the op. No free function.
     step(name, acc, value) {
       let entries = stepEntries.get(name);
-      // A miss of the cache only reads the op tables again.
-      // Stryker disable ConditionalExpression,BlockStatement,CallExpression
+      // Stryker disable ConditionalExpression,BlockStatement,CallExpression: a miss of the cache only reads the op tables again
       if (entries === undefined) {
         entries = entriesOf(name);
         stepEntries.set(name, entries);

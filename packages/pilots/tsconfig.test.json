@@ -7,7 +7,7 @@
     "declaration": false,
     "declarationMap": false,
     "isolatedDeclarations": false,
-    "rootDir": "${configDir}"
+    "rootDir": "${configDir}/../.."
   },
   "include": [
     "src/**/*",

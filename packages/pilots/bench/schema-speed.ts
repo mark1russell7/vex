@@ -19,6 +19,7 @@
 import { writeFileSync } from "node:fs";
 import { app, axes, call, compile, each, evaluate, fn, fold, let_, lit, rec, space, v, vexList, type Expr, type ItemNames, type Result } from "@mark1russell7/vex";
 import { SCHEMA_DOMAINS, SCHEMA_PROGRAM } from "../src/schema.ts";
+import { runner, runnerLine } from "../../core/bench/measure.ts";
 
 const RUNS = Number(process.env["RUNS"] ?? 40);
 const WARM = Number(process.env["WARM"] ?? 10);
@@ -178,20 +179,29 @@ if (process.env["COLD"] === "1") {
   const median = (performance.now() - t0) / 5;
   out.push({ name: "cold: mean of 5 runs after 1", median, min: Number.NaN, p90: Number.NaN, check: checkOf(last, true) });
 }
-for (const [name, run] of Object.entries(cases)) {
-  // A case of SAME gives the records of Graph. A stage gives a count, and an error of a stage fails too.
-  const check = checkOf(run(), SAME.has(name));
-  for (let i = 0; i < WARM; i++) run();
-  const ts: number[] = [];
-  for (let i = 0; i < RUNS; i++) {
+// The cases alternate in this process: each run times each case one time, and the order of the cases turns by one
+// place at each run. Thus no case has a better place in the warm-up of the machine (core/bench/measure.ts).
+const entries = Object.entries(cases);
+const checks = new Map(entries.map(([name, run]) => [name, checkOf(run(), SAME.has(name))]));
+for (let i = 0; i < WARM; i++) for (const [, run] of entries) run();
+const times = new Map<string, number[]>(entries.map(([name]) => [name, []]));
+for (let i = 0; i < RUNS; i++) {
+  for (let k = 0; k < entries.length; k++) {
+    const [name, run] = entries[(i + k) % entries.length] ?? ["", (): unknown => undefined];
     const t0 = performance.now();
     run();
-    ts.push(performance.now() - t0);
+    times.get(name)?.push(performance.now() - t0);
   }
+}
+for (const [name] of entries) {
+  // A case of SAME gives the records of Graph. A stage gives a count, and an error of a stage fails too.
+  const ts = [...(times.get(name) ?? [])];
+  // oxlint-disable-next-line unicorn/no-array-sort
   ts.sort((a, b) => a - b);
   const at = (q: number): number => ts[Math.floor(ts.length * q)] ?? Number.NaN;
-  out.push({ name, median: at(0.5), min: at(0), p90: at(0.9), check });
+  out.push({ name, median: at(0.5), min: at(0), p90: at(0.9), check: checks.get(name) ?? "missing" });
 }
+console.info(runnerLine());
 const pilot = out.find((o) => o.name === "pilot (evaluate)")?.median ?? Number.NaN;
 const cal = out.find((o) => o.name === "calibration")?.median ?? Number.NaN;
 const ts = out.find((o) => o.name === "TypeScript inferSchema")?.median ?? Number.NaN;
@@ -200,7 +210,7 @@ for (const o of out) {
 }
 console.info(`target: 5 ms for one sample, ${(5 / cal).toFixed(3)} per calibration. The warm pilot needs a factor of ${(pilot / 5).toFixed(1)} on this runner.`);
 const file = process.env["BENCH_OUT"];
-if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
+if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ runner: runner(), node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
 // A result that is not the result of Graph fails the step. The numbers stay in the report.
 const wrong = out.filter((o) => o.check !== "true" && o.check !== "n/a");
 if (wrong.length > 0) {

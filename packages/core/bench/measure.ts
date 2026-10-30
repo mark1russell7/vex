@@ -89,8 +89,8 @@ export interface PairedReport {
   readonly arms: readonly string[];
   readonly inputs: readonly InputReport[];
   readonly ratios: Readonly<Record<string, ArmRatios>>;
-  /** The ratios of the A/A arm. Without the A/A arm, each value is NaN. */
-  readonly noiseFloor: { readonly median: number; readonly p10: number; readonly p90: number };
+  /** The ratios of the A/A arm. Without the A/A arm, it is null. */
+  readonly noiseFloor: { readonly median: number; readonly p10: number; readonly p90: number } | null;
 }
 
 /** This function gives the machine of this run. `BENCH_RUNNER` names the runner, if it is set. */
@@ -163,7 +163,7 @@ function reportOf<I>(options: PairedOptions<I>, arms: readonly Arm<I>[], times: 
   });
   const ratiosOf = (id: string): number[] => inputs.map((r) => r.ratio[id] ?? Number.NaN);
   const aa = arms.some((a) => a.id === aaId) ? ratiosOf(aaId) : [];
-  const noiseFloor = { median: median(aa), p10: quantile(aa, 0.1), p90: quantile(aa, 0.9) };
+  const noiseFloor = aa.length === 0 ? null : { median: median(aa), p10: quantile(aa, 0.1), p90: quantile(aa, 0.9) };
   const ratios = Object.fromEntries(
     arms.map((a) => {
       const rs = ratiosOf(a.id);
@@ -176,7 +176,7 @@ function reportOf<I>(options: PairedOptions<I>, arms: readonly Arm<I>[], times: 
       const gs = Object.values(groups);
       const groupMean = gs.reduce((s, x) => s + x, 0) / gs.length;
       const groupSD = gs.length < 2 ? 0 : Math.sqrt(gs.reduce((s, x) => s + (x - groupMean) ** 2, 0) / (gs.length - 1));
-      const moved = aa.length === 0 ? null : rs.filter((x) => x < noiseFloor.p10 || x > noiseFloor.p90).length / rs.length;
+      const moved = noiseFloor === null ? null : rs.filter((x) => x < noiseFloor.p10 || x > noiseFloor.p90).length / rs.length;
       return [a.id, { inputs: rs.length, median: median(rs), p10: quantile(rs, 0.1), p90: quantile(rs, 0.9), moved, groups, groupMean, groupSD }];
     }),
   );

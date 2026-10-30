@@ -104,7 +104,10 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: mkdir -p reports && pnpm --filter @mark1russell7/vex run bench | tee reports/bench.txt
+      # Each record of the report names the CPU of the runner and the mode (packages/core/bench/measure.ts).
+      - run: mkdir -p reports && node --input-type=module -e 'import { envLine } from "./packages/core/bench/measure.ts"; console.info(envLine("process"));' | tee reports/bench.txt
+      # The times of the vitest bench are absolute times for this runner, and the report claims no ratio from them.
+      - run: pnpm --filter @mark1russell7/vex run bench | tee -a reports/bench.txt
       # The gate fails when Vex is much slower than the hand-written loops (bench/gate.ts gives the limits).
       - run: pnpm --filter @mark1russell7/vex run bench:gate | tee -a reports/bench.txt
       # The gate of the compiler: generated code against the same loops, with no fallback (docs/COMPILER.md §10). It runs

@@ -7,6 +7,9 @@
  * measured 2.3 and 1.6, and tier 1 measured 80 and 120. The runners of CI measure 1.5 to 1.66 (NEAREST) and 1.2 to 1.3
  * (LIFE) since 2026-10-14. The limit 2 for NEAREST and 1.5 for LIFE keep a margin for a busy runner, and a loss of the
  * fast paths of the sites fails them.
+ * The ratios above came from runs with a fixed order of the arms and no record of the CPU. By the rule of the fleet of
+ * 2026-10-30, they are void as claims. The limits stay. Since that day, the arms alternate with a swapped order, and
+ * each run prints its CPU and its mode (measure.ts).
  * Start: node packages/compiler/bench/gate.ts
  */
 import type { Space } from "@mark1russell7/vex";
@@ -17,40 +20,7 @@ import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, sha
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { emitModule, emitSheetModule, tiered } from "../src/index.ts";
-
-/** This function gives the time of one call of `f` in one sample of 30 ms, in microseconds. */
-function sample(f: () => void): number {
-  let calls = 0;
-  const start = performance.now();
-  while (performance.now() - start < 30) {
-    f();
-    calls++;
-  }
-  return ((performance.now() - start) * 1000) / calls;
-}
-
-/** This function gives the median of a list of numbers. */
-function median(xs: readonly number[]): number {
-  const mid = Math.floor(xs.length / 2);
-  return xs.find((x) => xs.filter((y) => y < x).length <= mid && xs.filter((y) => y <= x).length > mid) ?? Number.NaN;
-}
-
-/**
- * This function gives the median ratio of the times of `v` and `h`, and the median times. The samples alternate, so a
- * change of the speed of the machine changes both times of a pair.
- */
-function compare(v: () => void, h: () => void): { readonly ratio: number; readonly v: number; readonly h: number } {
-  for (let i = 0; i < 20; i++) {
-    v();
-    h();
-  }
-  const pairs = Array.from({ length: 15 }, () => {
-    const tv = sample(v);
-    const th = sample(h);
-    return { ratio: tv / th, v: tv, h: th };
-  });
-  return { ratio: median(pairs.map((p) => p.ratio)), v: median(pairs.map((p) => p.v)), h: median(pairs.map((p) => p.h)) };
-}
+import { envLine, paired } from "../../core/bench/measure.ts";
 
 /** This function gives a run of a program at each key of a space, in tier 2. */
 function atEachKey(program: { readonly program: Parameters<typeof tiered>[0] }, s: Space, domains: Parameters<typeof tiered>[1] = { domains: [PtDomain] }): { readonly run: () => void; readonly tier: 1 | 2; readonly fallbacks: () => number } {
@@ -171,18 +141,20 @@ const CASES = [
   shapesCase(10, 3),
 ] as const;
 
+console.info(envLine("process"));
 let failed = false;
 for (const { title, compiled, hand, limit } of CASES) {
-  const { ratio, v, h } = compare(compiled.run, hand);
+  // The arms alternate in this process, with the order reversed in odd rounds, and a copy of the base gives the noise floor (core/bench/measure.ts).
+  const { ratio, a: v, b: h, noise } = paired(compiled.run, hand);
   const ok = ratio <= limit && compiled.tier === 2 && compiled.fallbacks() === 0;
   failed ||= !ok;
-  console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, ratio ${ratio.toFixed(2)} (limit ${limit})`);
+  console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
 }
 {
   // The limit 2.6 is between the growth of O(n), 2, and the growth of O(n²), 4.
-  const { ratio, v, h } = compare(large.run, small.run);
+  const { ratio, a: v, b: h, noise } = paired(large.run, small.run);
   const ok = ratio <= 2.6 && large.tier === 2 && large.fallbacks() === 0;
   failed ||= !ok;
-  console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (limit 2.6)`);
+  console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (limit 2.6), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
 }
 process.exit(failed ? 1 : 0);

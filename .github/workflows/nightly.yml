@@ -4,7 +4,8 @@ name: Nightly
 # the next TypeScript and the links of the docs. Each job keeps its report as an artifact.
 on:
   schedule:
-    - cron: "17 3 * * *"
+    # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
+    - cron: "47 3 * * *"
   workflow_dispatch:
     inputs:
       packages:
@@ -13,10 +14,10 @@ on:
 
 permissions: {}
 
-# A run for some packages does not stop a run for other packages, and a run on a branch does not stop a run on
-# another branch. A new run on the same branch for the same packages stops the old run.
+# The runner slots of the account are a budget: one run for each branch. A new run on the same branch stops the old
+# run, and a run on a branch does not stop a run on another branch.
 concurrency:
-  group: nightly-${{ github.ref }}-${{ inputs.packages || 'all' }}
+  group: nightly-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -51,6 +52,8 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # At most 3 jobs of the matrix at one time, so the gates and the releases of the fleet keep their slots.
+      max-parallel: 3
       matrix:
         package: ${{ fromJSON(inputs.packages || '["core.kernel", "core.base", "domains", "testkit", "compiler.module", "compiler.rest"]') }}
     steps:

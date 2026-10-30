@@ -4,13 +4,14 @@ name: Weekly
 # its own job, so a slow package does not stop the others. The setup prints the seed. To repeat a failure, set FC_SEED.
 on:
   schedule:
-    - cron: "41 4 * * 0"
+    # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
+    - cron: "53 4 * * 0"
   workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: weekly
+  group: weekly-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -22,6 +23,8 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # At most 3 jobs of the matrix at one time, so the gates and the releases of the fleet keep their slots.
+      max-parallel: 3
       matrix:
         package: ["@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@vex/pilots", "@vex/formula", "@vex/sheet-app", "@vex/site"]
     steps:

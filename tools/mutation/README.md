@@ -47,3 +47,7 @@ node prepare.mjs
 VEX_MUTATE=domains npx stryker run stryker.config.mjs --concurrency 2
 node scores.mjs
 ```
+
+## The disabled mutants
+
+A comment `// Stryker disable next-line <Mutator>: <reason>` disables a mutant that is equivalent. The disable raises the score, so each one is also in `disables.json`, with its reason. The script `disables.mjs` gives the number of disables of each file. It fails when the sources and `disables.json` are not the same. `pnpm lint` and the nightly lane start it. After you add or remove a disable, start `node tools/mutation/disables.mjs --write` and examine the diff of `disables.json`.

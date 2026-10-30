@@ -774,6 +774,8 @@ Option A gives more of what Vex needs (search, code, API reference) with less cu
 
 ## 11. Roadmap
 
+This section gives the phases and their reasons. The list of the open items, with their status, is [`ROADMAP.md`](./ROADMAP.md). The Status page of the site reads that file.
+
 | Phase | Deliverables | Done when | Effort |
 |---|---|---|---|
 | **P0 Migrate** | §7: template files, rename, `legacy` package, Funk vendored, submodules removed, the template gap fixes T1–T5, ste-lint, Oxlint, CI, Pages on, the site skeleton (D0) | A new clone passes `pnpm install`, `pnpm typecheck`, `pnpm test` and `pnpm lint:ste`. CI is green. The skeleton is live. | 1–2 days |

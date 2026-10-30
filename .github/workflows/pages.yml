@@ -45,3 +45,5 @@ jobs:
       group: "@mark1russell7/vex"
       packages: "@mark1russell7/vex,@mark1russell7/vex-domains,@mark1russell7/vex-testkit,@mark1russell7/vex-compiler,@mark1russell7/vex-mcp"
       site-name: Vex
+      # The open items for the Status page. check:conventions parses the file on each pull request (roadmap-parses).
+      roadmap: docs/ROADMAP.md

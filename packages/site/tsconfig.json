@@ -27,6 +27,8 @@
   "exclude": [
     "src/content.config.ts",
     "dist",
-    ".astro"
+    ".astro",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
   ]
 }

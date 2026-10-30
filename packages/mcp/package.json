@@ -63,7 +63,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@mark1russell7/cue": "github:mark1russell7/cue",
+    "@mark1russell7/cue": "github:mark1russell7/cue#da04dd56699a2ae806ab64da5b1d677476afe69e",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^26.6.4",
     "tsx": "^4.23.15",

@@ -12,13 +12,13 @@
     "preview": "astro preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test:e2e": "playwright test",
     "test:docs": "tsx scripts/doctest.ts && tsc -p tsconfig.doctest.json && vitest run -c vitest.doctest.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@mark1russell7/cue": "github:mark1russell7/cue",
+    "@mark1russell7/cue": "github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7",
     "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",

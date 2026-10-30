@@ -24,8 +24,9 @@ jobs:
       # lint: Oxlint with type-aware rules.
       # test:coverage: the coverage of @mark1russell7/vex from the tests of each package, with the thresholds of vitest.config.ts.
       # test:docs: the code blocks of the docs with the meta word "doctest": types, values and type errors.
+      # check:conventions: the rules of @mark1russell7/conventions, with the exceptions and their reasons in package.json.
       # lint:ste: the writing rules (ASD-STE100) of the README files, the docs and the doc comments.
-      scripts: typecheck lint test test:coverage test:docs lint:ste
+      scripts: typecheck lint check:conventions test test:coverage test:docs lint:ste
       node-versions: '["22", "24", "26"]'
 
   # The site: typecheck of the widgets, the spec pages and the static build
@@ -85,5 +86,21 @@ jobs:
     timeout-minutes: 2
     permissions: {}
     steps:
-      - name: All jobs passed
-        run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = "false"
+      - name: Each job passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          # The jobs that their own if may skip, separated by spaces. Each other job must pass (template #85).
+          ALLOW_SKIP: ""
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' > results
+          cat results
+          if [ ! -s results ]; then echo "::error::no job in needs"; exit 1; fi
+          bad=0
+          while read -r job result; do
+            case "$result" in
+              success) ;;
+              skipped) case " $ALLOW_SKIP " in *" $job "*) ;; *) echo "::error::$job was skipped, and ALLOW_SKIP does not name it"; bad=1 ;; esac ;;
+              *) echo "::error::$job: $result"; bad=1 ;;
+            esac
+          done < results
+          exit $bad

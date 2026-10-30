@@ -20,7 +20,7 @@
     "@mark1russell7/vex-domains": "workspace:*"
   },
   "devDependencies": {
-    "@mark1russell7/cue": "github:mark1russell7/cue",
+    "@mark1russell7/cue": "github:mark1russell7/cue#f2bb6026e14fcfb782eef3e02771ce983d4bff55",
     "@mark1russell7/vex-testkit": "workspace:*",
     "@types/node": "^26.6.4",
     "fast-check": "^4.10.2",

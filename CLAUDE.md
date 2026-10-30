@@ -31,7 +31,7 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 
 - Each normative statement of the spec has a requirement ID. Each requirement ID has a test that names it.
 - Each defect from `docs/archive/2026-07/BUGS.md` (V-001 to V-042) has a row in `spec/regressions.md`, and each row with the status `test` has a test that names its ID.
-- Start `pnpm check` before a commit. It does the type check, Oxlint, the coverage, the tests, the doc tests and `ste-lint`.
+- Start `pnpm check` before a commit. It does the type check, Oxlint, the conventions check, the coverage, the tests, the doc tests and `ste-lint`.
 - A code block of the docs with the meta word `doctest` is a test. Write `// => value` for a value and `// : Type` for a type.
 - A golden file in `packages/core/src/__golden__` changes only with a change of the semantics. To accept it, start `vitest run -u`.
 - The coverage of each published package must stay at 98, 96, 98 and 98 or more. The root `vitest.config.ts` sets these gates.

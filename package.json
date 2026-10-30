@@ -19,14 +19,16 @@
     "test:docs": "pnpm --filter @vex/site run test:docs",
     "lint": "oxlint && node tools/mutation/disables.mjs",
     "lint:ste": "ste-lint",
-    "check": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm test && pnpm test:docs && pnpm lint:ste"
+    "check:conventions": "conventions check",
+    "check": "pnpm typecheck && pnpm lint && pnpm check:conventions && pnpm test:coverage && pnpm test && pnpm test:docs && pnpm lint:ste"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@arethetypeswrong/core": "^0.18.5",
     "@changesets/cli": "^3.0.3",
-    "@mark1russell7/cue": "github:mark1russell7/cue",
-    "@mark1russell7/ste-lint": "github:mark1russell7/ste-lint",
+    "@mark1russell7/conventions": "^0.5.0",
+    "@mark1russell7/cue": "github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7",
+    "@mark1russell7/ste-lint": "github:mark1russell7/ste-lint#f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7",
     "@mark1russell7/template-cli": "^0.1.2",
     "@vitest/coverage-v8": "^5.0.3",
     "oxlint": "^1.87.0",
@@ -36,5 +38,26 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
+  },
+  "conventions": {
+    "rules": {
+      "typed-scripts": {
+        "ignore": [
+          "packages/compiler/src/__golden__/*.js",
+          "packages/site/astro.config.mjs",
+          "packages/site/scripts/*.mjs",
+          "plugins/vex/mcp.mjs",
+          "scripts/check-packages.mjs",
+          "tools/mutation/*.mjs"
+        ],
+        "reason": "The goldens are output of the compiler, compared byte for byte. plugins/vex/mcp.mjs runs on the Node of each user of the plugin, which can be older than 22.18 (no TypeScript). The other scripts and configs become TypeScript in the item TYPED-SCRIPTS (2026-10-30)."
+      },
+      "typed-files": {
+        "ignore": [
+          "packages/site/src/content.config.ts"
+        ],
+        "reason": "It imports astro:content, a module that only astro sync makes. The site build loads it."
+      }
+    }
   }
 }

@@ -66,8 +66,8 @@
     "@mark1russell7/coeval": "^0.15.0"
   },
   "devDependencies": {
-    "@mark1russell7/cue": "github:mark1russell7/cue",
-    "@mark1russell7/optional": "github:mark1russell7/optional",
+    "@mark1russell7/cue": "github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7",
+    "@mark1russell7/optional": "github:mark1russell7/optional#1c649e1ea49991d1574a74f0c402220502e219a7",
     "@types/node": "^26.6.4",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"

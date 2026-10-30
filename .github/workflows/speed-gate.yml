@@ -1,0 +1,57 @@
+# The two speed gates on a pull request that changes the code they measure: Vex against the hand-written loops
+# (packages/core/bench/gate.ts) and the generated code against the same loops (packages/compiler/bench/gate.ts).
+# Timing runs in CI, not on a shared machine. The nightly runs the same gates each day.
+name: Speed gate
+
+on:
+  pull_request:
+    paths:
+      - "packages/core/src/**"
+      - "packages/core/bench/**"
+      - "packages/compiler/src/**"
+      - "packages/compiler/bench/**"
+      - "packages/pilots/src/ireko-*.ts"
+      - ".github/workflows/speed-gate.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+# One run for each branch: a newer run stops the older one. The workflow holds one runner slot.
+concurrency:
+  group: speed-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: Speed gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # The shell bash sets pipefail, so a gate that fails fails its step, also with its output piped into tee.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @mark1russell7/vex run bench:gate | tee gates.txt
+      # The gate of the compiler runs also when the first gate fails, and the summary keeps the lines of both.
+      - if: ${{ !cancelled() }}
+        run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a gates.txt
+      - if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### Speed gates (time ratios: lower is better)"
+            echo
+            echo '```'
+            grep -E "^(runner|ok|FAIL)" gates.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

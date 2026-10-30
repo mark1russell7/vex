@@ -26,7 +26,7 @@
     "@arethetypeswrong/cli": "^0.18.5",
     "@arethetypeswrong/core": "^0.18.5",
     "@changesets/cli": "^3.0.3",
-    "@mark1russell7/conventions": "^0.5.0",
+    "@mark1russell7/conventions": "^0.6.0",
     "@mark1russell7/cue": "github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7",
     "@mark1russell7/ste-lint": "github:mark1russell7/ste-lint#f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7",
     "@mark1russell7/template-cli": "^0.1.2",

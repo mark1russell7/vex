@@ -44,15 +44,15 @@ jobs:
   mutation:
     name: mutation (${{ matrix.package }})
     runs-on: ubuntu-latest
-    # The lane mutates the four published packages, one package or one part of the core on each runner
-    # (tools/mutation/stryker.config.mjs).
+    # The lane mutates the four published packages, one package or one part of the core or the compiler on each
+    # runner (tools/mutation/stryker.config.mjs).
     timeout-minutes: 150
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJSON(inputs.packages || '["core.kernel", "core.base", "domains", "testkit", "compiler"]') }}
+        package: ${{ fromJSON(inputs.packages || '["core.kernel", "core.base", "domains", "testkit", "compiler.module", "compiler.rest"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

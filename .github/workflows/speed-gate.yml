@@ -13,18 +13,30 @@ on:
       - "packages/pilots/src/ireko-*.ts"
       - ".github/workflows/speed-gate.yml"
   workflow_dispatch:
+    inputs:
+      reps:
+        description: The number of runs on separate runners, for the derivation of the limits (at most 3 at one time)
+        type: choice
+        options: ["1", "5"]
+        default: "1"
 
 permissions: {}
 
-# One run for each branch: a newer run stops the older one. The workflow holds one runner slot.
+# One run for each branch: a newer run stops the older one. The workflow holds at most 3 runner slots.
 concurrency:
   group: speed-gate-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   gates:
-    name: Speed gates
+    name: Speed gates ${{ matrix.rep }}
     runs-on: ubuntu-latest
+    # Each limit comes from at least 5 runs: the worst value times 1.1 (the fleet rule of 2026-10-30).
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        rep: ${{ fromJSON(inputs.reps == '5' && '[1, 2, 3, 4, 5]' || '[1]') }}
     timeout-minutes: 15
     permissions:
       contents: read

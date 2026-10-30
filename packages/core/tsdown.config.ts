@@ -6,10 +6,9 @@ export default defineConfig({
   outDir: "build",
   format: "esm",
   platform: "neutral",
-  // The type Optional comes from @mark1russell7/optional, a dev dependency: the declarations get a copy of it.
   // @mark1russell7/coeval, the kernel of the family, is the one runtime dependency (decision D13 in docs/REVIEW.md). The
   // build does not copy it, so a program has one kernel and one brand of its host things.
-  dts: { resolve: ["@mark1russell7/optional"] },
+  // The type Optional comes from @mark1russell7/optional, a dev dependency: onlyBundle copies it into the declarations.
   deps: { onlyBundle: ["@mark1russell7/optional"] },
   sourcemap: true,
   publint: true,

@@ -2,7 +2,9 @@
 // for all files, so its own break is off, and this script applies the threshold of 95 % to each package
 // (docs/QUALITY-PLAN.md). A run that mutates only some packages (with --mutate) gets the gate for those packages.
 // The score counts the killed and the timed-out mutants, out of the mutants that a test covers or that survive.
+// A missing report, or a report without mutants of a package of the run, fails the script.
 import { readFileSync } from "node:fs";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 /** @typedef {{ status: string, mutatorName: string, location: { start: { line: number } } }} Mutant */
@@ -26,6 +28,16 @@ for (const [file, data] of Object.entries(report.files)) {
   totals.set(pkg, t);
 }
 let failed = false;
+// The packages of the run. A part of a package ("core.kernel", "compiler.module") is in the report of its package.
+const ALL = ["core", "domains", "testkit", "compiler"];
+const expected = (process.env.VEX_MUTATE?.split(",").filter((p) => p !== "") ?? ALL).map((p) => p.split(".")[0] ?? p);
+// A report without mutants of a package of the run is not a pass: Stryker found no files, or it did not run.
+for (const pkg of new Set(expected)) {
+  if ((totals.get(pkg)?.valid ?? 0) === 0) {
+    console.error(`${pkg}: the report has no mutants of this package, but the run names it (VEX_MUTATE ${process.env.VEX_MUTATE ?? "not set"}).`);
+    failed = true;
+  }
+}
 for (const [pkg, t] of totals) {
   const score = t.valid === 0 ? 100 : (100 * t.detected) / t.valid;
   const gated = GATED.has(pkg);
@@ -36,6 +48,6 @@ for (const [pkg, t] of totals) {
   }
 }
 if (failed) {
-  console.error(`A package is under ${BREAK} %.`);
+  console.error(`The gate failed: a package of the run is under ${BREAK} % or has no mutants.`);
   process.exitCode = 1;
 }

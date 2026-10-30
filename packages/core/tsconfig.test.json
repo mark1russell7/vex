@@ -8,8 +8,14 @@
     "declarationMap": false,
     "isolatedDeclarations": false,
     "rootDir": "${configDir}",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*", "bench/**/*"],
+  "include": [
+    "src/**/*",
+    "bench/**/*",
+    "*.config.ts"
+  ],
   "exclude": []
 }

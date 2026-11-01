@@ -2,5 +2,6 @@
   "schema": "weekly-runs/1",
   "derivation": "No records yet. The dispatch of the weekly with reps 5 and record_only gives the records, and scripts/weekly-minimums.ts derives the minimums from them.",
   "sources": [],
-  "minimums": {}
+  "minimums": {},
+  "ungated": {}
 }

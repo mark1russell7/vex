@@ -30,7 +30,24 @@ export interface Minimums {
   readonly sources: readonly string[];
   /** The minimum of runs of each property that reached its budget in a source. */
   readonly minimums: Readonly<Record<string, number>>;
+  /** This field names each property whose noise is as large as its worst number of runs. Each run names it again. */
+  readonly ungated: Readonly<Record<string, Ungated>>;
 }
+
+/**
+ * A property without a minimum, because the spread of its runs is as large as its worst number of runs. A minimum of 0
+ * cannot fail, so the file names the property, as "cannot decide" in rule a2aa4cec. More reps or a larger budget fix it.
+ */
+export interface Ungated {
+  readonly reason: "not gated (noise > worst)";
+  /** The worst number of runs over the sets. */
+  readonly worst: number;
+  /** The largest minus the smallest number of runs of the sets where the budget stopped the property. */
+  readonly spread: number;
+}
+
+/** These are the parts of `Minimums` that a run of the weekly reads. A file without `ungated` has no ungated property. */
+export type Gates = Pick<Minimums, "minimums"> & Partial<Pick<Minimums, "ungated">>;
 
 /** The number of green runs that a derivation needs. */
 export const minimumSources = 5;
@@ -39,14 +56,21 @@ export const minimumMargin = 1.1;
 
 /**
  * This function gives the message of a failure for a record, or `undefined` when the record passes. With `recordOnly`,
- * no minimum applies: the runs that collect the records use it.
+ * no minimum applies: the runs that collect the records use it. An ungated property passes, and `ungatedNote` names it.
  */
-export function verdict(record: RunRecord, minimums: Readonly<Record<string, number>>, recordOnly: boolean): string | undefined {
-  if (!record.interrupted || recordOnly) return undefined;
-  const least = minimums[record.key];
+export function verdict(record: RunRecord, gates: Gates, recordOnly: boolean): string | undefined {
+  if (!record.interrupted || recordOnly || gates.ungated?.[record.key] !== undefined) return undefined;
+  const least = gates.minimums[record.key];
   const done = `The property "${record.key}" stopped at its time budget after ${String(record.runs)} of ${String(record.target)} runs`;
   if (least === undefined) return `${done}, and it has no minimum of runs. Derive the minimums with scripts/weekly-minimums.ts.`;
   return record.runs < least ? `${done}. Its minimum is ${String(least)} runs.` : undefined;
+}
+
+/** This function gives the note of a record of an ungated property that reached its budget, or `undefined`. */
+export function ungatedNote(record: RunRecord, gates: Gates): string | undefined {
+  const u = gates.ungated?.[record.key];
+  if (!record.interrupted || u === undefined) return undefined;
+  return `The property "${record.key}" is ${u.reason}: ${String(record.runs)} of ${String(record.target)} runs, worst ${String(u.worst)}, spread ${String(u.spread)}. Add reps or a larger budget.`;
 }
 
 /** This function reads the records of one file, one JSON object on each line. */
@@ -61,7 +85,8 @@ export function parseRecords(text: string): RunRecord[] {
  * This function gives the minimums from the sets of records, one set for each green run of the weekly. The sets are
  * A/A runs, so their spread is the noise. A minimum is the lower of the worst number of runs divided by 1.1, and the
  * worst number minus the spread. The spread comes from the sets where the budget stopped the property. A count at the
- * target is not a measure of the speed. The result is rounded down, and it is 0 or more.
+ * target is not a measure of the speed. The result is rounded down. A result under 1 cannot fail, so the property
+ * goes to `ungated` with its numbers.
  *
  * Only a property that reached its budget in a set gets a minimum. A property must be in each set. Fewer than 5 sets, a
  * set with a failure, or a property not in each set throws a `RangeError`.
@@ -83,18 +108,22 @@ export function deriveMinimums(sets: Readonly<Record<string, readonly RunRecord[
   // oxlint-disable-next-line unicorn/no-array-sort
   keys.sort();
   const minimums: Record<string, number> = {};
+  const ungated: Record<string, Ungated> = {};
   for (const key of keys) {
     const xs = runs.get(key) ?? [];
     if (xs.length !== sources.length) throw new RangeError(`weekly-minimums: the property "${key}" is in ${String(xs.length)} of ${String(sources.length)} sets.`);
     const measured = stopped.get(key) ?? [];
     const worst = Math.min(...xs);
     const spread = Math.max(...measured) - Math.min(...measured);
-    minimums[key] = Math.max(0, Math.floor(Math.min(worst / minimumMargin, worst - spread)));
+    const least = Math.floor(Math.min(worst / minimumMargin, worst - spread));
+    if (least >= 1) minimums[key] = least;
+    else ungated[key] = { reason: "not gated (noise > worst)", worst, spread };
   }
   return {
     schema: "weekly-runs/1",
-    derivation: `For each property over ${String(sources.length)} green runs of the weekly: the lower of the worst number of runs divided by ${String(minimumMargin)}, and the worst number minus the spread of the runs that the budget stopped, rounded down (rule 1e10f489).`,
+    derivation: `For each property over ${String(sources.length)} green runs of the weekly: the lower of the worst number of runs divided by ${String(minimumMargin)}, and the worst number minus the spread of the runs that the budget stopped, rounded down (rule 1e10f489). A property with a spread as large as its worst number is not gated: ungated names it.`,
     sources,
     minimums,
+    ungated,
   };
 }

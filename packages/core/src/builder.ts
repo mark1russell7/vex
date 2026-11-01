@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec, PrimitiveKind } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { app, call as callExpr, children, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type ItemNames, type Move } from "./ir.ts";
+import { addrExprs, app, axisExprs, call as callExpr, children, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { ok, toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -659,12 +659,18 @@ function inItemLoop<T>(build: () => T): T {
   }
 }
 
-/** This function tells if the expression reads the name, in one of its parts. It uses a stack, not recursion. */
+/**
+ * This function tells if the expression reads the name, in one of its parts. It uses a stack, not recursion. An `each`
+ * or a `fold` can have the name in its item names (`as`). Then it binds the name again for its body or its step, and
+ * those parts do not count (V-065). A chain made at the same depth of the loops has the same names, so a fold can hold such a chain in its step.
+ */
 function reads(e: Expr, name: string): boolean {
   const todo: Expr[] = [e];
   for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
     if (x.tag === "var" && x.name === name) return true;
-    todo.push(...children(x));
+    if (x.tag === "each" && x.as?.includes(name) === true) todo.push(...axisExprs(x.axis), ...addrExprs(x.at));
+    else if (x.tag === "fold" && x.as?.includes(name) === true) todo.push(...Object.values(x.init), ...axisExprs(x.axis), ...addrExprs(x.at), x.result);
+    else todo.push(...children(x));
   }
   return false;
 }

@@ -5,7 +5,7 @@ name: Weekly
 on:
   schedule:
     # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
-    - cron: "53 4 * * 0"
+    - cron: "12 4 * * 0"
   workflow_dispatch:
 
 permissions: {}

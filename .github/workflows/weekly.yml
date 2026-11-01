@@ -2,14 +2,26 @@ name: Weekly
 
 # The long run of phase D (docs/QUALITY-PLAN.md §8): at most one million runs of each property, each week. Each package
 # has its own job, so a slow package does not stop the others. The setup prints the seed. To repeat a failure, set FC_SEED.
-# Each property has a time budget of 10 minutes (FC_TIME_LIMIT_MS), inside the test time-out of 15 minutes. A property
-# that reaches the budget stops without a failure, and the log gives its number of runs. Before the budget, the slow
-# properties hit the time-out, so the run was red with no counterexample (2026-10-18 to 2026-11-01).
+# Each property has a time budget of 10 minutes (FC_TIME_LIMIT_MS), inside the test time-out of 15 minutes. Before the
+# budget, the slow properties hit the time-out, so the run was red with no counterexample (2026-10-18 to 2026-11-01).
+# A property that reaches the budget fails under its minimum of runs in spec/weekly-runs.json: the worst runs of 5 green
+# runs, times 0.9. Each job uploads the runs of each property. A dispatch with reps 5 and record_only gives the records
+# for scripts/weekly-minimums.ts.
 on:
   schedule:
     # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
     - cron: "53 4 * * 0"
   workflow_dispatch:
+    inputs:
+      reps:
+        description: The number of runs of each package, for the derivation of the minimums (at most 3 jobs at one time)
+        type: choice
+        options: ["1", "5"]
+        default: "1"
+      record_only:
+        description: Collect the records with no minimum of runs (a counterexample still fails)
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -19,7 +31,7 @@ concurrency:
 
 jobs:
   properties:
-    name: properties (1000000 runs) ${{ matrix.package }}
+    name: properties (1000000 runs) ${{ matrix.package }} ${{ matrix.rep }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     permissions:
@@ -30,6 +42,7 @@ jobs:
       max-parallel: 3
       matrix:
         package: ["@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@vex/pilots", "@vex/formula", "@vex/sheet-app", "@vex/site"]
+        rep: ${{ fromJSON(inputs.reps == '5' && '[1, 2, 3, 4, 5]' || '[1]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,3 +57,12 @@ jobs:
         env:
           FC_NUM_RUNS: "1000000"
           FC_TIME_LIMIT_MS: "600000"
+          FC_MIN_RUNS_FILE: ${{ github.workspace }}/spec/weekly-runs.json
+          FC_RECORD_FILE: ${{ runner.temp }}/runs-rep${{ matrix.rep }}.jsonl
+          FC_RECORD_ONLY: ${{ inputs.record_only && '1' || '' }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: weekly-runs-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/runs-rep${{ matrix.rep }}.jsonl
+          if-no-files-found: ignore

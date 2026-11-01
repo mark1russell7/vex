@@ -8,7 +8,8 @@
   },
   "include": [
     "vitest.config.ts",
-    "tools/mutation/*.ts"
+    "tools/mutation/*.ts",
+    "scripts/*.ts"
   ],
   "exclude": []
 }

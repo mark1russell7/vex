@@ -1,8 +1,8 @@
 /**
  * The minimum of runs of the weekly long run (`docs/QUALITY-PLAN.md` §8). Each property has a time budget. A property
- * that reaches its budget fails when it did fewer runs than its minimum. The minimum of a property is the worst
- * number of runs of 5 or more green runs of the weekly, times 0.9. This module is not a part of the API of the test
- * kit: `fc-setup.ts` and `scripts/weekly-minimums.ts` use it.
+ * that reaches its budget fails when it did fewer runs than its minimum. The minimum comes from 5 or more green runs of
+ * the weekly, with the margin on the safe side (rule 1e10f489 of the strategist). This module is not a part of the API
+ * of the test kit: `fc-setup.ts` and `scripts/weekly-minimums.ts` use it.
  */
 
 /** The record of one property in one run of the weekly. */
@@ -34,8 +34,8 @@ export interface Minimums {
 
 /** The number of green runs that a derivation needs. */
 export const minimumSources = 5;
-/** The part of the worst number of runs that a minimum keeps. */
-export const minimumFactor = 0.9;
+/** The margin of a minimum: the worst number of runs, divided by 1.1. */
+export const minimumMargin = 1.1;
 
 /**
  * This function gives the message of a failure for a record, or `undefined` when the record passes. With `recordOnly`,
@@ -58,24 +58,27 @@ export function parseRecords(text: string): RunRecord[] {
 }
 
 /**
- * This function gives the minimums from the sets of records, one set for each green run of the weekly. A minimum is the
- * worst number of runs of a property over the sets, times 0.9. Only a property that reached its budget in a set gets one. A
- * property must be in each set. Fewer than 5 sets, a set with a failure, or a property not in each set throws a
- * `RangeError`.
+ * This function gives the minimums from the sets of records, one set for each green run of the weekly. The sets are
+ * A/A runs, so their spread is the noise. A minimum is the lower of the worst number of runs divided by 1.1, and the
+ * worst number minus the spread. The spread comes from the sets where the budget stopped the property. A count at the
+ * target is not a measure of the speed. The result is rounded down, and it is 0 or more.
+ *
+ * Only a property that reached its budget in a set gets a minimum. A property must be in each set. Fewer than 5 sets, a
+ * set with a failure, or a property not in each set throws a `RangeError`.
  */
 export function deriveMinimums(sets: Readonly<Record<string, readonly RunRecord[]>>): Minimums {
   const sources = Object.keys(sets);
   if (sources.length < minimumSources) throw new RangeError(`weekly-minimums: ${String(sources.length)} sets of records. A derivation needs ${String(minimumSources)} or more.`);
   const runs = new Map<string, number[]>();
-  const stopped = new Set<string>();
+  const stopped = new Map<string, number[]>();
   for (const source of sources) {
     for (const r of sets[source] ?? []) {
       if (r.failed) throw new RangeError(`weekly-minimums: the set ${source} has a failure of "${r.key}". Use only green runs.`);
       runs.set(r.key, [...(runs.get(r.key) ?? []), r.runs]);
-      if (r.interrupted) stopped.add(r.key);
+      if (r.interrupted) stopped.set(r.key, [...(stopped.get(r.key) ?? []), r.runs]);
     }
   }
-  const keys = [...stopped];
+  const keys = [...stopped.keys()];
   // The type-aware lint does not have Array#toSorted, and sort() changes only the copy.
   // oxlint-disable-next-line unicorn/no-array-sort
   keys.sort();
@@ -83,11 +86,14 @@ export function deriveMinimums(sets: Readonly<Record<string, readonly RunRecord[
   for (const key of keys) {
     const xs = runs.get(key) ?? [];
     if (xs.length !== sources.length) throw new RangeError(`weekly-minimums: the property "${key}" is in ${String(xs.length)} of ${String(sources.length)} sets.`);
-    minimums[key] = Math.floor(Math.min(...xs) * minimumFactor);
+    const measured = stopped.get(key) ?? [];
+    const worst = Math.min(...xs);
+    const spread = Math.max(...measured) - Math.min(...measured);
+    minimums[key] = Math.max(0, Math.floor(Math.min(worst / minimumMargin, worst - spread)));
   }
   return {
     schema: "weekly-runs/1",
-    derivation: `The worst number of runs of each property over ${String(sources.length)} green runs of the weekly, times ${String(minimumFactor)}, rounded down.`,
+    derivation: `For each property over ${String(sources.length)} green runs of the weekly: the lower of the worst number of runs divided by ${String(minimumMargin)}, and the worst number minus the spread of the runs that the budget stopped, rounded down (rule 1e10f489).`,
     sources,
     minimums,
   };

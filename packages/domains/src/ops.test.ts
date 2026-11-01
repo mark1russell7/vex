@@ -163,10 +163,12 @@ describe("the ops of XYDomain", () => {
     ["dot", [{ x: 1, y: 2 }], -5],
     ["length", [], 5],
     ["distance", [{ x: 0, y: 0 }], 5],
+    ["distance", [{ x: 6, y: -8 }], 5],
     ["area", [], -12],
     ["sum", [], -1],
     ["equals", [{ x: 3, y: -4 }], true],
     ["equals", [{ x: 3, y: 4 }], false],
+    ["equals", [{ x: -3, y: -4 }], false],
   ];
   it.each(rows)("XY %s", (op, args, expected) => {
     expect(value(run([XYDomain], p, op, ...args))).toEqual(expected);
@@ -174,13 +176,19 @@ describe("the ops of XYDomain", () => {
 
   it("accepts plain objects with the numbers x and y only, and xy of NumDomain makes one", () => {
     expect([{ x: 1, y: 2 }, Object.assign(Object.create(null) as object, { x: 1, y: 2 })].map((u) => XYDomain.is(u))).toEqual([true, true]);
-    expect([new Vec2(1, 2), { x: 1, y: 2, z: 3 }, { x: 1 }, { x: "1", y: 2 }, { x: 1, y: "2" }, [1, 2], null, 1].map((u) => XYDomain.is(u))).toEqual([false, false, false, false, false, false, false, false]);
+    expect([new Vec2(1, 2), { x: 1, y: 2, z: 3 }, { x: 1 }, { x: "1", y: 2 }, { x: 1, y: "2" }, [1, 2], null, undefined, 1].map((u) => XYDomain.is(u))).toEqual([false, false, false, false, false, false, false, false, false]);
     expect(value(run([NumDomain, XYDomain], 3, "xy", -4))).toEqual({ x: 3, y: -4 });
     // A component that is not finite is not valid.
     expect(value(run([NumDomain, XYDomain], 3, "xy", Number.POSITIVE_INFINITY))).toBe("#NUM! invalid-value");
     expect(value(run([XYDomain], p, "divide", { x: 0, y: 1 }))).toBe("#NUM! invalid-value");
     expect(XYDomain.show?.(p)).toBe("(3, -4)");
-    expect(XYDomain.samples?.()).toHaveLength(3);
+    const samples = XYDomain.samples?.() ?? [];
+    expect(samples).toEqual([{ x: 0, y: 0 }, { x: 1.5, y: -2 }, { x: 3, y: 4 }]);
+    expect(samples.every((s) => XYDomain.is(s) && XYDomain.valid?.(s) === true)).toBe(true);
+    expect(Object.entries(XYDomain.ops).map(([name, op]) => `${name}: ${op.returns ?? "?"}`)).toEqual([
+      "x: number", "y: number", "add: domain", "subtract: domain", "multiply: domain", "divide: domain", "min: domain", "max: domain", "scale: domain", "negate: domain",
+      "abs: domain", "floor: domain", "ceil: domain", "round: domain", "dot: number", "length: number", "distance: number", "area: number", "sum: number", "equals: boolean",
+    ]);
   });
 });
 

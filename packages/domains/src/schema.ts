@@ -36,6 +36,7 @@ const notes = app(
   loop(
     v("docs"),
     ["d", "i"],
+    // Stryker disable next-line BooleanLiteral: flat skips an error item (LIST.BUILD), so a document without a kind gives no notes with true too
     loop(app("if", app("ifError", app("eq", app("kind", v("d")), lit("object")), lit(false)), app("leaves", v("d"), lit(3)), EMPTY), ["l"], rec({ path: field(v("l"), "path"), kind: app("if", app("eq", field(v("l"), "kind"), lit("array")), call("arrayKind", field(v("l"), "value")), field(v("l"), "kind")), doc: v("i") })),
   ),
 );

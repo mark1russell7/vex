@@ -1,7 +1,10 @@
 name: Weekly
 
-# The long run of phase D (docs/QUALITY-PLAN.md §8): one million runs of each property, each week. Each package has
-# its own job, so a slow package does not stop the others. The setup prints the seed. To repeat a failure, set FC_SEED.
+# The long run of phase D (docs/QUALITY-PLAN.md §8): at most one million runs of each property, each week. Each package
+# has its own job, so a slow package does not stop the others. The setup prints the seed. To repeat a failure, set FC_SEED.
+# Each property has a time budget of 10 minutes (FC_TIME_LIMIT_MS), inside the test time-out of 15 minutes. A property
+# that reaches the budget stops without a failure, and the log gives its number of runs. Before the budget, the slow
+# properties hit the time-out, so the run was red with no counterexample (2026-10-18 to 2026-11-01).
 on:
   schedule:
     # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
@@ -40,3 +43,4 @@ jobs:
       - run: pnpm --filter "${{ matrix.package }}" run test
         env:
           FC_NUM_RUNS: "1000000"
+          FC_TIME_LIMIT_MS: "600000"

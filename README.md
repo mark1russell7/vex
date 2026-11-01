@@ -66,6 +66,10 @@ The packages are on npm (see the badge for the version). The specification (Vex 
 | [`@vex/pilots`](./packages/pilots) | Programs of other projects in Vex: the grid layout of Graph |
 | [`@vex/cli`](./packages/cli) | The workspace commands of the template |
 
+## Speed
+
+The interpreter is the default. In CI, it takes approximately 17 to 41 times the time of hand-written loops on the programs of the speed lane. Tier 2 of `@mark1russell7/vex-compiler` takes 1.2 to 1.7 times, and the ireko modules take 1.3 to 3.3 times. The two speed gates give each limit and the 5 CI runs that set it.
+
 ## Commands
 
 ```sh

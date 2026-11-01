@@ -3,13 +3,24 @@
  * measures the generated code (tier 2) and the hand-written loops on the same machine, and checks the ratio against a
  * limit. The gate also checks that tier 2 gave each result, with no fallback.
  *
- * Phase C2 measured the median ratios 1.1 (NEAREST) and 1.05 (LIFE) on 2026-10-13, on a local machine. Phase C1
- * measured 2.3 and 1.6, and tier 1 measured 80 and 120. The runners of CI measure 1.5 to 1.66 (NEAREST) and 1.2 to 1.3
- * (LIFE) since 2026-10-14. The limit 2 for NEAREST and 1.5 for LIFE keep a margin for a busy runner, and a loss of the
- * fast paths of the sites fails them.
- * The ratios above came from runs with a fixed order of the arms and no record of the CPU. By the rule of the fleet of
- * 2026-10-30, they are void as claims. The limits stay. Since that day, the arms alternate with a swapped order, and
- * each run prints its CPU and its mode (measure.ts).
+ * The arms alternate in one process (core/bench/measure.ts).
+ *
+ * Each limit is the worst ratio of 5 CI runs times 1.1 (the fleet rule of 2026-10-30), rounded up. The runs are
+ * run 41022173204 of speed-gate.yml (2026-10-30): AMD EPYC 7763 in runs 2 to 4, AMD EPYC 9V45 in runs 1 and 5.
+ *
+ * | Case | Runs 1 to 5 | Worst | Limit |
+ * |---|---|---|---|
+ * | NEAREST | 1.50, 1.67, 1.65, 1.65, 1.50 | 1.67 | 1.84 |
+ * | LIFE | 1.27, 1.22, 1.22, 1.26, 1.30 | 1.30 | 1.43 |
+ * | radial, 60 children, nested | 2.62, 2.78, 2.95, 2.80, 2.66 | 2.95 | 3.25 |
+ * | radial, 12 children, linked | from 2.73 to 3.34 | 3.34 | 3.68 |
+ * | tree, 1000 nodes | 0.88, 0.96, 1.10, 1.01, 1.00 | 1.10 | 1.21 |
+ * | shapes, 1111 nodes | 1.72, 1.32, 1.62, 1.30, 1.34 | 1.72 | 1.90 |
+ * | the growth of the share of each value | 1.99, 2.02, 2.01, 1.99, 2.00 | 2.02 | 2.23 |
+ *
+ * NEAREST and LIFE change by less than 10 % from run to run, so their limits catch a loss of 10 %. Radial, tree and
+ * shapes change by 20 % to 32 %, so their limits catch only a larger loss (GATENOISE). The 9V45 gives NEAREST 1.50, and
+ * the 7763 gives 1.65. A PR that makes a ratio better sets its limit lower in the same PR.
  * Start: node packages/compiler/bench/gate.ts
  */
 import type { Space } from "@mark1russell7/vex";
@@ -42,7 +53,7 @@ const [small, large] = [share(500), share(1000)];
 
 // The strategy radial of ireko as a standalone module (§13.3), against the copy of the code of ireko in the pilot. A full
 // ring of children of mixed sizes needs the search of the radius, with the test of all pairs at each step. V-054 made
-// this module two times slower in the engine benchmark of ireko. The limit 4 catches such a loss of its columns.
+// this module two times slower in the engine benchmark of ireko. The limits in the header catch such a loss.
 const radialModule = ((): ((records: unknown, vars: unknown) => unknown) => {
   const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
   if (!m.ok) throw new Error(m.reason);
@@ -64,7 +75,7 @@ const ringOf = (n: number, mode: "nested" | "linked"): RadialInput => ({
 const radialCase = (n: number, mode: "nested" | "linked"): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limit: number } => {
   const input = ringOf(n, mode);
   const { space: s, vars } = radialRun(input);
-  return { title: `the radial module of ireko, a full ring of ${String(n)} children, ${mode}`, compiled: { run: () => radialModule(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limit: 4 };
+  return { title: `the radial module of ireko, a full ring of ${String(n)} children, ${mode}`, compiled: { run: () => radialModule(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limit: mode === "nested" ? 3.25 : 3.68 };
 };
 
 // A tree space as a standalone module (COMPILE.MODULE.TREE), against hand-written loops. At each node, the program gives
@@ -106,7 +117,7 @@ const treeCase = (n: number): { readonly title: string; readonly compiled: { rea
   // Each node has at most three children, so the depth is near log3(n).
   const records = Array.from({ length: n }, (_, i) => ({ w: (i * 37) % 11 }));
   const parents = records.map((_r, i) => (i === 0 ? -1 : Math.floor((i - 1) / 3)));
-  return { title: `a tree module, the team and the depth of each of ${String(n)} nodes`, compiled: { run: () => teamModule(records, {}, parents), tier: 2, fallbacks: () => 0 }, hand: () => teamHand(records, parents), limit: 3 };
+  return { title: `a tree module, the team and the depth of each of ${String(n)} nodes`, compiled: { run: () => teamModule(records, {}, parents), tier: 2, fallbacks: () => 0 }, hand: () => teamHand(records, parents), limit: 1.21 };
 };
 
 // The shapes pass of ireko as a module of a sheet, against the hand code of the pilot (COMPILE-FUSE, COMPILER.md §7.6).
@@ -129,12 +140,12 @@ const shapesCase = (branch: number, depth: number): { readonly title: string; re
   });
   const parents = records.map((r) => r.p);
   const vars = { limit: MAX_BANDS };
-  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapesModule(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limit: 6 };
+  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapesModule(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limit: 1.9 };
 };
 
 const CASES = [
-  { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limit: 2 },
-  { title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limit: 1.5 },
+  { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limit: 1.84 },
+  { title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limit: 1.43 },
   radialCase(12, "linked"),
   radialCase(60, "nested"),
   treeCase(1000),
@@ -151,10 +162,10 @@ for (const { title, compiled, hand, limit } of CASES) {
   console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
 }
 {
-  // The limit 2.6 is between the growth of O(n), 2, and the growth of O(n²), 4.
+  // The growth of O(n) is 2, and the growth of O(n²) is 4. The limit 2.23 comes from the runs in the header.
   const { ratio, a: v, b: h, noise } = paired(large.run, small.run);
-  const ok = ratio <= 2.6 && large.tier === 2 && large.fallbacks() === 0;
+  const ok = ratio <= 2.23 && large.tier === 2 && large.fallbacks() === 0;
   failed ||= !ok;
-  console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (limit 2.6), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
+  console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (limit 2.23), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
 }
 process.exit(failed ? 1 : 0);

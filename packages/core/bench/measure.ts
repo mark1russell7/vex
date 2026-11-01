@@ -45,6 +45,10 @@ export interface PairedOptions<I> {
   readonly clock?: () => number;
   /** For tests, mode `fresh`: the start of one child. The default starts the command as a process. */
   readonly startChild?: (command: readonly string[], input: string, warmup: number) => Promise<ChildResult>;
+  /** The machine of the run. The default is the machine of this process. */
+  readonly env?: Env;
+  /** The context of the run. The default is `context()`. */
+  readonly context?: string;
 }
 
 /** The line of JSON of one child of mode `fresh`: its time in ms, and its memory peak in bytes. */
@@ -65,13 +69,14 @@ export interface Env {
 
 /** The statistics of the ratios of one arm over the inputs. */
 export interface ArmRatios {
+  /** The number of the inputs with a ratio. */
   readonly inputs: number;
   readonly median: number;
   readonly p10: number;
   readonly p90: number;
   /** The share of the inputs whose ratio is outside [p10, p90] of the A/A arm. Without the A/A arm, it is null. */
   readonly moved: number | null;
-  /** The median ratio of the inputs of each group. */
+  /** The median ratio of the inputs of each group, with the groups in sorted order. An input with no group is in the group `all`. */
   readonly groups: Readonly<Record<string, number>>;
   readonly groupMean: number;
   readonly groupSD: number;
@@ -83,8 +88,9 @@ export interface InputReport {
   readonly group?: string;
   readonly ms: Readonly<Record<string, readonly number[]>>;
   readonly median: Readonly<Record<string, number>>;
-  /** The median time of the arm divided by the median time of the base, on this input. Lower tells faster. */
+  /** The median time of the arm divided by the median time of the base, on this input. Lower tells faster. The base has no ratio, and a base median of 0 gives no ratio. */
   readonly ratio: Readonly<Record<string, number>>;
+  /** The largest memory peak of each arm over its rounds, in bytes. Only mode `fresh` has it, and only for an arm with a peak. */
   readonly peakRss?: Readonly<Record<string, number>>;
 }
 
@@ -96,8 +102,10 @@ export interface PairedReport {
   readonly context?: string;
   readonly env: Env;
   readonly base: string;
+  /** The ids of the arms. The A/A arm is the last. */
   readonly arms: readonly string[];
   readonly inputs: readonly InputReport[];
+  /** The statistics of each arm that is not the base, with the A/A arm. */
   readonly ratios: Readonly<Record<string, ArmRatios>>;
   /** The ratios of the A/A arm. Without the A/A arm, it is null. */
   readonly noiseFloor: { readonly median: number; readonly p10: number; readonly p90: number } | null;
@@ -106,9 +114,10 @@ export interface PairedReport {
 /** This function gives the machine of this run. `BENCH_RUNNER` names the runner, if it is set. */
 export function env(): Env {
   const list = cpus();
-  const name = process.env["BENCH_RUNNER"] ?? process.env["RUNNER_NAME"];
+  // An empty value counts as no value, so "||" and not "??".
+  const name = process.env["BENCH_RUNNER"] || process.env["RUNNER_NAME"];
   return {
-    cpu: list[0]?.model.trim() ?? "unknown",
+    cpu: list[0]?.model.trim() || "unknown",
     cores: list.length,
     os: platform(),
     arch: arch(),
@@ -119,7 +128,7 @@ export function env(): Env {
 
 /** This function gives the context of a run: `BENCH_MODE`, else `ci` or `local`, and the flags of Node.js. */
 export function context(): string {
-  return [process.env["BENCH_MODE"] ?? (process.env["CI"] === "true" ? "ci" : "local"), ...process.execArgv].join(" ");
+  return [process.env["BENCH_MODE"] || (process.env["CI"] ? "ci" : "local"), ...process.execArgv].join(" ");
 }
 
 /** This function gives the line that a bench prints before its records: the machine, the mode and the context. */
@@ -146,51 +155,74 @@ export function median(xs: readonly number[]): number {
   return quantile(xs, 0.5);
 }
 
-/** This function gives the arms of a measurement, with the A/A arm after the base when `aa` is not `false`. */
+/** This function checks the options, and gives the arms with the A/A arm last when `aa` is not `false`. A bad option throws a `RangeError`. */
 function armsOf<I>(options: PairedOptions<I>): readonly Arm<I>[] {
-  const [base, ...rest] = options.arms;
+  if (options.mode !== "process" && options.mode !== "fresh") throw new RangeError(`measureIsolated: there is no mode "${String(options.mode)}".`);
+  if (!Number.isInteger(options.repeats) || options.repeats < 1) throw new RangeError("measureIsolated: the repeats are a whole number of 1 or more.");
+  const warmup = options.warmup ?? 1;
+  if (!Number.isInteger(warmup) || warmup < 0) throw new RangeError("measureIsolated: the warm-up runs are a whole number of 0 or more.");
+  const base = options.arms[0];
   if (base === undefined) throw new RangeError("measureIsolated: no arm. The first arm is the base.");
-  return options.aa === false ? options.arms : [base, { ...base, id: `${base.id}~aa` }, ...rest];
+  const arms = options.aa === false ? [...options.arms] : [...options.arms, { ...base, id: `${base.id}~aa` }];
+  if (arms.length < 2) throw new RangeError("measureIsolated: a comparison needs 2 arms or more, with the A/A arm.");
+  if (new Set(arms.map((a) => a.id)).size !== arms.length) throw new RangeError("measureIsolated: the ids of the arms are not unique.");
+  for (const a of arms) {
+    if (options.mode === "process" && a.run === undefined) throw new RangeError(`measureIsolated: the arm ${a.id} of mode process needs run.`);
+    if (options.mode === "fresh" && (a.command === undefined || a.command.length === 0)) throw new RangeError(`measureIsolated: the arm ${a.id} of mode fresh needs a command.`);
+  }
+  if (options.inputs.length === 0) throw new RangeError("measureIsolated: a comparison needs 1 input or more.");
+  if (new Set(options.inputs.map((i) => i.id)).size !== options.inputs.length) throw new RangeError("measureIsolated: the ids of the inputs are not unique.");
+  return arms;
+}
+
+/** This function gives the statistics of the ratios of one arm. The band is [p10, p90] of the A/A arm. */
+function ratiosOf(rows: readonly { readonly group?: string; readonly ratio: number }[], band: { readonly p10: number; readonly p90: number } | undefined): ArmRatios {
+  const rs = rows.map((r) => r.ratio);
+  const byGroup = new Map<string, number[]>();
+  for (const r of rows) byGroup.set(r.group ?? "all", [...(byGroup.get(r.group ?? "all") ?? []), r.ratio]);
+  // The type-aware lint does not have Array#toSorted, and sort() changes only the copy.
+  const keys = [...byGroup.keys()];
+  // oxlint-disable-next-line unicorn/no-array-sort
+  keys.sort();
+  const groups = Object.fromEntries(keys.map((g) => [g, median(byGroup.get(g) ?? [])]));
+  const gs = Object.values(groups);
+  const groupMean = gs.length === 0 ? Number.NaN : gs.reduce((s, x) => s + x, 0) / gs.length;
+  const groupSD = gs.length < 2 ? 0 : Math.sqrt(gs.reduce((s, x) => s + (x - groupMean) ** 2, 0) / (gs.length - 1));
+  const moved = band === undefined ? null : rs.length === 0 ? 0 : rs.filter((x) => x < band.p10 || x > band.p90).length / rs.length;
+  return { inputs: rs.length, median: median(rs), p10: quantile(rs, 0.1), p90: quantile(rs, 0.9), moved, groups, groupMean, groupSD };
 }
 
 /** This function gives the report from the raw times of each input. */
 function reportOf<I>(options: PairedOptions<I>, arms: readonly Arm<I>[], times: readonly Map<string, number[]>[], rss: readonly Map<string, number[]>[] | undefined): PairedReport {
   const base = arms[0]?.id ?? "";
   const aaId = `${base}~aa`;
+  const others = arms.slice(1);
   const inputs: InputReport[] = options.inputs.map((input, i) => {
     const ms = Object.fromEntries(arms.map((a) => [a.id, times[i]?.get(a.id) ?? []]));
-    const med = Object.fromEntries(arms.map((a) => [a.id, median(ms[a.id] ?? [])]));
-    const ratio = Object.fromEntries(arms.map((a) => [a.id, (med[a.id] ?? Number.NaN) / (med[base] ?? Number.NaN)]));
-    const peaks = rss?.[i];
+    // An arm with no times has no median, and an arm with no median has no ratio.
+    const med = Object.fromEntries(arms.filter((a) => (ms[a.id] ?? []).length > 0).map((a) => [a.id, median(ms[a.id] ?? [])]));
+    const b = med[base];
+    const ratio = b === undefined || !(b > 0) ? {} : Object.fromEntries(others.filter((a) => med[a.id] !== undefined).map((a) => [a.id, (med[a.id] ?? Number.NaN) / b]));
+    const peaks = [...(rss?.[i] ?? new Map<string, number[]>())].filter(([, xs]) => xs.length > 0).map(([id, xs]) => [id, Math.max(...xs)] as const);
     return {
       id: input.id,
       ...(input.group === undefined ? {} : { group: input.group }),
       ms,
       median: med,
       ratio,
-      ...(peaks === undefined ? {} : { peakRss: Object.fromEntries(arms.map((a) => [a.id, Math.max(...(peaks.get(a.id) ?? [Number.NaN]))])) }),
+      ...(peaks.length === 0 ? {} : { peakRss: Object.fromEntries(peaks) }),
     };
   });
-  const ratiosOf = (id: string): number[] => inputs.map((r) => r.ratio[id] ?? Number.NaN);
-  const aa = arms.some((a) => a.id === aaId) ? ratiosOf(aaId) : [];
-  const noiseFloor = aa.length === 0 ? null : { median: median(aa), p10: quantile(aa, 0.1), p90: quantile(aa, 0.9) };
-  const ratios = Object.fromEntries(
-    arms.map((a) => {
-      const rs = ratiosOf(a.id);
-      const byGroup = new Map<string, number[]>();
-      inputs.forEach((r, k) => {
-        const g = r.group ?? "all";
-        byGroup.set(g, [...(byGroup.get(g) ?? []), rs[k] ?? Number.NaN]);
-      });
-      const groups = Object.fromEntries([...byGroup].map(([g, xs]) => [g, median(xs)]));
-      const gs = Object.values(groups);
-      const groupMean = gs.reduce((s, x) => s + x, 0) / gs.length;
-      const groupSD = gs.length < 2 ? 0 : Math.sqrt(gs.reduce((s, x) => s + (x - groupMean) ** 2, 0) / (gs.length - 1));
-      const moved = noiseFloor === null ? null : rs.filter((x) => x < noiseFloor.p10 || x > noiseFloor.p90).length / rs.length;
-      return [a.id, { inputs: rs.length, median: median(rs), p10: quantile(rs, 0.1), p90: quantile(rs, 0.9), moved, groups, groupMean, groupSD }];
-    }),
-  );
-  return { schema: "paired-time/1", mode: options.mode, context: context(), env: env(), base, arms: arms.map((a) => a.id), inputs, ratios, noiseFloor };
+  const rowsOf = (id: string): { group?: string; ratio: number }[] =>
+    inputs.flatMap((r) => {
+      const ratio = r.ratio[id];
+      return ratio === undefined ? [] : [{ ...(r.group === undefined ? {} : { group: r.group }), ratio }];
+    });
+  const floor = arms.some((a) => a.id === aaId) ? ratiosOf(rowsOf(aaId), undefined) : undefined;
+  const band = floor === undefined ? undefined : { p10: floor.p10, p90: floor.p90 };
+  const ratios = Object.fromEntries(others.map((a) => [a.id, ratiosOf(rowsOf(a.id), band)]));
+  const noiseFloor = floor === undefined ? null : { median: floor.median, p10: floor.p10, p90: floor.p90 };
+  return { schema: "paired-time/1", mode: options.mode, context: options.context ?? context(), env: options.env ?? env(), base, arms: arms.map((a) => a.id), inputs, ratios, noiseFloor };
 }
 
 /** This function starts one child of mode `fresh` and gives its line of JSON. The time of the start does not count. */
@@ -234,8 +266,11 @@ function inProcess<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): Paire
         const value = input.value as I;
         for (let w = 0; w < warmup; w++) run(value);
         const t0 = clock();
-        run(value);
+        const out = run(value);
         times[i]?.get(arm.id)?.push(clock() - t0);
+        // A memory peak counts only in mode fresh: in one process, the heap holds the data of each arm.
+        if (typeof out === "object" && out !== null && typeof (out as { readonly peakRss?: unknown }).peakRss === "number")
+          throw new RangeError(`measureIsolated: the arm ${arm.id} gave a peakRss in mode process. A memory peak counts only in mode fresh.`);
       }
     });
   }
@@ -269,8 +304,9 @@ export function measureIsolated<I>(options: PairedOptions<I> & { readonly mode: 
 /** This function measures the arms on the inputs, with a new process for each arm in each round. */
 export function measureIsolated<I>(options: PairedOptions<I> & { readonly mode: "fresh" }): Promise<PairedReport>;
 export function measureIsolated<I>(options: PairedOptions<I>): PairedReport | Promise<PairedReport> {
-  const arms = armsOf(options);
-  return options.mode === "process" ? inProcess(options, arms) : inFresh(options, arms);
+  // In mode fresh, a bad option rejects the promise.
+  if (options.mode === "fresh") return Promise.resolve().then(async () => inFresh(options, armsOf(options)));
+  return inProcess(options, armsOf(options));
 }
 
 /**

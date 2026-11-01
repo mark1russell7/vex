@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { deriveMinimums, parseRecords, ungatedNote, verdict, type RunRecord } from "./fc-budget.ts";
 
 const record = (key: string, runs: number, more: Partial<RunRecord> = {}): RunRecord => ({ key, runs, target: 1_000_000, interrupted: true, failed: false, cpu: "test", ...more });
+/** One set of records for each number, each with the one property `a`. */
+const setsOf = (xs: readonly number[]): Record<string, RunRecord[]> => Object.fromEntries(xs.map((n, i) => [`run-${String(i)}`, [record("a", n)]]));
 
 describe("the minimum of runs of the weekly long run", () => {
   it("passes a property that did all its runs, also with no minimum", () => {
@@ -44,11 +46,10 @@ describe("the minimum of runs of the weekly long run", () => {
   });
 
   it("divides by 1.1 when the spread is small, and does not gate a property whose spread is as large as its worst runs", () => {
-    const sets = (xs: readonly number[]): Record<string, RunRecord[]> => Object.fromEntries(xs.map((n, i) => [`run-${String(i)}`, [record("a", n)]]));
-    expect(deriveMinimums(sets([1000, 1010, 1020, 1030, 1040])).minimums).toEqual({ a: 909 });
-    const noisy = deriveMinimums(sets([100, 300, 300, 300, 300]));
+    expect(deriveMinimums(setsOf([1000, 1010, 1020, 1030, 1040])).minimums).toEqual({ a: 909 });
+    const noisy = deriveMinimums(setsOf([100, 300, 300, 300, 300]));
     expect([noisy.minimums, noisy.ungated]).toEqual([{}, { a: { reason: "not gated (noise > worst)", worst: 100, spread: 200 } }]);
-    expect(deriveMinimums(sets([100, 200, 200, 200, 200])).ungated).toEqual({ a: { reason: "not gated (noise > worst)", worst: 100, spread: 100 } });
+    expect(deriveMinimums(setsOf([100, 200, 200, 200, 200])).ungated).toEqual({ a: { reason: "not gated (noise > worst)", worst: 100, spread: 100 } });
   });
 
   it("takes a property that reached its budget in only some sets", () => {

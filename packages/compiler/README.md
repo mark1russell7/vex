@@ -88,7 +88,16 @@ With `lists: "plain"`, the key of an item of the input is the text of its positi
 
 ## Speed
 
-The speed gate compares tier 2 with hand-written loops. On 2026-10-13, the nearest other box was 1.0 to 1.1 times the loops, and the Game of Life was 1.05 to 1.13 times. Tier 1 was 80 and 120 times. The plan of the compiler is in [`docs/COMPILER.md`](https://github.com/mark1russell7/vex/blob/main/docs/COMPILER.md).
+The speed gate compares tier 2 with hand-written loops, in 5 CI runs on 2026-10-30. Lower is better.
+
+| Program | Tier 2 / loops | Tier 1 / loops |
+|---|---|---|
+| The nearest other box, at each of 60 keys | 1.50 to 1.67 | 16.6 to 21.2 |
+| One step of the Game of Life, 16 by 16 | 1.22 to 1.30 | 38.0 to 40.6 |
+| The shapes module of ireko, 1111 nodes | 1.30 to 1.72 | |
+| The radial module of ireko | 2.62 to 3.34 | |
+
+`bench/gate.ts` gives the limits and the runs that set them. The plan of the compiler is in [`docs/COMPILER.md`](https://github.com/mark1russell7/vex/blob/main/docs/COMPILER.md).
 
 ## License
 

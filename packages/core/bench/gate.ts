@@ -1,19 +1,22 @@
 /**
  * The speed gate (docs/QUALITY-PLAN.md §8, phase C). For each program, the gate measures the time of Vex and the time
  * of the hand-written loops on the same machine, and checks the ratio against a limit. A ratio does not depend much on
- * the speed of the machine, so the gate works on a shared CI runner. The limits are about twice the ratios that the
- * work measured on 2026-10-08 (17 and 36), so only a real loss of speed fails the gate.
- * The ratios above came from runs with a fixed order of the arms and no record of the CPU. By the rule of the fleet of
- * 2026-10-30, they are void as claims. The limits stay. Since that day, the arms alternate with a swapped order, and
- * each run prints its CPU and its mode (measure.ts).
+ * the speed of the machine, so the gate works on a shared CI runner. The arms alternate in one process (measure.ts).
+ *
+ * Each limit is the worst ratio of 5 CI runs times 1.1 (the fleet rule of 2026-10-30), rounded up. The runs are
+ * run 41022173204 of speed-gate.yml (2026-10-30): AMD EPYC 7763 in runs 2 to 4, AMD EPYC 9V45 in runs 1 and 5.
+ * - NEAREST: 17.4, 21.0, 20.9, 21.2 and 16.6. The worst is 21.2, so the limit is 23.4. The 9V45 gives about 17.
+ * - LIFE: 38.6, 38.0, 26.8, 38.4 and 40.6. The worst is 40.6, so the limit is 44.7. Run 3 had an A/A band of 0.71
+ *   to 0.99, so its 26.8 is noise.
+ * A PR that makes a ratio better sets its limit lower in the same PR.
  * Start: node packages/core/bench/gate.ts
  */
 import { envLine, paired } from "./measure.ts";
 import { LIFE, NEAREST } from "./programs.ts";
 
 const LIMITS = [
-  { program: NEAREST, limit: 35 },
-  { program: LIFE, limit: 75 },
+  { program: NEAREST, limit: 23.4 },
+  { program: LIFE, limit: 44.7 },
 ] as const;
 
 console.info(envLine("process"));

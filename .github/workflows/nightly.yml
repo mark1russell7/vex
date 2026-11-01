@@ -10,7 +10,8 @@ on:
     inputs:
       packages:
         description: The packages of the mutation lane, as a JSON list
-        default: '["core.kernel", "core.base", "domains", "testkit", "compiler"]'
+        # The whole compiler takes more than the time-out of a job, so the lane has it in two parts.
+        default: '["core.kernel", "core.base", "domains", "testkit", "compiler.module", "compiler.rest"]'
 
 permissions: {}
 

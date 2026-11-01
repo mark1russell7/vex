@@ -256,6 +256,23 @@ describe("the other members of the builder", () => {
     expect(() => row.from("n").iterate(1, { x: 0 }, () => ({ y: 1 }) as never, (vars) => vars.x)).toThrow('the name "y" of the step is not a name of init');
   });
 
+  it("V-065 BUILD.LIST.ITEM: a fold holds a list chain that reads its own index, made at the same depth of the loops", () => {
+    const row = vex(Num).over(space.array([{ n: 1 }, { n: 2 }, { n: 3 }]));
+    // The chain binds the index name of depth 0. The step of the fold does not read the index of the fold.
+    const indexSum = row.start(0).each((t) => t.from("n")).each((_c, _item, i) => i).sum();
+    const plain = row.start(0).each((t) => t.from("n")).fold({ s: 0 }, (vars, n) => ({ s: vars.s._.plus(n)._.plus(indexSum) }), (vars) => vars.s);
+    expect(plain.all().values()).toEqual([15, 15, 15]);
+    // A fold over a list whose step reads its own index and holds the chain: each index has its own binding.
+    const items = row.start(0).each((t) => t.from("n"));
+    const both = items.each((_c, item) => item).fold({ s: 0 }, (vars, n, i) => ({ s: vars.s._.plus(n)._.times(i)._.plus(indexSum) }), (vars) => vars.s);
+    // s = ((0 + 1) * 0 + 3), then ((3 + 2) * 1 + 3), then ((8 + 3) * 2 + 3).
+    expect(both.all().values()).toEqual([25, 25, 25]);
+    // The held chain can be a fold that reads its own index: 0 + 1 + 2.
+    const foldIndex = items.each((_c, item) => item).fold({ s: 0 }, (vars, _n, i) => ({ s: vars.s._.plus(i) }), (vars) => vars.s);
+    const viaFold = row.start(0).each((t) => t.from("n")).fold({ s: 0 }, (vars, n) => ({ s: vars.s._.plus(n)._.plus(foldIndex) }), (vars) => vars.s);
+    expect(viaFold.all().values()).toEqual([15, 15, 15]);
+  });
+
   it("each() and the reductions of a list chain", () => {
     expect(weights.program.tag).toBe("let");
     expect(optionalValue(weights.sum().at("A"))).toBe(17);

@@ -2,6 +2,8 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const work = (p: string): string => fileURLToPath(new URL(`./work/${p}`, import.meta.url));
+// Stryker runs this folder in a copy (.stryker-tmp/sandbox-*), so the paths come from the folder of this file.
+const pilots = fileURLToPath(new URL("./pilots/src/", import.meta.url)).replaceAll("\\", "/");
 
 // The tests of the four packages in work/, run by Vitest 4.1. The aliases make "vitest" the Vitest of this
 // lane, and "@mark1russell7/vex" the copy that Stryker mutates.
@@ -17,7 +19,7 @@ export default defineConfig({
       resolveId(source, importer) {
         if (source !== "@mark1russell7/vex-domains") return null;
         const from = (importer ?? "").replaceAll("\\", "/");
-        const plain = /\/work\/compiler\/module(-[a-z]+)*\.test\.ts$/.test(from) || /\/tools\/mutation\/pilots\/src\//.test(from);
+        const plain = /\/work\/compiler\/module(-[a-z]+)*\.test\.ts$/.test(from) || from.startsWith(pilots);
         return plain ? work("domains-plain/index.ts") : work("domains/index.ts");
       },
     },

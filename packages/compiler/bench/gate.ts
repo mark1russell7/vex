@@ -44,7 +44,7 @@ import type { Space } from "@mark1russell7/vex";
 import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
 import { radialArrange, radialRun } from "../../pilots/src/ireko-radial.ts";
-import { allEdits, loadRadial, noChecks, noColumnTry, noItemTry, ringOf } from "./ablation.ts";
+import { handBoth, handPairs, handSum, loadRadial, ringOf } from "./ablation.ts";
 import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapesTree, type ShapeRecord } from "../../pilots/src/ireko-shapes.ts";
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
@@ -161,7 +161,7 @@ const shapesCase = (branch: number, depth: number): { readonly title: string; re
   return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapesModule(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes") };
 };
 
-// The ablation of RADIALGAP (step 3, predictions vex-radialgap-ablation-1102 and -2 of the fleet): with GATE_ABLATE=1,
+// The ablation of RADIALGAP (step 3, predictions vex-radialgap-ablation-1102, -2 and -3 of the fleet): with GATE_ABLATE=1,
 // variants of the nested radial module are more cases. `ablation.ts` makes them. A variant must give the result of the
 // module on the case input, or the gate stops.
 const ablationCase = (name: string, edit: (source: string) => string): ReturnType<typeof radialCase> => {
@@ -180,7 +180,7 @@ const CASES_BASE = [
   treeCase(1000),
   shapesCase(10, 3),
 ] as const;
-const CASES = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, ablationCase("checks", noChecks), ablationCase("column try", noColumnTry), ablationCase("item try", noItemTry), ablationCase("all", allEdits)] : CASES_BASE;
+const CASES = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, ablationCase("hand sum", handSum), ablationCase("hand pairs", handPairs), ablationCase("hand both", handBoth)] : CASES_BASE;
 
 // With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
 // changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run

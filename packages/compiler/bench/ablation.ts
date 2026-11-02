@@ -59,3 +59,55 @@ export const noItemTry = (source: string): string => {
 
 /** This edit applies the three edits together. */
 export const allEdits = (source: string): string => noItemTry(noColumnTry(noChecks(source)));
+
+// The transplants (the third ablation): a function of the module becomes the code of the hand arm. The names of the
+// module are the names of today's emitter: `fn42` gives the need of a child, `fn7` its radius, `c12` the direction,
+// `c13` the start angle and `v7` the gap. A change of the emitter stops the edit, or the test of the result.
+const ARRAYS_AFTER = "  const fn42 = (k21) => G(col41(k21));\n";
+const SUM_HEAD = "  const fn58 = (p47) => {\n";
+const PAIRS_HEAD = "  const fn115 = (p74) => {\n";
+/** This edit adds packed arrays of the needs and the radii of the children, made once at their first use. */
+const withArrays = (source: string): string =>
+  replaceOnce(source, ARRAYS_AFTER, `${ARRAYS_AFTER}  let NEED_, RHO_;\n  const needs = () => (NEED_ ??= Array.from({ length: n }, (_, j) => fn42(j)));\n  const rhos = () => (RHO_ ??= Array.from({ length: n }, (_, j) => fn7(j)));\n`);
+/** This function replaces the function that starts with `head`, up to its end at the indent of two spaces. */
+const replaceFunction = (source: string, head: string, to: string): string => {
+  if (source.split(head).length !== 2) throw new Error(`ablation: the edit needs the text "${head.trim()}" once in the radial module.`);
+  const from = source.indexOf(head);
+  const end = source.indexOf("\n  };\n", from);
+  if (end < 0) throw new Error(`ablation: the function "${head.trim()}" has no end.`);
+  return source.slice(0, from) + to + source.slice(end + "\n  };\n".length);
+};
+const HAND_SUM = `${SUM_HEAD}    const need = needs();
+    let sum = 0;
+    for (let j = 0; j < n; j++) sum += 2 * Math.asin(Math.min(1, need[j] / (2 * p47)));
+    return sum;
+  };
+`;
+const HAND_PAIRS = `${PAIRS_HEAD}    const need = needs(), rho = rhos(), r = p74;
+    const steps = need.map((d) => 2 * Math.asin(Math.min(1, d / (2 * r))));
+    const spare = (2 * Math.PI - steps.reduce((a, b) => a + b, 0)) / n;
+    if (spare < -1e-9) return false;
+    const angles = [];
+    let angle = G(c13);
+    for (const step of steps) {
+      angles.push(angle);
+      angle += c12 * (step + Math.max(0, spare));
+    }
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const d = Math.abs(angles[i] - angles[j]) % (2 * Math.PI);
+        if (2 * r * Math.sin(Math.min(d, 2 * Math.PI - d) / 2) < rho[i] + rho[j] + v7 - 1e-7) return false;
+      }
+    }
+    return true;
+  };
+`;
+
+/** This edit makes the sum of the chord angles at a radius the loop of the hand arm, over a packed array of the needs. */
+export const handSum = (source: string): string => replaceFunction(withArrays(source), SUM_HEAD, HAND_SUM);
+
+/** This edit makes the test of a radius the code of the hand arm: the angles, then the pairs, with a return at the first pair that is too close. */
+export const handPairs = (source: string): string => replaceFunction(withArrays(source), PAIRS_HEAD, HAND_PAIRS);
+
+/** This edit applies the two transplants together. */
+export const handBoth = (source: string): string => replaceFunction(replaceFunction(withArrays(source), SUM_HEAD, HAND_SUM), PAIRS_HEAD, HAND_PAIRS);

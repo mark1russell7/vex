@@ -43,7 +43,8 @@
 import type { Space } from "@mark1russell7/vex";
 import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
-import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, radialArrange, radialRun, type RadialInput } from "../../pilots/src/ireko-radial.ts";
+import { radialArrange, radialRun } from "../../pilots/src/ireko-radial.ts";
+import { allEdits, loadRadial, noChecks, noColumnTry, noItemTry, ringOf } from "./ablation.ts";
 import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapesTree, type ShapeRecord } from "../../pilots/src/ireko-shapes.ts";
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
@@ -88,27 +89,7 @@ const [small, large] = [share(500), share(1000)];
 // The strategy radial of ireko as a standalone module (§13.3), against the copy of the code of ireko in the pilot. A full
 // ring of children of mixed sizes needs the search of the radius, with the test of all pairs at each step. V-054 made
 // this module two times slower in the engine benchmark of ireko. The limits in the header catch such a loss.
-type RadialRun = (records: unknown, vars: unknown) => unknown;
-/** This function loads the radial module, with the source changed by `edit` (the ablation cases). */
-const loadRadial = (edit: (source: string) => string): RadialRun => {
-  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
-  if (!m.ok) throw new Error(m.reason);
-  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
-  const load = new Function(`${edit(m.source.replaceAll(/^export /gm, ""))}\nreturn radial;`) as () => RadialRun;
-  return load();
-};
 const radialModule = loadRadial((source) => source);
-const ringOf = (n: number, mode: "nested" | "linked"): RadialInput => ({
-  mode,
-  self: { width: 40, height: 30 },
-  gap: 8,
-  options: { startAngle: -90, sweep: 360, clockwise: true, distance: 0 },
-  children: Array.from({ length: n }, (_, i) => {
-    const width = 10 + ((i * 37) % 90);
-    const height = 10 + ((i * 53) % 70);
-    return { box: { width, height }, extent: { x: 0, y: 0, width, height } };
-  }),
-});
 const radialCase = (n: number, mode: "nested" | "linked"): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limits: CaseLimits } => {
   const input = ringOf(n, mode);
   const { space: s, vars } = radialRun(input);
@@ -180,23 +161,9 @@ const shapesCase = (branch: number, depth: number): { readonly title: string; re
   return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapesModule(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes") };
 };
 
-// The ablation of RADIALGAP (step 3, prediction vex-radialgap-ablation-1102 of the fleet): with GATE_ABLATE=1, variants of
-// the nested radial module are more cases. Each variant changes helpers of the emitted source, and each replaced text
-// must be in the source once. A variant must give the result of the module on the case input, or the gate stops.
-const HELPERS = {
-  k: "const k_number = (x) => (Number.isFinite(x) ? x : F());",
-  g: "function G(x) { return x === E ? F() : x; }",
-  q: "function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }",
-} as const;
-const replaceOnce = (source: string, from: string, to: string): string => {
-  if (source.split(from).length !== 2) throw new Error(`gate: the ablation needs the text "${from}" once in the radial module.`);
-  return source.replace(from, () => to);
-};
-// The variant checks makes the number checks and the error checks of lazy values the identity: an upper bound of what
-// the removal of the checks that the compiler can prove not needed wins.
-const noChecks = (source: string): string => replaceOnce(replaceOnce(source, HELPERS.k, "const k_number = (x) => x;"), HELPERS.g, "function G(x) { return x; }");
-// The variant columns keeps the memo of a column in a packed array, without its try block. The ring has fewer than 4096 children.
-const packedColumns = (source: string): string => replaceOnce(source, HELPERS.q, "function Q(f) { const m = new Array(4096).fill(undefined); return (j) => { let v = m[j]; if (v === undefined) { v = f(j); m[j] = v; } return v; }; }");
+// The ablation of RADIALGAP (step 3, predictions vex-radialgap-ablation-1102 and -2 of the fleet): with GATE_ABLATE=1,
+// variants of the nested radial module are more cases. `ablation.ts` makes them. A variant must give the result of the
+// module on the case input, or the gate stops.
 const ablationCase = (name: string, edit: (source: string) => string): ReturnType<typeof radialCase> => {
   const input = ringOf(60, "nested");
   const { space: s, vars } = radialRun(input);
@@ -213,7 +180,7 @@ const CASES_BASE = [
   treeCase(1000),
   shapesCase(10, 3),
 ] as const;
-const CASES = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, ablationCase("checks", noChecks), ablationCase("columns", packedColumns), ablationCase("both", (source) => packedColumns(noChecks(source)))] : CASES_BASE;
+const CASES = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, ablationCase("checks", noChecks), ablationCase("column try", noColumnTry), ablationCase("item try", noItemTry), ablationCase("all", allEdits)] : CASES_BASE;
 
 // With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
 // changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run

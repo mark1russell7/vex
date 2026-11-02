@@ -176,8 +176,8 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       '@mark1russell7/conventions':
-        specifier: ^0.14.0
-        version: 0.14.1
+        specifier: ^0.16.0
+        version: 0.16.0
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -243,8 +243,8 @@ importers:
   packages/core:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.17.0
-        version: 0.17.0
+        specifier: ^0.18.0
+        version: 0.18.0
     devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -554,8 +554,8 @@ importers:
   tools/mutation:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.17.0
-        version: 0.17.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains
@@ -1589,11 +1589,11 @@ packages:
   '@mark1russell7/coeval@0.14.0':
     resolution: {integrity: sha512-98JZ3BKi9vd8wj43QRvEW8ymYrlqG6YBZTg2EQ9VDFI+VwBf7n8K8pWJlZXtk2N+zEYGkBIoRh2eC7a7Kij8Yw==}
 
-  '@mark1russell7/coeval@0.17.0':
-    resolution: {integrity: sha512-JATXsfr+3SWnVCzYhUSxxvvd6t+99mnxL15BJEqTnPqx8is+8eo4KUj9CQEp//aoDiPSx97tZc4ntC2X+eMv4A==}
+  '@mark1russell7/coeval@0.18.0':
+    resolution: {integrity: sha512-eOK4wHB/sPLk/TSqwe6Q1HcqGL5RuDBj624NWotQuA/zGH5Err2myHOpUveyg7GVBds2uht2gNOHbrtcF1w0xg==}
 
-  '@mark1russell7/conventions@0.14.1':
-    resolution: {integrity: sha512-GjNgPL9ZvKeWtt4W6uSWUsbSaM7kvRtshgaESnJpa3F0liPvMjNFAtvk9hsQom5kzFpJoXSRS4eqomHeDoMr6A==}
+  '@mark1russell7/conventions@0.16.0':
+    resolution: {integrity: sha512-XtfP+joIOzkdm1ane/drcH8O8mFB60VVB3NQJTypD2vDTcB81vFBVAU2cZ+UNjA+ou2oYYehLSw7im0ZIhaMVA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -5560,9 +5560,9 @@ snapshots:
 
   '@mark1russell7/coeval@0.14.0': {}
 
-  '@mark1russell7/coeval@0.17.0': {}
+  '@mark1russell7/coeval@0.18.0': {}
 
-  '@mark1russell7/conventions@0.14.1': {}
+  '@mark1russell7/conventions@0.16.0': {}
 
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7': {}
 

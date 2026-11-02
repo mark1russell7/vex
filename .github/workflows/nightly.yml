@@ -17,8 +17,9 @@ permissions: {}
 
 # The runner slots of the account are a budget: one run for each branch. A new run on the same branch stops the old
 # run, and a run on a branch does not stop a run on another branch.
+# The event name is in the key: a dispatch with other inputs never cancels or holds a scheduled run (fleet rule of 2026-11-02).
 concurrency:
-  group: nightly-${{ github.ref }}
+  group: nightly-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

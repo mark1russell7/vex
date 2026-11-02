@@ -14,6 +14,10 @@ on:
         type: choice
         options: ["1", "5"]
         default: "1"
+      ablate:
+        description: With true, the gate of the compiler also measures the ablation variants of the nested radial case (RADIALGAP)
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -102,6 +106,8 @@ jobs:
       - run: pnpm --filter @mark1russell7/vex run bench:gate | tee gates.txt
       # The gate of the compiler runs also when the first gate fails, and the summary keeps the lines of both.
       - if: ${{ !cancelled() }}
+        env:
+          GATE_ABLATE: ${{ inputs.ablate && '1' || '0' }}
         run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a gates.txt
       - if: ${{ !cancelled() }}
         run: |

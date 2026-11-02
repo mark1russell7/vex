@@ -68,6 +68,12 @@ const CPU = cpus()[0]?.model ?? "";
 const limitsOf = (c: keyof typeof LIMITS): CaseLimits => limitsFor(LIMITS[c], CPU);
 const SHARE = limitsOf("share");
 
+/** This function gives a function that makes its value at the first call only, so a process makes only what its case needs. */
+const once = <T>(make: () => T): (() => T) => {
+  let made: { readonly value: T } | undefined;
+  return () => (made ??= { value: make() }).value;
+};
+
 /** This function gives a run of a program at each key of a space, in tier 2. */
 function atEachKey(program: { readonly program: Parameters<typeof tiered>[0] }, s: Space, domains: Parameters<typeof tiered>[1] = { domains: [PtDomain] }): { readonly run: () => void; readonly tier: 1 | 2; readonly fallbacks: () => number } {
   const p = tiered(program.program, domains);
@@ -84,29 +90,30 @@ function atEachKey(program: { readonly program: Parameters<typeof tiered>[0] }, 
 // Tier 2 computes the total once for each space, so the run at each of 1000 keys costs twice the run at each of 500.
 const share = (n: number): ReturnType<typeof atEachKey> =>
   atEachKey({ program: app("divide", ref("x"), app("sum", each(axes.all, ref("x")))) }, space.array(Array.from({ length: n }, (_, i) => ({ x: (i % 7) + 1 }))), { domains: [NumDomain] });
-const [small, large] = [share(500), share(1000)];
+const shares = once(() => [share(500), share(1000)] as const);
 
 // The strategy radial of ireko as a standalone module (§13.3), against the copy of the code of ireko in the pilot. A full
 // ring of children of mixed sizes needs the search of the radius, with the test of all pairs at each step. V-054 made
 // this module two times slower in the engine benchmark of ireko. The limits in the header catch such a loss.
-const radialModule = loadRadial((source) => source);
+const radialModule = once(() => loadRadial((source) => source));
 const radialCase = (n: number, mode: "nested" | "linked"): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limits: CaseLimits } => {
   const input = ringOf(n, mode);
   const { space: s, vars } = radialRun(input);
-  return { title: `the radial module of ireko, a full ring of ${String(n)} children, ${mode}`, compiled: { run: () => radialModule(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limits: limitsOf(mode) };
+  const radial = radialModule();
+  return { title: `the radial module of ireko, a full ring of ${String(n)} children, ${mode}`, compiled: { run: () => radial(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limits: limitsOf(mode) };
 };
 
 // A tree space as a standalone module (COMPILE.MODULE.TREE), against hand-written loops. At each node, the program gives
 // the cost of its team, the sum over its descendants (EXAMPLE.TREE), and its depth, the count of its ancestors.
 const TEAM = rec({ team: app("add", ref("w"), app("sum", each(axes.descendants, ref("w")))), depth: app("count", each(axes.ancestors, ref("w"))) });
 type TreeRun = (records: unknown, vars: unknown, parents: unknown) => unknown;
-const teamModule = ((): TreeRun => {
+const teamModule = once((): TreeRun => {
   const m = emitModule(TEAM, { domains: [NumDomain], schema: { fields: { w: "number" } }, space: "tree", name: "team" });
   if (!m.ok) throw new Error(m.reason);
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
   const load = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn team;`) as () => TreeRun;
   return load();
-})();
+});
 
 /** This function gives the cost of the team and the depth of each node, with loops: a walk with a stack, and a walk up. */
 function teamHand(records: readonly { readonly w: number }[], parents: readonly number[]): readonly { readonly team: number; readonly depth: number }[] {
@@ -135,18 +142,19 @@ const treeCase = (n: number): { readonly title: string; readonly compiled: { rea
   // Each node has at most three children, so the depth is near log3(n).
   const records = Array.from({ length: n }, (_, i) => ({ w: (i * 37) % 11 }));
   const parents = records.map((_r, i) => (i === 0 ? -1 : Math.floor((i - 1) / 3)));
-  return { title: `a tree module, the team and the depth of each of ${String(n)} nodes`, compiled: { run: () => teamModule(records, {}, parents), tier: 2, fallbacks: () => 0 }, hand: () => teamHand(records, parents), limits: limitsOf("tree") };
+  const team = teamModule();
+  return { title: `a tree module, the team and the depth of each of ${String(n)} nodes`, compiled: { run: () => team(records, {}, parents), tier: 2, fallbacks: () => 0 }, hand: () => teamHand(records, parents), limits: limitsOf("tree") };
 };
 
 // The shapes pass of ireko as a module of a sheet, against the hand code of the pilot (COMPILE-FUSE, COMPILER.md §7.6).
 // The module has the option fuse, so each step of the fusion shows its gain in this case.
-const shapesModule = ((): TreeRun => {
+const shapesModule = once((): TreeRun => {
   const m = emitSheetModule(SHAPE_COLUMNS, { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", fuse: true });
   if (!m.ok) throw new Error(m.reason);
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitSheetModule, as in the build of ireko.
   const load = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn shapesOf;`) as () => TreeRun;
   return load();
-})();
+});
 
 const shapesCase = (branch: number, depth: number): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limits: CaseLimits } => {
   // A root and `depth` levels of `branch` children. Each node wants its shape, and each mode is linked.
@@ -158,7 +166,8 @@ const shapesCase = (branch: number, depth: number): { readonly title: string; re
   });
   const parents = records.map((r) => r.p);
   const vars = { limit: MAX_BANDS };
-  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapesModule(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes") };
+  const shapes = shapesModule();
+  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapes(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes") };
 };
 
 // The ablation of RADIALGAP (step 3, predictions vex-radialgap-ablation-1102, -2 and -3 of the fleet): with GATE_ABLATE=1,
@@ -168,19 +177,28 @@ const ablationCase = (name: string, edit: (source: string) => string): ReturnTyp
   const input = ringOf(60, "nested");
   const { space: s, vars } = radialRun(input);
   const variant = loadRadial(edit);
-  if (JSON.stringify(variant(s.records, vars)) !== JSON.stringify(radialModule(s.records, vars))) throw new Error(`gate: the ablation variant ${name} gives another result.`);
+  if (JSON.stringify(variant(s.records, vars)) !== JSON.stringify(radialModule()(s.records, vars))) throw new Error(`gate: the ablation variant ${name} gives another result.`);
   return { title: `the radial module of ireko, a full ring of 60 children, nested, ablation ${name}`, compiled: { run: () => variant(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limits: limitsOf("nested") };
 };
 
-const CASES_BASE = [
-  { title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limits: limitsOf("nearest") },
-  { title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limits: limitsOf("life") },
-  radialCase(12, "linked"),
-  radialCase(60, "nested"),
-  treeCase(1000),
-  shapesCase(10, 3),
-] as const;
-const CASES = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, ablationCase("hand sum", handSum), ablationCase("hand pairs", handPairs), ablationCase("hand both", handBoth)] : CASES_BASE;
+// Each case is a function that makes the case, so a process makes only its own case (MODELLIMITS). When each process made
+// all cases, the three ablation variants ran in the process of the shapes case too. Its ratio on the 7763 went from 1.58
+// to 1.66 (7 runs) to 1.67 to 1.77 (6 runs with GATE_ABLATE=1).
+interface Case {
+  readonly title: string;
+  readonly compiled: { readonly run: () => void; readonly tier: 1 | 2; readonly fallbacks: () => number };
+  readonly hand: () => void;
+  readonly limits: CaseLimits;
+}
+const CASES_BASE: readonly (() => Case)[] = [
+  () => ({ title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limits: limitsOf("nearest") }),
+  () => ({ title: LIFE.title, compiled: atEachKey(LIFE.chain, LIFE.root.space), hand: LIFE.hand, limits: limitsOf("life") }),
+  () => radialCase(12, "linked"),
+  () => radialCase(60, "nested"),
+  () => treeCase(1000),
+  () => shapesCase(10, 3),
+];
+const CASES = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, () => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : CASES_BASE;
 
 // With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
 // changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run
@@ -194,7 +212,8 @@ const chosen = only === undefined ? undefined : Number(only);
 if (chosen !== undefined && !(Number.isInteger(chosen) && chosen >= 0 && chosen <= CASES.length)) throw new RangeError(`gate: GATE_CASE is "${String(only)}", not "count" or a case from 0 to ${String(CASES.length)}.`);
 console.info(envLine("process"));
 let failed = false;
-for (const { title, compiled, hand, limits } of CASES.filter((_, i) => chosen === undefined || chosen === i)) {
+for (const make of CASES.filter((_, i) => chosen === undefined || chosen === i)) {
+  const { title, compiled, hand, limits } = make();
   // The arms alternate in this process, with the order reversed in odd rounds, and a copy of the base gives the noise floor (core/bench/measure.ts).
   const { ratio, a: v, b: h, noise } = paired(compiled.run, hand);
   const ok = ratio <= limits.limit && compiled.tier === 2 && compiled.fallbacks() === 0;
@@ -203,6 +222,7 @@ for (const { title, compiled, hand, limits } of CASES.filter((_, i) => chosen ==
 }
 if (chosen === undefined || chosen === CASES.length) {
   // The growth of O(n) is 2, and the growth of O(n²) is 4. Its limit comes from the runs in the header.
+  const [small, large] = shares();
   const { ratio, a: v, b: h, noise } = paired(large.run, small.run);
   const ok = ratio <= SHARE.limit && large.tier === 2 && large.fallbacks() === 0;
   failed ||= !ok;

@@ -34,6 +34,7 @@ Change an item here first, then on the tracker. An item that is done goes out of
 | RADIALGAP | The generated code of the nested radial module of ireko gets near the hand loops. Its ratio is approximately 3.85 at this time, and the target is 2.0 or less. | compiler | P1 | later | GATENOISE |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | later | GATENOISE |
 | INAPPRECORD | Each night, all cases of the compiler gate run in one process, and the record gives the count of slow processes. | ci | P2 | later | GATENOISE |
+| MODELLIMITS | A script derives the gate limits from the recorded gate runs, with a row for each CPU model with 5 runs. The limit of other models is the worst run plus the largest spread in one model. | ci | P2 | later | GATENOISE, RADIALGAP |
 | TYPED-SCRIPTS | The JavaScript scripts become TypeScript, and the plugin launcher gets a TypeScript source. | ci | P2 | later | |
 | LISTWHERE | The `where` test of a list loop can read the names of the item. | core | P2 | later | |
 | MODULE-VALUES | Standalone modules for ops that give lists, for values of each kind and for records. | compiler | P2 | later | |

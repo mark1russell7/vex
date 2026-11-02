@@ -1,10 +1,11 @@
 /**
- * The CPU profile of one case of the speed gate of the compiler (RADIALGAP). This script starts `gate.ts` with
- * `GATE_CASE` in `PROFILE_PROCESSES` fresh processes (3 by default), each with `--cpu-prof`, and adds their samples.
+ * The CPU profile of a command of Node.js, as self time by function and by group (RADIALGAP). The function
+ * `profileCommand` starts the command in fresh processes, each with `--cpu-prof`, and adds their samples. This step
+ * belongs to the shared bench harness (`mark1russell7/rigor`, planned), so this file keeps only the profile, the sum and
+ * the files for the artifact.
  *
- * The output gives the time of each arm, from the samples under its entry function (`PROFILE_ARMS`), and the self
- * time of the functions under each arm. The `.cpuprofile` files stay in `PROFILE_DIR` for the artifact of the job.
- * Timing runs in CI only. Start: GATE_CASE=3 node packages/compiler/bench/profile.ts
+ * The script form profiles one case of the gate of the compiler: `GATE_CASE=3 node packages/compiler/bench/profile.ts`.
+ * Timing runs in CI only.
  */
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
@@ -25,30 +26,64 @@ interface Profile {
   readonly timeDeltas: readonly number[];
 }
 
-const which = process.env["GATE_CASE"];
-if (which === undefined || !/^\d+$/u.test(which)) throw new RangeError(`profile: GATE_CASE is "${String(which)}", not a case number.`);
-const count = Number(process.env["PROFILE_PROCESSES"] ?? "3");
-if (!Number.isInteger(count) || count < 1) throw new RangeError(`profile: PROFILE_PROCESSES is "${String(process.env["PROFILE_PROCESSES"])}".`);
-// The generated module of radial is the function `radial` (gate.ts), and the hand arm is `radialArrange`.
-const arms = (process.env["PROFILE_ARMS"] ?? "radial,radialArrange").split(",");
-const dir = resolve(process.env["PROFILE_DIR"] ?? "profiles");
-mkdirSync(dir, { recursive: true });
-const gate = fileURLToPath(new URL("gate.ts", import.meta.url));
-// The optimizer puts small functions into their callers, and then their time is the self time of the caller.
-// `PROFILE_NODE_FLAGS=--no-turbo-inlining` keeps each function apart, at the cost of a slower run.
-const flags = (process.env["PROFILE_NODE_FLAGS"] ?? "").split(" ").filter((f) => f !== "");
-
-for (let p = 1; p <= count; p++) {
-  const out = spawnSync(process.execPath, [...flags, "--cpu-prof", "--cpu-prof-dir", dir, "--cpu-prof-name", `case${which}-p${String(p)}.cpuprofile`, gate], { encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, GATE_CASE: which } });
-  for (const line of out.stdout.split("\n")) if (/^(?:runner|ok|FAIL)/u.test(line)) console.info(`  p${String(p)} ${line}`);
-  if (out.status !== 0 && out.status !== 1) throw new Error(`profile: process ${String(p)} ended with ${String(out.status ?? out.signal)}: ${out.stderr.trim().split("\n").slice(-3).join(" | ")}`);
+/** The options of `profileCommand`. */
+export interface ProfileOptions {
+  /** This value is the number of fresh processes. */
+  readonly processes: number;
+  /** This value is the folder of the `.cpuprofile` files. */
+  readonly dir: string;
+  /** This value is the name of the files, as `<name>-p<process>.cpuprofile`. */
+  readonly name: string;
+  /** These values are the entry functions of the arms. A sample counts for the nearest arm above it. */
+  readonly arms: readonly string[];
+  /**
+   * These values are the groups: a name, and its functions, each as a name or a full key (`name file:line`). A function
+   * can be in more than one group.
+   */
+  readonly groups: Readonly<Record<string, readonly string[]>>;
+  /** These values are more environment variables of the processes. */
+  readonly env?: Readonly<Record<string, string>>;
 }
 
-/** The self time of a function under one arm, in µs, by its name, its file and its line. */
-const self = new Map<string, Map<string, number>>(arms.map((a) => [a, new Map()]));
-const total = new Map<string, number>(arms.map((a) => [a, 0]));
-for (const file of readdirSync(dir).filter((f) => f.startsWith(`case${which}-`) && f.endsWith(".cpuprofile"))) {
-  const profile = JSON.parse(readFileSync(join(dir, file), "utf8")) as Profile;
+/** The self time of one arm, in µs: in all, by function (`name file:line`) and by group. */
+export interface ArmTime {
+  readonly arm: string;
+  readonly total: number;
+  readonly byFunction: ReadonlyMap<string, number>;
+  readonly byGroup: ReadonlyMap<string, number>;
+}
+
+/** The result of `profileCommand`: the time of each arm, and the result lines of each process. */
+export interface CommandProfile {
+  readonly arms: readonly ArmTime[];
+  readonly output: readonly string[];
+}
+
+/**
+ * This function starts `node <argv>` in fresh processes, each with `--cpu-prof`, and gives the self time of each arm.
+ * The node flags go first in `argv`. A process that ends with a status other than 0 or 1 stops the profile.
+ */
+export function profileCommand(argv: readonly string[], o: ProfileOptions): CommandProfile {
+  mkdirSync(o.dir, { recursive: true });
+  const output: string[] = [];
+  for (let p = 1; p <= o.processes; p++) {
+    const out = spawnSync(process.execPath, ["--cpu-prof", "--cpu-prof-dir", o.dir, "--cpu-prof-name", `${o.name}-p${String(p)}.cpuprofile`, ...argv], { encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, ...o.env } });
+    output.push(...out.stdout.split("\n").map((l) => `p${String(p)} ${l}`));
+    if (out.status !== 0 && out.status !== 1) throw new Error(`profile: process ${String(p)} ended with ${String(out.status ?? out.signal)}: ${out.stderr.trim().split("\n").slice(-3).join(" | ")}`);
+  }
+  const self = new Map<string, Map<string, number>>(o.arms.map((a) => [a, new Map()]));
+  for (const file of readdirSync(o.dir).filter((f) => f.startsWith(`${o.name}-p`) && f.endsWith(".cpuprofile"))) addSamples(JSON.parse(readFileSync(join(o.dir, file), "utf8")) as Profile, o.arms, self);
+  const arms = o.arms.map((arm): ArmTime => {
+    const byFunction = self.get(arm) ?? new Map<string, number>();
+    const total = [...byFunction.values()].reduce((s, us) => s + us, 0);
+    const byGroup = new Map(Object.entries(o.groups).map(([g, names]) => [g, [...byFunction].filter(([key]) => names.includes(key) || names.includes(key.slice(0, key.indexOf(" ")))).reduce((s, [, us]) => s + us, 0)]));
+    return { arm, total, byFunction, byGroup };
+  });
+  return { arms, output };
+}
+
+/** This function adds the self time of each sample of `profile` to the function of the sample, under its arm. */
+function addSamples(profile: Profile, arms: readonly string[], self: Map<string, Map<string, number>>): void {
   const byId = new Map(profile.nodes.map((n) => [n.id, n]));
   const parent = new Map<number, number>();
   for (const n of profile.nodes) for (const c of n.children ?? []) parent.set(c, n.id);
@@ -66,22 +101,42 @@ for (const file of readdirSync(dir).filter((f) => f.startsWith(`case${which}-`) 
     const a = arm(id);
     const node = byId.get(id);
     if (a === undefined || node === undefined) continue;
-    const dt = profile.timeDeltas[i] ?? 0;
     const f = node.callFrame;
     const key = `${f.functionName === "" ? "(anonymous)" : f.functionName} ${f.url === "" ? "(eval)" : basename(f.url)}:${String(f.lineNumber + 1)}`;
     const m = self.get(a);
-    m?.set(key, (m.get(key) ?? 0) + dt);
-    total.set(a, (total.get(a) ?? 0) + dt);
+    m?.set(key, (m.get(key) ?? 0) + (profile.timeDeltas[i] ?? 0));
   }
 }
 
-console.info(`case ${which}, ${String(count)} processes: the time under each arm, and the self time of its top functions`);
-for (const a of arms) {
-  const t = total.get(a) ?? 0;
-  console.info(`arm ${a}: ${(t / 1000).toFixed(1)} ms`);
-  // The type-aware lint does not have Array#toSorted, and sort() changes only the copy.
-  const top = [...(self.get(a) ?? new Map<string, number>())];
-  // oxlint-disable-next-line unicorn/no-array-sort
-  top.sort((x, y) => y[1] - x[1]);
-  for (const [key, us] of top.slice(0, 25)) console.info(`  ${(t === 0 ? 0 : (100 * us) / t).toFixed(1).padStart(5)} %  ${(us / 1000).toFixed(1).padStart(8)} ms  ${key}`);
+/** This function gives the lines of the summary of a profile: each arm, its groups and its top functions. */
+export function profileLines(p: CommandProfile, top: number): readonly string[] {
+  const lines: string[] = [];
+  const pct = (us: number, t: number): string => (t === 0 ? 0 : (100 * us) / t).toFixed(1).padStart(5);
+  for (const a of p.arms) {
+    lines.push(`arm ${a.arm}: ${(a.total / 1000).toFixed(1)} ms`);
+    for (const [g, us] of a.byGroup) lines.push(`  group ${g}: ${pct(us, a.total)} %  ${(us / 1000).toFixed(1)} ms`);
+    // The type-aware lint does not have Array#toSorted, and sort() changes only the copy.
+    const fns = [...a.byFunction];
+    // oxlint-disable-next-line unicorn/no-array-sort
+    fns.sort((x, y) => y[1] - x[1]);
+    for (const [key, us] of fns.slice(0, top)) lines.push(`  ${pct(us, a.total)} %  ${(us / 1000).toFixed(1).padStart(8)} ms  ${key}`);
+  }
+  return lines;
+}
+
+// The script form: one case of the gate of the compiler. The generated module of radial is the function `radial`
+// (gate.ts), and the hand arm is `radialArrange`. `PROFILE_GROUPS` is `name=f1,f2;name=f3`, with names or full keys. The optimizer can put
+// small functions into their callers: `PROFILE_NODE_FLAGS=--no-turbo-inlining` keeps each function apart.
+if (import.meta.filename === resolve(process.argv[1] ?? "")) {
+  const which = process.env["GATE_CASE"];
+  if (which === undefined || !/^\d+$/u.test(which)) throw new RangeError(`profile: GATE_CASE is "${String(which)}", not a case number.`);
+  const processes = Number(process.env["PROFILE_PROCESSES"] ?? "3");
+  if (!Number.isInteger(processes) || processes < 1) throw new RangeError(`profile: PROFILE_PROCESSES is "${String(process.env["PROFILE_PROCESSES"])}".`);
+  const groups = Object.fromEntries((process.env["PROFILE_GROUPS"] ?? "").split(";").filter((g) => g.includes("=")).map((g) => [g.slice(0, g.indexOf("=")), g.slice(g.indexOf("=") + 1).split(",")]));
+  const flags = (process.env["PROFILE_NODE_FLAGS"] ?? "").split(" ").filter((f) => f !== "");
+  const gate = fileURLToPath(new URL("gate.ts", import.meta.url));
+  const p = profileCommand([...flags, gate], { processes, dir: resolve(process.env["PROFILE_DIR"] ?? "profiles"), name: `case${which}`, arms: (process.env["PROFILE_ARMS"] ?? "radial,radialArrange").split(","), groups, env: { GATE_CASE: which } });
+  for (const line of p.output) if (/^p\d+ (?:runner|ok|FAIL)/u.test(line)) console.info(`  ${line}`);
+  console.info(`case ${which}, ${String(processes)} processes: the self time under each arm, by group and by function`);
+  for (const line of profileLines(p, 25)) console.info(line);
 }

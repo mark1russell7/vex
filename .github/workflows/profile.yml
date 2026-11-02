@@ -18,6 +18,10 @@ on:
         description: The entry function of each arm, separated by commas
         type: string
         default: radial,radialArrange
+      groups:
+        description: The groups of functions, as name=f1,f2;name=f3, with a function name or a full key (name file:line)
+        type: string
+        default: "search=fn58,fn54,op_0_12,(anonymous) (eval):193,(anonymous) (eval):180;pair=fn115,fn109,fn89,fn7,(anonymous) (eval):232;helpers=k_number,G,L,Q,T,F"
       node_flags:
         description: More flags of Node.js for each process, for example --no-turbo-inlining
         type: string
@@ -52,6 +56,7 @@ jobs:
           GATE_CASE: ${{ inputs.case }}
           PROFILE_PROCESSES: ${{ inputs.processes }}
           PROFILE_ARMS: ${{ inputs.arms }}
+          PROFILE_GROUPS: ${{ inputs.groups }}
           PROFILE_NODE_FLAGS: ${{ inputs.node_flags }}
           PROFILE_DIR: ${{ runner.temp }}/profiles
         run: node packages/compiler/bench/profile.ts | tee profile.txt

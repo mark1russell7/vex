@@ -34,8 +34,8 @@ import { emitModule, emitSheetModule, tiered } from "../src/index.ts";
 import { envLine, paired } from "../../core/bench/measure.ts";
 import { limitsText, type CaseLimits } from "../../core/bench/processes.ts";
 
-/** This function gives the limits of a case before the derivation of its slow line: check (b) cannot fail. */
-const provisional = (limit: number): CaseLimits => ({ limit, slow: limit, maxSlow: 11 });
+/** This function gives the limits of a case before their derivation: check (b) is a record only. */
+const provisional = (limit: number): CaseLimits => ({ limit, slow: limit, model: "other" });
 const SHARE = provisional(2.23);
 
 /** This function gives a run of a program at each key of a space, in tier 2. */

@@ -6,16 +6,40 @@
  * - (a) The median ratio of the valid processes is at most the limit of the case.
  * - (b) The count of valid processes above the slow line of the case is at most the largest slow count.
  *
+ * The limits of a case depend on the CPU model of the runner (`limitsFor`), and each result line names its model.
+ *
  * A process is valid for a case only when its A/A band contains 1.0. The functions here are pure, so tests give them
  * lines and get the decision.
  */
 import { median } from "./measure.ts";
 
-/** The limits of one case: (a) the median limit, and (b) the slow line with the largest count of slow processes. */
+/**
+ * The limits of one case on one CPU model: (a) the median limit, and (b) the slow line with the largest count of slow
+ * processes. Without `maxSlow`, check (b) is a record only: the count is printed, but it cannot fail the case.
+ */
 export interface CaseLimits {
   readonly limit: number;
   readonly slow: number;
-  readonly maxSlow: number;
+  readonly maxSlow?: number;
+  /** This value is the CPU model of the limits (a part of its name), or `other` for the worst limits of all models. */
+  readonly model: string;
+}
+
+/** The limits of one case for each CPU model with 5 or more derivation runs, by a part of the model name. */
+export type ModelLimits = Readonly<Record<string, Omit<CaseLimits, "model">>>;
+
+/**
+ * This function gives the limits of a case for the CPU model `cpu`: the limits of the first model whose name part
+ * `cpu` contains, or else the worst limits of all models, with the model `other`.
+ */
+export function limitsFor(byModel: ModelLimits, cpu: string): CaseLimits {
+  const known = Object.entries(byModel).find(([part]) => cpu.includes(part));
+  if (known !== undefined) return { ...known[1], model: known[0] };
+  const all = Object.values(byModel);
+  if (all.length === 0) throw new RangeError("limitsFor: a case has no limits.");
+  const counts = all.map((l) => l.maxSlow);
+  const maxSlow = counts.every((c) => c !== undefined) ? Math.max(...counts) : undefined;
+  return { limit: Math.max(...all.map((l) => l.limit)), slow: Math.max(...all.map((l) => l.slow)), ...(maxSlow === undefined ? {} : { maxSlow }), model: "other" };
 }
 
 /** The result of one case in one process, as the result line of a gate script gives it. */
@@ -40,19 +64,21 @@ export interface CaseDecision {
 }
 
 const LINE =
-  /^(?:ok {2}|FAIL) (.+?): tier (\d), (\d+) fallbacks, .*?(?:generated\/loops time|growth) ([\d.]+) \((?:lower is better, )?limit ([\d.]+), slow line ([\d.]+), at most (\d+) slow\), A\/A noise ([\d.]+) to ([\d.]+)$/u;
+  /^(?:ok {2}|FAIL) (.+?): tier (\d), (\d+) fallbacks, .*?(?:generated\/loops time|growth) ([\d.]+) \((?:lower is better, )?limit ([\d.]+), slow line ([\d.]+), (?:at most (\d+) slow|a record only), for ([\w-]+)\), A\/A noise ([\d.]+) to ([\d.]+)$/u;
 
 /** This function gives the limits part of a result line, in the form that `parseLine` reads. */
 export function limitsText(l: CaseLimits): string {
-  return `limit ${String(l.limit)}, slow line ${String(l.slow)}, at most ${String(l.maxSlow)} slow`;
+  const count = l.maxSlow === undefined ? "a record only" : `at most ${String(l.maxSlow)} slow`;
+  return `limit ${String(l.limit)}, slow line ${String(l.slow)}, ${count}, for ${l.model}`;
 }
 
 /** This function reads one result line of a gate script, or gives undefined for another line. */
 export function parseLine(line: string): CaseSample | undefined {
   const m = LINE.exec(line.trim());
   if (m === null) return undefined;
-  const [, title = "", tier, fallbacks, ratio, limit, slow, maxSlow, lo, hi] = m;
-  return { title, ratio: Number(ratio), tierOk: tier === "2" && fallbacks === "0", aa: [Number(lo), Number(hi)], limits: { limit: Number(limit), slow: Number(slow), maxSlow: Number(maxSlow) } };
+  const [, title = "", tier, fallbacks, ratio, limit, slow, maxSlow, model = "", lo, hi] = m;
+  const limits: CaseLimits = { limit: Number(limit), slow: Number(slow), ...(maxSlow === undefined ? {} : { maxSlow: Number(maxSlow) }), model };
+  return { title, ratio: Number(ratio), tierOk: tier === "2" && fallbacks === "0", aa: [Number(lo), Number(hi)], limits };
 }
 
 /** This function reads all the result lines of the output of one process. */
@@ -87,14 +113,14 @@ export function decide(processes: readonly (readonly CaseSample[])[], k: number)
     const missing = processes.length - present.length;
     if (missing > 0) reasons.push(`${String(missing)} processes gave no line`);
     if (present.some((s) => !s.tierOk)) reasons.push("a process had a wrong tier or a fallback");
-    const limits = present[0]?.limits ?? { limit: Number.NaN, slow: Number.NaN, maxSlow: 0 };
+    const limits = present[0]?.limits ?? { limit: Number.NaN, slow: Number.NaN, maxSlow: 0, model: "other" };
     if (present.some((s) => limitsText(s.limits) !== limitsText(limits))) reasons.push("the processes gave different limits");
     const ratios = present.filter((s) => isValid(s)).slice(0, k).map((s) => s.ratio);
     if (ratios.length < k) reasons.push(`${String(ratios.length)} valid processes, not ${String(k)}`);
     const m = median(ratios);
     const slowCount = ratios.filter((r) => r > limits.slow).length;
     if (!(m <= limits.limit)) reasons.push(`the median is above the limit`);
-    if (slowCount > limits.maxSlow) reasons.push(`more than ${String(limits.maxSlow)} processes above the slow line`);
+    if (limits.maxSlow !== undefined && slowCount > limits.maxSlow) reasons.push(`more than ${String(limits.maxSlow)} processes above the slow line`);
     return { title, ok: reasons.length === 0, median: m, slowCount, ratios, limits, reasons };
   });
 }
@@ -103,5 +129,6 @@ export function decide(processes: readonly (readonly CaseSample[])[], k: number)
 export function decisionLine(d: CaseDecision): string {
   const rs = d.ratios.map((r) => r.toFixed(2)).join(", ");
   const why = d.reasons.length === 0 ? "" : `. ${d.reasons.join(", ")}`;
-  return `${d.ok ? "ok  " : "FAIL"} ${d.title}: median ${d.median.toFixed(2)} of ${String(d.ratios.length)} valid processes (lower is better, limit ${String(d.limits.limit)}), ${String(d.slowCount)} above the slow line ${String(d.limits.slow)} (at most ${String(d.limits.maxSlow)}), processes ${rs}${why}`;
+  const most = d.limits.maxSlow === undefined ? "a record only" : `at most ${String(d.limits.maxSlow)}`;
+  return `${d.ok ? "ok  " : "FAIL"} ${d.title}: median ${d.median.toFixed(2)} of ${String(d.ratios.length)} valid processes (lower is better, limit ${String(d.limits.limit)} for ${d.limits.model}), ${String(d.slowCount)} above the slow line ${String(d.limits.slow)} (${most}), processes ${rs}${why}`;
 }

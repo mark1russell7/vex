@@ -1,8 +1,8 @@
 // The tests of the decision of a speed gate over fresh processes. The lines have the form that the gate scripts print.
 import { describe, expect, it } from "vitest";
-import { complete, decide, decisionLine, isValid, limitsText, parseLine, parseProcess, type CaseLimits, type CaseSample } from "./processes.ts";
+import { complete, decide, decisionLine, isValid, limitsFor, limitsText, parseLine, parseProcess, type CaseLimits, type CaseSample } from "./processes.ts";
 
-const TREE: CaseLimits = { limit: 1.1, slow: 1.2, maxSlow: 2 };
+const TREE: CaseLimits = { limit: 1.1, slow: 1.2, maxSlow: 2, model: "7763" };
 
 /** This function gives a result line of the compiler gate for the tree case. */
 function line(ratio: number, aa: readonly [number, number] = [0.98, 1.02], tier = 2, fallbacks = 0, limits: CaseLimits = TREE): string {
@@ -20,10 +20,10 @@ describe("parseLine", () => {
   });
 
   it("reads the line of the growth case, and a FAIL line", () => {
-    const s = parseLine(`FAIL the share of each value in the total: tier 2, 0 fallbacks, 1000 values 50.0 µs, 500 values 25.0 µs, growth 2.01 (${limitsText({ limit: 2.23, slow: 2.3, maxSlow: 1 })}), A/A noise 0.97 to 1.03`);
+    const s = parseLine(`FAIL the share of each value in the total: tier 2, 0 fallbacks, 1000 values 50.0 µs, 500 values 25.0 µs, growth 2.01 (${limitsText({ limit: 2.23, slow: 2.3, maxSlow: 1, model: "other" })}), A/A noise 0.97 to 1.03`);
     expect(s?.title).toBe("the share of each value in the total");
     expect(s?.ratio).toBe(2.01);
-    expect(s?.limits).toEqual({ limit: 2.23, slow: 2.3, maxSlow: 1 });
+    expect(s?.limits).toEqual({ limit: 2.23, slow: 2.3, maxSlow: 1, model: "other" });
   });
 
   it("gives tierOk false for tier 1 or a fallback", () => {
@@ -35,6 +35,32 @@ describe("parseLine", () => {
     expect(parseLine("runner: AMD EPYC 7763 (4 cores), Node.js v26.13.0")).toBeUndefined();
     expect(parseLine(line(1).replace(", slow line 1.2, at most 2 slow", ""))).toBeUndefined();
     expect(parseLine(`  p3 ${line(1)}`)).toBeUndefined();
+  });
+});
+
+describe("limitsFor", () => {
+  const BY = { "7763": { limit: 1.2, slow: 1.2, maxSlow: 3 }, "9V74": { limit: 1.3, slow: 1.25, maxSlow: 4 } };
+
+  it("gives the limits of the model that the CPU name contains, with its model", () => {
+    expect(limitsFor(BY, "AMD EPYC 7763 64-Core Processor")).toEqual({ limit: 1.2, slow: 1.2, maxSlow: 3, model: "7763" });
+    expect(limitsFor(BY, "AMD EPYC 9V74 80-Core Processor")).toMatchObject({ limit: 1.3, model: "9V74" });
+  });
+
+  it("gives the worst limits of all models for another model", () => {
+    expect(limitsFor(BY, "AMD EPYC 9V45 96-Core Processor")).toEqual({ limit: 1.3, slow: 1.25, maxSlow: 4, model: "other" });
+  });
+
+  it("gives a record only for another model when one model has a record only", () => {
+    expect(limitsFor({ a: { limit: 1, slow: 1 }, b: { limit: 2, slow: 2, maxSlow: 1 } }, "c")).toEqual({ limit: 2, slow: 2, model: "other" });
+  });
+
+  it("refuses a case with no limits", () => {
+    expect(() => limitsFor({}, "AMD EPYC 7763")).toThrow(RangeError);
+  });
+
+  it("reads back the model and a record only from a result line", () => {
+    const l: CaseLimits = { limit: 1.5, slow: 1.2, model: "other" };
+    expect(parseLine(line(1, undefined, 2, 0, l))?.limits).toEqual(l);
   });
 });
 
@@ -95,6 +121,13 @@ describe("decide", () => {
     expect(decide([...processes(1), parseProcess(line(1, undefined, 2, 0, { ...TREE, limit: 1.5 }))], 1)[0]?.reasons).toEqual(["the processes gave different limits"]);
   });
 
+  it("never fails check (b) when the slow count is a record only", () => {
+    const record: CaseLimits = { limit: 1.5, slow: 1.2, model: "7763" };
+    const [d] = decide([1.3, 1.4, 1.3].map((r) => parseProcess(line(r, undefined, 2, 0, record))), 3);
+    expect(d).toMatchObject({ ok: true, slowCount: 3, limits: record });
+    expect(d === undefined ? "" : decisionLine(d)).toContain("3 above the slow line 1.2 (a record only)");
+  });
+
   it("gives no decision for no line", () => {
     expect(decide([[], []], 2)).toEqual([]);
   });
@@ -105,7 +138,7 @@ describe("decisionLine", () => {
     const [ok] = decide(processes(1, 1.3, 1.02), 3);
     const [bad] = decide(processes(1.2, 1.3), 2);
     expect(ok === undefined ? "" : decisionLine(ok)).toBe(
-      "ok   a tree module, the team and the depth of each of 1000 nodes: median 1.02 of 3 valid processes (lower is better, limit 1.1), 1 above the slow line 1.2 (at most 2), processes 1.00, 1.30, 1.02",
+      "ok   a tree module, the team and the depth of each of 1000 nodes: median 1.02 of 3 valid processes (lower is better, limit 1.1 for 7763), 1 above the slow line 1.2 (at most 2), processes 1.00, 1.30, 1.02",
     );
     expect(bad === undefined ? "" : decisionLine(bad)).toMatch(/^FAIL .*processes 1\.20, 1\.30\. the median is above the limit$/u);
   });

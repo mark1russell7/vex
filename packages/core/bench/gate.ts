@@ -3,11 +3,14 @@
  * of the hand-written loops on the same machine, and checks the ratio against a limit. A ratio does not depend much on
  * the speed of the machine, so the gate works on a shared CI runner. The arms alternate in one process (measure.ts).
  *
- * Each limit is the worst ratio of 5 CI runs times 1.1 (the fleet rule of 2026-10-30), rounded up. The runs are
- * run 41022173204 of speed-gate.yml (2026-10-30): AMD EPYC 7763 in runs 2 to 4, AMD EPYC 9V45 in runs 1 and 5.
- * - NEAREST: 17.4, 21.0, 20.9, 21.2 and 16.6. The worst is 21.2, so the limit is 23.4. The 9V45 gives about 17.
- * - LIFE: 38.6, 38.0, 26.8, 38.4 and 40.6. The worst is 40.6, so the limit is 44.7. Run 3 had an A/A band of 0.71
- *   to 0.99, so its 26.8 is noise.
+ * Each limit is the worst ratio of 5 CI runs plus their spread (the largest minus the smallest), rounded up. This is
+ * the fleet rule of 2026-11-02. The runs are run 41022173204 of speed-gate.yml (2026-10-30): AMD EPYC 7763 in runs 2
+ * to 4, AMD EPYC 9V45 in runs 1 and 5.
+ * - NEAREST: 17.4, 21.0, 20.9, 21.2 and 16.6. The limit is 21.2 + (21.2 - 16.6) = 25.8. The spread comes from the
+ *   CPU: the 9V45 gives about 17 (GATEPERCPU).
+ * - LIFE: 38.6, 38.0, 38.3, 38.4 and 40.6. The limit is 40.6 + (40.6 - 38.0) = 43.2. A run counts only when its A/A
+ *   band contains 1.0. Run 3 of 41022173204 gave 26.8 with an A/A band of 0.71 to 0.99, so it measured the runner.
+ *   The 38.3 of run 41383482230 (2026-11-02, AMD EPYC 9V74, A/A band 0.97 to 1.01) replaces it.
  * A PR that makes a ratio better sets its limit lower in the same PR.
  * Start: node packages/core/bench/gate.ts
  */
@@ -15,8 +18,8 @@ import { envLine, paired } from "./measure.ts";
 import { LIFE, NEAREST } from "./programs.ts";
 
 const LIMITS = [
-  { program: NEAREST, limit: 23.4 },
-  { program: LIFE, limit: 44.7 },
+  { program: NEAREST, limit: 25.8 },
+  { program: LIFE, limit: 43.2 },
 ] as const;
 
 console.info(envLine("process"));

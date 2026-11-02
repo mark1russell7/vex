@@ -4,9 +4,9 @@ name: Weekly
 # has its own job, so a slow package does not stop the others. The setup prints the seed. To repeat a failure, set FC_SEED.
 # Each property has a time budget of 10 minutes (FC_TIME_LIMIT_MS), inside the test time-out of 15 minutes. Before the
 # budget, the slow properties hit the time-out, so the run was red with no counterexample (2026-10-18 to 2026-11-01).
-# A property that reaches the budget fails under its minimum of runs in spec/weekly-runs.json: from 5 green runs, the lower
-# of the worst runs divided by 1.1 and the worst runs minus their spread. Each job uploads the runs of each property. A dispatch with reps 5 and record_only gives the records
-# for scripts/weekly-minimums.ts.
+# A property that reaches the budget fails under its minimum of runs in spec/weekly-runs.json: from 5 green
+# runs, the worst runs minus their spread (the fleet rule of 2026-11-02). Each job uploads the runs of each property.
+# A dispatch with reps 5 and record_only gives the records for scripts/weekly-minimums.ts.
 on:
   schedule:
     # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).

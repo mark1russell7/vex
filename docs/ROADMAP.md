@@ -8,7 +8,7 @@ Change an item here first, then on the tracker. An item that is done goes out of
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| GATELIMITS | Each speed-gate limit is the worst of 5 CI runs times 1.1, with the derivation in the gate. | ci | P1 | in progress | |
+| GATELIMITS | Each speed-gate limit is the worst of 5 CI runs plus their spread (the fleet rule of 2026-11-02), with the derivation in the gate. | ci | P1 | in progress | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 6 merged, the cheap sort is next | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | COEVAL16 | Vex takes `@mark1russell7/coeval` 0.17 with the client release of 2026-11-02. | core | P1 | waiting for the release of 2026-11-02 | the coeval release |
@@ -30,6 +30,7 @@ Change an item here first, then on the tracker. An item that is done goes out of
 | SHAPESIZE | The ireko layout bundle with the shapes module stays under 17.4 kB. | pilots | P1 | later | COMPILE-FUSE |
 | TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. | compiler | P2 | later | FALLBACKSHARE |
 | GATENOISE | The radial, tree and shapes cases of the speed gate change by 20 % to 32 % from run to run. Make them steady enough to catch a loss of 10 %. | compiler | P2 | later | GATELIMITS |
+| GATEPERCPU | Some speed-gate ratios depend on the CPU model. Core NEAREST is approximately 17 on the EPYC 9V45, and approximately 21 on the 7763 and the 9V74. Give each model its own limit. | ci | P2 | later | GATELIMITS |
 | TYPED-SCRIPTS | The JavaScript scripts become TypeScript, and the plugin launcher gets a TypeScript source. | ci | P2 | later | |
 | LISTWHERE | The `where` test of a list loop can read the names of the item. | core | P2 | later | |
 | MODULE-VALUES | Standalone modules for ops that give lists, for values of each kind and for records. | compiler | P2 | later | |

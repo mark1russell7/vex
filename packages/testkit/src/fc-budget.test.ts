@@ -36,7 +36,7 @@ describe("the minimum of runs of the weekly long run", () => {
     expect(parseRecords(text).map((r) => r.key)).toEqual(["a", "b"]);
   });
 
-  it("gives the lower of the worst runs divided by 1.1 and the worst runs minus the spread, in sorted order", () => {
+  it("gives the worst runs minus their spread for each property that reached its budget, in sorted order", () => {
     const sets = Object.fromEntries([1000, 900, 1100, 950, 1200].map((n, i) => [`run-${String(i)}`, [record("z", n), record("a", n * 2), record("full", 1_000_000, { interrupted: false })]]));
     const m = deriveMinimums(sets);
     expect(m.minimums).toEqual({ a: 1200, z: 600 });
@@ -45,8 +45,8 @@ describe("the minimum of runs of the weekly long run", () => {
     expect(m.derivation).toMatch(/over 5 green runs/);
   });
 
-  it("divides by 1.1 when the spread is small, and does not gate a property whose spread is as large as its worst runs", () => {
-    expect(deriveMinimums(setsOf([1000, 1010, 1020, 1030, 1040])).minimums).toEqual({ a: 909 });
+  it("takes the spread off the worst runs, and does not gate a property whose spread is as large as its worst runs", () => {
+    expect(deriveMinimums(setsOf([1000, 1010, 1020, 1030, 1040])).minimums).toEqual({ a: 960 });
     const noisy = deriveMinimums(setsOf([100, 300, 300, 300, 300]));
     expect([noisy.minimums, noisy.ungated]).toEqual([{}, { a: { reason: "not gated (noise > worst)", worst: 100, spread: 200 } }]);
     expect(deriveMinimums(setsOf([100, 200, 200, 200, 200])).ungated).toEqual({ a: { reason: "not gated (noise > worst)", worst: 100, spread: 100 } });
@@ -54,7 +54,7 @@ describe("the minimum of runs of the weekly long run", () => {
 
   it("takes a property that reached its budget in only some sets", () => {
     const sets = Object.fromEntries([0, 1, 2, 3, 4].map((i) => [`run-${String(i)}`, [record("a", i === 0 ? 800 : 1_000_000, { interrupted: i === 0 })]]));
-    expect(deriveMinimums(sets).minimums).toEqual({ a: 727 });
+    expect(deriveMinimums(sets).minimums).toEqual({ a: 800 });
   });
 
   it("refuses fewer than 5 sets, a set with a failure, and a property not in each set", () => {

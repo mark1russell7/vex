@@ -76,7 +76,7 @@ jobs:
     if: needs.changes.outputs.match == 'true'
     name: Speed gates ${{ matrix.rep }}
     runs-on: ubuntu-latest
-    # Each limit comes from at least 5 runs: the worst value times 1.1 (the fleet rule of 2026-10-30).
+    # Each limit comes from at least 5 runs: the worst value plus the spread of the runs (the fleet rule of 2026-11-02).
     strategy:
       fail-fast: false
       max-parallel: 3

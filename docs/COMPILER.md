@@ -491,7 +491,7 @@ A kernel is a domain whose values are data structures. Two examples are the band
 - **Kinds.** A value of a domain without a primitive type has the kind `domain:Name`. An op with `returns: "domain"` gives this kind, and a parameter `domain` takes it. Thus a site on such a value is static (KIND.STATIC) when each domain before its domain has a primitive type.
 - **Modules.** A module copies the function of each kernel op, as for each other op. A kernel domain gives `samples`: values for the check of each copy. An op that reads a name outside itself gives a reason, not code.
 - **Schema.** A field of the records can have the kind of a domain. The module checks it with the copy of `is` of the domain.
-- **Scans.** A fold over the keys before the origin evaluates at each origin again, so a run costs O(n²). A scan gives each prefix in one pass, so the run costs O(n). The angles of `radial` and the packing of `tree` are such folds.
+- **Scans.** A fold over the keys before the origin evaluates at each origin again, so a run costs O(n²). A scan gives each prefix in one pass, so the run costs O(n). The angles of `radial` and the packing of `tree` are such folds. A module prints the angles of `radial` as a scan (COMPILE.MODULE.SCAN).
 
 The first kernels are the bands of ireko for `tree`, and a sweep over boxes for the check `OVERLAP`.
 
@@ -875,6 +875,16 @@ A local branch of ireko (`vex/radial-module`, after `vex/grid-module`) uses the 
 | 11111 nodes | 11.8 to 14.7 | 10.1 to 12.3 |
 
 A layout with the strategy `radial` is 15 % to 28 % slower, so the benchmarks of ireko do not hold for `radial` yet.
+
+The gate case of the nested ring of 60 children was 3.85 times the hand code (RADIALGAP). The angle of each child was a fold over the children before it, so a run did n² steps. The hand code adds the angles in one loop. A count of the loops of the module gave these iterations of the fold of the angles:
+
+| Children | The fold at each child | The scan | The hand code |
+|---|---|---|---|
+| 12 | 144 | 11 steps, 46 tests of the search | 12 |
+| 60 | 3600 | 59 steps, 358 tests of the search | 60 |
+| 120 | 14400 | 119 steps, 834 tests of the search | 120 |
+
+The module prints such a fold as a scan (COMPILE.MODULE.SCAN). The helper `PF` evaluates the value `T` of each target once, when the run reads the first angle. When the values do not decrease, a binary search finds the prefix of each origin, and each prefix keeps its state. Other values use the loop once for each origin. The other counts of the module are the counts of the hand code, with a small number more of `asin` calls. These are 4439 against 4200 at 60 children.
 
 #### The audit pilot
 

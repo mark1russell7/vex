@@ -1,16 +1,17 @@
 /**
  * This script examines the modes of one case of the compiler gate (GATENOISE). Each fresh process of Node.js is one
- * sample, as each user gets one process. The script starts `gate.ts` in fresh processes, in three variants:
+ * sample, as each user gets one process. The script starts `gate.ts` in fresh processes, in these variants:
  *
  * - `gate`: all the cases of the gate, in their order, as in CI.
  * - `alone`: only the case, so no other case changes the heap or the JIT before it.
  * - `trace`: only the case, with `--trace-opt`, `--trace-deopt` and `--trace-gc`. Each sample also has its tiers, its
  *   deopts and its collections of garbage.
+ * - `gate-fresh`: all the cases, with `GATE_FRESH_BATCH=1`: each arm has a timing loop of its own source.
  * - `gate-trace`: all the cases with the same traces. The events are only the ones of the case: the output after the
  *   result of the case before it.
  *
  * A sample is valid only when its A/A band contains 1.0. The output gives each sample, then the spread of each
- * variant. The third argument names the functions of the trace. Run it in CI only:
+ * variant. The third argument names the functions of the trace, and the fourth the variants (default `gate,gate-fresh`). Run it in CI only:
  * `node bench/modes.ts "tree module" 20 team,teamHand,CH,PR,AN,push`.
  */
 import { spawnSync } from "node:child_process";
@@ -64,8 +65,8 @@ function segmentOf(stdout: string): string {
 }
 
 /** This function starts one fresh process of the gate and gives the sample of the case, or undefined without it. */
-function sample(flags: readonly string[], alone: boolean): Sample | undefined {
-  const env: Record<string, string | undefined> = { ...process.env };
+function sample(flags: readonly string[], alone: boolean, extra: Readonly<Record<string, string>> = {}): Sample | undefined {
+  const env: Record<string, string | undefined> = { ...process.env, ...extra };
   if (alone) env["GATE_CASE"] = part;
   else delete env["GATE_CASE"];
   const out = spawnSync(process.execPath, [...flags, gate], { env, encoding: "utf8", maxBuffer: 1 << 28 });
@@ -77,18 +78,20 @@ function sample(flags: readonly string[], alone: boolean): Sample | undefined {
 }
 
 const VARIANTS = [
-  { name: "gate", flags: [], alone: false, n: Math.ceil(count / 2) },
-  { name: "alone", flags: [], alone: true, n: count },
-  { name: "trace", flags: ["--trace-opt", "--trace-deopt", "--trace-gc"], alone: true, n: Math.ceil(count / 2) },
-  { name: "gate-trace", flags: ["--trace-opt", "--trace-deopt", "--trace-gc"], alone: false, n: count },
+  { name: "gate", flags: [], alone: false, n: count, extra: {} },
+  { name: "gate-fresh", flags: [], alone: false, n: count, extra: { GATE_FRESH_BATCH: "1" } },
+  { name: "alone", flags: [], alone: true, n: count, extra: {} },
+  { name: "trace", flags: ["--trace-opt", "--trace-deopt", "--trace-gc"], alone: true, n: Math.ceil(count / 2), extra: {} },
+  { name: "gate-trace", flags: ["--trace-opt", "--trace-deopt", "--trace-gc"], alone: false, n: count, extra: {} },
 ] as const;
+const chosen = new Set((process.argv[5] ?? "gate,gate-fresh").split(","));
 
 const runner = spawnSync(process.execPath, ["-e", "console.log(require('node:os').cpus()[0]?.model ?? 'unknown')"], { encoding: "utf8" }).stdout.trim();
 console.info(`runner: ${runner}, Node.js ${process.version}, case "${part}", ${String(count)} processes`);
-for (const v of VARIANTS) {
+for (const v of VARIANTS.filter((x) => chosen.has(x.name))) {
   const valid: number[] = [];
   for (let i = 1; i <= v.n; i++) {
-    const s = sample(v.flags, v.alone);
+    const s = sample(v.flags, v.alone, v.extra);
     if (s === undefined) {
       console.info(`${v.name} ${String(i)}: no sample`);
       continue;

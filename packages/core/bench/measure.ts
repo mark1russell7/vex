@@ -314,6 +314,12 @@ export function measureIsolated<I>(options: PairedOptions<I>): PairedReport | Pr
  * clock. Give both arms of a comparison the same count, so the ratio of the runs is the ratio of the calls.
  */
 export function batch(id: string, f: () => void, calls: number): Arm<undefined> {
+  // GATENOISE diagnostic: with GATE_FRESH_BATCH, each arm gets a loop of its own source, so no two arms share its feedback.
+  if (process.env["GATE_FRESH_BATCH"] === "1") {
+    // oxlint-disable-next-line no-new-func, typescript/no-unsafe-type-assertion, typescript/no-unsafe-call
+    const run = new Function("f", "calls", `return () => { for (let c = 0; c < calls; c++) f(); }; // ${id}`)(f, calls) as () => void;
+    return { id, run };
+  }
   return {
     id,
     run: () => {

@@ -1,8 +1,8 @@
 /**
  * The minimum of runs of the weekly long run (`docs/QUALITY-PLAN.md` §8). Each property has a time budget. A property
  * that reaches its budget fails when it did fewer runs than its minimum. The minimum comes from 5 or more green runs of
- * the weekly, with the margin on the safe side (rule 1e10f489 of the strategist). This module is not a part of the API
- * of the test kit: `fc-setup.ts` and `scripts/weekly-minimums.ts` use it.
+ * the weekly: the worst number of runs minus their spread (the fleet rule of 2026-11-02). This module is not a part of
+ * the API of the test kit: `fc-setup.ts` and `scripts/weekly-minimums.ts` use it.
  */
 
 /** The record of one property in one run of the weekly. */
@@ -51,8 +51,6 @@ export type Gates = Pick<Minimums, "minimums"> & Partial<Pick<Minimums, "ungated
 
 /** The number of green runs that a derivation needs. */
 export const minimumSources = 5;
-/** The margin of a minimum: the worst number of runs, divided by 1.1. */
-export const minimumMargin = 1.1;
 
 /**
  * This function gives the message of a failure for a record, or `undefined` when the record passes. With `recordOnly`,
@@ -83,10 +81,9 @@ export function parseRecords(text: string): RunRecord[] {
 
 /**
  * This function gives the minimums from the sets of records, one set for each green run of the weekly. The sets are
- * A/A runs, so their spread is the noise. A minimum is the lower of the worst number of runs divided by 1.1, and the
- * worst number minus the spread. The spread comes from the sets where the budget stopped the property. A count at the
- * target is not a measure of the speed. The result is rounded down. A result under 1 cannot fail, so the property
- * goes to `ungated` with its numbers.
+ * A/A runs, so their spread is the noise. A minimum is the worst number of runs minus the spread. The spread comes
+ * from the sets where the budget stopped the property. A count at the target is not a measure of the speed. The
+ * result is rounded down. A result under 1 cannot fail, so the property goes to `ungated` with its numbers.
  *
  * Only a property that reached its budget in a set gets a minimum. A property must be in each set. Fewer than 5 sets, a
  * set with a failure, or a property not in each set throws a `RangeError`.
@@ -115,13 +112,13 @@ export function deriveMinimums(sets: Readonly<Record<string, readonly RunRecord[
     const measured = stopped.get(key) ?? [];
     const worst = Math.min(...xs);
     const spread = Math.max(...measured) - Math.min(...measured);
-    const least = Math.floor(Math.min(worst / minimumMargin, worst - spread));
+    const least = Math.floor(worst - spread);
     if (least >= 1) minimums[key] = least;
     else ungated[key] = { reason: "not gated (noise > worst)", worst, spread };
   }
   return {
     schema: "weekly-runs/1",
-    derivation: `For each property over ${String(sources.length)} green runs of the weekly: the lower of the worst number of runs divided by ${String(minimumMargin)}, and the worst number minus the spread of the runs that the budget stopped, rounded down (rule 1e10f489). A property with a spread as large as its worst number is not gated: ungated names it.`,
+    derivation: `For each property over ${String(sources.length)} green runs of the weekly: the worst number of runs minus the spread of the runs that the budget stopped, rounded down (the fleet rule of 2026-11-02). A property with a spread as large as its worst number is not gated: ungated names it.`,
     sources,
     minimums,
     ungated,

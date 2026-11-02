@@ -8,7 +8,7 @@ Change an item here first, then on the tracker. An item that is done goes out of
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| GATELIMITS | Each speed-gate limit is the worst of 5 CI runs times 1.1, with the derivation in the gate. | ci | P1 | in progress | |
+| GATELIMITS | Each speed-gate limit is the worst of 5 CI runs plus their spread (the fleet rule of 2026-11-02), with the derivation in the gate. | ci | P1 | in progress | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 6 merged, the cheap sort is next | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | COEVAL16 | Vex takes `@mark1russell7/coeval` 0.17 with the client release of 2026-11-02. | core | P1 | waiting for the release of 2026-11-02 | the coeval release |

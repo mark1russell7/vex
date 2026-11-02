@@ -8,7 +8,7 @@
  * Timing runs in CI only.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -131,7 +131,7 @@ export function profileLines(p: CommandProfile, top: number): readonly string[] 
 // The script form: one case of the gate of the compiler. The generated module of radial is the function `radial`
 // (gate.ts), and the hand arm is `radialArrange`. `PROFILE_GROUPS` is `name=f1,f2;name=f3`, with names or full keys. The optimizer can put
 // small functions into their callers: `PROFILE_NODE_FLAGS=--no-turbo-inlining` keeps each function apart.
-if (import.meta.filename === resolve(process.argv[1] ?? "")) {
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const which = process.env["GATE_CASE"];
   if (which === undefined || !/^\d+$/u.test(which)) throw new RangeError(`profile: GATE_CASE is "${String(which)}", not a case number.`);
   const processes = Number(process.env["PROFILE_PROCESSES"] ?? "3");

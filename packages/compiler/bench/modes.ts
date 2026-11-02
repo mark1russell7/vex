@@ -11,7 +11,7 @@
  *   result of the case before it.
  *
  * A sample is valid only when its A/A band contains 1.0. The output gives each sample, then the spread of each
- * variant. The third argument names the functions of the trace, and the fourth the variants (default `gate,gate-fresh`). Run it in CI only:
+ * variant. The third argument names the functions of the trace, and the fourth the variants (default `gate,gate-no-pretenure,gate-pretenure-trace`). Run it in CI only:
  * `node bench/modes.ts "tree module" 20 team,teamHand,CH,PR,AN,push`.
  */
 import { spawnSync } from "node:child_process";
@@ -55,6 +55,17 @@ function gcOf(trace: string): readonly string[] {
   return [...kinds].map(([k, v]) => `gc ${k} ×${String(v.n)}, ${v.ms.toFixed(1)} ms`);
 }
 
+/** This function gives the changes of the pretenuring decisions of a trace, with a count, in `where` (the case or before it). */
+function pretenureOf(trace: string, where: string): readonly string[] {
+  const counts = new Map<string, number>();
+  for (const m of trace.matchAll(/pretenuring: AllocationSite\(\w+\): .*\) ([a-z][a-z' ]*?) => ([a-z][a-z' ]*?)\s*$/gmu)) {
+    if (m[1] === m[2]) continue;
+    const key = `${where}: ${m[1] ?? ""} => ${m[2] ?? ""}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts].map(([k, n]) => `pretenure ${k} ×${String(n)}`);
+}
+
 /** This function gives the part of the output of a process that belongs to the case: after the result line before it. */
 function segmentOf(stdout: string): string {
   const lines = stdout.split("\n");
@@ -74,7 +85,10 @@ function sample(flags: readonly string[], alone: boolean, extra: Readonly<Record
   const m = line === undefined ? null : LINE.exec(line);
   if (m === null) return undefined;
   const [, generated, loops, ratio, lo, hi] = m.map(Number);
-  return { ratio: ratio ?? Number.NaN, generated: generated ?? Number.NaN, loops: loops ?? Number.NaN, aa: [lo ?? Number.NaN, hi ?? Number.NaN], events: flags.length === 0 ? [] : [...eventsOf(segmentOf(out.stdout)), ...gcOf(segmentOf(out.stdout))] };
+  const own = segmentOf(out.stdout);
+  const before = out.stdout.slice(0, Math.max(0, out.stdout.indexOf(own)));
+  const events = flags.length === 0 ? [] : [...eventsOf(own), ...gcOf(own), ...pretenureOf(before, "before"), ...pretenureOf(own, "case")];
+  return { ratio: ratio ?? Number.NaN, generated: generated ?? Number.NaN, loops: loops ?? Number.NaN, aa: [lo ?? Number.NaN, hi ?? Number.NaN], events };
 }
 
 const VARIANTS = [
@@ -83,8 +97,10 @@ const VARIANTS = [
   { name: "alone", flags: [], alone: true, n: count, extra: {} },
   { name: "trace", flags: ["--trace-opt", "--trace-deopt", "--trace-gc"], alone: true, n: Math.ceil(count / 2), extra: {} },
   { name: "gate-trace", flags: ["--trace-opt", "--trace-deopt", "--trace-gc"], alone: false, n: count, extra: {} },
+  { name: "gate-no-pretenure", flags: ["--no-allocation-site-pretenuring"], alone: false, n: count, extra: {} },
+  { name: "gate-pretenure-trace", flags: ["--trace-pretenuring-statistics"], alone: false, n: count, extra: {} },
 ] as const;
-const chosen = new Set((process.argv[5] ?? "gate,gate-fresh").split(","));
+const chosen = new Set((process.argv[5] ?? "gate,gate-no-pretenure,gate-pretenure-trace").split(","));
 
 const runner = spawnSync(process.execPath, ["-e", "console.log(require('node:os').cpus()[0]?.model ?? 'unknown')"], { encoding: "utf8" }).stdout.trim();
 console.info(`runner: ${runner}, Node.js ${process.version}, case "${part}", ${String(count)} processes`);

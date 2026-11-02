@@ -80,7 +80,7 @@ jobs:
         env:
           CASE: ${{ inputs.modes }}
         run: |
-          node packages/compiler/bench/modes.ts "$CASE" 20 | tee modes.txt
+          node packages/compiler/bench/modes.ts "$CASE" 40 | tee modes.txt
           {
             echo "### The modes of one case (time ratios: lower is better)"
             echo

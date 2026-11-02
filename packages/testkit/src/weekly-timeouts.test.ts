@@ -35,6 +35,11 @@ function argsOf(text: string, open: number): readonly string[] {
   return [...args, text.slice(start).trim()];
 }
 
+/** This function tells if the text of an argument is a function: the body of a block, not its time-out. */
+function isFunction(x: string): boolean {
+  return x.includes("=>") || x.startsWith("function") || x.startsWith("async");
+}
+
 /**
  * This function gives each block of a property (a title with `P<n>`) whose time-out does not come from
  * `propertyTimeout`. The time-out is a `timeout` option of the second argument, or a third argument that is not the
@@ -47,18 +52,21 @@ function fixedTimeouts(text: string): readonly string[] {
     const [title = "", second = "", third] = args;
     if (!/^["'`].*\bP\d+\b/su.test(title)) continue;
     const option = second.startsWith("{") && /\btimeout\b/u.test(second) && !/\btimeout:\s*propertyTimeout\(/u.test(second);
-    const fn = (x: string): boolean => x.includes("=>") || x.startsWith("function") || x.startsWith("async");
-    const last = third !== undefined && !fn(third) && !third.startsWith("propertyTimeout(");
+    const last = third !== undefined && !isFunction(third) && !third.startsWith("propertyTimeout(");
     if (option || last) out.push(`${m[0]}${title}, ${option ? second : `…, ${third ?? ""}`})`);
   }
   return out;
 }
 
-/** This function gives each test file of the packages, as a path from the root of the repository. */
+/** This file. Its cases of the guard are text in strings, not blocks, so the scan of the test files leaves it out. */
+const SELF = join("packages", "testkit", "src", "weekly-timeouts.test.ts");
+
+/** This function gives each test file of the packages but this one, as a path from the root of the repository. */
 function testFiles(): readonly string[] {
   return readdirSync(join(root, "packages"), { recursive: true, encoding: "utf8" })
     .filter((p) => /[\\/]src[\\/].*\.test\.ts$/u.test(p) && !p.includes("node_modules"))
-    .map((p) => join("packages", p));
+    .map((p) => join("packages", p))
+    .filter((p) => p !== SELF);
 }
 
 describe("the time-out of a test with properties", () => {
@@ -88,8 +96,20 @@ describe("the time-out of a test with properties", () => {
 });
 
 describe("the time-outs of the weekly long run", () => {
-  it("finds the test files", () => {
-    expect(testFiles().length).toBeGreaterThan(50);
+  it("finds the test files, and leaves out only this file", () => {
+    const files = testFiles();
+    expect(files.length).toBeGreaterThan(50);
+    expect(files).not.toContain(SELF);
+    expect(files).toContain(join("packages", "compiler", "src", "module-sheet.test.ts"));
+  });
+
+  // A real file of properties with a fixed time-out fails: the scan sees the blocks of a whole test file.
+  it("finds a fixed time-out in a real file of properties", () => {
+    const real = readFileSync(join(root, "packages", "compiler", "src", "module-sheet.test.ts"), "utf8");
+    expect(fixedTimeouts(real)).toEqual([]);
+    const broken = real.replace("{ timeout: propertyTimeout(60_000) }", "{ timeout: 60_000 }");
+    expect(broken).not.toBe(real);
+    expect(fixedTimeouts(broken)).toHaveLength(1);
   });
 
   // The weekly run gives each property 10 minutes (FC_TIME_LIMIT_MS). A fixed time-out of 60 s in the options of a

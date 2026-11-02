@@ -39,23 +39,16 @@ describe("parseLine", () => {
 });
 
 describe("limitsFor", () => {
-  const BY = { "7763": { limit: 1.2, slow: 1.2, maxSlow: 3 }, "9V74": { limit: 1.3, slow: 1.25, maxSlow: 4 } };
+  const BY = { "7763": { limit: 1.2, slow: 1.2, maxSlow: 3 }, "9V74": { limit: 1.3, slow: 1.25, maxSlow: 4 }, other: { limit: 1.4, slow: 1.4 } };
 
   it("gives the limits of the model that the CPU name contains, with its model", () => {
     expect(limitsFor(BY, "AMD EPYC 7763 64-Core Processor")).toEqual({ limit: 1.2, slow: 1.2, maxSlow: 3, model: "7763" });
     expect(limitsFor(BY, "AMD EPYC 9V74 80-Core Processor")).toMatchObject({ limit: 1.3, model: "9V74" });
   });
 
-  it("gives the worst limits of all models for another model", () => {
-    expect(limitsFor(BY, "AMD EPYC 9V45 96-Core Processor")).toEqual({ limit: 1.3, slow: 1.25, maxSlow: 4, model: "other" });
-  });
-
-  it("gives a record only for another model when one model has a record only", () => {
-    expect(limitsFor({ a: { limit: 1, slow: 1 }, b: { limit: 2, slow: 2, maxSlow: 1 } }, "c")).toEqual({ limit: 2, slow: 2, model: "other" });
-  });
-
-  it("refuses a case with no limits", () => {
-    expect(() => limitsFor({}, "AMD EPYC 7763")).toThrow(RangeError);
+  it("gives the limits of other for another model, and never matches other as a part of a name", () => {
+    expect(limitsFor(BY, "AMD EPYC 9V45 96-Core Processor")).toEqual({ limit: 1.4, slow: 1.4, model: "other" });
+    expect(limitsFor(BY, "another CPU")).toMatchObject({ model: "other" });
   });
 
   it("reads back the model and a record only from a result line", () => {

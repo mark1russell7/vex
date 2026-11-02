@@ -25,21 +25,16 @@ export interface CaseLimits {
   readonly model: string;
 }
 
-/** The limits of one case for each CPU model with 5 or more derivation runs, by a part of the model name. */
-export type ModelLimits = Readonly<Record<string, Omit<CaseLimits, "model">>>;
-
 /**
- * This function gives the limits of a case for the CPU model `cpu`: the limits of the first model whose name part
- * `cpu` contains, or else the worst limits of all models, with the model `other`.
+ * The limits of one case for each CPU model with 5 or more derivation runs, by a part of the model name. The entry
+ * `other` holds the limits from all derivation runs, for each other model.
  */
+export type ModelLimits = Readonly<Record<string, Omit<CaseLimits, "model">>> & { readonly other: Omit<CaseLimits, "model"> };
+
+/** This function gives the limits of a case for the CPU model `cpu`: the limits of the model that it contains, or `other`. */
 export function limitsFor(byModel: ModelLimits, cpu: string): CaseLimits {
-  const known = Object.entries(byModel).find(([part]) => cpu.includes(part));
-  if (known !== undefined) return { ...known[1], model: known[0] };
-  const all = Object.values(byModel);
-  if (all.length === 0) throw new RangeError("limitsFor: a case has no limits.");
-  const counts = all.map((l) => l.maxSlow);
-  const maxSlow = counts.every((c) => c !== undefined) ? Math.max(...counts) : undefined;
-  return { limit: Math.max(...all.map((l) => l.limit)), slow: Math.max(...all.map((l) => l.slow)), ...(maxSlow === undefined ? {} : { maxSlow }), model: "other" };
+  const known = Object.entries(byModel).find(([part]) => part !== "other" && cpu.includes(part));
+  return known === undefined ? { ...byModel.other, model: "other" } : { ...known[1], model: known[0] };
 }
 
 /** The result of one case in one process, as the result line of a gate script gives it. */

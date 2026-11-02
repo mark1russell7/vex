@@ -31,7 +31,7 @@ Change an item here first, then on the tracker. An item that is done goes out of
 | SHAPESIZE | The ireko layout bundle with the shapes module stays under 17.4 kB. | pilots | P1 | later | COMPILE-FUSE |
 | TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. | compiler | P2 | later | FALLBACKSHARE |
 | GATENOISE | The radial, tree and shapes cases of the speed gate change by 20 % to 32 % from run to run. Make them steady enough to catch a loss of 10 %. | compiler | P1 | in progress | GATELIMITS |
-| RADIALGAP | The generated code of the nested radial module of ireko gets near the hand loops. Its ratio is about 3.85 now, and the target is 2.0 or less. | compiler | P1 | later | GATENOISE |
+| RADIALGAP | The generated code of the nested radial module of ireko gets near the hand loops. Its ratio is approximately 3.85 at this time, and the target is 2.0 or less. | compiler | P1 | later | GATENOISE |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | later | GATENOISE |
 | INAPPRECORD | Each night, all cases of the compiler gate run in one process, and the record gives the count of slow processes. | ci | P2 | later | GATENOISE |
 | TYPED-SCRIPTS | The JavaScript scripts become TypeScript, and the plugin launcher gets a TypeScript source. | ci | P2 | later | |

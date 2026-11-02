@@ -25,7 +25,7 @@ on:
 
 permissions: {}
 
-# The event name is in the key, so a dispatch never cancels or holds a scheduled run (fleet rule of 2026-11-02).
+# The event name is in the key: a dispatch with other inputs never cancels or holds a scheduled run (fleet rule of 2026-11-02).
 concurrency:
   group: weekly-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false

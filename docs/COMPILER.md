@@ -682,6 +682,8 @@ The speed, measured by `bench/gate.ts` with alternate samples on one machine:
 
 These figures are from a local machine. The runners of CI measure 1.5 to 1.66 for the nearest box and 1.2 to 1.3 for the Game of Life (2026-10-14 to 2026-10-19). Until 2026-10-19, each step of the gate sent its output into `tee` without `pipefail`, so a failed gate did not fail the nightly job. From that day, the steps use the shell `bash`, which sets `pipefail`. The limit of the nearest box is 2, and the limit of the Game of Life stays 1.5. C1 measured 2.3, so a loss of the fast paths still fails the gate.
 
+From 2026-11-02, `bench/gate-processes.ts` starts each case of the gate in 11 fresh processes of its own (GATENOISE). The cases measured before a case changed its heap and its JIT state. In one process with all cases, V8 tenured an allocation site in the tree case. That arm stayed slow for the rest of the process. The nested radial case gave 2.7 there, and 3.85 alone. The header of `bench/gate.ts` gives the limits for each CPU model and the 10 CI runs that set them.
+
 The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they moved to phase C5. Later they moved to phase C3, after the kinds: a value in its components needs its kind.
 
 #### The memo of each space
@@ -927,7 +929,7 @@ Thus the targets of each axis are a range of an array, and the loop over them is
 
 A property compares random programs over random trees with the interpreter (P17). A random order of the keys gives each key a parent before it in that order. Thus a parent can come after its child in the key order. The programs read the parent, the siblings and each axis of a tree, also in the reverse order and from an address. The text of a module of a tree is in the golden file `__golden__/module-tree.js`.
 
-The speed gate of the compiler has a tree case. It gives the cost of the team and the depth of each of 1000 nodes, against loops with a stack. The nightly run gives its numbers, and its limit is 3.
+The speed gate of the compiler has a tree case. It gives the cost of the team and the depth of each of 1000 nodes, against loops with a stack. The header of `bench/gate.ts` gives its limit.
 
 #### Sheets in modules (design D)
 

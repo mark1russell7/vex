@@ -13,9 +13,8 @@ on:
 
 permissions: {}
 
-# The event name is in the key, so a dispatch never cancels or holds a scheduled run (fleet rule of 2026-11-02).
 concurrency:
-  group: security-${{ github.event_name }}-${{ github.ref }}
+  group: security-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

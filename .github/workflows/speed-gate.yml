@@ -4,14 +4,9 @@
 name: Speed gate
 
 on:
+  # Each pull request starts this workflow, so its summary check is always there. The job changes skips the
+  # work when the pull request changes no file of the gate (CI.md of the template, "A gate with paths").
   pull_request:
-    paths:
-      - "packages/core/src/**"
-      - "packages/core/bench/**"
-      - "packages/compiler/src/**"
-      - "packages/compiler/bench/**"
-      - "packages/pilots/src/ireko-*.ts"
-      - ".github/workflows/speed-gate.yml"
   workflow_dispatch:
     inputs:
       reps:
@@ -28,7 +23,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      match: ${{ steps.changes.outputs.match }}
+    steps:
+      - id: changes
+        uses: mark1russell7/template/.github/actions/changes@f05c6eeb35e33a040bdfdcd7d07a1d2c00640f8d # main
+        with:
+          paths: |
+            packages/core/src/**
+            packages/core/bench/**
+            packages/compiler/src/**
+            packages/compiler/bench/**
+            packages/pilots/src/ireko-*.ts
+            .github/workflows/speed-gate.yml
+
   gates:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
     name: Speed gates ${{ matrix.rep }}
     runs-on: ubuntu-latest
     # Each limit comes from at least 5 runs: the worst value times 1.1 (the fleet rule of 2026-10-30).
@@ -67,3 +84,15 @@ jobs:
             grep -E "^(runner|ok|FAIL)" gates.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  speed-gate-ok:
+    name: Speed gate OK
+    if: always()
+    needs: [changes, gates]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - uses: mark1russell7/template/.github/actions/gate-summary@f05c6eeb35e33a040bdfdcd7d07a1d2c00640f8d # main
+        with:
+          needs: ${{ toJSON(needs) }}

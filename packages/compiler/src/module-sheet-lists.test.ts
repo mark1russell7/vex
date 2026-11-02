@@ -338,7 +338,8 @@ function checkListSheet(columns: ReadonlyMap<string, Expr>, records: readonly un
 /** A random program whose value is a list, with no read of a cell. */
 const programs = (tree: boolean): fc.Arbitrary<Expr> => listOf({ axes: tree ? TREE_AXES : ARRAY_AXES, own: [], nums: [] });
 
-describe("COMPILE.MODULE.SHEET.LIST P17: random sheets with lists", { timeout: 60_000 }, () => {
+// The weekly run (FC_NUM_RUNS) gives each property 10 minutes, so this time-out is then the one of `vitest.config.ts`.
+describe("COMPILE.MODULE.SHEET.LIST P17: random sheets with lists", { timeout: process.env["FC_NUM_RUNS"] === undefined ? 60_000 : 900_000 }, () => {
   it("P17 COMPILE.MODULE.SHEET.LIST: a module of a random sheet with lists over an array or a tree gives the results of SheetRun", () => {
     fc.assert(fc.property(listSheet(false), rows, (columns, rs) => void checkListSheet(columns, rs, undefined)), { numRuns: 150 });
     fc.assert(fc.property(listSheet(true), trees, (columns, [rs, parents]) => void checkListSheet(columns, rs, parents)), { numRuns: 150 });

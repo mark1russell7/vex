@@ -350,7 +350,8 @@ const record = fc.record({
 });
 const records = fc.array(record, { maxLength: 6 });
 
-describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: 60_000 }, () => {
+// The weekly run (FC_NUM_RUNS) gives each property 10 minutes, so this time-out is then the one of `vitest.config.ts`.
+describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: process.env["FC_NUM_RUNS"] === undefined ? 60_000 : 900_000 }, () => {
   // The lists: from an axis, with error items and literals, and from the list ops that build a list.
   const base = fc.constantFrom<Expr>(ns, each(axes.all, w), inv, each(axes.where(axes.all, ref("b")), n), each(axes.window(-1, 1), n), each(axes.reverse(axes.all), w), LIT, BAD, EMPTY);
   const opts = fc.boolean().map((s) => (s ? [strict] : []));

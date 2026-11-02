@@ -342,7 +342,8 @@ const depth = (parents: readonly number[], k: number): number => (k < 0 ? -1 : 1
 
 // These tests check some hundred sheets, each with four budgets. In the mutation lane, Stryker adds its counters to
 // the code, and one test takes more than the 5 s of Vitest.
-describe("COMPILE.MODULE.SHEET P17: random sheets", { timeout: 60_000 }, () => {
+// The weekly run (FC_NUM_RUNS) gives each property 10 minutes, so this time-out is then the one of `vitest.config.ts`.
+describe("COMPILE.MODULE.SHEET P17: random sheets", { timeout: process.env["FC_NUM_RUNS"] === undefined ? 60_000 : 900_000 }, () => {
   it("P17 COMPILE.MODULE.SHEET: a module of a random sheet of the test kit gives the results of SheetRun, with each budget of the stack", () => {
     fc.assert(fc.property(arbSheet, ({ formulas, own, rows: vs }) => void checkSheet(sheetColumnsOf(formulas), sheetCellsOf(own), vs.map((x) => ({ v: x })), undefined)));
     // A fixed sample has cycles in many sheets.

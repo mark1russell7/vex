@@ -7,7 +7,7 @@ import { GATE_NPM_PACKAGES, lockInputs, sameInputs } from "./gate-inputs.ts";
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 
 /** The entries of the two speed gates: the files that `bench:gate` starts. */
-const ENTRIES = ["packages/core/bench/gate.ts", "packages/compiler/bench/gate.ts"];
+const ENTRIES = ["packages/core/bench/gate.ts", "packages/compiler/bench/gate.ts", "packages/compiler/bench/gate-processes.ts"];
 
 /** This function gives the indent of a line of YAML, as a number of spaces. */
 function indent(line: string): number {

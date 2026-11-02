@@ -51,7 +51,8 @@
     "build": "tsdown",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench:gate": "node bench/gate.ts",
+    "bench:gate": "node bench/gate-processes.ts",
+    "bench:gate:one": "node bench/gate.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
   },
   "devDependencies": {

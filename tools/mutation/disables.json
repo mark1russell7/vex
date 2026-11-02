@@ -476,6 +476,10 @@
     "comment": "// Stryker disable next-line EqualityOperator: the year 0 takes the first branch, so y < 0 and y <= 0 are the same in the second"
   },
   {
+    "file": "packages/domains/src/schema.ts",
+    "comment": "// Stryker disable next-line BooleanLiteral: flat skips an error item (LIST.BUILD), so a document without a kind gives no notes with true too"
+  },
+  {
     "file": "packages/domains/src/vec2.ts",
     "comment": "// Stryker disable next-line ArrayDeclaration: a list with a text gives NaN components, like the empty list"
   },

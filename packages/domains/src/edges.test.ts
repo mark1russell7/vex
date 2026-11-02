@@ -94,6 +94,8 @@ describe("the tests of Vec2 with a zero or an equal value in one component", () 
 describe("Color", () => {
   it("weights the channels for the luminance, and compares each channel for equality", () => {
     expect(new Color(10, 20, 30).luminance()).toBeCloseTo(18.596, 10);
+    // The channel 10.31475 is at the sRGB threshold 0.04045, and the threshold takes the linear branch.
+    expect(new Color(10.31475, 0, 0).relativeLuminance()).toBe(0.2126 * (0.04045 / 12.92));
     const base = new Color(1, 2, 3, 0.5);
     const others = [new Color(9, 2, 3, 0.5), new Color(1, 9, 3, 0.5), new Color(1, 2, 9, 0.5), new Color(1, 2, 3, 1)];
     expect(others.map((o) => base.equals(o))).toEqual([false, false, false, false]);

@@ -35,13 +35,18 @@ jobs:
       - id: changes
         uses: mark1russell7/template/.github/actions/changes@e035fa69560ec82e176f1f7bdcb6760c8b15af54 # main
         with:
+          # The gates measure the source, never a test, so a pull request that changes only tests skips them. The
+          # bench uses `test-support.ts`, so it stays in. The nightly measures main each day.
           paths: |
             packages/core/src/**
             packages/core/bench/**
             packages/compiler/src/**
             packages/compiler/bench/**
+            packages/domains/src/**
             packages/pilots/src/ireko-*.ts
             .github/workflows/speed-gate.yml
+            !packages/*/src/**/*.test.ts
+            !packages/*/src/__golden__/**
 
   gates:
     needs: changes

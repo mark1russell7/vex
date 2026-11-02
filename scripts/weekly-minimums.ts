@@ -23,3 +23,4 @@ for (const dir of process.argv.slice(2)) {
 const minimums = deriveMinimums(sets);
 writeFileSync("spec/weekly-runs.json", `${JSON.stringify(minimums, null, 2)}\n`);
 console.info(`weekly-minimums: ${String(Object.keys(minimums.minimums).length)} minimums from ${String(minimums.sources.length)} sets`);
+for (const [key, u] of Object.entries(minimums.ungated)) console.info(`weekly-minimums: "${key}" is ${u.reason}: worst ${String(u.worst)}, spread ${String(u.spread)}`);

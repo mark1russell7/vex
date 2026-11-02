@@ -29,8 +29,10 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # The gates start for a change of their code, or for a change of `pnpm-lock.yaml` that changes a package from
+    # npm that they import (`GATE_NPM_PACKAGES` in `packages/testkit/src/gate-inputs.ts`).
     outputs:
-      match: ${{ steps.changes.outputs.match }}
+      match: ${{ steps.changes.outputs.match == 'true' || steps.inputs.outputs.same == 'false' }}
     steps:
       - id: changes
         uses: mark1russell7/template/.github/actions/changes@e035fa69560ec82e176f1f7bdcb6760c8b15af54 # main
@@ -47,6 +49,27 @@ jobs:
             .github/workflows/speed-gate.yml
             !packages/*/src/**/*.test.ts
             !packages/*/src/__golden__/**
+      - id: lock
+        uses: mark1russell7/template/.github/actions/changes@e035fa69560ec82e176f1f7bdcb6760c8b15af54 # main
+        with:
+          paths: pnpm-lock.yaml
+      # Only the lock file changed: the gates start only when a package of the gates has a new version or integrity.
+      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - id: inputs
+        if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "$BASE:pnpm-lock.yaml" > "$RUNNER_TEMP/base-lock.yaml"
+          node scripts/gate-inputs.ts "$RUNNER_TEMP/base-lock.yaml" pnpm-lock.yaml >> "$GITHUB_OUTPUT"
 
   gates:
     needs: changes

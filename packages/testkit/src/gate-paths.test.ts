@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { GATE_NPM_PACKAGES, lockInputs, sameInputs } from "./gate-inputs.ts";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -101,10 +102,51 @@ describe("the paths of the speed gates", () => {
     expect(files.filter((f) => !inGate(patterns, f))).toEqual([]);
   });
 
-  // A package from npm changes only with `pnpm-lock.yaml`, and that file does not start the gates. This list makes a
-  // new package of the gates a decision.
-  it("reach only the packages from npm of this list", () => {
-    expect(reached(ENTRIES).external).toEqual(["@mark1russell7/coeval", "@mark1russell7/optional"]);
+  // A package from npm changes only with `pnpm-lock.yaml`. The gates start for a change of the lock file only when
+  // it changes a package of GATE_NPM_PACKAGES, so the list must hold each package that the gates import.
+  it("reach only the packages from npm of GATE_NPM_PACKAGES", () => {
+    expect(reached(ENTRIES).external).toEqual(GATE_NPM_PACKAGES);
+  });
+});
+
+/** This function gives a small lock file: one entry of coeval, one of another package, and the snapshots. */
+function lock(coeval: string, integrity: string, other: string): string {
+  return [
+    "packages:",
+    "",
+    `  '@mark1russell7/coeval@${coeval}':`,
+    `    resolution: {integrity: ${integrity}}`,
+    "",
+    `  left-pad@${other}:`,
+    "    resolution: {integrity: sha512-x}",
+    "",
+    "snapshots:",
+    "",
+    `  '@mark1russell7/coeval@${coeval}': {}`,
+    "",
+  ].join("\n");
+}
+
+describe("the packages from npm of the speed gates in the lock file", () => {
+  it("gives the key and the resolution of each entry of the list, and skips the snapshots", () => {
+    expect(lockInputs(lock("0.17.0", "sha512-a", "1.0.0"), GATE_NPM_PACKAGES)).toEqual(["@mark1russell7/coeval@0.17.0 resolution: {integrity: sha512-a}"]);
+    expect(lockInputs("  unscoped:\n    resolution: {integrity: sha512-u}\n", ["unscoped"])).toEqual(["unscoped resolution: {integrity: sha512-u}"]);
+  });
+
+  it("finds each package of the list in the lock file of the repository", () => {
+    const real = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
+    for (const name of GATE_NPM_PACKAGES) expect(lockInputs(real, [name]).length).toBeGreaterThan(0);
+  });
+
+  it("is the same when only another package changes", () => {
+    expect(sameInputs(lock("0.17.0", "sha512-a", "1.0.0"), lock("0.17.0", "sha512-a", "2.0.0"))).toBe(true);
+  });
+
+  it("is not the same when a version, an integrity or the number of entries of the list changes", () => {
+    const base = lock("0.17.0", "sha512-a", "1.0.0");
+    expect(sameInputs(base, lock("0.17.1", "sha512-a", "1.0.0"))).toBe(false);
+    expect(sameInputs(base, lock("0.17.0", "sha512-b", "1.0.0"))).toBe(false);
+    expect(sameInputs(base, `${base}\n  '@mark1russell7/optional@1.0.0':\n    resolution: {integrity: sha512-o}\n`)).toBe(false);
   });
 
   it("leave out the tests", () => {

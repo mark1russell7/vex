@@ -157,16 +157,26 @@ const CASES = [
   shapesCase(10, 3),
 ] as const;
 
+// With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
+// changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run
+// 41418095435), and that arm was slow for the whole process. With GATE_CASE=count, the process gives the count of cases.
+const only = process.env["GATE_CASE"];
+if (only === "count") {
+  console.info(`cases ${String(CASES.length + 1)}`);
+  process.exit(0);
+}
+const chosen = only === undefined ? undefined : Number(only);
+if (chosen !== undefined && !(Number.isInteger(chosen) && chosen >= 0 && chosen <= CASES.length)) throw new RangeError(`gate: GATE_CASE is "${String(only)}", not "count" or a case from 0 to ${String(CASES.length)}.`);
 console.info(envLine("process"));
 let failed = false;
-for (const { title, compiled, hand, limits } of CASES) {
+for (const { title, compiled, hand, limits } of CASES.filter((_, i) => chosen === undefined || chosen === i)) {
   // The arms alternate in this process, with the order reversed in odd rounds, and a copy of the base gives the noise floor (core/bench/measure.ts).
   const { ratio, a: v, b: h, noise } = paired(compiled.run, hand);
   const ok = ratio <= limits.limit && compiled.tier === 2 && compiled.fallbacks() === 0;
   failed ||= !ok;
   console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, ${limitsText(limits)}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
 }
-{
+if (chosen === undefined || chosen === CASES.length) {
   // The growth of O(n) is 2, and the growth of O(n²) is 4. The limit 2.23 comes from the runs in the header.
   const { ratio, a: v, b: h, noise } = paired(large.run, small.run);
   const ok = ratio <= SHARE.limit && large.tier === 2 && large.fallbacks() === 0;

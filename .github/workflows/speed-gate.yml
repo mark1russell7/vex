@@ -14,6 +14,10 @@ on:
         type: choice
         options: ["1", "5"]
         default: "1"
+      modes:
+        description: A part of the title of a compiler case. The job then runs bench/modes.ts for that case in fresh processes, not the gates (GATENOISE).
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -54,7 +58,7 @@ jobs:
       max-parallel: 3
       matrix:
         rep: ${{ fromJSON(inputs.reps == '5' && '[1, 2, 3, 4, 5]' || '[1]') }}
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.modes && 30 || 15 }}
     permissions:
       contents: read
     # The shell bash sets pipefail, so a gate that fails fails its step, also with its output piped into tee.
@@ -71,11 +75,25 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @mark1russell7/vex run bench:gate | tee gates.txt
+      # With the input modes, the job examines one compiler case in fresh processes (bench/modes.ts) and runs no gate.
+      - if: ${{ inputs.modes != '' && inputs.modes != null }}
+        env:
+          CASE: ${{ inputs.modes }}
+        run: |
+          node packages/compiler/bench/modes.ts "$CASE" 20 | tee modes.txt
+          {
+            echo "### The modes of one case (time ratios: lower is better)"
+            echo
+            echo '```'
+            grep -E "^(runner|summary)" modes.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - if: ${{ (inputs.modes == '' || inputs.modes == null) }}
+        run: pnpm --filter @mark1russell7/vex run bench:gate | tee gates.txt
       # The gate of the compiler runs also when the first gate fails, and the summary keeps the lines of both.
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && (inputs.modes == '' || inputs.modes == null) }}
         run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a gates.txt
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && (inputs.modes == '' || inputs.modes == null) }}
         run: |
           {
             echo "### Speed gates (time ratios: lower is better)"

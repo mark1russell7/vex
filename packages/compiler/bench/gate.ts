@@ -152,16 +152,18 @@ const CASES = [
   shapesCase(10, 3),
 ] as const;
 
+// With GATE_CASE, the run has only the cases whose title contains it. `bench/modes.ts` uses it to examine one case.
+const only = process.env["GATE_CASE"];
 console.info(envLine("process"));
 let failed = false;
-for (const { title, compiled, hand, limit } of CASES) {
+for (const { title, compiled, hand, limit } of CASES.filter((c) => only === undefined || c.title.includes(only))) {
   // The arms alternate in this process, with the order reversed in odd rounds, and a copy of the base gives the noise floor (core/bench/measure.ts).
   const { ratio, a: v, b: h, noise } = paired(compiled.run, hand);
   const ok = ratio <= limit && compiled.tier === 2 && compiled.fallbacks() === 0;
   failed ||= !ok;
   console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
 }
-{
+if (only === undefined) {
   // The growth of O(n) is 2, and the growth of O(n²) is 4. The limit 2.23 comes from the runs in the header.
   const { ratio, a: v, b: h, noise } = paired(large.run, small.run);
   const ok = ratio <= 2.23 && large.tier === 2 && large.fallbacks() === 0;

@@ -279,6 +279,16 @@ interface Ctx {
   readonly fns: ReadonlyMap<string, BoundFn>;
 }
 
+/** The parts of a printed fold that its scan reads (COMPILE.MODULE.SCAN): its names, its targets, its test, its steps and its result. */
+interface ScanParts {
+  readonly loop: number;
+  readonly names: { readonly s: readonly string[]; readonly vars: ReadonlyMap<string, Name>; readonly deps: ReadonlySet<number> };
+  readonly t: { readonly s: readonly string[]; readonly j: string; readonly key: readonly string[]; readonly check: readonly string[]; readonly skip: string | undefined; readonly inner: Ctx; readonly tests: readonly Expr[] };
+  readonly test: Code | undefined;
+  readonly step: { readonly s: readonly string[]; readonly deps: ReadonlySet<number>; readonly owners: readonly Owner[] };
+  readonly result: Code;
+}
+
 /**
  * A name of a loop whose step appends to its own list (COMPILE.MODULE.APPEND.OWN). It has the name, its read in the
  * loop and the variable of the array of its last append. The printer makes the variable at the first append that uses it.
@@ -358,7 +368,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
@@ -390,6 +400,46 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A column of the run: the value of an expression at each record, on its first read.
   Q: "function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }",
   G: "function G(x) { return x === E ? F() : x; }",
+  // A fold over the targets before the origin, as a scan (COMPILE.MODULE.SCAN). The first call evaluates the first
+  // state and the value of each target. When these values do not decrease, the targets of each origin are a prefix,
+  // and each prefix keeps its state. NaN satisfies no test, so its target is in no prefix.
+  PF: [
+    "function PF(n, init, key, test, step, result) {",
+    "  let ts, js, a0, bad, mono, pa;",
+    "  return (q) => {",
+    "    if (ts === undefined) {",
+    "      ts = [];",
+    "      js = [];",
+    "      bad = false;",
+    "      try { a0 = init(); } catch { a0 = E; }",
+    "      for (let j = 0; j < n; j++) {",
+    "        let t;",
+    "        try { t = key(j); } catch { bad = true; break; }",
+    "        if (t !== t) continue;",
+    "        ts.push(t);",
+    "        js.push(j);",
+    "      }",
+    "      mono = true;",
+    "      for (let i = 1; i < ts.length; i++) if (!(ts[i - 1] <= ts[i])) mono = false;",
+    "      pa = [a0];",
+    "    }",
+    "    if (a0 === E || bad || q === E) F();",
+    "    if (!mono) {",
+    "      let a = a0;",
+    "      for (let i = 0; i < ts.length; i++) if (test(ts[i], q)) a = step(a, js[i]);",
+    "      return result(a);",
+    "    }",
+    "    let lo = 0, hi = ts.length;",
+    "    while (lo < hi) {",
+    "      const h = (lo + hi) >> 1;",
+    "      if (test(ts[h], q)) lo = h + 1;",
+    "      else hi = h;",
+    "    }",
+    "    for (let i = pa.length - 1; i < lo; i++) pa.push(step(pa[i], js[i]));",
+    "    return result(pa[lo]);",
+    "  };",
+    "}",
+  ].join("\n"),
   B: 'function B(x) { return typeof x === "boolean" ? x : F(); }',
   U: 'function U(x) { return typeof x === "number" ? x : F(); }',
   X: "function X(t, n) { return t >= 0 && t < n ? t : F(); }",
@@ -1023,7 +1073,7 @@ const STEPS: Readonly<Record<string, readonly [string, string]>> = {
 
 /** The helpers that each helper uses. */
 const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
-  F: [], C: [], T: [], L: [], Q: [], G: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"],
+  F: [], C: [], T: [], L: [], Q: [], G: ["F"], PF: ["F"], B: ["F"], U: ["F"], X: ["F"], I: ["F"], K: ["F"], M: ["G"], M1: ["G"], S: ["M1", "F"],
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
@@ -1509,6 +1559,9 @@ function memoOf(expr: Expr): ReadonlyMap<Expr, readonly Expr[]> {
   const all = memoNodes(expr);
   return new Map([...all].filter(([e, keys]) => ownLoop(e, e, all, new Set(keys))));
 }
+
+/** This function tells if each level of `deps` is one of `levels`. */
+const within = (deps: ReadonlySet<number>, levels: readonly number[]): boolean => [...deps].every((d) => levels.includes(d));
 
 /** This function tells if an expression contains the expression `x`, the same object. */
 function contains(e: Expr, x: Expr): boolean {
@@ -3624,6 +3677,8 @@ class Printer {
     const step = this.#loopStep(e.step, { ...t.inner, env: withNames(names.env, t.items) }, names.vars, names.adopt);
     this.#readsNoTarget(t.texts, t.inner.level, [...tests.map((x) => x.v.deps), step.deps]);
     const result = this.#loopResult(e.result, { ...ctx, env: names.env }, step.owners);
+    const scan = this.#scan(e, { loop, names, t, test: tests[0], step, result });
+    if (scan !== undefined) return scan;
     const body = [
       ...t.key,
       ...(t.skip === undefined ? [] : [`if (${t.j} === ${t.skip}) continue;`]),
@@ -3634,6 +3689,52 @@ class Printer {
     const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level && d !== t.item);
     const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
     return { s: [...names.s, ...this.#ownVars(step.owners), ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+  }
+
+  /**
+   * This method gives the code of a fold over the targets before the origin as a scan (COMPILE.MODULE.SCAN), or
+   * undefined. The axis is `where(all, test)`, and the test compares a value `T` of the target with a key of the origin
+   * by `<` or `<=`. The first values, the steps and the result read no key of the run. A run evaluates `T` once at
+   * each record, and each step once at each record. When the values `T` do not decrease, the targets of each origin are
+   * a prefix. A binary search finds it, and each prefix keeps its state. The steps run in the order of the fold, so the
+   * result has the bits of the loop.
+   */
+  #scan(e: ExprOf<"fold">, p: ScanParts): Code | undefined {
+    const { loop, names, t, test, step, result } = p;
+    const level = t.inner.level;
+    const [x] = t.tests;
+    const { base } = testsOf(e.axis);
+    if (base.t !== "all" || (e.at ?? []).length > 0 || e.as !== undefined || t.tests.length !== 1 || x?.tag !== "app" || x.args.length !== 2 || test === undefined) return undefined;
+    if (t.s.length > 0 || t.key.length > 0 || t.check.length > 0 || t.skip !== undefined) return undefined;
+    // The test reads the target and a key of the origin. The rest reads only the target, the names of the fold and the
+    // constants of the run, so it can evaluate once for each run.
+    if (!test.v.deps.has(level) || within(test.v.deps, [level]) || names.deps.size > 0 || step.owners.length > 0 || !within(step.deps, [loop, level]) || !within(result.v.deps, [loop])) return undefined;
+    if ([...names.vars.values()].some((v) => v.list !== undefined) || result.v.list !== undefined) return undefined;
+    const sides = x.args.map((a) => this.#hoist(this.expr(a, t.inner), hasLoop(a)));
+    const at = sides.findIndex((c) => c.v.deps.size > 0 && !c.v.deps.has(level));
+    const key = sides[at];
+    const value = sides[1 - at];
+    // The search needs an order of the values: `<=` of two numbers or of two texts.
+    if (key === undefined || value === undefined || !within(value.v.deps, [level]) || (value.v.kind !== "number" && value.v.kind !== "string")) return undefined;
+    // The test is an op whose inline form cannot fail, as for the prefixes of a node that keeps its items (`#cached`).
+    const site = this.#facts.staticSite(x.op, sides.map((c) => c.v.kind));
+    if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
+    const form = inlineForm(Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[x.op] as { fn: (...a: never[]) => unknown }).fn));
+    if (form?.params.length !== 2) return undefined;
+    // `#0` is the value of the target and `#1` is the key, in the order of the parameters of the op.
+    const pattern = patternOf(form, (i) => (at === 0 ? 1 - i : i));
+    if (!["#0<#1", "#0<=#1", "#1>#0", "#1>=#0"].includes(pattern)) return undefined;
+    const keyTest = form.parts.map((part) => (typeof part === "number" ? `(${at === 0 ? ["q", "t"][part] : ["t", "q"][part]})` : part)).join("");
+    const vars = [...names.vars.values()].map((v) => v.code);
+    const s = this.fresh("s");
+    const pack = vars.length === 1 ? (vars[0] as string) : `[${vars.join(", ")}]`;
+    const unpack = vars.length === 1 ? [`let ${vars[0] as string} = ${s};`] : vars.map((v, i) => `let ${v} = ${s}[${String(i)}];`);
+    const arrow = (params: string, lines: readonly string[], code: string): readonly string[] => (lines.length === 0 ? [`(${params}) => ${code}`] : [`(${params}) => {`, ...ind(lines), `  return ${code};`, "}"]);
+    const fns = [arrow("", names.s, pack), arrow(t.j, value.s, value.v.code), [`(t, q) => ${keyTest}`], arrow(`${s}, ${t.j}`, [...unpack, ...step.s], pack), arrow(s, [...unpack, ...result.s], result.v.code)];
+    const name = this.fresh("P");
+    this.run.push(`const ${name} = ${this.use("PF")}(n,`, ...ind(fns.flatMap((f, i) => [...f.slice(0, -1), `${f.at(-1) as string}${i < fns.length - 1 ? "," : ""}`])), ");");
+    const q = this.fresh("q");
+    return { s: this.#store(q, key), v: { code: `${name}(${q})`, kind: result.v.kind, safe: false, deps: key.v.deps } };
   }
 
   /**

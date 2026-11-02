@@ -18,8 +18,8 @@
  * |---|---|---|---|---|
  * | NEAREST | 1.65, 1.62, 1.64, 1.62, 1.64 | 1.50, 1.50, 1.64, 1.32, 1.67 | 1.70 | 2.02 |
  * | LIFE | 1.17, 1.15, 1.17, 1.14, 1.17 | 1.23, 1.23, 1.18, 1.14, 1.15 | 1.21 | 1.32 |
- * | radial, 12 children, linked | 3.19, 3.00, 3.14, 2.95, 3.16 | 2.75, 2.75, 3.11, 3.03, 3.29 | 3.47 | 3.83 |
- * | radial, 60 children, nested | 3.90, 3.86, 3.81, 3.84, 3.82 | 3.56, 3.55, 3.83, 3.42, 4.06 | 4.31 | 4.70 |
+ * | radial, 12 children, linked | 3.19, 3.00, 3.14, 2.95, 3.16 | 2.75, 2.75, 3.11, 3.03, 3.29 | 3.34 (C) | 3.34 (C) |
+ * | radial, 60 children, nested | 3.90, 3.86, 3.81, 3.84, 3.82 | 3.56, 3.55, 3.83, 3.42, 4.06 | 3.29 (C) | 3.29 (C) |
  * | tree, 1000 nodes | 1.00, 1.06, 0.98, 1.05, 0.99 | 1.05, 1.06, 0.99, 0.99, 1.02 | 1.06 | 1.14 |
  * | shapes, 1111 nodes | 1.63, 1.70, 1.58, 1.63, 1.58 | 1.63, 1.68, 1.61, 1.83, 1.59 | 1.68 | 2.08 |
  * | the growth of the share of each value | 2.00, 2.00, 2.01, 2.00, 2.00 | 2.00, 2.00, 2.00, 2.01, 1.99 | 2.03 | 2.03 |
@@ -33,6 +33,10 @@
  *
  * In one process with all cases, the hand loops of the nested radial case were 35 % slower, and its ratio was 2.7, not
  * 3.85 (run 41420168361). Measured cases before a case change its heap and its JIT state (GATENOISE, run 41418095435).
+ * (C) The scan of a fold over the targets before the origin (COMPILE.MODULE.SCAN, RADIALGAP) made both radial cases faster.
+ * Their limits come from run 41455264352 (reps C1 to C5: 9V45, 9V45, 7763, 9V74, 9V74). Linked gave 2.58, 2.59, 2.90, 2.96
+ * and 2.63. Nested gave 2.77, 2.77, 3.03, 2.97 and 2.96. These runs have one 7763 run only, so each model has the same
+ * radial limits. L is 3 for both cases: 43 % at a slow rate of 0.3, 89 % at 0.5.
  * A PR that makes a ratio better sets its limit lower in the same PR.
  * Start: node packages/compiler/bench/gate.ts
  */
@@ -52,8 +56,8 @@ import { limitsFor, limitsText, type CaseLimits, type ModelLimits } from "../../
 const LIMITS = {
   nearest: { "7763": { limit: 1.7, slow: 1.7, maxSlow: 4 }, other: { limit: 2.02, slow: 2.02, maxSlow: 2 } },
   life: { "7763": { limit: 1.21, slow: 1.21, maxSlow: 4 }, other: { limit: 1.32, slow: 1.32, maxSlow: 2 } },
-  linked: { "7763": { limit: 3.47, slow: 3.47, maxSlow: 3 }, other: { limit: 3.83, slow: 3.83, maxSlow: 2 } },
-  nested: { "7763": { limit: 4.31, slow: 4.31, maxSlow: 3 }, other: { limit: 4.7, slow: 4.7, maxSlow: 2 } },
+  linked: { "7763": { limit: 3.34, slow: 3.34, maxSlow: 3 }, other: { limit: 3.34, slow: 3.34, maxSlow: 3 } },
+  nested: { "7763": { limit: 3.29, slow: 3.29, maxSlow: 3 }, other: { limit: 3.29, slow: 3.29, maxSlow: 3 } },
   tree: { "7763": { limit: 1.06, slow: 1.06, maxSlow: 4 }, other: { limit: 1.14, slow: 1.14, maxSlow: 2 } },
   shapes: { "7763": { limit: 1.68, slow: 1.68 }, other: { limit: 2.08, slow: 2.08 } },
   share: { "7763": { limit: 2.03, slow: 2.03 }, other: { limit: 2.03, slow: 2.03 } },

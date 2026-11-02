@@ -886,6 +886,8 @@ The gate case of the nested ring of 60 children was 3.85 times the hand code (RA
 
 The module prints such a fold as a scan (COMPILE.MODULE.SCAN). The helper `PF` evaluates the value `T` of each target once, when the run reads the first angle. When the values do not decrease, a binary search finds the prefix of each origin, and each prefix keeps its state. Other values use the loop once for each origin. The other counts of the module are the counts of the hand code, with a small number more of `asin` calls. These are 4439 against 4200 at 60 children.
 
+The per-case gate measured the scan in run 41455264352, with 5 runs on three CPU models. The nested ring of 60 children went from 3.42 to 4.06 down to 2.77 to 3.03. The linked ring of 12 children went from 2.75 to 3.29 down to 2.58 to 2.96. The target is 2.0, so a fixed cost of the module stays. No count shows that cost, so a profile in CI is the next step.
+
 #### The audit pilot
 
 After a layout, the audit of ireko gives two checks. `ESCAPE` finds each node that is not inside its container, the nearest ancestor in the nested mode. `OVERLAP` finds each pair of boxes that overlap.

@@ -8,6 +8,7 @@ import { NumDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { emitModule, emitSheetModule, type ModuleOptions, type SheetModuleOptions } from "./module.ts";
+import { propertyTimeout } from "../../testkit/src/fc-timeout.ts";
 
 type SheetRunFn = (records: unknown, vars: unknown, parents?: unknown) => Readonly<Record<string, readonly unknown[]>>;
 interface Loaded {
@@ -338,7 +339,8 @@ function checkListSheet(columns: ReadonlyMap<string, Expr>, records: readonly un
 /** A random program whose value is a list, with no read of a cell. */
 const programs = (tree: boolean): fc.Arbitrary<Expr> => listOf({ axes: tree ? TREE_AXES : ARRAY_AXES, own: [], nums: [] });
 
-describe("COMPILE.MODULE.SHEET.LIST P17: random sheets with lists", { timeout: 60_000 }, () => {
+// In the nightly and the weekly runs, the time-out is the budget of a property plus a margin (`fc-timeout.ts`).
+describe("COMPILE.MODULE.SHEET.LIST P17: random sheets with lists", { timeout: propertyTimeout(60_000) }, () => {
   it("P17 COMPILE.MODULE.SHEET.LIST: a module of a random sheet with lists over an array or a tree gives the results of SheetRun", () => {
     fc.assert(fc.property(listSheet(false), rows, (columns, rs) => void checkListSheet(columns, rs, undefined)), { numRuns: 150 });
     fc.assert(fc.property(listSheet(true), trees, (columns, [rs, parents]) => void checkListSheet(columns, rs, parents)), { numRuns: 150 });

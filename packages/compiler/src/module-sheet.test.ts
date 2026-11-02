@@ -9,6 +9,7 @@ import { arbSheet, sheetCellsOf, sheetColumnsOf } from "@mark1russell7/vex-testk
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { emitSheetModule, type SheetModuleOptions } from "./module.ts";
+import { propertyTimeout } from "../../testkit/src/fc-timeout.ts";
 
 type Run = (records: unknown, vars: unknown, parents?: unknown) => Readonly<Record<string, readonly unknown[]>>;
 interface Loaded {
@@ -342,7 +343,8 @@ const depth = (parents: readonly number[], k: number): number => (k < 0 ? -1 : 1
 
 // These tests check some hundred sheets, each with four budgets. In the mutation lane, Stryker adds its counters to
 // the code, and one test takes more than the 5 s of Vitest.
-describe("COMPILE.MODULE.SHEET P17: random sheets", { timeout: 60_000 }, () => {
+// In the nightly and the weekly runs, the time-out is the budget of a property plus a margin (`fc-timeout.ts`).
+describe("COMPILE.MODULE.SHEET P17: random sheets", { timeout: propertyTimeout(60_000) }, () => {
   it("P17 COMPILE.MODULE.SHEET: a module of a random sheet of the test kit gives the results of SheetRun, with each budget of the stack", () => {
     fc.assert(fc.property(arbSheet, ({ formulas, own, rows: vs }) => void checkSheet(sheetColumnsOf(formulas), sheetCellsOf(own), vs.map((x) => ({ v: x })), undefined)));
     // A fixed sample has cycles in many sheets.

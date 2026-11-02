@@ -30,7 +30,7 @@ Change an item here first, then on the tracker. An item that is done goes out of
 | SHAPESIZE | The ireko layout bundle with the shapes module stays under 17.4 kB. | pilots | P1 | later | COMPILE-FUSE |
 | TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. | compiler | P2 | later | FALLBACKSHARE |
 | GATENOISE | The radial, tree and shapes cases of the speed gate change by 20 % to 32 % from run to run. Make them steady enough to catch a loss of 10 %. | compiler | P2 | later | GATELIMITS |
-| GATEPERCPU | Some speed-gate ratios depend on the CPU model. Core NEAREST is about 17 on the EPYC 9V45, and about 21 on the 7763 and the 9V74. Give each model its own limit. | ci | P2 | later | GATELIMITS |
+| GATEPERCPU | Some speed-gate ratios depend on the CPU model. Core NEAREST is approximately 17 on the EPYC 9V45, and approximately 21 on the 7763 and the 9V74. Give each model its own limit. | ci | P2 | later | GATELIMITS |
 | TYPED-SCRIPTS | The JavaScript scripts become TypeScript, and the plugin launcher gets a TypeScript source. | ci | P2 | later | |
 | LISTWHERE | The `where` test of a list loop can read the names of the item. | core | P2 | later | |
 | MODULE-VALUES | Standalone modules for ops that give lists, for values of each kind and for records. | compiler | P2 | later | |

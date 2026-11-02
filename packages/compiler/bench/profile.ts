@@ -108,10 +108,14 @@ function addSamples(profile: Profile, arms: readonly string[], self: Map<string,
   }
 }
 
+/** This function gives the share of `us` in `t` as a percent, for the summary. */
+function pct(us: number, t: number): string {
+  return (t === 0 ? 0 : (100 * us) / t).toFixed(1).padStart(5);
+}
+
 /** This function gives the lines of the summary of a profile: each arm, its groups and its top functions. */
 export function profileLines(p: CommandProfile, top: number): readonly string[] {
   const lines: string[] = [];
-  const pct = (us: number, t: number): string => (t === 0 ? 0 : (100 * us) / t).toFixed(1).padStart(5);
   for (const a of p.arms) {
     lines.push(`arm ${a.arm}: ${(a.total / 1000).toFixed(1)} ms`);
     for (const [g, us] of a.byGroup) lines.push(`  group ${g}: ${pct(us, a.total)} %  ${(us / 1000).toFixed(1)} ms`);

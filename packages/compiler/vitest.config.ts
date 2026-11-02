@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { propertyTimeout } from "../testkit/src/fc-timeout.ts";
 
 export default defineConfig({
   test: {
@@ -7,6 +8,6 @@ export default defineConfig({
     // Each package has tests, so a run that finds none is an error (a broken pattern), not a pass.
     passWithNoTests: false,
     // The nightly run sets FC_NUM_RUNS to 10000, so a property test takes longer than the default limit.
-    testTimeout: process.env["FC_NUM_RUNS"] === undefined ? 30_000 : 900_000,
+    testTimeout: propertyTimeout(30_000),
   },
 });

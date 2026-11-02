@@ -9,7 +9,7 @@
     "isolatedDeclarations": false,
     "declaration": false,
     "declarationMap": false,
-    "rootDir": "${configDir}",
+    "rootDir": "${configDir}/../..",
     "types": [
       "vite/client",
       "node"

@@ -36,7 +36,8 @@
     "!src/**/*.test.ts",
     "!src/__golden__",
     "!src/test-support.ts",
-    "!src/fc-setup.ts"
+    "!src/fc-setup.ts",
+    "!src/fc-timeout.ts"
   ],
   "publishConfig": {
     "access": "public",

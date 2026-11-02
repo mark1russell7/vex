@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { propertyTimeout } from "./src/fc-timeout.ts";
 
 export default defineConfig({
   test: {
@@ -8,6 +9,6 @@ export default defineConfig({
     passWithNoTests: false,
     // The nightly run sets FC_NUM_RUNS to 10000, so a property test takes longer than the default limit.
     // The builder model test can take more than 5 seconds under the coverage run on a busy machine.
-    testTimeout: process.env["FC_NUM_RUNS"] === undefined ? 30_000 : 900_000,
+    testTimeout: propertyTimeout(30_000),
   },
 });

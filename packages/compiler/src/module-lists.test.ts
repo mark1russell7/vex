@@ -7,6 +7,7 @@ import { BoolDomain, NumDomain, TextDomain, XYDomain } from "@mark1russell7/vex-
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { emitModule, type ModuleOptions } from "./module.ts";
+import { propertyTimeout } from "../../testkit/src/fc-timeout.ts";
 
 type Run = (records: unknown, vars: unknown) => readonly unknown[];
 interface Loaded {
@@ -350,7 +351,8 @@ const record = fc.record({
 });
 const records = fc.array(record, { maxLength: 6 });
 
-describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: 60_000 }, () => {
+// In the nightly and the weekly runs, the time-out is the budget of a property plus a margin (`fc-timeout.ts`).
+describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: propertyTimeout(60_000) }, () => {
   // The lists: from an axis, with error items and literals, and from the list ops that build a list.
   const base = fc.constantFrom<Expr>(ns, each(axes.all, w), inv, each(axes.where(axes.all, ref("b")), n), each(axes.window(-1, 1), n), each(axes.reverse(axes.all), w), LIT, BAD, EMPTY);
   const opts = fc.boolean().map((s) => (s ? [strict] : []));

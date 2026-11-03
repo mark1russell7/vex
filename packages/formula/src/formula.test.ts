@@ -1,7 +1,7 @@
-import { app, axes, cell, each, fold, index, iterate, key, lit, offset, origin, parent, ref, SheetRun, space, v, type Expr, type Result } from "@mark1russell7/vex";
+import { app, axes, cell, dataLimit, each, fold, index, iterate, key, lit, offset, origin, parent, ref, SheetRun, space, v, type Expr, type Result } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
-import { BUILT_IN_NAMES, compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, MAX_LENGTH, OP_NAMES, type FormulaContext, type GridCellKind, type GridContext } from "./index.ts";
+import { BUILT_IN_NAMES, compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, MAX_LENGTH, OP_NAMES, toVexChain, type FormulaContext, type GridCellKind, type GridContext } from "./index.ts";
 
 // fruit ─┬─ apple
 //        └─ pear
@@ -569,5 +569,13 @@ describe("the results of the compiler", () => {
     expect(highlightFormula('"open').map((p) => p.kind)).toEqual(["error"]);
     expect(highlightFormula("[open").map((p) => p.kind)).toEqual(["error"]);
     expect(highlightFormula('"a""b" + 1 = 2').map((p) => p.kind)).toEqual(["string", "plain", "operator", "plain", "number", "plain", "operator", "plain", "number"]);
+  });
+});
+
+describe("the text of a chain with a data limit", () => {
+  it("ITERATE.LIMIT.DATA: a data limit prints as a list chain, and a number prints as a number", () => {
+    const loop = (limit: Parameters<typeof iterate>[0]): Expr => iterate(limit, { i: lit(0) }, { i: v("i") }, v("i"));
+    expect(toVexChain(loop(dataLimit(axes.all)))).toContain("root.start(0).iterate(root.start(0).each(");
+    expect(toVexChain(loop(3))).toContain("root.start(0).iterate(3, ");
   });
 });

@@ -112,8 +112,7 @@ describe("the tools", () => {
     const program = { type: "iterate", value: { limit: { type: "size", value: { axis: { type: ["axes", "all"], value: {} } } }, init: {}, step: {}, result: 1 } };
     const reason = 'the node "iterate.size" at the root needs step B';
     expect(check({ program })).toMatchObject({ ok: true, step: "B", stepReason: reason });
-    expect(check({ program, maxStep: "A" })).toMatchObject({ ok: false });
-    expect(JSON.stringify(check({ program, maxStep: "A" }))).toContain(`up to A: ${reason} (STEP.MAX)`);
+    expect(() => check({ program, maxStep: "A" })).toThrow(`up to A: ${reason} (STEP.MAX)`);
   });
 
   it("STEP.TOOLS: vex_check gives the step and the reason, and vex_explain gives the step on its first line", () => {

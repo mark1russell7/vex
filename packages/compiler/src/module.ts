@@ -89,6 +89,27 @@ export type Emitted = { readonly ok: true; readonly source: string } | { readonl
 /** The error of a construct that a standalone module does not have. */
 class NotStandalone extends Error {}
 
+/** The error that stops the second print of a fast sum (`#packed`). Then the sum keeps the code of its first print. */
+class NoPack extends Error {}
+
+/**
+ * The state of the second print of a fast sum (`#packed`). It has the level and the focus of its loop. It also has
+ * the local name of the pack of each column of the run that the term reads.
+ */
+interface Pack {
+  readonly level: number;
+  readonly j: string;
+  readonly cols: Map<string, string>;
+  /** The count of the calls that the second print puts at their place. A count over `INLINES` stops the print. */
+  inlines: number;
+}
+
+/** The most calls that the second print of a fast sum puts at their place. Thus a chain of calls stays linear. */
+const INLINES = 64;
+
+/** The list ops that a fast sum can be: each one adds or compares numbers, and its step cannot throw (`#packed`). */
+const PACK_OPS: ReadonlySet<string> = new Set(["sum", "mean", "min", "max"]);
+
 /**
  * A value of the printer: its code, its kind if the printer knows it, and true when its code cannot throw. A literal,
  * a variable of the schema and a field of the schema at the focus or at the origin cannot throw.
@@ -368,7 +389,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
@@ -400,6 +421,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A column of the run: the value of an expression at each record, on its first read.
   Q: "function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }",
   G: "function G(x) { return x === E ? F() : x; }",
+  // The pack of a column of the run: an array with the value of the column at each record (`#packed`).
+  QA: "function QA(n, f) { const a = []; for (let j = 0; j < n; j++) a.push(f(j)); return a; }",
   // A fold over the targets before the origin, as a scan (COMPILE.MODULE.SCAN). The first call evaluates the first
   // state and the value of each target. When these values do not decrease, the targets of each origin are a prefix,
   // and each prefix keeps its state. NaN satisfies no test, so its target is in no prefix.
@@ -1086,7 +1109,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   GI: [], RB: [],
   SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [], LCP: ["LP"],
   SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LVC: [], LPC: [],
-  SBI: ["F"], SKI: ["F"],
+  SBI: ["F"], SKI: ["F"], QA: [],
 };
 
 /** The clean form of each helper that gives a list of the code to the outside (COMPILE.MODULE.FUSE.CLEAN). */
@@ -1836,6 +1859,14 @@ class Printer {
   readonly #columns = new Map<string, string>();
   /** The expressions whose code is the read of a column of the run. */
   readonly #columned = new WeakSet<Expr>();
+  /** The kind of each column at the start of a run that holds no list. A column of a call is not in this map. */
+  readonly #runColumns = new Map<string, Kind | undefined>();
+  /** The code of each printed function, by its name. A fast sum looks in it for the columns that a call reads. */
+  readonly #specCode = new Map<string, string>();
+  /** The module variable of the pack of each column of the run, by the name of the column. */
+  readonly #packs = new Map<string, string>();
+  /** The state of the second print of a fast sum, or undefined outside it. */
+  #pack: Pack | undefined;
   /** The lazy constants of the run, and the printed functions that have a loop: code that reads one waits for its read. */
   readonly #deferred = new Set<string>();
   /** The functions that the printer prints at this time, the innermost last. */
@@ -2087,7 +2118,10 @@ class Printer {
     const key = ctx.keys.get(e);
     if (key !== undefined) return bare(this.#read(key));
     const keys = this.#memo.get(e);
-    const c = keys !== undefined && this.#inside !== e ? this.#memoized(e, keys, ctx) : this.#node(e, ctx);
+    // In the second print of a fast sum, a column of the run at the item is the read of its pack, with no print of its parts.
+    const packed = this.#pack?.level === ctx.level && this.#columned.has(e) ? this.#packRead(this.#columns.get(this.#constKey(e, ctx)), ctx) : undefined;
+    if (packed !== undefined) return packed;
+    const c = keys !== undefined && this.#inside !== e ? this.#unpacked(() => this.#memoized(e, keys, ctx)) : this.#node(e, ctx);
     if (c.v.deps.size === 0) {
       // A constant of the run with the structure of an earlier one is that constant.
       this.#keyOf.set(c, this.#constKey(e, ctx));
@@ -2231,21 +2265,39 @@ class Printer {
     return work;
   }
 
+  /**
+   * This method gives the read of the pack of a column in the second print of a fast sum (`#packed`), or undefined. The
+   * column must be a column of the run, and the read must be at the item of the loop.
+   */
+  #packRead(name: string | undefined, ctx: Ctx): Code | undefined {
+    const pack = this.#pack;
+    if (pack === undefined || name === undefined || ctx.level !== pack.level || ctx.focus !== pack.j || !this.#runColumns.has(name)) return undefined;
+    let local = pack.cols.get(name);
+    if (local === undefined) {
+      local = this.fresh("pk");
+      pack.cols.set(name, local);
+    }
+    return bare({ code: `${this.use("G")}(${local}[${pack.j}])`, kind: this.#runColumns.get(name), safe: false, deps: new Set([ctx.level]) });
+  }
+
   /** This method gives the read of a column of the run. Two parts with the same structure share one column. */
   #column(e: Expr, c: Code, ctx: Ctx): Code {
     const key = this.#constKey(e, ctx);
     let name = this.#columns.get(key);
     if (name === undefined) {
+      // The first print of a fast sum makes each column of its term, so the second print makes none (`#packed`).
+      if (this.#pack !== undefined) throw new NoPack();
       name = this.fresh("col");
       // A column of a call is at the start of the body of its function, so each call has its own.
       const scope = this.#callScope(c, ctx);
       (scope?.decls ?? this.run).push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
+      if (scope === undefined && c.v.list === undefined) this.#runColumns.set(name, c.v.kind);
       this.#columns.set(key, name);
     }
     this.#columned.add(e);
     // Each key of the column reads the array of the column again.
     this.#shared.add(e);
-    return bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps, list: heldList(c.v.list) });
+    return this.#packRead(name, ctx) ?? bare({ code: `${this.use("G")}(${name}(${ctx.focus as string}))`, kind: c.v.kind, safe: false, deps: c.v.deps, list: heldList(c.v.list) });
   }
 
   #node(e: Expr, ctx: Ctx): Code {
@@ -2543,6 +2595,8 @@ class Printer {
     const bound = ctx.env.has(e.fn) ? undefined : ctx.fns.get(e.fn);
     if (bound === undefined) throw new NotStandalone(`a call of "${e.fn}", which is not a function`);
     if (bound.fn.params.length !== e.args.length) throw new NotStandalone(`a call of "${e.fn}" with ${String(e.args.length)} arguments, not ${String(bound.fn.params.length)}`);
+    // The second print of a fast sum puts the body of a function at the place of its call (`#inline`).
+    if (this.#pack?.level === ctx.level) return this.#inline(bound, e, ctx);
     const s: string[] = [];
     const args = e.args.map((x): Arg => {
       // An argument can be a list, as a binding of a let can (COMPILE.MODULE.LIST.ARG).
@@ -2564,13 +2618,54 @@ class Printer {
     // a list are a part of its kind. With fuse, the fact clean of each list is a part too (COMPILE.MODULE.FUSE.CLEAN).
     // The function of a list that is not clean also serves a clean list, so a call takes it if it exists.
     const sig = this.#signature(args, this.#fuse);
-    const spec = bound.specs.get(sig) ?? bound.specs.get(this.#signature(args, false)) ?? this.#printFn(bound, args, sig);
+    const spec = bound.specs.get(sig) ?? bound.specs.get(this.#signature(args, false)) ?? this.#unpacked(() => this.#printFn(bound, args, sig));
     // Each marker becomes the levels at the call. The levels of the arguments count for each call, because their
     // statements read their keys, so the marker of the parameters gives no level.
     const levels = (d: number): readonly number[] => (d === spec.origin ? [ctx.originLevel] : d === spec.focus ? [ctx.level] : d === spec.param ? [] : [d]);
     const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap(levels)]);
     const position = spec.deps.has(spec.origin) ? [ctx.focus, ctx.origin] : spec.deps.has(spec.focus) ? [ctx.focus] : [];
     return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps, list: heldList(spec.list) } };
+  }
+
+  /**
+   * This method prints a call in the second print of a fast sum (`#packed`). The body of the function is at the place
+   * of the call, as the body of a let. Each argument evaluates at the place of the call. The body sees the names of the
+   * place of its binding (FN.CALL). Thus a read of a column in the body reads the pack of the column.
+   */
+  #inline(bound: BoundFn, e: ExprOf<"call">, ctx: Ctx): Code {
+    // A function at the place of its binding reads names of that place, so its body stays in its function.
+    if (bound.local || ++(this.#pack as Pack).inlines > INLINES) throw new NoPack();
+    const s: string[] = [];
+    const env = new Map(bound.ctx.env);
+    bound.fn.params.forEach((p, i) => {
+      const x = e.args[i] as Expr;
+      this.#wantList.add(x);
+      const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
+      if (c.v.list !== undefined) throw new NoPack();
+      // A short safe value is the read itself. A read of a name that can hold the error reads that name.
+      let code = c.v.code;
+      if (!c.v.safe && c.s.length === 0 && c.v.held !== undefined) code = c.v.held;
+      else if (!c.v.safe || c.s.length > 0 || !/^[\w$.]+$/.test(code)) {
+        code = this.fresh("b");
+        s.push(...this.#store(code, c));
+      }
+      env.set(p, { code, kind: c.v.kind, lazy: !c.v.safe, deps: c.v.deps, list: undefined });
+    });
+    this.#wantList.add(bound.fn.body);
+    const body = this.expr(bound.fn.body, { ...ctx, env, fns: bound.ctx.fns, keys: new Map() });
+    if (body.v.list !== undefined) throw new NoPack();
+    return { s: [...s, ...body.s], v: body.v };
+  }
+
+  /** This method runs `f` outside the second print of a fast sum: a function and a node of the memo print as before. */
+  #unpacked<T>(f: () => T): T {
+    const pack = this.#pack;
+    this.#pack = undefined;
+    try {
+      return f();
+    } finally {
+      this.#pack = pack;
+    }
   }
 
   /**
@@ -2608,6 +2703,7 @@ class Printer {
     const s = [...scope.decls, ...body.s];
     const decl = s.length === 0 ? [`${head} ${body.v.code};`] : [`${head} {`, ...ind(s), `  return ${body.v.code};`, "};"];
     (global ? this.run : bound.decls).push(...decl);
+    this.#specCode.set(name, decl.join("\n"));
     if (!global) bound.local = true;
     const spec: Spec = { name, kind: body.v.kind, list: body.v.list, safe: body.v.safe, deps: body.v.deps, origin, focus, param, global };
     bound.specs.set(sig, spec);
@@ -3037,6 +3133,9 @@ class Printer {
       const reduce = [`for (const ${v} of ${list}) {`, `  if (${v} === E) ${strict ? `${this.use("F")}();` : "continue;"}`, `  ${r.step}`, "}"];
       return { s: [...s, `const ${list} = [];`, head, ...ind(all), "}", ...reduce], v: { code: r.result, kind: r.kind, safe: false, deps } };
     }
+    // A sum over all the records whose term reads columns of the run can read their packs (`#packed`).
+    const packed = fixed && tests.length === 0 && testsOf(target.axis).base.t === "all" ? this.#packed(op, step, strict, target, inner, body, r) : undefined;
+    if (packed !== undefined) return { s: [...s, ...packed], v: { code: r.result, kind: r.kind, safe: false, deps } };
     const loop = [
       ...key,
       ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
@@ -3050,6 +3149,93 @@ class Printer {
     // can fail, except at the focus or at the origin.
     const safe = startSafe && !strict && (op === "count" || (BOOLEAN_LIST_OPS.has(op) && body.v.kind === "boolean"));
     return { s, v: { code: r.result, kind: r.kind, safe, deps } };
+  }
+
+  /**
+   * This method gives the fast loop of a sum, a mean, a min or a max over all the records, or undefined. The term must
+   * be a number that reads values of the record only through columns of the run. It must have no loop, no cell and no
+   * function of its own. Then the term prints again, with the body of each call at the place of the call (`#inline`).
+   * Each read of a column at the item reads the pack of the column: an array of its values. The first sum of a run
+   * makes it. The pack holds the sentinel for an error value, as the column does. Thus each read gives the value of the
+   * column. One try covers all the items. An item that throws stops the inner loop, and the outer loop continues after
+   * that item. The step comes after the value of the item, and it cannot throw.
+   */
+  #packed(op: string, step: Step | undefined, strict: boolean, target: ExprOf<"each">, inner: Ctx, body: Code, r: { readonly v: string; readonly step: string }): string[] | undefined {
+    if (this.#pack !== undefined || !PACK_OPS.has(op) || step !== undefined || body.v.kind !== "number") return undefined;
+    if (!this.#packable(target.body, inner.fns, new Set()) || !this.#reaches(body)) return undefined;
+    const j = inner.focus as string;
+    const pack: Pack = { level: inner.level, j, cols: new Map(), inlines: 0 };
+    const scopes = this.#scopes.length;
+    const outer = this.#inside;
+    this.#pack = pack;
+    let again: Code;
+    try {
+      again = this.expr(target.body, inner);
+    } catch (err) {
+      if (!(err instanceof NoPack || err instanceof NotStandalone)) throw err;
+      this.#scopes.length = scopes;
+      this.#inside = outer;
+      return undefined;
+    } finally {
+      this.#pack = undefined;
+    }
+    // A part of the term that is a column reads its pack, so the packs that the code of that part read are not in the term.
+    const text = [again.v.code, ...again.s].join("\n");
+    const used = [...pack.cols].filter(([, local]) => text.includes(`${local}[`));
+    if (used.length === 0) return undefined;
+    // Each other read of the item is a value that no column holds, so the term keeps its first code.
+    const rest = text.replaceAll(new RegExp(String.raw`\b(?:${used.map(([, local]) => local).join("|")})\[${j}\]`, "g"), "");
+    if (new RegExp(String.raw`\b${j}\b`).test(rest)) return undefined;
+    const lets = used.map(([col, local]) => {
+      let name = this.#packs.get(col);
+      if (name === undefined) {
+        name = this.fresh("PK");
+        this.#packs.set(col, name);
+        this.run.push(`let ${name};`);
+      }
+      return `const ${local} = ${name} || (${name} = ${this.use("QA")}(n, ${col}));`;
+    });
+    const items = [...again.s, `const ${r.v} = ${again.v.code};`, r.step];
+    const head = `for (let ${j} = 0; ${j} < n; ${j}++) {`;
+    if (strict) return [...lets, "try {", ...ind([head, ...ind(items), "}"]), "} catch {", `  ${this.use("F")}();`, "}"];
+    return [...lets, head, ...ind(["try {", ...ind([`for (; ${j} < n; ${j}++) {`, ...ind(items), "}"]), "} catch {}"]), "}"];
+  }
+
+  /**
+   * This method tells if the term of a fast sum can print at the place of its loop (`#packed`). It has no loop, no cell,
+   * no node of the memo and no function of its own. Each function that it calls is at the start of a run, and its body
+   * is such a term too. A part that is a column is one read, so the parts in it do not count.
+   */
+  #packable(e: Expr, fns: ReadonlyMap<string, BoundFn>, seen: Set<number>): boolean {
+    if (this.#columned.has(e)) return true;
+    if (e.tag === "each" || e.tag === "fold" || e.tag === "iterate" || e.tag === "ext" || this.#memo.has(e)) return false;
+    if (e.tag === "let" && Object.values(e.bind).some((x) => x.tag === "fn")) return false;
+    if (e.tag === "call") {
+      const bound = fns.get(e.fn);
+      if (bound === undefined || bound.local) return false;
+      if (!seen.has(bound.id)) {
+        seen.add(bound.id);
+        if (!this.#packable(bound.fn.body, bound.ctx.fns, seen)) return false;
+      }
+    }
+    return children(e).every((x) => this.#packable(x, fns, seen));
+  }
+
+  /** This method tells if code reads a column of the run, itself or in a printed function that it calls. */
+  #reaches(c: Code): boolean {
+    const seen = new Set<string>();
+    const todo = [[c.v.code, ...c.s].join("\n")];
+    for (let text = todo.pop(); text !== undefined; text = todo.pop()) {
+      for (const [name] of text.matchAll(/\b(?:col|fn)\d+\b/g)) {
+        if (this.#runColumns.has(name)) return true;
+        const code = this.#specCode.get(name);
+        if (code !== undefined && !seen.has(name)) {
+          seen.add(name);
+          todo.push(code);
+        }
+      }
+    }
+    return false;
   }
 
   /**

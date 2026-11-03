@@ -23,6 +23,7 @@ function M1(f) {
   };
 }
 function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }
+function QA(n, f) { const a = []; for (let j = 0; j < n; j++) a.push(f(j)); return a; }
 function S(n, mode, strict, a0, step, result, key, val, test, pre, ok) {
   let ts, js, xs, bad, reach, gs, mono, pa, pc, pe;
   const value = (i) => {
@@ -90,130 +91,132 @@ export function run(records, vars) {
   const col1 = Q((j0) => {
     return k_number(Math.abs((k_number((k_number((R[j0]["w"]) * (R[j0]["n"]))) + (k_number((R[j0]["w"]) - (k_number((R[j0]["n"]) / (2)))))))));
   });
-  let c5;
+  let PK6;
+  let c7;
   try {
     let a2 = 0;
+    const pk5 = PK6 || (PK6 = QA(n, col1));
     for (let j0 = 0; j0 < n; j0++) {
-      let x4;
       try {
-        x4 = G(col1(j0));
-      } catch {
-        continue;
-      }
-      a2 += x4;
+        for (; j0 < n; j0++) {
+          const x4 = G(pk5[j0]);
+          a2 += x4;
+        }
+      } catch {}
     }
-    c5 = k_number(a2);
+    c7 = k_number(a2);
   } catch {
-    c5 = E;
+    c7 = E;
   }
-  let c10;
+  let c12;
   try {
-    let a7 = 0;
-    for (let j6 = 0; j6 < n; j6++) {
-      let x9;
+    let a9 = 0;
+    for (let j8 = 0; j8 < n; j8++) {
+      let x11;
       try {
-        x9 = k_number((k_number((R[j6]["w"]) * (R[j6]["n"]))) + (k_number((R[j6]["w"]) - (k_number((R[j6]["n"]) / (2))))));
+        x11 = k_number((k_number((R[j8]["w"]) * (R[j8]["n"]))) + (k_number((R[j8]["w"]) - (k_number((R[j8]["n"]) / (2))))));
       } catch {
         continue;
       }
-      a7 += x9;
+      a9 += x11;
     }
-    c10 = k_number(a7);
+    c12 = k_number(a9);
   } catch {
-    c10 = E;
+    c12 = E;
   }
-  const col13 = Q((j12) => {
-    return k_number(Math.max((k_number(Math.abs((k_number((R[j12]["w"]) - (k_number((R[j12]["n"]) / (2)))))))), (k_number(Math.abs((k_number((R[j12]["w"]) + (k_number((R[j12]["n"]) * (3))))))))));
+  const col15 = Q((j14) => {
+    return k_number(Math.max((k_number(Math.abs((k_number((R[j14]["w"]) - (k_number((R[j14]["n"]) / (2)))))))), (k_number(Math.abs((k_number((R[j14]["w"]) + (k_number((R[j14]["n"]) * (3))))))))));
   });
-  let c17;
-  try {
-    let a14 = 0;
-    for (let j12 = 0; j12 < n; j12++) {
-      let x16;
-      try {
-        x16 = G(col13(j12));
-      } catch {
-        continue;
-      }
-      a14 += x16;
-    }
-    c17 = k_number(a14);
-  } catch {
-    c17 = E;
-  }
+  let PK20;
   let c21;
   try {
-    let a18 = 0;
-    for (let j11 = 0; j11 < n; j11++) {
-      let x20;
+    let a16 = 0;
+    const pk19 = PK20 || (PK20 = QA(n, col15));
+    for (let j14 = 0; j14 < n; j14++) {
       try {
-        x20 = k_number((R[j11]["w"]) + (G(c17)));
-      } catch {
-        continue;
-      }
-      a18 += x20;
+        for (; j14 < n; j14++) {
+          const x18 = G(pk19[j14]);
+          a16 += x18;
+        }
+      } catch {}
     }
-    c21 = k_number(a18);
+    c21 = k_number(a16);
   } catch {
     c21 = E;
   }
-  const c22 = T(() => k_number((k_number((v0) + (1))) * (k_number((k_number((v0) * (3))) - (2)))));
-  let c27;
+  let c25;
   try {
-    let a24 = 0;
-    for (let j23 = 0; j23 < n; j23++) {
-      let x26;
+    let a22 = 0;
+    for (let j13 = 0; j13 < n; j13++) {
+      let x24;
       try {
-        x26 = k_number((R[j23]["w"]) + (G(c22)));
+        x24 = k_number((R[j13]["w"]) + (G(c21)));
       } catch {
         continue;
       }
-      a24 += x26;
+      a22 += x24;
     }
-    c27 = k_number(a24);
+    c25 = k_number(a22);
   } catch {
-    c27 = E;
+    c25 = E;
   }
-  const m30 = M1((q29) => {
-    let a32 = 0;
-    for (let j31 = 0; j31 < n; j31++) {
-      let x34;
+  const c26 = T(() => k_number((k_number((v0) + (1))) * (k_number((k_number((v0) * (3))) - (2)))));
+  let c31;
+  try {
+    let a28 = 0;
+    for (let j27 = 0; j27 < n; j27++) {
+      let x30;
       try {
-        x34 = k_number((G(col13(j31))) + (G(q29)));
+        x30 = k_number((R[j27]["w"]) + (G(c26)));
       } catch {
         continue;
       }
-      a32 += x34;
+      a28 += x30;
     }
-    return k_number(a32);
+    c31 = k_number(a28);
+  } catch {
+    c31 = E;
+  }
+  const m34 = M1((q33) => {
+    let a36 = 0;
+    const pk39 = PK20 || (PK20 = QA(n, col15));
+    for (let j35 = 0; j35 < n; j35++) {
+      try {
+        for (; j35 < n; j35++) {
+          const x38 = k_number((G(pk39[j35])) + (G(q33)));
+          a36 += x38;
+        }
+      } catch {}
+    }
+    return k_number(a36);
   });
-  const m38 = S(n, 1, false, undefined, s_first, r_count,
-    (j39) => R[j39]["n"],
-    (j39) => R[j39]["n"],
+  const m43 = S(n, 1, false, undefined, s_first, r_count,
+    (j44) => R[j44]["n"],
+    (j44) => R[j44]["n"],
     (t, q) => (t) === (q)
   );
-  let c43;
+  let c48;
   try {
-    let a40 = 0;
-    for (let j35 = 0; j35 < n; j35++) {
-      let x42;
+    let a45 = 0;
+    for (let j40 = 0; j40 < n; j40++) {
+      let x47;
       try {
-        const b36 = R[j35]["n"];
-        x42 = k_number((G(col13(j35))) + (m38(b36)));
+        const b41 = R[j40]["n"];
+        x47 = k_number((G(col15(j40))) + (m43(b41)));
       } catch {
         continue;
       }
-      a40 += x42;
+      a45 += x47;
     }
-    c43 = k_number(a40);
+    c48 = k_number(a45);
   } catch {
-    c43 = E;
+    c48 = E;
   }
   const out = [];
   for (let o = 0; o < n; o++) {
     try {
-      const b28 = R[o]["n"];
-      out.push(({ "ten": G(c5), "nine": G(c10), "memo": G(c21), "constant": G(c27), "outside": m30(b28), "keyed": G(c43) }));
+      const b32 = R[o]["n"];
+      out.push(({ "ten": G(c7), "nine": G(c12), "memo": G(c25), "constant": G(c31), "outside": m34(b32), "keyed": G(c48) }));
     } catch {
       out.push(VEX_ERROR);
     }

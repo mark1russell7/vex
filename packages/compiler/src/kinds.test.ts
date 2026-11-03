@@ -68,7 +68,7 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
 
   it("gives the error of the interpreter for an argument of a kind that the op does not accept", () => {
     const e = op("ifError", op("add", n, lit("x")), lit(7));
-    expect(sitesOf(e).source).toContain("= F;");
+    expect(sitesOf(e).source).toMatch(/= s\d+_\d+\(/);
     expect(expectSame(e)).toBe(1);
   });
 
@@ -91,8 +91,8 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
     expect(sitesOf(e, options)).toMatchObject({ direct: 1, guarded: 0 });
     // Only the third record breaks the schema, so only its run goes to tier 1.
     expect(expectSame(e, options)).toBe(1);
-    // A component that is not finite is not valid in XYDomain. The check of the result finds it, and tier 1 gives the error.
-    expect(expectSame(e, options, { k: Number.POSITIVE_INFINITY, t: "x" })).toBe(3);
+    // A component that is not finite is not valid in XYDomain. The check of the result finds it, and tier 2 gives the error.
+    expect(expectSame(e, options, { k: Number.POSITIVE_INFINITY, t: "x" })).toBe(1);
     // An op can give a value of another kind than it declares. The checks of the interpreter keep such a value too.
     const Liar = defineDomain({ name: "Liar", is: (u: unknown): u is number => typeof u === "number", primitive: "number", ops: { pt: { fn: (a: number): unknown => a * 2, returns: "domain:XY" } } });
     expect(expectSame(op("pt", n), { domains: [Liar, XYDomain], schema: SCHEMA })).toBe(1);
@@ -120,7 +120,7 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
     const e = op("mix", n, v("k"));
     expect(sitesOf(e, { domains: [Mix], schema: SCHEMA })).toMatchObject({ direct: 1 });
     expect(expectSame(e, { domains: [Mix], schema: SCHEMA })).toBe(1);
-    expect(sitesOf(op("mix", n, s), { domains: [Mix], schema: SCHEMA }).source).toContain("= F;");
+    expect(sitesOf(op("mix", n, s), { domains: [Mix], schema: SCHEMA }).source).toMatch(/= s\d+_\d+\(/);
   });
 
   it("checks a result with the domain of its kind: valid of that domain, the dispatch of the checks, or nothing", () => {

@@ -64,9 +64,13 @@ describe("the probe of the sites of the fallbacks (FALLBACKOPS)", () => {
   it("names the failed check of a memo, in this run or in an earlier run", () => {
     // The sum does not depend on the origin, so a memo keeps it for the space.
     const strict = app("sum", each(axes.all, app("divide", lit(1), ref("x"))), lit({ strict: true }));
-    const probe = siteProbe(strict, options);
-    expect(probe?.site({ space: s, origin: "A" })).toStrictEqual({ site: "a value of the memo, after an op: divide", context: TOP });
-    expect(probe?.site({ space: s, origin: "B" })).toStrictEqual({ site: "a value of the memo, after an error of an earlier run", context: TOP });
+    // An item of a list as a value keeps no error, so the entry of the memo stops the program.
+    const probe = siteProbe(each(axes.all, strict), options);
+    const context = "in an item of a list op";
+    expect(probe?.site({ space: s, origin: "A" })).toStrictEqual({ site: "a value of the memo, after an op: divide", context });
+    expect(probe?.site({ space: s, origin: "B" })).toStrictEqual({ site: "a value of the memo, after an error of an earlier run", context });
+    // Where the error is the result, a copy of the node gives the error of this position, so the probe names the op.
+    expect(siteProbe(strict, options)?.site({ space: s, origin: "A" })).toStrictEqual({ site: "an op: divide", context });
   });
 
   it("gives the same counts with the probe, and a site for each fallback", () => {
@@ -81,7 +85,9 @@ describe("the probe of the sites of the fallbacks (FALLBACKOPS)", () => {
     // COMPILE.EXT: IFERROR around the cell of the row before the first row stays in tier 2, so no fallback gives a value.
     expect(values).toBe(0);
     expect(on.totals.valueSites).toStrictEqual([]);
-    expect(on.totals.errorSites?.map((r) => r.reason)).toContain("an extension: vex.cell gave #N/A");
+    // COMPILE.ERRORS: tier 2 gives the error of a cell at the result.
+    expect(on.totals.errorSites?.map((r) => r.reason)).not.toContain("an extension: vex.cell gave #N/A");
+    expect(on.totals.tier2ErrorRuns).toBeGreaterThan(0);
     for (const p of on.programs) expect(sum(p.valueSites) + sum(p.errorSites)).toBe(p.fallbacks);
   });
 });

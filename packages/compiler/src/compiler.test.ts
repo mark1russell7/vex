@@ -218,7 +218,7 @@ const SITES = space.record({
 function expectSame(e: Expr, fast: boolean, run: RunOptions = RUN, options: CompileOptions = OPTIONS): void {
   const p = tiered(e, options);
   expect(fromCore(p.run(run))).toStrictEqual(fromCore(evaluate(e, { ...options, ...run })));
-  // Each program of these tests has generated code. Without a value from it, the one run has one fallback.
+  // Each program of these tests has generated code. Without a result from it, the one run has one fallback.
   expect(p.tier).toBe(2);
   expect(p).not.toHaveProperty("reason");
   expect(p.stats).toEqual({ runs: 1, fallbacks: fast ? 0 : 1 });
@@ -323,8 +323,8 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
   ];
   it.each(cases)("%s", (_title, e, fast) => expectSame(e, fast));
 
-  it("a method op on a text, which has no methods", () => expectSame(app("toUpperCase", ref("s")), false));
-  it("a list op without arguments", () => expectSame(app("count"), false));
+  it("a method op on a text, which has no methods", () => expectSame(app("toUpperCase", ref("s")), true));
+  it("a list op without arguments", () => expectSame(app("count"), true));
   it("ifError and then a list op", () => expectSame(rec({ a: app("ifError", ref("missing"), lit(0)), b: app("count", all(n)) }), true));
   it("a result that is not finite, without a domain of numbers", () => expectSame(app("values", all(app("bad", box))), true, RUN, { domains: [BoxDomain] }));
   it("the check of the result stops at the first domain that accepts it, also without valid", () => {
@@ -346,8 +346,8 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
   it("an op without a value, in each item", () => expectSame(app("values", all(app("and"))), true));
   it("a free function of a list", () => expectSame(app("double", all(n)), true));
   it("AXIS.TABLE: the origin of an axis that is not a table stays the origin", () => expectSame(app("sum", all(ref("n", [{ t: "origin" }]))), true));
-  it("an inherited method is not a method", () => expectSame(app("toString", ref("tag")), false));
-  it("an inherited function is not a free function", () => expectSame(app("toString"), false));
+  it("an inherited method is not a method", () => expectSame(app("toString", ref("tag")), true));
+  it("an inherited function is not a free function", () => expectSame(app("toString"), true));
   it("the options null of a list op", () => expectSame(app("sum", all(n), lit(null)), true));
   it("an inherited name is not a table", () => expectSame(app("count", all(app("count", each(axes.table("toString"), n)))), true));
   it("a name without a binding, in each item, without the variables of the run", () => expectSame(app("count", all(v("zz"))), true, { space: S, origin: "A" }));
@@ -367,7 +367,7 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
     expectSame(app("zero"), true, RUN, { domains: [Everything], fns: { zero: () => 0 } });
   });
   it("an own property that is not a function is not a method", () => expectSame(app("get0", box), false, { space: space.record({ A: { box: Object.assign(new Box(1), { get0: 5 }) } }), origin: "A" }));
-  it("a name that cannot be an op", () => expectSame(app("constructor", box), false));
+  it("a name that cannot be an op", () => expectSame(app("constructor", box), true));
   it("an argument after the declared parameters has any kind", () => expectSame(app("max", box, box, lit(1)), true));
   it("a method of a later domain", () => expectSame(app("get0", ref("tag")), true));
   it("a program without options", () => expectSame(app("sum", all(n)), true, RUN, {}));
@@ -466,10 +466,10 @@ describe("COMPILE.TIERED: a list op over an axis is one loop with the result of 
   const ops = ["count", "sum", "mean", "min", "max", "first", "values", "keys", "errors"] as const;
   it.each(ops)("%s over all", (op) => expectSame(app(op, all(n)), true));
   it.each(["any", "all", "none"] as const)("%s over all", (op) => expectSame(app(op, all(ref("b"))), true));
-  it.each(["any", "all", "none"] as const)("%s with an item that is not a boolean", (op) => expectSame(app(op, all(n)), false));
-  it.each(["sum", "mean", "min", "max"] as const)("%s with an item that is not a number", (op) => expectSame(app(op, all(ref("tag"))), false));
+  it.each(["any", "all", "none"] as const)("%s with an item that is not a boolean", (op) => expectSame(app(op, all(n)), true));
+  it.each(["sum", "mean", "min", "max"] as const)("%s with an item that is not a number", (op) => expectSame(app(op, all(ref("tag"))), true));
   it.each(["mean", "min", "max", "first", "reduce"] as const)("%s of no items", (op) =>
-    expectSame(app(op, where(lit(false), n), lit("add")), false),
+    expectSame(app(op, where(lit(false), n), lit("add")), op !== "reduce"),
   );
 
   const cases: readonly (readonly [string, Expr, boolean])[] = [

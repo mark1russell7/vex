@@ -1,6 +1,6 @@
 /**
- * The errors of extensions in tier 2 (COMPILE.EXT). An error that the program catches stays in tier 2, and the result is
- * the result of the interpreter, also each error value. `#DEPTH!` stops tier 2, so tier 1 gives it.
+ * The errors of extensions in tier 2 (COMPILE.EXT). Tier 2 gives the result, and it is the result of the interpreter, also
+ * each error value. `#DEPTH!` stops tier 2, so tier 1 gives it.
  */
 import { app, axes, call, each, evaluate, ext, fail, fn, let_, lit, ok, rec, ref, space, v, vexError, type ErrorKind, type Expr, type ExtHandler, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
@@ -63,9 +63,9 @@ describe("COMPILE.EXT: an error of an extension that the program catches stays i
     expect(fallbacks(app("ifError", ext("overflow", null), lit(792)))).toBe(3);
   });
 
-  it("COMPILE.EXT: an error of an extension at the result goes to tier 1, which gives the error value", () => {
-    expect(fallbacks(ext("unknown-key", null))).toBe(3);
-    expect(fallbacks(app("add", ref("n"), ext("cycle", null)))).toBe(3);
+  it("COMPILE.EXT COMPILE.ERRORS: an error of an extension at the result is the result of tier 2", () => {
+    expect(fallbacks(ext("unknown-key", null))).toBe(0);
+    expect(fallbacks(app("add", ref("n"), ext("cycle", null)))).toBe(0);
   });
 
   it("COMPILE.EXT LIST.LENIENT: a list op skips the error item of an extension", () => {
@@ -126,7 +126,7 @@ describe("COMPILE.EXT: an error of an extension that the program catches stays i
   it("COMPILE.EXT: a binding of let with an error of an extension has no value only where the body reads it", () => {
     expect(fallbacks(let_({ x: ext("missing-field", null) }, app("ifError", v("x"), lit(5))))).toBe(0);
     expect(fallbacks(let_({ x: ext("missing-field", null) }, lit(5)))).toBe(0);
-    expect(fallbacks(let_({ x: ext("missing-field", null) }, v("x")))).toBe(3);
+    expect(fallbacks(let_({ x: ext("missing-field", null) }, v("x")))).toBe(0);
   });
 
   it("COMPILE.EXT COMPILE.MEMO: a node of the memo next to an error of an extension keeps its value", () => {

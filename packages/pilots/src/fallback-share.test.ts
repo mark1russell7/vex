@@ -10,6 +10,9 @@ function wellFormed(report: ShareReport): void {
   for (const p of report.programs) {
     expect(p.runs).toBeGreaterThanOrEqual(p.fallbacks);
     expect(p.fallbacks).toBeGreaterThanOrEqual(0);
+    expect(p.runs).toBeGreaterThanOrEqual(p.values);
+    expect(p.values).toBeGreaterThanOrEqual(p.tier2Values);
+    expect(p.tier2Values).toBeLessThanOrEqual(p.runs - p.fallbacks);
     expect(p.fallbackReasons.reduce((n, r) => n + r.count, 0)).toBe(p.fallbacks);
     expect(p.tier === 2 || typeof p.reason === "string").toBe(true);
   }

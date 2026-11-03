@@ -43,6 +43,10 @@ export interface ProgramShare {
   readonly runs: number;
   /** The number of runs where tier 2 gave `FALLBACK`, so tier 1 gave the result. */
   readonly fallbacks: number;
+  /** The number of runs with a value, not an error. */
+  readonly values: number;
+  /** The number of runs where tier 2 gave the value. A program of tier 1 has 0. */
+  readonly tier2Values: number;
   /** The result of tier 1 on each run after a `FALLBACK`, by count, largest first. */
   readonly fallbackReasons: readonly ReasonCount[];
   /** With the option `sites`: the site and the context of each fallback where tier 1 gave a value, by count. */
@@ -70,6 +74,12 @@ export interface ShareTotals {
   readonly fallbacks: number;
   /** The runs where tier 2 gave the value divided by the runs. A run of a program of tier 1 is not a run of tier 2. */
   readonly runShare: number;
+  /** The number of runs with a value, not an error. */
+  readonly valueRuns: number;
+  /** The number of runs where tier 2 gave the value, in the programs of tier 2. */
+  readonly tier2ValueRuns: number;
+  /** The runs where tier 2 gave the value divided by the runs with a value. */
+  readonly valueShare: number;
   /** The reasons of the programs of tier 1, by count of programs, largest first. */
   readonly tier1Reasons: readonly ReasonCount[];
   /** The results of tier 1 after a `FALLBACK`, by count of runs, largest first. */
@@ -108,6 +118,8 @@ interface Tally {
   compiles: number;
   runs: number;
   fallbacks: number;
+  values: number;
+  tier2Values: number;
   readonly reasons: Map<string, number>;
   readonly valueSites: Map<string, number>;
   readonly errorSites: Map<string, number>;
@@ -171,7 +183,7 @@ function meterOf(tallies: Map<string, Tally>, sites: SiteRun[] | undefined): Met
     let probe: SiteProbe | undefined;
     let t = tallies.get(name);
     if (t === undefined) {
-      t = { tier: p.tier, reason: p.reason, compiles: 0, runs: 0, fallbacks: 0, reasons: new Map(), valueSites: new Map(), errorSites: new Map() };
+      t = { tier: p.tier, reason: p.reason, compiles: 0, runs: 0, fallbacks: 0, values: 0, tier2Values: 0, reasons: new Map(), valueSites: new Map(), errorSites: new Map() };
       tallies.set(name, t);
     } else if (t.tier !== p.tier) {
       // Two compiles of one name with different tiers: the name counts as tier 1, with the reason of tier 1.
@@ -186,7 +198,12 @@ function meterOf(tallies: Map<string, Tally>, sites: SiteRun[] | undefined): Met
         const before = p.stats.fallbacks;
         const result = p.run(r);
         tally.runs++;
-        if (p.stats.fallbacks > before) {
+        const fellBack = p.stats.fallbacks > before;
+        if (result.ok) {
+          tally.values++;
+          if (p.tier === 2 && !fellBack) tally.tier2Values++;
+        }
+        if (fellBack) {
           tally.fallbacks++;
           add(tally.reasons, fallbackReason(result));
           if (sites !== undefined) {
@@ -242,6 +259,9 @@ export function measureShare(cases: readonly ShareCase[], options: ShareOptions 
         compiles: t.compiles,
         runs: t.runs,
         fallbacks: t.fallbacks,
+        values: t.values,
+        // A name with compiles of two tiers counts as tier 1.
+        tier2Values: t.tier === 2 ? t.tier2Values : 0,
         fallbackReasons: sorted(t.reasons),
         ...(withSites ? { valueSites: sorted(t.valueSites), errorSites: sorted(t.errorSites) } : {}),
       });
@@ -252,8 +272,12 @@ export function measureShare(cases: readonly ShareCase[], options: ShareOptions 
   let runs = 0;
   let tier2Runs = 0;
   let fallbacks = 0;
+  let valueRuns = 0;
+  let tier2ValueRuns = 0;
   for (const p of programs) {
     runs += p.runs;
+    valueRuns += p.values;
+    tier2ValueRuns += p.tier2Values;
     if (p.tier === 2) {
       tier2Runs += p.runs - p.fallbacks;
       fallbacks += p.fallbacks;
@@ -274,6 +298,9 @@ export function measureShare(cases: readonly ShareCase[], options: ShareOptions 
       tier2Runs,
       fallbacks,
       runShare: share(tier2Runs, runs),
+      valueRuns,
+      tier2ValueRuns,
+      valueShare: share(tier2ValueRuns, valueRuns),
       tier1Reasons: sorted(tier1),
       fallbackReasons: sorted(fallbackReasons),
       ...(withSites ? { valueSites: sortedSites(valueSites), errorSites: sortedSites(errorSites) } : {}),

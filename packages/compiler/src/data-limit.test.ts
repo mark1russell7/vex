@@ -25,7 +25,14 @@ const STEP = { i: app("add", v("i"), lit(1)) };
 const count = (axis: Axis, until?: Expr): Expr => iterate(dataLimit(axis), LOOP, STEP, v("i"), until);
 const CAP = app("fill", lit(100_000), lit(0));
 
-/** This function compares each key with the interpreter, and it gives the fallbacks of the program. */
+/** This function compares each key with the interpreter, and it gives the tier of the program. An axis `list` stays in tier 1. */
+function agrees(e: Expr, s = S): number {
+  const p = tiered(e, OPTIONS);
+  for (const origin of s.keys) expect(p.run({ space: s, origin })).toEqual(evaluate(e, { ...OPTIONS, space: s, origin }));
+  return p.tier;
+}
+
+/** This function compares each key with the interpreter, and it gives the fallbacks of a program of tier 2. */
 function fallbacks(e: Expr, s = S): number {
   const p = tiered(e, OPTIONS);
   expect(p.tier).toBe(2);
@@ -33,14 +40,17 @@ function fallbacks(e: Expr, s = S): number {
   return p.stats.fallbacks;
 }
 
+/** This function gives a table of `n` records. */
+const wide = (n: number) => space.array(Array.from({ length: n }, (_, i) => ({ n: i, ok: true })));
+
 describe("a data limit in tier 2 (ITERATE.LIMIT.DATA)", () => {
   it("ITERATE.LIMIT.DATA P17: tier 2 counts the targets of an axis with no fallback", () => {
     for (const axis of [axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.where(axes.all, ref("ok")), axes.where(axes.where(axes.all, ref("ok")), app("gt", ref("n"), lit(1)))]) {
       expect(fallbacks(count(axis))).toBe(0);
     }
     expect(fallbacks(count(axes.children), TREE)).toBe(0);
-    expect(fallbacks(count(axes.list(each(axes.all, ref("n")))))).toBe(0);
-    expect(fallbacks(count(axes.list(app("fill", lit(4), lit(0)))))).toBe(0);
+    expect(agrees(count(axes.list(each(axes.all, ref("n")))))).toBe(1);
+    expect(agrees(count(axes.list(app("fill", lit(4), lit(0)))))).toBe(1);
   });
 
   it("ITERATE.LIMIT.DATA ITERATE.UNTIL P17: the test sees the count, and a test with no true value gives #NUM! with the count", () => {
@@ -54,23 +64,33 @@ describe("a data limit in tier 2 (ITERATE.LIMIT.DATA)", () => {
 
   it("ITERATE.LIMIT.DATA P17: the limit reads an outer name, and it evaluates after init", () => {
     const outer = iterate(2, { xs: lit([1, 2]), s: lit(0) }, { s: app("add", v("s"), count(axes.list(v("xs")))) }, v("s"));
-    expect(fallbacks(outer)).toBe(0);
+    expect(agrees(outer)).toBe(1);
     const first = iterate(dataLimit(axes.list(lit(3))), { i: ref("missing") }, {}, v("i"));
     expect(tiered(first, OPTIONS).run({ space: S, origin: "0" })).toMatchObject({ ok: false, error: { kind: "missing-field" } });
-    fallbacks(first);
+    expect(agrees(first)).toBe(1);
   });
 
   it("ITERATE.LIMIT.ERROR P17: each limit that is not valid gives the error of the interpreter", () => {
     const bad: readonly Axis[] = [axes.where(axes.all, ref("missing")), axes.where(axes.all, ref("n")), axes.list(lit(3)), axes.list(ref("missing")), axes.list(each(axes.all, ref("missing"))), axes.table("none")];
     for (const axis of bad) {
-      fallbacks(count(axis));
-      fallbacks(app("ifError", count(axis), lit(-1)));
+      expect(agrees(count(axis))).toBeGreaterThan(0);
+      expect(agrees(app("ifError", count(axis), lit(-1)))).toBeGreaterThan(0);
       expect(tiered(count(axis), OPTIONS).run({ space: S, origin: "0" })).toMatchObject({ ok: false, error: { code: "#NUM!", kind: "limit" } });
     }
-    fallbacks(count(axes.children));
+    expect(fallbacks(count(axes.children))).toBeGreaterThan(0);
   });
 
-  it("ITERATE.LIMIT.ERROR P17: tier 2 takes a count of 100000, and a count above the cap is an error", () => {
+  it("ITERATE.LIMIT.ERROR P17: tier 2 takes a count of 100000, and a count above the cap goes to tier 1", () => {
+    const records = iterate(dataLimit(axes.all), {}, {}, lit(1));
+    const fit = tiered(records, OPTIONS);
+    expect(fit.run({ space: wide(100_000), origin: "0" })).toEqual(evaluate(records, { ...OPTIONS, space: wide(100_000), origin: "0" }));
+    expect(fit.stats).toEqual({ runs: 1, fallbacks: 0 });
+    const over = tiered(records, OPTIONS);
+    expect(over.run({ space: wide(100_001), origin: "0" })).toMatchObject({ ok: false, error: { code: "#NUM!", kind: "limit" } });
+    expect(over.stats).toEqual({ runs: 1, fallbacks: 1 });
+  });
+
+  it("ITERATE.LIMIT.ERROR P17: tier 1 takes a list of 100000 items, and a list above the cap is an error", () => {
     const at = { space: S, origin: "0" };
     const fits = iterate(dataLimit(axes.list(CAP)), {}, {}, lit(1));
     expect(tiered(fits, OPTIONS).run(at)).toEqual(evaluate(fits, { ...OPTIONS, ...at }));
@@ -81,7 +101,7 @@ describe("a data limit in tier 2 (ITERATE.LIMIT.DATA)", () => {
   it("ITERATE.LIMIT.ERROR EVAL.DEPTH P17: #DEPTH! stays as it is, also after an earlier error of an item", () => {
     const items = axes.list(each(axes.all, app("if", app("gt", ref("n"), lit(1)), ext("deep", null), ext("other", null))));
     for (const e of [count(axes.list(ext("deep", null))), count(items), app("ifError", count(items), lit(0))]) {
-      fallbacks(e);
+      expect(agrees(e)).toBe(1);
       expect(tiered(e, OPTIONS).run({ space: S, origin: "0" })).toMatchObject({ ok: false, error: { code: "#DEPTH!" } });
     }
   });
@@ -96,7 +116,7 @@ describe("a data limit and the steps (STEP.MAX)", () => {
     expect(generate(e, refused)).toStrictEqual({ ok: false, reason });
     expect(tiered(e, refused).run({ space: S, origin: "0" })).toMatchObject({ ok: false, error: { code: "#VALUE!", message: reason } });
     expect(emitModule(e, refused)).toStrictEqual({ ok: false, reason });
-    expect(emitSheetModule(new Map([["A", e]]), { ...refused, kinds: { A: "number" } })).toMatchObject({ ok: false, reason });
+    expect(emitSheetModule(new Map([["A", e]]), { ...refused, kinds: { A: "number" } })).toStrictEqual({ ok: false, reason: `the formula of the column "A": ${reason}` });
   });
 
   it("STEP.MAX ITERATE.LIMIT.DATA: the default accepts a data limit, and maxStep A accepts a constant limit", () => {

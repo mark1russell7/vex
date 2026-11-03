@@ -211,9 +211,9 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
           const loop: Expr = { tag: "iterate", limit, init: two ? { a: init, b: init } : { a: init }, step: { a: step }, result };
           return until === undefined ? loop : { ...loop, until };
         }),
-      // A limit from the data (ITERATE.LIMIT.DATA): the size of an axis, the same axes that a fold has.
+      // A limit from the data (ITERATE.LIMIT.DATA). Most limits read a base axis, which tier 2 takes. Some read each axis of a fold.
       fc
-        .tuple(tie("axis"), tie("expr"), tie("expr"), tie("expr"), fc.option(tie("expr"), { nil: undefined }))
+        .tuple(fc.oneof({ weight: 3, arbitrary: fc.constantFrom(...BASE_AXES) }, { weight: 1, arbitrary: tie("axis") }), tie("expr"), tie("expr"), tie("expr"), fc.option(tie("expr"), { nil: undefined }))
         .map(([axis, init, step, result, until]): Expr => {
           const loop: Expr = { tag: "iterate", limit: { axis }, init: { a: init }, step: { a: step }, result };
           return until === undefined ? loop : { ...loop, until };

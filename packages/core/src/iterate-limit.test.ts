@@ -45,12 +45,15 @@ function run(e: Expr, opts: Partial<EvalOptions> = {}): Result<unknown> {
 }
 
 const count = (axis: Axis): Expr => iterate(dataLimit(axis), { i: lit(0) }, { i: app("add", v("i"), lit(1)) }, v("i"));
-const list = (...xs: readonly unknown[]): Expr => each(axes.list(lit(xs)), v("x"), undefined, ["x"]);
 /** A limit that is not valid must give `#NUM!` with the kind `limit`, in both tiers. */
-const invalid = (axis: Axis, opts: Partial<EvalOptions> = {}): void => {
+const invalid = (axis: Axis, opts: Partial<EvalOptions> = {}): readonly unknown[] => {
   const r = error(run(count(axis), opts));
-  expect([r.code, r.kind]).toEqual(["#NUM!", "limit"]);
+  return [r.code, r.kind];
 };
+const LIMIT = ["#NUM!", "limit"];
+const stop = (limit: number): Expr => iterate(dataLimit(axes.all), { i: lit(0) }, { i: app("add", v("i"), lit(1)) }, v("i"), app("gt", v("i"), lit(limit)));
+const part = (x: Expr): string => (x.tag === "ref" ? x.path.join(".") : x.tag);
+const iterateOf = (limit: unknown): unknown => ({ type: "iterate", value: { limit, init: {}, step: {}, result: 1 } });
 
 describe("the limit of iterate from the data (ITERATE.LIMIT.DATA)", () => {
   it("ITERATE.LIMIT.DATA: the limit is the number of targets of the axis, the steps of a fold over that axis", () => {
@@ -78,7 +81,6 @@ describe("the limit of iterate from the data (ITERATE.LIMIT.DATA)", () => {
   });
 
   it("ITERATE.UNTIL ITERATE.LIMIT.DATA: a data limit with until stops at a true test, and gives #NUM! with no true test", () => {
-    const stop = (limit: number): Expr => iterate(dataLimit(axes.all), { i: lit(0) }, { i: app("add", v("i"), lit(1)) }, v("i"), app("gt", v("i"), lit(limit)));
     expect(value(run(stop(1)))).toBe(2);
     const r = error(run(stop(9)));
     expect([r.code, r.kind, r.message]).toEqual(["#NUM!", "limit", '"iterate" made its 3 steps, and its test "until" is not true']);
@@ -115,27 +117,27 @@ describe("the limit of iterate from the data (ITERATE.LIMIT.DATA)", () => {
 
 describe("the error of a limit that is not valid (ITERATE.LIMIT.ERROR)", () => {
   it("ITERATE.LIMIT.ERROR: a list that is not a list, an error, a missing field or an error item gives one error", () => {
-    invalid(axes.list(lit(3)));
-    invalid(axes.list(lit("text")));
-    invalid(axes.list(ref("missing")));
-    invalid(axes.list(ref("n", [offset(9)])));
-    invalid(axes.list(app("unknown-op", lit(1))));
-    invalid(axes.list(each(axes.all, ref("missing"))));
-    invalid({ t: "reverse", axis: axes.list(lit(3)) });
+    expect(invalid(axes.list(lit(3)))).toEqual(LIMIT);
+    expect(invalid(axes.list(lit("text")))).toEqual(LIMIT);
+    expect(invalid(axes.list(ref("missing")))).toEqual(LIMIT);
+    expect(invalid(axes.list(ref("n", [offset(9)])))).toEqual(LIMIT);
+    expect(invalid(axes.list(app("unknown-op", lit(1))))).toEqual(LIMIT);
+    expect(invalid(axes.list(each(axes.all, ref("missing"))))).toEqual(LIMIT);
+    expect(invalid({ t: "reverse", axis: axes.list(lit(3)) })).toEqual(LIMIT);
   });
 
   it("ITERATE.LIMIT.ERROR: a test that fails or that is not a boolean gives one error, and a test of a removed item does not run", () => {
-    invalid(axes.where(axes.all, ref("missing")));
-    invalid(axes.where(axes.all, ref("n")));
-    invalid(axes.where(axes.list(lit(3)), lit(true)));
-    invalid(axes.where(axes.where(axes.all, ref("missing")), lit(true)));
+    expect(invalid(axes.where(axes.all, ref("missing")))).toEqual(LIMIT);
+    expect(invalid(axes.where(axes.all, ref("n")))).toEqual(LIMIT);
+    expect(invalid(axes.where(axes.list(lit(3)), lit(true)))).toEqual(LIMIT);
+    expect(invalid(axes.where(axes.where(axes.all, ref("missing")), lit(true)))).toEqual(LIMIT);
     expect(value(run(count(axes.where(axes.where(axes.all, ref("ok")), app("gt", ref("n"), lit(0))))))).toBe(2);
   });
 
   it("ITERATE.LIMIT.ERROR: an axis that is not valid for the run gives one error", () => {
-    invalid(axes.table("none"));
-    invalid(axes.table("none"), { tables: { other: records } });
-    invalid(axes.children);
+    expect(invalid(axes.table("none"))).toEqual(LIMIT);
+    expect(invalid(axes.table("none"), { tables: { other: records } })).toEqual(LIMIT);
+    expect(invalid(axes.children)).toEqual(LIMIT);
   });
 
   it("ITERATE.LIMIT.ERROR: the error keeps its cause and the place of the node", () => {
@@ -248,7 +250,6 @@ describe("the forms of a data limit (ITERATE.LIMIT.DATA)", () => {
   const e = iterate(dataLimit(axes.where(axes.list(lit([1, 2])), ref("ok"))), { i: ref("n") }, { i: ref("m") }, ref("r"), ref("u"));
 
   it("ITERATE.LIMIT.DATA EVAL.LOCATION: the children of a data limit come after the steps and before until", () => {
-    const part = (x: Expr): string => (x.tag === "ref" ? String(x.path[0]) : x.tag);
     expect(children(e).map(part)).toEqual(["n", "m", "lit", "ok", "u", "r"]);
     const [targets, rest] = splitLimit(e) ?? [];
     expect(targets).toEqual(each(axes.where(axes.list(lit([1, 2])), ref("ok")), lit(0)));
@@ -256,8 +257,8 @@ describe("the forms of a data limit (ITERATE.LIMIT.DATA)", () => {
   });
 
   it("DOC.LIMIT DOC.ROUND-TRIP: the document has the kind size, and it reads back as the same expression", () => {
-    const d = value(toDocument(count(axes.all))) as { readonly value: { readonly limit: unknown } };
-    expect(d.value.limit).toEqual({ type: "size", value: { axis: { type: ["axes", "all"], value: {} } } });
+    const d = value(toDocument(count(axes.all)));
+    expect(d.value).toMatchObject({ limit: { type: "size", value: { axis: { type: ["axes", "all"], value: {} } } } });
     expect(value(fromDocument(d))).toEqual(count(axes.all));
     expect(value(fromDocument(value(toDocument(e))))).toEqual(e);
   });
@@ -272,7 +273,6 @@ describe("the forms of a data limit (ITERATE.LIMIT.DATA)", () => {
   });
 
   it("DOC.LIMIT DOC.ERROR: a size with a bad axis or a limit of another kind is not valid", () => {
-    const iterateOf = (limit: unknown): unknown => ({ type: "iterate", value: { limit, init: {}, step: {}, result: 1 } });
     for (const limit of [{ type: "size", value: {} }, { type: "size", value: { axis: 1 } }, { type: "lit", value: 1 }, { type: "size", value: { axis: { type: ["axes", "all"], value: {} }, at: [] } }, null]) {
       expect(error(fromDocument(iterateOf(limit))).code).toBe("#VALUE!");
     }
@@ -291,12 +291,12 @@ describe("the forms of a data limit (ITERATE.LIMIT.DATA)", () => {
 
   it("ITERATE.LIMIT.DATA EVAL.SHAPE: the shape check reads the axis of a data limit", () => {
     const bare = { tag: "iterate", init: {}, step: {}, result: lit(1) };
-    expect(shapeError({ ...bare, limit: { axis: { t: "all" } } } as Expr)).toBeUndefined();
-    expect(shapeError({ ...bare, limit: { axis: { t: "nope" } } } as unknown as Expr)).toBeDefined();
-    expect(shapeError({ ...bare, limit: {} } as unknown as Expr)).toBeDefined();
-    expect(shapeError({ ...bare, limit: { axis: { t: "list", list: 1 } } } as unknown as Expr)).toBeDefined();
-    expect(shapeError({ ...bare, limit: null } as unknown as Expr)).toBeDefined();
-    expect(shapeError({ tag: "iterate", limit: { axis: { t: "all" } }, step: {}, result: lit(1) } as unknown as Expr)).toBeDefined();
+    expect(shapeError({ ...bare, limit: { axis: { t: "all" } } })).toBeUndefined();
+    expect(shapeError({ ...bare, limit: { axis: { t: "nope" } } })).toBeDefined();
+    expect(shapeError({ ...bare, limit: {} })).toBeDefined();
+    expect(shapeError({ ...bare, limit: { axis: { t: "list", list: 1 } } })).toBeDefined();
+    expect(shapeError({ ...bare, limit: null })).toBeDefined();
+    expect(shapeError({ tag: "iterate", limit: { axis: { t: "all" } }, step: {}, result: lit(1) })).toBeDefined();
   });
 
   it("ITERATE.LIMIT.DATA TRACE.EVENTS: the label of an iteration names the axis of its limit", () => {

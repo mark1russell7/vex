@@ -345,7 +345,7 @@ const depth = (parents: readonly number[], k: number): number => (k < 0 ? -1 : 1
 // the code, and one test takes more than the 5 s of Vitest.
 // In the nightly and the weekly runs, the time-out is the budget of a property plus a margin (`fc-timeout.ts`).
 describe("a data limit in a module of a sheet (ITERATE.LIMIT.DATA)", () => {
-  const rows = [{ v: 1 }, { v: -2 }, { v: 3 }];
+  const data = [{ v: 1 }, { v: -2 }, { v: 3 }];
 
   it("ITERATE.LIMIT.DATA COMPILE.MODULE.SHEET SHEET.ORDER: a test of a limit reads a cell, and the cell comes first", () => {
     const step = { s: app("add", v("s"), lit(1)) };
@@ -356,7 +356,7 @@ describe("a data limit in a module of a sheet (ITERATE.LIMIT.DATA)", () => {
     ]);
     const m = emitSheetModule(columns, NUM);
     if (!m.ok) throw new Error(m.reason);
-    expectSame(make(m.source), columns, rows, undefined);
+    expectSame(make(m.source), columns, data, undefined);
   });
 
   it("ITERATE.LIMIT.DATA COMPILE.MODULE.SHEET: a list of a limit reads a cell", () => {
@@ -367,7 +367,7 @@ describe("a data limit in a module of a sheet (ITERATE.LIMIT.DATA)", () => {
     ]);
     const m = emitSheetModule(columns, NUM);
     if (!m.ok) throw new Error(m.reason);
-    expectSame(make(m.source), columns, rows, undefined);
+    expectSame(make(m.source), columns, data, undefined);
   });
 });
 

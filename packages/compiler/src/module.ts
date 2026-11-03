@@ -3932,12 +3932,12 @@ class Printer {
   }
 
   /**
-   * The number of steps of an iteration. A data limit is the strict count of the targets of its axis, so an error of the
+   * The number of steps of an iteration. A data limit is the strict count of the targets of its axis. An error of the
    * axis, of a test or of an item throws. A count above the cap throws too (ITERATE.LIMIT.ERROR).
    */
   #limit(e: ExprOf<"iterate">, ctx: Ctx): { readonly s: readonly string[]; readonly code: string; readonly deps: ReadonlySet<number> } {
     const [targets] = splitLimit(e) ?? [];
-    if (targets === undefined) return { s: [], code: String(e.limit), deps: new Set() };
+    if (targets === undefined) return { s: [], code: String(e.limit as number), deps: new Set() };
     const count = this.expr(app("count", targets, lit({ strict: true })), ctx);
     const n = this.fresh("n");
     return { s: [...count.s, `const ${n} = ${count.v.code};`, `if (${n} > ${String(MAX_ITERATIONS)}) ${this.use("F")}();`], code: n, deps: count.v.deps };

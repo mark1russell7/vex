@@ -572,9 +572,10 @@ describe("the results of the compiler", () => {
   });
 });
 
+const loop = (limit: Parameters<typeof iterate>[0]): Expr => iterate(limit, { i: lit(0) }, { i: v("i") }, v("i"));
+
 describe("the text of a chain with a data limit", () => {
   it("ITERATE.LIMIT.DATA: a data limit prints as a list chain, and a number prints as a number", () => {
-    const loop = (limit: Parameters<typeof iterate>[0]): Expr => iterate(limit, { i: lit(0) }, { i: v("i") }, v("i"));
     expect(toVexChain(loop(dataLimit(axes.all)))).toContain("root.start(0).iterate(root.start(0).each(");
     expect(toVexChain(loop(3))).toContain("root.start(0).iterate(3, ");
   });

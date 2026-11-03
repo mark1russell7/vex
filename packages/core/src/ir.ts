@@ -146,8 +146,8 @@ export const dataLimit = (axis: Axis): DataLimit => ({ axis });
 export const limitAxis = (e: ExprOf<"iterate">): Axis | undefined => (typeof e.limit === "number" ? undefined : e.limit.axis);
 
 /**
- * This function gives the parts of an iteration with a data limit, for a walk that tells the axes apart: an `each` over
- * the axis, and the iteration without its axis. An iteration with a number has `undefined`.
+ * This function gives the parts of an iteration with a data limit, for a walk that tells the axes apart. The parts are
+ * an `each` over the axis, and the iteration without its axis. An iteration with a number has `undefined`.
  */
 export function splitLimit(e: ExprOf<"iterate">): readonly [ExprOf<"each">, ExprOf<"iterate">] | undefined {
   const axis = limitAxis(e);

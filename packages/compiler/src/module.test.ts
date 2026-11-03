@@ -1759,7 +1759,7 @@ describe("a data limit in a module (ITERATE.LIMIT.DATA)", () => {
   it("ITERATE.LIMIT.DATA COMPILE.MODULE: a limit reads the field of a test, and a limit over the focus is not a constant", () => {
     // The module reads the field b only in the test of the limit, so the reads of the limit must count.
     const e = count(axes.where(axes.all, ref("b")));
-    expect(sourceOf(e)).toContain(".b");
+    expect(sourceOf(e)).toContain('["b"]');
     // Each node has its own count of children, so one constant for all keys gives the wrong value.
     const children = count(axes.children);
     expectSameTree(make(sourceOf(children, TREE)), children, TREE_RECORDS, PARENTS, VARS, TREE);
@@ -1774,7 +1774,7 @@ describe("a data limit in a module (ITERATE.LIMIT.DATA)", () => {
   });
 
   it("ITERATE.LIMIT.ERROR COMPILE.MODULE: a module gives VEX_ERROR for each limit that is not valid", () => {
-    const above = iterate(dataLimit(axes.list(op("append", CAP, lit([1])))), {}, {}, lit(1));
+    const above = iterate(dataLimit(axes.list(op("append", CAP, op("fill", lit(1), lit(1))))), {}, {}, lit(1));
     const fits = iterate(dataLimit(axes.list(CAP)), {}, {}, lit(1));
     const item = count(axes.list(each(axes.all, op("divide", lit(1), op("subtract", n, n)))));
     const caught = op("ifError", above, lit(-1));
@@ -1783,7 +1783,7 @@ describe("a data limit in a module (ITERATE.LIMIT.DATA)", () => {
 
   it("P17 ITERATE.LIMIT.DATA COMPILE.MODULE: a module of a random program with a data limit gives the value of the interpreter", () => {
     const limited = fc
-      .tuple(fc.constantFrom(...[axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.where(axes.all, ref("b"))]), program.num, program.num)
+      .tuple(fc.constantFrom<Axis>(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.where(axes.all, ref("b"))), program.num, program.num)
       .map(([a, init, step]) => iterate(dataLimit(a), { s: init }, { s: op("add", v("s"), step) }, v("s")));
     fc.assert(
       fc.property(limited, records, fc.integer({ min: -3, max: 3 }), fc.constantFrom("x", "y"), (e, rs, a, t) => {

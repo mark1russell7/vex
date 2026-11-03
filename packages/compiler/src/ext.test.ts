@@ -97,6 +97,16 @@ describe("COMPILE.EXT: an error of an extension that the program catches stays i
     }
   });
 
+  it("V-067 COMPILE.EXT EVAL.DEPTH: #DEPTH! of a later item wins over a failed op check at an earlier item", () => {
+    // V-067: tier 2 jumped past the later items at the failed check of the text item, so it did not give #DEPTH!.
+    const e = app("ifError", app("sum", all(app("if", app("gt", ref("n"), lit(1)), ext("depth", null), lit("x")))), lit(0));
+    for (const origin of S.keys) {
+      const r = tiered(e, OPTIONS).run({ space: S, origin });
+      expect(r.ok ? r.value : r.error.code).toBe("#DEPTH!");
+      expect(r).toEqual(evaluate(e, { ...OPTIONS, space: S, origin }));
+    }
+  });
+
   it("COMPILE.EXT EVAL.DEPTH: after an error that the program catches, the interpreter still evaluates the later arguments", () => {
     // The error of the first argument is not the result: #DEPTH! of the later extension is.
     expect(fallbacks(app("ifError", app("add", missing, ext("depth", null)), lit(0)))).toBe(3);
@@ -180,25 +190,29 @@ const arbParts: fc.Arbitrary<Expr[]> = fc
 const ORDER = space.record({ K0: { n: 0 }, K1: { n: 1 }, K2: { n: 2 }, K3: { n: 3 } });
 /** This function gives the expression whose value at the record `k` is `parts[k]`. */
 const byItem = (parts: readonly Expr[]): Expr =>
-  parts.slice(0, -1).reduceRight<Expr>((later, part, k) => app("if", app("gt", ref("n"), lit(k)), later, part), parts[parts.length - 1] as Expr);
-const names = (parts: readonly Expr[]): string[] => parts.map((_, k) => `x${String(k)}`);
+  parts.reduceRight<Expr | undefined>((later, part, k) => (later === undefined ? part : app("if", app("gt", ref("n"), lit(k)), later, part)), undefined) ?? lit(0);
+/** This function gives the parts as the fields `x0`, `x1` and so on. */
+const fieldsOf = (parts: readonly Expr[]): Record<string, Expr> => Object.fromEntries(parts.map((part, k): [string, Expr] => [`x${String(k)}`, part]));
 
-/** Programs that catch an error before an error that stops (V-066): ops, records, the items and options of a list op, and let. */
+/** Programs that catch an error before an error that stops (V-066, V-067): ops, records, the items and options of a list op, and let. */
 const arbOrder: fc.Arbitrary<Expr> = fc
   .tuple(arbParts, fc.integer({ min: 0, max: 6 }), fc.constantFrom("add", "mul", "sub", "gt", "and", "pow"), fc.constantFrom("count", "sum", "values", "errors", "first", "min", "reduce"), fc.boolean())
   .map(([parts, context, op, listOp, flag]): Expr => {
     const options = flag ? [lit({ strict: true })] : [];
     const listArgs = (list: Expr): Expr[] => (listOp === "reduce" ? [list, lit("add"), ...options] : [list, ...options]);
-    const bound = (body: (xs: Expr[]) => Expr): Expr => let_(Object.fromEntries(names(parts).map((x, k) => [x, parts[k] as Expr])), body(names(parts).map((x) => v(x))));
-    const node = [
+    const fields = fieldsOf(parts);
+    const bound = (body: (xs: Expr[]) => Expr): Expr => let_(fields, body(Object.keys(fields).map((x) => v(x))));
+    const nodes: readonly (() => Expr)[] = [
       () => app(op, ...parts),
-      () => rec(Object.fromEntries(names(parts).map((x, k) => [x, parts[k] as Expr]))),
+      () => rec(fields),
       () => app(listOp, ...listArgs(all(byItem(parts)))),
       () => app("count", all(ref("n")), ...parts),
       () => app("reduce", all(ref("n")), ...parts),
-      () => bound((xs) => app("add", ...(flag ? xs.reverse() : xs))),
+      () => bound((xs) => app("add", ...(flag ? xs.toReversed() : xs))),
       () => let_({ y: app(op, ...parts) }, app("add", v("y"), lit(1))),
-    ][context] as () => Expr;
+    ];
+    const node = nodes.at(context);
+    if (node === undefined) throw new RangeError(`no context ${String(context)}`);
     return app("ifError", node(), lit(0));
   });
 
@@ -216,7 +230,7 @@ describe("COMPILE.EXT: random programs with extensions", () => {
     );
   });
 
-  it("P17 V-066 COMPILE.EXT EVAL.DEPTH: an error that stops the program wins over an earlier caught error, in each position", () => {
+  it("P17 V-066 V-067 COMPILE.EXT EVAL.DEPTH: an error that stops the program wins over an earlier caught error, in each position", () => {
     fc.assert(
       fc.property(arbOrder, fc.constantFrom(...ORDER.keys), (e, origin) => {
         expect(tiered(e, OPTIONS).run({ space: ORDER, origin })).toEqual(evaluate(e, { ...OPTIONS, space: ORDER, origin }));

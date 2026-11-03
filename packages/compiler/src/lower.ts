@@ -300,8 +300,8 @@ class Lowerer {
   /**
    * This method lowers the arguments of an op or the fields of a record, with the child indexes from `first`. After an
    * error, the interpreter still evaluates the later arguments, and an extension there can give `#DEPTH!` (`#all` of the
-   * interpreter). Thus where the program catches the error, each argument before the last one that can call an
-   * extension evaluates in a block of its own (COMPILE.EXT). Then a failure skips no extension.
+   * interpreter). Thus, where the program catches the error, each argument before the last one that can use an
+   * extension has its own block (COMPILE.EXT). Then a failure skips no extension.
    */
   #all(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, b: Block): LExpr[] {
     const last = b.fail === RETURN ? -1 : xs.findLastIndex((x) => this.#mayExt(x, s.fns));

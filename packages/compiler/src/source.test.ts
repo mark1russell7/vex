@@ -25,8 +25,8 @@ const sourceOf = (e: Expr, options?: GenerateOptions): string => {
 };
 
 /**
- * This function compares the source with its golden file. A new golden file has the extension `.js.txt`: the conventions
- * check refuses a new JavaScript file, and a golden file is output, not a script.
+ * This function compares the source with its golden file. A golden file is output of the compiler and test data, not
+ * source. Thus a new golden file has the extension `.js.txt`, outside the rule `typed-scripts`. A script does not use it.
  */
 const expectGolden = async (name: string, e: Expr, options?: GenerateOptions, extension = ".js"): Promise<void> => {
   await expect(sourceOf(e, options)).toMatchFileSnapshot(`./__golden__/${name}${extension}`);

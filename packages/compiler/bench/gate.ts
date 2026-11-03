@@ -38,6 +38,7 @@
  * and 2.63. Nested gave 2.77, 2.77, 3.03, 2.97 and 2.96. These runs have one 7763 run only, so each model has the same
  * radial limits. L is 3 for both cases: 43 % at a slow rate of 0.3, 89 % at 0.5.
  * A PR that makes a ratio better sets its limit lower in the same PR.
+ * With `GATE_GC=1`, each case also prints the garbage collections of each arm in its timed runs (gc.ts, GATEGC).
  * Start: node packages/compiler/bench/gate.ts
  */
 import type { Space } from "@mark1russell7/vex";
@@ -52,6 +53,7 @@ import { emitModule, emitSheetModule, tiered } from "../src/index.ts";
 import { cpus } from "node:os";
 import { envLine, paired } from "../../core/bench/measure.ts";
 import { limitsFor, limitsText, type CaseLimits, type ModelLimits } from "../../core/bench/processes.ts";
+import { GC_ON, gcRecorder } from "./gc.ts";
 
 /** The limits of each case, from the 10 runs in the header. A case with no `maxSlow` has check (b) as a record only. */
 const LIMITS = {
@@ -215,17 +217,23 @@ let failed = false;
 for (const make of CASES.filter((_, i) => chosen === undefined || chosen === i)) {
   const { title, compiled, hand, limits } = make();
   // The arms alternate in this process, with the order reversed in odd rounds, and a copy of the base gives the noise floor (core/bench/measure.ts).
-  const { ratio, a: v, b: h, noise } = paired(compiled.run, hand);
+  // With GATE_GC=1, a clock records each timed run, and an observer counts the garbage collections in it (gc.ts).
+  const gc = GC_ON ? gcRecorder() : undefined;
+  const { ratio, a: v, b: h, noise, report } = paired(compiled.run, hand, gc === undefined ? {} : { clock: gc.clock });
   const ok = ratio <= limits.limit && compiled.tier === 2 && compiled.fallbacks() === 0;
   failed ||= !ok;
   console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, ${limitsText(limits)}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
+  // oxlint-disable-next-line no-await-in-loop -- the cases run one after the other, and the gc entries of a case come from the event loop.
+  if (gc !== undefined) for (const line of await gc.done(report, { a: "vex", b: "hand", "b~aa": "hand~aa" })) console.info(line);
 }
 if (chosen === undefined || chosen === CASES.length) {
   // The growth of O(n) is 2, and the growth of O(n²) is 4. Its limit comes from the runs in the header.
   const [small, large] = shares();
-  const { ratio, a: v, b: h, noise } = paired(large.run, small.run);
+  const gc = GC_ON ? gcRecorder() : undefined;
+  const { ratio, a: v, b: h, noise, report } = paired(large.run, small.run, gc === undefined ? {} : { clock: gc.clock });
   const ok = ratio <= SHARE.limit && large.tier === 2 && large.fallbacks() === 0;
   failed ||= !ok;
   console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (${limitsText(SHARE)}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
+  if (gc !== undefined) for (const line of await gc.done(report, { a: "1000", b: "500", "b~aa": "500~aa" })) console.info(line);
 }
 process.exit(failed ? 1 : 0);

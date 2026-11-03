@@ -233,7 +233,10 @@ type Env = ReadonlyMap<string, Entry>;
 
 /** A refusal of the check. The check throws it, and `sizeError` gives its message. */
 class Refusal {
-  constructor(readonly message: string) {}
+  readonly message: string;
+  constructor(message: string) {
+    this.message = message;
+  }
 }
 
 /** The literal number of an argument, if the argument is a literal number. */
@@ -855,12 +858,15 @@ class Loop {
   /** The cycle of each variable: the variables that its new value reads, and that read it in turn. */
   readonly #cycles = new Map<string, ReadonlySet<string>>();
 
-  constructor(
-    readonly node: ExprOf<"fold"> | ExprOf<"iterate">,
-    readonly names: readonly string[],
-    ids: ReadonlyMap<string, number>,
-    readonly steps: ReadonlyMap<string, Shape>,
-  ) {
+  readonly node: ExprOf<"fold"> | ExprOf<"iterate">;
+  readonly names: readonly string[];
+  readonly steps: ReadonlyMap<string, Shape>;
+
+  // Node.js starts the speed gate from this source with the types removed, so the class has no parameter properties.
+  constructor(node: ExprOf<"fold"> | ExprOf<"iterate">, names: readonly string[], ids: ReadonlyMap<string, number>, steps: ReadonlyMap<string, Shape>) {
+    this.node = node;
+    this.names = names;
+    this.steps = steps;
     for (const name of names)
       for (const measure of MEASURES)
         this.#owners.set(variable(measure, ids.get(name) as number), {

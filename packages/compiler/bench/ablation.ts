@@ -61,14 +61,14 @@ export const noItemTry = (source: string): string => {
 export const allEdits = (source: string): string => noItemTry(noColumnTry(noChecks(source)));
 
 // The transplants (the third ablation): a function of the module becomes the code of the hand arm. The names of the
-// module are the names of today's emitter: `fn42` gives the need of a child, `fn7` its radius, `c12` the direction,
-// `c13` the start angle and `v7` the gap. A change of the emitter stops the edit, or the test of the result.
-const ARRAYS_AFTER = "  const fn42 = (k21) => G(col41(k21));\n";
-const SUM_HEAD = "  const fn58 = (p47) => {\n";
-const PAIRS_HEAD = "  const fn115 = (p74) => {\n";
+// module are the names of today's emitter: `fn44` gives the need of a child, `fn7` its radius, `c14` the direction,
+// `c15` the start angle and `v7` the gap. A change of the emitter stops the edit, or the test of the result.
+const ARRAYS_AFTER = "  const fn44 = (k23) => G(col43(k23));\n";
+const SUM_HEAD = "  const fn63 = (p51) => {\n";
+const PAIRS_HEAD = "  const fn120 = (p79) => {\n";
 /** This edit adds packed arrays of the needs and the radii of the children, made once at their first use. */
 const withArrays = (source: string): string =>
-  replaceOnce(source, ARRAYS_AFTER, `${ARRAYS_AFTER}  let NEED_, RHO_;\n  const needs = () => (NEED_ ??= Array.from({ length: n }, (_, j) => fn42(j)));\n  const rhos = () => (RHO_ ??= Array.from({ length: n }, (_, j) => fn7(j)));\n`);
+  replaceOnce(source, ARRAYS_AFTER, `${ARRAYS_AFTER}  let NEED_, RHO_;\n  const needs = () => (NEED_ ??= Array.from({ length: n }, (_, j) => fn44(j)));\n  const rhos = () => (RHO_ ??= Array.from({ length: n }, (_, j) => fn7(j)));\n`);
 /** This function replaces the function that starts with `head`, up to its end at the indent of two spaces. */
 const replaceFunction = (source: string, head: string, to: string): string => {
   if (source.split(head).length !== 2) throw new Error(`ablation: the edit needs the text "${head.trim()}" once in the radial module.`);
@@ -79,19 +79,19 @@ const replaceFunction = (source: string, head: string, to: string): string => {
 };
 const HAND_SUM = `${SUM_HEAD}    const need = needs();
     let sum = 0;
-    for (let j = 0; j < n; j++) sum += 2 * Math.asin(Math.min(1, need[j] / (2 * p47)));
+    for (let j = 0; j < n; j++) sum += 2 * Math.asin(Math.min(1, need[j] / (2 * p51)));
     return sum;
   };
 `;
-const HAND_PAIRS = `${PAIRS_HEAD}    const need = needs(), rho = rhos(), r = p74;
+const HAND_PAIRS = `${PAIRS_HEAD}    const need = needs(), rho = rhos(), r = p79;
     const steps = need.map((d) => 2 * Math.asin(Math.min(1, d / (2 * r))));
     const spare = (2 * Math.PI - steps.reduce((a, b) => a + b, 0)) / n;
     if (spare < -1e-9) return false;
     const angles = [];
-    let angle = G(c13);
+    let angle = G(c15);
     for (const step of steps) {
       angles.push(angle);
-      angle += c12 * (step + Math.max(0, spare));
+      angle += c14 * (step + Math.max(0, spare));
     }
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
@@ -103,6 +103,8 @@ const HAND_PAIRS = `${PAIRS_HEAD}    const need = needs(), rho = rhos(), r = p74
   };
 `;
 
+// The emitter gives `fn63` a pack of the needs and one try for all the items already. Thus `handSum` measures only the
+// checks of the numbers and of the errors, and the try. The edit stays, so the gate keeps the same hand arm.
 /** This edit makes the sum of the chord angles at a radius the loop of the hand arm, over a packed array of the needs. */
 export const handSum = (source: string): string => replaceFunction(withArrays(source), SUM_HEAD, HAND_SUM);
 

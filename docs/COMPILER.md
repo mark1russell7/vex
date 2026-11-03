@@ -768,6 +768,16 @@ The shapes case has a large spread of its process ratios: 1.41 to 1.77 in one CI
 
 Without these inputs, the gate does not make the observer of the garbage collector, so no time changes.
 
+The input `alloc` of `profile.yml` measures the allocations of one case, and it starts no CPU profile (TREEALLOC). The script is `bench/alloc.ts`. It has no timing and no limit, so the load of the machine does not change its numbers.
+
+- Each process runs one arm: the module, the hand loops, or tier 2 in the tree case.
+- The regime `warm` gives the numbers of the arm. A fixed count of runs goes first, and `--single-threaded` makes the optimizer part of each run.
+- The regime `split` is `warm` with no inlining, so each helper keeps its frame in the attribution.
+- The regime `cold` has no optimizer, so it shows each allocation of the source.
+- The heap counters give the bytes over a window with no garbage collection. The sampling heap profiler, at an interval of 1 byte, gives the objects, their sizes and the path of functions.
+
+The artifact keeps the JSON record of each process.
+
 The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they moved to phase C5. Later they moved to phase C3, after the kinds: a value in its components needs its kind.
 
 #### The memo of each space

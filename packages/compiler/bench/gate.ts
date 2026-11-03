@@ -39,6 +39,7 @@
  * radial limits. L is 3 for both cases: 43 % at a slow rate of 0.3, 89 % at 0.5.
  * A PR that makes a ratio better sets its limit lower in the same PR.
  * With `GATE_GC=1`, each case also prints the garbage collections of each arm in its timed runs (gc.ts, GATEGC).
+ * With `GATE_ALLOC`, the process gives the allocations of one arm and no time (alloc.ts, TREEALLOC).
  * Start: node packages/compiler/bench/gate.ts
  */
 import type { Space } from "@mark1russell7/vex";
@@ -53,6 +54,7 @@ import { emitModule, emitSheetModule, tiered } from "../src/index.ts";
 import { cpus } from "node:os";
 import { envLine, paired } from "../../core/bench/measure.ts";
 import { limitsFor, limitsText, type CaseLimits, type ModelLimits } from "../../core/bench/processes.ts";
+import type { AllocArm, AllocRegime } from "./alloc.ts";
 import { GC_ON, gcRecorder } from "./gc.ts";
 
 /** The limits of each case, from the 10 runs in the header. A case with no `maxSlow` has check (b) as a record only. */
@@ -140,12 +142,20 @@ function teamHand(records: readonly { readonly w: number }[], parents: readonly 
   });
 }
 
-const treeCase = (n: number): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limits: CaseLimits } => {
+/** This function gives a run of the program of the tree case at each key, in tier 2. */
+function teamTier2(records: readonly { readonly w: number }[], parents: readonly number[]): () => void {
+  const tree = space.tree(Object.fromEntries(records.map((r, i) => [String(i), r])), Object.fromEntries(parents.map((p, i) => [String(i), p < 0 ? null : String(p)])));
+  const p = atEachKey({ program: TEAM }, tree, { domains: [NumDomain] });
+  if (p.tier !== 2) throw new Error("gate: the program of the tree case is not in tier 2.");
+  return p.run;
+}
+
+const treeCase = (n: number): Case => {
   // Each node has at most three children, so the depth is near log3(n).
   const records = Array.from({ length: n }, (_, i) => ({ w: (i * 37) % 11 }));
   const parents = records.map((_r, i) => (i === 0 ? -1 : Math.floor((i - 1) / 3)));
   const team = teamModule();
-  return { title: `a tree module, the team and the depth of each of ${String(n)} nodes`, compiled: { run: () => team(records, {}, parents), tier: 2, fallbacks: () => 0 }, hand: () => teamHand(records, parents), limits: limitsOf("tree") };
+  return { title: `a tree module, the team and the depth of each of ${String(n)} nodes`, compiled: { run: () => team(records, {}, parents), tier: 2, fallbacks: () => 0 }, hand: () => teamHand(records, parents), limits: limitsOf("tree"), nodes: n, tier2: () => teamTier2(records, parents) };
 };
 
 // The shapes pass of ireko as a module of a sheet, against the hand code of the pilot (COMPILE-FUSE, COMPILER.md §7.6).
@@ -158,7 +168,7 @@ const shapesModule = once((): TreeRun => {
   return load();
 });
 
-const shapesCase = (branch: number, depth: number): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limits: CaseLimits } => {
+const shapesCase = (branch: number, depth: number): Case => {
   // A root and `depth` levels of `branch` children. Each node wants its shape, and each mode is linked.
   const n = Array.from({ length: depth + 1 }, (_, d) => branch ** d).reduce((a, b) => a + b, 0);
   const records = Array.from({ length: n }, (_, i): ShapeRecord => {
@@ -169,7 +179,7 @@ const shapesCase = (branch: number, depth: number): { readonly title: string; re
   const parents = records.map((r) => r.p);
   const vars = { limit: MAX_BANDS };
   const shapes = shapesModule();
-  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapes(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes") };
+  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapes(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes"), nodes: n };
 };
 
 // The ablation of RADIALGAP (step 3, predictions vex-radialgap-ablation-1102, -2 and -3 of the fleet): with GATE_ABLATE=1,
@@ -191,6 +201,10 @@ interface Case {
   readonly compiled: { readonly run: () => void; readonly tier: 1 | 2; readonly fallbacks: () => number };
   readonly hand: () => void;
   readonly limits: CaseLimits;
+  /** This value is the count of nodes of a tree case, for the allocation measure (alloc.ts). */
+  readonly nodes?: number;
+  /** This function makes the run of the case in tier 2, for the allocation measure. The speed gate does not call it. */
+  readonly tier2?: () => () => void;
 }
 const CASES_BASE: readonly (() => Case)[] = [
   () => ({ title: NEAREST.title, compiled: atEachKey(NEAREST.chain, NEAREST.root.space), hand: NEAREST.hand, limits: limitsOf("nearest") }),
@@ -200,7 +214,7 @@ const CASES_BASE: readonly (() => Case)[] = [
   () => treeCase(1000),
   () => shapesCase(10, 3),
 ];
-const CASES = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, () => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : CASES_BASE;
+const CASES: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, () => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : CASES_BASE;
 
 // With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
 // changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run
@@ -212,6 +226,16 @@ if (only === "count") {
 }
 const chosen = only === undefined ? undefined : Number(only);
 if (chosen !== undefined && !(Number.isInteger(chosen) && chosen >= 0 && chosen <= CASES.length)) throw new RangeError(`gate: GATE_CASE is "${String(only)}", not "count" or a case from 0 to ${String(CASES.length)}.`);
+// With GATE_ALLOC, the process gives the allocation record of one arm of its case, and no time (alloc.ts).
+const allocArm = process.env["GATE_ALLOC"] as AllocArm | undefined;
+if (allocArm !== undefined) {
+  const made = CASES[chosen ?? -1]?.();
+  if (made === undefined) throw new RangeError(`gate: GATE_ALLOC needs a GATE_CASE of a program, not "${String(only)}".`);
+  const run = { vex: made.compiled.run, hand: made.hand, tier2: made.tier2?.() }[allocArm];
+  const { allocRecord } = await import("./alloc-arm.ts");
+  console.info(run === undefined ? "alloc none" : `alloc ${JSON.stringify(await allocRecord(made.title, allocArm, process.env["GATE_ALLOC_REGIME"] as AllocRegime, made.nodes ?? 1, run))}`);
+  process.exit(0);
+}
 console.info(envLine("process"));
 let failed = false;
 for (const make of CASES.filter((_, i) => chosen === undefined || chosen === i)) {

@@ -1,0 +1,67 @@
+{
+  "seed": 1,
+  "scale": 1,
+  "rows": [
+    {
+      "source": "pilots",
+      "programs": 55,
+      "tier2": 49,
+      "programShare": 0.8909090909090909,
+      "runs": 39125,
+      "valueRuns": 33955,
+      "tier2ValueRuns": 33238,
+      "valueShare": 0.9788838168163746,
+      "tier1Reasons": [
+        {
+          "reason": "the program has the list op \"append\", and tier 2 does not have lists as values yet",
+          "count": 2
+        },
+        {
+          "reason": "the program has the list op \"nth\", and tier 2 does not have lists as values yet",
+          "count": 2
+        },
+        {
+          "reason": "the program has the axis \"list\", and tier 2 does not have lists as values yet",
+          "count": 1
+        },
+        {
+          "reason": "the program has the list op \"get\", and tier 2 does not have lists as values yet",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "source": "example sheets",
+      "programs": 46,
+      "tier2": 46,
+      "programShare": 1,
+      "runs": 445,
+      "valueRuns": 434,
+      "tier2ValueRuns": 390,
+      "valueShare": 0.8986175115207373,
+      "tier1Reasons": []
+    },
+    {
+      "source": "a private app",
+      "programs": 58,
+      "tier2": 56,
+      "programShare": 0.9655172413793104,
+      "runs": 23666,
+      "valueRuns": 16665,
+      "tier2ValueRuns": 16622,
+      "valueShare": 0.9974197419741975,
+      "tier1Reasons": [
+        {
+          "reason": "the program has the axis \"list\", and tier 2 does not have lists as values yet",
+          "count": 1
+        },
+        {
+          "reason": "the program has the list op \"nth\", and tier 2 does not have lists as values yet",
+          "count": 1
+        }
+      ],
+      "ci": false,
+      "note": "measured locally, not in CI: the counts of 2026-11-03, set by hand"
+    }
+  ]
+}

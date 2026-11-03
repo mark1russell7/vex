@@ -630,6 +630,24 @@ Each program has the `Program` interface of the core (`run`, `explain`), so each
 - **Standalone modules**: a test imports a generated module and compares it with the interpreter.
 - The mutation lane covers the compiler package at 95 % or more.
 
+### 10.1 The record of the share of tier 2
+
+The file `packages/pilots/share-record.json` keeps the share of tier 2 for each source of real programs (roadmap item CORPUSGATE). Each row has these counts:
+
+- the programs and the programs of tier 2, and the program share,
+- the runs, the runs with a value, the values of tier 2, and the value share,
+- the reasons of the programs of tier 1, by count.
+
+The public sources are the pilots, the example sheets and each corpus file in `packages/pilots/corpus`. A corpus file holds programs with the input of the tool `vex_evaluate`, and a line on each program. The test `share-record.test.ts` computes the public rows again with a fixed seed. It fails when a share is lower than its record.
+
+A row with `ci: false` comes from a private source. Its counts come from a local computer, and CI does not compute them.
+
+To update the record:
+
+1. Start `pnpm --filter @vex/pilots run share-record`. The script writes the public rows again and keeps each row with `ci: false`.
+2. Examine the diff of the record. A lower share needs a reason in the pull request.
+3. To add a corpus, put its file in `packages/pilots/corpus` and start the script again.
+
 ## 11. Decisions of the owner
 
 The owner made these decisions on 2026-10-13:

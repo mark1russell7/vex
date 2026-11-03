@@ -4,6 +4,7 @@
  */
 export * from "./result.ts";
 export * from "./errors.ts";
+export * from "./error-text.ts";
 export * from "./ir.ts";
 export * from "./space.ts";
 export * from "./domain.ts";

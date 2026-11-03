@@ -1,6 +1,7 @@
 import { CHECKED } from "./checked.ts";
 import { fromDocument, isDocument, type Envelope } from "./document.ts";
 import { findMethod, isOpName, liftsAt, resolveOp, type AnyDomain, type OpSpec, type ParamKind, type PrimitiveKind, type ResolvedOp, type ReturnKind, type SizeRule } from "./domain.ts";
+import { describeType, errorAt, errorText, type ErrorExtra, type ErrorText } from "./error-text.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
 import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
@@ -10,6 +11,8 @@ import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOpti
 import { fail, ok, type Result } from "./result.ts";
 import { axisTargets, fixAddr, resolveAddr, type Position, type Space } from "./space.ts";
 import type { Read, Trace, TraceEvent, TraceSink } from "./trace.ts";
+
+export { describeType };
 
 /**
  * A free function op. The interpreter gives it the values of all arguments. The property `size` is its size rule
@@ -137,6 +140,9 @@ class Closure {
   }
 }
 
+/** This function gives the error of an origin that is not a key of the space (EVAL.ORIGIN). */
+export const noKeyError = (origin: string): VexError => vexError("unknown-key", `the space has no key "${origin}"`, { origin, focus: origin });
+
 /** The deepest nesting of an expression that `compile` accepts (EVAL.NESTING). */
 export const MAX_NESTING = 500;
 
@@ -174,7 +180,7 @@ export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Pro
   const root: Node = bad === undefined ? new Compiler(opts).node(expr, []) : (f) => fail(vexError(kind, bad, { path: [], origin: f.pos.origin, focus: f.pos.focus }));
   const run = (r: RunOptions): Result<unknown> => {
     const { space, origin } = r;
-    if (!space.has(origin)) return fail(vexError("unknown-key", `the space has no key "${origin}"`, { origin, focus: origin }));
+    if (!space.has(origin)) return fail(noKeyError(origin));
     const env = new Map<string, Result<unknown>>(Object.entries(r.vars ?? {}).map(([k, val]) => [k, ok(val)]));
     try {
       return root({ pos: { origin, focus: origin }, env }, { space, trace: r.trace, tables: r.tables });
@@ -311,6 +317,11 @@ class Compiler {
     return fail(vexError(kind, message, { path, origin: f.pos.origin, focus: f.pos.focus, ...extra }));
   }
 
+  /** This method gives the error of a text at a node (`errorAt`). */
+  #at(text: ErrorText, f: Frame, path: readonly number[], extra?: ErrorExtra): Result<never> {
+    return fail(errorAt(text, f.pos, path, extra));
+  }
+
   /** This method gives the error of a position of an array without a value (LIST.ARRAY), at a node. */
   #missing(f: Frame, path: readonly number[]): (message: string) => VexError {
     return (message) => vexError("missing-field", message, { path, origin: f.pos.origin, focus: f.pos.focus });
@@ -358,8 +369,8 @@ class Compiler {
         return (f, c) => {
           const bound = f.env.get(name);
           // A function is not a value (FN.VALUE).
-          if (bound?.ok === true && bound.value instanceof Closure) return this.#emit(c, info, f, this.#err("kind-mismatch", `the name "${name}" is a function, not a value`, f, path));
-          return this.#emit(c, info, f, bound ?? this.#err("unbound", `the name "${name}" has no binding`, f, path));
+          if (bound?.ok === true && bound.value instanceof Closure) return this.#emit(c, info, f, this.#at(errorText.functionValue(name), f, path));
+          return this.#emit(c, info, f, bound ?? this.#at(errorText.unbound(name), f, path));
         };
       }
       case "fn":
@@ -400,7 +411,7 @@ class Compiler {
         const extensions = this.#extensions ?? {};
         const handler = Object.hasOwn(extensions, e.kind) ? extensions[e.kind] : undefined;
         const { kind, data } = e;
-        if (handler === undefined) return (f, c) => this.#emit(c, info, f, this.#err("unknown-op", `no handler for the extension kind "${kind}"`, f, path));
+        if (handler === undefined) return (f, c) => this.#emit(c, info, f, this.#at(errorText.noHandler(kind), f, path));
         return (f, c) =>
           this.#emit(c, info, f, this.#locate(this.#guard(() => handler(data, { space: c.space, position: f.pos, path }), f, path, kind), f, path));
       }
@@ -429,11 +440,11 @@ class Compiler {
     const args = this.#nodes(e.args, path);
     return (f, c) => {
       const bound = f.env.get(e.fn);
-      if (bound === undefined) return this.#emit(c, info, f, this.#err("unbound", `the function "${e.fn}" has no binding`, f, path));
+      if (bound === undefined) return this.#emit(c, info, f, this.#at(errorText.noFunction(e.fn), f, path));
       if (!bound.ok) return this.#emit(c, info, f, bound);
       const callee = bound.value;
-      if (!(callee instanceof Closure)) return this.#emit(c, info, f, this.#err("kind-mismatch", `the name "${e.fn}" is a value, not a function`, f, path));
-      if (callee.params.length !== args.length) return this.#emit(c, info, f, this.#err("bad-expression", `the function "${e.fn}" takes ${String(callee.params.length)} arguments, not ${String(args.length)}`, f, path));
+      if (!(callee instanceof Closure)) return this.#emit(c, info, f, this.#at(errorText.notFunction(e.fn), f, path));
+      if (callee.params.length !== args.length) return this.#emit(c, info, f, this.#at(errorText.arity(e.fn, callee.params.length, args.length), f, path));
       const values: Result<unknown>[] = [];
       for (const n of args) values.push(n(f, c));
       return this.#emit(c, info, f, callee.body({ pos: f.pos, env: new Scope(callee.env, callee.params, values) }, c));
@@ -450,13 +461,13 @@ class Compiler {
     try {
       return run();
     } catch (thrown) {
-      return this.#threw(thrown, `"${op}" threw an exception`, f, path, { op });
+      return this.#threw(thrown, errorText.threw(op), f, path);
     }
   }
 
   /** This method gives the error of an exception: `#DEPTH!` for a full call stack, and `#CALC!` for each other exception. */
-  #threw(thrown: unknown, message: string, f: Frame, path: readonly number[], extra: Partial<VexError> = {}): Result<never> {
-    return isStackOverflow(thrown) ? this.#err("depth", DEPTH_MESSAGE, f, path, { ...extra, thrown }) : this.#err("threw", message, f, path, { ...extra, thrown });
+  #threw(thrown: unknown, text: ErrorText, f: Frame, path: readonly number[]): Result<never> {
+    return this.#at(isStackOverflow(thrown) ? { ...text, kind: "depth", message: DEPTH_MESSAGE } : text, f, path, { thrown });
   }
 
   /**
@@ -497,7 +508,7 @@ class Compiler {
         key = where.value;
       }
       const failed = (r: Result<unknown>): Result<unknown> => this.#emit(c, info, f, r, [{ key, path: segs, ok: false }]);
-      const missing = (where: string): Result<unknown> => failed(this.#err("missing-field", `the record at "${key}" has no value at "${where}"`, f, path));
+      const missing = (where: string): Result<unknown> => failed(this.#at(errorText.missing(key, where), f, path));
       let value: unknown = c.space.get(key);
       if (value === undefined || value === null) return missing(label === "" ? "(record)" : label);
       for (const { seg, where, valid } of steps) {
@@ -505,7 +516,7 @@ class Compiler {
         try {
           value = Reflect.get(value, seg);
         } catch (thrown) {
-          return failed(this.#threw(thrown, `reading "${where}" at "${key}" threw an exception`, f, path));
+          return failed(this.#threw(thrown, errorText.readThrew(key, where), f, path));
         }
         if (value === undefined || value === null) return missing(where);
       }
@@ -528,7 +539,7 @@ class Compiler {
     // A #DEPTH! argument is the result, so #ARGS does not wrap it, and ifError cannot hide it.
     const depth = [first, ...(errors ?? [])].find(isDepthError);
     if (depth !== undefined) return fail(depth);
-    return errors === undefined ? fail(first) : this.#err("args", `${errors.length} ${what} failed`, f, path, { causes: errors });
+    return errors === undefined ? fail(first) : this.#at(errorText.args(errors.length, what), f, path, { causes: errors });
   }
 
   #each(e: ExprOf<"each">, info: Info): Node {
@@ -553,7 +564,7 @@ class Compiler {
       let inner = c;
       if (base.t === "table") {
         const space = c.tables !== undefined && Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined;
-        if (space === undefined) return this.#emit(c, info, f, this.#err("no-table", `the evaluation has no table "${base.name}"`, f, path));
+        if (space === undefined) return this.#emit(c, info, f, this.#at(errorText.noTable(base.name), f, path));
         inner = { ...c, space };
       }
       const ts = targets(from, inner);
@@ -622,7 +633,7 @@ class Compiler {
       let inner = c;
       if (base.t === "table") {
         const space = c.tables !== undefined && Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined;
-        if (space === undefined) return this.#emit(c, info, f, this.#err("no-table", `the evaluation has no table "${base.name}"`, f, path));
+        if (space === undefined) return this.#emit(c, info, f, this.#at(errorText.noTable(base.name), f, path));
         inner = { ...c, space };
       }
       const ts = targets(from, inner);
@@ -660,10 +671,10 @@ class Compiler {
           const t = until(frame, c);
           if (!t.ok) return this.#emit(c, info, f, t);
           if (t.value === true) break;
-          if (t.value !== false) return this.#emit(c, info, f, this.#err("kind-mismatch", `the test "until" of "iterate" gave a ${typeof t.value}, not a boolean`, f, untilPath));
+          if (t.value !== false) return this.#emit(c, info, f, this.#at(errorText.untilKind(t.value), f, untilPath));
         }
         if (k === limit) {
-          if (until !== undefined) return this.#emit(c, info, f, this.#err("limit", `"iterate" made its ${String(limit)} steps, and its test "until" is not true`, f, path));
+          if (until !== undefined) return this.#emit(c, info, f, this.#at(errorText.limit(limit), f, path));
           break;
         }
         const after = names.next(frame, c, env);
@@ -705,7 +716,7 @@ class Compiler {
         // The target keeps the value and the index of its item (AXIS.LIST.ITEM).
         else if (r.value === true) out.push(t);
         else if (r.value !== false) {
-          out.push({ key: t.key, test: this.#err("kind-mismatch", `the test of "where" gave a ${typeof r.value}, not a boolean`, at, testPath) });
+          out.push({ key: t.key, test: this.#at(errorText.whereKind(r.value), at, testPath) });
         }
       }
       return ok(out);
@@ -762,9 +773,9 @@ class Compiler {
       // LIST.ARRAY and LIST.FILL come after the domains and the functions of the host, so each of their results stays.
       if (listOp !== undefined && Array.isArray(self)) return this.#emit(c, info, f, this.#listOp(listOp, listOfArray(self, this.#missing(f, path)), values.slice(1), f, path));
       if (op === "fill") return this.#emit(c, info, f, this.#fill(values, f, path));
-      if (accepted !== undefined) return this.#emit(c, info, f, this.#err("unknown-op", `the domain "${accepted.name}" has no op "${op}"`, f, path, { op }));
-      if (values.length === 0) return this.#emit(c, info, f, this.#err("unknown-op", `there is no function "${op}"`, f, path, { op }));
-      return this.#emit(c, info, f, this.#err("not-instance", `no domain accepts the receiver of "${op}" (${describeType(self)})`, f, path, { op }));
+      if (accepted !== undefined) return this.#emit(c, info, f, this.#at(errorText.domainNoOp(accepted.name, op), f, path));
+      if (values.length === 0) return this.#emit(c, info, f, this.#at(errorText.noOp(op), f, path));
+      return this.#emit(c, info, f, this.#at(errorText.noDomain(op, self), f, path));
     };
   }
 
@@ -772,12 +783,12 @@ class Compiler {
     const { path } = info;
     const arg = (i: number, f: Frame, c: Ctx): Result<unknown> => {
       const n = args[i];
-      return n === undefined ? this.#err("bad-expression", `"${op}" needs argument ${i + 1}`, f, path, { op }) : n(f, c);
+      return n === undefined ? this.#at(errorText.needsArgument(op, i), f, path) : n(f, c);
     };
     const bool = (i: number, f: Frame, c: Ctx): Result<boolean> => {
       const r = arg(i, f, c);
       if (!r.ok) return r;
-      return typeof r.value === "boolean" ? ok(r.value) : this.#err("kind-mismatch", `argument ${i + 1} of "${op}" is a ${describeType(r.value)}, not a boolean`, f, path, { op });
+      return typeof r.value === "boolean" ? ok(r.value) : this.#at(errorText.notBoolean(op, i, r.value), f, path);
     };
     switch (op) {
       case "if":
@@ -789,7 +800,7 @@ class Compiler {
       case "or": {
         const stop = op === "or";
         return (f, c) => {
-          if (args.length === 0) return this.#emit(c, info, f, this.#err("bad-expression", `"${op}" needs at least 1 argument`, f, path, { op }));
+          if (args.length === 0) return this.#emit(c, info, f, this.#at(errorText.needsArguments(op), f, path));
           for (let i = 0; i < args.length; i++) {
             const b = bool(i, f, c);
             if (!b.ok) return this.#emit(c, info, f, b);
@@ -828,17 +839,14 @@ class Compiler {
     if (spec.params !== undefined) {
       for (let i = 0; i < callArgs.length; i++) {
         const kind = spec.params[i] ?? "any";
-        if (!matchesKind(kind, callArgs[i], domain)) {
-          const k: ErrorKind = kind === "domain" ? "not-instance" : "kind-mismatch";
-          return this.#err(k, `argument ${i + 1} of "${name}" is a ${describeType(callArgs[i])}, not a ${kind === "domain" ? domain.name : kind}`, f, path, { op: name });
-        }
+        if (!matchesKind(kind, callArgs[i], domain)) return this.#at(errorText.badParam(name, i, callArgs[i], kind, domain.name), f, path);
       }
     }
     let value: unknown;
     try {
       value = run(self, ...callArgs);
     } catch (thrown) {
-      return this.#threw(thrown, `"${name}" threw an exception`, f, path, { op: name });
+      return this.#threw(thrown, errorText.threw(name), f, path);
     }
     return this.#checkResult(ok(value), f, path, name);
   }
@@ -847,7 +855,7 @@ class Compiler {
     try {
       return ok(run());
     } catch (thrown) {
-      return this.#threw(thrown, `"${op}" threw an exception`, f, path, { op });
+      return this.#threw(thrown, errorText.threw(op), f, path);
     }
   }
 
@@ -865,18 +873,17 @@ class Compiler {
   #checkResult(r: Result<unknown>, f: Frame, path: readonly number[], op: string): Result<unknown> {
     if (!r.ok) return r;
     const value = r.value;
-    const extra = { op };
-    if (value === undefined || value === null) return this.#err("undefined-result", `"${op}" gave no value`, f, path, extra);
-    if (typeof value === "number" && !Number.isFinite(value)) return this.#err("not-finite", `"${op}" gave ${value}`, f, path, extra);
+    if (value === undefined || value === null) return this.#at(errorText.noValue(op), f, path);
+    if (typeof value === "number" && !Number.isFinite(value)) return this.#at(errorText.notFinite(op, value), f, path);
     const d = this.#domainOf(value);
     if (d?.valid !== undefined) {
       let valid: boolean;
       try {
         valid = d.valid(value);
       } catch (thrown) {
-        return this.#threw(thrown, `the "valid" check of "${d.name}" threw an exception`, f, path, extra);
+        return this.#threw(thrown, errorText.validThrew(op, d.name), f, path);
       }
-      if (!valid) return this.#err("invalid-value", `"${op}" gave a value that is not a valid ${d.name}`, f, path, extra);
+      if (!valid) return this.#at(errorText.invalid(op, d.name), f, path);
     }
     return r;
   }
@@ -894,13 +901,13 @@ class Compiler {
     for (const it of okItems) okValues.push(valueOf(it));
     const numbers = (): Result<readonly number[]> => {
       const bad = okValues.find((x) => typeof x !== "number");
-      return bad === undefined ? ok(okValues as readonly number[]) : this.#err("kind-mismatch", `"${op}" needs numbers, but an item is a ${describeType(bad)}`, f, path, { op });
+      return bad === undefined ? ok(okValues as readonly number[]) : this.#at(errorText.needsItems(op, "numbers", bad), f, path);
     };
     const booleans = (): Result<readonly boolean[]> => {
       const bad = okValues.find((x) => typeof x !== "boolean");
-      return bad === undefined ? ok(okValues as readonly boolean[]) : this.#err("kind-mismatch", `"${op}" needs booleans, but an item is a ${describeType(bad)}`, f, path, { op });
+      return bad === undefined ? ok(okValues as readonly boolean[]) : this.#at(errorText.needsItems(op, "booleans", bad), f, path);
     };
-    const empty = (): Result<never> => this.#err("empty", `"${op}" has no values to work with`, f, path, { op });
+    const empty = (): Result<never> => this.#at(errorText.empty(op), f, path);
     // A count or a position of take, drop and nth is a whole number from 0.
     const whole = (): Result<number> => {
       const n = rest[0] as number;
@@ -1106,7 +1113,7 @@ class Compiler {
         op = safeIs(d, x) ? resolveOp(d, x, by) : undefined;
         if (op !== undefined) break;
       }
-      if (op === undefined) return this.#err("unknown-op", `no domain gives "${by}" for a ${describeType(x)}`, f, path, { op: by });
+      if (op === undefined) return this.#at(errorText.noStep(by, x), f, path);
       const r = this.#callResolved(op, x, by, [], f, path);
       if (!r.ok) return r;
       out.push(r.value);
@@ -1119,7 +1126,7 @@ class Compiler {
    * domain has an identity for the op (LIST.EMPTY). The option `domain` names that domain when more domains have one.
    */
   #reduce(opName: unknown, values: readonly unknown[], f: Frame, path: readonly number[], opts: unknown): Result<unknown> {
-    if (typeof opName !== "string") return this.#err("kind-mismatch", `"reduce" needs an op name, but got a ${describeType(opName)}`, f, path, { op: "reduce" });
+    if (typeof opName !== "string") return this.#at(errorText.reduceName(opName), f, path);
     if (values.length === 0) {
       const named = (opts as { domain?: unknown } | null | undefined)?.domain;
       const candidates = this.#domains.filter((d) => Object.hasOwn(d.ops, opName) && (d.ops[opName] as { identity?: () => unknown }).identity !== undefined && (named === undefined || d.name === named));
@@ -1138,7 +1145,7 @@ class Compiler {
     for (let i = 1; i < values.length; i++) {
       const d = this.#domains.find((dom) => safeIs(dom, acc) && resolveOp(dom, acc, opName) !== undefined);
       const op = d === undefined ? undefined : resolveOp(d, acc, opName);
-      if (op === undefined) return this.#err("unknown-op", `no domain gives "${opName}" for a ${describeType(acc)}`, f, path, { op: opName });
+      if (op === undefined) return this.#at(errorText.noStep(opName, acc), f, path);
       const r = this.#callResolved(op, acc, opName, [values[i]], f, path);
       if (!r.ok) return r;
       acc = r.value;
@@ -1249,18 +1256,6 @@ export function matchesKind(kind: ParamKind, value: unknown, domain: AnyDomain):
     case "any":
       return true;
   }
-}
-
-/** This function gives a short name for the type of a value, for error messages. */
-export function describeType(u: unknown): string {
-  if (u === null) return "null";
-  if (Array.isArray(u)) return "array";
-  if (isVexList(u)) return "list";
-  if (typeof u === "object") {
-    const name = (Object.getPrototypeOf(u) as { constructor?: { name?: unknown } } | null)?.constructor?.name;
-    return typeof name === "string" && name !== "Object" ? name : "object";
-  }
-  return typeof u;
 }
 
 /** This function gives the label of a node, for traces. */

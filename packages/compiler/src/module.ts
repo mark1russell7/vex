@@ -2018,7 +2018,7 @@ class Printer {
   runList(v: Value, plain: boolean): string {
     const code = this.envelope(v, plain ? "LP" : "LO");
     if (plain || !this.#fuse || v.deps.size > 0) return code;
-    return this.#hoist(bare({ code, kind: undefined, safe: false, deps: NO_DEPS }), true).v.code;
+    return this.#hoist(bare({ ...v, code, plain: false }), true).v.code;
   }
 
   /** This method gives the name of a part of the tree, for example `H` for the children, and marks the part as read. */

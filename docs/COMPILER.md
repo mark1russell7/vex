@@ -196,9 +196,9 @@ A run knows which cell reads which cell. After a change of one record, only the 
 
 ### 7.6 Fusion of list ops
 
-This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 6 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT).
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 7 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT). The seventh step gives one frozen `vex.list` for each run (COMPILE.MODULE.FUSE.OUT).
 
-The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the other IDs stay in this section until their tests exist. Then they move to the spec.
+The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus an ID stayed in this section until its test existed. Then it moved to the spec.
 
 #### The cost of a chain of list ops
 
@@ -316,7 +316,7 @@ The clean form does not move a part of the code. Thus each part evaluates in the
 - `sortBy` with `by` collects the pairs of the item and its sort value in the loop of the stage before it. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
 - `LO` of a fused chain makes the items of the `vex.list` in the loop.
 - **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it. An append of `fill(1, x)` into that array pushes the item directly. The rules of the adoption follow this list.
-- **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LO` for each run. Each key gets that object.
+- **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LO` for each run. Each key gets that object. The printer tests the levels of the value: a value with no levels reads no key. The `L` of the envelope evaluates on the first read, so a run with no keys makes no envelope. An error stays the error of each key. `LO` and `LOC` give a frozen list, and they keep no object on the array.
 - The fused code uses no new global, so the test of `MODULE_GLOBALS` (V-060) does not change. It makes no own property on an array.
 
 #### The rules of the adoption
@@ -402,13 +402,9 @@ With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_dom
 - `fold` and `iterate` over the axis `list`, in the first steps. Their steps read the list in order, so they can be sinks later.
 - Tier 2 of the run time (`tiered`). Its lowering has its own fusion of the aggregates (`#fused` of `lower.ts`).
 
-#### Planned requirement IDs
+#### Requirement IDs
 
-This ID moves to `spec/README.md` with the test that names it:
-
-- `COMPILE.MODULE.FUSE.OUT`: A value of the run that does not depend on the key has one `vex.list` for each run.
-
-`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6.
+`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6, and `COMPILE.MODULE.FUSE.OUT` moved with step 7. Step 7 added the frozen form to `COMPILE.MODULE.LIST.RESULT`.
 
 #### Measure before a release
 
@@ -422,7 +418,7 @@ A release that claims a speed gain carries its bench result in the pull request.
 
 #### The steps of the work
 
-Each step is one pull request. P17 and the golden files check each step, and the step changes no value.
+Each step is one pull request. P17 and the golden files check each step, and the step changes no value. Step 7 changes no value too, but its list is frozen.
 
 1. Add the option `fuse` (COMPILE.MODULE.FUSE.OFF) with no effect, and a bench case for `SHAPE_COLUMNS` in `bench/gate.ts`. Done.
 2. Add the facts `clean`, `fresh` and the count of the reads of each list node (COMPILE.MODULE.FUSE.FACTS). Do not change the printed code. Done.
@@ -430,7 +426,7 @@ Each step is one pull request. P17 and the golden files check each step, and the
 4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). Done.
 5. Fuse the chains of `append`, and make `sortBy` a sink. Done. A chain fuses only when a part pushes its items, because a copy loop costs more than `concat`. In a sheet with a search, a chain that reads a cell keeps its arrays. The interpreter reads each cell of an append also after an error, and the fused chain stops at the first error.
 6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT). Done. A literal is not fresh, so a loop that starts with the empty literal keeps its first copy. That copy has no items, so its cost is small. Then an append of `fill(1, x)` into the array pushes its item directly, with no `FI` and no `AOC`.
-7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions).
+7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions). Done. A list of a result is frozen in each form. These forms are a value that reads a key, a column of lists of a sheet and a module of `fuse` false. Thus the option `fuse` does not change the contract. With `fuse` false, each key keeps its own envelope, so a bench can compare the two forms. A plain array stays one array for each key, and it is not frozen. The decision covers only the `vex.list`, and a host can change an array. A column of a sheet keeps one frozen list for each cell.
 8. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
 
 These golden files change. The files in `packages/core/src/__golden__` do not change, because they are the IR and the traces of tier 1:
@@ -442,12 +438,12 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | 4 | `module-list-build.js`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
 | 5 | `module-fuse.js`. The programs of the other files have no chain of `append` with a part that pushes. |
 | 6 | `module-fuse.js`, also for the direct push. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
-| 7 | `module-fuse.js`, and each golden file of a module whose value is a list |
+| 7 | `module-fuse.js`, the one golden file of a module whose value is a list. The two hashes of the modules of `fuse` false in the tests change only by the text of `LO`. |
 
 #### Open questions
 
 - **The form of one envelope for each run (decided 2026-10-29).** The value of the run is one frozen `vex.list` for each run, as `LV` gives, and each key gets that object. These facts support the decision:
-  - The interpreter is the reference, and its `vexList` is frozen (`packages/core/src/list.ts`). The `LO` of today gives a list that is not frozen, so the frozen form agrees with the reference.
+  - The interpreter is the reference, and its `vexList` is frozen (`packages/core/src/list.ts`). The `LO` before step 7 gave a list that was not frozen, so the frozen form agrees with the reference.
   - The memo of a module already gives the same object at each origin (§13.2, the memo of each space). Thus the identity of a value is not a part of the contract.
   - The host of ireko only reads the value (`valuesOf` in `shape-vex.ts`).
   - A host that changes the value of the run gets a `TypeError` in strict code, or no change. The project treats this as a breaking change. Thus step 7 goes into a MINOR version (0.18.0 or later), with a changeset that tells the change.
@@ -1339,7 +1335,7 @@ The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 %
 - The helper `LP` gives the result, and `LPC` is its clean form (COMPILE.MODULE.FUSE.CLEAN). The helper `LCP` gives a column of lists of a sheet.
 - The module prints no types. The host declares them: `T[]` for a list of `T`, and `T | typeof VEX_ERROR` for an item that can be an error.
 
-In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out.push(LPC(G(c136()), 1))` replaces `out.push(LOC(G(c136()), 1))`. The value at each key is `[rows, columns]`, two arrays of bands. The module has 12857 bytes, and the default module has 13463 bytes. The golden file `module-plain.js` keeps its text.
+In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out.push(LPC(G(c136()), 1))` replaces the read `out.push(G(c137()))` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12857 bytes, and the default module has 13463 bytes. The golden file `module-plain.js` keeps its text.
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
 

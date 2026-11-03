@@ -134,7 +134,7 @@ describe("COMPILE.MODULE.FUSE.OUT: one vex.list for each run", () => {
     expect((second as { readonly items: readonly ListItem[] }).items).toStrictEqual([item("0", 9)]);
   });
 
-  it("COMPILE.MODULE.FUSE.OUT: a value that fails gives VEX_ERROR at each key, and a run without keys evaluates nothing", () => {
+  it("COMPILE.MODULE.FUSE.OUT: a value that fails gives VEX_ERROR at each key, and a run without keys gives no value", () => {
     const m = moduleOf(NEVER);
     expect(m.run(RECORDS, {})).toStrictEqual(RECORDS.map(() => m.VEX_ERROR));
     expect(m.run([], {})).toStrictEqual([]);

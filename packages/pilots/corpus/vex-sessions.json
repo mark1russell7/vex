@@ -1,0 +1,2459 @@
+{
+  "source": "vex sessions",
+  "programs": [
+    {
+      "name": "add-one",
+      "why": "It adds 1 to the field n (no space: only the tier counts).",
+      "program": {
+        "tag": "app",
+        "op": "add",
+        "args": [
+          {
+            "tag": "ref",
+            "path": [
+              "n"
+            ]
+          },
+          {
+            "tag": "lit",
+            "value": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "reachable-count",
+      "why": "It counts the nodes that each node of a graph reaches.",
+      "program": {
+        "tag": "app",
+        "op": "count",
+        "args": [
+          {
+            "tag": "each",
+            "axis": {
+              "t": "reachable"
+            },
+            "body": {
+              "tag": "ref",
+              "path": [
+                "id"
+              ]
+            }
+          }
+        ]
+      },
+      "space": {
+        "kind": "graph",
+        "records": {
+          "a": {
+            "id": "a"
+          },
+          "b": {
+            "id": "b"
+          },
+          "c": {
+            "id": "c"
+          },
+          "d": {
+            "id": "d"
+          },
+          "e": {
+            "id": "e"
+          }
+        },
+        "edges": {
+          "a": [
+            "b"
+          ],
+          "b": [
+            "c"
+          ],
+          "c": [
+            "a",
+            "d"
+          ],
+          "d": [],
+          "e": [
+            "e"
+          ]
+        }
+      }
+    },
+    {
+      "name": "longest-path-capped",
+      "why": "It finds the longest path into each node with iterate and fold, capped at the number of nodes.",
+      "program": {
+        "tag": "let",
+        "bind": {
+          "n": {
+            "tag": "app",
+            "op": "count",
+            "args": [
+              {
+                "tag": "each",
+                "axis": {
+                  "t": "all"
+                },
+                "body": {
+                  "tag": "lit",
+                  "value": 1
+                }
+              }
+            ]
+          }
+        },
+        "body": {
+          "tag": "iterate",
+          "limit": 100000,
+          "init": {
+            "d": {
+              "tag": "each",
+              "axis": {
+                "t": "all"
+              },
+              "body": {
+                "tag": "lit",
+                "value": 0
+              }
+            },
+            "s": {
+              "tag": "lit",
+              "value": -1
+            }
+          },
+          "step": {
+            "d": {
+              "tag": "each",
+              "axis": {
+                "t": "all"
+              },
+              "body": {
+                "tag": "app",
+                "op": "min",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "n"
+                  },
+                  {
+                    "tag": "fold",
+                    "axis": {
+                      "t": "predecessors"
+                    },
+                    "init": {
+                      "m": {
+                        "tag": "lit",
+                        "value": 0
+                      }
+                    },
+                    "step": {
+                      "m": {
+                        "tag": "app",
+                        "op": "max",
+                        "args": [
+                          {
+                            "tag": "var",
+                            "name": "m"
+                          },
+                          {
+                            "tag": "app",
+                            "op": "add",
+                            "args": [
+                              {
+                                "tag": "app",
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "tag": "var",
+                                    "name": "d"
+                                  },
+                                  {
+                                    "tag": "ref",
+                                    "path": [
+                                      "id"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "tag": "lit",
+                                "value": 1
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "result": {
+                      "tag": "var",
+                      "name": "m"
+                    }
+                  }
+                ]
+              }
+            },
+            "s": {
+              "tag": "app",
+              "op": "sum",
+              "args": [
+                {
+                  "tag": "each",
+                  "axis": {
+                    "t": "all"
+                  },
+                  "body": {
+                    "tag": "app",
+                    "op": "get",
+                    "args": [
+                      {
+                        "tag": "var",
+                        "name": "d"
+                      },
+                      {
+                        "tag": "ref",
+                        "path": [
+                          "id"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "result": {
+            "tag": "app",
+            "op": "get",
+            "args": [
+              {
+                "tag": "var",
+                "name": "d"
+              },
+              {
+                "tag": "ref",
+                "path": [
+                  "id"
+                ]
+              }
+            ]
+          },
+          "until": {
+            "tag": "app",
+            "op": "eq",
+            "args": [
+              {
+                "tag": "var",
+                "name": "s"
+              },
+              {
+                "tag": "app",
+                "op": "sum",
+                "args": [
+                  {
+                    "tag": "each",
+                    "axis": {
+                      "t": "all"
+                    },
+                    "body": {
+                      "tag": "app",
+                      "op": "get",
+                      "args": [
+                        {
+                          "tag": "var",
+                          "name": "d"
+                        },
+                        {
+                          "tag": "ref",
+                          "path": [
+                            "id"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "space": {
+        "kind": "graph",
+        "records": {
+          "a": {
+            "id": "a"
+          },
+          "b": {
+            "id": "b"
+          },
+          "c": {
+            "id": "c"
+          },
+          "d": {
+            "id": "d"
+          },
+          "e": {
+            "id": "e"
+          },
+          "f": {
+            "id": "f"
+          },
+          "g": {
+            "id": "g"
+          }
+        },
+        "edges": {
+          "a": [
+            "b"
+          ],
+          "b": [
+            "c"
+          ],
+          "c": [
+            "a",
+            "d"
+          ],
+          "d": [],
+          "e": [
+            "e"
+          ],
+          "f": [
+            "g",
+            "d"
+          ],
+          "g": [
+            "d"
+          ]
+        }
+      }
+    },
+    {
+      "name": "longest-path-50",
+      "why": "It finds the longest path into each node with iterate, at most 50 steps.",
+      "program": {
+        "tag": "iterate",
+        "limit": 50,
+        "init": {
+          "d": {
+            "tag": "each",
+            "axis": {
+              "t": "all"
+            },
+            "body": {
+              "tag": "lit",
+              "value": 0
+            }
+          },
+          "s": {
+            "tag": "lit",
+            "value": -1
+          }
+        },
+        "step": {
+          "d": {
+            "tag": "each",
+            "axis": {
+              "t": "all"
+            },
+            "body": {
+              "tag": "fold",
+              "axis": {
+                "t": "predecessors"
+              },
+              "init": {
+                "m": {
+                  "tag": "lit",
+                  "value": 0
+                }
+              },
+              "step": {
+                "m": {
+                  "tag": "app",
+                  "op": "max",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "m"
+                    },
+                    {
+                      "tag": "app",
+                      "op": "add",
+                      "args": [
+                        {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "d"
+                            },
+                            {
+                              "tag": "ref",
+                              "path": [
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "result": {
+                "tag": "var",
+                "name": "m"
+              }
+            }
+          },
+          "s": {
+            "tag": "app",
+            "op": "sum",
+            "args": [
+              {
+                "tag": "each",
+                "axis": {
+                  "t": "all"
+                },
+                "body": {
+                  "tag": "app",
+                  "op": "get",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "d"
+                    },
+                    {
+                      "tag": "ref",
+                      "path": [
+                        "id"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "result": {
+          "tag": "app",
+          "op": "get",
+          "args": [
+            {
+              "tag": "var",
+              "name": "d"
+            },
+            {
+              "tag": "ref",
+              "path": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      "space": {
+        "kind": "graph",
+        "records": {
+          "a": {
+            "id": "a"
+          },
+          "b": {
+            "id": "b"
+          },
+          "c": {
+            "id": "c"
+          },
+          "d": {
+            "id": "d"
+          },
+          "e": {
+            "id": "e"
+          },
+          "f": {
+            "id": "f"
+          },
+          "g": {
+            "id": "g"
+          }
+        },
+        "edges": {
+          "a": [
+            "b"
+          ],
+          "b": [
+            "c"
+          ],
+          "c": [
+            "a",
+            "d"
+          ],
+          "d": [],
+          "e": [
+            "e"
+          ],
+          "f": [
+            "g",
+            "d"
+          ],
+          "g": [
+            "d"
+          ]
+        }
+      },
+      "origins": [
+        "a",
+        "d",
+        "e",
+        "g"
+      ]
+    },
+    {
+      "name": "longest-path-1000",
+      "why": "It finds the longest path into each node with iterate, at most 1000 steps.",
+      "program": {
+        "tag": "iterate",
+        "limit": 1000,
+        "init": {
+          "d": {
+            "tag": "each",
+            "axis": {
+              "t": "all"
+            },
+            "body": {
+              "tag": "lit",
+              "value": 0
+            }
+          },
+          "s": {
+            "tag": "lit",
+            "value": -1
+          }
+        },
+        "step": {
+          "d": {
+            "tag": "each",
+            "axis": {
+              "t": "all"
+            },
+            "body": {
+              "tag": "fold",
+              "axis": {
+                "t": "predecessors"
+              },
+              "init": {
+                "m": {
+                  "tag": "lit",
+                  "value": 0
+                }
+              },
+              "step": {
+                "m": {
+                  "tag": "app",
+                  "op": "max",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "m"
+                    },
+                    {
+                      "tag": "app",
+                      "op": "add",
+                      "args": [
+                        {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "d"
+                            },
+                            {
+                              "tag": "ref",
+                              "path": [
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "result": {
+                "tag": "var",
+                "name": "m"
+              }
+            }
+          },
+          "s": {
+            "tag": "app",
+            "op": "sum",
+            "args": [
+              {
+                "tag": "each",
+                "axis": {
+                  "t": "all"
+                },
+                "body": {
+                  "tag": "app",
+                  "op": "get",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "d"
+                    },
+                    {
+                      "tag": "ref",
+                      "path": [
+                        "id"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "result": {
+          "tag": "app",
+          "op": "get",
+          "args": [
+            {
+              "tag": "var",
+              "name": "d"
+            },
+            {
+              "tag": "ref",
+              "path": [
+                "id"
+              ]
+            }
+          ]
+        },
+        "until": {
+          "tag": "app",
+          "op": "eq",
+          "args": [
+            {
+              "tag": "var",
+              "name": "s"
+            },
+            {
+              "tag": "app",
+              "op": "sum",
+              "args": [
+                {
+                  "tag": "each",
+                  "axis": {
+                    "t": "all"
+                  },
+                  "body": {
+                    "tag": "app",
+                    "op": "get",
+                    "args": [
+                      {
+                        "tag": "var",
+                        "name": "d"
+                      },
+                      {
+                        "tag": "ref",
+                        "path": [
+                          "id"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "space": {
+        "kind": "graph",
+        "records": {
+          "a": {
+            "id": "a"
+          },
+          "b": {
+            "id": "b"
+          },
+          "c": {
+            "id": "c"
+          },
+          "d": {
+            "id": "d"
+          },
+          "e": {
+            "id": "e"
+          },
+          "f": {
+            "id": "f"
+          },
+          "g": {
+            "id": "g"
+          }
+        },
+        "edges": {
+          "a": [
+            "b"
+          ],
+          "b": [
+            "c"
+          ],
+          "c": [
+            "a",
+            "d"
+          ],
+          "d": [],
+          "e": [
+            "e"
+          ],
+          "f": [
+            "g",
+            "d"
+          ],
+          "g": [
+            "d"
+          ]
+        }
+      },
+      "origins": [
+        "a",
+        "g"
+      ]
+    },
+    {
+      "name": "longest-path-get",
+      "why": "It reads the longest path of the origin from the result of iterate (no space: only the tier counts).",
+      "program": {
+        "tag": "app",
+        "op": "get",
+        "args": [
+          {
+            "tag": "let",
+            "bind": {
+              "n": {
+                "tag": "app",
+                "op": "count",
+                "args": [
+                  {
+                    "tag": "each",
+                    "axis": {
+                      "t": "all"
+                    },
+                    "body": {
+                      "tag": "lit",
+                      "value": 1
+                    }
+                  }
+                ]
+              }
+            },
+            "body": {
+              "tag": "iterate",
+              "limit": 100000,
+              "init": {
+                "d": {
+                  "tag": "each",
+                  "axis": {
+                    "t": "all"
+                  },
+                  "body": {
+                    "tag": "lit",
+                    "value": 0
+                  }
+                },
+                "s": {
+                  "tag": "lit",
+                  "value": -1
+                }
+              },
+              "step": {
+                "d": {
+                  "tag": "each",
+                  "axis": {
+                    "t": "all"
+                  },
+                  "body": {
+                    "tag": "app",
+                    "op": "min",
+                    "args": [
+                      {
+                        "tag": "var",
+                        "name": "n"
+                      },
+                      {
+                        "tag": "fold",
+                        "axis": {
+                          "t": "predecessors"
+                        },
+                        "init": {
+                          "m": {
+                            "tag": "lit",
+                            "value": 0
+                          }
+                        },
+                        "step": {
+                          "m": {
+                            "tag": "app",
+                            "op": "max",
+                            "args": [
+                              {
+                                "tag": "var",
+                                "name": "m"
+                              },
+                              {
+                                "tag": "app",
+                                "op": "add",
+                                "args": [
+                                  {
+                                    "tag": "app",
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "tag": "var",
+                                        "name": "d"
+                                      },
+                                      {
+                                        "tag": "ref",
+                                        "path": [
+                                          "id"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "tag": "lit",
+                                    "value": 1
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "result": {
+                          "tag": "var",
+                          "name": "m"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "s": {
+                  "tag": "app",
+                  "op": "sum",
+                  "args": [
+                    {
+                      "tag": "each",
+                      "axis": {
+                        "t": "all"
+                      },
+                      "body": {
+                        "tag": "app",
+                        "op": "get",
+                        "args": [
+                          {
+                            "tag": "var",
+                            "name": "d"
+                          },
+                          {
+                            "tag": "ref",
+                            "path": [
+                              "id"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              "result": {
+                "tag": "var",
+                "name": "d"
+              },
+              "until": {
+                "tag": "app",
+                "op": "eq",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "s"
+                  },
+                  {
+                    "tag": "app",
+                    "op": "sum",
+                    "args": [
+                      {
+                        "tag": "each",
+                        "axis": {
+                          "t": "all"
+                        },
+                        "body": {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "d"
+                            },
+                            {
+                              "tag": "ref",
+                              "path": [
+                                "id"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "tag": "ref",
+            "path": [
+              "id"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "depth-first",
+      "why": "It walks a graph depth first with a stack in iterate.",
+      "program": {
+        "tag": "iterate",
+        "limit": 100000,
+        "init": {
+          "stack": {
+            "tag": "each",
+            "axis": {
+              "t": "all"
+            },
+            "body": {
+              "tag": "lit",
+              "value": 0
+            }
+          },
+          "state": {
+            "tag": "each",
+            "axis": {
+              "t": "all"
+            },
+            "body": {
+              "tag": "lit",
+              "value": 0
+            }
+          },
+          "back": {
+            "tag": "lit",
+            "value": {
+              "kind": "vex.list",
+              "items": []
+            }
+          }
+        },
+        "step": {
+          "stack": {
+            "tag": "let",
+            "bind": {
+              "t": {
+                "tag": "app",
+                "op": "first",
+                "args": [
+                  {
+                    "tag": "each",
+                    "axis": {
+                      "t": "list",
+                      "list": {
+                        "tag": "app",
+                        "op": "take",
+                        "args": [
+                          {
+                            "tag": "var",
+                            "name": "stack"
+                          },
+                          {
+                            "tag": "lit",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    },
+                    "body": {
+                      "tag": "ref",
+                      "path": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "f": {
+                "tag": "app",
+                "op": "nth",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "stack"
+                  },
+                  {
+                    "tag": "lit",
+                    "value": 0
+                  }
+                ]
+              }
+            },
+            "body": {
+              "tag": "app",
+              "op": "if",
+              "args": [
+                {
+                  "tag": "app",
+                  "op": "eq",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "f"
+                    },
+                    {
+                      "tag": "lit",
+                      "value": 1
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "drop",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "stack"
+                    },
+                    {
+                      "tag": "lit",
+                      "value": 1
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "if",
+                  "args": [
+                    {
+                      "tag": "app",
+                      "op": "eq",
+                      "args": [
+                        {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "state"
+                            },
+                            {
+                              "tag": "var",
+                              "name": "t"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 0
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "append",
+                      "args": [
+                        {
+                          "tag": "each",
+                          "axis": {
+                            "t": "successors"
+                          },
+                          "body": {
+                            "tag": "lit",
+                            "value": 0
+                          },
+                          "at": [
+                            {
+                              "t": "key",
+                              "key": {
+                                "tag": "var",
+                                "name": "t"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "app",
+                          "op": "append",
+                          "args": [
+                            {
+                              "tag": "each",
+                              "axis": {
+                                "t": "list",
+                                "list": {
+                                  "tag": "app",
+                                  "op": "take",
+                                  "args": [
+                                    {
+                                      "tag": "var",
+                                      "name": "stack"
+                                    },
+                                    {
+                                      "tag": "lit",
+                                      "value": 1
+                                    }
+                                  ]
+                                }
+                              },
+                              "body": {
+                                "tag": "lit",
+                                "value": 1
+                              }
+                            },
+                            {
+                              "tag": "app",
+                              "op": "drop",
+                              "args": [
+                                {
+                                  "tag": "var",
+                                  "name": "stack"
+                                },
+                                {
+                                  "tag": "lit",
+                                  "value": 1
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "drop",
+                      "args": [
+                        {
+                          "tag": "var",
+                          "name": "stack"
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "state": {
+            "tag": "let",
+            "bind": {
+              "t": {
+                "tag": "app",
+                "op": "first",
+                "args": [
+                  {
+                    "tag": "each",
+                    "axis": {
+                      "t": "list",
+                      "list": {
+                        "tag": "app",
+                        "op": "take",
+                        "args": [
+                          {
+                            "tag": "var",
+                            "name": "stack"
+                          },
+                          {
+                            "tag": "lit",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    },
+                    "body": {
+                      "tag": "ref",
+                      "path": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "f": {
+                "tag": "app",
+                "op": "nth",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "stack"
+                  },
+                  {
+                    "tag": "lit",
+                    "value": 0
+                  }
+                ]
+              }
+            },
+            "body": {
+              "tag": "app",
+              "op": "if",
+              "args": [
+                {
+                  "tag": "app",
+                  "op": "eq",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "f"
+                    },
+                    {
+                      "tag": "lit",
+                      "value": 1
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "append",
+                  "args": [
+                    {
+                      "tag": "each",
+                      "axis": {
+                        "t": "list",
+                        "list": {
+                          "tag": "app",
+                          "op": "take",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "stack"
+                            },
+                            {
+                              "tag": "lit",
+                              "value": 1
+                            }
+                          ]
+                        }
+                      },
+                      "body": {
+                        "tag": "lit",
+                        "value": 2
+                      }
+                    },
+                    {
+                      "tag": "var",
+                      "name": "state"
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "if",
+                  "args": [
+                    {
+                      "tag": "app",
+                      "op": "eq",
+                      "args": [
+                        {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "state"
+                            },
+                            {
+                              "tag": "var",
+                              "name": "t"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 0
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "append",
+                      "args": [
+                        {
+                          "tag": "each",
+                          "axis": {
+                            "t": "list",
+                            "list": {
+                              "tag": "app",
+                              "op": "take",
+                              "args": [
+                                {
+                                  "tag": "var",
+                                  "name": "stack"
+                                },
+                                {
+                                  "tag": "lit",
+                                  "value": 1
+                                }
+                              ]
+                            }
+                          },
+                          "body": {
+                            "tag": "lit",
+                            "value": 1
+                          }
+                        },
+                        {
+                          "tag": "var",
+                          "name": "state"
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "var",
+                      "name": "state"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "back": {
+            "tag": "let",
+            "bind": {
+              "t": {
+                "tag": "app",
+                "op": "first",
+                "args": [
+                  {
+                    "tag": "each",
+                    "axis": {
+                      "t": "list",
+                      "list": {
+                        "tag": "app",
+                        "op": "take",
+                        "args": [
+                          {
+                            "tag": "var",
+                            "name": "stack"
+                          },
+                          {
+                            "tag": "lit",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    },
+                    "body": {
+                      "tag": "ref",
+                      "path": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "f": {
+                "tag": "app",
+                "op": "nth",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "stack"
+                  },
+                  {
+                    "tag": "lit",
+                    "value": 0
+                  }
+                ]
+              }
+            },
+            "body": {
+              "tag": "app",
+              "op": "if",
+              "args": [
+                {
+                  "tag": "app",
+                  "op": "and",
+                  "args": [
+                    {
+                      "tag": "app",
+                      "op": "eq",
+                      "args": [
+                        {
+                          "tag": "var",
+                          "name": "f"
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 0
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "eq",
+                      "args": [
+                        {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "state"
+                            },
+                            {
+                              "tag": "var",
+                              "name": "t"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 0
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "append",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "back"
+                    },
+                    {
+                      "tag": "each",
+                      "axis": {
+                        "t": "where",
+                        "axis": {
+                          "t": "successors"
+                        },
+                        "test": {
+                          "tag": "app",
+                          "op": "eq",
+                          "args": [
+                            {
+                              "tag": "app",
+                              "op": "get",
+                              "args": [
+                                {
+                                  "tag": "var",
+                                  "name": "state"
+                                },
+                                {
+                                  "tag": "ref",
+                                  "path": [
+                                    "id"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "lit",
+                              "value": 1
+                            }
+                          ]
+                        }
+                      },
+                      "body": {
+                        "tag": "app",
+                        "op": "concat",
+                        "args": [
+                          {
+                            "tag": "app",
+                            "op": "concat",
+                            "args": [
+                              {
+                                "tag": "var",
+                                "name": "t"
+                              },
+                              {
+                                "tag": "lit",
+                                "value": "->"
+                              }
+                            ]
+                          },
+                          {
+                            "tag": "ref",
+                            "path": [
+                              "id"
+                            ]
+                          }
+                        ]
+                      },
+                      "at": [
+                        {
+                          "t": "key",
+                          "key": {
+                            "tag": "var",
+                            "name": "t"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "var",
+                  "name": "back"
+                }
+              ]
+            }
+          }
+        },
+        "result": {
+          "tag": "var",
+          "name": "back"
+        },
+        "until": {
+          "tag": "app",
+          "op": "eq",
+          "args": [
+            {
+              "tag": "app",
+              "op": "count",
+              "args": [
+                {
+                  "tag": "var",
+                  "name": "stack"
+                }
+              ]
+            },
+            {
+              "tag": "lit",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "space": {
+        "kind": "graph",
+        "records": {
+          "a": {
+            "id": "a"
+          },
+          "b": {
+            "id": "b"
+          },
+          "c": {
+            "id": "c"
+          },
+          "d": {
+            "id": "d"
+          },
+          "e": {
+            "id": "e"
+          },
+          "f": {
+            "id": "f"
+          },
+          "g": {
+            "id": "g"
+          }
+        },
+        "edges": {
+          "a": [
+            "b"
+          ],
+          "b": [
+            "c"
+          ],
+          "c": [
+            "a",
+            "d"
+          ],
+          "d": [],
+          "e": [
+            "e"
+          ],
+          "f": [
+            "g",
+            "d"
+          ],
+          "g": [
+            "d",
+            "f"
+          ]
+        }
+      },
+      "origins": [
+        "a"
+      ]
+    },
+    {
+      "name": "depth-first-module",
+      "why": "It walks a graph depth first with a stack (no space: only the tier counts).",
+      "program": {
+        "tag": "iterate",
+        "limit": 100000,
+        "init": {
+          "stack": {
+            "tag": "each",
+            "axis": {
+              "t": "all"
+            },
+            "body": {
+              "tag": "lit",
+              "value": 0
+            }
+          },
+          "state": {
+            "tag": "each",
+            "axis": {
+              "t": "all"
+            },
+            "body": {
+              "tag": "lit",
+              "value": 0
+            }
+          },
+          "back": {
+            "tag": "lit",
+            "value": {
+              "kind": "vex.list",
+              "items": []
+            }
+          }
+        },
+        "step": {
+          "stack": {
+            "tag": "let",
+            "bind": {
+              "t": {
+                "tag": "app",
+                "op": "first",
+                "args": [
+                  {
+                    "tag": "each",
+                    "axis": {
+                      "t": "list",
+                      "list": {
+                        "tag": "app",
+                        "op": "take",
+                        "args": [
+                          {
+                            "tag": "var",
+                            "name": "stack"
+                          },
+                          {
+                            "tag": "lit",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    },
+                    "body": {
+                      "tag": "ref",
+                      "path": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "f": {
+                "tag": "app",
+                "op": "nth",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "stack"
+                  },
+                  {
+                    "tag": "lit",
+                    "value": 0
+                  }
+                ]
+              }
+            },
+            "body": {
+              "tag": "app",
+              "op": "if",
+              "args": [
+                {
+                  "tag": "app",
+                  "op": "eq",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "f"
+                    },
+                    {
+                      "tag": "lit",
+                      "value": 1
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "drop",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "stack"
+                    },
+                    {
+                      "tag": "lit",
+                      "value": 1
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "if",
+                  "args": [
+                    {
+                      "tag": "app",
+                      "op": "eq",
+                      "args": [
+                        {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "state"
+                            },
+                            {
+                              "tag": "var",
+                              "name": "t"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 0
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "append",
+                      "args": [
+                        {
+                          "tag": "each",
+                          "axis": {
+                            "t": "successors"
+                          },
+                          "body": {
+                            "tag": "lit",
+                            "value": 0
+                          },
+                          "at": [
+                            {
+                              "t": "key",
+                              "key": {
+                                "tag": "var",
+                                "name": "t"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "app",
+                          "op": "append",
+                          "args": [
+                            {
+                              "tag": "each",
+                              "axis": {
+                                "t": "list",
+                                "list": {
+                                  "tag": "app",
+                                  "op": "take",
+                                  "args": [
+                                    {
+                                      "tag": "var",
+                                      "name": "stack"
+                                    },
+                                    {
+                                      "tag": "lit",
+                                      "value": 1
+                                    }
+                                  ]
+                                }
+                              },
+                              "body": {
+                                "tag": "lit",
+                                "value": 1
+                              }
+                            },
+                            {
+                              "tag": "app",
+                              "op": "drop",
+                              "args": [
+                                {
+                                  "tag": "var",
+                                  "name": "stack"
+                                },
+                                {
+                                  "tag": "lit",
+                                  "value": 1
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "drop",
+                      "args": [
+                        {
+                          "tag": "var",
+                          "name": "stack"
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "state": {
+            "tag": "let",
+            "bind": {
+              "t": {
+                "tag": "app",
+                "op": "first",
+                "args": [
+                  {
+                    "tag": "each",
+                    "axis": {
+                      "t": "list",
+                      "list": {
+                        "tag": "app",
+                        "op": "take",
+                        "args": [
+                          {
+                            "tag": "var",
+                            "name": "stack"
+                          },
+                          {
+                            "tag": "lit",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    },
+                    "body": {
+                      "tag": "ref",
+                      "path": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "f": {
+                "tag": "app",
+                "op": "nth",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "stack"
+                  },
+                  {
+                    "tag": "lit",
+                    "value": 0
+                  }
+                ]
+              }
+            },
+            "body": {
+              "tag": "app",
+              "op": "if",
+              "args": [
+                {
+                  "tag": "app",
+                  "op": "eq",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "f"
+                    },
+                    {
+                      "tag": "lit",
+                      "value": 1
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "append",
+                  "args": [
+                    {
+                      "tag": "each",
+                      "axis": {
+                        "t": "list",
+                        "list": {
+                          "tag": "app",
+                          "op": "take",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "stack"
+                            },
+                            {
+                              "tag": "lit",
+                              "value": 1
+                            }
+                          ]
+                        }
+                      },
+                      "body": {
+                        "tag": "lit",
+                        "value": 2
+                      }
+                    },
+                    {
+                      "tag": "var",
+                      "name": "state"
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "if",
+                  "args": [
+                    {
+                      "tag": "app",
+                      "op": "eq",
+                      "args": [
+                        {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "state"
+                            },
+                            {
+                              "tag": "var",
+                              "name": "t"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 0
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "append",
+                      "args": [
+                        {
+                          "tag": "each",
+                          "axis": {
+                            "t": "list",
+                            "list": {
+                              "tag": "app",
+                              "op": "take",
+                              "args": [
+                                {
+                                  "tag": "var",
+                                  "name": "stack"
+                                },
+                                {
+                                  "tag": "lit",
+                                  "value": 1
+                                }
+                              ]
+                            }
+                          },
+                          "body": {
+                            "tag": "lit",
+                            "value": 1
+                          }
+                        },
+                        {
+                          "tag": "var",
+                          "name": "state"
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "var",
+                      "name": "state"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "back": {
+            "tag": "let",
+            "bind": {
+              "t": {
+                "tag": "app",
+                "op": "first",
+                "args": [
+                  {
+                    "tag": "each",
+                    "axis": {
+                      "t": "list",
+                      "list": {
+                        "tag": "app",
+                        "op": "take",
+                        "args": [
+                          {
+                            "tag": "var",
+                            "name": "stack"
+                          },
+                          {
+                            "tag": "lit",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    },
+                    "body": {
+                      "tag": "ref",
+                      "path": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "f": {
+                "tag": "app",
+                "op": "nth",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "stack"
+                  },
+                  {
+                    "tag": "lit",
+                    "value": 0
+                  }
+                ]
+              }
+            },
+            "body": {
+              "tag": "app",
+              "op": "if",
+              "args": [
+                {
+                  "tag": "app",
+                  "op": "and",
+                  "args": [
+                    {
+                      "tag": "app",
+                      "op": "eq",
+                      "args": [
+                        {
+                          "tag": "var",
+                          "name": "f"
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 0
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "eq",
+                      "args": [
+                        {
+                          "tag": "app",
+                          "op": "get",
+                          "args": [
+                            {
+                              "tag": "var",
+                              "name": "state"
+                            },
+                            {
+                              "tag": "var",
+                              "name": "t"
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "lit",
+                          "value": 0
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "app",
+                  "op": "append",
+                  "args": [
+                    {
+                      "tag": "var",
+                      "name": "back"
+                    },
+                    {
+                      "tag": "each",
+                      "axis": {
+                        "t": "where",
+                        "axis": {
+                          "t": "successors"
+                        },
+                        "test": {
+                          "tag": "app",
+                          "op": "eq",
+                          "args": [
+                            {
+                              "tag": "app",
+                              "op": "get",
+                              "args": [
+                                {
+                                  "tag": "var",
+                                  "name": "state"
+                                },
+                                {
+                                  "tag": "ref",
+                                  "path": [
+                                    "id"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "tag": "lit",
+                              "value": 1
+                            }
+                          ]
+                        }
+                      },
+                      "body": {
+                        "tag": "var",
+                        "name": "t"
+                      },
+                      "at": [
+                        {
+                          "t": "key",
+                          "key": {
+                            "tag": "var",
+                            "name": "t"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "var",
+                  "name": "back"
+                }
+              ]
+            }
+          }
+        },
+        "result": {
+          "tag": "var",
+          "name": "back"
+        },
+        "until": {
+          "tag": "app",
+          "op": "eq",
+          "args": [
+            {
+              "tag": "app",
+              "op": "count",
+              "args": [
+                {
+                  "tag": "var",
+                  "name": "stack"
+                }
+              ]
+            },
+            {
+              "tag": "lit",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "nested-iterate",
+      "why": "It runs an iterate inside the step of another iterate (no space: only the tier counts).",
+      "program": {
+        "tag": "iterate",
+        "limit": 100000,
+        "init": {
+          "i": {
+            "tag": "lit",
+            "value": 0
+          }
+        },
+        "step": {
+          "i": {
+            "tag": "iterate",
+            "limit": 100000,
+            "init": {
+              "j": {
+                "tag": "var",
+                "name": "i"
+              }
+            },
+            "step": {
+              "j": {
+                "tag": "app",
+                "op": "add",
+                "args": [
+                  {
+                    "tag": "var",
+                    "name": "j"
+                  },
+                  {
+                    "tag": "lit",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "result": {
+              "tag": "var",
+              "name": "j"
+            }
+          }
+        },
+        "result": {
+          "tag": "var",
+          "name": "i"
+        }
+      }
+    },
+    {
+      "name": "subtree-sum",
+      "why": "It adds the weight of each node to the sum of the weights of its descendants.",
+      "program": {
+        "tag": "app",
+        "op": "add",
+        "args": [
+          {
+            "tag": "ref",
+            "path": [
+              "w"
+            ]
+          },
+          {
+            "tag": "app",
+            "op": "sum",
+            "args": [
+              {
+                "tag": "each",
+                "axis": {
+                  "t": "descendants"
+                },
+                "body": {
+                  "tag": "ref",
+                  "path": [
+                    "w"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "space": {
+        "kind": "tree",
+        "records": {
+          "r": {
+            "w": 1
+          },
+          "a": {
+            "w": 2
+          },
+          "b": {
+            "w": 3
+          },
+          "c": {
+            "w": 4
+          }
+        },
+        "parents": {
+          "r": null,
+          "a": "r",
+          "b": "r",
+          "c": "a"
+        }
+      }
+    },
+    {
+      "name": "nearest-two",
+      "why": "It gives the distances to the two nearest other points.",
+      "program": {
+        "tag": "app",
+        "op": "take",
+        "args": [
+          {
+            "tag": "app",
+            "op": "sortBy",
+            "args": [
+              {
+                "tag": "each",
+                "axis": {
+                  "t": "others"
+                },
+                "body": {
+                  "tag": "app",
+                  "op": "hypot",
+                  "args": [
+                    {
+                      "tag": "app",
+                      "op": "subtract",
+                      "args": [
+                        {
+                          "tag": "ref",
+                          "path": [
+                            "x"
+                          ]
+                        },
+                        {
+                          "tag": "ref",
+                          "path": [
+                            "x"
+                          ],
+                          "at": [
+                            {
+                              "t": "origin"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "app",
+                      "op": "subtract",
+                      "args": [
+                        {
+                          "tag": "ref",
+                          "path": [
+                            "y"
+                          ]
+                        },
+                        {
+                          "tag": "ref",
+                          "path": [
+                            "y"
+                          ],
+                          "at": [
+                            {
+                              "t": "origin"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "tag": "lit",
+            "value": 2
+          }
+        ]
+      },
+      "space": {
+        "kind": "array",
+        "records": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 3,
+            "y": 4
+          }
+        ]
+      },
+      "origins": [
+        "0"
+      ]
+    },
+    {
+      "name": "vector-scale",
+      "why": "It multiplies a 2D vector by a number.",
+      "program": {
+        "tag": "app",
+        "op": "multiply",
+        "args": [
+          {
+            "tag": "lit",
+            "value": {
+              "$vex": "domain",
+              "domain": "Vec2",
+              "value": [
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "tag": "lit",
+            "value": 5
+          }
+        ]
+      },
+      "space": {
+        "kind": "array",
+        "records": [
+          {}
+        ]
+      }
+    }
+  ],
+  "leftOut": [
+    {
+      "reason": "private or unsure",
+      "count": 15
+    },
+    {
+      "reason": "a second copy (the same program as a JSON string)",
+      "count": 29
+    },
+    {
+      "reason": "fails the check",
+      "count": 2
+    }
+  ]
+}

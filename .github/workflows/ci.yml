@@ -10,7 +10,7 @@ permissions: {}
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # The checks of each Node.js version: the shared CI of mark1russell7 (reusable-ci.yml of

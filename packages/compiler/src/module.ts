@@ -1575,8 +1575,19 @@ function namesOf(e: Expr, out = new Set<string>()): Set<string> {
  */
 const COLUMN_WORK = 10;
 
-/** This function gives the head of a loop over targets: from `lo` up to `hi`, or from `hi` down to `lo` in the reverse order. */
-const forHead = (j: string, lo: string, hi: string, reverse: boolean): string => (reverse ? `for (let ${j} = ${hi} - 1; ${j} >= ${lo}; ${j}--) {` : `for (let ${j} = ${lo}; ${j} < ${hi}; ${j}++) {`);
+/** The parts of the head of a loop over targets: the first value, the condition and the step. */
+interface ForParts {
+  readonly init: string;
+  readonly cond: string;
+  readonly next: string;
+}
+
+/** This function gives the parts of a loop over targets: from `lo` up to `hi`, or from `hi` down to `lo` in the reverse order. */
+const forParts = (j: string, lo: string, hi: string, reverse: boolean): ForParts =>
+  reverse ? { init: `${hi} - 1`, cond: `${j} >= ${lo}`, next: `${j}--` } : { init: lo, cond: `${j} < ${hi}`, next: `${j}++` };
+
+/** This function gives the head of a loop over targets from its parts. */
+const forHead = (j: string, p: ForParts): string => `for (let ${j} = ${p.init}; ${p.cond}; ${p.next}) {`;
 
 /**
  * This function gives the value that stops the step `x` of the name `name` of a fold (COMPILE.MODULE.EXIT), or
@@ -2983,6 +2994,8 @@ class Printer {
     readonly j: string;
     /** The head of the loop, and the statements at the start of each item before the try and inside it. */
     readonly head: string;
+    /** The parts of the head. An early exit (COMPILE.MODULE.EXIT) goes on from the next target with them. */
+    readonly parts: ForParts;
     readonly key: readonly string[];
     readonly check: readonly string[];
     readonly skip: string | undefined;
@@ -3015,7 +3028,8 @@ class Printer {
       const texts = (list.v.list as ListInfo).texts === true;
       const a = this.fresh("A");
       const q = this.fresh("q");
-      const head = reverse ? `for (let ${q} = ${a}.length - 1; ${q} >= 0; ${q}--) {` : `for (let ${q} = 0; ${q} < ${a}.length; ${q}++) {`;
+      const parts = forParts(q, "0", `${a}.length`, reverse);
+      const head = forHead(q, parts);
       const key = [`const ${j} = ${a}[${q}][0];`];
       // The loop over a clean list has no test of the sentinel (COMPILE.MODULE.FUSE.CLEAN).
       const clean = this.#clean(list.v.list);
@@ -3026,7 +3040,7 @@ class Printer {
         s.push(...named.s);
         check.push(...named.check);
       }
-      return { s, j, head, key, check, checkSafe: clean, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level };
+      return { s, j, head, parts, key, check, checkSafe: clean, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level };
     }
     // The focus of each other axis is the position of a record, so a loop in a second print reads the packs there too.
     this.#pack?.foci.add(j);
@@ -3050,13 +3064,13 @@ class Printer {
     if (this.#tree && isTreeAxis(base)) {
       const range = this.#treeRange(base, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+      return { s: [...s, ...range.s], j, head: forHead(q, forParts(q, range.lo, range.hi, reverse)), parts: forParts(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
     }
     // In a graph space, the targets of an axis of a graph are an array of positions. A graph has no offsets and no tree.
     if (this.#graph && GRAPH_AXES.has(base.t)) {
       const range = this.#graphRange(base.t, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+      return { s: [...s, ...range.s], j, head: forHead(q, forParts(q, range.lo, range.hi, reverse)), parts: forParts(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
     }
     if (this.#graph && base.t === "window") throw new NotStandalone('the axis "window" in a graph space');
     if (base.t === "others") skip = f;
@@ -3066,7 +3080,7 @@ class Printer {
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
-    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], checkSafe: true, skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+    return { s, j, head: forHead(j, forParts(j, lo, hi, reverse)), parts: forParts(j, lo, hi, reverse), key: [], check: [], checkSafe: true, skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
   }
 
   /**
@@ -3995,7 +4009,7 @@ class Printer {
    * an error of a later target is still the error of the fold. When these steps cannot throw and the result does not
    * read their names, the loop leaves at once.
    */
-  #foldExit(e: ExprOf<"fold">, t: { readonly head: string; readonly checkSafe: boolean }, item: readonly string[], tests: readonly Code[], step: LoopStep, vars: ReadonlyMap<string, Name>, result: Code): string[] {
+  #foldExit(e: ExprOf<"fold">, t: { readonly parts: ForParts; readonly checkSafe: boolean }, item: readonly string[], tests: readonly Code[], step: LoopStep, vars: ReadonlyMap<string, Name>, result: Code): string[] {
     if (step.owners.length > 0) return [];
     const stops: string[] = [];
     const rest: StepPart[] = [];
@@ -4013,8 +4027,8 @@ class Printer {
       tests.every((c) => c.s.length === 0 && this.#safeBoolean(c.v)) &&
       rest.every((p) => p.safe && p.s.length === 1 && !new RegExp(String.raw`\b${(vars.get(p.name) as Name).code}\b`).test(reads));
     if (quiet) return [`if (${test}) break;`];
-    // The rest goes on from the next target, in the order of the loop. Each loop over targets has a head of this form.
-    const [, cond, next] = /^for \(let \w+ = .+; (.+); (\w+(?:\+\+|--))\) \{$/.exec(t.head) as unknown as readonly [string, string, string];
+    // The rest goes on from the next target, in the order of the loop, with the parts of the head of the loop.
+    const { cond, next } = t.parts;
     const residual = [...item, ...rest.flatMap((p) => p.s), ...rest.map((p) => p.set)];
     return [`if (${test}) {`, ...ind([`for (${next}; ${cond}; ${next}) {`, ...ind(residual), "}", "break;"]), "}"];
   }

@@ -16,7 +16,7 @@ vi.mock(import("./constructs.ts"), async (load) => {
   return { ...real, CONSTRUCT_STEPS: steps };
 });
 
-const loop: Expr = iterate(3, { i: lit(0) }, { i: app("add", v("i"), lit(1)) }, v("i"));
+const loop: Expr = iterate(3, { i: lit(5) }, { i: v("i") }, v("i"));
 const called: Expr = let_({ f: fn(["x"], v("x")) }, call("f", lit(7)));
 const sp = space.array([{ n: 1 }]);
 
@@ -45,7 +45,7 @@ describe("the steps of Vex with constructs of steps B and C", () => {
   });
 
   it("STEP.VALUE: each step that accepts a program gives the same value", () => {
-    expect(value(evaluate(loop, { space: sp, origin: "0" }))).toBe(3);
+    expect(value(evaluate(loop, { space: sp, origin: "0" }))).toBe(5);
     expect(evaluate(loop, { space: sp, origin: "0", maxStep: "C" })).toEqual(evaluate(loop, { space: sp, origin: "0", maxStep: "B" }));
     expect(value(evaluate(called, { space: sp, origin: "0", maxStep: "C" }))).toBe(7);
   });

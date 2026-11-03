@@ -3,7 +3,7 @@
  * declares `iterate` as a construct of step B and `call` as a construct of step C, in a mock of the table of the core.
  * Tier 2, `emitModule` and `emitSheetModule` refuse the programs that the interpreter refuses, with the same reason.
  */
-import { app, evaluate, iterate, lit, programStep, sizeError, space, v, type Expr, type Result, type VexStep } from "@mark1russell7/vex";
+import { app, evaluate, iterate, lit, MAX_NESTING, nestingOf, programStep, shapeError, sizeError, space, v, type Expr, type Result, type VexStep } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { arbExpr, arbOrigin, arbSpace, fromCore } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -61,8 +61,9 @@ describe("the steps in the tiers and the modules", () => {
         const [c1] = at("C");
         const step = programStep(e).step;
         seen.add(step);
-        // A check before the check of steps, for example LOOP.SIZE, gives its error at each step, so no step refuses it.
-        const sized = sizeError(e, { domains: DOMAINS }) === undefined;
+        // A check before the check of steps gives its error at each step, so no step refuses the program. These checks are
+        // the origin of the run, EVAL.SHAPE, EVAL.NESTING and LOOP.SIZE.
+        const sized = s.keys.includes(k) && shapeError(e) === undefined && nestingOf(e) <= MAX_NESTING && sizeError(e, { domains: DOMAINS }) === undefined;
         // A refuses each program above A. B accepts a program that A refuses only if its step is B. C accepts each program.
         const expected = sized ? [step !== "A", step !== "A", step === "C", step === "C", false] : [false, false, false, false, false];
         expect([a1, a2, b1, b2, c1].map(refused)).toEqual(expected);

@@ -9,8 +9,8 @@
       "programShare": 0.8909090909090909,
       "runs": 39125,
       "valueRuns": 33955,
-      "tier2ValueRuns": 33238,
-      "valueShare": 0.9788838168163746,
+      "tier2ValueRuns": 33440,
+      "valueShare": 0.9848328670298925,
       "tier1Reasons": [
         {
           "reason": "the program has the list op \"append\", and tier 2 does not have lists as values yet",
@@ -37,8 +37,8 @@
       "programShare": 1,
       "runs": 445,
       "valueRuns": 434,
-      "tier2ValueRuns": 390,
-      "valueShare": 0.8986175115207373,
+      "tier2ValueRuns": 434,
+      "valueShare": 1,
       "tier1Reasons": []
     },
     {

@@ -684,6 +684,14 @@ These figures are from a local machine. The runners of CI measure 1.5 to 1.66 fo
 
 From 2026-11-02, `bench/gate-processes.ts` starts each case of the gate in 11 fresh processes of its own (GATENOISE). The cases measured before a case changed its heap and its JIT state. In one process with all cases, V8 tenured an allocation site in the tree case. That arm stayed slow for the rest of the process. The nested radial case gave 2.7 there, and 3.85 alone. The header of `bench/gate.ts` gives the limits for each CPU model and the 10 CI runs that set them.
 
+The shapes case has a large spread of its process ratios: 1.41 to 1.77 in one CI job (41572269874). Three inputs of a dispatch of `speed-gate.yml` help to find the cause (GATEGC):
+
+- `case` gives the cases of the gate of the compiler, from 0. Case 5 is shapes. With a case, the core gate does not start.
+- `node_flags` gives flags of Node.js to each process, for example `--max-semi-space-size=64`.
+- `gc` makes each process count the garbage collections in each timed measurement of each arm (`bench/gc.ts`). The summary gives the medians of each case.
+
+Without these inputs, the gate does not make the observer of the garbage collector, so no time changes.
+
 The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they moved to phase C5. Later they moved to phase C3, after the kinds: a value in its components needs its kind.
 
 #### The memo of each space

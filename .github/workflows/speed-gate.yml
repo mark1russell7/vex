@@ -18,12 +18,25 @@ on:
         description: With true, the gate of the compiler also measures the ablation variants of the nested radial case (RADIALGAP)
         type: boolean
         default: false
+      case:
+        description: The cases of the compiler gate, from 0, separated by commas (5 is shapes). With a case, the core gate does not run. Empty runs all
+        type: string
+        default: ""
+      node_flags:
+        description: More flags of Node.js for each process of the compiler gate, for example --max-semi-space-size=64
+        type: string
+        default: ""
+      gc:
+        description: With true, each process of the compiler gate counts the garbage collections of each arm (GATEGC)
+        type: boolean
+        default: false
 
 permissions: {}
 
-# One run for each branch: a newer run stops the older one. The workflow holds at most 3 runner slots.
+# One run for each branch and settings: a newer run stops the older one. The workflow holds at most 3 runner slots.
+# The settings of a dispatch are in the group, so two dispatches with different settings run one after the other.
 concurrency:
-  group: speed-gate-${{ github.ref }}
+  group: speed-gate-${{ github.ref }}-${{ inputs.case }}-${{ inputs.node_flags }}-${{ inputs.gc }}
   cancel-in-progress: true
 
 jobs:
@@ -103,11 +116,17 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @mark1russell7/vex run bench:gate | tee gates.txt
+      # A dispatch with the input case measures only these cases of the compiler gate, so the core gate does not run.
+      - if: ${{ !inputs.case }}
+        run: pnpm --filter @mark1russell7/vex run bench:gate | tee gates.txt
       # The gate of the compiler runs also when the first gate fails, and the summary keeps the lines of both.
+      # A pull request has no inputs, so each of these settings is empty or 0, and the gate runs as before.
       - if: ${{ !cancelled() }}
         env:
           GATE_ABLATE: ${{ inputs.ablate && '1' || '0' }}
+          GATE_CASE: ${{ inputs.case }}
+          GATE_NODE_FLAGS: ${{ inputs.node_flags }}
+          GATE_GC: ${{ inputs.gc && '1' || '0' }}
         run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a gates.txt
       - if: ${{ !cancelled() }}
         run: |
@@ -115,7 +134,7 @@ jobs:
             echo "### Speed gates (time ratios: lower is better)"
             echo
             echo '```'
-            grep -E "^(runner|ok|FAIL)" gates.txt
+            grep -E "^(runner|flags|ok|FAIL|gc)" gates.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

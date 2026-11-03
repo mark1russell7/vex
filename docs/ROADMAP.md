@@ -31,7 +31,6 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
 | LISTVALUES | Tier 2 gets lists as values (`get`, `nth`, `append`, `take` and the list axis). This is the largest limit for the programs that sessions write. | compiler | P1 | next | ERRVALUES |
-| SIZERULE | The size rule: in a step of `fold` or `iterate`, the new list uses the old list at most once in its size. The rule holds at each step of the ladder. | core | P1 | in review: the check of sizes and the size rules of the ops | |
 | GINSETS | A domain for the four sides of an inset. A number lifts to four sides. | domains | P2 | next | |
 | GSMALL | The op `sign`, and an op that gives the unit vector of the smallest axis. | domains | P2 | next | |
 | GNDGET | Tier 2 reads the `get` of `NDVectorDomain` as the `get` of a list. | compiler | P2 | next | |
@@ -40,14 +39,15 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| DATALIMIT | Step B: the limit of `iterate` can come from the size of the data, for example the count of the records. | core | P1 | later | STEPS, SIZERULE |
+| DATALIMIT | Step B: the limit of `iterate` can come from the size of the data, for example the count of the records. | core | P1 | later | STEPS |
 | FIXPOINT | Step B: a fixed-point column. Its steps must move one way, and the checker examines this from the kinds of the ops. `explain` shows the rounds. | core | P1 | later | STEPS |
 | DFSOP | A kernel op for a depth-first search, with the order of ties in the spec. | domains | P2 | later | |
 | ASTAROP | A kernel op for the A* search, with the order of ties in the spec. | domains | P2 | later | |
 | STEPC | Step C: functions that call themselves, with a budget of steps. Vex builds it only when a real consumer needs it. | core | P3 | later | FIXPOINT |
 | SHAPESIZE | The ireko layout bundle with the shapes module stays under 17.4 kB. | pilots | P1 | later | COMPILE-FUSE |
 | TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. The pilots get tier 2 for 94 % of their programs, but the programs that sessions write get it for 43 % to 78 %. | compiler | P2 | later | ERRVALUES, LISTVALUES |
-| TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | later | |
+| COLUMNSCOPE | A column of a sheet can apply to some rows of a tree. At this time, a column runs at each row, and the user pays for cells that nobody reads. | core | P2 | later | |
+| TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
 | INAPPRECORD | Each night, all cases of the compiler gate run in one process, and the record gives the count of slow processes. | ci | P2 | later | |
 | MODELLIMITS | A script derives the gate limits from the recorded gate runs, with a row for each CPU model with 5 runs. The limit of other models is the worst run plus the largest spread in one model. | ci | P2 | later | RADIALGAP |
 | TYPED-SCRIPTS | The JavaScript scripts become TypeScript, and the plugin launcher gets a TypeScript source. | ci | P2 | later | |

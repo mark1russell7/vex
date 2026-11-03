@@ -1,7 +1,7 @@
 /**
  * The share of tier 2 on real programs (roadmap item FALLBACKSHARE). This module compiles programs with `tiered` of
- * `@mark1russell7/vex-compiler`. It counts the runs that tier 2 finishes with a value or with an error, and the runs that
- * tier 1 does again after a `FALLBACK`. It is a measurement, not a gate. With the option `sites`, it also finds the site of each fallback
+ * `@mark1russell7/vex-compiler`. It counts the runs that tier 2 finishes with a value or with an error. It also counts the
+ * runs that tier 1 does again after a `FALLBACK`. It is a measurement, not a gate. With the option `sites`, it also finds the site of each fallback
  * (FALLBACKOPS).
  */
 import type { CompileFn, Expr, Program, Result } from "@mark1russell7/vex";

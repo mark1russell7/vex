@@ -156,9 +156,9 @@ export function printJs(p: LoopProgram, facts: Facts): string {
    * the op in a `try`, and checks the result. A number that the op lifts, and each failed guard, go to the dispatch.
    */
   const siteBlock = (n: number, x: OpExpr, indent: string): boolean => {
-    const attempt = (call: string, ind: string): void => {
+    const attempt = (invoked: string, ind: string): void => {
       threw = true;
-      lines.push(`${ind}try { ${name(n)} = ${call}; } catch (e) { ${name(n)} = threw_(e); }`);
+      lines.push(`${ind}try { ${name(n)} = ${invoked}; } catch (e) { ${name(n)} = threw_(e); }`);
     };
     const st = facts.staticSite(p.constants[x.name] as string, x.kinds);
     if (st !== undefined) {
@@ -225,24 +225,24 @@ export function printJs(p: LoopProgram, facts: Facts): string {
     const d = domain(f.domain);
     lines.push(`${indent}${label}: {`);
     let inner: string;
-    let call: string;
+    let invoked: string;
     if (f.method) {
       const m = `m${label}`;
       lines.push(`${indent}  if (typeof ${self} === "object" && ${self} !== null) {`, `${indent}    const ${m} = ${site}.m;`);
       lines.push(`${indent}    if (${m} !== undefined && ${self}[${expr(constant(x.name))}] === ${m} && ${d}.is(${self})) {`);
       inner = `${indent}      `;
-      call = `${self}[${expr(constant(x.name))}](${args.join(", ")})`;
+      invoked = `${self}[${expr(constant(x.name))}](${args.join(", ")})`;
     } else {
       sites.set(`${site}_f`, `${site}.fn`);
       lines.push(`${indent}  if (${d}.is(${self})) {`);
       inner = `${indent}    `;
-      call = `${site}_f(${values.join(", ")})`;
+      invoked = `${site}_f(${values.join(", ")})`;
     }
     const lifted = args.filter((_a, i) => liftsAt(f.lift, i)).map((a) => `typeof ${a} === "number"`);
     if (lifted.length > 0) lines.push(`${inner}if (${lifted.join(" || ")}) { ${out} = ${generic(x, site, values)}; break ${label}; }`);
     const kinds = args.flatMap((a, i) => kindCheck(f.params?.[i], a, d));
     if (kinds.length > 0) lines.push(`${inner}if (!(${kinds.join(" && ")})) { ${out} = ${generic(x, site, values)}; break ${label}; }`);
-    attempt(call, inner);
+    attempt(invoked, inner);
     resultChecks(out, facts.checks, inner);
     lines.push(`${inner}break ${label};`);
     if (f.method) lines.push(`${indent}    }`);

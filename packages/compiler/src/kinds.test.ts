@@ -59,7 +59,7 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
 
   it("takes the op of the first domain of the kind of the receiver, also for the name of a list op and for texts and booleans", () => {
     const e = op("concat", op("upper", s), op("max", n, lit(5)));
-    expect(sitesOf(e)).toMatchObject({ direct: 3, guarded: 0 });
+    expect(sitesOf(e)).toMatchObject({ direct: 4, guarded: 0 });
     expect(expectSame(e)).toBe(1);
     const tests = op("and", op("eq", s, v("t")), op("xor", b, lit(true)));
     expect(sitesOf(tests)).toMatchObject({ direct: 2, guarded: 0 });
@@ -191,10 +191,11 @@ describe("KIND.STATIC: the kinds go through the forms, the bindings, the list op
     ["ifError with two numbers", op("add", op("ifError", op("divide", n, lit(0)), lit(0)), lit(1)), 2],
     ["and and or give booleans", op("not", op("or", op("and", b, b), b)), 1],
     ["a binding", let_({ x: op("add", n, lit(1)) }, op("multiply", v("x"), lit(2))), 2],
-    ["a sum, a count, a mean, a min and a max", op("add", op("add", op("sum", each(axes.all, n)), op("count", each(axes.all, n))), op("add", op("mean", each(axes.all, n)), op("min", each(axes.all, n)))), 3],
-    ["any, all and none", op("and", op("not", op("any", each(axes.all, b))), op("not", op("none", each(axes.all, b)))), 2],
-    ["a node of the memo", op("add", op("max", each(axes.where(axes.all, b), n)), lit(1)), 1],
+    ["a sum, a count, a mean, a min and a max", op("add", op("add", op("sum", each(axes.all, n)), op("count", each(axes.all, n))), op("add", op("mean", each(axes.all, n)), op("min", each(axes.all, n)))), 6],
+    ["any, all and none", op("and", op("not", op("any", each(axes.all, b))), op("not", op("none", each(axes.all, b)))), 4],
+    ["a node of the memo", op("add", op("max", each(axes.where(axes.all, b), n)), lit(1)), 2],
   ];
+  // The failure path of a list op or a memo node has a copy of the sites, so these numbers count both paths.
   it.each(cases)("%s", (_name, e, direct) => {
     expect(sitesOf(e)).toMatchObject({ direct, guarded: 0 });
     expectSame(e);

@@ -303,7 +303,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       case "no-step":
         return at(errorText.noStep(op, e.a));
       // The two details of an extension have no op site, so this case is the only other detail.
-      default:
+      case "no-op":
+      case "foreign":
+      case "no-handler":
         return at(noOpText(op, e.a as boolean, e.b));
     }
   };

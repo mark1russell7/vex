@@ -58,7 +58,7 @@ function link(generated: Extract<Generated, { readonly ok: true }>): { readonly 
   const runtime = createRuntime(generated.options);
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from printJs, and it reads each name and literal from K (§5).
   const make = new Function("K", "R", generated.source) as (k: readonly unknown[], r: ReturnType<typeof createRuntime>) => Tier2;
-  return { run: make(generated.program.constants, runtime), take: runtime.take };
+  return { run: make(generated.program.constants, runtime), take: () => runtime.take() };
 }
 
 /** The counts of the runs of a tiered program. */

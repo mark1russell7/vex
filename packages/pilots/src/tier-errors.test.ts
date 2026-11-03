@@ -87,6 +87,8 @@ describe("COMPILE.ERRORS P17: the real programs in tier 1 and in tier 2", () => 
   });
 
   it("P17 COMPILE.ERRORS: the corpora give the same results", () => {
-    for (const corpus of readCorpora()) differential(() => corpusCases(corpus));
+    const corpora = readCorpora();
+    for (const corpus of corpora) differential(() => corpusCases(corpus));
+    expect(corpora.length).toBeGreaterThan(0);
   });
 });

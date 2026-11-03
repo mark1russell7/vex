@@ -134,7 +134,7 @@ A function call can use an extension in the body of its function, or in the body
 
 Tier 2 gives the error result of a program itself (COMPILE.ERRORS). The value path does not change: it has no new check, no new flag and no new allocation. Only the failure path has new code.
 
-**The lazy error.** A failed check keeps a small record: its site, the origin, the focus and the runtime operands. The site is a constant of the program. A function of the runtime that fails also records its detail in two variables: the thrown value, the result that failed its checks, or a foreign error. A record has no text. When the program ends with a lazy error, `take` of the runtime makes the error of the interpreter from it (`materialize`). This step uses the error texts of the core (`errorText`, `errorAt`). So the two tiers have one copy of each message.
+**The lazy error.** A failed check keeps a small record: its site, the origin, the focus and the runtime operands. The site is a constant of the program. A function of the runtime that fails also records its detail in two variables. The detail is the thrown value, the result that failed its checks, or a foreign error. A record has no text. When the program ends with a lazy error, `take` of the runtime makes the error of the interpreter from it (`materialize`). This step uses the error texts of the core (`errorText`, `errorAt`). So the two tiers have one copy of each message.
 
 The signal stays `FALLBACK`. The generated code puts the lazy error in a slot of the runtime, and it gives `FALLBACK`. `tiered` then reads the slot. An empty slot sends the run to tier 1. An exception also gives `FALLBACK` with an empty slot. Thus `load` keeps its contract.
 
@@ -142,7 +142,7 @@ The signal stays `FALLBACK`. The generated code puts the lazy error in a slot of
 
 **`#ARGS`.** The interpreter evaluates each argument, also after an error (`#all`). Two errors give `#ARGS`. The value path has no flags for this. Each argument has a block for its failure, and the code after this block is a copy of the next argument that can fail. Thus a failure jumps to the copies of the later arguments, and each argument evaluates once. The order of evaluation is the order of the interpreter, and no extension runs twice.
 
-A copy can read flags, because the value path does not read a copy (`#collect`). So a node in a copy adds no other copy, and the size of the code grows with the depth of the failing nodes, not with the number of their paths. `MAX_COPIED` limits the nodes of the copies. Past the limit, a node with two arguments that can fail keeps no error, and tier 1 gives its result.
+A copy can read flags, because the value path does not read a copy (`#collect`). So a node in a copy adds no other copy. The size of the code grows with the depth of the failing nodes, not with the number of their paths. `MAX_COPIED` limits the nodes of the copies. Past the limit, a node with two arguments that can fail keeps no error, and tier 1 gives its result. `MAX_CHAINED` limits the arguments of a chain in the same way, because each argument that can fail adds a level of blocks.
 
 **The memo.** An entry of the memo holds a value or the mark of a failure. The error depends on the position and on the child nodes, so the entry has no error. After a read of a failed entry, where the context keeps the error, a copy of the node evaluates at this position. A node of the memo uses no extension, so this has no effect. The value path reads one flag, as before.
 

@@ -103,6 +103,12 @@ const block = (fail: Fail): Block => ({ stmts: [], fail });
  */
 export const MAX_COPIED = 2000;
 
+/**
+ * The number of arguments of a node that `#chain` takes. Each argument that can fail adds a level of blocks, and the
+ * printer and the JavaScript parser recurse over the levels. A node with more arguments keeps no error.
+ */
+export const MAX_CHAINED = 64;
+
 /** This function gives the axis inside the `where` axes of an axis. */
 const baseAxis = (a: Axis): Exclude<Axis, { readonly t: "where" }> => (a.t === "where" ? baseAxis(a.axis) : a);
 
@@ -345,7 +351,7 @@ class Lowerer {
    * An exception stops the program, so the memo gets no entry for it.
    *
    * The entry has no error, because the error of a node depends on its position and on its child nodes. Where the context
-   * keeps the error, a copy of the node evaluates after a read of such an entry, and it gives the error at this position.
+   * keeps the error, a copy of the node evaluates after a read of such an entry. The copy gives the error at this position.
    * A node of the memo and its keys use no extension, so this second evaluation has no effect.
    */
   #memoized(e: Expr, keys: readonly Expr[], s: Scope, path: readonly number[], b: Block): LExpr {
@@ -385,7 +391,7 @@ class Lowerer {
   #all(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, what: string, b: Block): LExpr[] {
     if (keeps(b.fail) && xs.filter((x) => x.tag !== "lit").length > 1) {
       if (this.#copying > 0) return this.#collect(xs, s, path, first, what, b);
-      if (this.#copied < MAX_COPIED) return this.#chain(xs, s, path, first, what, b);
+      if (this.#copied < MAX_COPIED && xs.length <= MAX_CHAINED) return this.#chain(xs, s, path, first, what, b);
       return this.#all(xs, s, path, first, what, { stmts: b.stmts, fail: plainOf(b.fail) });
     }
     const last = b.fail.t === "return" || b.fail.t === "stop" ? -1 : xs.findLastIndex((x) => this.#mayExt(x, s.fns));
@@ -399,7 +405,7 @@ class Lowerer {
 
   /**
    * This method lowers arguments on the value path, with no new check. A failure of an argument keeps its error in a
-   * local of the argument, and it jumps to the copy of the next argument that can fail. After the last copy, the errors
+   * local of the argument. It then jumps to the copy of the next argument that can fail. After the last copy, the errors
    * give the error of the node (`args` of the runtime). The copies clear the locals, for the next turn of a loop.
    *
    * Each argument evaluates once: the value path gives up at the failure, and the copies start after it.
@@ -623,7 +629,7 @@ class Lowerer {
    */
   #ifError(args: readonly Expr[], s: Scope, path: readonly number[], b: Block): LExpr {
     const [first, second] = args;
-    if (first === undefined) return this.fail(b, this.#text(b, s, path, errorText.needsArgument("ifError", 0)));
+    if (first === undefined) return this.fail(b, this.#text(b, s, path, errorText.needsArgument("ifError", 1)));
     const label = this.labels++;
     const r = this.locals++;
     const ok = this.locals++;

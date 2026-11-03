@@ -85,8 +85,8 @@ describe("the probe of the sites of the fallbacks (FALLBACKOPS)", () => {
     // COMPILE.EXT: IFERROR around the cell of the row before the first row stays in tier 2, so no fallback gives a value.
     expect(values).toBe(0);
     expect(on.totals.valueSites).toStrictEqual([]);
-    // COMPILE.ERRORS: tier 2 gives the error of a cell at the result.
-    expect(on.totals.errorSites?.map((r) => r.reason)).not.toContain("an extension: vex.cell gave #N/A");
+    // COMPILE.ERRORS: tier 2 gives the error of a cell at the result. A strict list op over cells stays in tier 1.
+    expect(new Set(on.totals.errorSites?.flatMap((r) => r.programs.map((x) => x.reason)))).toEqual(new Set(["invoice.linesSum"]));
     expect(on.totals.tier2ErrorRuns).toBeGreaterThan(0);
     for (const p of on.programs) expect(sum(p.valueSites) + sum(p.errorSites)).toBe(p.fallbacks);
   });

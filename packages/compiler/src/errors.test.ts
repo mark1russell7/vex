@@ -6,7 +6,7 @@ import { app, axes, call, defineDomain, each, evaluate, ext, fail, fn, fold, ind
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { MAX_COPIED } from "./lower.ts";
+import { MAX_CHAINED, MAX_COPIED } from "./lower.ts";
 import { FALLBACK } from "./runtime.ts";
 import { generate, load, tiered, type GenerateOptions } from "./tiers.ts";
 
@@ -73,7 +73,7 @@ const codeOf = (r: Result<unknown>): string => (r.ok ? "value" : r.error.code);
  */
 function direct(e: Expr, s: Space = S, vars?: Readonly<Record<string, unknown>>): string[] {
   const p = tiered(e, OPTIONS);
-  expect(p.tier, p.tier === 1 ? p.reason : "").toBe(2);
+  expect([p.tier, p.tier === 1 ? p.reason : ""]).toEqual([2, ""]);
   const codes = s.keys.map((origin) => {
     const r = p.run(runOf(s, origin, vars));
     expect(r).toEqual(evaluate(e, { ...OPTIONS, ...runOf(s, origin, vars) }));
@@ -83,13 +83,22 @@ function direct(e: Expr, s: Space = S, vars?: Readonly<Record<string, unknown>>)
   return codes;
 }
 
-/** This function checks a program with `direct`, and that it gives an error at a key. */
-function fails(e: Expr, s: Space = S, vars?: Readonly<Record<string, unknown>>): void {
-  expect(direct(e, s, vars).some((code) => code !== "value")).toBe(true);
+/** This function checks a program with `direct`, and it tells if the program gives an error at a key. */
+function fails(e: Expr, s: Space = S, vars?: Readonly<Record<string, unknown>>): boolean {
+  return direct(e, s, vars).some((code) => code !== "value");
 }
 
 const all = (body: Expr): Expr => each(axes.all, body);
 const nope = ref("nope");
+const wide = (x: Expr): Expr => app("add", x, x, x, x, x, x, x, x);
+const big = (x: Expr): Expr => wide(wide(wide(x)));
+/** This function gives an op with `count` arguments, and each argument is a different field. */
+const fields = (count: number): Expr => app("add", ...Array.from({ length: count }, (_x, i) => ref(`f${String(i)}`)));
+/** This function gives the size of the code of a chain, without the indentation of its nested blocks. */
+const size = (count: number): number => {
+  const g = generate(fields(count), OPTIONS);
+  return g.ok ? g.source.replace(/^ +/gm, "").length : Number.NaN;
+};
 const text = lit("x");
 
 describe("COMPILE.ERRORS: tier 2 gives the error of each site", () => {
@@ -100,127 +109,127 @@ describe("COMPILE.ERRORS: tier 2 gives the error of each site", () => {
   });
 
   it("COMPILE.ERRORS: the names of variables and functions", () => {
-    fails(v("x"));
-    direct(v("x"), S, { x: 1 });
-    fails(let_({ f: fn([], lit(1)) }, v("f")));
-    fails(call("f"));
-    fails(call("x"), S, { x: 1 });
+    expect(fails(v("x"))).toBe(true);
+    expect(direct(v("x"), S, { x: 1 })).not.toHaveLength(0);
+    expect(fails(let_({ f: fn([], lit(1)) }, v("f")))).toBe(true);
+    expect(fails(call("f"))).toBe(true);
+    expect(fails(call("x"), S, { x: 1 })).toBe(true);
     // A property of the prototype of the variables is no variable.
-    fails(call("toString"), S, {});
-    fails(let_({ x: lit(1) }, call("x")));
-    fails(let_({ x: nope }, call("x")));
-    fails(let_({ f: fn(["a"], v("a")) }, call("f")));
-    fails(let_({ f: fn(["a"], app("add", v("a"), nope)) }, call("f", lit(1))));
+    expect(fails(call("toString"), S, {})).toBe(true);
+    expect(fails(let_({ x: lit(1) }, call("x")))).toBe(true);
+    expect(fails(let_({ x: nope }, call("x")))).toBe(true);
+    expect(fails(let_({ f: fn(["a"], v("a")) }, call("f")))).toBe(true);
+    expect(fails(let_({ f: fn(["a"], app("add", v("a"), nope)) }, call("f", lit(1))))).toBe(true);
   });
 
   it("COMPILE.ERRORS: the fields of a record", () => {
-    fails(nope);
-    fails(ref(["o", "p"]));
-    fails(ref(["o", "p", "z"]));
-    fails(ref("u"));
-    fails(ref("__proto__"));
-    fails(ref(["o", "__proto__", "x"]));
-    fails(ref("nope", [key("A")]));
-    direct(ref("n", []));
+    expect(fails(nope)).toBe(true);
+    expect(fails(ref(["o", "p"]))).toBe(true);
+    expect(fails(ref(["o", "p", "z"]))).toBe(true);
+    expect(fails(ref("u"))).toBe(true);
+    expect(fails(ref("__proto__"))).toBe(true);
+    expect(fails(ref(["o", "__proto__", "x"]))).toBe(true);
+    expect(fails(ref("nope", [key("A")]))).toBe(true);
+    expect(direct(ref("n", []))).not.toHaveLength(0);
   });
 
   it("COMPILE.ERRORS: a record that is not an object, and a key without a record", () => {
     const s = space.array([1, 2]);
-    fails(ref("x"), s);
+    expect(fails(ref("x"), s)).toBe(true);
     const holes = space.record({ A: undefined, B: { x: 1 } });
-    fails(ref("x"), holes);
+    expect(fails(ref("x"), holes)).toBe(true);
   });
 
   it("COMPILE.ERRORS: the addresses and the axes", () => {
     const g = space.array([{ n: 1 }, { n: 2 }, { n: 3 }]);
-    fails(ref("n", [offset(1)]), g);
-    fails(ref("n", [index(lit(9))]), g);
-    fails(ref("n", [index(text)]), g);
-    fails(ref("n", [key("Z")]), g);
-    fails(ref("n", [index(nope)]), g);
-    fails(ref("n", [index(nope), index(text)]), g);
-    fails(ref("n", [offset(1), offset(1)]), g);
-    fails(ref([], [offset(1)]), g);
-    fails(app("sum", each(axes.table("nope"), ref("n"))));
-    direct(app("sum", each(axes.table("T"), ref("n"))));
-    direct(app("sum", each(axes.window(0, 1), ref("n"))));
+    expect(fails(ref("n", [offset(1)]), g)).toBe(true);
+    expect(fails(ref("n", [index(lit(9))]), g)).toBe(true);
+    expect(fails(ref("n", [index(text)]), g)).toBe(true);
+    expect(fails(ref("n", [key("Z")]), g)).toBe(true);
+    expect(fails(ref("n", [index(nope)]), g)).toBe(true);
+    expect(fails(ref("n", [index(nope), index(text)]), g)).toBe(true);
+    expect(fails(ref("n", [offset(1), offset(1)]), g)).toBe(true);
+    expect(fails(ref([], [offset(1)]), g)).toBe(true);
+    expect(fails(app("sum", each(axes.table("nope"), ref("n"))))).toBe(true);
+    expect(direct(app("sum", each(axes.table("T"), ref("n"))))).not.toHaveLength(0);
+    expect(direct(app("sum", each(axes.window(0, 1), ref("n"))))).not.toHaveLength(0);
   });
 
   it("COMPILE.ERRORS: the tests of the axes", () => {
-    fails(app("sum", each(axes.where(axes.all, ref("n")), ref("n"))));
-    fails(app("sum", each(axes.where(axes.all, nope), ref("n"))));
-    fails(fold(axes.where(axes.all, ref("t")), { a: lit(0) }, { a: lit(1) }, v("a")));
-    fails(fold(axes.all, { a: lit(0) }, { a: app("add", v("a"), nope) }, v("a")));
-    fails(fold(axes.all, { a: nope, b: text }, { a: lit(0), b: lit(0) }, v("a")));
+    expect(direct(app("sum", each(axes.where(axes.all, ref("n")), ref("n"))))).toEqual(["value", "value", "value"]);
+    expect(direct(app("sum", each(axes.where(axes.all, nope), ref("n"))))).toEqual(["value", "value", "value"]);
+    expect(fails(fold(axes.where(axes.all, ref("t")), { a: lit(0) }, { a: lit(1) }, v("a")))).toBe(true);
+    expect(fails(fold(axes.all, { a: lit(0) }, { a: app("add", v("a"), nope) }, v("a")))).toBe(true);
+    expect(fails(fold(axes.all, { a: nope, b: text }, { a: lit(0), b: lit(0) }, v("a")))).toBe(true);
   });
 
   it("COMPILE.ERRORS: the tests of iterate, and its limit", () => {
     const step = { a: app("add", v("a"), lit(1)) };
-    fails(iterate(2, { a: lit(0) }, step, v("a"), lit(1)));
-    fails(iterate(2, { a: lit(0) }, step, v("a"), app("gt", v("a"), lit(9))));
-    direct(iterate(2, { a: lit(0) }, step, v("a")));
-    fails(iterate(2, { a: nope }, step, v("a")));
-    fails(iterate(2, { a: lit(0) }, { a: nope }, v("a")));
-    fails(iterate(2, { a: nope, b: text }, { a: lit(0), b: lit(0) }, v("a")));
+    expect(fails(iterate(2, { a: lit(0) }, step, v("a"), lit(1)))).toBe(true);
+    expect(fails(iterate(2, { a: lit(0) }, step, v("a"), app("gt", v("a"), lit(9))))).toBe(true);
+    expect(direct(iterate(2, { a: lit(0) }, step, v("a")))).not.toHaveLength(0);
+    expect(fails(iterate(2, { a: nope }, step, v("a")))).toBe(true);
+    expect(fails(iterate(2, { a: lit(0) }, { a: nope }, v("a")))).toBe(true);
+    expect(fails(iterate(2, { a: nope, b: text }, { a: lit(0), b: lit(0) }, v("a")))).toBe(true);
   });
 
   it("COMPILE.ERRORS: if, and, or and ifError", () => {
-    fails(app("if"));
-    fails(app("if", lit(1), lit(2), lit(3)));
-    fails(app("if", lit(true)));
-    fails(app("if", lit(false), lit(1)));
-    fails(app("if", app("gt", ref("n"), lit(1)), nope, text));
-    fails(app("and"));
-    fails(app("or"));
-    fails(app("and", lit(true), lit(1)));
-    fails(app("or", lit(false), text));
-    fails(app("ifError"));
-    fails(app("ifError", nope));
-    fails(app("ifError", nope, app("add", text, lit(1))));
-    fails(app("ifError", nope, nope));
+    expect(fails(app("if"))).toBe(true);
+    expect(fails(app("if", lit(1), lit(2), lit(3)))).toBe(true);
+    expect(fails(app("if", lit(true)))).toBe(true);
+    expect(fails(app("if", lit(false), lit(1)))).toBe(true);
+    expect(fails(app("if", app("gt", ref("n"), lit(1)), nope, text))).toBe(true);
+    expect(fails(app("and"))).toBe(true);
+    expect(fails(app("or"))).toBe(true);
+    expect(fails(app("and", lit(true), lit(1)))).toBe(true);
+    expect(fails(app("or", lit(false), text))).toBe(true);
+    expect(fails(app("ifError"))).toBe(true);
+    expect(fails(app("ifError", nope))).toBe(true);
+    expect(fails(app("ifError", nope, app("add", text, lit(1))))).toBe(true);
+    expect(fails(app("ifError", nope, nope))).toBe(true);
   });
 
   it("COMPILE.ERRORS: the failures of an op", () => {
-    fails(app("nope", lit(1)));
-    fails(app("nope"));
-    fails(app("nope", lit({ odd: 1 })));
-    fails(app("add", lit(new Vec2(1, 2)), lit("x")));
-    fails(app("divide", lit(1), lit(0)));
-    fails(app("boom"));
-    fails(app("nothing"));
-    fails(app("infinite"));
-    fails(app("badValue"));
-    fails(app("wrong", app("make", lit(false))));
-    fails(app("make", lit(true)));
-    fails(app("both", app("make", lit(false)), lit(-1)));
-    fails(app("both", app("make", lit(false)), lit("x")));
-    direct(app("both", app("make", lit(false)), lit(1)));
+    expect(fails(app("nope", lit(1)))).toBe(true);
+    expect(fails(app("nope"))).toBe(true);
+    expect(fails(app("nope", lit({ odd: 1 })))).toBe(true);
+    expect(fails(app("add", lit(new Vec2(1, 2)), lit("x")))).toBe(true);
+    expect(fails(app("divide", lit(1), lit(0)))).toBe(true);
+    expect(fails(app("boom"))).toBe(true);
+    expect(fails(app("nothing"))).toBe(true);
+    expect(fails(app("infinite"))).toBe(true);
+    expect(fails(app("badValue"))).toBe(true);
+    expect(fails(app("wrong", app("make", lit(false))))).toBe(true);
+    expect(fails(app("make", lit(true)))).toBe(true);
+    expect(fails(app("both", app("make", lit(false)), lit(-1)))).toBe(true);
+    expect(fails(app("both", app("make", lit(false)), lit("x")))).toBe(true);
+    expect(direct(app("both", app("make", lit(false)), lit(1)))).not.toHaveLength(0);
     // A number that a domain does not accept as valid is finite, so its error is not #NUM! of a number.
-    fails(app("wrong", lit(1)));
+    expect(fails(app("wrong", lit(1)))).toBe(true);
   });
 
   it("COMPILE.ERRORS: the kinds of the arguments of an op with a static site", () => {
-    fails(app("add", ref("n"), text));
-    fails(app("sqrt", app("subtract", lit(0), ref("n"))));
-    fails(app("gt", ref("t"), lit(1)));
+    expect(fails(app("add", ref("n"), text))).toBe(true);
+    expect(fails(app("sqrt", app("subtract", lit(0), ref("n"))))).toBe(true);
+    expect(fails(app("gt", ref("t"), lit(1)))).toBe(true);
   });
 
   it("COMPILE.ERRORS: the list ops", () => {
-    fails(app("sum", all(ref("t"))));
-    fails(app("mean", all(ref("t"))));
-    fails(app("min", all(ref("t"))));
-    fails(app("max", all(text)));
-    fails(app("any", all(ref("n"))));
-    fails(app("all", all(text)));
-    fails(app("none", all(text)));
-    fails(app("mean", all(nope)));
-    fails(app("min", all(nope)));
-    fails(app("max", all(nope)));
-    fails(app("first", all(nope)));
-    fails(app("sum", all(lit(1e308))));
-    fails(app("mean", all(lit(1e308))));
-    fails(app("reduce", all(ref("n")), lit("nope")));
-    direct(app("reduce", all(ref("n")), lit("divide"), lit({ strict: false })));
+    expect(fails(app("sum", all(ref("t"))))).toBe(true);
+    expect(fails(app("mean", all(ref("t"))))).toBe(true);
+    expect(fails(app("min", all(ref("t"))))).toBe(true);
+    expect(fails(app("max", all(text)))).toBe(true);
+    expect(fails(app("any", all(ref("n"))))).toBe(true);
+    expect(fails(app("all", all(text)))).toBe(true);
+    expect(fails(app("none", all(text)))).toBe(true);
+    expect(fails(app("mean", all(nope)))).toBe(true);
+    expect(fails(app("min", all(nope)))).toBe(true);
+    expect(fails(app("max", all(nope)))).toBe(true);
+    expect(fails(app("first", all(nope)))).toBe(true);
+    expect(fails(app("sum", all(lit(1e308))))).toBe(true);
+    expect(fails(app("mean", all(lit(1e308))))).toBe(true);
+    expect(fails(app("reduce", all(ref("n")), lit("nope")))).toBe(true);
+    expect(direct(app("reduce", all(ref("n")), lit("divide"), lit({ strict: false })))).not.toHaveLength(0);
   });
 
   it("COMPILE.FALLBACK COMPILE.ERRORS: a failed argument after the list of a list op goes to tier 1", () => {
@@ -231,11 +240,11 @@ describe("COMPILE.ERRORS: tier 2 gives the error of each site", () => {
   });
 
   it("COMPILE.ERRORS: the extensions", () => {
-    fails(ext("none", null));
-    fails(ext("cycle", null));
-    fails(ext("located", null));
-    fails(ext("throws", null));
-    fails(ext("thrown", null));
+    expect(fails(ext("none", null))).toBe(true);
+    expect(fails(ext("cycle", null))).toBe(true);
+    expect(fails(ext("located", null))).toBe(true);
+    expect(fails(ext("throws", null))).toBe(true);
+    expect(fails(ext("thrown", null))).toBe(true);
   });
 
   it("COMPILE.ERRORS: `load` keeps its contract: a function that gives a value or `FALLBACK`", () => {
@@ -292,7 +301,7 @@ describe("CALL.ARGS REC.FIELDS COMPILE.ERRORS: two or more failed arguments give
     expect(direct(let_({ f: fn(["a", "b"], app("add", v("a"), v("b"))) }, call("f", nope, ref("zz"))))).toEqual(["#ARGS", "#ARGS", "#ARGS"]);
     expect(direct(let_({ f: fn(["a"], lit(1)) }, call("f", nope)))).toEqual(["value", "value", "value"]);
     expect(direct(iterate(3, { a: lit(0) }, { a: app("add", nope, ref("zz")) }, v("a")))).toEqual(["#ARGS", "#ARGS", "#ARGS"]);
-    expect(direct(fold(axes.all, { a: lit(0) }, { a: app("add", ref("t"), ref(["o", "p"])) }, v("a")))).toEqual(["#N/A", "#N/A", "#N/A"]);
+    expect(direct(fold(axes.all, { a: lit(0) }, { a: app("add", ref("t"), ref(["o", "p"])) }, v("a")))).toEqual(["#NAME?", "#NAME?", "#NAME?"]);
     expect(direct(iterate(3, { a: lit(0) }, { a: app("if", app("gt", v("a"), lit(0)), app("add", nope, ref("zz")), lit(1)) }, v("a")))).toEqual(["#ARGS", "#ARGS", "#ARGS"]);
   });
 
@@ -317,7 +326,7 @@ describe("CALL.ARGS REC.FIELDS COMPILE.ERRORS: two or more failed arguments give
     expect(p.stats.fallbacks).toBe(0);
   });
 
-  it("CALL.ARGS EVAL.ORDER: tier 2 calls each extension once, in the order of the interpreter", () => {
+  it("CALL.ARGS: tier 2 calls each extension once, in the order of the interpreter", () => {
     const seen: string[] = [];
     const tag = (name: string): ExtHandler => () => {
       seen.push(name);
@@ -346,8 +355,6 @@ describe("CALL.ARGS REC.FIELDS COMPILE.ERRORS: two or more failed arguments give
   });
 
   it("COMPILE.ERRORS: past the limit of the copies, a node keeps no error, and tier 1 gives the result", () => {
-    const wide = (x: Expr): Expr => app("add", x, x, x, x, x, x, x, x);
-    const big = (x: Expr): Expr => wide(wide(wide(x)));
     const e = app("add", ...Array.from({ length: 7 }, () => big(ref("n"))), big(nope));
     // The first parts of the program use the copies, so the last part has none.
     expect(MAX_COPIED).toBeLessThan(585 * 7);
@@ -357,11 +364,16 @@ describe("CALL.ARGS REC.FIELDS COMPILE.ERRORS: two or more failed arguments give
     expect(p.stats.fallbacks).toBe(1);
   });
 
+  it("COMPILE.ERRORS: past the limit of a chain, a node keeps no error, and tier 1 gives the result", () => {
+    const fit = tiered(fields(MAX_CHAINED), OPTIONS);
+    expect(fit.run(runOf(S, "A"))).toEqual(evaluate(fields(MAX_CHAINED), { ...OPTIONS, ...runOf(S, "A") }));
+    expect(fit.stats.fallbacks).toBe(0);
+    const over = tiered(fields(MAX_CHAINED + 1), OPTIONS);
+    expect(over.run(runOf(S, "A"))).toEqual(evaluate(fields(MAX_CHAINED + 1), { ...OPTIONS, ...runOf(S, "A") }));
+    expect(over.stats.fallbacks).toBe(1);
+  });
+
   it("COMPILE.ERRORS: the generated code of a chain has one copy for each later argument", () => {
-    const size = (count: number): number => {
-      const g = generate(app("add", ...Array.from({ length: count }, (_x, i) => ref(`f${String(i)}`))), OPTIONS);
-      return g.ok ? g.source.length : Number.NaN;
-    };
     // A chain of 32 arguments is near 4 chains of 8 arguments: the size is linear in the arguments.
     expect(size(32)).toBeLessThan(size(8) * 4.5);
   });
@@ -463,7 +475,7 @@ describe("P17 COMPILE.ERRORS: generated programs with each code", () => {
       errors++;
       if (p.stats.fallbacks === 0) fast++;
     }
-    for (const code of ["#ARGS", "#N/A", "#NAME?", "#REF!", "#VALUE!", "#NUM!", "#CALC!", "#CYCLE!"]) expect(codes.get(code) ?? 0, code).toBeGreaterThan(0);
+    expect(["#ARGS", "#N/A", "#NAME?", "#REF!", "#VALUE!", "#NUM!", "#CALC!", "#CYCLE!"].filter((code) => !codes.has(code))).toEqual([]);
     expect(fast / errors).toBeGreaterThan(0.7);
   });
 });

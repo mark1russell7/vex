@@ -42,6 +42,30 @@
       "tier1Reasons": []
     },
     {
+      "source": "vex sessions",
+      "programs": 12,
+      "tier2": 5,
+      "programShare": 0.4166666666666667,
+      "runs": 25,
+      "valueRuns": 23,
+      "tier2ValueRuns": 10,
+      "valueShare": 0.43478260869565216,
+      "tier1Reasons": [
+        {
+          "reason": "the program has the list op \"get\", and tier 2 does not have lists as values yet",
+          "count": 4
+        },
+        {
+          "reason": "the program has the list op \"append\", and tier 2 does not have lists as values yet",
+          "count": 2
+        },
+        {
+          "reason": "the program has the list op \"take\", and tier 2 does not have lists as values yet",
+          "count": 1
+        }
+      ]
+    },
+    {
       "source": "a private app",
       "programs": 58,
       "tier2": 56,

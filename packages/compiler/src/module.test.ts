@@ -715,6 +715,7 @@ describe("COMPILE.MODULE: the text of a module", () => {
     type Span = { readonly lo: number; readonly hi: number };
     const Interval = defineDomain({
       name: "Interval",
+      size: "fixed",
       is: (u: unknown): u is Span => typeof u === "object" && u !== null && typeof (u as Partial<Span>).lo === "number" && typeof (u as Partial<Span>).hi === "number",
       ops: {
         span: { fn: (i: Span): number => i.hi - i.lo, returns: "number" },

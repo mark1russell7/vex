@@ -1,16 +1,21 @@
 import { CHECKED } from "./checked.ts";
 import { fromDocument, isDocument, type Envelope } from "./document.ts";
-import { findMethod, isOpName, liftsAt, resolveOp, type AnyDomain, type OpSpec, type ParamKind, type PrimitiveKind, type ResolvedOp } from "./domain.ts";
+import { findMethod, isOpName, liftsAt, resolveOp, type AnyDomain, type OpSpec, type ParamKind, type PrimitiveKind, type ResolvedOp, type ReturnKind, type SizeRule } from "./domain.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
 import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
+import { sizeError } from "./size.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { axisTargets, fixAddr, resolveAddr, type Position, type Space } from "./space.ts";
 import type { Read, Trace, TraceEvent, TraceSink } from "./trace.ts";
 
-/** A free function op. The interpreter gives it the values of all arguments. */
-export type FreeFn = (...args: readonly unknown[]) => unknown;
+/**
+ * A free function op. The interpreter gives it the values of all arguments. The property `size` is its size rule
+ * (LOOP.SIZE.OPS). Without it, a step of a loop cannot use its result in the size of a list name. The property
+ * `returns` is the kind of its result, as in `OpSpec`. The interpreter does not examine it.
+ */
+export type FreeFn = ((...args: readonly unknown[]) => unknown) & { readonly size?: SizeRule; readonly returns?: ReturnKind };
 
 /** The context of an extension handler. */
 export interface ExtContext {
@@ -155,7 +160,9 @@ export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Pro
   // EVAL.NESTING: a program nested too deep gives an error before the compiler walks it with recursion.
   const shape = read.ok ? shapeError(expr) : read.error.message;
   const nesting = shape === undefined ? nestingOf(expr) : 0;
-  const bad = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}` : undefined);
+  const deep = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}` : undefined);
+  // LOOP.SIZE: a step of a loop that can double the size of a list at each step gives an error before a run.
+  const bad = deep ?? sizeError(expr, opts);
   const kind = read.ok ? "bad-expression" : read.error.kind;
   const root: Node = bad === undefined ? new Compiler(opts).node(expr, []) : (f) => fail(vexError(kind, bad, { path: [], origin: f.pos.origin, focus: f.pos.focus }));
   const run = (r: RunOptions): Result<unknown> => {

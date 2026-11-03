@@ -12,6 +12,63 @@ export type ParamKind = "domain" | "number" | "boolean" | "string" | "any";
 /** The kind of the result of an op: a kind of a parameter, or `domain:Name` for a value of the domain `Name`. */
 export type ReturnKind = ParamKind | `domain:${string}`;
 
+/**
+ * How the size of one argument adds to the size of the result of an op (LOOP.SIZE.OPS). The size of a value counts the
+ * texts, the fields, the keys and the items in it.
+ *
+ * - `0`: the argument does not add to the size.
+ * - `1`: the size of the argument adds one time.
+ * - `"scaled"`: the size of the argument adds a fixed number of times, for example two times.
+ * - `"many"`: the size of the argument adds more than one time.
+ * - `"unbounded"`: the size of the result has no bound in the size of the argument.
+ * - `"text"`: the size adds one time for a text, and a fixed number of times for another value, as its JSON text.
+ * - `"copies"`: the size adds one time for each copy. The first argument is the number of the copies.
+ * - `"each"`: the size adds one time for each item of the first argument.
+ * - `"number"`: the argument is a number that sets a count. A literal number gives that count, and another number
+ *   gives a fixed bound.
+ */
+export type SizeUse = 0 | 1 | "scaled" | "many" | "unbounded" | "text" | "copies" | "each" | "number";
+
+/**
+ * A measure of a value for the check of sizes (LOOP.SIZE.OPS). `size` is the size of the value, and `count` is the
+ * number of its items. `inner` is the sum of the counts of the values of its items. `item` is the size of its largest
+ * item.
+ */
+export type SizeMeasure = "size" | "count" | "inner" | "item";
+
+/** One term of a size rule: a use of the same measure of the argument, or a use of the measure that the pair names. */
+export type SizeTerm = SizeUse | readonly [use: SizeUse, of: SizeMeasure];
+
+/**
+ * The size rule of an op: how the measures of its result follow from its arguments (LOOP.SIZE.OPS). The check of sizes
+ * reads it in the steps of `fold` and `iterate` (LOOP.SIZE).
+ *
+ * - `"scalar"`: the result is a number or a boolean.
+ * - `"fixed"`: the result has a size with a fixed bound, for example a 2D vector.
+ * - `"reduce"`: the rule of the list op `reduce`. The op that its second argument names gives the size.
+ * - A record: `size`, `count`, `inner` and `item` have one term for each argument. `rest` is the use of the arguments
+ *   after them, and its default is `"many"`. Without `count`, `inner` or `item`, that measure of the result is its size.
+ *   The terms of `item` give the largest bound of the arguments, because the largest item comes from one argument. A literal
+ *   number at the position `limit` sets the count. With `keys: "position"`, the items get their positions as new keys.
+ *   With `constant: true`, the result can also hold a part with a fixed size. With `union: true`, the result holds
+ *   each key of its arguments one time, so the bound of the result is the largest bound of the arguments.
+ */
+export type SizeRule =
+  | "scalar"
+  | "fixed"
+  | "reduce"
+  | {
+      readonly size: readonly SizeTerm[];
+      readonly count?: readonly SizeTerm[];
+      readonly inner?: readonly SizeTerm[];
+      readonly item?: readonly SizeTerm[];
+      readonly rest?: SizeUse;
+      readonly limit?: number;
+      readonly keys?: "position";
+      readonly constant?: true;
+      readonly union?: true;
+    };
+
 /** The description of one op of a domain. */
 export interface OpSpec<D = never> {
   /**
@@ -33,6 +90,12 @@ export interface OpSpec<D = never> {
    * and the law checker of the test kit does.
    */
   readonly returns?: ReturnKind;
+  /**
+   * The size rule of the op (LOOP.SIZE.OPS). Without it, an op whose result is a number or a boolean has the rule
+   * `"scalar"`. An op of a domain with `size: "fixed"` has the rule `"fixed"`. Another op has no rule, so a step of a
+   * loop cannot use its result in the size of a list name (LOOP.SIZE).
+   */
+  readonly size?: SizeRule;
 }
 
 /** A JavaScript type of primitive values that a domain can accept. */
@@ -65,6 +128,11 @@ export interface DomainSpec<Name extends string, D, Ops extends Readonly<Record<
   readonly primitive?: PrimitiveKind;
   /** The ops of the domain, with their metadata. */
   readonly ops: Ops;
+  /**
+   * With `"fixed"`, each value of the domain has a size with a fixed bound, for example a 2D vector. Then each op of the
+   * domain has the size rule `"fixed"` or `"scalar"`, unless the op has its own rule (LOOP.SIZE.OPS).
+   */
+  readonly size?: "fixed";
   /** With `"all"`, each method of a value is an op, also without an entry in `ops`. The default is `"declared"`. */
   readonly methods?: "declared" | "all";
   /** The scalar lift: it makes a domain value from a number. */

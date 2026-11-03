@@ -272,7 +272,7 @@ describe("the documents of the expressions (DOC.*)", () => {
 
   it("DOC.ENTRY: compile, evaluate, explain and parse take a document, and give the results of its expression", () => {
     const s = space.record({ A: { v: 1, w: 2 }, B: { v: 3, w: 4 }, C: { v: 5, w: 6 } });
-    const fns = { add: (a: unknown, b: unknown): number => (a as number) + (b as number) };
+    const fns = { add: Object.assign((a: unknown, b: unknown): number => (a as number) + (b as number), { size: "scalar" as const }) };
     const programs = [
       app("count", each(axes.others, ref("v"))),
       fold(axes.all, { s: lit(0) }, { s: app("add", v("s"), ref("v")) }, v("s")),

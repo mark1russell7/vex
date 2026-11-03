@@ -45,6 +45,8 @@ export type NumOps = {
 /** The domain of numbers. A result that is not a finite number is the error `#NUM!`. */
 export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", number, NumOps>({
   name: "Num",
+  // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
+  size: "fixed",
   is: (u: unknown): u is number => typeof u === "number",
   primitive: "number",
   valid: (n: number): boolean => Number.isFinite(n),
@@ -102,6 +104,8 @@ export type BoolOps = {
 /** The domain of booleans. For lazy logic, use the special forms `and`, `or` and `if` of the IR. */
 export const BoolDomain: Domain<"Bool", boolean, BoolOps> = defineDomain<"Bool", boolean, BoolOps>({
   name: "Bool",
+  // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
+  size: "fixed",
   is: (u: unknown): u is boolean => typeof u === "boolean",
   primitive: "boolean",
   show: (b: boolean): string => String(b),

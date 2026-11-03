@@ -1,4 +1,4 @@
-import { defineDomain, type Domain, type FnOp, type OpTable } from "@mark1russell7/vex";
+import { defineDomain, type Domain, type FnOp, type OpTable, type SizeRule } from "@mark1russell7/vex";
 
 /**
  * An immutable vector with named components. The type parameter `K` is the set of component names. Ops that
@@ -132,24 +132,30 @@ export type NDVectorOps = OpTable<NDVector, NDOpNames>;
 /** The ops of `LiftedNDVectorDomain`. */
 export type LiftedNDVectorOps = OpTable<NDVector, NDOpNames, "add" | "subtract" | "multiply" | "dot">;
 
+/** The size rule of an op whose result has the keys of both vectors, each key one time (LOOP.SIZE.OPS). */
+const KEYS = { size: [1, 1], union: true } as const satisfies SizeRule;
+
+/** The size rule of an op that lifts a number to the vector `{ scalar: n }`: the keys of both, and maybe one key more. */
+const LIFTED = { size: [1, 1], union: true, constant: true } as const satisfies SizeRule;
+
 const ndOps = {
-  add: { laws: ["commutative", "associative"], identity: (): NDVector => NDVector.zero(), params: ["domain"] },
-  subtract: { params: ["domain"] },
-  multiply: { laws: ["commutative", "associative"], params: ["domain"] },
-  min: { laws: ["commutative", "associative", "idempotent"], params: ["domain"] },
-  max: { laws: ["commutative", "associative", "idempotent"], params: ["domain"] },
-  mergePreferNonZero: { laws: ["associative", "idempotent"], params: ["domain"] },
-  scale: { params: ["number"] },
-  clamp: { params: ["number", "number"] },
-  dot: { laws: ["commutative"], params: ["domain"] },
-  length: {},
-  norm1: {},
-  normInf: {},
-  equals: { laws: ["commutative"], params: ["domain"] },
-  pick: {},
-  withKeys: {},
-  get: { params: ["string"] },
-  set: { params: ["string", "number"] },
+  add: { laws: ["commutative", "associative"], identity: (): NDVector => NDVector.zero(), params: ["domain"], size: KEYS },
+  subtract: { params: ["domain"], size: KEYS },
+  multiply: { laws: ["commutative", "associative"], params: ["domain"], size: KEYS },
+  min: { laws: ["commutative", "associative", "idempotent"], params: ["domain"], size: KEYS },
+  max: { laws: ["commutative", "associative", "idempotent"], params: ["domain"], size: KEYS },
+  mergePreferNonZero: { laws: ["associative", "idempotent"], params: ["domain"], size: KEYS },
+  scale: { params: ["number"], size: { size: [1, 0] } },
+  clamp: { params: ["number", "number"], size: { size: [1, 0, 0] } },
+  dot: { laws: ["commutative"], params: ["domain"], size: "scalar" },
+  length: { size: "scalar" },
+  norm1: { size: "scalar" },
+  normInf: { size: "scalar" },
+  equals: { laws: ["commutative"], params: ["domain"], size: "scalar" },
+  pick: { size: { size: [1, 1, 0], union: true } },
+  withKeys: { size: KEYS },
+  get: { params: ["string"], size: "scalar" },
+  set: { params: ["string", "number"], size: { size: [1, 1, 0], union: true } },
 } as const satisfies NDVectorOps;
 
 const isNDVector = (u: unknown): u is NDVector => u instanceof NDVector;
@@ -178,9 +184,9 @@ export const LiftedNDVectorDomain: Domain<"NDVector(lifted)", NDVector, LiftedND
   show: (v: NDVector): string => v.toString(),
   ops: {
     ...ndOps,
-    add: { ...ndOps.add, liftScalar: true },
-    subtract: { ...ndOps.subtract, liftScalar: true },
-    multiply: { ...ndOps.multiply, liftScalar: true },
+    add: { ...ndOps.add, liftScalar: true, size: LIFTED },
+    subtract: { ...ndOps.subtract, liftScalar: true, size: LIFTED },
+    multiply: { ...ndOps.multiply, liftScalar: true, size: LIFTED },
     dot: { ...ndOps.dot, liftScalar: true },
   },
 });
@@ -205,6 +211,6 @@ export const NumRecordDomain: Domain<"NumRecord", NumRecord, NumRecordOps> = def
   name: "NumRecord",
   is: isNumRecord,
   ops: {
-    toNDVector: { fn: (r: NumRecord): NDVector => new NDVector(r) },
+    toNDVector: { fn: (r: NumRecord): NDVector => new NDVector(r), size: { size: [1] } },
   },
 });

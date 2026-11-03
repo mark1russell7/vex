@@ -23,6 +23,15 @@ describe("the inputs of the tools", () => {
     expect(() => programOf("not json", DEFAULT_DOMAINS)).toThrow("the program is not valid: the text is not JSON.");
   });
 
+  it("LOOP.SIZE: vex_check refuses a step of a loop that appends a list to itself, and accepts a step that appends one item", () => {
+    const fold = (next: unknown): unknown => ({ tag: "fold", axis: { t: "all" }, init: { xs: lit({ kind: "vex.list", items: [] }) }, step: { xs: next }, result: app("count", { tag: "var", name: "xs" }) });
+    const xs = { tag: "var", name: "xs" };
+    expect(() => check({ program: fold(app("append", xs, xs)) })).toThrow(
+      'the program is not valid: the expression has a node "fold" whose step gives the name "xs" a value that uses the lists of the loop more than one time in its size, at the op "append" (LOOP.SIZE).',
+    );
+    expect(check({ program: fold(app("append", xs, app("fill", lit(1), ref("n")))) })).toMatchObject({ ok: true });
+  });
+
   it("DOC.ENTRY: reads a program as a document, as JSON data or as JSON text, and gives the location of a part that is not valid", () => {
     const document = { type: ["ops", "add"], value: [{ type: "ref", value: ["self", "n"] }, 1] };
     expect(programOf(document, DEFAULT_DOMAINS)).toEqual(app("add", ref("n"), lit(1)));

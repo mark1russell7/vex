@@ -117,6 +117,8 @@ export type DateOps = OpTable<LocalDate, "add" | "subtract" | "addMonths" | "end
  */
 export const DateDomain: Domain<"Date", LocalDate, DateOps> = defineDomain<"Date", LocalDate, DateOps>({
   name: "Date",
+  // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
+  size: "fixed",
   is: (u: unknown): u is LocalDate => u instanceof LocalDate,
   valid: (d: LocalDate): boolean => Number.isSafeInteger(d.days) && Math.abs(d.days) <= MAX_DAYS,
   show: (d: LocalDate): string => d.toString(),

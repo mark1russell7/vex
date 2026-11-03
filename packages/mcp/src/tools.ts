@@ -3,7 +3,7 @@
  * data. A value of a domain in that data has the JSON form of a literal of the IR, for example
  * `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`. A result has the same form.
  */
-import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, nestingOf, parse, serialize, shapeError, sizeOf, space, type AnyDomain, type Expr, type Result, type Space, type VexError } from "@mark1russell7/vex";
+import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, MAX_NESTING, nestingOf, parse, serialize, shapeError, sizeError, sizeOf, space, type AnyDomain, type Expr, type Result, type Space, type VexError } from "@mark1russell7/vex";
 import { emitModule, generate, type Schema } from "@mark1russell7/vex-compiler";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, JsonDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
@@ -44,7 +44,12 @@ export function domainsOf(names: readonly string[] | undefined): readonly AnyDom
  */
 export function programOf(program: unknown, domains: readonly AnyDomain[]): Expr {
   const r = parse(typeof program === "string" ? program : JSON.stringify(program), domains);
-  if (r.ok) return r.value;
+  if (r.ok) {
+    // LOOP.SIZE: a step of a loop that can double the size of a list makes the program not valid.
+    const size = nestingOf(r.value) > MAX_NESTING ? undefined : sizeError(r.value, { domains });
+    if (size === undefined) return r.value;
+    throw new ToolError(`the program is not valid: ${size}.`);
+  }
   // The error of a document has its location, so only a program in the tagged IR gets the reason of shapeError.
   const data = typeof program === "string" ? safeJson(program) : program;
   // A reason of the kernel ends with a period already.

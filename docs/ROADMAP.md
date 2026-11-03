@@ -30,7 +30,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| SIZERULE | The size rule: in a step of `fold` or `iterate`, the new list uses the old list at most once in its size. The rule holds at each step of the ladder. | core | P1 | next | |
+| SIZERULE | The size rule: in a step of `fold` or `iterate`, the new list uses the old list at most once in its size. The rule holds at each step of the ladder. | core | P1 | in review: the check of sizes and the size rules of the ops | |
 | STEPS | The checker gives the lowest step of the ladder that each program needs, with the reason. The host option `maxStep` sets the highest step that it accepts, and the default is B. A property test gives each program of the test kit the same values at A and at B. | core | P1 | next | |
 | FALLBACKSHARE | Measure the share of real programs (the pilots and the sheet examples) that tier 2 sends to tier 1. | compiler | P1 | next | |
 | GINSETS | A domain for the four sides of an inset. A number lifts to four sides. | domains | P2 | next | |

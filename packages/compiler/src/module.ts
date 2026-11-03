@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, listOf, lit, moveExpr, nestingOf, rec, shapeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, listOf, lit, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -4057,6 +4057,9 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
+  // LOOP.SIZE: a module refuses the steps that the interpreter refuses. A program nested too deep fails in the printer.
+  const size = nestingOf(expr) > MAX_NESTING ? undefined : sizeError(expr, options);
+  if (size !== undefined) return { ok: false, reason: size };
   const p = new Printer(expr, options);
   let value: Code;
   try {
@@ -4132,7 +4135,9 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
     const shape = shapeError(f.expr);
-    if (shape !== undefined) return { ok: false, reason: `${formulaText(f)}: ${shape}` };
+    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : sizeError(f.expr, options);
+    const reason = shape ?? size;
+    if (reason !== undefined) return { ok: false, reason: `${formulaText(f)}: ${reason}` };
   }
   const kinds = new Map<string, Kind | undefined>();
   const lists = new Map<string, ListInfo>();

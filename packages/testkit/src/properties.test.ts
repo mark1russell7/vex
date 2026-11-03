@@ -1,4 +1,4 @@
-import { app, axisTargets, cell, compile, each, evaluate, explain, fromDocument, isDocument, isExpr, kernelPlan, lit, parse, ref, resolveAddr, serialize, shapeError, SheetRun, space, toDocument, vex, type Axis, type Envelope, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axisTargets, cell, compile, each, evaluate, explain, fromDocument, isDocument, isExpr, kernelPlan, lit, parse, ref, resolveAddr, serialize, shapeError, SheetRun, sizeError, space, toDocument, vex, type Axis, type Envelope, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -136,7 +136,9 @@ describe("properties of the interpreter", () => {
         expect(read.ok ? shapeError(read.value) : undefined).toBeUndefined();
         const core = fromCore(evaluate(d as Envelope, { space: s, origin: k, domains: DOMAINS, tables }));
         // A bare value at the root is not a document for compile (DOC.ENTRY), so both tiers read it as the tagged IR.
-        expect(isDocument(d) ? kernelPlan(d, { domains: DOMAINS }).doc === undefined : !read.ok).toBe(!read.ok);
+        // A program with a step that grows by a factor has no plan (LOOP.SIZE).
+        const refused = !read.ok || sizeError(read.value, { domains: DOMAINS }) !== undefined;
+        expect(isDocument(d) ? kernelPlan(d, { domains: DOMAINS }).doc === undefined : !read.ok).toBe(isDocument(d) ? refused : !read.ok);
         expect(fromReference(referenceEvaluate(d as Envelope, { space: s, origin: k, domains: DOMAINS, tables }))).toEqual(core);
       }),
     );
@@ -257,6 +259,8 @@ describe("properties of the axes", () => {
         // The law holds for bodies that do not read the origin, because inside an axis the origin stays. An origin
         // outside the space fails before the axis (EVAL.TOTAL), so the law starts at a key of the space.
         fc.pre(!JSON.stringify(e).includes('"t":"origin"') && s.keys.includes(o));
+        // A program with a step that grows by a factor fails before the address (LOOP.SIZE), so the law starts at a valid program.
+        fc.pre(sizeError(e, { domains: DOMAINS }) === undefined);
         const moved = resolveAddr(s, { origin: o, focus: o }, at);
         const withAddress = run(each(axis, e, at), s, o);
         // A failed address gives #REF!. Otherwise the list equals the axis at the key of the address.

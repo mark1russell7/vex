@@ -214,6 +214,10 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[ITERATE.UNTIL]** With `until`, the test evaluates before each step and after the last step. A true test stops the iteration. With no true test, the value is `#NUM!`. A test that is not a boolean gives `#VALUE!`.
 - **[ITERATE.ERROR]** The first error of a value, of the test or of `result` is the value of the iteration.
 - **[LOOP.LIST]** A name of `fold` or `iterate` can hold a list (LIST.VALUE). A step gives a new list from the values before the step, for example with `append`, `drop` and `without`. Thus a list can be the stack or the seen set of a search, or the positions of a layout. A step reads the old value at a key with `get` (LIST.GET).
+- **[LOOP.SIZE]** The size of a value of a loop grows at most in proportion to the number of steps. The size of a list or a text includes its items and characters. A step gives each name a new value that uses the old lists and texts of the loop at most one time. For example, a step with `append(xs, xs)` uses `xs` two times, and it doubles the list at each step.
+
+  A use inside a nested loop or inside `each` counts as many uses. A function counts the uses of its arguments. A value from outside the loop is a constant, so `append(xs, outside)` is valid. A chain of names that grows by a factor at each step is not valid. `compile` refuses an expression that breaks this rule with `#VALUE!`, and so do tier 2, `emitModule` and `vex_check`. The reason names the loop, the name and the op.
+- **[LOOP.SIZE.OPS]** Each op that can give a list or a text has a size rule as data. The rule is the property `size` of the op, or `size: "fixed"` of its domain. A function of the host has a rule in its property `size`. An op with no rule that gets a value of the loop makes the loop not valid, and the reason names the op.
 
 ## 6. Folds
 

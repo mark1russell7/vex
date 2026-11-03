@@ -176,8 +176,8 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       '@mark1russell7/conventions':
-        specifier: ^0.22.0
-        version: 0.22.0
+        specifier: ^0.25.0
+        version: 0.25.0
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -243,8 +243,8 @@ importers:
   packages/core:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.20.1
-        version: 0.20.1
+        specifier: ^0.21.0
+        version: 0.21.0
     devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -313,7 +313,7 @@ importers:
     dependencies:
       '@mark1russell7/service':
         specifier: ^0.6.0
-        version: 0.6.3(ws@8.22.0)(zod@4.6.7)
+        version: 0.6.5(ws@8.22.0)(zod@4.6.7)
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -560,8 +560,8 @@ importers:
   tools/mutation:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.20.1
-        version: 0.20.1
+        specifier: ^0.21.0
+        version: 0.21.0
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains
@@ -1592,14 +1592,23 @@ packages:
       zod:
         optional: true
 
+  '@mark1russell7/algebra@0.8.1':
+    resolution: {integrity: sha512-lpuX4jO56Ht7F6ugymJwPCoL1F6fMVX/HAfuWaxfxBUCTrZxpSwD8qVk6O9M0fqaiyj2XUE+D5fz1XQP6BQlRA==}
+    engines: {node: '>=22.19'}
+    peerDependencies:
+      zod: ^4.1.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
   '@mark1russell7/coeval@0.14.0':
     resolution: {integrity: sha512-98JZ3BKi9vd8wj43QRvEW8ymYrlqG6YBZTg2EQ9VDFI+VwBf7n8K8pWJlZXtk2N+zEYGkBIoRh2eC7a7Kij8Yw==}
 
-  '@mark1russell7/coeval@0.20.1':
-    resolution: {integrity: sha512-ZiacoiJhenMxbhwz1JqfGHaSQ3fAyYtUT2mF9TWe6VCjWvm7uCzHHq3a8RBVTcUadtGiKL12j5WLxqDIEgO2Bg==}
+  '@mark1russell7/coeval@0.21.0':
+    resolution: {integrity: sha512-eEotEeFBHfPtrLabaYq/f+C38VAjY5bH4T+1mNqT3kHReIAZlgK1/wHhqkAphy6XCzURx8qNnq274WNNNLkkAQ==}
 
-  '@mark1russell7/conventions@0.22.0':
-    resolution: {integrity: sha512-MtNaOnUyG9trSTY0S9In5+JtGwNpYHRGYxvDgncGtn50VBE75fJ7aSFNOxZDcDY4F0+AoG2pOJbnQd+bSSX13Q==}
+  '@mark1russell7/conventions@0.25.0':
+    resolution: {integrity: sha512-p49TqkjzhugGqhKdWjKq5bXOd2ljkwEHdbkEUVzmHSz8b805t2NhGLvbq63oBHMHMv0lKfJDgU0LMIXmpEgqhA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1635,8 +1644,25 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.6.3':
-    resolution: {integrity: sha512-PN8dNgqh6SyCyKN5r+x/ilr5GXyq8d0lxQJsTEDIGBSe42n3edmsK/5qcqAQ4iMI7iLBRv97aF4AIXJxTbnyLw==}
+  '@mark1russell7/quantity@0.3.0':
+    resolution: {integrity: sha512-psfyKmVrOz5ynHgr2ED7WM5Pa/XVy6DR28jCaSGY42gvV0CJEq7HJRpV6sgkvWx8s3Et7evJWR56aG5tjCHZIw==}
+    engines: {node: '>=22.19'}
+    peerDependencies:
+      zod: ^4.1.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
+  '@mark1russell7/rational@0.1.1':
+    resolution: {integrity: sha512-bVpsMxiNi3CKjEVbL7bcQG2daR5nVY47Wz5MIQxI/9fpkuvlB/EwkJ30jw15BcBEiAfvoLjtWqLC00wrU7tsZQ==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/rigor-generators@0.1.1':
+    resolution: {integrity: sha512-N5o3II0AClHgsWCWtzuBzckQdReydJnLUS8Kdt9hWXVpTzb0dxucrN1bWdDN+75YompOR1rAmsIX8zuHqoQdqA==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/service@0.6.5':
+    resolution: {integrity: sha512-USBAaZX8lQ3nmBzaTycF+6xQJyIQ51ZTWIxw9rZnZ5bhaqZe5FydTgVPYr92/gb8VWcOG4jxWsPnLPBBEaxzSA==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -5564,11 +5590,17 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
+  '@mark1russell7/algebra@0.8.1(zod@4.6.7)':
+    dependencies:
+      '@mark1russell7/quantity': 0.3.0(zod@4.6.7)
+    optionalDependencies:
+      zod: 4.6.7
+
   '@mark1russell7/coeval@0.14.0': {}
 
-  '@mark1russell7/coeval@0.20.1': {}
+  '@mark1russell7/coeval@0.21.0': {}
 
-  '@mark1russell7/conventions@0.22.0': {}
+  '@mark1russell7/conventions@0.25.0': {}
 
   '@mark1russell7/cue@https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7': {}
 
@@ -5582,10 +5614,21 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/service@0.6.3(ws@8.22.0)(zod@4.6.7)':
+  '@mark1russell7/quantity@0.3.0(zod@4.6.7)':
     dependencies:
-      '@mark1russell7/algebra': 0.8.0(zod@4.6.7)
-      '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
+      '@mark1russell7/rational': 0.1.1
+    optionalDependencies:
+      zod: 4.6.7
+
+  '@mark1russell7/rational@0.1.1': {}
+
+  '@mark1russell7/rigor-generators@0.1.1': {}
+
+  '@mark1russell7/service@0.6.5(ws@8.22.0)(zod@4.6.7)':
+    dependencies:
+      '@mark1russell7/algebra': 0.8.1(zod@4.6.7)
+      '@mark1russell7/quantity': 0.3.0(zod@4.6.7)
+      '@mark1russell7/rigor-generators': 0.1.1
     optionalDependencies:
       ws: 8.22.0
       zod: 4.6.7
@@ -5749,7 +5792,7 @@ snapshots:
       '@mark1russell7/algebra': 0.8.0(zod@4.6.7)
       '@mark1russell7/coeval': 0.14.0
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
-      '@mark1russell7/service': 0.6.3(ws@8.22.0)(zod@4.6.7)
+      '@mark1russell7/service': 0.6.5(ws@8.22.0)(zod@4.6.7)
       '@types/ws': 8.18.2
       ws: 8.22.0
       zod: 4.6.7

@@ -43,7 +43,7 @@ describe("a data limit in tier 2 (ITERATE.LIMIT.DATA)", () => {
     expect(fallbacks(count(axes.list(app("fill", lit(4), lit(0)))))).toBe(0);
   });
 
-  it("ITERATE.LIMIT.DATA ITERATE.UNTIL P17: the test sees the count, and a test that is never true gives #NUM! with the count", () => {
+  it("ITERATE.LIMIT.DATA ITERATE.UNTIL P17: the test sees the count, and a test with no true value gives #NUM! with the count", () => {
     expect(fallbacks(count(axes.all, app("gt", v("i"), lit(1))))).toBe(0);
     expect(fallbacks(count(axes.where(axes.all, ref("ok")), app("gt", v("i"), lit(0))))).toBe(0);
     expect(fallbacks(app("ifError", count(axes.all, app("gt", v("i"), lit(9))), lit(-1)))).toBe(0);

@@ -43,8 +43,8 @@ const WALK: StepWalk<Expr> = {
   children: (e) => children(e).map((child, i) => [i, child] as const),
 };
 
-/** This function gives the position of the highest step of a construct of the table. A limit at that step or higher accepts each program without a walk. */
-const highest = (): number => Math.max(0, ...Object.values(VEX_STEPS.constructs).map((s) => stepRank(VEX_STEPS, s)));
+/** The position of the highest step of a construct of the table. A limit at that step or higher accepts each program without a walk. The table is frozen, so the module computes this value one time. */
+const HIGHEST: number = Math.max(0, ...Object.values(VEX_STEPS.constructs).map((s) => stepRank(VEX_STEPS, s)));
 
 const at = (path: readonly unknown[]): string => (path.length === 0 ? "at the root" : `at the path [${path.join(", ")}]`);
 
@@ -71,7 +71,7 @@ export function stepError(e: Expr, opts: StepOptions = {}): string | undefined {
     return `the option maxStep ${shown} is not a step of Vex. The steps are ${VEX_STEP_NAMES.join(", ")} (STEP.MAX)`;
   }
   // Stryker disable next-line ConditionalExpression: without the shortcut, the walk gives the same answer
-  if (stepRank(VEX_STEPS, maxStep) >= highest()) return undefined;
+  if (stepRank(VEX_STEPS, maxStep) >= HIGHEST) return undefined;
   const refusal = checkStep(VEX_STEPS, stepOf(VEX_STEPS, WALK, e), maxStep);
   if (refusal === undefined) return undefined;
   // A refusal of `stepOf` has a reason, because its step is above the lowest step.

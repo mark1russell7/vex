@@ -48,7 +48,7 @@ function expectSame(e: Expr, records: readonly unknown[] = MANY): string {
   const m = make(source);
   expect(m.run(structuredClone(records), { a: 2 })).toStrictEqual(results.map((r) => (r.ok ? r.value : m.VEX_ERROR)));
   // Each pack in a loop is a read of the term: a pack that only a column read is not in the code.
-  for (const [, local] of source.matchAll(/const (pk\d+) = /g)) expect(source).toContain(`${local as string}[`);
+  for (const [, local] of source.matchAll(/const (pk\d+) = /g)) expect(source).toContain(`${local}[`);
   return source;
 }
 
@@ -73,6 +73,17 @@ const FNS: Readonly<Record<string, Expr>> = {
 };
 const withFns = (body: Expr, fns: Readonly<Record<string, Expr>> = FNS): Expr => let_(NEED_FN, let_(STEP_FN, let_(fns, body)));
 const packs = (source: string): number => [...source.matchAll(/QA\(n, col\d+\)/g)].length;
+
+/** This function gives a chain of functions: each function calls the one before twice, and the sum takes `termOf` of them. */
+const chain = (depth: number, termOf: (h: (i: number) => Expr) => Expr): Expr => {
+  const h = (i: number): Expr => call(`h${String(i)}`, call("need"), r);
+  let body: Expr = let_({ g: fn(["r"], op("sum", each(axes.all, termOf(h)))) }, rec({ a: call("g", lit(3)), b: call("g", lit(-2)) }));
+  for (let i = depth; i >= 1; i--) {
+    const before = (): Expr => call(`h${String(i - 1)}`, v("x"), r);
+    body = let_({ [`h${String(i)}`]: fn(["x", "r"], op("add", before(), before())) }, body);
+  }
+  return let_(NEED_FN, let_({ h0: fn(["x", "r"], op("divide", v("x"), r)) }, body));
+};
 
 describe("the fast sum: a loop over the packs of the columns of the run", () => {
   it("a sum over all the records whose term reads a column through a call reads the pack of the column", () => {
@@ -153,13 +164,11 @@ describe("the fast sum does not apply: the loop keeps a try for each item", () =
     ["a term with a function of its own", op("sum", each(axes.all, let_({ f: fn([], NEED) }, op("multiply", call("f"), r))))],
     ["a term of booleans", op("count", each(axes.where(axes.all, op("gt", term, lit(1))), n))],
   ];
-  for (const [name, e] of cases) {
-    it(name, () => {
-      const source = expectSame(let_({ g: fn(["r"], e) }, rec({ a: call("g", lit(2)), b: call("g", lit(-1)) })));
-      expect(source).not.toContain("QA(");
-      expect(source).not.toContain("let PK");
-    });
-  }
+  it.each(cases)("%s", (_title, e) => {
+    const source = expectSame(let_({ g: fn(["r"], e) }, rec({ a: call("g", lit(2)), b: call("g", lit(-1)) })));
+    expect(source).not.toContain("QA(");
+    expect(source).not.toContain("let PK");
+  });
 
   it("a call of a function at the place of its binding", () => {
     // The function reads the name `k`, which depends on the key, so it is at the place of its binding.
@@ -177,19 +186,12 @@ describe("the fast sum does not apply: the loop keeps a try for each item", () =
 
   it("the second print puts at most 64 calls at their place, so a chain of calls stays linear", () => {
     // Each function calls the one before twice. With the call of need, the term of h5 has 64 calls, and h40 has more than 2 ** 40.
-    const chain = (depth: number, term: (h: (i: number) => Expr) => Expr): Expr => {
-      const h = (i: number): Expr => call(`h${String(i)}`, call("need"), r);
-      let body: Expr = let_({ g: fn(["r"], op("sum", each(axes.all, term(h)))) }, rec({ a: call("g", lit(3)), b: call("g", lit(-2)) }));
-      for (let i = depth; i >= 1; i--) {
-        const before = (): Expr => call(`h${String(i - 1)}`, v("x"), r);
-        body = let_({ [`h${String(i)}`]: fn(["x", "r"], op("add", before(), before())) }, body);
-      }
-      return let_(NEED_FN, let_({ h0: fn(["x", "r"], op("divide", v("x"), r)) }, body));
-    };
     // 64 calls are not too many: the sum reads the pack.
     expect(expectSame(chain(5, (h) => h(5)), CLEAN)).toContain("QA(");
     // 65 calls are too many: the sum is the loop of today.
     expect(expectSame(chain(5, (h) => op("add", h(5), h(0))), CLEAN)).not.toContain("QA(");
-    expect(expectSame(chain(40, (h) => h(40)), CLEAN)).not.toContain("QA(");
+    expect(expectSame(chain(6, (h) => h(6)), CLEAN)).not.toContain("QA(");
+    // The interpreter takes more than 2 ** 40 calls for h40, so the test reads only the text. The text prints at once.
+    expect(sourceOf(chain(40, (h) => h(40)))).not.toContain("QA(");
   });
 });

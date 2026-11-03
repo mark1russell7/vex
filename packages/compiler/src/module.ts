@@ -3168,9 +3168,9 @@ class Printer {
     const scopes = this.#scopes.length;
     const outer = this.#inside;
     this.#pack = pack;
-    let again: Code;
+    let second: Code;
     try {
-      again = this.expr(target.body, inner);
+      second = this.expr(target.body, inner);
     } catch (err) {
       if (!(err instanceof NoPack || err instanceof NotStandalone)) throw err;
       this.#scopes.length = scopes;
@@ -3180,7 +3180,7 @@ class Printer {
       this.#pack = undefined;
     }
     // A part of the term that is a column reads its pack, so the packs that the code of that part read are not in the term.
-    const text = [again.v.code, ...again.s].join("\n");
+    const text = [second.v.code, ...second.s].join("\n");
     const used = [...pack.cols].filter(([, local]) => text.includes(`${local}[`));
     if (used.length === 0) return undefined;
     // Each other read of the item is a value that no column holds, so the term keeps its first code.
@@ -3195,7 +3195,7 @@ class Printer {
       }
       return `const ${local} = ${name} || (${name} = ${this.use("QA")}(n, ${col}));`;
     });
-    const items = [...again.s, `const ${r.v} = ${again.v.code};`, r.step];
+    const items = [...second.s, `const ${r.v} = ${second.v.code};`, r.step];
     const head = `for (let ${j} = 0; ${j} < n; ${j}++) {`;
     if (strict) return [...lets, "try {", ...ind([head, ...ind(items), "}"]), "} catch {", `  ${this.use("F")}();`, "}"];
     return [...lets, head, ...ind(["try {", ...ind([`for (; ${j} < n; ${j}++) {`, ...ind(items), "}"]), "} catch {}"]), "}"];

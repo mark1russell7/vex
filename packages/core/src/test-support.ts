@@ -58,6 +58,7 @@ export type PtOps = {
 export const PtDomain: Domain<"Pt", Pt, PtOps> = defineDomain({
   name: "Pt",
   is: (u: unknown): u is Pt => u instanceof Pt,
+  size: "fixed",
   fromScalar: (n: number) => new Pt(n, n),
   valid: (p: Pt) => Number.isFinite(p.x) && Number.isFinite(p.y),
   show: (p: Pt) => `Pt(${p.x}, ${p.y})`,

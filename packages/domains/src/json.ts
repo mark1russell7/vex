@@ -52,9 +52,10 @@ export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json
       [Object.prototype, null].includes(Object.getPrototypeOf(u) as object | null) &&
       !((u as { readonly kind?: unknown }).kind === "vex.list" && Array.isArray((u as { readonly items?: unknown }).items))),
   samples: (): readonly JsonValue[] => [{ a: 1, b: [true, null], c: { d: "x" } }, [1, "x", null, [2]], "x", 2, false],
+  // LOOP.SIZE.OPS: each op gives a part of its value, or a list with one item for each field or leaf of its value.
   ops: {
     // Each op reads no name outside itself, so a module can copy its text.
-    kind: { fn: (v: JsonValue): JsonKind => (Array.isArray(v) ? "array" : (typeof v as JsonKind)), params: [], returns: "string" },
+    kind: { fn: (v: JsonValue): JsonKind => (Array.isArray(v) ? "array" : (typeof v as JsonKind)), params: [], returns: "string", size: "fixed" },
     kinds: {
       fn: (c: JsonValue): readonly JsonItemKind[] => {
         if (typeof c !== "object") throw new Error(`"kinds" needs an array or an object, not a ${typeof c}`);
@@ -67,6 +68,7 @@ export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json
         });
       },
       params: [],
+      size: { size: ["scaled"], keys: "position" },
     },
     fields: {
       fn: (o: JsonValue): readonly string[] => {
@@ -74,6 +76,7 @@ export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json
         return Object.keys(o);
       },
       params: [],
+      size: { size: [1], keys: "position" },
     },
     field: {
       fn: (o: JsonValue, k: unknown): unknown => {
@@ -86,6 +89,7 @@ export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json
       },
       params: ["any"],
       returns: "any",
+      size: { size: [1, 0] },
     },
     // The walk of the schema of Graph as a flat list (JSON.LEAVES). The function reads no name outside itself, so a
     // module can copy it. A stack of the objects, not recursion, keeps the order of a recursive walk.
@@ -115,6 +119,9 @@ export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json
         return Object.freeze(out);
       },
       params: ["number"],
+      // A path repeats the keys above it, at most 100 levels, so the size of the list is the size of the object times a
+      // fixed factor.
+      size: { size: ["scaled", 0], keys: "position" },
     },
   },
 });

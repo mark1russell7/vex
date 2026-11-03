@@ -203,6 +203,8 @@ export type Vec2Ops = OpTable<Vec2, Vec2OpNames, "add" | "subtract" | "multiply"
 /** The domain of 2D vectors. A number argument of a component-wise op lifts to a vector with that value twice. */
 export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Vec2, Vec2Ops>({
   name: "Vec2",
+  // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
+  size: "fixed",
   is: (u: unknown): u is Vec2 => u instanceof Vec2,
   fromScalar: (n: number): Vec2 => Vec2.scalar(n),
   valid: (v: Vec2): boolean => Number.isFinite(v.x) && Number.isFinite(v.y),

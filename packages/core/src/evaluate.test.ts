@@ -281,6 +281,7 @@ describe("axes (AXIS.*) and list ops (LIST.*)", () => {
     const Digits = defineDomain({
       name: "Num",
       is: (u: unknown): u is number => typeof u === "number",
+      size: "fixed",
       ops: { next: { fn: (n: number, d: number): number => n * 10 + d, params: ["number"] }, gt: { fn: (a: number, b: number): boolean => a > b, params: ["number"] } },
     });
     const rows = space.array([{ v: 1 }, { v: 2 }, { v: 4 }, { v: 8 }]);
@@ -661,6 +662,7 @@ describe("the fast paths of the interpreter", () => {
     name: "N",
     primitive: "number",
     is: isNumber,
+    size: "fixed",
     valid: (n: number) => n >= 0,
     ops: {
       add: { fn: (a: number, b: number): number => a + b, params: ["number"] },

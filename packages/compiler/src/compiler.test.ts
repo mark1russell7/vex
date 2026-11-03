@@ -155,7 +155,7 @@ let log: string[] = [];
 const OPTIONS: CompileOptions = {
   domains: [BoxDomain, TagDomain, NumDomain, TextDomain],
   fns: {
-    double: (x: unknown) => (typeof x === "number" ? x * 2 : x),
+    double: Object.assign((x: unknown) => (typeof x === "number" ? x * 2 : x), { size: "scalar" as const }),
     zero: () => 0,
     ghost: () => 7,
     // The method "nothing" of Box gives no value. That is an error of the op, so this function does not apply.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deps } from "./deps.ts";
+import type { ReturnKind, SizeRule } from "./domain.ts";
 import { evaluate, explain, type EvalOptions } from "./evaluate.ts";
 import { app, axes, children, each, fold, isExpr, iterate, let_, lit, offset, ref, rec, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
@@ -12,13 +13,16 @@ const rows = space.array([
   { n: 3, w: 30 },
 ]);
 
-/** Free functions for the tests: numbers and texts, without a domain. */
+/** A size rule for a function of the host (LOOP.SIZE.OPS). */
+const sized = <F extends (...args: never[]) => unknown>(fn: F, size: SizeRule, returns?: ReturnKind): F => Object.assign(fn, returns === undefined ? { size } : { size, returns });
+
+/** Free functions for the tests: numbers and texts, without a domain. Each function has a size rule. */
 const FNS = {
-  add: (a: unknown, b: unknown) => (a as number) + (b as number),
-  mul: (a: unknown, b: unknown) => (a as number) * (b as number),
-  half: (a: unknown) => (a as number) / 2,
-  gt: (a: unknown, b: unknown) => (a as number) > (b as number),
-  join: (a: unknown, b: unknown) => `${String(a)}${String(b)}`,
+  add: sized((a: unknown, b: unknown) => (a as number) + (b as number), "scalar"),
+  mul: sized((a: unknown, b: unknown) => (a as number) * (b as number), "scalar"),
+  half: sized((a: unknown) => (a as number) / 2, "scalar"),
+  gt: sized((a: unknown, b: unknown) => (a as number) > (b as number), "scalar"),
+  join: sized((a: unknown, b: unknown) => `${String(a)}${String(b)}`, { size: [1, "text"] }, "string"),
 };
 
 /** This function gives the value of an expression at an origin, or its error. */

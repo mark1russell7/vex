@@ -1,4 +1,5 @@
 import { CHECKED } from "./checked.ts";
+import type { SizeRule } from "./domain.ts";
 import type { Result } from "./result.ts";
 
 /** One item of a list: the key of the target and the result of the body there. */
@@ -61,6 +62,39 @@ export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | 
  * domain and no function of the host has the op for it (LIST.ARRAY).
  */
 export const LIST_OPS: ReadonlySet<string> = new Set<ListOp>(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without", "get", "indexOf", "distinct", "group", "join"]);
+
+/**
+ * The size rules of the core list ops and of `fill` (LOOP.SIZE.OPS). Each op that gives a list has a rule here. An
+ * error item has no size, so `errors` has no bound: the messages of the errors can hold texts.
+ */
+export const LIST_SIZES: Readonly<Record<ListOp | "fill", SizeRule>> = Object.freeze<Record<ListOp | "fill", SizeRule>>({
+  count: "scalar",
+  sum: "scalar",
+  min: "scalar",
+  max: "scalar",
+  mean: "scalar",
+  any: "scalar",
+  all: "scalar",
+  none: "scalar",
+  indexOf: "scalar",
+  values: { size: [1], count: [1], inner: [1], item: [1], keys: "position" },
+  keys: { size: [1], count: [1], keys: "position" },
+  errors: { size: ["unbounded"] },
+  reduce: "reduce",
+  first: { size: [[1, "item"]], count: [[1, "item"]], inner: [[1, "item"]], item: [1] },
+  nth: { size: [[1, "item"], 0], count: [[1, "item"], 0], inner: [[1, "item"], 0], item: [1, 0] },
+  get: { size: [[1, "item"], 0], count: [[1, "item"], 0], inner: [[1, "item"], 0], item: [1, 0] },
+  sortBy: { size: [1, 0], count: [1, 0], inner: [1, 0], item: [1, 0] },
+  take: { size: [1, 0], count: [1, 0], inner: [1, 0], item: [1, 0], limit: 1 },
+  drop: { size: [1, 0], count: [1, 0], inner: [1, 0], item: [1, 0] },
+  without: { size: [1, 0], count: [1, 0], inner: [1, 0], item: [1, 0] },
+  append: { size: [1, 1], count: [1, 1], inner: [1, 1], item: [1, 1] },
+  flat: { size: [1], count: [[1, "inner"]], item: [1] },
+  distinct: { size: [1], count: [1], inner: [1], item: [1] },
+  group: { size: [1, "scaled"], count: [0, 1], inner: [[1, "count"], 0] },
+  join: { size: [1, "each"] },
+  fill: { size: [0, "copies"], count: ["number", 0], inner: [0, ["copies", "count"]], item: [0, [1, "size"]], keys: "position" },
+});
 
 /** This function tells if a name is the name of a core list op. */
 export const isListOp = (op: string): op is ListOp => LIST_OPS.has(op);

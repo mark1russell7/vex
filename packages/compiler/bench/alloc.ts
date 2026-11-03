@@ -154,9 +154,11 @@ export function summarize(records: readonly AllocRecord[]): AllocSummary {
   };
 }
 
+/** This function gives a number of a summary as text. */
+const n = (x: number): string => x.toFixed(2);
+
 /** This function gives the lines of a summary, with the rows of at least `floor` bytes for each node. */
 export function summaryLines(s: AllocSummary, floor = 0.5): readonly string[] {
-  const n = (x: number): string => x.toFixed(2);
   const head = `${s.arm} ${s.regime}: ${n(s.heap.median)} heap bytes for each node (${n(s.heap.min)} to ${n(s.heap.max)}), ${n(s.external)} external bytes, ${n(s.objects.median)} objects (${n(s.objects.min)} to ${n(s.objects.max)}), the profiler saw ${n(s.sampledBytes)} bytes, ${String(s.processes)} processes`;
   return [head, ...s.sites.filter((x) => x.bytes >= floor).map((x) => `  ${n(x.bytes).padStart(9)} B  ${n(x.objects).padStart(7)} objects of ${x.size.padStart(8)} B  ${x.path}`)];
 }

@@ -23,6 +23,15 @@ describe("the inputs of the tools", () => {
     expect(() => programOf("not json", DEFAULT_DOMAINS)).toThrow("the program is not valid: the text is not JSON.");
   });
 
+  it("LOOP.SIZE: vex_check refuses a step of a loop that appends a list to itself, and accepts a step that appends one item", () => {
+    const fold = (next: unknown): unknown => ({ tag: "fold", axis: { t: "all" }, init: { xs: lit({ kind: "vex.list", items: [] }) }, step: { xs: next }, result: app("count", { tag: "var", name: "xs" }) });
+    const xs = { tag: "var", name: "xs" };
+    expect(() => check({ program: fold(app("append", xs, xs)) })).toThrow(
+      'the program is not valid: the expression has a node "fold" whose step gives the name "xs" a value that uses the lists of the loop more than one time in its size, at the op "append" (LOOP.SIZE).',
+    );
+    expect(check({ program: fold(app("append", xs, app("fill", lit(1), ref("n")))) })).toMatchObject({ ok: true });
+  });
+
   it("DOC.ENTRY: reads a program as a document, as JSON data or as JSON text, and gives the location of a part that is not valid", () => {
     const document = { type: ["ops", "add"], value: [{ type: "ref", value: ["self", "n"] }, 1] };
     expect(programOf(document, DEFAULT_DOMAINS)).toEqual(app("add", ref("n"), lit(1)));
@@ -58,9 +67,11 @@ describe("the inputs of the tools", () => {
 });
 
 describe("the tools", () => {
-  it("vex_check gives the size, the nesting, the reads and the tier of a program", () => {
+  it("vex_check gives the step, the size, the nesting, the reads and the tier of a program", () => {
     expect(check({ program: app("add", ref("n"), app("sum", all(ref("w")))) })).toEqual({
       ok: true,
+      step: "A",
+      stepReason: "each construct of the program is of step A",
       nodes: 5,
       nesting: 4,
       reads: [
@@ -95,6 +106,21 @@ describe("the tools", () => {
     expect(evaluateAll({ program: all(ref("size")), space, origins: ["0"] })).toEqual([
       { key: "0", ok: true, value: { list: [{ key: "0", ok: true, value: vec(10, 20) }, { key: "1", ok: true, value: vec(30, 5) }] } },
     ]);
+  });
+
+  it("STEP.TOOLS: vex_check gives the step and the reason, and vex_explain gives the step on its first line", () => {
+    const program = app("add", ref("n"), lit(1));
+    const space = { kind: "array", records: [{ n: 2 }] } as const;
+    for (const maxStep of ["A", "B", "C"] as const) expect(check({ program, maxStep })).toMatchObject({ ok: true, step: "A", stepReason: "each construct of the program is of step A" });
+    expect(explainAt({ program, space, origin: "0" }).split("\n")[0]).toBe("step A: each construct of the program is of step A");
+    // STEP.MAX: a value of maxStep that is not a step makes the program not valid in each tool.
+    const bad = { program, maxStep: "D" as "A" };
+    const reason = 'the option maxStep "D" is not a step of Vex. The steps are A, B, C (STEP.MAX)';
+    expect(() => check(bad)).toThrow(reason);
+    expect(() => evaluateAll({ ...bad, space })).toThrow(reason);
+    expect(() => explainAt({ ...bad, space, origin: "0" })).toThrow(reason);
+    expect(() => moduleOf({ ...bad, schema: { fields: { n: "number" } } })).toThrow(reason);
+    expect(() => programOf(program, [], "D" as "A")).toThrow(reason);
   });
 
   it("vex_explain gives the trace at one key", () => {

@@ -5,8 +5,8 @@
 // On a machine with the MCP gateway of headroom, the sessions share one server of the gateway. The tools of Vex keep no
 // state of a session, so one server serves each session. The launcher then connects its input and output to the
 // gateway through the bridge of headroom, in this process, so the launcher is the only process of the session. Without
-// the bridge, or when the gateway does not serve vex, the launcher starts its own server. HEADROOM_BRIDGE names another
-// bridge file. A path that does not exist turns the gateway off.
+// the bridge, or when the gateway does not serve vex, the launcher starts its own server. The launcher looks for
+// `bridge.ts`, then `bridge.mjs`. HEADROOM_BRIDGE names another bridge file. A path that does not exist turns the gateway off.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -30,8 +30,11 @@ function startLocal() {
 
 /** This function gives the bridge of the gateway when the gateway serves vex, and else undefined. */
 async function gateway() {
-  const file = process.env["HEADROOM_BRIDGE"] ?? join(homedir(), "git", "headroom", "packages", "daemon", "src", "bridge.mjs");
-  if (!existsSync(file)) return undefined;
+  // The bridge of headroom is a TypeScript file since headroom #125, and Node.js imports it directly. Older working
+  // copies of headroom have the JavaScript file.
+  const src = join(homedir(), "git", "headroom", "packages", "daemon", "src");
+  const file = process.env["HEADROOM_BRIDGE"] ?? [join(src, "bridge.ts"), join(src, "bridge.mjs")].find((f) => existsSync(f));
+  if (file === undefined || !existsSync(file)) return undefined;
   try {
     const bridge = /** @type {{ gatewayServes(name: string): Promise<boolean>, runBridge(name: string): void }} */ (await import(pathToFileURL(file).href));
     return (await bridge.gatewayServes("vex")) ? bridge : undefined;

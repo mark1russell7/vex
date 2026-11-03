@@ -214,6 +214,21 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[ITERATE.UNTIL]** With `until`, the test evaluates before each step and after the last step. A true test stops the iteration. With no true test, the value is `#NUM!`. A test that is not a boolean gives `#VALUE!`.
 - **[ITERATE.ERROR]** The first error of a value, of the test or of `result` is the value of the iteration.
 - **[LOOP.LIST]** A name of `fold` or `iterate` can hold a list (LIST.VALUE). A step gives a new list from the values before the step, for example with `append`, `drop` and `without`. Thus a list can be the stack or the seen set of a search, or the positions of a layout. A step reads the old value at a key with `get` (LIST.GET).
+- **[LOOP.SIZE]** The size of a value of a loop grows at most in proportion to the number of steps. The size of a list or a text includes its items and characters. A step gives each name a new value that uses the old lists and texts of the loop at most one time. For example, a step with `append(xs, xs)` uses `xs` two times, and it doubles the list at each step.
+
+  A use inside a nested loop or inside `each` counts as many uses. A function counts the uses of its arguments. A value from outside the loop is a constant, so `append(xs, outside)` is valid. A chain of names that grows by a factor at each step is not valid. `compile` refuses an expression that breaks this rule with `#VALUE!`, and so do tier 2, `emitModule` and `vex_check`. The reason names the loop, the name and the op.
+- **[LOOP.SIZE.OPS]** Each op that can give a list or a text has a size rule as data. The rule is the property `size` of the op, or `size: "fixed"` of its domain. A function of the host has a rule in its property `size`. An op with no rule that gets a value of the loop makes the loop not valid, and the reason names the op.
+
+### 5.8 Steps
+
+A step is a level of the power of the language. A host sets the highest step that it accepts.
+
+- **[STEP.LADDER]** The steps of Vex are A, B and C, from the lowest to the highest. Step A has loops with a fixed count. Step B adds limits from the data, and fixed points whose steps move one way. Step C adds functions that call themselves, with a budget. Each construct has a step as data in `CONSTRUCT_STEPS`. Today each construct is of step A.
+- **[STEP.LOWEST]** The step of a program is the highest step of its nodes. The reason is the first node with that step, in the order of `children`, with its construct and its path. `programStep` gives the step and the reason.
+- **[STEP.MAX]** The host option `maxStep` sets the highest step that the host accepts. The default is B. A program above `maxStep` is not valid. `compile`, tier 2, `emitModule` and `vex_check` refuse it, and the reason names the needed step. A program has no field for its step, so a document cannot raise its own step. A value of `maxStep` that is not a step is not valid. The default B fails closed. Each construct of step B has a bound of cost from the size of the input. Each construct of step A has one too (`LOOP.SIZE` and the evaluation budget). A construct without such a bound has step C.
+- **[STEP.VALUE]** The option `maxStep` changes only which programs the host accepts. Each accepted program gives the same value at each step. LOOP.SIZE, EVAL.PURE and P17 hold at each step.
+- **[STEP.CYCLE]** A cycle of cells without an explicit fixed point gives `#CYCLE!` at each step.
+- **[STEP.TOOLS]** `vex_check` gives the step of the program and the reason. `vex_explain` gives the step at the root, on the first line of the trace.
 
 ## 6. Folds
 
@@ -294,6 +309,7 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 
 - **[COMPILE.TIERED]** `tiered(e, options)` gives a program with the interface of `compile`. For each space, origin, variables and tables, its `run` gives the result of `evaluate`.
 - **[COMPILE.FALLBACK]** Where the generated code of tier 2 cannot give the result, tier 1 gives it. Each error value comes from tier 1. A page that does not permit `new Function` uses tier 1.
+- **[COMPILE.EXT]** In tier 2, an error of an extension is an error of the program, as an error of an op is. `ifError` gives its second argument, a list op skips the error item, and a binding of `let` has no value. Tier 2 then gives the value. These send the evaluation to tier 1: an error of an extension at the result, `#DEPTH!` of an extension, and a full call stack. Tier 2 skips no extension whose `#DEPTH!` the interpreter gives, also after an error that the program catches. The result is the result of `evaluate`.
 - **[COMPILE.TRACE]** A run with a trace, and `explain`, use tier 1. Thus they give the traces of the interpreter.
 - **[COMPILE.MEMO]** A program keeps the value of each node that depends only on the space, for each space. Thus a run at each key of a space evaluates such a node once. A space does not change, so each run gives the result of `evaluate`.
 - **[COMPILE.GROUP]** A program keeps the value of a node for each space and each value of its keys. A key reads the origin or a name from outside the node, and nothing that the node changes. Thus an aggregate over the group of the origin evaluates once for each group.
@@ -332,6 +348,8 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[COMPILE.MODULE.FUSE.ITEM]** In a fused chain, an item that fails adds no item. With `strict`, it is the error of the chain. An error item of a source stays where the interpreter meets it. A strict loop over cells reads each cell before it raises the error.
 - **[COMPILE.MODULE.FUSE.ADOPT]** With `fuse`, an append into the list of its name (COMPILE.MODULE.APPEND.OWN) takes a clean and fresh first list as its own array. Thus the first append makes no copy. An append of the result of the loop pushes into the array of the loop when no other part of the result reads the list. A `let` of the result can bind that append to a new name. The values and the errors do not change.
 - **[COMPILE.MODULE.SCAN]** A `fold` over `where(all, test)` can be a scan. Its test compares a value `T` of the target with a key of the origin by `<` or `<=`. Its first values, its steps and its result must read no key of the origin. Then a run evaluates `T` once and each step at most once at each record. The values and the errors stay the values and the errors of the interpreter.
+- **[COMPILE.MODULE.EXIT]** In a module, a name of `fold` whose step is `and(name, ...)` stops at false, and `or(name, ...)` stops at true. When each such name stops, the loop leaves. The rest of the targets runs only the checks, the tests and the steps of the other names. Thus the values and the errors stay the values and the errors of the interpreter. A fold with an append into its own list has no exit.
+- **[COMPILE.MODULE.PAIRS]** A module prints the steps of a `fold` over `all` again, with no test and no name that holds a list. Each read of a column at the focus of the fold, or of a loop in its steps, reads the pack of the column. A column of a call of the printed function has a pack in each call. The values and the errors do not change.
 - **[COMPILE.SOURCE]** `generate(e)` gives the same source for the same expression. The source has no name and no literal of the expression. It reads them from its constants, by index.
 
 ## 11. Examples

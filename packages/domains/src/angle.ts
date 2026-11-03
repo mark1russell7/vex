@@ -55,6 +55,8 @@ export type AngleOps = OpTable<Angle, "add" | "subtract" | "scale" | "normalize"
 /** The domain of angles. A number argument of `add` or `subtract` lifts to an angle in radians. */
 export const AngleDomain: Domain<"Angle", Angle, AngleOps> = defineDomain<"Angle", Angle, AngleOps>({
   name: "Angle",
+  // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
+  size: "fixed",
   is: (u: unknown): u is Angle => u instanceof Angle,
   fromScalar: (n: number): Angle => new Angle(n),
   valid: (a: Angle): boolean => Number.isFinite(a.radians),

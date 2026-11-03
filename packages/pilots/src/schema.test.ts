@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { JsonDomain, type JsonValue } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
+import { SCHEMA_DEEP, SCHEMA_EXAMPLE, SCHEMA_ODD_KEYS, schemaDocs as docsArb, schemaSample } from "./inputs.ts";
 import { schemaOf, type JsonFieldSchema } from "./schema.ts";
 
 // A copy of `valueKind` and `inferSchema` of Graph (stage-schema.ts). The pilot must keep this behavior, so do not
@@ -53,22 +54,9 @@ function graphNotes(doc: Readonly<Record<string, unknown>>): readonly (readonly 
 // The pilots have no types of Node, so the test reads the clock and the log through globalThis.
 const { performance: clock, console: log } = globalThis as unknown as { readonly performance: { now(): number }; readonly console: { info(message: string): void } };
 
-/** Random JSON values up to the depth 4. The keys collide on purpose: "x.y" next to x: { y }, "", __proto__ and constructor. */
-const KEYS = ["a", "b", "x", "y", "x.y", "", "_id", "__proto__", "constructor"] as const;
-const arbs = fc.letrec<{ json: unknown; array: unknown[]; object: Record<string, unknown> }>((tie) => ({
-  json: fc.oneof({ maxDepth: 4, depthIdentifier: "json" }, fc.constant(null), fc.boolean(), fc.integer({ min: -2, max: 2 }), fc.constantFrom("", "s", "t"), tie("array"), tie("object")),
-  array: fc.array(tie("json"), { maxLength: 3, depthIdentifier: "json" }),
-  // Object.fromEntries gives an own field also for the key __proto__, as JSON.parse does.
-  object: fc.array(fc.tuple(fc.constantFrom(...KEYS), tie("json")), { maxLength: 4, depthIdentifier: "json" }).map((entries) => Object.fromEntries(entries)),
-}));
-const docsArb = fc.array(fc.oneof({ arbitrary: arbs.object, weight: 4 }, { arbitrary: arbs.json, weight: 1 }), { maxLength: 5 });
-
 describe("the schema pilot", () => {
   it("EXAMPLE.SCHEMA: gives the schema of the example of Graph", () => {
-    const docs = [
-      { _id: "a", n: 1, tags: ["x"], o: { p: true } },
-      { _id: "b", n: "2", o: {} },
-    ];
+    const docs = SCHEMA_EXAMPLE;
     expect(schemaOf(docs)).toEqual([
       { path: "_id", kinds: ["string"], count: 2 },
       { path: "n", kinds: ["number", "string"], count: 2 },
@@ -80,12 +68,7 @@ describe("the schema pilot", () => {
   });
 
   it("EXAMPLE.SCHEMA: stops at the depth 3, and reads null fields and items, nested and empty arrays, and a document that is not an object", () => {
-    const docs = [
-      { a: { b: { c: { d: 1 } } }, z: [1, null, "s", [2], {}], e: [] },
-      { a: { b: 2 }, z: null },
-      "notadoc",
-      { a: { b: { c: {} } }, "x.y": 1, x: { y: "t" } },
-    ];
+    const docs = SCHEMA_DEEP;
     const expected: JsonFieldSchema[] = [
       { path: "a.b.c", kinds: ["object"], count: 2 },
       { path: "z", kinds: ["array<number|null|string|array|object>", "null"], count: 2 },
@@ -98,7 +81,7 @@ describe("the schema pilot", () => {
   });
 
   it("EXAMPLE.SCHEMA: skips null and array documents, and reads the keys __proto__, constructor and the empty key as Graph does", () => {
-    const docs = [null, [1, 2], JSON.parse('{"__proto__":{"p":1},"":{"q":[null]},"constructor":"c"}') as unknown, 7];
+    const docs = SCHEMA_ODD_KEYS;
     const expected: JsonFieldSchema[] = [
       { path: "__proto__.p", kinds: ["number"], count: 1 },
       // After an empty key, the path of Graph has no dot.
@@ -131,7 +114,7 @@ describe("the schema pilot", () => {
   });
 
   it("EXAMPLE.SCHEMA: gives the records of inferSchema for 20 documents of 30 fields, the size of a sample of Graph", () => {
-    const docs = Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${f}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
+    const docs = schemaSample();
     const want = inferSchema(docs);
     expect(schemaOf(docs)).toEqual(want);
     const runs = 5;

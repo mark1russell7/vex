@@ -29,13 +29,16 @@ export const TextDomain: Domain<"Text", string, TextOps> = defineDomain<"Text", 
   is: (u: unknown): u is string => typeof u === "string",
   primitive: "string",
   show: (s: string): string => JSON.stringify(s),
+  // LOOP.SIZE.OPS: `concat` adds the JSON text of a value that is not a text. `upper` and `lower` can make a text
+  // longer, for example "ß" becomes "SS". The new letters do not change again, so a text grows at most three times in
+  // total, and not at each step.
   ops: {
-    concat: { fn: (a: string, b: unknown): string => a + textOf(b), params: ["any"], returns: "string" },
+    concat: { fn: (a: string, b: unknown): string => a + textOf(b), params: ["any"], returns: "string", size: { size: [1, "text"] } },
     // The length counts UTF-16 code units, like the function LEN of a spreadsheet.
     length: { fn: (a: string): number => a.length, returns: "number" },
-    upper: { fn: (a: string): string => a.toUpperCase(), returns: "string" },
-    lower: { fn: (a: string): string => a.toLowerCase(), returns: "string" },
-    trim: { fn: (a: string): string => a.trim(), returns: "string" },
+    upper: { fn: (a: string): string => a.toUpperCase(), returns: "string", size: { size: [1] } },
+    lower: { fn: (a: string): string => a.toLowerCase(), returns: "string", size: { size: [1] } },
+    trim: { fn: (a: string): string => a.trim(), returns: "string", size: { size: [1] } },
     contains: { fn: (a: string, b: string): boolean => a.includes(b), params: ["string"], returns: "boolean" },
     eq: { fn: (a: string, b: string): boolean => a === b, laws: ["commutative"], params: ["string"], returns: "boolean" },
   },

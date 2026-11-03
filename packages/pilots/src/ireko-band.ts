@@ -79,6 +79,8 @@ export type BandOps = {
  */
 export const BandDomain: Domain<"Band", Band, BandOps> = defineDomain<"Band", Band, BandOps>({
   name: "Band",
+  // LOOP.SIZE.OPS: a band has four numbers, so each op has a size rule.
+  size: "fixed",
   // A plain object: its prototype is Object.prototype or null, and it has only the four number fields.
   is: (u: unknown): u is Band =>
     typeof u === "object" &&

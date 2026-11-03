@@ -17,11 +17,11 @@ permissions: {}
 # One deployment at a time. A newer push cancels a deployment that waits.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pages:
-    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@3377b376fb6e39e4d65f130a98e74125d592f1f3 # main
+    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@c8d2f57af6932442af82d2f2223931e47c11beb1 # main
     # The build job of the shared workflow gets only the read permissions. Only its deploy job,
     # which runs no code of the repository, writes to Pages.
     permissions:

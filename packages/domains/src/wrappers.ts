@@ -19,6 +19,7 @@ export type FnOps = OpTable<Fn, "invoke">;
 export const FnDomain: Domain<"Fn", Fn, FnOps> = defineDomain<"Fn", Fn, FnOps>({
   name: "Fn",
   is: (u: unknown): u is Fn => u instanceof Fn,
+  // LOOP.SIZE.OPS: `invoke` calls a function of the value, so it has no size rule.
   ops: { invoke: {} },
 });
 
@@ -64,5 +65,6 @@ export type MaybeOps = OpTable<Maybe<unknown>, "isTop" | "isBottom" | "map" | "c
 export const MaybeDomain: Domain<"Maybe", Maybe<unknown>, MaybeOps> = defineDomain<"Maybe", Maybe<unknown>, MaybeOps>({
   name: "Maybe",
   is: (u: unknown): u is Maybe<unknown> => u instanceof Maybe,
-  ops: { isTop: {}, isBottom: {}, map: {}, chain: {}, valueOr: {} },
+  // LOOP.SIZE.OPS: `map` and `chain` call a function of the value, so they have no size rule.
+  ops: { isTop: { size: "scalar" }, isBottom: { size: "scalar" }, map: {}, chain: {}, valueOr: { size: { size: [1, 1] } } },
 });

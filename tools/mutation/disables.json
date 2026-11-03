@@ -204,6 +204,10 @@
     "comment": "// Stryker disable next-line ConditionalExpression: a call of undefined throws, and the program gives F for it too"
   },
   {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
+  },
+  {
     "file": "packages/compiler/src/sheet-order.ts",
     "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
   },
@@ -458,6 +462,10 @@
   {
     "file": "packages/core/src/space.ts",
     "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
+  },
+  {
+    "file": "packages/core/src/steps.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: without the shortcut, the walk gives the same answer"
   },
   {
     "file": "packages/core/src/write.ts",

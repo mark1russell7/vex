@@ -83,6 +83,8 @@ export type ColorOps = OpTable<Color, "add" | "multiply" | "clamp" | "mix" | "lu
 /** The domain of colors. */
 export const ColorDomain: Domain<"Color", Color, ColorOps> = defineDomain<"Color", Color, ColorOps>({
   name: "Color",
+  // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
+  size: "fixed",
   is: (u: unknown): u is Color => u instanceof Color,
   fromScalar: (n: number): Color => Color.gray(n),
   valid: (c: Color): boolean => c.toArray().every((x) => Number.isFinite(x)),

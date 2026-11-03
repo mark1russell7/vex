@@ -350,11 +350,12 @@ export interface Paired {
 /**
  * This function compares `a` with the base `b` in mode `process`, with the A/A arm. Each timed run calls a function
  * enough times for about `ms` milliseconds. The ratio is the time of `a` divided by the time of `b`: lower is faster.
+ * The option `clock` replaces `performance.now` for the timed runs only. A gate can record the start and the end of each timed run with it.
  */
-export function paired(a: () => void, b: () => void, options: { readonly repeats?: number; readonly ms?: number } = {}): Paired {
-  const { repeats = 16, ms = 30 } = options;
+export function paired(a: () => void, b: () => void, options: { readonly repeats?: number; readonly ms?: number; readonly clock?: () => number } = {}): Paired {
+  const { repeats = 16, ms = 30, clock } = options;
   const calls = callsFor([a, b], ms);
-  const report = measureIsolated({ arms: [batch("b", b, calls), batch("a", a, calls)], inputs: [{ id: "one" }], repeats, mode: "process" });
+  const report = measureIsolated({ arms: [batch("b", b, calls), batch("a", a, calls)], inputs: [{ id: "one" }], repeats, mode: "process", ...(clock === undefined ? {} : { clock }) });
   const one = report.inputs[0];
   const perCall = (id: string): number => ((one?.median[id] ?? Number.NaN) * 1000) / calls;
   // The ratio of each round, with the base of the same round, keeps a change of the speed of the machine out.

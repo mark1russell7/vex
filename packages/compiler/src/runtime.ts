@@ -6,11 +6,12 @@
  * Generated code uses the runtime inside a `try`, and an exception gives `FALLBACK` for the whole program. A function
  * of the runtime catches an exception only where the interpreter makes a value of it. In an op, it is `#CALC!`, and in
  * `safeIs`, it is `false`. A full call stack is `#DEPTH!`, which no list op and no `ifError` hides, so it goes on to
- * the program.
+ * the program. An extension gives `FALLBACK` for each other error, and it throws for `#DEPTH!` (COMPILE.EXT).
  */
 import {
   axisTargets,
   findMethod,
+  isDepthError,
   isListOp,
   isStackOverflow,
   isVexList,
@@ -319,8 +320,18 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       const handler = Object.hasOwn(extensions, kind) ? extensions[kind] : undefined;
       // Stryker disable next-line ConditionalExpression: a call of undefined throws, and the program gives F for it too
       if (handler === undefined) return F;
-      const r = handler(data, { space: s, position: { origin, focus }, path });
-      return r.ok ? r.value : F;
+      let r: ReturnType<typeof handler>;
+      try {
+        r = handler(data, { space: s, position: { origin, focus }, path });
+      } catch (thrown) {
+        // As for an op: an exception is #CALC!, and a full call stack goes on to the program.
+        return threw(thrown);
+      }
+      if (r.ok) return r.value;
+      // EVAL.DEPTH: no list op and no ifError hides #DEPTH!, so it stops the program as an exception (COMPILE.EXT).
+      // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
+      if (isDepthError(r.error)) throw new Error("an extension gave #DEPTH!");
+      return F;
     },
     // The interpreter reads the own enumerable properties of the variables, with `Object.entries`.
     var(vars, name) {

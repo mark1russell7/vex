@@ -23,6 +23,7 @@ const D = box(0, 1, 1, 1, "d", 7);
 const Num = defineDomain({
   name: "Num",
   is: (u: unknown): u is number => typeof u === "number",
+  size: "fixed",
   ops: {
     plus: { fn: (a: number, b: number): number => a + b, laws: ["commutative", "associative"], identity: () => 0 },
     times: { fn: (a: number, b: number): number => a * b },

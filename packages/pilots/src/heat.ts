@@ -20,9 +20,11 @@ export function heatStep(alpha: number): Program {
   return compile(root.from("t")._.add(flow._.multiply(alpha)).program, { domains: [NumDomain] });
 }
 
-/** This function gives the grid after `steps` steps, with the Vex program. A cell that gives an error throws. */
-export function heatVex(grid: HeatGrid, alpha: number, steps: number): HeatGrid {
-  const program = heatStep(alpha);
+/**
+ * This function gives the grid after `steps` steps, with the Vex program. A cell that gives an error throws. The
+ * optional `program` replaces the program of `heatStep(alpha)`, for example with a program of tier 2.
+ */
+export function heatVex(grid: HeatGrid, alpha: number, steps: number, program: Program = heatStep(alpha)): HeatGrid {
   let now = grid;
   for (let n = 0; n < steps; n++) {
     const s = space.grid(now.map((row) => row.map((t) => ({ t }))));

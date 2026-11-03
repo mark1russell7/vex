@@ -18,6 +18,7 @@ import { error, Pt, PtDomain, value } from "./test-support.ts";
 const Num = defineDomain({
   name: "Num",
   is: (u: unknown): u is number => typeof u === "number",
+  size: "fixed",
   ops: {
     add: { fn: (a: number, b: number): number => a + b, params: ["number"] },
     gt: { fn: (a: number, b: number): boolean => a > b, params: ["number"] },
@@ -532,6 +533,7 @@ describe("lists as the state of a loop (LOOP.LIST, LIST.GET, LIST.LITERAL)", () 
     const Line = defineDomain({
       name: "Line",
       is: (u: unknown): u is number => typeof u === "number",
+      size: "fixed",
       ops: {
         add: { fn: (a: number, b: number): number => a + b, params: ["number"] },
         subtract: { fn: (a: number, b: number): number => a - b, params: ["number"] },

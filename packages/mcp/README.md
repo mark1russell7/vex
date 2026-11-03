@@ -7,10 +7,12 @@ The MCP server of [Vex](https://mark1russell7.github.io/vex/). Its tools give th
 | Tool | What it gives |
 |---|---|
 | `vex_catalog` | Each domain and each op: its call, its result, its lifting, its laws and its identity. The input `domain` gives one domain. |
-| `vex_check` | The number of nodes, the nesting, the fields that the program reads, and if the compiler gives it generated code |
+| `vex_check` | The step of the program with the reason, the number of nodes, the nesting, the fields that the program reads, and if the compiler gives it generated code |
 | `vex_evaluate` | The value or the error at each key of a space of records |
-| `vex_explain` | The trace at one key: each node, with its focus, its reads and its result |
+| `vex_explain` | The step of the program, and the trace at one key: each node, with its focus, its reads and its result |
 | `vex_module` | The source of a standalone ES module, or the reason that the program cannot be one |
+
+Each tool that takes a program also takes `maxStep`, the highest step that it accepts. The default is B. A program above it is not valid.
 
 A program is the JSON form of the IR, as `serialize` gives it, or a document of [coeval](https://github.com/mark1russell7/coeval), as `toDocument` gives it. A value of a domain in a program, in the records or in the variables has the form `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`. A result has the same form.
 

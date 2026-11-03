@@ -119,6 +119,19 @@ A failed check stops the program only where the error is the result. In three co
 
 An exception in an op is the error `#CALC!` of that op, so it follows the same rules. A full call stack (`#DEPTH!`) always stops the program, because no list op and no `ifError` hides it.
 
+An error of an extension follows the same rules (COMPILE.EXT). An extension without a handler and an exception of a handler are errors too. The runtime gives `FALLBACK` for each such error. For `#DEPTH!` of an extension, the runtime throws, so the program stops. Thus the interpreter and tier 2 have the same rule for an extension and for an op.
+
+Example: `IFERROR(row(-1).closing, 792)` reads a row that does not exist. The cell extension gives `#REF!`, and tier 2 gives 792.
+
+This is the general rule. An error that the program cannot catch wins over each error that it can catch, in each order of the parts. `#DEPTH!` and an exception that stops the program are such errors. Thus the order of evaluation does not change the result. A full call stack in an op is not in this rule, because it depends on the size of the stack.
+
+A failure jumps to the end of its block, but the interpreter still evaluates some later parts. An extension in such a part can give `#DEPTH!`, and then `#DEPTH!` is the result. Before this change, tier 2 gave 0 for `ifError(add(missing, depth), 0)`, where the extension `depth` gives `#DEPTH!` (V-066). Thus where the program catches an error, two rules keep the result of the interpreter:
+
+- **The later arguments.** The interpreter evaluates each argument of an op and each field of a record, also after an error (`#all`). Each argument before the last argument that can use an extension gets a block of its own. A check after the arguments reads the flags.
+- **The later items.** The interpreter makes each item of a list before the list op. A failure of the op stops the loop, for example the first error item with `strict`. If the list can use an extension, such a failure stops the program. A failure of the other arguments of the op also stops it. Then tier 1 gives the result.
+
+A function call can use an extension in the body of its function, or in the body of a function of that body. A program without an extension gets the same code as before.
+
 ### 4.2 The same bits
 
 A result of tier 2 must have the same bits as the result of the interpreter. ireko compares its layouts byte for byte.
@@ -441,6 +454,51 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 - **Values without keys.** In the shapes module, each list of `merge` after its first `each` has the key 0 for each item. An array of values without pairs removes most of the remaining allocation. But each helper then needs two forms. The work decides after the measure of step 5.
 - **The model of the full layout.** The model `1 + 0.26 × (module ratio - 1)` gives 1.46 for 2.76, but CI measured 1.58. The difference is approximately 0.12, and the wrapper `shape-vex.ts` of ireko is the probable cause. Thus the gate of 1.1 can also need a change of the wrapper.
 
+### 7.7 Sums over the packs of columns
+
+This section is the first step of the roadmap item RADIALGAP. The angle sum of the radial pilot adds a term for each child at each radius. In the old module, each term called a function, and each call read a column through its memo. Each item also had a try of its own.
+
+A module prints a fast loop for a list op that obeys these rules:
+
+- The op is `sum`, `mean`, `min` or `max`, without `reduce`. The step of these ops cannot throw.
+- The axis is `all`, with no test, no address and no reverse order. The order of a sum of numbers is a part of its value.
+- The term is a number. It has no loop, no cell, no node of the memo and no function of its own. Each function that it calls is at the start of a run, and the body of that function obeys the same rules. A part of the term that is a column counts as one read.
+- The code of the term reads a column of the run, in the term or in a function that it calls.
+
+Then the printer prints the term again. The body of each call is at the place of the call, as the body of a `let`. Each read of a column of the run at the item reads the **pack** of the column. A pack is an array with the value of the column at each record. The first loop of a run that reads it makes it, with the helper `QA`. Each later loop of that run, and each parameter, reads the same array.
+
+A part of the term that is a column of the run is the read of its pack, so its calls do not print again. The second print puts at most 64 calls at their place. Thus a chain of calls costs a linear time.
+
+The term must read the record only through packs. If it reads the record in another way, the loop keeps its first code. The loop also keeps its first code if the second print needs a new column or more than 64 calls. Where a rule does not apply, the module is the same as before.
+
+The fast loop gives the values of the interpreter (P17):
+
+- The pack holds the error sentinel of an error value, as the column does. Thus each read of a pack gives the value of a read of its column. A column catches each error, so a pack that evaluates all the records changes no value.
+- One try covers all the items. An item that throws stops the inner loop, and the outer loop continues at the next item. Thus an error item is skipped. With `strict`, the try is outside the loop, and the first error item is an error of the op.
+- The step comes after the value of the item, so an error item adds nothing. An empty collection, or a parameter that makes each item an error, gives the sum 0. The mean, the min and the max of no item are errors.
+
+The unit tests are in `packages/compiler/src/module-pack.test.ts`. A change of the emitted code for a program that obeys the rules is a change of the code, not of the semantics. Its golden files change for that reason only.
+
+### 7.8 The pair test: packs in a fold and an exit
+
+This section is the second step of the roadmap item RADIALGAP. The pair test of the radial pilot is a `fold` in a `fold`. The name `ok` of each fold has the step `and(ok, ...)`. In the old module, each child called the functions of its angle step, of its radius and of the distance. The loops also went to the last child after the first pair that was too close.
+
+The first part is the **exit** of a fold (COMPILE.MODULE.EXIT). A name whose step is `and(name, ...)` stops at false. A name whose step is `or(name, ...)` stops at true. After its stop, each step of the name gives the same value and evaluates no other argument. When each name with a stop stops, the loop leaves:
+
+- When the steps of the other names cannot throw and the result does not read them, the loop leaves at once with `break`. The checks and the tests of the targets must not throw too.
+- Otherwise a second loop goes on from the next target, in the order of the loop. It runs the checks, the tests and the steps of the other names only. Then it leaves.
+- A fold with an append into its own list (COMPILE.MODULE.APPEND.OWN) has no exit.
+
+The exit gives the values of the interpreter (P17). The interpreter evaluates the names of each step in order, and the first error is the value of the fold. After the stop, a name with a stop cannot give an error. Thus only the other names, the checks and the tests can give an error, and the second loop evaluates all of them in their order. For example, an angle that overflows after the first pair that is too close is still the error of the pair test.
+
+The second part reads the **packs** in a fold (COMPILE.MODULE.PAIRS). A fold over `all`, with no test, no address and no reverse order, prints its steps again when no name holds a list. In this print, each read of a column at the focus of the fold reads the pack of the column, as in §7.7. Each read at the focus of a loop in the steps reads a pack too. A column of a call of the function that the printer prints has a pack too. Each call of the function makes its pack again, at the first loop that reads it.
+
+Each call at such a focus is the body of its function at the place of the call. The rules of §7.7 for the second print apply. Where the second print fails, the fold keeps its first print. A fold whose first print reads no column that can have a pack has no second print.
+
+A pack evaluates its column at each record, also at a record that the loop does not reach. Thus a pack costs more than a column when the loop leaves early. A column catches each error, so a pack changes no value and no error.
+
+The unit tests are in `packages/compiler/src/module-pairs.test.ts`. They compare the module with the interpreter on error items after a stop, an overflow after a stop, empty collections and collections of one record. They also check the radial pilot on small rings.
+
 ## 8. Bounded iteration
 
 Vex has no loop, so each program ends. The language keeps this property, and it gets **bounded** iteration:
@@ -605,6 +663,24 @@ Each program has the `Program` interface of the core (`run`, `explain`), so each
 - **Standalone modules**: a test imports a generated module and compares it with the interpreter.
 - The mutation lane covers the compiler package at 95 % or more.
 
+### 10.1 The record of the share of tier 2
+
+The file `packages/pilots/share-record.json` keeps the share of tier 2 for each source of real programs (roadmap item CORPUSGATE). Each row has these counts:
+
+- the programs and the programs of tier 2, and the program share,
+- the runs, the runs with a value, the values of tier 2, and the value share,
+- the reasons of the programs of tier 1, by count.
+
+The public sources are the pilots, the example sheets and each corpus file in `packages/pilots/corpus`. A corpus file holds programs with the input of the tool `vex_evaluate`, and a line on each program. The test `share-record.test.ts` computes the public rows again with a fixed seed. It fails when a share is lower than its record.
+
+A row with `ci: false` comes from a private source. Its counts come from a local computer, and CI does not compute them.
+
+To update the record:
+
+1. Start `pnpm --filter @vex/pilots run share-record`. The script writes the public rows again and keeps each row with `ci: false`.
+2. Examine the diff of the record. A lower share needs a reason in the pull request.
+3. To add a corpus, put its file in `packages/pilots/corpus` and start the script again.
+
 ## 11. Decisions of the owner
 
 The owner made these decisions on 2026-10-13:
@@ -660,7 +736,7 @@ Two caches of the runtime give most of the speed:
 
 The rest of the time goes into the reads of the space and into the checks that the semantics need, for example `valid`. Phase C2 removes this time with the kinds and the inline forms.
 
-These cases operate in tier 1: a list value with an error item, and a list op on a list value. An error of an extension and each other exception also operate in tier 1.
+These cases operate in tier 1: a list value with an error item, and a list op on a list value. Each exception that is not an error of an op also operates in tier 1. Since COMPILE.EXT, an error of an extension operates in tier 1 only where it is the result (§4.1).
 
 An item for the owner: npm trusted publishing needs the package on npm. Before the next release, the owner publishes `@mark1russell7/vex-compiler` once, or adds its trust, as for the other packages.
 
@@ -683,6 +759,14 @@ The speed, measured by `bench/gate.ts` with alternate samples on one machine:
 These figures are from a local machine. The runners of CI measure 1.5 to 1.66 for the nearest box and 1.2 to 1.3 for the Game of Life (2026-10-14 to 2026-10-19). Until 2026-10-19, each step of the gate sent its output into `tee` without `pipefail`, so a failed gate did not fail the nightly job. From that day, the steps use the shell `bash`, which sets `pipefail`. The limit of the nearest box is 2, and the limit of the Game of Life stays 1.5. C1 measured 2.3, so a loss of the fast paths still fails the gate.
 
 From 2026-11-02, `bench/gate-processes.ts` starts each case of the gate in 11 fresh processes of its own (GATENOISE). The cases measured before a case changed its heap and its JIT state. In one process with all cases, V8 tenured an allocation site in the tree case. That arm stayed slow for the rest of the process. The nested radial case gave 2.7 there, and 3.85 alone. The header of `bench/gate.ts` gives the limits for each CPU model and the 10 CI runs that set them.
+
+The shapes case has a large spread of its process ratios: 1.41 to 1.77 in one CI job (41572269874). Three inputs of a dispatch of `speed-gate.yml` help to find the cause (GATEGC):
+
+- `case` gives the cases of the gate of the compiler, from 0. Case 5 is shapes. With a case, the core gate does not start.
+- `node_flags` gives flags of Node.js to each process, for example `--max-semi-space-size=64`.
+- `gc` makes each process count the garbage collections in each timed measurement of each arm (`bench/gc.ts`). The summary gives the medians of each case.
+
+Without these inputs, the gate does not make the observer of the garbage collector, so no time changes.
 
 The plan had the kinds (§3.2) and the inline forms (§7.1) in this phase. A spike measured each change: the fast paths and the records by index give the target without them. The kinds are necessary for a module without a runtime, so they move to phase C3. The inline forms change the API of the domains, and they give more speed than the target, so they moved to phase C5. Later they moved to phase C3, after the kinds: a value in its components needs its kind.
 
@@ -714,7 +798,7 @@ The plan had a different solution: one pass for all groups. That needs an `eq` o
 
 #### Sheets: compiled formulas in a run
 
-A `SheetRun` takes the option `compile`, for example `tiered` (SHEET.COMPILE). The run then evaluates each formula of a column with its compiled program. A cell reference stays an extension, so the search of the run does not change. After an error of a cell reference, for example `#CYCLE!`, tier 1 evaluates the formula again. The run gives the result of tier 1.
+A `SheetRun` takes the option `compile`, for example `tiered` (SHEET.COMPILE). The run then evaluates each formula of a column with its compiled program. A cell reference stays an extension, so the search of the run does not change. An error of a cell reference, for example `#CYCLE!`, is an error of tier 2 (COMPILE.EXT). Where the error is the result, tier 1 evaluates the formula again, and the run gives the result of tier 1.
 
 A formula compiles once for each compiler and its options, also across runs. A compiled program reads the cells of the active run, so it does not depend on one run. The formula of a single cell evaluates once in a run, so the run does not compile it.
 

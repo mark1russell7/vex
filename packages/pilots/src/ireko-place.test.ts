@@ -2,6 +2,7 @@ import { SheetRun } from "@mark1russell7/vex";
 import { emitSheetModule } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { placeTreeInput as tree } from "./inputs.ts";
 import { PLACE_COLUMNS, PLACE_DOMAINS, PLACE_KINDS, PLACE_SCHEMA, placeSpace, placeTree, type PlacedRecord, type PlaceRecord, type PlaceVars } from "./ireko-place.ts";
 
 type Columns = Readonly<Record<string, readonly unknown[]>>;
@@ -29,30 +30,6 @@ function placedOf(columns: Columns, n: number): PlacedRecord[] {
 
 /** The columns of the sheet have the name `as` for the scale. */
 const renamed = (columns: Columns): Columns => ({ ...columns, scale: columns["as"] ?? [] });
-
-const coord = fc.oneof(fc.integer({ min: -400, max: 400 }), fc.double({ min: -400, max: 400, noNaN: true, noDefaultInfinity: true }));
-const size = fc.oneof(fc.integer({ min: 1, max: 400 }), fc.double({ min: 1e-3, max: 400, noNaN: true, noDefaultInfinity: true }));
-const scale = fc.oneof(fc.constant(1), fc.double({ min: 1e-3, max: 1, noNaN: true, noDefaultInfinity: true }));
-const node = fc.record({ px: coord, py: coord, ps: scale, bw: size, bh: size, nested: fc.boolean() });
-
-/**
- * A tree in the pre-order of ireko, with up to `most` nodes. Each node after the root has a parent before it. A choice
- * of the last nodes as parents makes deep chains, and a choice of the first nodes makes wide trees.
- */
-const tree = (most: number): fc.Arbitrary<{ readonly records: PlaceRecord[]; readonly vars: PlaceVars }> =>
-  fc
-    .record({
-      nodes: fc.array(fc.tuple(node, fc.double({ min: 0, max: 1, noNaN: true, maxExcluded: true }), fc.boolean()), { minLength: 1, maxLength: most }),
-      vars: fc.record({ ox: coord, oy: coord }),
-    })
-    .map(({ nodes, vars }) => ({
-      records: nodes.map(([r, pick, deep], i) => {
-        const p = i === 0 ? -1 : deep ? Math.max(0, i - 1 - Math.floor(pick * 3)) : Math.floor(pick * i);
-        // The root has the identity placement, as in ireko.
-        return i === 0 ? { ...r, p, px: 0, py: 0, ps: 1 } : { ...r, p };
-      }),
-      vars,
-    }));
 
 describe("the ireko place pilot", () => {
   const place = moduleOf();

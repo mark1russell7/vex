@@ -169,7 +169,6 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
     const fallBacks: Record<string, Expr> = {
       otherName: fold(axes.all, { acc: NONE, c: NONE }, { acc: op("append", acc, one(n)), c: acc }, rec({ acc, c: v("c") })),
       otherCount: fold(axes.all, { acc: NONE, c: lit(0) }, { acc: op("append", acc, one(n)), c: op("count", acc) }, v("c")),
-      itself: iterate(3, { acc: LIT }, { acc: op("append", acc, acc) }, acc),
       inX: folded(LIT, op("append", acc, one(op("count", acc)))),
       inTest: folded(NONE, op("if", op("gt", op("count", acc), lit(1)), acc, op("append", acc, one(n)))),
       inBind: folded(NONE, let_({ y: op("count", acc) }, op("append", acc, one(v("y"))))),
@@ -186,6 +185,8 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
         expect(source).not.toContain("let undefined");
       }
     }
+    // LOOP.SIZE: a step that appends the list to itself doubles it at each step, so the module refuses it.
+    expect(() => sourceOf(iterate(3, { acc: LIT }, { acc: op("append", acc, acc) }, acc))).toThrow("(LOOP.SIZE)");
     // The name `acc` appends to its own list, and the name `c` reads only itself, so `acc` still appends in place.
     const still = fold(axes.all, { acc: NONE, c: lit(0) }, { acc: op("append", acc, one(n)), c: op("add", v("c"), n) }, rec({ acc, c: v("c") }));
     expect(owns(expectSame(still, MANY))).toBe(true);

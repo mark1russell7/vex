@@ -14,6 +14,7 @@ import { space } from "./space.ts";
 const Num = defineDomain({
   name: "Num",
   is: (u: unknown): u is number => typeof u === "number",
+  size: "fixed",
   ops: {
     add: { fn: (a: number, b: number): number => a + b, params: ["number"] },
     subtract: { fn: (a: number, b: number): number => a - b, params: ["number"] },

@@ -11,6 +11,8 @@ import { shapeError, type Expr } from "./ir.ts";
 import { toKernelError, toVexResult, vexDefinitions, vexMachine, vexSelf } from "./kernel.ts";
 import type { Result } from "./result.ts";
 import { sameVex } from "./same.ts";
+import { sizeError } from "./size.ts";
+import { stepError } from "./steps.ts";
 import { writeDocument } from "./write.ts";
 
 /** The options of a run of a plan of the kernel: the options of a run without a trace. */
@@ -56,12 +58,15 @@ export function kernelPlan(source: Expr | Envelope, opts: CompileOptions = {}): 
   let bad: VexError | undefined;
   if (isDocument(source)) {
     const read = fromDocument(source, domains);
-    if (read.ok) doc = source;
-    else bad = read.error;
+    // LOOP.SIZE, STEP.MAX: the plan refuses the same programs as `compile`.
+    const size = read.ok ? (sizeError(read.value, opts) ?? stepError(read.value, opts)) : undefined;
+    if (read.ok && size === undefined) doc = source;
+    else bad = read.ok ? vexError("bad-expression", size ?? "") : read.error;
   } else {
     const shape = shapeError(source);
     const nesting = shape === undefined ? nestingOf(source) : 0;
-    const reason = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${String(nesting)} levels deep, and the limit is ${String(MAX_NESTING)}` : undefined);
+    const deep = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${String(nesting)} levels deep, and the limit is ${String(MAX_NESTING)}` : undefined);
+    const reason = deep ?? sizeError(source, opts) ?? stepError(source, opts);
     // Stryker disable next-line StringLiteral: the writer tests only the mode "json" and the order "reads"
     if (reason === undefined) doc = writeDocument(source, { domains, literals: "host", order: "document" });
     else bad = vexError("bad-expression", reason);

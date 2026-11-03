@@ -150,8 +150,11 @@ describe("COMPILE.MODULE.FILL: fill in a module", () => {
     // fill(0, value) gives an empty list whose items have a kind, so sortBy with the option by reads it.
     const sorted = fold(axes.all, { l: op("fill", lit(0), n) }, { l: op("append", v("l"), op("fill", lit(1), n)) }, op("first", op("sortBy", v("l"))));
     expectSame(sorted, MANY);
+    const grown = iterate(3, { l: op("fill", lit(1), lit(1)) }, { l: op("append", v("l"), op("fill", lit(1), lit(1))) }, op("count", v("l")), lit(false));
+    expectSame(grown);
+    // LOOP.SIZE: a step that appends the list to itself doubles it at each step, so the module refuses it.
     const doubled = iterate(3, { l: op("fill", lit(1), lit(1)) }, { l: op("append", v("l"), v("l")) }, op("count", v("l")), lit(false));
-    expectSame(doubled);
+    expect(reasonOf(doubled)).toContain('whose step gives the name "l" a value that uses the lists of the loop more than one time in its size, at the op "append" (LOOP.SIZE)');
   });
 
   it("COMPILE.MODULE.FILL AXIS.LIST: the axis list goes over the keys of fill and of a literal when it reads no record at them", () => {

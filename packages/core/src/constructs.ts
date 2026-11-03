@@ -1,7 +1,7 @@
 /**
  * The step of each construct of Vex (STEP.LADDER). The construct of a node is its tag. An `iterate` with a limit from
- * the data has its own construct `iterate.size` (ITERATE.LIMIT.DATA), of step B. Each other construct is of step A. A
- * function cannot call itself (FN.TOTAL). The table is its own module, so a test can declare a construct of a higher step.
+ * the data has its own construct `iterate.size` (ITERATE.LIMIT.DATA). The step of this construct is `B`. The step of
+ * each other construct is `A`. A function cannot call itself (FN.TOTAL). The table is its own module, so a test can declare a construct of a higher step.
  */
 import type { ExprTag } from "./ir.ts";
 

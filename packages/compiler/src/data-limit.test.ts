@@ -2,7 +2,7 @@
  * The data limit of `iterate` in tier 2 and in the fallback to tier 1 (ITERATE.LIMIT.DATA, ITERATE.LIMIT.ERROR, STEP.MAX).
  * The tests of the modules are in `module.test.ts` and `module-sheet.test.ts`.
  */
-import { app, axes, dataLimit, each, evaluate, ext, fail, iterate, lit, ok, ref, space, v, vexError, type Axis, type Expr, type ExtHandler } from "@mark1russell7/vex";
+import { app, axes, dataLimit, each, evaluate, ext, fail, iterate, lit, ok, ref, space, v, vexError, type Axis, type Expr, type ExtHandler, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { emitModule, emitSheetModule } from "./module.ts";
@@ -26,14 +26,14 @@ const count = (axis: Axis, until?: Expr): Expr => iterate(dataLimit(axis), LOOP,
 const CAP = app("fill", lit(100_000), lit(0));
 
 /** This function compares each key with the interpreter, and it gives the tier of the program. An axis `list` stays in tier 1. */
-function agrees(e: Expr, s = S): number {
+function agrees(e: Expr, s: Space = S): number {
   const p = tiered(e, OPTIONS);
   for (const origin of s.keys) expect(p.run({ space: s, origin })).toEqual(evaluate(e, { ...OPTIONS, space: s, origin }));
   return p.tier;
 }
 
 /** This function compares each key with the interpreter, and it gives the fallbacks of a program of tier 2. */
-function fallbacks(e: Expr, s = S): number {
+function fallbacks(e: Expr, s: Space = S): number {
   const p = tiered(e, OPTIONS);
   expect(p.tier).toBe(2);
   for (const origin of s.keys) expect(p.run({ space: s, origin })).toEqual(evaluate(e, { ...OPTIONS, space: s, origin }));

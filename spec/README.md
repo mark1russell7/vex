@@ -223,7 +223,7 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 
 A step is a level of the power of the language. A host sets the highest step that it accepts.
 
-- **[STEP.LADDER]** The steps of Vex are A, B and C, from the lowest to the highest. Step A has loops with a fixed count. Step B adds limits from the data and fixed points through monotone steps. Step C adds functions that call themselves, with a budget. Each construct has a step as data in `CONSTRUCT_STEPS`. Today each construct is of step A.
+- **[STEP.LADDER]** The steps of Vex are A, B and C, from the lowest to the highest. Step A has loops with a fixed count. Step B adds limits from the data, and fixed points whose steps move one way. Step C adds functions that call themselves, with a budget. Each construct has a step as data in `CONSTRUCT_STEPS`. Today each construct is of step A.
 - **[STEP.LOWEST]** The step of a program is the highest step of its nodes. The reason is the first node with that step, in the order of `children`, with its construct and its path. `programStep` gives the step and the reason.
 - **[STEP.MAX]** The host option `maxStep` sets the highest step that the host accepts. The default is B. A program above `maxStep` is not valid. `compile`, tier 2, `emitModule` and `vex_check` refuse it, and the reason names the needed step. A program has no field for its step, so a document cannot raise its own step. A value of `maxStep` that is not a step is not valid.
 - **[STEP.VALUE]** The option `maxStep` changes only which programs the host accepts. Each accepted program gives the same value at each step. LOOP.SIZE, EVAL.PURE and P17 hold at each step.

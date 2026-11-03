@@ -12,7 +12,7 @@ import { emitModule, emitSheetModule } from "./module.ts";
 import { generate, tiered } from "./tiers.ts";
 
 vi.mock("../../core/src/constructs.ts", async (load) => {
-  const real = await load<typeof import("../../core/src/constructs.ts")>();
+  const real = await load<{ readonly CONSTRUCT_STEPS: Readonly<Record<string, VexStep>> }>();
   return { ...real, CONSTRUCT_STEPS: { ...real.CONSTRUCT_STEPS, iterate: "B", call: "C" } };
 });
 

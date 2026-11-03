@@ -3060,6 +3060,11 @@ class Printer {
     }
     const startSafe = at.every((m) => m.t === "origin");
     if (base.t === "window" && (!Number.isInteger(base.from) || !Number.isInteger(base.to))) throw new NotStandalone('the axis "window" with a bound that is not an integer');
+    // The ancestors are a walk up the parents, with no array (COMPILE.MODULE.TREE.ALLOC). The reverse order needs the array.
+    if (this.#tree && base.t === "ancestors" && !reverse) {
+      const parts = { init: `P[${f as string}]`, cond: `${j} >= 0`, next: `${j} = P[${j}]` };
+      return { s, j, head: forHead(j, parts), parts, key: [], check: [], checkSafe: true, skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+    }
     // In a tree space, the targets of a tree axis and of a window are a range of an array of positions.
     if (this.#tree && isTreeAxis(base)) {
       const range = this.#treeRange(base, f as string);

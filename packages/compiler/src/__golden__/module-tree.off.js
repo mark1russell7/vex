@@ -18,13 +18,14 @@ function CH(P, n) {
 function G(x) { return x === E ? F() : x; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
 function PR(h, r, n) {
-  const o = [], at = new Int32Array(n), z = new Int32Array(n), st = [];
-  for (let q = r.length - 1; q >= 0; q--) st.push(r[q]);
-  while (st.length > 0) {
-    const k = st.pop();
-    at[k] = o.length;
-    o.push(k);
-    for (let q = h[k].length - 1; q >= 0; q--) st.push(h[k][q]);
+  const o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n), st = new Int32Array(n);
+  let t = 0, m = 0;
+  for (let q = r.length - 1; q >= 0; q--) st[t++] = r[q];
+  while (t > 0) {
+    const k = st[--t];
+    at[k] = m;
+    o[m++] = k;
+    for (let q = h[k].length - 1; q >= 0; q--) st[t++] = h[k][q];
   }
   for (let q = n - 1; q >= 0; q--) {
     const k = o[q];
@@ -121,7 +122,7 @@ export function run(records, vars, parents) {
   } catch {
     c192 = E;
   }
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t0;
@@ -466,9 +467,9 @@ export function run(records, vars, parents) {
         if (x180 === E) continue;
         a178 += x180;
       }
-      out.push(({ "moves": ({ "parent": t0, "grand": t1, "next": t2, "prev": t3, "uncle": t4, "far": t5, "zero": R[SO(GP, SI, o, 0)]["n"], "two": t6, "half": t7, "fixed": c10, "root": c11 }), "axes": ({ "children": t18, "ancestors": t23, "descendants": t31, "siblings": t38, "window": t47, "wide": t56, "none": t65, "successors": t72, "predecessors": t79, "reachable": t86, "all": G(c96()), "others": k_number(a93) }), "reversed": ({ "children": t103, "descendants": t111, "ancestors": t118, "window": t127 }), "at": ({ "parent": t134, "cousins": t142, "next": t149 }), "team": k_number((R[o]["w"]) + (k_number(a155))), "depth": n161, "tested": n169, "list": k_number(a178), "memo": G(c192) }));
+      out[o] = ({ "moves": ({ "parent": t0, "grand": t1, "next": t2, "prev": t3, "uncle": t4, "far": t5, "zero": R[SO(GP, SI, o, 0)]["n"], "two": t6, "half": t7, "fixed": c10, "root": c11 }), "axes": ({ "children": t18, "ancestors": t23, "descendants": t31, "siblings": t38, "window": t47, "wide": t56, "none": t65, "successors": t72, "predecessors": t79, "reachable": t86, "all": G(c96()), "others": k_number(a93) }), "reversed": ({ "children": t103, "descendants": t111, "ancestors": t118, "window": t127 }), "at": ({ "parent": t134, "cousins": t142, "next": t149 }), "team": k_number((R[o]["w"]) + (k_number(a155))), "depth": n161, "tested": n169, "list": k_number(a178), "memo": G(c192) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

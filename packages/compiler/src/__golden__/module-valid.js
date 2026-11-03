@@ -42,7 +42,7 @@ export function run(records, vars) {
     t5 = 0;
   }
   const c7 = t5;
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t6;
@@ -51,9 +51,9 @@ export function run(records, vars) {
       } catch {
         t6 = 0;
       }
-      out.push(({ "sum": c7, "x": t6 }));
+      out[o] = ({ "sum": c7, "x": t6 });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

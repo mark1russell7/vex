@@ -188,7 +188,7 @@ export function run(records, vars) {
     (j29) => R[j29]["b"],
     (t, q) => (t) === (q)
   );
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t5;
@@ -221,9 +221,9 @@ export function run(records, vars) {
       } catch {
         t23 = 0;
       }
-      out.push(({ "strict": t5, "ok": t9, "pre": m11(R[o]["n"]), "and": m14(R[o]["n"]), "mean": t19, "min": t23, "all": m25(R[o]["n"]), "none": m28(R[o]["n"]) }));
+      out[o] = ({ "strict": t5, "ok": t9, "pre": m11(R[o]["n"]), "and": m14(R[o]["n"]), "mean": t19, "min": t23, "all": m25(R[o]["n"]), "none": m28(R[o]["n"]) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

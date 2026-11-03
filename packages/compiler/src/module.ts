@@ -692,13 +692,14 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // record. Thus the descendants of a record are the keys after it, as many as its subtree has under it.
   PR: [
     "function PR(h, r, n) {",
-    "  const o = [], at = new Int32Array(n), z = new Int32Array(n), st = [];",
-    "  for (let q = r.length - 1; q >= 0; q--) st.push(r[q]);",
-    "  while (st.length > 0) {",
-    "    const k = st.pop();",
-    "    at[k] = o.length;",
-    "    o.push(k);",
-    "    for (let q = h[k].length - 1; q >= 0; q--) st.push(h[k][q]);",
+    "  const o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n), st = new Int32Array(n);",
+    "  let t = 0, m = 0;",
+    "  for (let q = r.length - 1; q >= 0; q--) st[t++] = r[q];",
+    "  while (t > 0) {",
+    "    const k = st[--t];",
+    "    at[k] = m;",
+    "    o[m++] = k;",
+    "    for (let q = h[k].length - 1; q >= 0; q--) st[t++] = h[k][q];",
     "  }",
     "  for (let q = n - 1; q >= 0; q--) {",
     "    const k = o[q];",
@@ -934,8 +935,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "    else D[c][k] = x;",
     "  };",
     "  const o = (c) => {",
-    "    const d = D[c], out = [];",
-    "    for (let k = 0; k < n; k++) out.push(d[k] === E ? VEX_ERROR : d[k]);",
+    "    const d = D[c], out = new Array(n);",
+    "    for (let k = 0; k < n; k++) out[k] = d[k] === E ? VEX_ERROR : d[k];",
     "    return out;",
     "  };",
     "  return { r, f, o };",
@@ -4417,7 +4418,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   }
   // A list gives a vex.list (COMPILE.MODULE.LIST.RESULT), or a plain array (COMPILE.MODULE.LIST.PLAIN).
   const result = value.v.list === undefined ? value.v.code : p.envelope(value.v, run.plain ? "LP" : "LO");
-  const body = ["const out = [];", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out.push(${result});`, "  } catch {", "    out.push(VEX_ERROR);", "  }", "}", "return out;"];
+  const body = ["const out = new Array(n);", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out[o] = ${result};`, "  } catch {", "    out[o] = VEX_ERROR;", "  }", "}", "return out;"];
   return printModule(p, options, run, body);
 }
 

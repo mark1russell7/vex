@@ -99,7 +99,7 @@ export function run(records, vars) {
     },
     (t, q) => (t) === (q)
   );
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t3;
@@ -108,9 +108,9 @@ export function run(records, vars) {
       } catch {
         t3 = 0;
       }
-      out.push(t3);
+      out[o] = t3;
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

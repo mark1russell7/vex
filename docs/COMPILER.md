@@ -1023,11 +1023,12 @@ Before the loop over the keys, the run makes only the parts of the tree that the
 | The parent of each record, in an `Int32Array` | `PT` | Each tree |
 | The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the two parts below |
 | The siblings of each record with the record itself, and its position among them | `SG` | `siblings`, `window` and the offsets |
-| The keys depth first, and the position and the size of the subtree of each key | `PR` | `descendants` |
+| The keys depth first, and the position and the size of the subtree of each key, in `Int32Array` | `PR` | `descendants` |
 
 Thus the targets of each axis are a range of an array, and the loop over them is a `for` loop over that range. The reverse order is the same loop from the end.
 
 - `children` and `successors` are the children of the focus. `siblings` are the siblings of the focus, and the loop skips the focus.
+- `ancestors` in the forward order are a walk up the parents, with no array (COMPILE.MODULE.TREE.ALLOC). The reverse order reads the array of `AN`. A walk reads each parent once, and the array read each parent and then its own slot. Thus a deep tree costs no more time than before. A chain of `n` keys still has `n` times `n` reads over all the keys.
 - `descendants` are the keys after the focus in the order depth first, as many as the subtree of the focus has under it.
 - `window(from, to)` is the range of the siblings from the position of the focus plus `from` to its position plus `to`.
 - `ancestors` and `reachable` make an array for each loop. `predecessors` is the parent, or no target for a root.

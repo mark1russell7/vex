@@ -19,3 +19,4 @@ export * from "./traversal.ts";
 export * from "./sheet.ts";
 export * from "./builder.ts";
 export * from "./size.ts";
+export * from "./steps.ts";

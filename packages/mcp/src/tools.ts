@@ -3,7 +3,7 @@
  * data. A value of a domain in that data has the JSON form of a literal of the IR, for example
  * `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`. A result has the same form.
  */
-import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, MAX_NESTING, nestingOf, parse, serialize, shapeError, sizeError, sizeOf, space, type AnyDomain, type Expr, type Result, type Space, type VexError } from "@mark1russell7/vex";
+import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, MAX_NESTING, nestingOf, parse, programStep, serialize, shapeError, sizeError, sizeOf, space, stepError, type AnyDomain, type Expr, type Result, type Space, type VexError, type VexStep } from "@mark1russell7/vex";
 import { emitModule, generate, type Schema } from "@mark1russell7/vex-compiler";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, JsonDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
@@ -40,13 +40,14 @@ export function domainsOf(names: readonly string[] | undefined): readonly AnyDom
 
 /**
  * This function gives the expression of a program as JSON data: the tagged IR or a document (DOC.ENTRY). It checks the
- * program as `parse` does.
+ * program as `parse` does. A program above the highest step `maxStep` is not valid (STEP.MAX), and the default is B.
  */
-export function programOf(program: unknown, domains: readonly AnyDomain[]): Expr {
+export function programOf(program: unknown, domains: readonly AnyDomain[], maxStep?: VexStep): Expr {
   const r = parse(typeof program === "string" ? program : JSON.stringify(program), domains);
   if (r.ok) {
     // LOOP.SIZE: a step of a loop that can double the size of a list makes the program not valid.
-    const size = nestingOf(r.value) > MAX_NESTING ? undefined : sizeError(r.value, { domains });
+    // STEP.MAX: a program above the highest step of the host is not valid, and the reason names its step.
+    const size = nestingOf(r.value) > MAX_NESTING ? undefined : (sizeError(r.value, { domains }) ?? stepError(r.value, maxStep === undefined ? {} : { maxStep }));
     if (size === undefined) return r.value;
     throw new ToolError(`the program is not valid: ${size}.`);
   }
@@ -126,15 +127,23 @@ export interface RunInput {
   readonly space: SpaceInput;
   readonly domains?: readonly string[] | undefined;
   readonly vars?: Readonly<Record<string, unknown>> | undefined;
+  /** The highest step that the tool accepts (STEP.MAX). The default is B. */
+  readonly maxStep?: VexStep | undefined;
 }
 
-/** This function gives the facts of a program: its reads, its size, and if the compiler gives it generated code. */
-export function check(input: { readonly program: unknown; readonly domains?: readonly string[] | undefined }): unknown {
+/**
+ * This function gives the facts of a program: its step with the reason (STEP.LOWEST), its reads, its size, and if the
+ * compiler gives it generated code.
+ */
+export function check(input: { readonly program: unknown; readonly domains?: readonly string[] | undefined; readonly maxStep?: VexStep | undefined }): unknown {
   const domains = domainsOf(input.domains);
-  const e = programOf(input.program, domains);
-  const g = generate(e, { domains });
+  const e = programOf(input.program, domains, input.maxStep);
+  const step = programStep(e);
+  const g = generate(e, { domains, ...(input.maxStep === undefined ? {} : { maxStep: input.maxStep }) });
   return {
     ok: true,
+    step: step.step,
+    stepReason: step.reason,
     nodes: sizeOf(e),
     nesting: nestingOf(e),
     reads: deps(e).map((d) => ({ path: d.path.join("."), at: d.at, axes: d.axes })),
@@ -145,25 +154,29 @@ export function check(input: { readonly program: unknown; readonly domains?: rea
 /** This function evaluates a program at each origin, or at each key of the space. */
 export function evaluateAll(input: RunInput & { readonly origins?: readonly string[] | undefined }): unknown {
   const domains = domainsOf(input.domains);
-  const e = programOf(input.program, domains);
+  const e = programOf(input.program, domains, input.maxStep);
   const s = spaceOf(input.space, domains);
   const vars = input.vars === undefined ? {} : (dataOf(input.vars, domains) as Readonly<Record<string, unknown>>);
   return (input.origins ?? s.keys).map((origin) => ({ key: origin, ...resultJson(evaluate(e, { space: s, origin, domains, vars }), domains) }));
 }
 
-/** This function gives the trace of a program at one origin: each node, with its focus, its reads and its result. */
+/**
+ * This function gives the trace of a program at one origin: each node, with its focus, its reads and its result. The
+ * first line gives the step of the program at the root, with the reason (STEP.LOWEST).
+ */
 export function explainAt(input: RunInput & { readonly origin: string }): string {
   const domains = domainsOf(input.domains);
-  const e = programOf(input.program, domains);
+  const e = programOf(input.program, domains, input.maxStep);
   const s = spaceOf(input.space, domains);
   const vars = input.vars === undefined ? {} : (dataOf(input.vars, domains) as Readonly<Record<string, unknown>>);
-  return formatTrace(explain(e, { space: s, origin: input.origin, domains, vars }), domains);
+  const step = programStep(e);
+  return `step ${step.step}: ${step.reason}\n${formatTrace(explain(e, { space: s, origin: input.origin, domains, vars }), domains)}`;
 }
 
 /** This function gives the source of a standalone ES module of a program, or the reason that it has none. */
-export function moduleOf(input: { readonly program: unknown; readonly domains?: readonly string[] | undefined; readonly schema: Schema; readonly name?: string | undefined; readonly space?: "array" | "tree" | "graph" | undefined }): unknown {
+export function moduleOf(input: { readonly program: unknown; readonly domains?: readonly string[] | undefined; readonly schema: Schema; readonly name?: string | undefined; readonly space?: "array" | "tree" | "graph" | undefined; readonly maxStep?: VexStep | undefined }): unknown {
   const domains = domainsOf(input.domains);
-  const e = programOf(input.program, domains);
+  const e = programOf(input.program, domains, input.maxStep);
   const m = emitModule(e, { domains, schema: input.schema, ...(input.name === undefined ? {} : { name: input.name }), ...(input.space === undefined ? {} : { space: input.space }) });
   return m.ok ? { ok: true, source: m.source } : { ok: false, reason: m.reason };
 }

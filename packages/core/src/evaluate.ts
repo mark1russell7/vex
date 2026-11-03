@@ -5,6 +5,7 @@ import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, t
 import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
 import { sizeError } from "./size.ts";
+import { stepError, type VexStep } from "./steps.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { axisTargets, fixAddr, resolveAddr, type Position, type Space } from "./space.ts";
@@ -45,6 +46,11 @@ export interface EvalOptions {
   readonly tables?: Readonly<Record<string, Space>>;
   /** A receiver of trace events. */
   readonly trace?: TraceSink;
+  /**
+   * The highest step of the language that the host accepts (STEP.MAX). The default is B. A program that needs a higher
+   * step gives `#VALUE!` before the evaluation, and the reason names its step.
+   */
+  readonly maxStep?: VexStep;
 }
 
 /** The names of a frame: a map of the variables of the caller, or a scope inside it. */
@@ -97,7 +103,7 @@ export const SPECIAL_FORMS: ReadonlySet<string> = new Set<SpecialForm>(["if", "a
 const isSpecialForm = (op: string): op is SpecialForm => SPECIAL_FORMS.has(op);
 
 /** The options that a compiled program keeps: the domains, the free functions and the extension handlers. */
-export type CompileOptions = Pick<EvalOptions, "domains" | "fns" | "extensions">;
+export type CompileOptions = Pick<EvalOptions, "domains" | "fns" | "extensions" | "maxStep">;
 
 /** The options of one run of a compiled program. */
 export type RunOptions = Pick<EvalOptions, "space" | "origin" | "vars" | "trace" | "tables">;
@@ -162,7 +168,8 @@ export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Pro
   const nesting = shape === undefined ? nestingOf(expr) : 0;
   const deep = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}` : undefined);
   // LOOP.SIZE: a step of a loop that can double the size of a list at each step gives an error before a run.
-  const bad = deep ?? sizeError(expr, opts);
+  // STEP.MAX: a program above the highest step of the host gives an error before a run.
+  const bad = deep ?? sizeError(expr, opts) ?? stepError(expr, opts);
   const kind = read.ok ? "bad-expression" : read.error.kind;
   const root: Node = bad === undefined ? new Compiler(opts).node(expr, []) : (f) => fail(vexError(kind, bad, { path: [], origin: f.pos.origin, focus: f.pos.focus }));
   const run = (r: RunOptions): Result<unknown> => {
@@ -189,7 +196,7 @@ export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Pro
 }
 
 // The cache of compiled programs: one entry for each expression object or document, for the last options.
-const CACHE = new WeakMap<Expr | Envelope, { readonly domains: unknown; readonly fns: unknown; readonly extensions: unknown; readonly program: Program }>();
+const CACHE = new WeakMap<Expr | Envelope, { readonly domains: unknown; readonly fns: unknown; readonly extensions: unknown; readonly maxStep: unknown; readonly program: Program }>();
 
 function compiled(expr: Expr | Envelope, opts: CompileOptions): Program {
   // V-056: a program that is not an object cannot be a key of the cache. Its compilation gives #VALUE! (EVAL.SHAPE).
@@ -198,9 +205,9 @@ function compiled(expr: Expr | Envelope, opts: CompileOptions): Program {
   // Without the cache, each evaluation compiles again: the result is the same, so a mutant that removes a hit is
   // equivalent. A false hit changes results, and the tests find it.
   // Stryker disable next-line ConditionalExpression: a missed hit only compiles again
-  if (hit !== undefined && hit.domains === opts.domains && hit.fns === opts.fns && hit.extensions === opts.extensions) return hit.program;
+  if (hit !== undefined && hit.domains === opts.domains && hit.fns === opts.fns && hit.extensions === opts.extensions && hit.maxStep === opts.maxStep) return hit.program;
   const program = compile(expr, opts);
-  CACHE.set(expr, { domains: opts.domains, fns: opts.fns, extensions: opts.extensions, program });
+  CACHE.set(expr, { domains: opts.domains, fns: opts.fns, extensions: opts.extensions, maxStep: opts.maxStep, program });
   return program;
 }
 

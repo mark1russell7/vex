@@ -1,13 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { HEAT_CENTER, heatAlpha as alpha, heatGrid as grid, heatSteps as steps } from "./inputs.ts";
 import { heatReference, heatVex, totalHeat, type HeatGrid } from "./heat.ts";
-
-/** A random grid from 1 by 1 to 6 by 6, with temperatures from -100 to 100. */
-const grid: fc.Arbitrary<number[][]> = fc
-  .tuple(fc.integer({ min: 1, max: 6 }), fc.integer({ min: 1, max: 6 }))
-  .chain(([rows, cols]) => fc.array(fc.array(fc.double({ min: -100, max: 100, noNaN: true }), { minLength: cols, maxLength: cols }), { minLength: rows, maxLength: rows }));
-const alpha = fc.double({ min: 0, max: 0.25, noNaN: true });
-const steps = fc.integer({ min: 0, max: 6 });
 
 /** The largest difference between two grids of the same shape. A grid of another shape gives Infinity. */
 const maxDiff = (a: HeatGrid, b: HeatGrid): number =>
@@ -15,7 +9,7 @@ const maxDiff = (a: HeatGrid, b: HeatGrid): number =>
 
 describe("the heat pilot", () => {
   it("spreads the heat of the center cell of a 3 by 3 grid: the values of two steps, checked by hand", () => {
-    const start = [[0, 0, 0], [0, 100, 0], [0, 0, 0]];
+    const start = HEAT_CENTER;
     // Step 1: the center gives a quarter of its heat to each neighbor. A corner has no neighbor with heat.
     expect(heatVex(start, 0.25, 1)).toEqual([[0, 25, 0], [25, 0, 25], [0, 25, 0]]);
     // Step 2: a corner gets 0.25 * (25 + 25). An edge cell keeps 25 - 0.25 * 75. The center gets 0.25 * 100.

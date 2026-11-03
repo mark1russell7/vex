@@ -4,7 +4,7 @@
  * opening balance plus the interest, less the payment and the extra payment. This module gives the schedule three
  * times: with the typed builder, with the formula language, and in plain TypeScript.
  */
-import { offset, space, vex } from "@mark1russell7/vex";
+import { offset, space, vex, type CompileFn } from "@mark1russell7/vex";
 import { AngleDomain, BoolDomain, ColorDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import { runFormulas, type FormulaCells } from "./formula-run.ts";
 
@@ -67,7 +67,7 @@ export function loanFormulas(terms: LoanTerms): Readonly<Record<keyof LoanRow, s
   };
 }
 
-/** The schedule with the formula language, on an array space. */
-export function loanFormula(months: readonly LoanMonth[], terms: LoanTerms): FormulaCells {
-  return runFormulas(space.array(months), ["payment", "extra"], loanFormulas(terms));
+/** The schedule with the formula language, on an array space. The optional `compile` is the compiler of the run. */
+export function loanFormula(months: readonly LoanMonth[], terms: LoanTerms, compile?: CompileFn): FormulaCells {
+  return runFormulas(space.array(months), ["payment", "extra"], loanFormulas(terms), compile);
 }

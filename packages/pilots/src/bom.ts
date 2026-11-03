@@ -8,7 +8,7 @@
  * - `need`: the number of units of the part in one unit of its top assembly.
  * - `leafUnits`: the number of leaf parts in one unit of the part.
  */
-import { parent, space, vex, type Space } from "@mark1russell7/vex";
+import { parent, space, vex, type CompileFn, type Space } from "@mark1russell7/vex";
 import { AngleDomain, BoolDomain, ColorDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import { runFormulas, type FormulaCells } from "./formula-run.ts";
 
@@ -78,7 +78,7 @@ export const BOM_FORMULAS: Readonly<Record<(typeof BOM_COLUMNS)[number], string>
   leafUnits: "= IF(COUNT(children) = 0, 1, SUM(children, qty * leafUnits))",
 };
 
-/** The columns with the formula language. */
-export function bomFormula(parts: readonly Part[]): FormulaCells {
-  return runFormulas(bomSpace(parts), ["qty", "cost"], BOM_FORMULAS);
+/** The columns with the formula language. The optional `compile` is the compiler of the run, for example `tiered`. */
+export function bomFormula(parts: readonly Part[], compile?: CompileFn): FormulaCells {
+  return runFormulas(bomSpace(parts), ["qty", "cost"], BOM_FORMULAS, compile);
 }

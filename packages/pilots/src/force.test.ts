@@ -3,25 +3,11 @@ import { emitModule } from "@mark1russell7/vex-compiler";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { FORCE_DOMAINS, FORCE_SCHEMA, forceProgram, layoutReference, layoutVex, type ForceNode, type ForceOptions } from "./force.ts";
+import { FORCE_FIXED, forceGraph as graph, forceInput as inputOf, forceNode, forceOptions as options } from "./inputs.ts";
+import { FORCE_DOMAINS, FORCE_SCHEMA, forceProgram, layoutReference, layoutVex, type ForceOptions } from "./force.ts";
 
-const node = (id: string, x: number, y: number): ForceNode => ({ id, pos: new Vec2(x, y) });
+const node = forceNode;
 const ONE: ForceOptions = { steps: 1, repel: 1, spring: 0.5, center: 0 };
-
-const coord = fc.integer({ min: -20, max: 20 });
-const graph: fc.Arbitrary<{ readonly nodes: Record<string, ForceNode>; readonly edges: Record<string, readonly string[]> }> = fc
-  .array(fc.tuple(coord, coord), { minLength: 1, maxLength: 6 })
-  .chain((points) => {
-    const keys = points.map((_p, i) => `n${String(i)}`);
-    const nodes = Object.fromEntries(points.map(([x, y], i) => [`n${String(i)}`, node(`n${String(i)}`, x, y)]));
-    return fc.dictionary(fc.constantFrom(...keys), fc.array(fc.constantFrom(...keys), { maxLength: 3 })).map((edges) => ({ nodes, edges }));
-  });
-const options: fc.Arbitrary<ForceOptions> = fc.record({
-  steps: fc.integer({ min: 0, max: 6 }),
-  repel: fc.double({ min: 0, max: 3, noNaN: true }),
-  spring: fc.double({ min: 0, max: 0.5, noNaN: true }),
-  center: fc.double({ min: 0, max: 0.2, noNaN: true }),
-});
 
 describe("the force pilot", () => {
   it("LOOP.LIST LIST.GET: one step of two nodes on an edge, the values checked by hand", () => {
@@ -70,30 +56,6 @@ function moduleOf(o: ForceOptions): ForceRun {
 return force;`)() as ForceRun;
 }
 
-interface Input {
-  readonly nodes: Record<string, ForceNode>;
-  readonly edges: Record<string, readonly string[]>;
-  readonly records: readonly { readonly id: string; readonly pos: XY }[];
-  readonly ends: readonly (readonly number[])[];
-}
-
-/**
- * This function gives the input of the module: the records in key order, and the positions of the ends of the edges.
- * In a module, the key of a record is the text of its position. Thus the nodes and the edges get these keys too.
- */
-function inputOf(nodes: Readonly<Record<string, ForceNode>>, edges: Readonly<Record<string, readonly string[]>>): Input {
-  const keys = Object.keys(nodes);
-  const at = (k: string): string => String(keys.indexOf(k));
-  const points = Object.values(nodes).map((x) => x.pos);
-  const records = points.map((p, i) => ({ id: String(i), pos: { x: p.x, y: p.y } }));
-  return {
-    nodes: Object.fromEntries(points.map((p, i) => [String(i), node(String(i), p.x, p.y)])),
-    edges: Object.fromEntries(Object.entries(edges).map(([k, e]) => [at(k), e.map(at)])),
-    records,
-    ends: keys.map((k) => (edges[k] ?? []).map((j) => keys.indexOf(j))),
-  };
-}
-
 /** This function gives the positions of a layout as plain data, in key order. */
 const plain = (r: Record<string, Vec2>): XY[] => Object.values(r).map((p) => ({ x: p.x, y: p.y }));
 
@@ -112,7 +74,7 @@ describe("the force pilot as a standalone module", () => {
   it("COMPILE.MODULE.GRAPH: the module gives the values of the interpreter (P17) and of tier 1 at each node", () => {
     const o: ForceOptions = { steps: 4, repel: 1, spring: 0.25, center: 0.05 };
     // The edges have a duplicate, a loop on one node and a cycle.
-    const { nodes, edges, records, ends } = inputOf({ a: node("a", 0, 0), b: node("b", 1, 0), c: node("c", 3, 1), d: node("d", -2, 2) }, { a: ["b", "b", "a"], b: ["c"], c: ["a"] });
+    const { nodes, edges, records, ends } = inputOf(FORCE_FIXED.nodes, FORCE_FIXED.edges);
     const got = moduleOf(o)(records, {}, ends);
     const s = space.graph(Object.fromEntries(records.map((r) => [r.id, r])), edges);
     const want = s.keys.map((origin) => {

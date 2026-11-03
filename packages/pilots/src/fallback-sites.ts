@@ -69,6 +69,7 @@ function opLocals(program: LoopProgram): Map<number, string> {
           break;
         case "check":
         case "fail":
+        case "break":
         case "next":
         case "push":
         case "return":

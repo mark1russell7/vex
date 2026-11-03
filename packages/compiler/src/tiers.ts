@@ -1,8 +1,9 @@
 /**
- * The tiers (docs/COMPILER.md §2.1). Tier 2 is generated JavaScript. Tier 1 is the closure compiler of the core, and it
- * gives each result that tier 2 cannot give. Thus a tiered program gives the results of the interpreter.
+ * The tiers (docs/COMPILER.md §2.1). Tier 2 is generated JavaScript, and it gives its values and its error results. Tier
+ * 1 is the closure compiler of the core, and it gives each result that tier 2 cannot give. Thus a tiered program gives
+ * the results of the interpreter.
  */
-import { compile, fromDocument, isDocument, ok, sizeError, stepError, type CompileOptions, type Envelope, type Expr, type Program, type Space } from "@mark1russell7/vex";
+import { compile, fail, fromDocument, isDocument, ok, sizeError, stepError, type CompileOptions, type Envelope, type Expr, type Program, type Space, type VexError } from "@mark1russell7/vex";
 import { factsOf, type Schema } from "./facts.ts";
 
 /** The options of the compiler: the options of `compile`, and the schema of the host (docs/COMPILER.md §3.2). */
@@ -20,7 +21,7 @@ export type Generated =
   | { readonly ok: true; readonly program: LoopProgram; readonly source: string; readonly options: GenerateOptions }
   | { readonly ok: false; readonly reason: string };
 
-/** A function of tier 2. It gives the value of the program, or `FALLBACK`. */
+/** A function of tier 2. It gives the value of the program, or `FALLBACK` for each other result. */
 export type Tier2 = (space: Space, origin: string, vars: Readonly<Record<string, unknown>> | undefined, tables: Readonly<Record<string, Space>> | undefined) => unknown;
 
 /**
@@ -49,16 +50,22 @@ export function generate(source: Expr | Envelope, options: GenerateOptions = {})
  * that does not permit `new Function`.
  */
 export function load(generated: Extract<Generated, { readonly ok: true }>): Tier2 {
+  return link(generated).run;
+}
+
+/** This function loads a program, with the function that gives the error of a run that gave `FALLBACK`. */
+function link(generated: Extract<Generated, { readonly ok: true }>): { readonly run: Tier2; readonly take: () => VexError | undefined } {
+  const runtime = createRuntime(generated.options);
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from printJs, and it reads each name and literal from K (§5).
   const make = new Function("K", "R", generated.source) as (k: readonly unknown[], r: ReturnType<typeof createRuntime>) => Tier2;
-  return make(generated.program.constants, createRuntime(generated.options));
+  return { run: make(generated.program.constants, runtime), take: runtime.take };
 }
 
 /** The counts of the runs of a tiered program. */
 export interface TierStats {
   /** The number of runs. */
   readonly runs: number;
-  /** The number of runs where tier 2 gave `FALLBACK`, so tier 1 gave the result. */
+  /** The number of runs where tier 2 gave no result, so tier 1 gave it. A run that tier 2 ends with an error is no fallback. */
   readonly fallbacks: number;
 }
 
@@ -72,20 +79,20 @@ export interface TieredProgram extends Program {
 }
 
 /**
- * This function compiles an expression or a document into tier 2 if it can, and else into tier 1 (DOC.ENTRY). After a
- * failed check of tier 2, tier 1 does that evaluation again. A run with a trace and `explain` always use tier 1, because
- * tier 2 makes no trace.
+ * This function compiles an expression or a document into tier 2 if it can, and else into tier 1 (DOC.ENTRY). Tier 2
+ * gives a value or an error. When it gives no result, tier 1 does that evaluation again. A run with a trace and
+ * `explain` always use tier 1, because tier 2 makes no trace.
  */
 export function tiered(source: Expr | Envelope, options: GenerateOptions = {}): TieredProgram {
   const slow = compile(source, options);
   // The program of tier 1 has the expression of a document, so tier 2 does not read the document again.
   const { expr } = slow;
   const generated = generate(expr, options);
-  let fast: Tier2 | undefined;
+  let fast: ReturnType<typeof link> | undefined;
   let reason: string | undefined;
   if (generated.ok) {
     try {
-      fast = load(generated);
+      fast = link(generated);
     } catch {
       reason = "the page does not permit new Function";
     }
@@ -101,8 +108,10 @@ export function tiered(source: Expr | Envelope, options: GenerateOptions = {}): 
     run(r) {
       stats.runs++;
       if (fast === undefined || r.trace !== undefined) return slow.run(r);
-      const value = fast(r.space, r.origin, r.vars, r.tables);
+      const value = fast.run(r.space, r.origin, r.vars, r.tables);
       if (value !== FALLBACK) return ok(value);
+      const error = fast.take();
+      if (error !== undefined) return fail(error);
       stats.fallbacks++;
       return slow.run(r);
     },

@@ -51,7 +51,7 @@ At run time, a program operates in one of three tiers:
 | 1 | The closure compiler (`compile` of today) | Each page, also a page that does not permit `eval` |
 | 2 | Generated JavaScript | A page that permits `new Function`, and each build |
 
-A tier-2 program is specialized to the kinds of values that it expects. A check that fails sends that one evaluation to tier 1, so the result is the result of the interpreter (§4.1).
+A tier-2 program is specialized to the kinds of values that it expects. A check that fails gives the error of the interpreter. Tier 1 gives the few results that tier 2 cannot give (§4.1).
 
 A build is tier 2 with declared kinds in place of observed kinds. Thus the run-time compiler and the build-time compiler are one design.
 
@@ -92,7 +92,7 @@ The loop IR is a small language of statements:
 - a running value for a reduction: a count, a sum, a minimum
 - a direct call of an op function, or a primitive operation on numbers
 - a read of a field of a record, by the index of a constant
-- a check, with the reason that it fails
+- a check, with the reason that it fails, and the site of its error (§4.1.1)
 - a return
 
 The lowering joins an axis and its reduction into one loop, so it makes no list. A list exists only when the program gives a list. A move of an address becomes a call of a space function of the core (`applyMove`, `axisTargets`). In an array space or a grid, it becomes a computed index.
@@ -107,11 +107,9 @@ The lowering joins an axis and its reduction into one loop, so it makes no list.
 
 ### 4.1 Checks and the fallback
 
-The generated code expects the usual case: each field exists, each value has its expected kind, each number is finite, and no op fails. A check guards each of these facts. When a check fails, the generated function stops and gives the value `FALLBACK`. Then the same evaluation runs again in tier 1, and its result is the result.
+The generated code expects the usual case: each field exists, each value has its expected kind, each number is finite, and no op fails. A check guards each of these facts. A failed check ends the program with the error of the interpreter (§4.1.1). Where tier 2 cannot give the result, the generated function gives the value `FALLBACK`. Then the same evaluation runs again in tier 1, and its result is the result.
 
-Thus generated code does not make an error value. Each error of Vex (`#REF!`, `#N/A`, `#NUM!` and the others) comes from the interpreter, with its message, its path and its location.
-
-A failed check stops the program only where the error is the result. In three contexts, the error is not the result:
+A failed check ends the program only where the error is the result. In three contexts, the error is not the result:
 
 - In an item of a list op, the error makes an error item. The list op skips it, and with the option `strict`, the list op fails.
 - In the first argument of `ifError`, the error gives the second argument.
@@ -119,7 +117,7 @@ A failed check stops the program only where the error is the result. In three co
 
 An exception in an op is the error `#CALC!` of that op, so it follows the same rules. A full call stack (`#DEPTH!`) always stops the program, because no list op and no `ifError` hides it.
 
-An error of an extension follows the same rules (COMPILE.EXT). An extension without a handler and an exception of a handler are errors too. The runtime gives `FALLBACK` for each such error. For `#DEPTH!` of an extension, the runtime throws, so the program stops. Thus the interpreter and tier 2 have the same rule for an extension and for an op.
+An error of an extension follows the same rules (COMPILE.EXT). An extension without a handler and an exception of a handler are errors too. For `#DEPTH!` of an extension, the runtime throws, so tier 1 gives the result. Thus the interpreter and tier 2 have the same rule for an extension and for an op.
 
 Example: `IFERROR(row(-1).closing, 792)` reads a row that does not exist. The cell extension gives `#REF!`, and tier 2 gives 792.
 
@@ -130,7 +128,34 @@ A failure jumps to the end of its block, but the interpreter still evaluates som
 - **The later arguments.** The interpreter evaluates each argument of an op and each field of a record, also after an error (`#all`). Each argument before the last argument that can use an extension gets a block of its own. A check after the arguments reads the flags.
 - **The later items.** The interpreter makes each item of a list before the list op. A failure of the op stops the loop, for example the first error item with `strict`. If the list can use an extension, such a failure stops the program. A failure of the other arguments of the op also stops it. Then tier 1 gives the result.
 
-A function call can use an extension in the body of its function, or in the body of a function of that body. A program without an extension gets the same code as before.
+A function call can use an extension in the body of its function, or in the body of a function of that body.
+
+### 4.1.1 The error results of tier 2
+
+Tier 2 gives the error result of a program itself (COMPILE.ERRORS). The value path does not change: it has no new check, no new flag and no new allocation. Only the failure path has new code.
+
+**The lazy error.** A failed check keeps a small record: its site, the origin, the focus and the runtime operands. The site is a constant of the program. A function of the runtime that fails also records its detail in two variables: the thrown value, the result that failed its checks, or a foreign error. A record has no text. When the program ends with a lazy error, `take` of the runtime makes the error of the interpreter from it (`materialize`). This step uses the error texts of the core (`errorText`, `errorAt`). So the two tiers have one copy of each message.
+
+The signal stays `FALLBACK`. The generated code puts the lazy error in a slot of the runtime, and it gives `FALLBACK`. `tiered` then reads the slot. An empty slot sends the run to tier 1. An exception also gives `FALLBACK` with an empty slot. Thus `load` keeps its contract.
+
+**A context that drops the error.** An item of a list op and the first argument of `ifError` drop the error, so their checks keep nothing. A binding of `let` keeps its error in the local of its value. Only a failure writes there, and a read of the name tests the flag of the binding.
+
+**`#ARGS`.** The interpreter evaluates each argument, also after an error (`#all`). Two errors give `#ARGS`. The value path has no flags for this. Each argument has a block for its failure, and the code after this block is a copy of the next argument that can fail. Thus a failure jumps to the copies of the later arguments, and each argument evaluates once. The order of evaluation is the order of the interpreter, and no extension runs twice.
+
+A copy can read flags, because the value path does not read a copy (`#collect`). So a node in a copy adds no other copy, and the size of the code grows with the depth of the failing nodes, not with the number of their paths. `MAX_COPIED` limits the nodes of the copies. Past the limit, a node with two arguments that can fail keeps no error, and tier 1 gives its result.
+
+**The memo.** An entry of the memo holds a value or the mark of a failure. The error depends on the position and on the child nodes, so the entry has no error. After a read of a failed entry, where the context keeps the error, a copy of the node evaluates at this position. A node of the memo uses no extension, so this has no effect. The value path reads one flag, as before.
+
+**What stays with tier 1.** These results still use `FALLBACK`:
+
+- `#DEPTH!` of an extension and a full call stack, by the rule above.
+- A list with an error item, and the op `errors` on such an item, because generated code makes no error item.
+- A failed kind check of a schema, because it is no error of the interpreter.
+- `reduce` on an empty list, because the result can be the identity of the op.
+- An op that fails in a list op, where the list can use an extension or the option `strict` is set. The interpreter makes each item first, so an earlier error item or `#DEPTH!` can come first.
+- A failed argument of a list op after its list, because the interpreter evaluates the list first.
+- An exception of a getter of a record.
+- A node with two failed arguments past `MAX_COPIED`.
 
 ### 4.2 The same bits
 

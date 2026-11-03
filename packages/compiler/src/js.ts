@@ -10,7 +10,7 @@
  */
 import { liftsAt, type ParamKind } from "@mark1russell7/vex";
 import { primitiveOf, type Facts, type SiteFacts, type StaticSite } from "./facts.ts";
-import { constant, FIXED_LOCALS, type Fail, type LExpr, type LoopProgram, type LStmt, type RuntimeFn } from "./loop.ts";
+import { call, constant, FIXED_LOCALS, type Fail, type LExpr, type LoopProgram, type LStmt, type RuntimeFn } from "./loop.ts";
 
 type OpExpr = Extract<LExpr, { readonly t: "op" }>;
 
@@ -50,6 +50,10 @@ export function printJs(p: LoopProgram, facts: Facts): string {
         return String(x.v);
       case "fallback":
         return "F";
+      case "none":
+        return "undefined";
+      case "site":
+        return `K[${x.i}]`;
       case "array":
         return `[${x.items.map(expr).join(", ")}]`;
       case "call":
@@ -84,6 +88,8 @@ export function printJs(p: LoopProgram, facts: Facts): string {
             return `(${a} !== undefined && ${a} !== null)`;
           case "isObject":
             return `(typeof ${a} === "object" || typeof ${a} === "function")`;
+          case "unless":
+            return `(${a} ? undefined : ${b})`;
           case "get":
             return `${a}.get(${b})`;
           case "member":
@@ -125,13 +131,22 @@ export function printJs(p: LoopProgram, facts: Facts): string {
     domains.add(i);
     return `d${i}`;
   };
+  // The record of a result that failed its checks. The result is `FALLBACK` after it.
+  const bad = (out: string): string => {
+    used.add("bad");
+    return `${out} = bad_(${out});`;
+  };
+  // The check `valid` of the domain at the index `i`, with the record of its failure.
+  const validity = (out: string, i: number): string => {
+    used.add("invalid");
+    return `try { if (!${domain(i)}.valid(${out})) ${bad(out)} } catch (e) { ${out} = invalid_(e, ${i}); }`;
+  };
   // The checks of the result of an op, as `#checkResult` of the interpreter. A domain without `valid` stops the search.
   const resultChecks = (out: string, checks: readonly boolean[], indent: string): void => {
     lines.push(`${indent}if (${out} !== F) {`);
-    lines.push(`${indent}  if (${out} === undefined || ${out} === null || (typeof ${out} === "number" && !Number.isFinite(${out}))) ${out} = F;`);
+    lines.push(`${indent}  if (${out} === undefined || ${out} === null || (typeof ${out} === "number" && !Number.isFinite(${out}))) ${bad(out)}`);
     checks.forEach((valid, i) => {
-      const d = domain(i);
-      lines.push(valid ? `${indent}  else if (${d}.is(${out})) { try { if (!${d}.valid(${out})) ${out} = F; } catch (e) { ${out} = threw_(e); } }` : `${indent}  else if (${d}.is(${out})) {}`);
+      lines.push(valid ? `${indent}  else if (${domain(i)}.is(${out})) { ${validity(out, i)} }` : `${indent}  else if (${domain(i)}.is(${out})) {}`);
     });
     lines.push(`${indent}}`);
   };
@@ -169,7 +184,7 @@ export function printJs(p: LoopProgram, facts: Facts): string {
   /**
    * The block of a static site (KIND.STATIC). The kinds of its values decide its op, so the site uses the function of the
    * op with no guard. A result of another kind breaks the declaration of the op. Then the program stops, and tier 1
-   * evaluates it.
+   * evaluates it. An argument of a kind that the op does not accept goes to the dispatch, which gives the failure.
    */
   const staticBlock = (n: number, x: OpExpr, st: StaticSite, indent: string, attempt: (call: string, ind: string) => void): void => {
     const out = name(n);
@@ -181,9 +196,8 @@ export function printJs(p: LoopProgram, facts: Facts): string {
       resultChecks(out, facts.checks, indent);
       return;
     }
-    // An argument of a kind that the op does not accept: the interpreter gives an error.
     if (st.bad) {
-      lines.push(`${indent}${out} = F;`);
+      lines.push(`${indent}${out} = ${generic(x, siteOf(x), values)};`);
       return;
     }
     const f = `f${x.name}_${st.domain}`;
@@ -197,13 +211,10 @@ export function printJs(p: LoopProgram, facts: Facts): string {
       return;
     }
     lines.push(`${indent}if (${out} !== F && typeof ${out} !== "${kind}") return F; // the kind of the result`);
-    if (kind === "number") lines.push(`${indent}if (${out} !== F && !Number.isFinite(${out})) ${out} = F;`);
+    if (kind === "number") lines.push(`${indent}if (${out} !== F && !Number.isFinite(${out})) ${bad(out)}`);
     const check = facts.checkOf(kind);
     if (check === undefined) resultChecks(out, facts.checks, indent);
-    else if (facts.checks[check] === true) {
-      const d = domain(check);
-      lines.push(`${indent}if (${out} !== F) { try { if (!${d}.valid(${out})) ${out} = F; } catch (e) { ${out} = threw_(e); } }`);
-    }
+    else if (facts.checks[check] === true) lines.push(`${indent}if (${out} !== F) { ${validity(out, check)} }`);
   };
   const opBlock = (n: number, x: OpExpr, f: Extract<SiteFacts, { readonly t: "op" }>, indent: string, attempt: (call: string, ind: string) => void): void => {
     const site = siteOf(x);
@@ -230,22 +241,24 @@ export function printJs(p: LoopProgram, facts: Facts): string {
     const lifted = args.filter((_a, i) => liftsAt(f.lift, i)).map((a) => `typeof ${a} === "number"`);
     if (lifted.length > 0) lines.push(`${inner}if (${lifted.join(" || ")}) { ${out} = ${generic(x, site, values)}; break ${label}; }`);
     const kinds = args.flatMap((a, i) => kindCheck(f.params?.[i], a, d));
-    if (kinds.length > 0) lines.push(`${inner}if (!(${kinds.join(" && ")})) { ${out} = F; break ${label}; }`);
+    if (kinds.length > 0) lines.push(`${inner}if (!(${kinds.join(" && ")})) { ${out} = ${generic(x, site, values)}; break ${label}; }`);
     attempt(call, inner);
     resultChecks(out, facts.checks, inner);
     lines.push(`${inner}break ${label};`);
     if (f.method) lines.push(`${indent}    }`);
     lines.push(`${indent}  }`, `${indent}  ${out} = ${generic(x, site, values)};`, `${indent}}`);
   };
-  // The statement of a failure (docs/COMPILER.md §4.1).
-  const action = (f: Fail): string => {
+  // The statement of a failure (docs/COMPILER.md §4.1). A failure that keeps its error always has one (`keeps`).
+  const action = (f: Fail, error: LExpr | undefined): string => {
     switch (f.t) {
       case "return":
+        return `return ${expr(call("raise", error as LExpr))};`;
+      case "stop":
         return "return F;";
       case "break":
-        return `break L${f.label};`;
+        return f.keep === undefined ? `break L${f.label};` : `{ ${name(f.keep)} = ${expr(error as LExpr)}; break L${f.label}; }`;
       case "continue":
-        return f.strict === undefined ? `continue L${f.label};` : `{ if (${expr(f.strict.cond)}) ${action(f.strict.else)} continue L${f.label}; }`;
+        return f.strict === undefined ? `continue L${f.label};` : `{ if (${expr(f.strict.cond)}) ${action(f.strict.else, error)} continue L${f.label}; }`;
     }
   };
   const lines: string[] = [];
@@ -260,10 +273,10 @@ export function printJs(p: LoopProgram, facts: Facts): string {
         lines.push(`${indent}${name(s.n)} = ${expr(s.value)};`);
         return;
       case "check":
-        lines.push(`${indent}if (!(${expr(s.ok)})) ${action(s.fail)} // ${s.reason}`);
+        lines.push(`${indent}if (!(${expr(s.ok)})) ${action(s.fail, s.error)} // ${s.reason}`);
         return;
       case "fail":
-        lines.push(`${indent}${action(s.fail)}`);
+        lines.push(`${indent}${action(s.fail, s.error)}`);
         return;
       case "if":
         lines.push(`${indent}if (${expr(s.cond)}) {`);
@@ -292,6 +305,9 @@ export function printJs(p: LoopProgram, facts: Facts): string {
         lines.push(`${indent}L${s.label}: for (;;) {`);
         stmts(s.body, `${indent}  `);
         lines.push(`${indent}}`);
+        return;
+      case "break":
+        lines.push(`${indent}break L${s.label};`);
         return;
       case "next":
         lines.push(`${indent}continue;`);

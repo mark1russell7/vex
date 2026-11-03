@@ -1,7 +1,7 @@
 /**
  * The share of tier 2 on real programs (roadmap item FALLBACKSHARE). This module compiles programs with `tiered` of
- * `@mark1russell7/vex-compiler`. It counts the runs that tier 2 gives, and the runs that tier 1 does again after a
- * `FALLBACK`. It is a measurement, not a gate. With the option `sites`, it also finds the site of each fallback
+ * `@mark1russell7/vex-compiler`. It counts the runs that tier 2 finishes with a value or with an error, and the runs that
+ * tier 1 does again after a `FALLBACK`. It is a measurement, not a gate. With the option `sites`, it also finds the site of each fallback
  * (FALLBACKOPS).
  */
 import type { CompileFn, Expr, Program, Result } from "@mark1russell7/vex";
@@ -41,12 +41,14 @@ export interface ProgramShare {
   /** The number of compiles of the program. A sheet compiles its formulas again in each new run. */
   readonly compiles: number;
   readonly runs: number;
-  /** The number of runs where tier 2 gave `FALLBACK`, so tier 1 gave the result. */
+  /** The number of runs where tier 2 gave no result, so tier 1 gave it. */
   readonly fallbacks: number;
   /** The number of runs with a value, not an error. */
   readonly values: number;
   /** The number of runs where tier 2 gave the value. A program of tier 1 has 0. */
   readonly tier2Values: number;
+  /** The number of runs where tier 2 gave the error. A program of tier 1 has 0. */
+  readonly tier2Errors: number;
   /** The result of tier 1 on each run after a `FALLBACK`, by count, largest first. */
   readonly fallbackReasons: readonly ReasonCount[];
   /** With the option `sites`: the site and the context of each fallback where tier 1 gave a value, by count. */
@@ -69,11 +71,20 @@ export interface ShareTotals {
   /** The programs of tier 2 divided by the programs. */
   readonly programShare: number;
   readonly runs: number;
-  /** The number of runs where tier 2 gave the value. */
+  /** The number of runs that tier 2 finished: with a value or with an error. */
   readonly tier2Runs: number;
   readonly fallbacks: number;
-  /** The runs where tier 2 gave the value divided by the runs. A run of a program of tier 1 is not a run of tier 2. */
+  /** The runs that tier 2 finished divided by the runs. A run of a program of tier 1 is not a run of tier 2. */
   readonly runShare: number;
+  /**
+   * The runs where tier 2 gave the value divided by the runs. This field keeps the first meaning of `runShare`, from the
+   * time when tier 2 gave no error. Compare it with the `runShare` of an older record.
+   */
+  readonly valueRunShare: number;
+  /** The number of runs where tier 2 gave the error, in the programs of tier 2. */
+  readonly tier2ErrorRuns: number;
+  /** The runs where tier 2 gave the error divided by the runs with an error. */
+  readonly errorShare: number;
   /** The number of runs with a value, not an error. */
   readonly valueRuns: number;
   /** The number of runs where tier 2 gave the value, in the programs of tier 2. */
@@ -120,6 +131,7 @@ interface Tally {
   fallbacks: number;
   values: number;
   tier2Values: number;
+  tier2Errors: number;
   readonly reasons: Map<string, number>;
   readonly valueSites: Map<string, number>;
   readonly errorSites: Map<string, number>;
@@ -183,7 +195,7 @@ function meterOf(tallies: Map<string, Tally>, sites: SiteRun[] | undefined): Met
     let probe: SiteProbe | undefined;
     let t = tallies.get(name);
     if (t === undefined) {
-      t = { tier: p.tier, reason: p.reason, compiles: 0, runs: 0, fallbacks: 0, values: 0, tier2Values: 0, reasons: new Map(), valueSites: new Map(), errorSites: new Map() };
+      t = { tier: p.tier, reason: p.reason, compiles: 0, runs: 0, fallbacks: 0, values: 0, tier2Values: 0, tier2Errors: 0, reasons: new Map(), valueSites: new Map(), errorSites: new Map() };
       tallies.set(name, t);
     } else if (t.tier !== p.tier) {
       // Two compiles of one name with different tiers: the name counts as tier 1, with the reason of tier 1.
@@ -199,9 +211,10 @@ function meterOf(tallies: Map<string, Tally>, sites: SiteRun[] | undefined): Met
         const result = p.run(r);
         tally.runs++;
         const fellBack = p.stats.fallbacks > before;
-        if (result.ok) {
-          tally.values++;
-          if (p.tier === 2 && !fellBack) tally.tier2Values++;
+        if (result.ok) tally.values++;
+        if (p.tier === 2 && !fellBack) {
+          if (result.ok) tally.tier2Values++;
+          else tally.tier2Errors++;
         }
         if (fellBack) {
           tally.fallbacks++;
@@ -261,7 +274,8 @@ export function measureShare(cases: readonly ShareCase[], options: ShareOptions 
         fallbacks: t.fallbacks,
         values: t.values,
         // A name with compiles of two tiers counts as tier 1.
-        tier2Values: t.tier === 2 ? t.tier2Values : 0,
+        tier2Values: t.tier2Values,
+        tier2Errors: t.tier2Errors,
         fallbackReasons: sorted(t.reasons),
         ...(withSites ? { valueSites: sorted(t.valueSites), errorSites: sorted(t.errorSites) } : {}),
       });
@@ -274,10 +288,12 @@ export function measureShare(cases: readonly ShareCase[], options: ShareOptions 
   let fallbacks = 0;
   let valueRuns = 0;
   let tier2ValueRuns = 0;
+  let tier2ErrorRuns = 0;
   for (const p of programs) {
     runs += p.runs;
     valueRuns += p.values;
     tier2ValueRuns += p.tier2Values;
+    tier2ErrorRuns += p.tier2Errors;
     if (p.tier === 2) {
       tier2Runs += p.runs - p.fallbacks;
       fallbacks += p.fallbacks;
@@ -298,6 +314,9 @@ export function measureShare(cases: readonly ShareCase[], options: ShareOptions 
       tier2Runs,
       fallbacks,
       runShare: share(tier2Runs, runs),
+      valueRunShare: share(tier2ValueRuns, runs),
+      tier2ErrorRuns,
+      errorShare: share(tier2ErrorRuns, runs - valueRuns),
       valueRuns,
       tier2ValueRuns,
       valueShare: share(tier2ValueRuns, valueRuns),

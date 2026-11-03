@@ -108,6 +108,14 @@ describe("the tools", () => {
     ]);
   });
 
+  it("STEP.TOOLS STEP.MAX ITERATE.LIMIT.DATA: vex_check gives step B for a data limit, and maxStep A refuses it", () => {
+    const program = { type: "iterate", value: { limit: { type: "size", value: { axis: { type: ["axes", "all"], value: {} } } }, init: {}, step: {}, result: 1 } };
+    const reason = 'the node "iterate.size" at the root needs step B';
+    expect(check({ program })).toMatchObject({ ok: true, step: "B", stepReason: reason });
+    expect(check({ program, maxStep: "A" })).toMatchObject({ ok: false });
+    expect(JSON.stringify(check({ program, maxStep: "A" }))).toContain(`up to A: ${reason} (STEP.MAX)`);
+  });
+
   it("STEP.TOOLS: vex_check gives the step and the reason, and vex_explain gives the step on its first line", () => {
     const program = app("add", ref("n"), lit(1));
     const space = { kind: "array", records: [{ n: 2 }] } as const;

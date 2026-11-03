@@ -532,7 +532,18 @@ A value of a loop is a value of a name, not a field of a record. Thus a bisectio
 
 A fold evaluates `init` at the node. Then it evaluates `step` at each target of the axis, in the order of the axis. The focus of a step is the target. A target that a test of `where` removes has no step. The first error of a value, of a test or of `result` is the value of the fold.
 
-An iteration evaluates `init` at the node, and then `step` up to `limit` times, at the same position. `limit` is a whole number from 0 to 100000 in the expression, not a value of a run. Thus each program ends.
+An iteration evaluates `init` at the node, and then `step` up to `limit` times, at the same position. `limit` is a whole number from 0 to 100000 in the expression, or a data limit. Thus each program ends.
+
+A data limit (ITERATE.LIMIT.DATA) names an axis, and the limit is the number of targets of that axis. It is the first construct of step B. The limit is not a free expression, for these reasons:
+
+- A count is a whole number from 0, so a data limit has no negative or fractional case to check at run time.
+- A count is finite in each run, because the space and each list are finite. So the language stays total.
+- `iterate` over a data limit makes the steps of a `fold` over the same axis. So LOOP.SIZE needs no new rule, and a limit that reads a list of an outer loop counts as a use of it.
+- The axis `list` gives the count of a list. A number that is not a count needs a free expression, and that stays out of step B at this time.
+
+The cap of 100000 stays. A loop can make heavy steps, so a large input must fail with a defined error and not take a long time. A count above the cap gives `#NUM!` of the kind `limit` (ITERATE.LIMIT.ERROR). The same error wraps each failure of the axis, so a host reads one error for each cause.
+
+Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
 
 Without `until`, the iteration makes `limit` steps. With `until`, the test evaluates before each step and after the last one. A true test stops the iteration, and with no true test the value is `#NUM!`. The first error of a value, of the test or of `result` is the value of the iteration.
 

@@ -2,7 +2,7 @@ import { CHECKED } from "./checked.ts";
 import { fromDocument, isDocument, type Envelope } from "./document.ts";
 import { findMethod, isOpName, liftsAt, resolveOp, type AnyDomain, type OpSpec, type ParamKind, type PrimitiveKind, type ResolvedOp, type ReturnKind, type SizeRule } from "./domain.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
-import { limitError, overLimitMessage } from "./limit-error.ts";
+import { limitError, overLimitMessage, worstError } from "./limit-error.ts";
 import { addrExprs, children, limitAxis, MAX_ITERATIONS, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
 import { sizeError } from "./size.ts";
@@ -692,7 +692,8 @@ class Compiler {
       if (!inner.ok) return invalid(f, inner.error);
       const ts = targets(f, inner.value);
       if (!ts.ok) return invalid(f, ts.error);
-      for (const { test } of ts.value) if (test !== undefined && !test.ok) return invalid(f, test.error);
+      const cause = worstError(ts.value.flatMap(({ test }) => (test === undefined || test.ok ? [] : test.error)));
+      if (cause !== undefined) return invalid(f, cause);
       const count = ts.value.length;
       return count > MAX_ITERATIONS ? this.#err("limit", overLimitMessage(count), f, path) : ok(count);
     };

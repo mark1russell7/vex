@@ -22,12 +22,13 @@ const PROGRAMS: readonly Expr[] = [
 const sp = space.array([{ n: 1 }, { n: 2 }]);
 
 describe("the steps of Vex", () => {
-  it("STEP.LADDER: the steps are A, B and C, and each construct is of step A today", () => {
+  it("STEP.LADDER: the steps are A, B and C, the limit from the data is of step B, and each other construct is of step A", () => {
     expect(VEX_STEPS.steps).toEqual(["A", "B", "C"]);
     expect(VEX_STEP_NAMES).toEqual(VEX_STEPS.steps);
     const tags: readonly ExprTag[] = ["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "fn", "call", "ext"];
-    expect(Object.keys(CONSTRUCT_STEPS).toSorted()).toEqual(tags.toSorted());
-    expect(new Set(Object.values(VEX_STEPS.constructs))).toEqual(new Set(["A"]));
+    expect(Object.keys(CONSTRUCT_STEPS).toSorted()).toEqual([...tags, "iterate.size"].toSorted());
+    for (const tag of tags) expect(VEX_STEPS.constructs[tag]).toBe("A");
+    expect(VEX_STEPS.constructs["iterate.size"]).toBe("B");
     expect(DEFAULT_MAX_STEP).toBe("B");
   });
 

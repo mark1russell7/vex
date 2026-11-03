@@ -67,7 +67,7 @@ withHalf.from("weight").call("half").at("A"); // : Optional<number>
 | `fork(branches)` | Evaluates each branch with the current value, and gives a record |
 | `ifError(fallback)` | Gives `fallback` when the chain gives an error |
 | `if(then, otherwise)` | For a boolean value: gives `then` or `otherwise`. Only the selected branch evaluates. |
-| `iterate(limit, init, step, result, { until })` | A loop of at most `limit` steps. `step` and `result` get a chain for each name of `init`. |
+| `iterate(limit, init, step, result, { until })` | A loop of at most `limit` steps. `limit` is a number, `dataLimit(axis)` or a list chain. `step` and `result` get a chain for each name of `init`. |
 | `call(name, ...args)` | Applies a free function of `withOptions` to the current value. The types accept only the functions whose first parameter accepts the value. |
 | `at(key)`, `value(key)`, `result(key)`, `explain(key)`, `all()` | Evaluates the chain |
 | `program` | The expression of the chain |

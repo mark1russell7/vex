@@ -27,7 +27,7 @@ The chain `others(...)` binds the current value to a fresh name (`$0`), and the 
 | `rec` | `fields` | a record of the values of the fields |
 | `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address `at` |
 | `fold` | `axis`, `init`, `step`, `result`, `at` | a loop over the targets of the axis, in order. `init` gives the names and their first values, and `step` gives the next values at each target. |
-| `iterate` | `limit`, `init`, `step`, `result`, `until` | a loop of at most `limit` steps (a whole number up to 100000). A true `until` stops it. |
+| `iterate` | `limit`, `init`, `step`, `result`, `until` | a loop of at most `limit` steps (a whole number up to 100000, or a data limit `{ axis }`, the number of targets of the axis). A true `until` stops it. |
 | `ext` | `kind`, `data` | the value that the extension handler of `kind` gives |
 
 The first three kinds have the same shape as the expressions of the `render` project. Thus a `render` expression is also a Vex expression.

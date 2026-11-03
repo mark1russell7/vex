@@ -3,7 +3,7 @@
  * the value, or `VEX_ERROR` for an error of Vex. This is also true for each cell on a cycle and with each budget of the
  * stack. The run fills the columns in the order of `SheetRun.fill`.
  */
-import { app, axes, call, cell, each, ext, fn, fold, index, iterate, let_, lit, offset, origin, rec, ref, SheetRun, space, v, type Axis, type CellFormulas, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
+import { app, axes, call, cell, dataLimit, each, ext, fn, fold, index, iterate, let_, lit, offset, origin, rec, ref, SheetRun, space, v, type Axis, type CellFormulas, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { arbSheet, sheetCellsOf, sheetColumnsOf } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -344,6 +344,33 @@ const depth = (parents: readonly number[], k: number): number => (k < 0 ? -1 : 1
 // These tests check some hundred sheets, each with four budgets. In the mutation lane, Stryker adds its counters to
 // the code, and one test takes more than the 5 s of Vitest.
 // In the nightly and the weekly runs, the time-out is the budget of a property plus a margin (`fc-timeout.ts`).
+describe("a data limit in a module of a sheet (ITERATE.LIMIT.DATA)", () => {
+  const rows = [{ v: 1 }, { v: -2 }, { v: 3 }];
+
+  it("ITERATE.LIMIT.DATA COMPILE.MODULE.SHEET SHEET.ORDER: a test of a limit reads a cell, and the cell comes first", () => {
+    const step = { s: app("add", v("s"), lit(1)) };
+    const columns = new Map<string, Expr>([
+      ["A", iterate(dataLimit(axes.where(axes.all, app("gt", cell("B"), lit(0)))), { s: lit(0) }, step, v("s"))],
+      ["B", ref("v")],
+      ["C", app("add", cell("A"), lit(1))],
+    ]);
+    const m = emitSheetModule(columns, NUM);
+    if (!m.ok) throw new Error(m.reason);
+    expectSame(make(m.source), columns, rows, undefined);
+  });
+
+  it("ITERATE.LIMIT.DATA COMPILE.MODULE.SHEET: a list of a limit reads a cell", () => {
+    const columns = new Map<string, Expr>([
+      ["A", iterate(dataLimit(axes.list(each(axes.all, cell("B")))), { s: lit(0) }, { s: app("add", v("s"), lit(2)) }, v("s"))],
+      ["B", ref("v")],
+      ["C", lit(0)],
+    ]);
+    const m = emitSheetModule(columns, NUM);
+    if (!m.ok) throw new Error(m.reason);
+    expectSame(make(m.source), columns, rows, undefined);
+  });
+});
+
 describe("COMPILE.MODULE.SHEET P17: random sheets", { timeout: propertyTimeout(60_000) }, () => {
   it("P17 COMPILE.MODULE.SHEET: a module of a random sheet of the test kit gives the results of SheetRun, with each budget of the stack", () => {
     fc.assert(fc.property(arbSheet, ({ formulas, own, rows: vs }) => void checkSheet(sheetColumnsOf(formulas), sheetCellsOf(own), vs.map((x) => ({ v: x })), undefined)));

@@ -38,7 +38,7 @@ import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./arra
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { vexError, type ErrorCode, type ErrorDetails, type ErrorKind, type VexError } from "./errors.ts";
-import { limitError, overLimitMessage } from "./limit-error.ts";
+import { limitError, overLimitMessage, worstError } from "./limit-error.ts";
 import type { CompileOptions } from "./evaluate.ts";
 import { MAX_ITERATIONS, type Axis, type FixedMove } from "./ir.ts";
 import { isVexList, LIST_OPS, vexList, type ListItem } from "./list.ts";
@@ -548,10 +548,11 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
   // ITERATE.LIMIT.ERROR: each failure of the size of an axis is one error. Only an error of the run stays as it is.
   "vex.size": ({ value, context }) => {
     const found = targetsOf(value, context);
-    const cause = found.ok ? found.value.targets.find((t) => t.error !== undefined)?.error : toVexError(found.error);
+    if (!found.ok) return { ok: false, error: toKernelError(limitError(toVexError(found.error))) };
+    const { targets } = found.value;
+    const cause = worstError(targets.flatMap((t) => t.error ?? []));
     if (cause !== undefined) return { ok: false, error: toKernelError(limitError(cause)) };
-    const count = (found as { readonly value: { readonly targets: readonly Target[] } }).value.targets.length;
-    return count > MAX_ITERATIONS ? failed("limit", overLimitMessage(count)) : ok(count);
+    return targets.length > MAX_ITERATIONS ? failed("limit", overLimitMessage(targets.length)) : ok(targets.length);
   },
 
   "vex.iterate": ({ value, context }) => {

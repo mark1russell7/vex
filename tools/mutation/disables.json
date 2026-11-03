@@ -177,10 +177,6 @@
   },
   {
     "file": "packages/compiler/src/runtime.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression: a call of undefined throws, and the catch also gives F"
-  },
-  {
-    "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line ConditionalExpression,BooleanLiteral: see the comments above"
   },
   {
@@ -198,10 +194,6 @@
   {
     "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable ConditionalExpression,BlockStatement,CallExpression: a miss of the cache only reads the op tables again"
-  },
-  {
-    "file": "packages/compiler/src/runtime.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression: a call of undefined throws, and the program gives F for it too"
   },
   {
     "file": "packages/compiler/src/runtime.ts",

@@ -87,6 +87,16 @@ describe("COMPILE.EXT: an error of an extension that the program catches stays i
     expect(fallbacks(app("ifError", app("reduce", all(app("if", app("gt", ref("n"), lit(1)), ext("depth", null), lit(1))), lit("nope")), lit(0)))).toBe(3);
   });
 
+  it("V-066 COMPILE.EXT EVAL.DEPTH: #DEPTH! of a later argument wins over a caught error of an earlier argument", () => {
+    // V-066: tier 2 jumped to the second argument of ifError at the first error, so it gave 0, not #DEPTH!.
+    const e = app("ifError", app("add", missing, ext("depth", null)), lit(0));
+    for (const origin of S.keys) {
+      const r = tiered(e, OPTIONS).run({ space: S, origin });
+      expect(r.ok ? r.value : r.error.code).toBe("#DEPTH!");
+      expect(r).toEqual(evaluate(e, { ...OPTIONS, space: S, origin }));
+    }
+  });
+
   it("COMPILE.EXT EVAL.DEPTH: after an error that the program catches, the interpreter still evaluates the later arguments", () => {
     // The error of the first argument is not the result: #DEPTH! of the later extension is.
     expect(fallbacks(app("ifError", app("add", missing, ext("depth", null)), lit(0)))).toBe(3);
@@ -149,6 +159,49 @@ const arbProgram: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => {
   };
 }).e;
 
+/** These errors do not stop the program, so `ifError` and a list op catch them. */
+const arbCaught: fc.Arbitrary<Expr> = fc.constantFrom(missing, lit("x"), ext("throws", null), ext("nohandler", null), ...KINDS.filter((kind) => kind !== "depth").map((kind) => ext(kind, null)));
+/** These errors stop the program: `#DEPTH!` of an extension and a full call stack. */
+const arbStop: fc.Arbitrary<Expr> = fc.constantFrom(ext("depth", null), ext("overflow", null));
+const arbFiller: fc.Arbitrary<Expr> = fc.oneof(
+  { weight: 3, arbitrary: fc.constantFrom(lit(1), ref("n"), ext("value", null), ext("text", null)) },
+  { weight: 1, arbitrary: arbProgram },
+);
+
+/** The parts of a node, with a caught error at the index `i` and an error that stops at a later index `j`. */
+const arbParts: fc.Arbitrary<Expr[]> = fc
+  .integer({ min: 2, max: 4 })
+  .chain((size) => fc.tuple(fc.array(arbFiller, { minLength: size, maxLength: size }), fc.integer({ min: 0, max: size - 2 }), arbCaught, arbStop))
+  .chain(([parts, i, caught, stop]) =>
+    fc.integer({ min: i + 1, max: parts.length - 1 }).map((j) => parts.map((part, k) => (k === i ? caught : k === j ? stop : part))),
+  );
+
+/** Four records, so the item `k` of a list over the axis all is the record whose `n` is `k`. */
+const ORDER = space.record({ K0: { n: 0 }, K1: { n: 1 }, K2: { n: 2 }, K3: { n: 3 } });
+/** This function gives the expression whose value at the record `k` is `parts[k]`. */
+const byItem = (parts: readonly Expr[]): Expr =>
+  parts.slice(0, -1).reduceRight<Expr>((later, part, k) => app("if", app("gt", ref("n"), lit(k)), later, part), parts[parts.length - 1] as Expr);
+const names = (parts: readonly Expr[]): string[] => parts.map((_, k) => `x${String(k)}`);
+
+/** Programs that catch an error before an error that stops (V-066): ops, records, the items and options of a list op, and let. */
+const arbOrder: fc.Arbitrary<Expr> = fc
+  .tuple(arbParts, fc.integer({ min: 0, max: 6 }), fc.constantFrom("add", "mul", "sub", "gt", "and", "pow"), fc.constantFrom("count", "sum", "values", "errors", "first", "min", "reduce"), fc.boolean())
+  .map(([parts, context, op, listOp, flag]): Expr => {
+    const options = flag ? [lit({ strict: true })] : [];
+    const listArgs = (list: Expr): Expr[] => (listOp === "reduce" ? [list, lit("add"), ...options] : [list, ...options]);
+    const bound = (body: (xs: Expr[]) => Expr): Expr => let_(Object.fromEntries(names(parts).map((x, k) => [x, parts[k] as Expr])), body(names(parts).map((x) => v(x))));
+    const node = [
+      () => app(op, ...parts),
+      () => rec(Object.fromEntries(names(parts).map((x, k) => [x, parts[k] as Expr]))),
+      () => app(listOp, ...listArgs(all(byItem(parts)))),
+      () => app("count", all(ref("n")), ...parts),
+      () => app("reduce", all(ref("n")), ...parts),
+      () => bound((xs) => app("add", ...(flag ? xs.reverse() : xs))),
+      () => let_({ y: app(op, ...parts) }, app("add", v("y"), lit(1))),
+    ][context] as () => Expr;
+    return app("ifError", node(), lit(0));
+  });
+
 const vec = fc.tuple(fc.integer({ min: -3, max: 3 }), fc.integer({ min: -3, max: 3 })).map(([x, y]) => new Vec2(x, y));
 const runs = arbSpace(vec).chain((s) => fc.tuple(fc.constant(s), arbProgram, arbOrigin(s)));
 
@@ -160,6 +213,15 @@ describe("COMPILE.EXT: random programs with extensions", () => {
         expect(p.run({ space: s, origin })).toEqual(evaluate(e, { ...OPTIONS, space: s, origin }));
       }),
       { numRuns: 500 },
+    );
+  });
+
+  it("P17 V-066 COMPILE.EXT EVAL.DEPTH: an error that stops the program wins over an earlier caught error, in each position", () => {
+    fc.assert(
+      fc.property(arbOrder, fc.constantFrom(...ORDER.keys), (e, origin) => {
+        expect(tiered(e, OPTIONS).run({ space: ORDER, origin })).toEqual(evaluate(e, { ...OPTIONS, space: ORDER, origin }));
+      }),
+      { numRuns: 400 },
     );
   });
 

@@ -123,7 +123,9 @@ An error of an extension follows the same rules (COMPILE.EXT). An extension with
 
 Example: `IFERROR(row(-1).closing, 792)` reads a row that does not exist. The cell extension gives `#REF!`, and tier 2 gives 792.
 
-A failure jumps to the end of its block, but the interpreter still evaluates some later parts. An extension in such a part can give `#DEPTH!`, and then `#DEPTH!` is the result. Thus where the program catches an error, two rules keep the result of the interpreter:
+The general rule is this: an error that the program cannot catch wins over each error that it can catch, in each order of the parts. `#DEPTH!` and an exception that stops the program are such errors. Thus the order of evaluation does not change the result. A full call stack in an op is not in this rule, because it depends on the size of the stack.
+
+A failure jumps to the end of its block, but the interpreter still evaluates some later parts. An extension in such a part can give `#DEPTH!`, and then `#DEPTH!` is the result. Before this change, tier 2 gave 0 for `ifError(add(missing, depth), 0)`, where the extension `depth` gives `#DEPTH!` (V-066). Thus where the program catches an error, two rules keep the result of the interpreter:
 
 - **The later arguments.** The interpreter evaluates each argument of an op and each field of a record, also after an error (`#all`). Each argument before the last argument that can use an extension gets a block of its own. A check after the arguments reads the flags.
 - **The later items.** The interpreter makes each item of a list before the list op. A failure of the op stops the loop, for example the first error item with `strict`. If the list can use an extension, such a failure stops the program. A failure of the other arguments of the op also stops it. Then tier 1 gives the result.

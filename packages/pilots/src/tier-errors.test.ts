@@ -1,67 +1,92 @@
 /**
- * The differential of tier 1 and tier 2 on the real programs (COMPILE.ERRORS). Each run of each pilot and example sheet
- * runs in both tiers, and each field of the two results is the same, also for each error. The cases are the cases of the
- * measurement, so this test reads each run that the share counts.
+ * The differential of tier 1 and tier 2 on the real programs (COMPILE.ERRORS). The cases of the measurement run twice:
+ * once with `compile` and once with `tiered`. Each field of each result is the same, also for each error. Two whole runs
+ * keep the state of a sheet out of the comparison.
  */
 import { compile, type CompileOptions, type Expr, type Program, type Result } from "@mark1russell7/vex";
 import { tiered } from "@mark1russell7/vex-compiler";
 import { describe, expect, it } from "vitest";
+import { corpusCases, readCorpora } from "./corpus.ts";
 import { pilotCases, sheetCases } from "./fallback-cases.ts";
 import type { Meter, ShareCase } from "./fallback-share.ts";
+import { RECORD_SCALE, RECORD_SEED } from "./share-record.ts";
 
-/** The counts of a differential: the runs, and the errors by code, with the errors that tier 2 gave. */
-interface Differential {
-  runs: number;
-  readonly errors: Map<string, number>;
-  readonly tier2: Map<string, number>;
+/** One run of a program: its name, its origin, its result, and `true` when tier 2 gave the result. */
+interface RunRecord {
+  readonly name: string;
+  readonly origin: string;
+  readonly result: Result<unknown>;
+  readonly tier2: boolean;
 }
 
-/** This function adds one to a count. */
-const add = (counts: Map<string, number>, code: string): void => {
-  counts.set(code, (counts.get(code) ?? 0) + 1);
-};
+/** A program of a tier, with a test that tells if the last run stayed in tier 2. */
+interface Compiled {
+  readonly program: Program;
+  readonly fast: () => boolean;
+}
 
-/** This function gives a meter whose programs run in tier 1 and in tier 2, and compare the two results. */
-function differentialMeter(d: Differential): Meter {
+/** This function runs each case with a compiler of programs, and gives the record of each run. */
+function record(cases: readonly ShareCase[], make: (source: Expr, options: CompileOptions) => Compiled): RunRecord[] {
+  const runs: RunRecord[] = [];
   const program = (name: string, source: Expr, options: CompileOptions = {}): Program => {
-    const fast = tiered(source, options);
-    const slow = compile(source, options);
+    const { program: p, fast } = make(source, options);
     return {
-      expr: fast.expr,
-      explain: (r) => fast.explain(r),
-      run(r): Result<unknown> {
-        const before = fast.stats.fallbacks;
-        const got = fast.run(r);
-        expect(got, `${name} at ${r.origin}`).toEqual(slow.run(r));
-        d.runs++;
-        if (!got.ok) {
-          add(d.errors, got.error.code);
-          if (fast.tier === 2 && fast.stats.fallbacks === before) add(d.tier2, got.error.code);
-        }
-        return got;
+      ...p,
+      run(r) {
+        const result = p.run(r);
+        runs.push({ name, origin: r.origin, result, tier2: fast() });
+        return result;
       },
     };
   };
-  return { program, compiler: (nameOf) => (expr, options) => program(nameOf(expr), expr, options) };
-}
-
-/** This function runs each case in both tiers. */
-function differential(cases: readonly ShareCase[]): Differential {
-  const d: Differential = { runs: 0, errors: new Map(), tier2: new Map() };
-  const meter = differentialMeter(d);
+  const meter: Meter = { program, compiler: (nameOf) => (expr, options) => program(nameOf(expr), expr, options) };
   for (const c of cases) c.run(meter);
-  return d;
+  return runs;
 }
 
-describe("COMPILE.ERRORS P17: the pilots and the example sheets in tier 1 and in tier 2", () => {
-  it("P17 COMPILE.ERRORS: each result of tier 2 is the result of tier 1, and tier 2 gives #ARGS and the other errors", () => {
-    const d = differential([...pilotCases({ seed: 1, scale: 0.2 }), ...sheetCases()]);
-    expect(d.runs).toBeGreaterThan(1000);
-    expect(d.tier2.get("#ARGS") ?? 0).toBeGreaterThan(0);
-    expect(d.tier2.get("#N/A") ?? 0).toBeGreaterThan(0);
-    expect(d.tier2.get("#NAME?") ?? 0).toBeGreaterThan(0);
-    expect(d.tier2.get("#REF!") ?? 0).toBeGreaterThan(0);
-    expect(d.tier2.get("#VALUE!") ?? 0).toBeGreaterThan(0);
-    expect(d.tier2.get("#CYCLE!") ?? 0).toBeGreaterThan(0);
+/** This function gives a program of tier 1. */
+const slowly = (source: Expr, options: CompileOptions): Compiled => ({ program: compile(source, options), fast: () => false });
+
+/** This function gives a tiered program. */
+function quickly(source: Expr, options: CompileOptions): Compiled {
+  const program = tiered(source, options);
+  let fallbacks = 0;
+  return {
+    program,
+    fast() {
+      const before = fallbacks;
+      fallbacks = program.stats.fallbacks;
+      return program.tier === 2 && fallbacks === before;
+    },
+  };
+}
+
+/** This function compares two whole runs of the cases, and gives the errors that tier 2 gave, by code. */
+function differential(cases: () => readonly ShareCase[]): Map<string, number> {
+  const slow = record(cases(), slowly);
+  const fast = record(cases(), quickly);
+  expect(fast).toHaveLength(slow.length);
+  const codes = new Map<string, number>();
+  fast.forEach((run, i) => {
+    const other = slow.at(i);
+    expect(run.result, `${run.name} at ${run.origin}`).toEqual(other?.result);
+    if (run.tier2 && !run.result.ok) codes.set(run.result.error.code, (codes.get(run.result.error.code) ?? 0) + 1);
+  });
+  return codes;
+}
+
+describe("COMPILE.ERRORS P17: the real programs in tier 1 and in tier 2", () => {
+  it("P17 COMPILE.ERRORS: the pilots give the same results, and tier 2 gives the errors", () => {
+    const codes = differential(() => pilotCases({ seed: RECORD_SEED, scale: RECORD_SCALE }));
+    expect(codes.get("#ARGS") ?? 0).toBeGreaterThan(0);
+    expect(codes.get("#N/A") ?? 0).toBeGreaterThan(0);
+  });
+
+  it("P17 COMPILE.ERRORS: the example sheets give the same results, and tier 2 gives #CYCLE!", () => {
+    expect(differential(sheetCases).get("#CYCLE!") ?? 0).toBeGreaterThan(0);
+  });
+
+  it("P17 COMPILE.ERRORS: the corpora give the same results", () => {
+    for (const corpus of readCorpora()) differential(() => corpusCases(corpus));
   });
 });

@@ -273,8 +273,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   // This function gives the error of a result that failed its checks, as `#checkResult` of the interpreter.
   const badText = (op: string, value: unknown): ErrorText => {
     if (value === undefined || value === null) return errorText.noValue(op);
-    if (typeof value === "number") return errorText.notFinite(op, value);
-    // A domain accepted the value, or else the value would pass its checks.
+    if (typeof value === "number" && !Number.isFinite(value)) return errorText.notFinite(op, value);
+    // The checks of a domain gave this failure, so a domain accepts the value.
     return errorText.invalid(op, (domains.find((d) => safeIs(d, value)) as AnyDomain).name);
   };
 

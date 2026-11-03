@@ -134,6 +134,19 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
     const dup = op("ifError", op("dup", op("dup", s)), lit("long"));
     expect(sitesOf(dup, { domains: [Short], schema: SCHEMA }).source).toContain(".valid(");
     expect(expectSame(dup, { domains: [Short], schema: SCHEMA })).toBe(1);
+    // COMPILE.ERRORS: at the result, the check of the site gives the error of the interpreter.
+    expectSame(op("dup", op("dup", s)), { domains: [Short], schema: SCHEMA });
+    const Throwing = defineDomain({
+      name: "Throwing",
+      is: (u: unknown): u is string => typeof u === "string",
+      primitive: "string",
+      valid: (x: string): boolean => {
+        if (x.length > 2) throw new Error("no check");
+        return true;
+      },
+      ops: { dup: { fn: (a: string): string => a + a, returns: "domain" } },
+    });
+    expectSame(op("dup", op("dup", s)), { domains: [Throwing], schema: SCHEMA });
     // A domain without a primitive type comes before the booleans, so the checks of the result use the dispatch.
     const gt = op("not", op("gt", n, lit(1)));
     expect(sitesOf(gt, { domains: [NumDomain, Vec2Domain, BoolDomain], schema: SCHEMA }).source).toContain("d1.is(");

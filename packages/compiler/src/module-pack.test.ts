@@ -163,11 +163,22 @@ describe("the fast sum does not apply: the loop keeps a try for each item", () =
     ["a term with a loop", op("sum", each(axes.all, op("add", term, fold(axes.window(-1, 0), { s: lit(0) }, { s: op("add", v("s"), w) }, v("s")))))],
     ["a term with a function of its own", op("sum", each(axes.all, let_({ f: fn([], NEED) }, op("multiply", call("f"), r))))],
     ["a term of booleans", op("count", each(axes.where(axes.all, op("gt", term, lit(1))), n))],
+    ["a sum of booleans", op("sum", each(axes.all, op("gt", term, lit(1))))],
+    // In these terms, each read of the item is a read of a column. Only the loop in the term stops the fast sum.
+    ["a term with a loop that is a constant of the run", op("sum", each(axes.all, op("multiply", term, op("sum", each(axes.all, n)))))],
+    ["a term with a fold over all the records", op("sum", each(axes.all, op("multiply", term, fold(axes.all, { s: lit(0) }, { s: op("add", v("s"), n) }, v("s")))))],
+    ["a term with a node of the memo", op("sum", each(axes.all, op("multiply", term, op("sum", each(axes.where(axes.all, op("lt", n, ref("n", [{ t: "origin" }]))), w)))))],
   ];
   it.each(cases)("%s", (_title, e) => {
     const source = expectSame(let_({ g: fn(["r"], e) }, rec({ a: call("g", lit(2)), b: call("g", lit(-1)) })));
     expect(source).not.toContain("QA(");
     expect(source).not.toContain("let PK");
+  });
+
+  it("a call of a function whose body has a loop", () => {
+    const fns = { loopy: fn(["r"], op("multiply", op("multiply", NEED, r), op("sum", each(axes.all, n)))) };
+    const e = let_(fns, let_({ g: fn(["r"], op("sum", each(axes.all, call("loopy", r)))) }, rec({ a: call("g", lit(2)), b: call("g", lit(-1)) })));
+    expect(expectSame(e)).not.toContain("QA(");
   });
 
   it("a call of a function at the place of its binding", () => {
@@ -193,5 +204,41 @@ describe("the fast sum does not apply: the loop keeps a try for each item", () =
     expect(expectSame(chain(6, (h) => h(6)), CLEAN)).not.toContain("QA(");
     // The interpreter takes more than 2 ** 40 calls for h40, so the test reads only the text. The text prints at once.
     expect(sourceOf(chain(40, (h) => h(40)))).not.toContain("QA(");
+  });
+});
+
+describe("the fast sum: the code of the second print", () => {
+  /** This function gives the sum of `term` over all the records for two parameters. Each let of `fns` sees the lets before it. */
+  const sumOf = (term: Expr, ...fns: readonly Readonly<Record<string, Expr>>[]): Expr =>
+    let_(NEED_FN, fns.reduceRight<Expr>((body, f) => let_(f, body), let_({ g: fn(["r"], op("sum", each(axes.all, term))) }, rec({ a: call("g", lit(3)), b: call("g", lit(-2)) }))));
+  const loops = (source: string): number => [...source.matchAll(/for \(; j\d+ < n; j\d+\+\+\)/g)].length;
+  const locals = (source: string): number => [...source.matchAll(/const pk\d+ = /g)].length;
+
+  it("two reads of one column in a term read one pack", () => {
+    const twice = { twice: fn(["r"], op("add", op("divide", call("need"), r), op("multiply", call("need"), r))) };
+    const source = expectSame(sumOf(call("twice", r), twice));
+    expect(loops(source)).toBeGreaterThan(0);
+    expect(locals(source)).toBe(loops(source));
+  });
+
+  it("a term that reads two columns reads two packs", () => {
+    const other = { other: fn([], op("add", op("add", op("multiply", n, n), op("divide", w, n)), op("multiply", n, lit(3)))) };
+    const both = { both: fn(["r"], op("add", op("multiply", call("need"), r), op("multiply", call("other"), r))) };
+    const source = expectSame(sumOf(call("both", r), other, both));
+    expect(loops(source)).toBeGreaterThan(0);
+    expect(locals(source)).toBe(2 * loops(source));
+  });
+
+  it("ifError around the read of a column gives its second value for an error item of the column", () => {
+    // The need is an error where w is 0. Then the term is r, and the item is not skipped.
+    const guard = { guard: fn(["r"], op("ifError", call("need"), r)) };
+    expect(expectSame(sumOf(call("guard", r), guard))).toContain("QA(");
+  });
+
+  it("an argument with statements evaluates before the body, and a safe short argument is its code", () => {
+    const mix = { mix: fn(["p", "q"], op("add", op("multiply", call("need"), v("p")), v("q"))) };
+    const source = expectSame(sumOf(call("mix", lit(2), op("ifError", op("divide", call("need"), r), lit(5))), mix));
+    expect(source).toContain("QA(");
+    expect(source).not.toMatch(/const b\d+ = 2;/u);
   });
 });

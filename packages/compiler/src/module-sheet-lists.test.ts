@@ -246,6 +246,8 @@ describe("COMPILE.MODULE.SHEET.LIST: a column of lists", () => {
     expect(sheetReason(new Map([["b", op("sum", ext("note", null))]]), NUM)).toBe('the extension "note"');
     expect(sheetReason(new Map([["b", op("sum", ext(CELL_KIND, { column: 5 }))]]), NUM)).toBe('the kinds of the values of "sum" do not decide its op');
     expect(programReason(op("sum", ext("note", null)))).toBe('the extension "note"');
+    // A program that is not a sheet has no cells.
+    expect(programReason(op("add", cell("A"), lit(1)))).toBe(`the extension "${CELL_KIND}"`);
   });
 
   it("COMPILE.MODULE.SHEET.LIST: a read of a column of lists that the sheet does not have gives the error of SheetRun", () => {

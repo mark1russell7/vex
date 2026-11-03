@@ -466,6 +466,26 @@ The fast loop gives the values of the interpreter (P17):
 
 The unit tests are in `packages/compiler/src/module-pack.test.ts`. A change of the emitted code for a program that obeys the rules is a change of the code, not of the semantics. Its golden files change for that reason only.
 
+### 7.8 The pair test: packs in a fold and an exit
+
+This section is the second step of the roadmap item RADIALGAP. The pair test of the radial pilot is a `fold` in a `fold`. The name `ok` of each fold has the step `and(ok, ...)`. In the old module, each child called the functions of its angle step, of its radius and of the distance. The loops also went to the last child after the first pair that was too close.
+
+The first part is the **exit** of a fold (COMPILE.MODULE.EXIT). A name whose step is `and(name, ...)` stops at false. A name whose step is `or(name, ...)` stops at true. After its stop, each step of the name gives the same value and evaluates no other argument. When each name with a stop stops, the loop leaves:
+
+- When the steps of the other names cannot throw and the result does not read them, the loop leaves at once with `break`. The checks and the tests of the targets must not throw too.
+- Otherwise a second loop goes on from the next target, in the order of the loop. It runs the checks, the tests and the steps of the other names only. Then it leaves.
+- A fold with an append into its own list (COMPILE.MODULE.APPEND.OWN) has no exit.
+
+The exit gives the values of the interpreter (P17). The interpreter evaluates the names of each step in order, and the first error is the value of the fold. After the stop, a name with a stop cannot give an error. Thus only the other names, the checks and the tests can give an error, and the second loop evaluates all of them in their order. For example, an angle that overflows after the first pair that is too close is still the error of the pair test.
+
+The second part reads the **packs** in a fold (COMPILE.MODULE.PAIRS). A fold over `all`, with no test, no address and no reverse order, prints its steps again when no name holds a list. In this print, each read of a column at the focus of the fold reads the pack of the column, as in §7.7. Each read at the focus of a loop in the steps reads a pack too. A column of a call of the function that the printer prints has a pack too. Each call of the function makes its pack again, at the first loop that reads it.
+
+Each call at such a focus is the body of its function at the place of the call. The rules of §7.7 for the second print apply. Where the second print fails, the fold keeps its first print. A fold whose first print reads no column that can have a pack has no second print.
+
+A pack evaluates its column at each record, also at a record that the loop does not reach. Thus a pack costs more than a column when the loop leaves early. A column catches each error, so a pack changes no value and no error.
+
+The unit tests are in `packages/compiler/src/module-pairs.test.ts`. They compare the module with the interpreter on error items after a stop, an overflow after a stop, empty collections and collections of one record. They also check the radial pilot on small rings.
+
 ## 8. Bounded iteration
 
 Vex has no loop, so each program ends. The language keeps this property, and it gets **bounded** iteration:

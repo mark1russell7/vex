@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, listOf, lit, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -221,7 +221,7 @@ interface Part {
 const FOCUS_TAGS: ReadonlySet<string> = new Set(["ref", "ext", "call", "each", "fold"]);
 
 /** This function tells if an expression has a node that can read at the focus. */
-const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || children(e).some(readsFocus);
+const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || (e.tag === "iterate" && limitAxis(e) !== undefined) || children(e).some(readsFocus);
 
 /**
  * This function tells if an expression has a node that can read a cell: a read of a cell or a call. The interpreter
@@ -1398,12 +1398,14 @@ function refsOf(e: Expr, name: string): number {
     }
     case "fold":
     case "iterate": {
-      // The steps and the result see the names of the loop. The tests of a fold read only the names outside the fold.
+      // The steps and the result see the names of the loop. The tests of a fold or of a data limit read only the names outside the loop.
       const hidden = name in e.init;
       const steps = [...Object.values(e.step), ...(e.tag === "iterate" && e.until !== undefined ? [e.until] : [])];
-      const once = e.tag === "fold" ? [...(listOf(e.axis) === undefined ? [] : [listOf(e.axis) as Expr]), ...addrExprs(e.at)] : [];
+      const axis = e.tag === "fold" ? e.axis : limitAxis(e);
+      const list = axis === undefined ? undefined : listOf(axis);
+      const once = [...(list === undefined ? [] : [list]), ...(e.tag === "fold" ? addrExprs(e.at) : [])];
       // Stryker disable next-line ArrayDeclaration: refsOf of a string gives NaN, and again(NaN) gives 0.
-      const tests = e.tag === "fold" ? axisExprs(e.axis).filter((x) => x !== listOf(e.axis)) : [];
+      const tests = axis === undefined ? [] : axisExprs(axis).filter((x) => x !== list);
       const item = e.tag === "fold" && e.as?.includes(name) === true;
       return refsIn([...Object.values(e.init), ...once], name) + again(refsIn(tests, name)) + (hidden || item ? 0 : again(refsIn(steps, name))) + (hidden ? 0 : refsOf(e.result, name));
     }
@@ -3911,6 +3913,8 @@ class Printer {
     const loop = this.#loops++;
     const names = this.#loopNames(e.init, e.step, ctx, loop);
     const inner: Ctx = { ...ctx, env: names.env };
+    // The data limit reads the names outside the loop, after the first values (ITERATE.LIMIT.DATA).
+    const limit = this.#limit(e, ctx);
     // A loop at a place that takes a list gives its result there (LOOP.LIST).
     if (this.#wantList.has(e)) this.#wantList.add(e.result);
     const until = e.until === undefined ? undefined : this.expr(e.until, inner);
@@ -3919,12 +3923,24 @@ class Printer {
     const k = this.fresh("k");
     const body = [
       ...(until === undefined ? [] : [...until.s, `if (${this.#boolean(until.v)}) break;`]),
-      `if (${k} === ${String(e.limit)}) ${until === undefined ? "break;" : `${this.use("F")}();`}`,
+      `if (${k} === ${limit.code}) ${until === undefined ? "break;" : `${this.use("F")}();`}`,
       ...step.s,
     ];
     const inside = [...(until?.v.deps ?? []), ...step.deps, ...result.v.deps].filter((d) => d !== loop);
-    const deps = new Set([...names.deps, ...inside]);
-    return { s: [...names.s, ...this.#ownVars(step.owners), `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+    const deps = new Set([...names.deps, ...limit.deps, ...inside]);
+    return { s: [...names.s, ...limit.s, ...this.#ownVars(step.owners), `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+  }
+
+  /**
+   * The number of steps of an iteration. A data limit is the strict count of the targets of its axis, so an error of the
+   * axis, of a test or of an item throws. A count above the cap throws too (ITERATE.LIMIT.ERROR).
+   */
+  #limit(e: ExprOf<"iterate">, ctx: Ctx): { readonly s: readonly string[]; readonly code: string; readonly deps: ReadonlySet<number> } {
+    const [targets] = splitLimit(e) ?? [];
+    if (targets === undefined) return { s: [], code: String(e.limit), deps: new Set() };
+    const count = this.expr(app("count", targets, lit({ strict: true })), ctx);
+    const n = this.fresh("n");
+    return { s: [...count.s, `const ${n} = ${count.v.code};`, `if (${n} > ${String(MAX_ITERATIONS)}) ${this.use("F")}();`], code: n, deps: count.v.deps };
   }
 
   /**

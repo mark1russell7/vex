@@ -7,7 +7,7 @@
  * Each other error stops the program with `FALLBACK`. An error of an extension is such an error too, but `#DEPTH!` of an
  * extension stops the program (COMPILE.EXT).
  */
-import { addrExprs, children, isFieldName, isListOp, MAX_NESTING, nestingOf, shapeError, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, children, isFieldName, isListOp, limitAxis, MAX_ITERATIONS, MAX_NESTING, nestingOf, shapeError, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, listReason, MAX_CALLS, primitiveOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
@@ -715,20 +715,38 @@ class Lowerer {
     const tests = first + Object.keys(e.step).length;
     const { env, locals } = this.#loopNames(e.init, s, path, b);
     const inner: Scope = { ...s, env };
+    const limit = this.#limit(e, s, path, tests, b);
+    const untilAt = tests + whereTests(limitAxis(e) ?? { t: "all" }).length;
     const label = this.labels++;
     const k = this.typedLocal("number");
     b.stmts.push({ t: "let", n: k, value: num(0) });
     const body = block(b.fail);
     if (e.until !== undefined) {
-      const stop = this.#boolean(this.expr(e.until, inner, [...path, tests], body), body);
+      const stop = this.#boolean(this.expr(e.until, inner, [...path, untilAt], body), body);
       body.stmts.push({ t: "check", ok: prim("!", stop), reason: "the test until", fail: { t: "break", label } });
     }
     // At the limit, an iteration without a test ends, and an iteration with a test fails.
-    body.stmts.push({ t: "check", ok: prim("!==", local(k), num(e.limit)), reason: "the limit of iterate", fail: e.until === undefined ? { t: "break", label } : b.fail });
+    body.stmts.push({ t: "check", ok: prim("!==", local(k), limit), reason: "the limit of iterate", fail: e.until === undefined ? { t: "break", label } : b.fail });
     this.#loopStep(e.step, inner, path, first, body, locals);
     body.stmts.push({ t: "set", n: k, value: prim("+", local(k), num(1)) });
     b.stmts.push({ t: "repeat", label, body: body.stmts });
-    return this.expr(e.result, inner, [...path, tests + (e.until === undefined ? 0 : 1)], b);
+    return this.expr(e.result, inner, [...path, untilAt + (e.until === undefined ? 0 : 1)], b);
+  }
+
+  /**
+   * This method gives the number of steps of an iteration. A data limit counts the targets of its axis. Its failure
+   * stops the program, and tier 1 gives the error (ITERATE.LIMIT.ERROR).
+   */
+  #limit(e: ExprOf<"iterate">, s: Scope, path: readonly number[], firstTest: number, b: Block): LExpr {
+    const axis = limitAxis(e);
+    if (axis === undefined) return num(e.limit as number);
+    const n = this.typedLocal("number");
+    b.stmts.push({ t: "let", n, value: num(0) });
+    this.#targetLoop(axis, undefined, s, path, firstTest, b, () => b.fail, (body) => {
+      body.stmts.push({ t: "set", n, value: prim("+", local(n), num(1)) });
+    });
+    this.check(b, prim("===", prim("min", local(n), num(MAX_ITERATIONS)), local(n)), "a data limit in the cap");
+    return local(n);
   }
 
   /** This method lowers a fold (FOLD.ORDER): the loop over the targets, with a step at each target. */

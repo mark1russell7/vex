@@ -3,7 +3,7 @@
  * whose op the interpreter takes first, and the kinds and the lifts of its parameters. The facts come from the op
  * tables, so the same options always give the same facts, and the same source.
  */
-import { children, isListOp, isOpName, isVexList, liftsAt, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
+import { children, isListOp, isOpName, isVexList, liftsAt, limitAxis, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
 /**
  * The most bodies of functions that tier 2 puts at the calls of one program. A function that calls another function
@@ -25,7 +25,8 @@ const ORDER_OPS: ReadonlySet<string> = new Set(["sortBy", "take", "nth", "drop",
 export function listReason(expr: Expr): string | undefined {
   const todo: Expr[] = [expr];
   for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
-    if ((x.tag === "each" || x.tag === "fold") && listOf(x.axis) !== undefined) return 'the program has the axis "list", and tier 2 does not have lists as values yet';
+    const axis = x.tag === "each" || x.tag === "fold" ? x.axis : x.tag === "iterate" ? limitAxis(x) : undefined;
+    if (axis !== undefined && listOf(axis) !== undefined) return 'the program has the axis "list", and tier 2 does not have lists as values yet';
     // Stryker disable next-line ConditionalExpression: a node that is not an app has no field op, so the set does not have it
     if (x.tag === "app" && ORDER_OPS.has(x.op)) return `the program has the list op "${x.op}", and tier 2 does not have lists as values yet`;
     if (x.tag === "lit" && isVexList(x.value)) return "the program has a list literal, and tier 2 does not have lists as values yet";

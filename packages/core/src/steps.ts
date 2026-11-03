@@ -1,10 +1,9 @@
 /**
- * The steps of Vex (STEP.LADDER, STEP.LOWEST, STEP.MAX). A step is a level of the power of the language: step A is a
- * total formula language, step B adds limits from the data and fixed points, and step C adds functions that call
+ * The steps of Vex (STEP.LADDER, STEP.LOWEST, STEP.MAX). A step is a level of the power of the language. Step A is a
+ * total formula language. Step B adds limits from the data and fixed points. Step C adds functions that call
  * themselves. The checker gives the lowest step that a program needs, with the reason. The host option `maxStep` sets
- * the highest step that the host accepts, and the default is B. A program has no field for its step, so a document
- * cannot raise its own step. The ladder is the ladder of steps of coeval (D116 of coeval), with the table of
- * `constructs.ts`.
+ * the highest step that the host accepts. The default is B. A program has no field for its step, so a document cannot
+ * raise its own step. The ladder is the ladder of steps of coeval (D116 of coeval), with the table of `constructs.ts`.
  */
 import { checkStep, isStep, stepLadder, stepOf, stepRank, type StepLadder, type StepReason, type StepWalk } from "@mark1russell7/coeval";
 import { CONSTRUCT_STEPS, type VexStep } from "./constructs.ts";

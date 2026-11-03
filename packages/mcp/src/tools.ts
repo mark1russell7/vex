@@ -132,8 +132,8 @@ export interface RunInput {
 }
 
 /**
- * This function gives the facts of a program: its step with the reason (STEP.LOWEST), its reads, its size, and if the
- * compiler gives it generated code.
+ * This function gives the facts of a program: its step with the reason (STEP.LOWEST), its reads and its size. It
+ * also tells if the compiler gives generated code.
  */
 export function check(input: { readonly program: unknown; readonly domains?: readonly string[] | undefined; readonly maxStep?: VexStep | undefined }): unknown {
   const domains = domainsOf(input.domains);

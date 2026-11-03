@@ -61,18 +61,16 @@ describe("the steps in the tiers and the modules", () => {
         const [c1] = at("C");
         const step = programStep(e).step;
         seen.add(step);
-        // A check before the check of steps, for example LOOP.SIZE, gives its error at each step.
-        if (sizeError(e, { domains: DOMAINS }) === undefined) {
-          // A refuses each program above A. B accepts a program that A refuses only if its step is B.
-          expect([refused(a1), refused(a2)]).toEqual([step !== "A", step !== "A"]);
-          expect([refused(b1), refused(b2)]).toEqual([step === "C", step === "C"]);
-          expect(refused(c1)).toBe(false);
-        }
-        if (!refused(a1)) expect(fromCore(a1)).toStrictEqual(fromCore(b1));
-        if (!refused(b1)) {
-          expect(fromCore(b2)).toStrictEqual(fromCore(b1));
-          expect(fromCore(c1)).toStrictEqual(fromCore(b1));
-        }
+        // A check before the check of steps, for example LOOP.SIZE, gives its error at each step, so no step refuses it.
+        const sized = sizeError(e, { domains: DOMAINS }) === undefined;
+        // A refuses each program above A. B accepts a program that A refuses only if its step is B. C accepts each program.
+        const expected = sized ? [step !== "A", step !== "A", step === "C", step === "C", false] : [false, false, false, false, false];
+        expect([a1, a2, b1, b2, c1].map(refused)).toEqual(expected);
+        // An accepted program gives the same value at each step and in each tier.
+        expect(fromCore(a2)).toStrictEqual(fromCore(a1));
+        expect(fromCore(b2)).toStrictEqual(fromCore(b1));
+        expect(fromCore(a1)).toStrictEqual(fromCore(refused(a1) ? a1 : b1));
+        expect(fromCore(c1)).toStrictEqual(fromCore(refused(b1) ? c1 : b1));
       }),
     );
     expect(seen).toEqual(new Set(["A", "B", "C"]));

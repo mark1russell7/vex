@@ -4,14 +4,16 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "./evaluate.ts";
-import { app, call, fn, iterate, let_, lit, rec, v, type Expr } from "./ir.ts";
+import type { VexStep } from "./constructs.ts";
+import { app, call, fn, iterate, let_, lit, rec, v, type Expr, type ExprTag } from "./ir.ts";
 import { space } from "./space.ts";
 import { programStep, stepError, VEX_STEPS } from "./steps.ts";
 import { error, value } from "./test-support.ts";
 
 vi.mock(import("./constructs.ts"), async (load) => {
   const real = await load();
-  return { ...real, CONSTRUCT_STEPS: { ...real.CONSTRUCT_STEPS, iterate: "B", call: "C" } };
+  const steps: Readonly<Record<ExprTag, VexStep>> = { ...real.CONSTRUCT_STEPS, iterate: "B", call: "C" };
+  return { ...real, CONSTRUCT_STEPS: steps };
 });
 
 const loop: Expr = iterate(3, { i: lit(0) }, { i: app("add", v("i"), lit(1)) }, v("i"));
@@ -20,8 +22,8 @@ const sp = space.array([{ n: 1 }]);
 
 describe("the steps of Vex with constructs of steps B and C", () => {
   it("STEP.LADDER: the ladder takes the table of constructs", () => {
-    expect(VEX_STEPS.constructs.iterate).toBe("B");
-    expect(VEX_STEPS.constructs.call).toBe("C");
+    expect(VEX_STEPS.constructs["iterate"]).toBe("B");
+    expect(VEX_STEPS.constructs["call"]).toBe("C");
   });
 
   it("STEP.LOWEST: the step is the highest step of the nodes, and the reason is the first node with it", () => {

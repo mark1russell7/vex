@@ -26,7 +26,7 @@ describe("the steps of Vex", () => {
     expect(VEX_STEPS.steps).toEqual(["A", "B", "C"]);
     expect(VEX_STEP_NAMES).toEqual(VEX_STEPS.steps);
     const tags: readonly ExprTag[] = ["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "fn", "call", "ext"];
-    expect(Object.keys(CONSTRUCT_STEPS).sort()).toEqual([...tags].sort());
+    expect(Object.keys(CONSTRUCT_STEPS).toSorted()).toEqual(tags.toSorted());
     expect(new Set(Object.values(VEX_STEPS.constructs))).toEqual(new Set(["A"]));
     expect(DEFAULT_MAX_STEP).toBe("B");
   });
@@ -50,7 +50,7 @@ describe("the steps of Vex", () => {
     expect([e.code, e.kind]).toEqual(["#VALUE!", "bad-expression"]);
     expect(e.message).toContain("(STEP.MAX)");
     expect(error(compile(lit(1), bad).run({ space: sp, origin: "0" })).message).toContain("(STEP.MAX)");
-    for (const source of [lit(1), toDocument(lit(1))]) {
+    for (const source of [lit(1), value(toDocument(lit(1)))]) {
       const plan = kernelPlan(source, bad);
       expect(plan.doc).toBeUndefined();
       expect(error(plan.run({ space: sp, origin: "0" })).message).toContain("(STEP.MAX)");

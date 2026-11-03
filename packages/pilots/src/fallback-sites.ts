@@ -39,8 +39,11 @@ interface Recorder {
   readonly stop: (id: number) => typeof FALLBACK;
   readonly note: (id: number) => true;
   readonly thrown: (e: unknown) => typeof FALLBACK;
-  readonly ext: (kind: string, data: unknown, s: RunOptions["space"], origin: string, focus: string, path: readonly number[]) => unknown;
+  readonly ext: (inner: ExtRule) => ExtRule;
 }
+
+/** The rule `ext` of the runtime of tier 2. */
+type ExtRule = (kind: string, data: unknown, s: RunOptions["space"], origin: string, focus: string, path: readonly number[]) => unknown;
 
 /** The context of a site at the top of the program. */
 export const TOP = "at the top of the program";
@@ -112,7 +115,7 @@ export function siteProbe(expr: Expr, options: GenerateOptions = {}): SiteProbe 
   const body = lines.findIndex((l) => l.startsWith("return function vex("));
   const stops: Stop[] = [];
   const out = lines.map((line, i) => {
-    if (i < body) return line.replace("const ext_ = R.ext;", "const ext_ = P_.ext;");
+    if (i < body) return line.replace("const ext_ = R.ext;", "const ext_ = P_.ext(R.ext);");
     // The catch of the program: an exception stops it.
     if (line === "  } catch {" && lines[i + 1] === `    ${RETURN_F}`) return "  } catch (e) {";
     if (line === `    ${RETURN_F}` && lines[i - 1] === "  } catch {") return "    return P_.thrown(e);";
@@ -151,19 +154,28 @@ export function siteProbe(expr: Expr, options: GenerateOptions = {}): SiteProbe 
       last = { thrown: e };
       return FALLBACK;
     },
-    // The rule of `ext` of the runtime, with a record of the error of the handler.
-    ext: (kind, data, s, origin, focus, path) => {
-      const handler = Object.hasOwn(extensions, kind) ? extensions[kind] : undefined;
-      if (handler === undefined) {
-        lastExt = `${kind}, no handler`;
-        return FALLBACK;
-      }
-      const r = handler(data, { space: s, position: { origin, focus }, path });
-      if (r.ok) return r.value;
-      lastExt = `${kind} gave ${r.error.code}`;
-      return FALLBACK;
+    // The rule `ext` of the runtime, with a record of an extension that has no handler. The handlers record their errors.
+    ext: (inner) => (kind, ...rest) => {
+      if (!Object.hasOwn(extensions, kind)) lastExt = `${kind}, no handler`;
+      return inner(kind, ...rest);
     },
   };
+  /** The handlers of the extensions, each with a record of its error or its exception. */
+  const recorded: Record<string, ExtHandler> = Object.fromEntries(
+    Object.entries(extensions).map(([kind, handler]): [string, ExtHandler] => [
+      kind,
+      (data, ctx) => {
+        try {
+          const r = handler(data, ctx);
+          if (!r.ok) lastExt = `${kind} gave ${r.error.code}`;
+          return r;
+        } catch (thrown) {
+          lastExt = `${kind} threw`;
+          throw thrown;
+        }
+      },
+    ]),
+  );
   /** This function gives the text of a check, with its op or the error of its extension. */
   const siteText = (stop: Stop): string => {
     const op = stop.local === undefined ? undefined : ops.get(stop.local);
@@ -184,7 +196,7 @@ export function siteProbe(expr: Expr, options: GenerateOptions = {}): SiteProbe 
     return { site: `${stop.reason}, after ${note}`, context: stop.context };
   };
   const source = [out[0], `const P_ = K[${String(g.program.constants.length)}];`, ...out.slice(1)].join("\n");
-  const fast = load({ ...g, source, program: { ...g.program, constants: [...g.program.constants, recorder] } });
+  const fast = load({ ...g, source, options: { ...g.options, extensions: recorded }, program: { ...g.program, constants: [...g.program.constants, recorder] } });
   const run = (r: RunOptions): { readonly value: unknown; readonly site?: FallbackSite } => {
     last = undefined;
     lastExt = undefined;

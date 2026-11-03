@@ -219,6 +219,17 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
   A use inside a nested loop or inside `each` counts as many uses. A function counts the uses of its arguments. A value from outside the loop is a constant, so `append(xs, outside)` is valid. A chain of names that grows by a factor at each step is not valid. `compile` refuses an expression that breaks this rule with `#VALUE!`, and so do tier 2, `emitModule` and `vex_check`. The reason names the loop, the name and the op.
 - **[LOOP.SIZE.OPS]** Each op that can give a list or a text has a size rule as data. The rule is the property `size` of the op, or `size: "fixed"` of its domain. A function of the host has a rule in its property `size`. An op with no rule that gets a value of the loop makes the loop not valid, and the reason names the op.
 
+### 5.8 Steps
+
+A step is a level of the power of the language. A host sets the highest step that it accepts.
+
+- **[STEP.LADDER]** The steps of Vex are A, B and C, from the lowest to the highest. Step A has loops with a fixed count. Step B adds limits from the data, and fixed points whose steps move one way. Step C adds functions that call themselves, with a budget. Each construct has a step as data in `CONSTRUCT_STEPS`. Today each construct is of step A.
+- **[STEP.LOWEST]** The step of a program is the highest step of its nodes. The reason is the first node with that step, in the order of `children`, with its construct and its path. `programStep` gives the step and the reason.
+- **[STEP.MAX]** The host option `maxStep` sets the highest step that the host accepts. The default is B. A program above `maxStep` is not valid. `compile`, tier 2, `emitModule` and `vex_check` refuse it, and the reason names the needed step. A program has no field for its step, so a document cannot raise its own step. A value of `maxStep` that is not a step is not valid. The default B fails closed. Each construct of step B has a bound of cost from the size of the input. Each construct of step A has one too (`LOOP.SIZE` and the evaluation budget). A construct without such a bound has step C.
+- **[STEP.VALUE]** The option `maxStep` changes only which programs the host accepts. Each accepted program gives the same value at each step. LOOP.SIZE, EVAL.PURE and P17 hold at each step.
+- **[STEP.CYCLE]** A cycle of cells without an explicit fixed point gives `#CYCLE!` at each step.
+- **[STEP.TOOLS]** `vex_check` gives the step of the program and the reason. `vex_explain` gives the step at the root, on the first line of the trace.
+
 ## 6. Folds
 
 - **[TRACE.EVENTS]** `explain` records one event for each node evaluation, in the order that the nodes finish. A reference event records its reads.

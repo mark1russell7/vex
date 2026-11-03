@@ -2,7 +2,7 @@
  * The tiers (docs/COMPILER.md §2.1). Tier 2 is generated JavaScript. Tier 1 is the closure compiler of the core, and it
  * gives each result that tier 2 cannot give. Thus a tiered program gives the results of the interpreter.
  */
-import { compile, fromDocument, isDocument, ok, sizeError, type CompileOptions, type Envelope, type Expr, type Program, type Space } from "@mark1russell7/vex";
+import { compile, fromDocument, isDocument, ok, sizeError, stepError, type CompileOptions, type Envelope, type Expr, type Program, type Space } from "@mark1russell7/vex";
 import { factsOf, type Schema } from "./facts.ts";
 
 /** The options of the compiler: the options of `compile`, and the schema of the host (docs/COMPILER.md §3.2). */
@@ -34,8 +34,8 @@ export function generate(source: Expr | Envelope, options: GenerateOptions = {})
   try {
     const facts = factsOf(options);
     const program = lower(read.value, facts, options.schema);
-    // LOOP.SIZE: tier 2 refuses the steps that tier 1 refuses. The lowering checks the shape and the nesting first.
-    const size = sizeError(read.value, options);
+    // LOOP.SIZE, STEP.MAX: tier 2 refuses the programs that tier 1 refuses. The lowering checks the shape and the nesting first.
+    const size = sizeError(read.value, options) ?? stepError(read.value, options);
     if (size !== undefined) return { ok: false, reason: size };
     return { ok: true, program, source: printJs(program, facts), options };
   } catch (thrown) {

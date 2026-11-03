@@ -460,6 +460,10 @@
     "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
   },
   {
+    "file": "packages/core/src/steps.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: without the shortcut, the walk gives the same answer"
+  },
+  {
     "file": "packages/core/src/write.ts",
     "comment": "// Stryker disable next-line StringLiteral: the writer tests only the kind \"envelope\", so each other kind is the kind \"term\""
   },

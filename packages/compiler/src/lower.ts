@@ -4,9 +4,10 @@
  *
  * Each value that the interpreter can give as an error has a check. The block of the check tells what a failure does
  * (`Fail`). A list op skips an error item, and an error in the first argument of `ifError` gives the second argument.
- * Each other error stops the program with `FALLBACK`.
+ * Each other error stops the program with `FALLBACK`. An error of an extension is such an error too, but `#DEPTH!` of an
+ * extension stops the program (COMPILE.EXT).
  */
-import { addrExprs, isFieldName, isListOp, MAX_NESTING, nestingOf, shapeError, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import { addrExprs, children, isFieldName, isListOp, MAX_NESTING, nestingOf, shapeError, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
 import { factsOf, listReason, MAX_CALLS, primitiveOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
@@ -247,7 +248,7 @@ class Lowerer {
       case "call":
         return this.#call(e, s, path, b);
       case "rec": {
-        const values = Object.values(e.fields).map((x, i) => this.expr(x, s, [...path, i], b));
+        const values = this.#all(Object.values(e.fields), s, path, 0, b);
         return this.value(b, call("rec", this.constant(Object.keys(e.fields)), array(...values)));
       }
       case "app":
@@ -267,10 +268,8 @@ class Lowerer {
         return this.value(b, call("list", local(keys), local(values)));
       }
       case "ext": {
-        // An extension can give the error #DEPTH!, which a list op does not skip. Thus an error of an extension stops the program.
-        const x = this.value(b, call("ext", this.constant(e.kind), this.constant(e.data), s.space, s.origin, s.focus, this.constant(path)));
-        b.stmts.push({ t: "check", ok: prim("!==", x, FALLBACK_EXPR), reason: "an extension", fail: RETURN });
-        return x;
+        // COMPILE.EXT: an error of an extension is an error of the block. The runtime throws for #DEPTH!, which stops the program.
+        return this.checked(b, call("ext", this.constant(e.kind), this.constant(e.data), s.space, s.origin, s.focus, this.constant(path)), "an extension");
       }
     }
   }
@@ -296,6 +295,33 @@ class Lowerer {
     this.check(b, prim("entryOk", local(h)), "a value of the memo");
     // Each entry of the memo comes from the code of the node, so it has the kind of the value of the node.
     return this.#typed(this.value(b, prim("entryValue", local(h))), this.kindOf(node.value));
+  }
+
+  /**
+   * This method lowers the arguments of an op or the fields of a record, with the child indexes from `first`. After an
+   * error, the interpreter still evaluates the later arguments, and an extension there can give `#DEPTH!` (`#all` of the
+   * interpreter). Thus where the program catches the error, each argument before the last one that can call an
+   * extension evaluates in a block of its own (COMPILE.EXT). Then a failure skips no extension.
+   */
+  #all(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, b: Block): LExpr[] {
+    const last = b.fail === RETURN ? -1 : xs.findLastIndex((x) => this.#mayExt(x, s.fns));
+    const parts = xs.map((x, i): Bound => {
+      const at = [...path, first + i];
+      return i < last ? this.#attempt(b, (inner) => this.expr(x, s, at, inner)) : { value: this.expr(x, s, at, b) };
+    });
+    for (const x of parts) if (x.ok !== undefined) this.check(b, x.ok, "an argument with a value");
+    return parts.map((x) => x.value);
+  }
+
+  /**
+   * This method tells if an expression can call an extension. A call reads the body of its function, and the bodies of
+   * the functions of that body. A function cannot call itself, so the search ends.
+   */
+  #mayExt(e: Expr, fns: ReadonlyMap<string, BoundFn>): boolean {
+    if (e.tag === "ext") return true;
+    const bound = e.tag === "call" ? fns.get(e.fn) : undefined;
+    if (bound !== undefined && this.#mayExt(bound.fn.body, bound.scope.fns)) return true;
+    return children(e).some((x) => this.#mayExt(x, fns));
   }
 
   /**
@@ -386,7 +412,7 @@ class Lowerer {
       const target = eachUnderLets(args[0]);
       if (target !== undefined) return this.#fused(op, e, target, s, path, b);
     }
-    const values = args.map((x, i) => this.expr(x, s, [...path, i], b));
+    const values = this.#all(args, s, path, 0, b);
     const kinds = values.map((x) => this.kindOf(x));
     // A static site checks the kind of its result, so the result has the kind that the op declares (KIND.RETURNS).
     const site = this.#facts.staticSite(op, kinds);
@@ -471,17 +497,21 @@ class Lowerer {
       inner = { ...inner, ...this.#bind(x, inner, at, b) };
       at = [...at, Object.keys(x.bind).length];
     }
-    const rest = e.args.slice(1).map((x, i) => this.expr(x, s, [...path, i + 1], b));
+    // COMPILE.EXT: the interpreter evaluates each item of the list before the op, and an extension in an item can give
+    // #DEPTH!. Thus where the program catches the error of the op, a failure that would skip the later items stops the
+    // program, if the list can call an extension.
+    const skip: Block = b.fail !== RETURN && this.#mayExt(e.args[0] as Expr, s.fns) ? { stmts: b.stmts, fail: RETURN } : b;
+    const rest = this.#all(e.args.slice(1), s, path, 1, skip);
     const options = op === "reduce" ? rest[1] : rest[0];
     const strict = options === undefined ? undefined : this.value(b, prim("===", call("opts", options), bool(true)));
     const name = rest[0];
     if (op === "reduce") {
-      if (name === undefined) return this.fail(b);
-      this.check(b, prim("isString", name), "an op name");
+      if (name === undefined) return this.fail(skip);
+      this.check(skip, prim("isString", name), "an op name");
     }
     const items = (label: number): Fail => {
       if (op === "errors") return RETURN;
-      return strict === undefined ? { t: "continue", label } : { t: "continue", label, strict: { cond: strict, else: b.fail } };
+      return strict === undefined ? { t: "continue", label } : { t: "continue", label, strict: { cond: strict, else: skip.fail } };
     };
 
     const acc = this.locals++;
@@ -494,9 +524,9 @@ class Lowerer {
       body.stmts.push({ t: "set", n, value: prim("+", local(n), num(1)) });
     };
     // A check of the list op itself is in the loop, but its failure is a failure of the list op.
-    const opCheck = (body: Block): Block => ({ stmts: body.stmts, fail: b.fail });
+    const opCheck = (body: Block): Block => ({ stmts: body.stmts, fail: skip.fail });
     const firstThen = (body: Block, v: LExpr, then: (later: Block) => LExpr): void => {
-      const later = block(b.fail);
+      const later = block(skip.fail);
       later.stmts.push({ t: "set", n: acc, value: then(later) });
       body.stmts.push({ t: "if", cond: prim("===", local(n), num(0)), yes: [{ t: "set", n: acc, value: v }], no: later.stmts });
     };

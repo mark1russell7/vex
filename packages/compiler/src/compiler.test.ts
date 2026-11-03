@@ -499,7 +499,8 @@ describe("COMPILE.TIERED: a list op over an axis is one loop with the result of 
     ["a step inside an item fails, so the item is skipped", app("count", all(app("reduce", all(ref("tag")), lit("nope")))), true],
     ["strict inside an item, with an error item", app("count", all(app("sum", all(ref("s")), lit({ strict: true })))), true],
     ["ifError inside an item", app("sum", all(app("ifError", ref("big"), lit(0)))), true],
-    ["an extension error inside an item", app("count", all(ext("no", null))), false],
+    // COMPILE.EXT: the list op skips the error item in tier 2 too.
+    ["an extension error inside an item", app("count", all(ext("no", null))), true],
     ["a list op over a list value", let_({ xs: all(n) }, app("count", v("xs"))), false],
   ];
   it.each(cases)("%s", (_title, e, fast) => expectSame(e, fast));

@@ -101,6 +101,23 @@ describe("COMPILE.SOURCE: the generated source", () => {
     await expectGolden("stops", rec({ list: each(axes.all, ref("n")), errors: app("errors", each(axes.all, ref("n"))), ext: ext("note", "a") }));
   });
 
+  it("COMPILE.EXT: an error of an extension that the program catches stays in tier 2", async () => {
+    const note = ext("note", "a");
+    await expectGolden(
+      "ext-errors",
+      rec({
+        // ifError catches the error of the extension. The argument before it has a block of its own, so its error skips no extension.
+        caught: app("ifError", app("add", ref("n"), note), lit(0)),
+        args: app("ifError", app("add", ref("n"), ref("m"), note, ref("q")), lit(0)),
+        // A list op skips the error item. A list that can call an extension stops the program at a failure of the op.
+        items: app("count", each(axes.all, note)),
+        strict: app("ifError", app("sum", each(axes.all, note), lit({ strict: true })), lit(0)),
+        // The list of the second list op calls no extension, so its failures stay in tier 2.
+        plain: app("ifError", app("sum", each(axes.all, ref("n")), lit({ strict: true })), lit(0)),
+      }),
+    );
+  });
+
   it("the fast path of each kind of op site, for the options", async () => {
     const options: CompileOptions = { domains: [Vec2Domain, NumDomain, BoolDomain], fns: { twice: (x: unknown) => x } };
     const e = rec({

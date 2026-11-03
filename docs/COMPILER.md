@@ -119,6 +119,17 @@ A failed check stops the program only where the error is the result. In three co
 
 An exception in an op is the error `#CALC!` of that op, so it follows the same rules. A full call stack (`#DEPTH!`) always stops the program, because no list op and no `ifError` hides it.
 
+An error of an extension follows the same rules (COMPILE.EXT). An extension without a handler and an exception of a handler are errors too. The runtime gives `FALLBACK` for each such error. For `#DEPTH!` of an extension, the runtime throws, so the program stops. Thus the interpreter and tier 2 have the same rule for an extension and for an op.
+
+Example: `IFERROR(row(-1).closing, 792)` reads a row that does not exist. The cell extension gives `#REF!`, and tier 2 gives 792.
+
+A failure jumps to the end of its block, but the interpreter still evaluates some later parts. An extension in such a part can give `#DEPTH!`, and then `#DEPTH!` is the result. Thus where the program catches an error, two rules keep the result of the interpreter:
+
+- **The later arguments.** The interpreter evaluates each argument of an op and each field of a record, also after an error (`#all`). Each argument before the last argument that can use an extension gets a block of its own. A check after the arguments reads the flags.
+- **The later items.** The interpreter makes each item of a list before the list op. A failure of the op stops the loop, for example the first error item with `strict`. If the list can use an extension, such a failure stops the program. A failure of the other arguments of the op also stops it. Then tier 1 gives the result.
+
+A function call can use an extension in the body of its function, or in the body of a function of that body. A program without an extension gets the same code as before.
+
 ### 4.2 The same bits
 
 A result of tier 2 must have the same bits as the result of the interpreter. ireko compares its layouts byte for byte.
@@ -705,7 +716,7 @@ Two caches of the runtime give most of the speed:
 
 The rest of the time goes into the reads of the space and into the checks that the semantics need, for example `valid`. Phase C2 removes this time with the kinds and the inline forms.
 
-These cases operate in tier 1: a list value with an error item, and a list op on a list value. An error of an extension and each other exception also operate in tier 1.
+These cases operate in tier 1: a list value with an error item, and a list op on a list value. Each exception that is not an error of an op also operates in tier 1. Since COMPILE.EXT, an error of an extension operates in tier 1 only where it is the result (§4.1).
 
 An item for the owner: npm trusted publishing needs the package on npm. Before the next release, the owner publishes `@mark1russell7/vex-compiler` once, or adds its trust, as for the other packages.
 
@@ -767,7 +778,7 @@ The plan had a different solution: one pass for all groups. That needs an `eq` o
 
 #### Sheets: compiled formulas in a run
 
-A `SheetRun` takes the option `compile`, for example `tiered` (SHEET.COMPILE). The run then evaluates each formula of a column with its compiled program. A cell reference stays an extension, so the search of the run does not change. After an error of a cell reference, for example `#CYCLE!`, tier 1 evaluates the formula again. The run gives the result of tier 1.
+A `SheetRun` takes the option `compile`, for example `tiered` (SHEET.COMPILE). The run then evaluates each formula of a column with its compiled program. A cell reference stays an extension, so the search of the run does not change. An error of a cell reference, for example `#CYCLE!`, is an error of tier 2 (COMPILE.EXT). Where the error is the result, tier 1 evaluates the formula again, and the run gives the result of tier 1.
 
 A formula compiles once for each compiler and its options, also across runs. A compiled program reads the cells of the active run, so it does not depend on one run. The formula of a single cell evaluates once in a run, so the run does not compile it.
 

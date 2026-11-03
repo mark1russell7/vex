@@ -2,6 +2,7 @@ import { SheetRun } from "@mark1russell7/vex";
 import { emitSheetModule } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { fitChild as child, measureVars as vars } from "./inputs.ts";
 import { fitNode, MEASURE_COLUMNS, MEASURE_DOMAINS, MEASURE_KINDS, MEASURE_SCHEMA, measureRecords, measureSpace, type Fit, type FitChild, type MeasureVars } from "./ireko-measure.ts";
 
 type Columns = Readonly<Record<string, readonly unknown[]>>;
@@ -37,45 +38,6 @@ function fitOf(columns: Columns, n: number): Fit {
     placement: Array.from({ length: n }, (_, k) => ({ x: num("lx", k + 1), y: num("ly", k + 1), scale: num("ls", k + 1) })),
   };
 }
-
-const coord = fc.oneof(fc.integer({ min: -400, max: 400 }), fc.double({ min: -400, max: 400, noNaN: true, noDefaultInfinity: true }));
-const size = fc.oneof(fc.integer({ min: 1, max: 400 }), fc.double({ min: 1e-3, max: 400, noNaN: true, noDefaultInfinity: true }));
-const space0 = fc.oneof(fc.constant(0), fc.integer({ min: 0, max: 40 }), fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true }));
-const child: fc.Arbitrary<FitChild> = fc.record({ offset: fc.record({ x: coord, y: coord }), extent: fc.record({ x: coord, y: coord, width: size, height: size }) });
-const fit = fc.constantFrom("grow", "scale", "clip");
-const vars: fc.Arbitrary<MeasureVars> = fc
-  .record({
-    linked: fc.boolean(),
-    content: fc.boolean(),
-    area: fc.record({ x: coord, y: coord, width: size, height: size }),
-    own: fc.record({ width: size, height: size }),
-    explicit: fc.record({ width: fc.oneof(fc.constant(0), size), height: fc.oneof(fc.constant(0), size) }),
-    node: fc.record({ width: fc.option(fc.oneof(size, fc.constant(1), fc.constant(2))), height: fc.option(fc.oneof(size, fc.constant(1), fc.constant(2))) }),
-    padding: space0,
-    header: space0,
-    fit,
-  })
-  .map((r) => ({
-    linked: r.linked,
-    content: r.content,
-    cx: r.content ? r.area.x : 0,
-    cy: r.content ? r.area.y : 0,
-    cw: r.content ? r.area.width : 0,
-    ch: r.content ? r.area.height : 0,
-    ownW: r.own.width,
-    ownH: r.own.height,
-    expW: r.explicit.width,
-    expH: r.explicit.height,
-    hasW: r.node.width !== null,
-    hasH: r.node.height !== null,
-    nodeW: r.node.width ?? 0,
-    nodeH: r.node.height ?? 0,
-    padding: r.padding,
-    header: r.header,
-    grow: r.fit === "grow",
-    scale: r.fit === "scale",
-    clip: r.fit === "clip",
-  }));
 
 describe("the ireko measure pilot", () => {
   const measure = moduleOf();

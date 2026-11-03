@@ -65,7 +65,7 @@ export const allEdits = (source: string): string => noItemTry(noColumnTry(noChec
 // `c15` the start angle and `v7` the gap. A change of the emitter stops the edit, or the test of the result.
 const ARRAYS_AFTER = "  const fn44 = (k23) => G(col43(k23));\n";
 const SUM_HEAD = "  const fn63 = (p51) => {\n";
-const PAIRS_HEAD = "  const fn120 = (p79) => {\n";
+const PAIRS_HEAD = "  const fn137 = (p79) => {\n";
 /** This edit adds packed arrays of the needs and the radii of the children, made once at their first use. */
 const withArrays = (source: string): string =>
   replaceOnce(source, ARRAYS_AFTER, `${ARRAYS_AFTER}  let NEED_, RHO_;\n  const needs = () => (NEED_ ??= Array.from({ length: n }, (_, j) => fn44(j)));\n  const rhos = () => (RHO_ ??= Array.from({ length: n }, (_, j) => fn7(j)));\n`);

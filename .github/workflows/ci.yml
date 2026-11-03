@@ -16,7 +16,7 @@ jobs:
   # The checks of each Node.js version: the shared CI of mark1russell7 (reusable-ci.yml of
   # mark1russell7/template, its CI.md)
   ci:
-    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@20dea158bc3a00838428ea75cbe6ff88b25606bb # main
+    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@4df6a2d5a4de464ab3f8b50c20df52c234794af6 # main
     permissions:
       contents: read
     with:
@@ -50,7 +50,7 @@ jobs:
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
       # The shared action installs the browsers from a cache, with a time limit and a second try for each install.
-      - uses: mark1russell7/template/.github/actions/setup-playwright@20dea158bc3a00838428ea75cbe6ff88b25606bb # main
+      - uses: mark1russell7/template/.github/actions/setup-playwright@4df6a2d5a4de464ab3f8b50c20df52c234794af6 # main
         with:
           browsers: chromium firefox webkit
           command: pnpm --filter @vex/site exec playwright

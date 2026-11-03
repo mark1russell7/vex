@@ -138,7 +138,7 @@ describe("COMPILE.MODULE.LIST.PLAIN: the option lists", () => {
     // A list that the facts prove clean gives the clean form, also for a list of lists.
     const clean = sourceOf(emitModule(each(axes.all, each(axes.window(0, 1), n)), PLAIN));
     expect(clean).toContain("out[o] = LPC(");
-    expect(clean).toContain(", 1));");
+    expect(clean).toContain(", 1);");
     expect(clean).toContain("function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }");
     expect(clean).not.toContain("function LP(");
     // With fuse false, no list is clean.

@@ -1,15 +1,34 @@
 /**
  * The share of tier 2 on real programs (roadmap item FALLBACKSHARE). This module compiles programs with `tiered` of
  * `@mark1russell7/vex-compiler`. It counts the runs that tier 2 gives, and the runs that tier 1 does again after a
- * `FALLBACK`. It is a measurement, not a gate.
+ * `FALLBACK`. It is a measurement, not a gate. With the option `sites`, it also finds the site of each fallback
+ * (FALLBACKOPS).
  */
 import type { CompileFn, Expr, Program, Result } from "@mark1russell7/vex";
 import { tiered, type GenerateOptions } from "@mark1russell7/vex-compiler";
+import { siteProbe, type SiteProbe } from "./fallback-sites.ts";
 
 /** A reason and the number of times that it occurs. */
 export interface ReasonCount {
   readonly reason: string;
   readonly count: number;
+}
+
+/** A site of the fallbacks, the number of its runs, the programs of these runs and the first run. */
+export interface SiteCount extends ReasonCount {
+  /** The programs of the runs, by count, largest first. */
+  readonly programs: readonly ReasonCount[];
+  /** The first run of the site: the name of the program and the origin of the run. */
+  readonly example: string;
+}
+
+/** The options of a measurement. */
+export interface ShareOptions {
+  /**
+   * With `sites`, a probe finds the site of each fallback (`fallback-sites.ts`). The probe operates after the fallback,
+   * so the counts do not change.
+   */
+  readonly sites?: boolean;
 }
 
 /** The counts of one program. */
@@ -26,6 +45,10 @@ export interface ProgramShare {
   readonly fallbacks: number;
   /** The result of tier 1 on each run after a `FALLBACK`, by count, largest first. */
   readonly fallbackReasons: readonly ReasonCount[];
+  /** With the option `sites`: the site and the context of each fallback where tier 1 gave a value, by count. */
+  readonly valueSites?: readonly ReasonCount[];
+  /** With the option `sites`: the site of each fallback where tier 1 gave an error, by count. */
+  readonly errorSites?: readonly ReasonCount[];
 }
 
 /** A program that the measurement could not run on the inputs of its tests, and the error. */
@@ -51,6 +74,10 @@ export interface ShareTotals {
   readonly tier1Reasons: readonly ReasonCount[];
   /** The results of tier 1 after a `FALLBACK`, by count of runs, largest first. */
   readonly fallbackReasons: readonly ReasonCount[];
+  /** With the option `sites`: the sites of the fallbacks where tier 1 gave a value, with their context, by count of runs. */
+  readonly valueSites?: readonly SiteCount[];
+  /** With the option `sites`: the sites of the fallbacks where tier 1 gave an error, by count of runs. */
+  readonly errorSites?: readonly SiteCount[];
 }
 
 /** The result of a measurement. */
@@ -82,6 +109,22 @@ interface Tally {
   runs: number;
   fallbacks: number;
   readonly reasons: Map<string, number>;
+  readonly valueSites: Map<string, number>;
+  readonly errorSites: Map<string, number>;
+}
+
+/** One fallback with its site. A value fallback is a fallback where tier 1 gave a value. */
+interface SiteRun {
+  readonly value: boolean;
+  readonly site: string;
+  readonly program: string;
+  readonly origin: string;
+}
+
+/** The runs of one site: the count of each program, and the first run. */
+interface SiteTally {
+  readonly programs: Map<string, number>;
+  readonly example: string;
 }
 
 /** This function gives the reason of a run after a `FALLBACK`: the error of tier 1, or a note that tier 1 gave a value. */
@@ -101,13 +144,34 @@ function sorted(counts: ReadonlyMap<string, number>): ReasonCount[] {
     .toSorted((a, b) => b.count - a.count || (a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0));
 }
 
-/** This function gives a meter that counts into `tallies`. */
-function meterOf(tallies: Map<string, Tally>): Meter {
+/** This function adds one run to the tally of its site. */
+function addSite(sites: Map<string, SiteTally>, run: SiteRun): void {
+  let t = sites.get(run.site);
+  if (t === undefined) {
+    t = { programs: new Map(), example: `${run.program} at the origin ${JSON.stringify(run.origin)}` };
+    sites.set(run.site, t);
+  }
+  add(t.programs, run.program);
+}
+
+/** This function gives the sites as a list, largest first. */
+function sortedSites(sites: ReadonlyMap<string, SiteTally>): SiteCount[] {
+  const counts = new Map([...sites].map(([site, t]) => [site, [...t.programs.values()].reduce((a, b) => a + b, 0)]));
+  return sorted(counts).map((r) => {
+    const t = sites.get(r.reason) as SiteTally;
+    return { ...r, programs: sorted(t.programs), example: t.example };
+  });
+}
+
+/** This function gives a meter that counts into `tallies`. With `sites`, a probe finds the site of each fallback. */
+function meterOf(tallies: Map<string, Tally>, sites: SiteRun[] | undefined): Meter {
   const program = (name: string, source: Expr, options: GenerateOptions = {}): Program => {
     const p = tiered(source, options);
+    // The probe compiles the program again, so the meter makes it at the first fallback.
+    let probe: SiteProbe | undefined;
     let t = tallies.get(name);
     if (t === undefined) {
-      t = { tier: p.tier, reason: p.reason, compiles: 0, runs: 0, fallbacks: 0, reasons: new Map() };
+      t = { tier: p.tier, reason: p.reason, compiles: 0, runs: 0, fallbacks: 0, reasons: new Map(), valueSites: new Map(), errorSites: new Map() };
       tallies.set(name, t);
     } else if (t.tier !== p.tier) {
       // Two compiles of one name with different tiers: the name counts as tier 1, with the reason of tier 1.
@@ -125,6 +189,14 @@ function meterOf(tallies: Map<string, Tally>): Meter {
         if (p.stats.fallbacks > before) {
           tally.fallbacks++;
           add(tally.reasons, fallbackReason(result));
+          if (sites !== undefined) {
+            probe ??= siteProbe(p.expr, options);
+            const found = probe?.site(r) ?? { site: "no probe", context: "" };
+            // A value fallback names the context too: the context tells why tier 1 gives a value.
+            const site = result.ok ? `${found.site}, ${found.context}` : found.site;
+            add(result.ok ? tally.valueSites : tally.errorSites, site);
+            sites.push({ value: result.ok, site, program: name, origin: r.origin });
+          }
         }
         return result;
       },
@@ -144,19 +216,24 @@ const share = (part: number, all: number): number => (all === 0 ? 0 : part / all
  * This function runs each case, and it gives the counts of each program and the totals. When a case throws, its
  * programs go to `skipped` with the error, and the totals do not count them.
  */
-export function measureShare(cases: readonly ShareCase[]): ShareReport {
+export function measureShare(cases: readonly ShareCase[], options: ShareOptions = {}): ShareReport {
   const programs: ProgramShare[] = [];
   const skipped: SkippedProgram[] = [];
+  const withSites = options.sites === true;
+  const valueSites = new Map<string, SiteTally>();
+  const errorSites = new Map<string, SiteTally>();
   for (const c of cases) {
     const tallies = new Map<string, Tally>();
+    const sites: SiteRun[] | undefined = withSites ? [] : undefined;
     try {
-      c.run(meterOf(tallies));
+      c.run(meterOf(tallies, sites));
     } catch (thrown) {
       const reason = thrown instanceof Error ? thrown.message : String(thrown);
       const names = tallies.size === 0 ? [c.name] : [...tallies.keys()];
       for (const name of names) skipped.push({ name, reason });
       continue;
     }
+    for (const run of sites ?? []) addSite(run.value ? valueSites : errorSites, run);
     for (const [name, t] of tallies) {
       programs.push({
         name,
@@ -166,6 +243,7 @@ export function measureShare(cases: readonly ShareCase[]): ShareReport {
         runs: t.runs,
         fallbacks: t.fallbacks,
         fallbackReasons: sorted(t.reasons),
+        ...(withSites ? { valueSites: sorted(t.valueSites), errorSites: sorted(t.errorSites) } : {}),
       });
     }
   }
@@ -198,6 +276,7 @@ export function measureShare(cases: readonly ShareCase[]): ShareReport {
       runShare: share(tier2Runs, runs),
       tier1Reasons: sorted(tier1),
       fallbackReasons: sorted(fallbackReasons),
+      ...(withSites ? { valueSites: sortedSites(valueSites), errorSites: sortedSites(errorSites) } : {}),
     },
   };
 }

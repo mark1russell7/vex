@@ -691,20 +691,33 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // The keys depth first, with each parent before its children, and the position and the size of the subtree of each
   // record. Thus the descendants of a record are the keys after it, as many as its subtree has under it.
   PR: [
-    "function PR(h, r, n) {",
-    "  const o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n), st = new Int32Array(n);",
-    "  let t = 0, m = 0;",
-    "  for (let q = r.length - 1; q >= 0; q--) st[t++] = r[q];",
-    "  while (t > 0) {",
-    "    const k = st[--t];",
+    "function PR(P, n) {",
+    "  const f = new Int32Array(n).fill(-1), x = new Int32Array(n), o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n);",
+    "  let r = -1;",
+    "  for (let i = n - 1; i >= 0; i--) {",
+    "    const p = P[i];",
+    "    if (p < 0) {",
+    "      x[i] = r;",
+    "      r = i;",
+    "    } else {",
+    "      x[i] = f[p];",
+    "      f[p] = i;",
+    "    }",
+    "  }",
+    "  let m = 0;",
+    "  for (let k = r; k >= 0; ) {",
     "    at[k] = m;",
     "    o[m++] = k;",
-    "    for (let q = h[k].length - 1; q >= 0; q--) st[t++] = h[k][q];",
+    "    if (f[k] >= 0) k = f[k];",
+    "    else {",
+    "      while (k >= 0 && x[k] < 0) k = P[k];",
+    "      if (k >= 0) k = x[k];",
+    "    }",
     "  }",
     "  for (let q = n - 1; q >= 0; q--) {",
-    "    const k = o[q];",
-    "    z[k] = 1;",
-    "    for (const c of h[k]) z[k] += z[c];",
+    "    const k = o[q], p = P[k];",
+    "    z[k]++;",
+    "    if (p >= 0) z[p] += z[k];",
     "  }",
     "  return [o, at, z];",
     "}",
@@ -1149,7 +1162,7 @@ type TreePart = "children" | "siblings" | "order";
 const TREE_PARTS: Readonly<Record<TreePart, readonly [TreeHelper, string]>> = {
   children: ["CH", "const [H, RT] = CH(P, n);"],
   siblings: ["SG", "const [GP, SI] = SG(P, H, RT, n);"],
-  order: ["PR", "const [PO, PI, SZ] = PR(H, RT, n);"],
+  order: ["PR", "const [PO, PI, SZ] = PR(P, n);"],
 };
 
 /** An axis whose targets in a tree space are a range of an array of positions: an axis of a tree, or a window. */
@@ -4342,10 +4355,10 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     return reasonOf(thrown);
   }
   const { name, tree, graph } = run;
-  // A tree checks its parents, and it computes the parts that the program reads. The siblings and the order need the
-  // children.
+  // A tree checks its parents, and it computes the parts that the program reads. The siblings need the children. The
+  // order reads only the parents (COMPILE.MODULE.TREE.ALLOC).
   if (tree) p.use("PT");
-  if (p.treeParts.size > 0) p.treeParts.add("children");
+  if (p.treeParts.has("siblings")) p.treeParts.add("children");
   const parts = (["children", "siblings", "order"] as const).filter((x) => p.treeParts.has(x));
   for (const x of parts) p.use(TREE_PARTS[x][0]);
   // A graph checks its edges, and it computes the predecessors if the program reads them.

@@ -1415,7 +1415,8 @@ describe("COMPILE.MODULE.TREE: a module of a tree space", () => {
     expect(parts(op("count", each(axes.children, n)))).toBe("PT CH");
     expect(parts(op("count", each(axes.siblings, n)))).toBe("PT CH SG");
     expect(parts(ref("n", [offset(1)]))).toBe("PT CH SG SO");
-    expect(parts(op("count", each(axes.descendants, n)))).toBe("PT CH PR");
+    expect(parts(op("count", each(axes.descendants, n)))).toBe("PT PR");
+    expect(parts(rec({ a: op("count", each(axes.descendants, n)), b: op("count", each(axes.children, n)) }))).toBe("PT CH PR");
     // COMPILE.MODULE.TREE.ALLOC: the ancestors are a walk up the parents, and only the reverse order needs their array.
     expect(parts(op("count", each(axes.ancestors, n)))).toBe("PT");
     expect(parts(op("count", each(axes.reverse(axes.ancestors), n)))).toBe("PT AN");

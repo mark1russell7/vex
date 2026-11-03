@@ -1021,9 +1021,9 @@ Before the loop over the keys, the run makes only the parts of the tree that the
 | Part | Helper | For |
 |---|---|---|
 | The parent of each record, in an `Int32Array` | `PT` | Each tree |
-| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the two parts below |
+| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the part below |
 | The siblings of each record with the record itself, and its position among them | `SG` | `siblings`, `window` and the offsets |
-| The keys depth first, and the position and the size of the subtree of each key, in `Int32Array` | `PR` | `descendants` |
+| The keys depth first, and the position and the size of the subtree of each key, in `Int32Array` | `PR` | `descendants`. It reads only the parents, so a program with only this axis has no `CH` |
 
 Thus the targets of each axis are a range of an array, and the loop over them is a `for` loop over that range. The reverse order is the same loop from the end.
 

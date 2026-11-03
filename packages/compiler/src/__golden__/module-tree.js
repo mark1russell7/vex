@@ -17,20 +17,33 @@ function CH(P, n) {
 }
 function G(x) { return x === E ? F() : x; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
-function PR(h, r, n) {
-  const o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n), st = new Int32Array(n);
-  let t = 0, m = 0;
-  for (let q = r.length - 1; q >= 0; q--) st[t++] = r[q];
-  while (t > 0) {
-    const k = st[--t];
+function PR(P, n) {
+  const f = new Int32Array(n).fill(-1), x = new Int32Array(n), o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n);
+  let r = -1;
+  for (let i = n - 1; i >= 0; i--) {
+    const p = P[i];
+    if (p < 0) {
+      x[i] = r;
+      r = i;
+    } else {
+      x[i] = f[p];
+      f[p] = i;
+    }
+  }
+  let m = 0;
+  for (let k = r; k >= 0; ) {
     at[k] = m;
     o[m++] = k;
-    for (let q = h[k].length - 1; q >= 0; q--) st[t++] = h[k][q];
+    if (f[k] >= 0) k = f[k];
+    else {
+      while (k >= 0 && x[k] < 0) k = P[k];
+      if (k >= 0) k = x[k];
+    }
   }
   for (let q = n - 1; q >= 0; q--) {
-    const k = o[q];
-    z[k] = 1;
-    for (const c of h[k]) z[k] += z[c];
+    const k = o[q], p = P[k];
+    z[k]++;
+    if (p >= 0) z[p] += z[k];
   }
   return [o, at, z];
 }
@@ -74,7 +87,7 @@ export function run(records, vars, parents) {
   const P = PT(parents, n);
   const [H, RT] = CH(P, n);
   const [GP, SI] = SG(P, H, RT, n);
-  const [PO, PI, SZ] = PR(H, RT, n);
+  const [PO, PI, SZ] = PR(P, n);
   let t8;
   try {
     t8 = R[UP(P, (4 < n ? 4 : F()))]["n"];

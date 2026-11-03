@@ -8,10 +8,10 @@ import { startArm, summarize } from "./alloc.ts";
 
 /**
  * The limits for each node. Three fresh processes on each of Node 22, 24 and 26 gave the numbers. The highest number is
- * 161.8252 heap bytes, and the largest spread between the windows of one version is 0.0412. The external bytes and the
+ * 49.506 heap bytes, and the largest spread between the windows of one version is 0.0412. The external bytes and the
  * objects had no spread in one version, so their limit is their highest number.
  */
-const LIMIT = { heap: 161.8252 + 0.0412, external: 21, objects: 2.364 };
+const LIMIT = { heap: 49.506 + 0.0412, external: 25, objects: 1.017 };
 
 /** The time limit of the test. It starts one process, and a shared runner can be slow. */
 const PROCESS_MS = 180_000;

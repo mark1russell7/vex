@@ -498,14 +498,14 @@ describe("COMPILE.MODULE.SHEET: the code of a cell and of the run", () => {
   it("COMPILE.MODULE.SHEET: a formula that cannot throw has no try, in a direct fill and in the search", () => {
     const kinds = { A: "number", B: "number", C: "number" } as const;
     const records = [{ v: 2 }, { v: 0 }, { v: 4 }];
-    const direct = new Map<string, Expr>([["A", lit(3)], ["B", app("divide", lit(1), ref("v"))]]);
-    const d = sourceOf(direct, { ...NUM, kinds });
+    const plain = new Map<string, Expr>([["A", lit(3)], ["B", app("divide", lit(1), ref("v"))]]);
+    const d = sourceOf(plain, { ...NUM, kinds });
     expect(isDirect(d)).toBe(true);
     expect(d).toContain("D[0][o] = 3;");
     expect(d).not.toMatch(/try \{\n\s*D\[0\]\[o\] = 3;/u);
-    expectSame(make(d), direct, records, undefined);
+    expectSame(make(d), plain, records, undefined);
     // The column C reads the next key of itself, so the run searches.
-    const search = new Map<string, Expr>([...direct, ["C", app("ifError", cell("C", [offset(1)]), ref("v"))]]);
+    const search = new Map<string, Expr>([...plain, ["C", app("ifError", cell("C", [offset(1)]), ref("v"))]]);
     const s = sourceOf(search, { ...NUM, kinds });
     expect(isDirect(s)).toBe(false);
     expect(s).toMatch(/const cf\d+ = \(o\) => 3;/u);

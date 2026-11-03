@@ -259,6 +259,9 @@ describe("COMPILE.MODULE.SHEET.LIST: a column of lists", () => {
   });
 });
 
+/** This function gives the cells of a column at the children of each key. */
+const kids = (name: string): Expr => each(axes.children, cell(name));
+
 describe("COMPILE.MODULE.SHEET: a list op over the cells of a sheet", () => {
   // The items go into an array first when the step or the option strict can throw for an item. Then an error of a
   // step does not stop the reads of the next items. A step that cannot throw reduces each item at once.
@@ -266,7 +269,6 @@ describe("COMPILE.MODULE.SHEET: a list op over the cells of a sheet", () => {
     ["a", op("add", ref("v"), lit(1))],
     ["f", op("gt", ref("v"), lit(1))],
   ];
-  const kids = (name: string): Expr => each(axes.children, cell(name));
   const cases: readonly (readonly [string, Expr, boolean])[] = [
     ["a sum of numbers", op("sum", kids("a")), false],
     ["a max of numbers", op("max", kids("a")), false],

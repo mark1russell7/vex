@@ -156,6 +156,10 @@
     "comment": "// Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code"
   },
   {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line all: for the axis all with no address, #targetLoop gives no statements, key, check or skip, so this test is always false"
+  },
+  {
     "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
   },

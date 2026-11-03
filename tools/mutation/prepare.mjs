@@ -1,17 +1,14 @@
-// This script copies the sources and the tests of the four published packages to work/. Stryker reads only the
-// files under its working folder, and its Vitest runner loads the Vitest of that folder (4.1, not 5).
+// This script copies the sources and the tests of the four published packages to work/, and the other folders of
+// COPIES (layout.mjs). Stryker reads only the files under its working folder, and its Vitest runner loads the Vitest
+// of that folder (4.1, not 5). Stryker does not mutate the copies outside work/.
 import { cpSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { COPIES, unresolvedImports } from "./layout.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-rmSync(`${here}work`, { recursive: true, force: true });
-for (const p of ["core", "domains", "testkit", "compiler"]) {
-  cpSync(`${here}../../packages/${p}/src`, `${here}work/${p}`, { recursive: true });
-}
-// A standalone module copies the text of each op function. Stryker adds its counters to the functions of
-// work/domains, so the tests of the modules read a copy of the domains that Stryker does not mutate.
-cpSync(`${here}../../packages/domains/src`, `${here}work/domains-plain`, { recursive: true, filter: (f) => !f.endsWith(".test.ts") });
-// The tests of the fusion (module-fuse.test.ts) read the shapes pilot of ireko by the path "../../pilots/src". From
-// work/compiler, that path is pilots/src of this folder. Stryker does not mutate the pilot.
-rmSync(`${here}pilots`, { recursive: true, force: true });
-cpSync(`${here}../../packages/pilots/src`, `${here}pilots/src`, { recursive: true, filter: (f) => !f.endsWith(".test.ts") });
+const root = fileURLToPath(new URL("../../", import.meta.url));
+for (const top of new Set(COPIES.map((c) => c.to.split("/")[0]))) rmSync(`${here}${top}`, { recursive: true, force: true });
+for (const c of COPIES) cpSync(`${root}${c.from}`, `${here}${c.to}`, { recursive: true, filter: (f) => c.tests || !f.endsWith(".test.ts") });
+// A test file whose import finds no file does not load, and its mutants survive with no error (V-066).
+const unresolved = unresolvedImports(root);
+if (unresolved.length > 0) throw new Error(`These imports find no file in the copy of the lane. Add their folder to COPIES of layout.mjs:\n${unresolved.join("\n")}`);

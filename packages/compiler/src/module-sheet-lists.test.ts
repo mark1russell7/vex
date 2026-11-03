@@ -257,6 +257,31 @@ describe("COMPILE.MODULE.SHEET.LIST: a column of lists", () => {
   });
 });
 
+describe("COMPILE.MODULE.SHEET: a list op over the cells of a sheet", () => {
+  // The items go into an array first when the step or the option strict can throw for an item. Then an error of a
+  // step does not stop the reads of the next items. A step that cannot throw reduces each item at once.
+  const BASE: readonly (readonly [string, Expr])[] = [
+    ["a", op("add", ref("v"), lit(1))],
+    ["f", op("gt", ref("v"), lit(1))],
+  ];
+  const kids = (name: string): Expr => each(axes.children, cell(name));
+  const cases: readonly (readonly [string, Expr, boolean])[] = [
+    ["a sum of numbers", op("sum", kids("a")), false],
+    ["a max of numbers", op("max", kids("a")), false],
+    ["a strict sum of numbers", op("sum", kids("a"), lit({ strict: true })), true],
+    ["a sum of booleans", op("sum", kids("f")), true],
+    ["an any of booleans", op("any", kids("f")), false],
+    ["an all of numbers", op("all", kids("a")), true],
+    ["a reduce", op("reduce", kids("a"), lit("add")), true],
+  ];
+  it.each(cases)("COMPILE.MODULE.SHEET: %s", (_title, e, array) => {
+    const columns = new Map<string, Expr>([...BASE, ["r", e]]);
+    const source = sheetSource(columns, { ...TREE, kinds: { a: "number", f: "boolean" } });
+    expect(/const L\d+ = \[\];/u.test(source)).toBe(array);
+    expectSameSheet(make(source), columns, RECORDS, PARENTS);
+  });
+});
+
 /** The parts of a random formula of a list over an array or a tree. */
 interface ListGen {
   readonly axes: readonly Parameters<typeof each>[0][];

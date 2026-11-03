@@ -20,10 +20,9 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| RADIALGAP | The generated code of the nested radial module of ireko gets near the hand loops. Its ratio was approximately 3.85, and the target is 2.0 or less. | compiler | P1 | in progress: the scan of the angles gives 2.96, a profile of the fixed cost is next | |
+| RADIALGAP | The generated code of the nested radial module of ireko gets near the hand loops. Its ratio was approximately 3.85, and the target is 2.0 or less. | compiler | P1 | in progress: a packed sum (#202) is merged, and the pair loop with an early exit (#209) is in review | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 6 merged, the cheap sort is next | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
-| COEVAL16 | Vex takes `@mark1russell7/coeval` 0.20.1, which has the ladder of steps for STEPS. | core | P1 | in review | |
 | LAYERS | The layers and tree strategies of ireko as Vex programs. | ireko | P1 | blocked | ENGINE |
 
 ## Next
@@ -31,8 +30,6 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
 | SIZERULE | The size rule: in a step of `fold` or `iterate`, the new list uses the old list at most once in its size. The rule holds at each step of the ladder. | core | P1 | in review: the check of sizes and the size rules of the ops | |
-| STEPS | The checker gives the lowest step of the ladder that each program needs, with the reason. The host option `maxStep` sets the highest step that it accepts, and the default is B. A property test gives each program of the test kit the same values at A and at B. | core | P1 | in review: the ladder in coeval (coeval #231) and the steps of Vex | |
-| FALLBACKSHARE | Measure the share of real programs (the pilots and the sheet examples) that tier 2 sends to tier 1. | compiler | P1 | next | |
 | GINSETS | A domain for the four sides of an inset. A number lifts to four sides. | domains | P2 | next | |
 | GSMALL | The op `sign`, and an op that gives the unit vector of the smallest axis. | domains | P2 | next | |
 | GNDGET | Tier 2 reads the `get` of `NDVectorDomain` as the `get` of a list. | compiler | P2 | next | |
@@ -47,7 +44,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ASTAROP | A kernel op for the A* search, with the order of ties in the spec. | domains | P2 | later | |
 | STEPC | Step C: functions that call themselves, with a budget of steps. Vex builds it only when a real consumer needs it. | core | P3 | later | FIXPOINT |
 | SHAPESIZE | The ireko layout bundle with the shapes module stays under 17.4 kB. | pilots | P1 | later | COMPILE-FUSE |
-| TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. | compiler | P2 | later | FALLBACKSHARE |
+| TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. The real programs give tier 2 for 85 % of the runs. First, tier 2 gives the 246 values that it sends to tier 1 at this time. Then, tier 2 gets lists as values for the 6 programs of tier 1. | compiler | P2 | later | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | later | |
 | INAPPRECORD | Each night, all cases of the compiler gate run in one process, and the record gives the count of slow processes. | ci | P2 | later | |
 | MODELLIMITS | A script derives the gate limits from the recorded gate runs, with a row for each CPU model with 5 runs. The limit of other models is the worst run plus the largest spread in one model. | ci | P2 | later | RADIALGAP |

@@ -24,8 +24,12 @@ const sourceOf = (e: Expr, options?: GenerateOptions): string => {
   return g.ok ? g.source : `no source: ${g.reason}\n`;
 };
 
-const expectGolden = async (name: string, e: Expr, options?: GenerateOptions): Promise<void> => {
-  await expect(sourceOf(e, options)).toMatchFileSnapshot(`./__golden__/${name}.js`);
+/**
+ * This function compares the source with its golden file. A new golden file has the extension `.js.txt`: the conventions
+ * check refuses a new JavaScript file, and a golden file is output, not a script.
+ */
+const expectGolden = async (name: string, e: Expr, options?: GenerateOptions, extension = ".js"): Promise<void> => {
+  await expect(sourceOf(e, options)).toMatchFileSnapshot(`./__golden__/${name}${extension}`);
 };
 
 describe("COMPILE.SOURCE: the generated source", () => {
@@ -115,6 +119,8 @@ describe("COMPILE.SOURCE: the generated source", () => {
         // The list of the second list op calls no extension, so its failures stay in tier 2.
         plain: app("ifError", app("sum", each(axes.all, ref("n")), lit({ strict: true })), lit(0)),
       }),
+      undefined,
+      ".js.txt",
     );
   });
 

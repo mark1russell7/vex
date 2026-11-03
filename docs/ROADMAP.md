@@ -29,6 +29,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
+| FALLBACKCORPUS | Measure the share of tier 2 for the programs of each repository that imports Vex, for each source. The share of FALLBACKSHARE comes only from programs of Vex. | compiler | P1 | next | |
 | SIZERULE | The size rule: in a step of `fold` or `iterate`, the new list uses the old list at most once in its size. The rule holds at each step of the ladder. | core | P1 | in review: the check of sizes and the size rules of the ops | |
 | GINSETS | A domain for the four sides of an inset. A number lifts to four sides. | domains | P2 | next | |
 | GSMALL | The op `sign`, and an op that gives the unit vector of the smallest axis. | domains | P2 | next | |
@@ -44,7 +45,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ASTAROP | A kernel op for the A* search, with the order of ties in the spec. | domains | P2 | later | |
 | STEPC | Step C: functions that call themselves, with a budget of steps. Vex builds it only when a real consumer needs it. | core | P3 | later | FIXPOINT |
 | SHAPESIZE | The ireko layout bundle with the shapes module stays under 17.4 kB. | pilots | P1 | later | COMPILE-FUSE |
-| TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. The real programs give tier 2 for 85 % of the runs. First, tier 2 gives the 246 values that it sends to tier 1 at this time. Then, tier 2 gets lists as values for the 6 programs of tier 1. | compiler | P2 | later | |
+| TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. Tier 2 gives 97.8 % of the values of the real programs (33628 of 34389 runs without an error). First, tier 2 gives the 246 values that it sends to tier 1 at this time, by the class of the op. Then, tier 2 gets lists as values for the 6 programs of tier 1. | compiler | P2 | later | FALLBACKCORPUS |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | later | |
 | INAPPRECORD | Each night, all cases of the compiler gate run in one process, and the record gives the count of slow processes. | ci | P2 | later | |
 | MODELLIMITS | A script derives the gate limits from the recorded gate runs, with a row for each CPU model with 5 runs. The limit of other models is the worst run plus the largest spread in one model. | ci | P2 | later | RADIALGAP |

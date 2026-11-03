@@ -441,6 +441,31 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 - **Values without keys.** In the shapes module, each list of `merge` after its first `each` has the key 0 for each item. An array of values without pairs removes most of the remaining allocation. But each helper then needs two forms. The work decides after the measure of step 5.
 - **The model of the full layout.** The model `1 + 0.26 × (module ratio - 1)` gives 1.46 for 2.76, but CI measured 1.58. The difference is approximately 0.12, and the wrapper `shape-vex.ts` of ireko is the probable cause. Thus the gate of 1.1 can also need a change of the wrapper.
 
+### 7.7 Sums over the packs of columns
+
+This section is the first step of the roadmap item RADIALGAP. The angle sum of the radial pilot adds a term for each child at each radius. In the old module, each term called a function, and each call read a column through its memo. Each item also had a try of its own.
+
+A module prints a fast loop for a list op that obeys these rules:
+
+- The op is `sum`, `mean`, `min` or `max`, without `reduce`. The step of these ops cannot throw.
+- The axis is `all`, with no test, no address and no reverse order. The order of a sum of numbers is a part of its value.
+- The term is a number. It has no loop, no cell, no node of the memo and no function of its own. Each function that it calls is at the start of a run, and the body of that function obeys the same rules. A part of the term that is a column counts as one read.
+- The code of the term reads a column of the run, in the term or in a function that it calls.
+
+Then the printer prints the term again. The body of each call is at the place of the call, as the body of a `let`. Each read of a column of the run at the item reads the **pack** of the column. A pack is an array with the value of the column at each record. The first loop of a run that reads it makes it, with the helper `QA`. Each later loop of that run, and each parameter, reads the same array.
+
+A part of the term that is a column of the run is the read of its pack, so its calls do not print again. The second print puts at most 64 calls at their place. Thus a chain of calls costs a linear time.
+
+The term must read the record only through packs. If it reads the record in another way, the loop keeps its first code. The loop also keeps its first code if the second print needs a new column or more than 64 calls. Where a rule does not apply, the module is the same as before.
+
+The fast loop gives the values of the interpreter (P17):
+
+- The pack holds the error sentinel of an error value, as the column does. Thus each read of a pack gives the value of a read of its column. A column catches each error, so a pack that evaluates all the records changes no value.
+- One try covers all the items. An item that throws stops the inner loop, and the outer loop continues at the next item. Thus an error item is skipped. With `strict`, the try is outside the loop, and the first error item is an error of the op.
+- The step comes after the value of the item, so an error item adds nothing. An empty collection, or a parameter that makes each item an error, gives the sum 0. The mean, the min and the max of no item are errors.
+
+The unit tests are in `packages/compiler/src/module-pack.test.ts`. A change of the emitted code for a program that obeys the rules is a change of the code, not of the semantics. Its golden files change for that reason only.
+
 ## 8. Bounded iteration
 
 Vex has no loop, so each program ends. The language keeps this property, and it gets **bounded** iteration:

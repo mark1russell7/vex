@@ -23,7 +23,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | RADIALGAP | The generated code of the nested radial module of ireko gets near the hand loops. Its ratio was approximately 3.85, and the target is 2.0 or less. | compiler | P1 | in progress: the scan of the angles gives 2.96, a profile of the fixed cost is next | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 6 merged, the cheap sort is next | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
-| COEVAL16 | Vex takes `@mark1russell7/coeval` 0.17 with the client release of 2026-11-02. | core | P1 | waiting for the release of 2026-11-02 | the coeval release |
+| COEVAL16 | Vex takes `@mark1russell7/coeval` 0.20.1, which has the ladder of steps for STEPS. | core | P1 | in review | |
 | LAYERS | The layers and tree strategies of ireko as Vex programs. | ireko | P1 | blocked | ENGINE |
 
 ## Next

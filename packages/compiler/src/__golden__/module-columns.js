@@ -23,6 +23,7 @@ function M1(f) {
   };
 }
 function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }
+function QA(n, f) { const a = []; for (let j = 0; j < n; j++) a.push(f(j)); return a; }
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
@@ -36,82 +37,83 @@ export function run(records, vars) {
   const col2 = Q((j1) => {
     return k_number(Math.max((k_number(Math.abs((k_number((R[j1]["w"]) - (k_number((R[j1]["n"]) / (2)))))))), (k_number(Math.abs((k_number((R[j1]["w"]) + (k_number((R[j1]["n"]) * (3))))))))));
   });
-  let c6;
+  let PK7;
+  let c8;
   try {
     let a3 = 0;
+    const pk6 = PK7 || (PK7 = QA(n, col2));
     for (let j1 = 0; j1 < n; j1++) {
-      let x5;
       try {
-        x5 = G(col2(j1));
-      } catch {
-        continue;
-      }
-      a3 += x5;
+        for (; j1 < n; j1++) {
+          const x5 = G(pk6[j1]);
+          a3 += x5;
+        }
+      } catch {}
     }
-    c6 = k_number(a3);
+    c8 = k_number(a3);
   } catch {
-    c6 = E;
+    c8 = E;
   }
-  let c19;
+  let c21;
   try {
-    let a16 = 0;
-    for (let j15 = 0; j15 < n; j15++) {
-      let x18;
+    let a18 = 0;
+    for (let j17 = 0; j17 < n; j17++) {
+      let x20;
       try {
-        x18 = k_number((R[j15]["w"]) + (1));
+        x20 = k_number((R[j17]["w"]) + (1));
       } catch {
         continue;
       }
-      a16 += x18;
+      a18 += x20;
     }
-    c19 = k_number(a16);
+    c21 = k_number(a18);
   } catch {
-    c19 = E;
+    c21 = E;
   }
-  const m21 = M1((q20) => {
-    let a23 = 0;
-    for (let j22 = 0; j22 < n; j22++) {
-      let x25;
+  const m23 = M1((q22) => {
+    let a25 = 0;
+    const pk28 = PK7 || (PK7 = QA(n, col2));
+    for (let j24 = 0; j24 < n; j24++) {
       try {
-        x25 = k_number(Math.max((G(col2(j22))), (G(q20))));
-      } catch {
-        continue;
-      }
-      a23 += x25;
+        for (; j24 < n; j24++) {
+          const x27 = k_number(Math.max((G(pk28[j24])), (G(q22))));
+          a25 += x27;
+        }
+      } catch {}
     }
-    return k_number(a23);
+    return k_number(a25);
   });
-  const c26 = L(() => {
+  const c29 = L(() => {
     let l0 = 0;
-    for (let k8 = 0; ; k8++) {
-      if (k8 === 3) break;
-      const t7 = k_number((l0) + (G(c6)));
-      l0 = t7;
+    for (let k10 = 0; ; k10++) {
+      if (k10 === 3) break;
+      const t9 = k_number((l0) + (G(c8)));
+      l0 = t9;
     }
     return l0;
   });
   const out = [];
   for (let o = 0; o < n; o++) {
     try {
-      let t14;
+      let t16;
       try {
-        const f10 = o;
-        let a11, n12 = 0;
-        for (let j9 = 0; j9 < n; j9++) {
-          if (j9 === f10) continue;
-          let x13;
+        const f12 = o;
+        let a13, n14 = 0;
+        for (let j11 = 0; j11 < n; j11++) {
+          if (j11 === f12) continue;
+          let x15;
           try {
-            x13 = G(col2(j9));
+            x15 = G(col2(j11));
           } catch {
             continue;
           }
-          a11 = n12++ === 0 ? x13 : Math.max(a11, x13);
+          a13 = n14++ === 0 ? x15 : Math.max(a13, x15);
         }
-        t14 = (n12 === 0 ? F() : a11);
+        t16 = (n14 === 0 ? F() : a13);
       } catch {
-        t14 = 0;
+        t16 = 0;
       }
-      out.push(({ "loop": G(c26()), "again": t14, "light": G(c19), "origin": m21(R[o]["n"]) }));
+      out.push(({ "loop": G(c29()), "again": t16, "light": G(c21), "origin": m23(R[o]["n"]) }));
     } catch {
       out.push(VEX_ERROR);
     }

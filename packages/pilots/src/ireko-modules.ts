@@ -75,8 +75,8 @@ export const TEXT_CASES: readonly ((...a: never[]) => unknown)[] = [
   (a: number): number => (a > 0 ? 0.5 : 1000),
   (a: { readonly x: number } | string): number => (a as { readonly x: number }).x,
   (a: number): number => {
-    const twice = (x: number): number => x * 2;
-    return twice(a);
+    const twice: number = a * 2;
+    return twice;
   },
 ];
 

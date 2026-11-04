@@ -51,7 +51,7 @@ export function functionText(f: (...a: never[]) => unknown): string {
   try {
     const tree = parseExpressionAt(raw, 0, { ecmaVersion: "latest" });
     if (tree.end !== raw.length) return raw;
-    return generate(tree as never, { generator: TEXT_PRINTERS as unknown as Generator, indent: "", lineEnd: " " });
+    return generate(tree, { generator: TEXT_PRINTERS as unknown as Generator, indent: "", lineEnd: " " });
   } catch {
     return raw;
   }

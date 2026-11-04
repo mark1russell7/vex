@@ -4,5 +4,5 @@
  */
 import { IREKO_COMMITTED, IREKO_NOT_COMMITTED, irekoSource, TEXT_CASES, textOfCases } from "../src/ireko-modules.ts";
 
-const modules = [...IREKO_COMMITTED, ...IREKO_NOT_COMMITTED].map((which) => [which, irekoSource(which, "value")]);
+const modules = [...IREKO_COMMITTED, ...IREKO_NOT_COMMITTED].map((which): readonly [string, string] => [which, irekoSource(which, "value")]);
 process.stdout.write(JSON.stringify({ modules: Object.fromEntries(modules), cases: textOfCases(TEXT_CASES) }));

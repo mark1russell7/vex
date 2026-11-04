@@ -33,7 +33,7 @@ describe("the text of a function (COMPILE.MODULE.TEXT)", () => {
   });
 
   it("COMPILE.MODULE.TEXT: the text gives the values of each kind of literal", () => {
-    const f = make(functionText(make("() => [1e999, 2n, /a b/g.source, true, null, `x${1 + 1}`, 'a\"b']"))) as unknown as () => unknown;
+    const f = make(functionText(make("() => [1e999, 2n, /a b/g.source, true, null, `x${1 + 1}`, 'a\"b']")));
     expect(f()).toEqual([Number.POSITIVE_INFINITY, 2n, "a b", true, null, "x2", 'a"b']);
   });
 
@@ -46,7 +46,7 @@ describe("the text of a function (COMPILE.MODULE.TEXT)", () => {
   });
 
   it("COMPILE.MODULE.TEXT: a text that is not one expression stays as it is", () => {
-    const method = ({ m(a: never) { return a; } }).m;
+    const method = make("({ m(a) { return a; } }).m");
     expect(functionText(method)).toBe(Function.prototype.toString.call(method));
     expect(functionText(Math.max)).toBe(Function.prototype.toString.call(Math.max));
   });

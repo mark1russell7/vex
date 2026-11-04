@@ -25,7 +25,7 @@ interface Layout {
 describe("the copy of the mutation lane", () => {
   // A test file whose import finds no file does not load in the lane. Stryker sees no failed test, so each mutant
   // that the file kills survives. On 2026-11-03, three test files of the compiler did not load.
-  it("V-066: each relative import of a file of the copy finds a file of the copy", async () => {
+  it("V-072: each relative import of a file of the copy finds a file of the copy", async () => {
     const root = repoRoot();
     const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.mjs")).href)) as Layout;
     expect(layout.unresolvedImports(root)).toEqual([]);

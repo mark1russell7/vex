@@ -241,7 +241,7 @@ export function run(records, vars) {
     }
     return t106;
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t15;
@@ -273,9 +273,9 @@ export function run(records, vars) {
       for (const [, x81] of l71) {
         a79 += x81;
       }
-      out.push(({ "layout": t15, "count": G(c107()), "stack": G(c108()), "seen": G(c109()), "until": G(c110()), "overList": G(c111()), "perKey": k_number(a79), "lists": G(c112()), "error": G(c113()) }));
+      out[o] = ({ "layout": t15, "count": G(c107()), "stack": G(c108()), "seen": G(c109()), "until": G(c110()), "overList": G(c111()), "perKey": k_number(a79), "lists": G(c112()), "error": G(c113()) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

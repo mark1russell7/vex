@@ -2,34 +2,8 @@ import { compile, type Result } from "@mark1russell7/vex";
 import { emitModule, tiered } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { auditTree as tree } from "./inputs.ts";
 import { ESCAPE_DOMAINS, ESCAPE_PROGRAM, ESCAPE_SCHEMA, escapeRun, escapes, type PlacedBox } from "./ireko-audit.ts";
-
-/**
- * Random placed trees. The container of a node is an earlier node or -1, as in the pre-order of ireko. A node is near
- * its container, so some nodes are inside, some are outside, and some are at the tolerance.
- */
-const tree: fc.Arbitrary<PlacedBox[]> = fc
-  .array(
-    fc.record({
-      parent: fc.nat(),
-      orphan: fc.boolean(),
-      dx: fc.oneof(fc.constantFrom(-0.5, -0.25, 0, 0.5), fc.double({ min: -20, max: 60, noNaN: true, noDefaultInfinity: true })),
-      dy: fc.oneof(fc.constantFrom(-0.5, 0, 0.5), fc.double({ min: -20, max: 60, noNaN: true, noDefaultInfinity: true })),
-      width: fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true }),
-      height: fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true }),
-      clip: fc.boolean(),
-    }),
-    { minLength: 1, maxLength: 24 },
-  )
-  .map((rows) => {
-    const out: PlacedBox[] = [];
-    rows.forEach((r, i) => {
-      const container = i === 0 || r.orphan ? -1 : r.parent % i;
-      const c = out[container];
-      out.push({ x: (c?.x ?? 0) + r.dx, y: (c?.y ?? 0) + r.dy, width: r.width, height: r.height, container, clip: r.clip });
-    });
-    return out;
-  });
 
 /** This function evaluates the program at each node with `run`. */
 function valuesOf(run: (r: { readonly space: ReturnType<typeof escapeRun>["space"]; readonly origin: string }) => Result<unknown>, nodes: readonly PlacedBox[]): unknown[] {

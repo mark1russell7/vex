@@ -11,7 +11,7 @@
  * - `totalOk` (an invoice): `true` if the total of the invoice is the amount due, within half a cent.
  * - `discountOk` (an invoice): `true` if the discount is from 0 to 1.
  */
-import { space, vex, type Space } from "@mark1russell7/vex";
+import { space, vex, type CompileFn, type Space } from "@mark1russell7/vex";
 import { AngleDomain, BoolDomain, ColorDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import { runFormulas, type FormulaCells } from "./formula-run.ts";
 
@@ -125,7 +125,7 @@ export const INVOICE_FORMULAS: Readonly<Record<(typeof LINE_COLUMNS)[number] | (
   discountOk: "= AND(discount >= 0, discount <= 1)",
 };
 
-/** The checks with the formula language. */
-export function invoiceFormula(invoices: readonly Invoice[]): FormulaCells {
-  return runFormulas(invoiceSpace(invoices), ["qty", "price", "total", "discount"], INVOICE_FORMULAS);
+/** The checks with the formula language. The optional `compile` is the compiler of the run, for example `tiered`. */
+export function invoiceFormula(invoices: readonly Invoice[], compile?: CompileFn): FormulaCells {
+  return runFormulas(invoiceSpace(invoices), ["qty", "price", "total", "discount"], INVOICE_FORMULAS, compile);
 }

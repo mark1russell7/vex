@@ -3,7 +3,7 @@
  * purpose: they make prototype names, missing fields, non-finite numbers, records that throw, and ops that do
  * not exist.
  */
-import { space, toDocument, vexList, type AnyDomain, type Axis, type Expr, type FixedMove, type Move, type Space } from "@mark1russell7/vex";
+import { app, axes, each, fix, last, lit, ref, space, toDocument, vexList, type AnyDomain, type Axis, type Expr, type FixedMove, type FixJoin, type Move, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The options of the arbitraries. */
@@ -211,6 +211,13 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
           const loop: Expr = { tag: "iterate", limit, init: two ? { a: init, b: init } : { a: init }, step: { a: step }, result };
           return until === undefined ? loop : { ...loop, until };
         }),
+      // A limit from the data (ITERATE.LIMIT.DATA). Most limits read a base axis, which tier 2 takes. Some read each axis of a fold.
+      fc
+        .tuple(fc.oneof({ weight: 3, arbitrary: fc.constantFrom(...BASE_AXES) }, { weight: 1, arbitrary: tie("axis") }), tie("expr"), tie("expr"), tie("expr"), fc.option(tie("expr"), { nil: undefined }))
+        .map(([axis, init, step, result, until]): Expr => {
+          const loop: Expr = { tag: "iterate", limit: { axis }, init: { a: init }, step: { a: step }, result };
+          return until === undefined ? loop : { ...loop, until };
+        }),
       // A list as the name of a loop (LOOP.LIST): the step pushes a list onto a, or it removes the first item of a.
       fc
         .tuple(fc.integer({ min: 0, max: 3 }), tie("list"), fc.boolean(), tie("list"), tie("expr"))
@@ -260,6 +267,68 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
   }));
   return expr;
 }
+
+/** The axes of a generated column. Each has targets that do not depend on the order of the rows. */
+const FIX_AXES: readonly Axis[] = [axes.predecessors, axes.successors, axes.reachable, axes.all, axes.others, axes.where(axes.all, ref("b"))];
+
+/** This function generates a `fix` of the name `x` from the parts. */
+const arbFix = (join: FixJoin, init: fc.Arbitrary<Expr>, step: fc.Arbitrary<Expr>): fc.Arbitrary<Expr> => fc.tuple(init, step).map(([a, b]): Expr => fix("x", join, a, b));
+
+/**
+ * This function generates a program with one `fix` that the check accepts (FIX.MONOTONE). Each read of the fields in the
+ * records of `arbFixGraph` works. The ops ignore the order of the rows, so a test can reverse the rows (FIX.ORDER).
+ */
+export function arbFixExpr(maxDepth = 3): fc.Arbitrary<Expr> {
+  const axis = fc.constantFrom(...FIX_AXES);
+  const number = (depth: number): fc.Arbitrary<Expr> => {
+    const inner = fc.constant(null).chain(() => number(depth - 1));
+    const leaf = fc.oneof({ weight: 3, arbitrary: fc.constant<Expr>(last("x")) }, fc.integer({ min: -4, max: 4 }).map((n): Expr => app("add", last("x"), lit(n))));
+    if (depth <= 0) return leaf;
+    return fc.oneof(
+      leaf,
+      fc.tuple(inner, inner, fc.constantFrom("min", "max")).map(([a, b, op]): Expr => app(op, a, b)),
+      fc.tuple(inner, fc.integer({ min: -4, max: 4 })).map(([a, n]): Expr => app("min", a, lit(n))),
+      fc.tuple(inner, inner).map(([a, b]): Expr => app("if", ref("b"), a, b)),
+      fc.tuple(inner, axis, fc.constantFrom("min", "max"), fc.integer({ min: -4, max: 4 })).map(([a, on, op, n]): Expr => app("ifError", app(op, each(on, a)), lit(n))),
+    );
+  };
+  const boolean = (depth: number): fc.Arbitrary<Expr> => {
+    const inner = fc.constant(null).chain(() => boolean(depth - 1));
+    if (depth <= 0) return fc.constant<Expr>(last("x"));
+    return fc.oneof(
+      fc.constant<Expr>(last("x")),
+      fc.tuple(inner, inner, fc.constantFrom("and", "or")).map(([a, b, op]): Expr => app(op, a, b)),
+      fc.tuple(inner, inner).map(([a, b]): Expr => app("if", ref("b"), a, b)),
+      fc.tuple(inner, axis, fc.constantFrom("any", "all")).map(([a, on, op]): Expr => app(op, each(on, a))),
+      fc.tuple(inner, axis).map(([a, on]): Expr => app("none", each(on, app("not", a)))),
+    );
+  };
+  const start = fc.constantFrom<Expr>(ref("n"), lit(0), lit(9), app("if", ref("b"), lit(0), lit(9)));
+  const flag = fc.constantFrom<Expr>(ref("b"), lit(false), lit(true), app("not", ref("b")));
+  return fc.oneof(
+    arbFix("max", start, number(maxDepth)),
+    arbFix("min", start, number(maxDepth)),
+    arbFix("or", flag, boolean(maxDepth)),
+    arbFix("and", flag, boolean(maxDepth)),
+  );
+}
+
+/** The records and the edges of a graph for `arbFixExpr`. A test makes the space, so it can reverse the rows. */
+export interface FixGraph {
+  readonly records: Readonly<Record<string, { readonly n: number; readonly b: boolean }>>;
+  readonly edges: Readonly<Record<string, readonly string[]>>;
+}
+
+/** The arbitrary of a graph of 1 to 6 records for `arbFixExpr`, with cycles and with keys that have no edge. */
+export const arbFixGraph: fc.Arbitrary<FixGraph> = /* @__PURE__ */ fc.integer({ min: 1, max: 6 }).chain((size) => {
+  const keys = Array.from({ length: size }, (_, i) => String(i));
+  const row = fc.record({ n: fc.integer({ min: -4, max: 4 }), b: fc.boolean() });
+  const ends = fc.uniqueArray(fc.constantFrom(...keys), { maxLength: 3 });
+  return fc.tuple(fc.array(row, { minLength: size, maxLength: size }), fc.array(ends, { minLength: size, maxLength: size })).map(([rows, targets]) => ({
+    records: Object.fromEntries(keys.map((k, i) => [k, rows[i] as FixGraph["records"][string]])),
+    edges: Object.fromEntries(keys.map((k, i) => [k, targets[i] as readonly string[]])),
+  }));
+});
 
 /** A key of a space, or a key that is not in it. */
 export const arbOrigin = (s: Space): fc.Arbitrary<string> => fc.oneof({ weight: 5, arbitrary: fc.constantFrom(...s.keys) }, { weight: 1, arbitrary: fc.constant("Z") });
@@ -353,6 +422,7 @@ export function arbNumberExpr(maxDepth = 4): fc.Arbitrary<Expr> {
       fc.tuple(tie("expr"), tie("expr")).map(([body, a]): Expr => ({ tag: "let", bind: { f: { tag: "fn", params: ["k"], body: { tag: "app", op: "add", args: [{ tag: "var", name: "k" }, body] } } }, body: { tag: "call", fn: "f", args: [a] } })),
       fc.tuple(tie("axis"), tie("expr")).map(([axis, step]): Expr => ({ tag: "fold", axis, init: { s: num(0) }, step: { s: { tag: "app", op: "add", args: [{ tag: "var", name: "s" }, step] } }, result: { tag: "var", name: "s" } })),
       fc.tuple(fc.integer({ min: 0, max: 3 }), tie("expr")).map(([limit, start]): Expr => ({ tag: "iterate", limit, init: { x: start }, step: { x: { tag: "app", op: "add", args: [{ tag: "var", name: "x" }, num(1)] } }, result: { tag: "var", name: "x" } })),
+      fc.tuple(tie("axis"), tie("expr")).map(([axis, start]): Expr => ({ tag: "iterate", limit: { axis }, init: { x: start }, step: { x: { tag: "app", op: "add", args: [{ tag: "var", name: "x" }, num(1)] } }, result: { tag: "var", name: "x" } })),
     ),
     axis: fc.oneof(
       { depthSize: "small", maxDepth: 2 },

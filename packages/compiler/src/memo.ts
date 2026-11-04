@@ -72,6 +72,8 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
     // function reads nothing where it is bound, but the memo does not follow them yet (FN.CALL).
     case "fold":
     case "iterate":
+    case "fix":
+    case "last":
     // A let with a function and no call has the value of its body, and a call is opaque, so this case only keeps the
     // memo simple.
     // Stryker disable next-line StringLiteral: see the comment above
@@ -149,6 +151,8 @@ function keysOf(e: Expr, top: boolean, outer: ReadonlySet<string>, pure: Set<Exp
     case "ext":
     case "fold":
     case "iterate":
+    case "fix":
+    case "last":
     case "fn":
     case "call":
       return undefined;
@@ -163,6 +167,7 @@ function loopOutside(e: Expr, keys: ReadonlySet<Expr>): boolean {
     case "each":
     case "fold":
     case "iterate":
+    case "fix":
       return true;
     case "app":
       return e.args.some((x) => loopOutside(x, keys));
@@ -174,6 +179,7 @@ function loopOutside(e: Expr, keys: ReadonlySet<Expr>): boolean {
       return addrExprs(e.at).some((x) => loopOutside(x, keys));
     // A missing case gives undefined, which is false too.
     // Stryker disable StringLiteral,ConditionalExpression: see the comment above
+    case "last":
     case "lit":
     case "var":
     case "ext":
@@ -199,9 +205,10 @@ function eachUnderLets(e: Expr | undefined): { readonly lets: readonly Extract<E
 /**
  * This function gives the nodes of `expr` that a program keeps in its memo, each with its keys. Each such node has a
  * loop outside its keys. A node inside such a node can be in the memo too. Thus the first evaluation of the outer
- * node evaluates the inner node once.
+ * node evaluates the inner node once. The function `loops` tells if a list op is one loop with an `each`. In a module,
+ * each list op is one. In tier 2, the ops of `isFusedOp` are.
  */
-export function memoNodes(expr: Expr): ReadonlyMap<Expr, readonly Expr[]> {
+export function memoNodes(expr: Expr, loops: (op: string) => boolean = isListOp): ReadonlyMap<Expr, readonly Expr[]> {
   const out = new Map<Expr, readonly Expr[]>();
   const visit = (e: Expr): void => {
     const pure = new Set<Expr>();
@@ -211,7 +218,7 @@ export function memoNodes(expr: Expr): ReadonlyMap<Expr, readonly Expr[]> {
       // A list op over an `each` under `let` expressions is one loop, so that `each` and those `let` expressions have
       // no value of their own. Their parts can be in the memo.
       const [first, ...rest] = e.args;
-      const fused = isListOp(e.op) ? eachUnderLets(first) : undefined;
+      const fused = loops(e.op) ? eachUnderLets(first) : undefined;
       if (fused === undefined) {
         if (first !== undefined) visit(first);
       } else {

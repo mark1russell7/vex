@@ -11,7 +11,7 @@
  */
 import { vexError } from "./errors.ts";
 import { evaluate, explain, nestingOf, type CompileOptions, type EvalOptions, type ExtHandler, type Program } from "./evaluate.ts";
-import { addrExprs, children, ext, isMove, listOf, moveExpr, shapeError, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
+import { addrExprs, children, ext, isMove, listOf, moveExpr, shapeError, splitLimit, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
 import { fail, type Result } from "./result.ts";
 import { resolveAddr, type Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
@@ -161,7 +161,10 @@ function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string
   const todo: [Expr, Axis | undefined][] = [...(formula === undefined ? [] : [formula]), ...(t.cells.get(self)?.values() ?? [])].filter((e) => shapeError(e) === undefined).map((e) => [e, undefined]);
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
     const [e, axis] = item;
-    if (e.tag === "each" || e.tag === "fold") {
+    // A test of the axis of a data limit reads at each target, as the test of an `each` does.
+    const split = e.tag === "iterate" ? splitLimit(e) : undefined;
+    if (split !== undefined) for (const x of split) todo.push([x, axis]);
+    else if (e.tag === "each" || e.tag === "fold") {
       const { base, tests } = partsOf(e.axis);
       for (const x of [...(e.tag === "each" ? [e.body] : Object.values(e.step)), ...tests]) todo.push([x, base]);
       // The values of init, the result of a fold, the list of the axis list and the expressions of the address evaluate

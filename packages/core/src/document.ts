@@ -15,7 +15,9 @@
  * | `rec` | `{ "type": "record", "value": { ...fields } }` |
  * | `each` | `{ "type": "each", "value": { "axis", "as"?, "body", "at"? } }` |
  * | `fold` | `{ "type": "fold", "value": { "axis", "as"?, "init", "step", "result", "at"? } }` |
- * | `iterate` | `{ "type": "iterate", "value": { "limit", "init", "step", "until"?, "result" } }` |
+ * | `iterate` | `{ "type": "iterate", "value": { "limit", "init", "step", "until"?, "result" } }`. A data limit is `{ "type": "size", "value": { "axis" } }`. |
+ * | `fix` | `{ "type": "fix", "value": { "name", "join", "init", "step" } }` |
+ * | `last` | `{ "type": "last", "value": name }` |
  * | `ext` | `{ "type": ["ext", ...keys], "value": data }` |
  * | a move | `{ "type": ["moves", kind], "value": v }` |
  * | an axis | `{ "type": ["axes", name], "value": { ...parameters } }` |
@@ -32,7 +34,7 @@ import { check, isEnvelope, typeName, typePath, type Envelope, type Issue, type 
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { isStackOverflow, vexError, type VexError } from "./errors.ts";
-import { app, call, each, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Addr, type Axis, type Expr, type ItemNames, type Move, type Names } from "./ir.ts";
+import { app, call, dataLimit, each, ext, fix, fn, fold, index, iterate, key, last, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Addr, type Axis, type DataLimit, type Expr, type FixJoin, type ItemNames, type Move, type Names } from "./ir.ts";
 import { MAX_DOCUMENT_DEPTH, TERM_KINDS, vexChecker } from "./kernel.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { itemNamesError } from "./item-names.ts";
@@ -183,11 +185,16 @@ class Reader {
         const as = this.#items(f, axis, at);
         return fold(axis, init, step, this.term(f["result"], into(at, "result")), this.#address(f["at"], into(at, "at")), as);
       }
+      case "fix":
+        // The contract gives the name and one of the joins (DOC.CONSTRUCT).
+        return fix(f["name"] as string, f["join"] as FixJoin, this.term(f["init"], into(at, "init")), this.term(f["step"], into(at, "step")));
+      case "last":
+        return last(u.value as string);
       default: {
-        // iterate: the contract gives a whole number from 0 to MAX_ITERATIONS for the limit (ITERATE.LIMIT).
+        // iterate: the contract gives a whole number from 0 to MAX_ITERATIONS, or an envelope of a limit (ITERATE.LIMIT).
         const [init, step] = this.#loop(f, at);
         const until = f["until"] === undefined ? undefined : this.term(f["until"], into(at, "until"));
-        return iterate(f["limit"] as number, init, step, this.term(f["result"], into(at, "result")), until);
+        return iterate(this.#limit(f["limit"], into(at, "limit")), init, step, this.term(f["result"], into(at, "result")), until);
       }
     }
   }
@@ -240,6 +247,13 @@ class Reader {
    * This method reads the names `as` of a loop (AXIS.LIST.SCOPE). The contract gives a list of distinct texts. The
    * grammar of Vex needs one or two names, the axis `list` and no name of `init`.
    */
+  /** This method reads the limit of `iterate`: a bare number, the envelope of a number, or the size of an axis (ITERATE.LIMIT.DATA). */
+  #limit(u: unknown, where: string): number | DataLimit {
+    if (!isEnvelope(u)) return u as number;
+    const value = u.value as number | { readonly axis: Envelope };
+    return typeof value === "number" ? value : dataLimit(this.#axis(value.axis, into(into(where, "value"), "axis")));
+  }
+
   #items(f: Readonly<Record<string, unknown>>, axis: Axis, at: string): ItemNames | undefined {
     const reason = itemNamesError({ as: f["as"], axis, init: f["init"] });
     return reason === undefined ? (f["as"] as ItemNames | undefined) : bad(into(at, "as"), reason);

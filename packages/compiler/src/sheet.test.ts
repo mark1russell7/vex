@@ -79,15 +79,15 @@ describe("SHEET.COMPILE: a sheet run with the compiler", () => {
     );
   });
 
-  it("SHEET.COMPILE SHEET.RECURRENCE: a running total evaluates in tier 2, and each formula compiles once", () => {
+  it("SHEET.COMPILE SHEET.RECURRENCE COMPILE.EXT: a running total evaluates in tier 2, and each formula compiles once", () => {
     const rows = sheetRowsOf(Array.from({ length: 50 }, (_v, i) => i));
     const total = app("add", app("ifError", cell("total", [offset(-1)]), lit(0)), ref("v"));
     const { compile, programs } = keeping();
     const run = new SheetRun(new Map([["total", total]]), { space: rows, domains: [NumDomain], compile });
     expect(plain(run.cell("total", "49"))).toBe((49 * 50) / 2);
     expect(programs).toHaveLength(1);
-    // The first row reads a row that does not exist. The extension gives #REF!, so tier 1 gives that result.
-    expect(programs[0]?.stats).toEqual({ runs: 50, fallbacks: 1 });
+    // The first row reads a row that does not exist. The extension gives #REF!, and ifError of tier 2 catches it (COMPILE.EXT).
+    expect(programs[0]?.stats).toEqual({ runs: 50, fallbacks: 0 });
   });
 });
 
@@ -113,16 +113,16 @@ describe("SHEET.COMPILE SHEET.DEEP: deep sheets with the compiler", { timeout: 3
     expect(programs[0]?.stats).toEqual({ runs: n, fallbacks: 0 });
   });
 
-  it("SHEET.DEEP: a chain that reads the next row, read at the first row, gives the length of the chain", () => {
+  it("SHEET.DEEP COMPILE.EXT: a chain that reads the next row, read at the first row, gives the length of the chain", () => {
     const n = 100_000;
     const chain = app("add", ref("v"), app("ifError", cell("c", [offset(1)]), lit(0)));
     const run = new SheetRun(new Map([["c", chain]]), { space: sheetRowsOf(Array.from({ length: n }, () => 1)), domains: [NumDomain], compile: tiered });
     expect(plain(run.cell("c", "0"))).toBe(n);
-    // A fill goes from the last row up. The last row reads a row that does not exist, so tier 1 gives its result.
+    // A fill goes from the last row up. The last row reads a row that does not exist, and ifError of tier 2 catches the error (COMPILE.EXT).
     const { compile, programs } = keeping();
     const filled = new SheetRun(new Map([["c", chain]]), { space: sheetRowsOf(Array.from({ length: n }, () => 1)), domains: [NumDomain], compile });
     filled.fill();
     expect(plain(filled.cell("c", "0"))).toBe(n);
-    expect(programs[0]?.stats).toEqual({ runs: n, fallbacks: 1 });
+    expect(programs[0]?.stats).toEqual({ runs: n, fallbacks: 0 });
   });
 });

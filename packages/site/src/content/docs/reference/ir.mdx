@@ -27,7 +27,9 @@ The chain `others(...)` binds the current value to a fresh name (`$0`), and the 
 | `rec` | `fields` | a record of the values of the fields |
 | `each` | `axis`, `body`, `at` | a list: the body at each target of the axis, from the key of the address `at` |
 | `fold` | `axis`, `init`, `step`, `result`, `at` | a loop over the targets of the axis, in order. `init` gives the names and their first values, and `step` gives the next values at each target. |
-| `iterate` | `limit`, `init`, `step`, `result`, `until` | a loop of at most `limit` steps (a whole number up to 100000). A true `until` stops it. |
+| `iterate` | `limit`, `init`, `step`, `result`, `until` | a loop of at most `limit` steps (a whole number up to 100000, or a data limit `{ axis }`, the number of targets of the axis). A true `until` stops it. |
+| `fix` | `name`, `join`, `init`, `step` | a column with a value for each row. The rounds repeat `step` until no row changes. The join `or` or `max` moves a row up, and `and` or `min` moves a row down. The value is the row of the focus. It is of step B. |
+| `last` | `name` | the value of the focus in the last round of the `fix` with the name |
 | `ext` | `kind`, `data` | the value that the extension handler of `kind` gives |
 
 The first three kinds have the same shape as the expressions of the `render` project. Thus a `render` expression is also a Vex expression.
@@ -116,7 +118,7 @@ evaluate(byX, { space: boxes, origin: "0", domains: [NumDomain] }); // => { ok: 
 | `flat(list)` | a list of the items of the lists that are the values of the items of `list`, in order |
 | `get(list, key)` | the value of the first item with the key `key`. A key that no item has gives `#N/A`. |
 
-These ops skip error items, as each list op does. The option `{ strict: true }` gives the first error. The axis `reverse(list(expr))` gives the reverse order, and an error item of the list gives an error item for its target. A standalone module keeps each list as an array. Tier 2 does not have lists yet, so tier 1 evaluates such a program.
+These ops skip error items, as each list op does. The option `{ strict: true }` gives the first error. The axis `reverse(list(expr))` gives the reverse order, and an error item of the list gives an error item for its target. A standalone module keeps each list as an array. Tier 2 gives a list op on a list with the code of the interpreter. It also gives the axis `list`, and tier 1 evaluates that axis over an error item.
 
 The ops `drop`, `append`, `without` and `flat` build new lists, and each item keeps its key and its value. Thus a list can be a stack: `append` puts items on the top, `take(stack, 1)` is the top, and `drop(stack, 1)` removes it. `without(list, seen)` removes the keys that a search saw. A body of an axis can give a list, and `flat` joins these lists. A standalone module does not have these four ops yet, so it gives a reason.
 
@@ -180,7 +182,7 @@ run(app("sum", app("take", v("fr"), lit(2))), "0"); // => { ok: true, value: 0.5
 run(app("values", app("fill", lit(4), lit(0.25))), "0"); // => { ok: true, value: [0.25, 0.25, 0.25, 0.25] }
 ```
 
-Tier 2 and a standalone module do not have lists yet. Thus they give a reason for `indexOf`, `fill`, `distinct`, `group` and `join`, and tier 1 evaluates the program. A list op of tier 2 on an array also goes to tier 1, so each tier gives the same result.
+Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` on a list. A standalone module gives a reason for `distinct`, `group` and `join`. A list op of tier 2 on an array goes to tier 1, so each tier gives the same result.
 
 ### The names of the items
 
@@ -249,7 +251,9 @@ Each term is an envelope `{ type, value }`. Another JSON value in the place of a
 | `rec(fields)` | `{ type: "record", value: fields }` |
 | `each(axis, body, at, as)` | `{ type: "each", value: { axis, as, body, at } }`. `at` is a reference from `self` with moves only. `as` is a list of texts. |
 | `fold(axis, init, step, result, at, as)` | `{ type: "fold", value: { axis, as, init, step, result, at } }` |
-| `iterate(limit, init, step, result, until)` | `{ type: "iterate", value: { limit, init, step, until, result } }` |
+| `iterate(limit, init, step, result, until)` | `{ type: "iterate", value: { limit, init, step, until, result } }`. A data limit `dataLimit(axis)` has the form `{ type: "size", value: { axis } }`. |
+| `fix(name, join, init, step)` | `{ type: "fix", value: { name, join, init, step } }` |
+| `last(name)` | `{ type: "last", value: name }` |
 | `ext(kind, data)` | `{ type: ["ext", ...keys], value: data }` |
 
 A move is `{ type: ["moves", kind], value }`. The value of `key` or `index` is a term. A text key and a number position are fixed, and another term is a computed key or position, for example a term in an envelope. A literal of another kind gives `#VALUE!` at run time. The value of `offset` is its list of numbers, and the value of `other`, `origin` and `parent` is `null`. An axis is `{ type: ["axes", name], value: parameters }`, for example `{ type: ["axes", "window"], value: { from: -1, to: 0 } }`.

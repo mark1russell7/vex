@@ -128,33 +128,35 @@ describe("COMPILE.MODULE.LIST.PLAIN: the option lists", () => {
     const envelope = sourceOf(emitModule(e, OPTIONS));
     expect(plain).toContain('LA(r["xs"], 0, is_number)');
     expect(plain).toContain('LA(r["nest"], 1, is_number) === undefined');
-    expect(plain).toContain("out.push(LP(");
+    expect(plain).toContain("out[o] = LP(");
     expect(plain).toContain("function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }");
     expect(plain).not.toContain("vex.list");
     expect(plain).not.toMatch(/\bL[IO]C?\(/);
     expect(envelope).toContain('LI(r["xs"], 0, is_number)');
-    expect(envelope).toContain("out.push(LO(");
+    expect(envelope).toContain("out[o] = LO(");
     expect(envelope).not.toMatch(/\bL[AP]C?\(/);
     // A list that the facts prove clean gives the clean form, also for a list of lists.
     const clean = sourceOf(emitModule(each(axes.all, each(axes.window(0, 1), n)), PLAIN));
-    expect(clean).toContain("out.push(LPC(");
-    expect(clean).toContain(", 1));");
+    expect(clean).toContain("out[o] = LPC(");
+    expect(clean).toContain(", 1);");
     expect(clean).toContain("function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }");
     expect(clean).not.toContain("function LP(");
     // With fuse false, no list is clean.
-    expect(sourceOf(emitModule(each(axes.all, n), { ...PLAIN, fuse: false }))).toContain("out.push(LP(");
+    expect(sourceOf(emitModule(each(axes.all, n), { ...PLAIN, fuse: false }))).toContain("out[o] = LP(");
   });
 
-  it("COMPILE.MODULE.LIST.PLAIN: the module of NODE_SHAPE replaces LI and LOC, and its text is in a golden file", async () => {
+  it("COMPILE.MODULE.LIST.PLAIN: the module of NODE_SHAPE replaces LI and LSC, and its text is in a golden file", async () => {
     const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
     const plain = sourceOf(emitModule(NODE_SHAPE, { ...node, lists: "plain" }));
     const envelope = sourceOf(emitModule(NODE_SHAPE, node));
     await expect(plain).toMatchFileSnapshot("./__golden__/module-plain.js");
     // Only the helpers of the lists change: LA reads the input, and LPC gives the result.
-    const swapped = envelope.replace(helper(envelope, "LI"), helper(plain, "LA")).replace(helper(envelope, "LOC"), helper(plain, "LPC")).replaceAll("LI(r[", "LA(r[").replaceAll("out.push(LOC(", "out.push(LPC(");
+    // The envelope is one object for each run (COMPILE.MODULE.FUSE.OUT), and a plain array is one array for each key.
+    const once = "  const c137 = L(() => {\n    return LSC(G(c136()), 1);\n  });\n";
+    const swapped = envelope.replace(helper(envelope, "LI"), helper(plain, "LA")).replace(helper(envelope, "LSC"), helper(plain, "LPC")).replaceAll("LI(r[", "LA(r[").replace(once, "").replace("out[o] = G(c137());", "out[o] = LPC(G(c136()), 1);");
     expect(swapped).toBe(plain);
     expect(plain).toContain('(LF3[i] = LA(r["rows"], 0, is_3)) === undefined');
-    expect(plain).toContain("out.push(LPC(G(c136()), 1));");
+    expect(plain).toContain("out[o] = LPC(G(c136()), 1);");
   });
 });
 

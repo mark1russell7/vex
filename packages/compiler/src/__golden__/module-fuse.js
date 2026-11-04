@@ -33,15 +33,24 @@ function LI(x, h, t) {
   }
   return o;
 }
-function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }
+function LSC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LSC(v, h - 1) : v } }))) }); }
 function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }
 function SKI(l, f) {
-  const n = l.length;
-  for (let i = 0; i < n; i++) l[i] = [l[i], f(l[i][1])];
-  const t = n > 0 ? typeof l[0][1] : "number";
-  for (const [, v] of l) if (typeof v !== t || (t !== "number" && t !== "string") || v !== v) F();
-  l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
-  for (let i = 0; i < n; i++) l[i] = l[i][0];
+  const n = l.length, k = new Array(n);
+  for (let i = 0; i < n; i++) k[i] = f(l[i][1]);
+  const t = n > 0 ? typeof k[0] : "number";
+  for (const v of k) if (typeof v !== t || (t !== "number" && t !== "string") || v !== v) F();
+  if (n > 64) {
+    const o = new Array(n), c = l.slice();
+    for (let i = 0; i < n; i++) o[i] = i;
+    o.sort((a, b) => (k[a] < k[b] ? -1 : k[a] > k[b] ? 1 : 0));
+    for (let i = 0; i < n; i++) l[i] = c[o[i]];
+  } else for (let i = 1; i < n; i++) {
+    const v = k[i], x = l[i];
+    let j = i - 1;
+    for (; j >= 0 && k[j] > v; j--) { k[j + 1] = k[j]; l[j + 1] = l[j]; }
+    k[j + 1] = v; l[j + 1] = x;
+  }
   return l;
 }
 function T(f) { try { return f(); } catch { return E; } }
@@ -410,12 +419,15 @@ export function nodeShape(records, vars) {
     o135.push([0, G(c134())]);
     return o135;
   });
-  const out = [];
+  const c137 = L(() => {
+    return LSC(G(c136()), 1);
+  });
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
-      out.push(LOC(G(c136()), 1));
+      out[o] = G(c137());
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

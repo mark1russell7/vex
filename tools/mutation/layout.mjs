@@ -2,7 +2,7 @@
 // each folder of COPIES into tools/mutation. A test file whose import does not find a file does not load. Vitest then
 // reports no test of the file, and Stryker sees no failed test, so each mutant that the file kills survives. On
 // 2026-11-03, three test files of the compiler imported "../../testkit/src/fc-timeout.ts", and the score of module.ts
-// fell to 93.34 % (V-066). Thus the function unresolvedImports finds each relative import that the copy breaks.
+// fell to 93.34 % (V-072). Thus the function unresolvedImports finds each relative import that the copy breaks.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 

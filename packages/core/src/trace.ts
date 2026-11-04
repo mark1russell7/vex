@@ -21,6 +21,8 @@ export interface TraceEvent {
   readonly focus: string;
   /** The field reads of a reference node. */
   readonly reads?: readonly Read[];
+  /** The round of a `fix`: its count from 0, and the keys of the rows that it changed (FIX.TRACE). The result is the column. */
+  readonly round?: { readonly index: number; readonly changed: readonly string[] };
   /** The result of the node. */
   readonly result: Result<unknown>;
 }

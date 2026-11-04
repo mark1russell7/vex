@@ -3,6 +3,7 @@ import { emitModule, emitSheetModule } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BandDomain, type Band } from "./ireko-band.ts";
+import { bandLimit, childRecord, NODE_FIXED_KIDS, NODE_INFINITE, shapeChild as child, shapeExtent as extent, shapeLeaf as leaf, SHAPES_INFINITE, shapeTree as tree, type ShapeChild as Child } from "./inputs.ts";
 import { boxShape, joinShapes, MAX_BANDS, mergeBands, moveShape, NODE_SCHEMA, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapeSpace, shapesTree, type Shape, type ShapeRecord } from "./ireko-shapes.ts";
 
 type Columns = Readonly<Record<string, readonly unknown[]>>;
@@ -59,26 +60,6 @@ function sheetShapes(records: readonly ShapeRecord[], limit: number): (Shape | u
   return shapesOf(columns, records.length);
 }
 
-/** A whole number, a number with a fraction, or a negative zero: the bits of each one count. */
-const coord = fc.oneof(fc.integer({ min: -60, max: 60 }), fc.double({ min: -60, max: 60, noNaN: true, noDefaultInfinity: true }), fc.constant(-0));
-const size = fc.oneof(fc.integer({ min: 0, max: 40 }), fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true }));
-/** An infinite number, as ireko keeps on a band that overflows. */
-const infinite = fc.constantFrom(Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY);
-/** A size, or sometimes `Infinity`: the box of a node that overflows. */
-const extent = fc.oneof({ arbitrary: size, weight: 9 }, { arbitrary: fc.constant(Number.POSITIVE_INFINITY), weight: 1 });
-const node = fc.record({ wants: fc.boolean(), linked: fc.boolean(), w: extent, h: extent, ox: coord, oy: coord, ex: coord, ey: coord, ew: extent, eh: extent });
-
-/**
- * A tree in the pre-order of ireko, with up to `most` nodes. Each node after the root has a parent before it. A choice
- * of the last nodes as parents makes deep chains, and a choice of the first nodes makes wide trees.
- */
-const tree = (most: number): fc.Arbitrary<ShapeRecord[]> =>
-  fc.array(fc.tuple(node, fc.double({ min: 0, max: 1, noNaN: true, maxExcluded: true }), fc.boolean()), { minLength: 1, maxLength: most }).map((nodes) =>
-    nodes.map(([r, pick, deep], i) => ({ ...r, p: i === 0 ? -1 : deep ? Math.max(0, i - 1 - Math.floor(pick * 3)) : Math.floor(pick * i) })),
-  );
-
-const leaf = (p: number, more: Partial<ShapeRecord> = {}): ShapeRecord => ({ p, wants: false, linked: true, w: 10, h: 10, ox: 0, oy: 0, ex: 0, ey: 0, ew: 10, eh: 10, ...more });
-
 describe("the ireko shapes pilot", () => {
   const shapes = moduleOf();
   const run = (records: readonly ShapeRecord[], limit: number): (Shape | undefined)[] =>
@@ -93,7 +74,7 @@ describe("the ireko shapes pilot", () => {
 
   it("COMPILE.MODULE.SHEET.LIST COMPILE.MODULE.TREE COMPILE.MODULE.LIST.CALL: the module gives the shapes pass of ireko on random trees, with the same bits", () => {
     fc.assert(
-      fc.property(tree(12), fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 5 })), (records, limit) => {
+      fc.property(tree(12), bandLimit(5), (records, limit) => {
         expect(run(records, limit)).toStrictEqual(shapesTree(records, limit));
       }),
       { numRuns: 60 },
@@ -102,7 +83,7 @@ describe("the ireko shapes pilot", () => {
 
   it("COMPILE.MODULE.SHEET.LIST: the sheet gives the shapes pass of ireko in SheetRun, the interpreter of the module", () => {
     fc.assert(
-      fc.property(tree(6), fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 4 })), (records, limit) => {
+      fc.property(tree(6), bandLimit(4), (records, limit) => {
         expect(sheetShapes(records, limit)).toStrictEqual(shapesTree(records, limit));
       }),
       { numRuns: 20 },
@@ -145,13 +126,7 @@ describe("the ireko shapes pilot", () => {
   it("CALL.RESULT: the sheet keeps the infinite ends of a box that overflows, in the module and in SheetRun, as ireko", () => {
     const inf = Number.POSITIVE_INFINITY;
     // The child a1 of the node a has an infinite width, and the nested child a2 has an infinite height.
-    const records: ShapeRecord[] = [
-      leaf(-1, { wants: true, w: 100, h: 20 }),
-      leaf(0, { w: 10, h: 10 }),
-      leaf(1, { w: inf, h: 5, ox: 3, oy: 15 }),
-      leaf(1, { linked: false, w: 4, h: inf, ox: 0, oy: 30 }),
-      leaf(3, { w: 2, h: 2 }),
-    ];
+    const records = SHAPES_INFINITE;
     const reference = shapesTree(records);
     expect(reference[1]).toStrictEqual({
       rows: [
@@ -210,19 +185,6 @@ describe("the ireko shapes pilot", () => {
   });
 });
 
-/** A child of a node for the module of one node: its offset, and its shape as two lists of bands. */
-interface Child {
-  readonly ox: number;
-  readonly oy: number;
-  readonly shape: Shape;
-}
-
-/** This function gives a list of bands as a `vex.list` of plain data. */
-const listOf = (bands: readonly Band[]): object => ({ kind: "vex.list", items: bands.map((b, k) => ({ key: String(k), result: { ok: true, value: b } })) });
-
-/** This function gives the record of a child, as the measure loop of ireko gives it to the module of one node. */
-const childRecord = (c: Child): object => ({ ox: c.ox, oy: c.oy, rows: listOf(c.shape.rows), cols: listOf(c.shape.columns) });
-
 /** This function gives the shape of a node from the shapes of its children, as the measure pass of ireko. */
 const reference = (kids: readonly Child[], w: number, h: number, limit: number): Shape => joinShapes([boxShape(w, h), ...kids.map((c) => moveShape(c.shape, c.ox, c.oy))], limit);
 
@@ -232,16 +194,6 @@ const nodeShape = (value: unknown): Shape => {
   const [rows, cols] = value.items.map((x) => (x.result.ok ? x.result.value : undefined));
   return { rows: bandsOf(rows, "rows"), columns: bandsOf(cols, "cols") };
 };
-
-/**
- * An end of a band. The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shape of ireko has no
- * end -0: a box starts at 0, and a sum is -0 only for two terms -0. Thus an end here is not -0. An end is sometimes
- * infinite, as on a band that overflows.
- */
-const end = fc.oneof({ arbitrary: coord.map((x) => (x === 0 ? 0 : x)), weight: 9 }, { arbitrary: infinite, weight: 1 });
-const across = fc.oneof({ arbitrary: coord, weight: 9 }, { arbitrary: infinite, weight: 1 });
-const band = fc.record({ from: end, to: end, min: across, max: across });
-const child = fc.record({ ox: coord, oy: coord, shape: fc.record({ rows: fc.array(band, { maxLength: 4 }), columns: fc.array(band, { maxLength: 4 }) }) });
 
 describe("the ireko shapes pilot for one node", () => {
   const m = emitModule(NODE_SHAPE, { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" });
@@ -253,7 +205,7 @@ return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[]
   it("COMPILE.MODULE.LIST.INPUT: the module of one node reads the shapes of the children as input, and gives the join of ireko with the same bits", () => {
     expect(m.source).not.toContain("import");
     fc.assert(
-      fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), extent, extent, fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 4 })), (kids, w, h, limit) => {
+      fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), extent, extent, bandLimit(4), (kids, w, h, limit) => {
         const values = run(kids.map(childRecord), { w, h, limit });
         expect(values).toHaveLength(kids.length);
         for (const value of values) expect(nodeShape(value)).toStrictEqual(reference(kids, w, h, limit));
@@ -263,11 +215,7 @@ return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[]
   });
 
   it("COMPILE.MODULE.LIST.INPUT: the module of one node gives the value of the interpreter on a fixed node", () => {
-    const kids: Child[] = [
-      { ox: 0, oy: 30, shape: boxShape(10, 10) },
-      { ox: 20, oy: 15, shape: moveShape(boxShape(30, 5), 2, -0) },
-      { ox: 60, oy: 30, shape: { rows: [], columns: [{ from: 0, to: 4, min: 1, max: 2 }] } },
-    ];
+    const kids = NODE_FIXED_KIDS;
     const records = kids.map(childRecord);
     const vars = { w: 100, h: 20, limit: 2 };
     const expected = evaluate(NODE_SHAPE, { space: space.array(records), origin: "0", vars, domains: SHAPE_DOMAINS });
@@ -301,35 +249,24 @@ return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[]
 
   it("CALL.RESULT: the module of one node and the interpreter keep the bands with infinite ends, as ireko", () => {
     const inf = Number.POSITIVE_INFINITY;
-    // Each node: its children, its box and the rows of ireko.
-    const nodes: readonly (readonly [readonly Child[], number, number, readonly Band[]])[] = [
-      // The case of the tracker item SHAPEINF: a band to Infinity and a band with an infinite max.
+    // The rows of ireko for each node of NODE_INFINITE.
+    const rowsOf: readonly (readonly Band[])[] = [
       [
-        [{ ox: 0, oy: 0, shape: { rows: [{ from: 0, to: inf, min: 0, max: 5 }, { from: 3, to: 8, min: -1, max: inf }], columns: [] } }],
-        1,
-        1,
-        [
-          { from: 0, to: 3, min: 0, max: 5 },
-          { from: 3, to: 8, min: -1, max: inf },
-          { from: 8, to: inf, min: 0, max: 5 },
-        ],
+        { from: 0, to: 3, min: 0, max: 5 },
+        { from: 3, to: 8, min: -1, max: inf },
+        { from: 8, to: inf, min: 0, max: 5 },
       ],
-      // A band from -Infinity with a min of -Infinity, a band of all the axis, and a band from Infinity, which has no size.
       [
-        [{ ox: 2, oy: 1, shape: { rows: [{ from: -inf, to: 4, min: -inf, max: 0 }, { from: -inf, to: inf, min: 1, max: 2 }, { from: inf, to: inf, min: 0, max: 1 }], columns: [] } }],
-        10,
-        4,
-        [
-          { from: -inf, to: 0, min: -inf, max: 4 },
-          { from: 0, to: 4, min: -inf, max: 10 },
-          { from: 4, to: 5, min: -inf, max: 4 },
-          { from: 5, to: inf, min: 3, max: 4 },
-        ],
+        { from: -inf, to: 0, min: -inf, max: 4 },
+        { from: 0, to: 4, min: -inf, max: 10 },
+        { from: 4, to: 5, min: -inf, max: 4 },
+        { from: 5, to: inf, min: 3, max: 4 },
       ],
-      // A box of the node that overflows on both axes covers the box of its child.
-      [[{ ox: 0, oy: 6, shape: boxShape(2, 2) }], inf, inf, [{ from: 0, to: inf, min: 0, max: inf }]],
+      [{ from: 0, to: inf, min: 0, max: inf }],
     ];
-    for (const [kids, w, h, rows] of nodes) {
+    expect(rowsOf).toHaveLength(NODE_INFINITE.length);
+    for (const [k, [kids, w, h]] of NODE_INFINITE.entries()) {
+      const rows = rowsOf[k];
       const records = kids.map(childRecord);
       const vars = { w, h, limit: MAX_BANDS };
       const interpreted = evaluate(NODE_SHAPE, { space: space.array(records), origin: "0", vars, domains: SHAPE_DOMAINS });
@@ -356,7 +293,7 @@ return { nodeShape, VEX_ERROR };`)() as { readonly nodeShape: (records: unknown,
   it("COMPILE.MODULE.LIST.PLAIN: the module of one node reads the arrays of the bands, and gives the two arrays of the interpreter", () => {
     expect(m.source).not.toContain("vex.list");
     fc.assert(
-      fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), extent, extent, fc.oneof(fc.constant(MAX_BANDS), fc.integer({ min: 1, max: 4 })), (kids, w, h, limit) => {
+      fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), extent, extent, bandLimit(4), (kids, w, h, limit) => {
         const vars = { w, h, limit };
         const values = run(kids.map(plainRecord), vars);
         const interpreted = evaluate(NODE_SHAPE, { space: space.array(kids.map(childRecord)), origin: "0", vars, domains: SHAPE_DOMAINS });

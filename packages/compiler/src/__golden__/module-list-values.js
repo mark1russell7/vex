@@ -266,7 +266,7 @@ export function run(records, vars) {
   } catch {
     c137 = E;
   }
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       const f5 = o;
@@ -325,9 +325,9 @@ export function run(records, vars) {
       for (const [, x117] of b114) {
         a115 += x117;
       }
-      out.push(({ "firstW": G(c118), "lastW": G(c119), "digits": G(c120()), "tested": G(c121), "sum": k_number(a37), "mean": (n41 === 0 ? F() : k_number(a40 / n41)), "top": G(c122), "second": G(c123), "texts": G(c124), "lenient": G(c125), "strict": c126, "nth": c127, "errorItem": G(c128()), "badCount": c129, "badKind": c130, "noCount": c131, "noPosition": c132, "strictCount": c133, "counted": TKC(G(c3), n71).length, "positioned": NTC(G(c3), n77), "listCount": G(c134), "records": G(c135), "perKey": k_number(a94), "withErrors": G(c136), "safeTest": G(c137), "others": k_number(a115) }));
+      out[o] = ({ "firstW": G(c118), "lastW": G(c119), "digits": G(c120()), "tested": G(c121), "sum": k_number(a37), "mean": (n41 === 0 ? F() : k_number(a40 / n41)), "top": G(c122), "second": G(c123), "texts": G(c124), "lenient": G(c125), "strict": c126, "nth": c127, "errorItem": G(c128()), "badCount": c129, "badKind": c130, "noCount": c131, "noPosition": c132, "strictCount": c133, "counted": TKC(G(c3), n71).length, "positioned": NTC(G(c3), n77), "listCount": G(c134), "records": G(c135), "perKey": k_number(a94), "withErrors": G(c136), "safeTest": G(c137), "others": k_number(a115) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

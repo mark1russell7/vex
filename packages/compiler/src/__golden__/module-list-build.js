@@ -421,7 +421,7 @@ export function run(records, vars) {
   }
   const c258 = t206;
   const c259 = T(() => NTC(SBC(c3), 0));
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t4;
@@ -458,9 +458,9 @@ export function run(records, vars) {
       } catch {
         t220 = -1;
       }
-      out.push(({ "own": t4, "first": G(c221), "missing": c222, "notText": c223, "lenient": G(c224), "strictGet": c225, "errorKey": c226, "noKey": c227, "byVar": c228, "dropped": G(c229), "dropAll": G(c230), "dropBad": c231, "dropNone": c232, "dropStrict": c233, "dropKey": c234, "appended": G(c235), "appendFirst": G(c236), "appendStrict": c237, "appendLenient": G(c238), "appendEmpty": G(c239), "without": G(c240), "withoutLit": G(c241), "withoutLenient": G(c242), "withoutStrict": c243, "flat": G(c244), "flatKey": c245, "flatErrors": c246, "flatStrict": c247, "flatEmpty": G(c248), "index": t131, "indexLit": G(c249), "indexMissing": c250, "indexBad": c251, "indexNone": c252, "indexStrict": c253, "indexLenient": c254, "nestedFirst": G(c255), "nestedCount": c172, "nestedNth": G(c256), "nestedGet": t195, "sortedLit": G(c257), "sheet": G(c200), "sheetStrict": c258, "sheetNested": c212, "nthLet": G(c259), "getLet": t220 }));
+      out[o] = ({ "own": t4, "first": G(c221), "missing": c222, "notText": c223, "lenient": G(c224), "strictGet": c225, "errorKey": c226, "noKey": c227, "byVar": c228, "dropped": G(c229), "dropAll": G(c230), "dropBad": c231, "dropNone": c232, "dropStrict": c233, "dropKey": c234, "appended": G(c235), "appendFirst": G(c236), "appendStrict": c237, "appendLenient": G(c238), "appendEmpty": G(c239), "without": G(c240), "withoutLit": G(c241), "withoutLenient": G(c242), "withoutStrict": c243, "flat": G(c244), "flatKey": c245, "flatErrors": c246, "flatStrict": c247, "flatEmpty": G(c248), "index": t131, "indexLit": G(c249), "indexMissing": c250, "indexBad": c251, "indexNone": c252, "indexStrict": c253, "indexLenient": c254, "nestedFirst": G(c255), "nestedCount": c172, "nestedNth": G(c256), "nestedGet": t195, "sortedLit": G(c257), "sheet": G(c200), "sheetStrict": c258, "sheetNested": c212, "nthLet": G(c259), "getLet": t220 });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

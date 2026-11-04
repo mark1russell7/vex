@@ -52,7 +52,9 @@ export type Expr =
   | { readonly tag: "rec"; readonly fields: Readonly<Record<string, Expr>> }
   | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr; readonly at?: Addr; readonly as?: ItemNames }
   | { readonly tag: "fold"; readonly axis: Axis; readonly init: Names; readonly step: Names; readonly result: Expr; readonly at?: Addr; readonly as?: ItemNames }
-  | { readonly tag: "iterate"; readonly limit: number; readonly init: Names; readonly step: Names; readonly until?: Expr; readonly result: Expr }
+  | { readonly tag: "iterate"; readonly limit: number | DataLimit; readonly init: Names; readonly step: Names; readonly until?: Expr; readonly result: Expr }
+  | { readonly tag: "fix"; readonly name: string; readonly join: FixJoin; readonly init: Expr; readonly step: Expr }
+  | { readonly tag: "last"; readonly name: string }
   | { readonly tag: "fn"; readonly params: readonly string[]; readonly body: Expr }
   | { readonly tag: "call"; readonly fn: string; readonly args: readonly Expr[] }
   | { readonly tag: "ext"; readonly kind: string; readonly data: unknown };
@@ -66,8 +68,19 @@ export type Names = Readonly<Record<string, Expr>>;
  */
 export type ItemNames = readonly [item: string] | readonly [item: string, index: string];
 
+/** The joins of `fix`. The join `or` or `max` moves a row up, and `and` or `min` moves a row down (FIX.JOIN). */
+export type FixJoin = "or" | "and" | "max" | "min";
+
 /** The largest number of steps of `iterate` (ITERATE.LIMIT). */
 export const MAX_ITERATIONS = 100_000;
+
+/**
+ * The limit of `iterate` from the size of the data (ITERATE.LIMIT.DATA): the number of targets of an axis. This is the
+ * number of steps that a `fold` over the axis makes. The axis `list` gives the count of a list. This limit needs step B.
+ */
+export interface DataLimit {
+  readonly axis: Axis;
+}
 
 /** The tag of an expression kind. */
 export type ExprTag = Expr["tag"];
@@ -127,8 +140,36 @@ export function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Ad
  * This function makes an iteration: up to `limit` steps. `init` gives the names and their first values, and `step`
  * gives the next values. A true `until` stops it, and `result` gives the value (ITERATE.LIMIT, ITERATE.UNTIL).
  */
-export function iterate(limit: number, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate"> {
+export function iterate(limit: number | DataLimit, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate"> {
   return until === undefined ? { tag: "iterate", limit, init, step, result } : { tag: "iterate", limit, init, step, until, result };
+}
+
+/**
+ * This function makes a fixed-point column (FIX.ROUNDS). `init` gives the first value of each row. `step` gives the next
+ * value of each row, and it reads the last round with `last`. `join` joins each next value to the old value of its row.
+ */
+export function fix(name: string, join: FixJoin, init: Expr, step: Expr): ExprOf<"fix"> {
+  return { tag: "fix", name, join, init, step };
+}
+
+/** This function makes a read of the value of the focus in the last round of the `fix` with the name `name` (FIX.LAST). */
+export function last(name: string): ExprOf<"last"> {
+  return { tag: "last", name };
+}
+
+/** This function makes the limit of `iterate` from the size of the data: the number of targets of an axis (ITERATE.LIMIT.DATA). */
+export const dataLimit = (axis: Axis): DataLimit => ({ axis });
+
+/** This function gives the axis of the data limit of an iteration, or `undefined` for a limit that is a number. */
+export const limitAxis = (e: ExprOf<"iterate">): Axis | undefined => (typeof e.limit === "number" ? undefined : e.limit.axis);
+
+/**
+ * This function gives the parts of an iteration with a data limit, for a walk that tells the axes apart. The parts are
+ * an `each` over the axis, and the iteration without its axis. An iteration with a number has `undefined`.
+ */
+export function splitLimit(e: ExprOf<"iterate">): readonly [ExprOf<"each">, ExprOf<"iterate">] | undefined {
+  const axis = limitAxis(e);
+  return axis === undefined ? undefined : [each(axis, lit(0)), { ...e, limit: 0 }];
 }
 
 /**
@@ -276,7 +317,10 @@ export function isExpr(u: unknown): u is Expr {
 }
 
 /** The tags of the expressions of this version of Vex. */
-const TAGS: ReadonlySet<unknown> = new Set(["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "fn", "call", "ext"]);
+const TAGS: ReadonlySet<unknown> = new Set(["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "fix", "last", "fn", "call", "ext"]);
+
+/** The joins of `fix`. */
+const JOINS: ReadonlySet<unknown> = new Set<FixJoin>(["or", "and", "max", "min"]);
 
 /**
  * This function gives the reason that a value is not a valid expression, or `undefined` for a valid expression
@@ -406,10 +450,19 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
       case "iterate": {
         const limit = u["limit"];
         const names = loopParts(u);
-        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 0 || limit > MAX_ITERATIONS || names === undefined) return item;
+        if (names === undefined) return item;
+        if (isObject(limit)) push(true, [limit["axis"]]);
+        else if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 0 || limit > MAX_ITERATIONS) return item;
         push(false, [...names, ...(u["until"] === undefined ? [] : [u["until"]])]);
         break;
       }
+      case "fix":
+        if (typeof u["name"] !== "string" || !JOINS.has(u["join"])) return item;
+        push(false, [u["init"], u["step"]]);
+        break;
+      case "last":
+        if (typeof u["name"] !== "string") return item;
+        break;
       case "ext":
         if (typeof u["kind"] !== "string" || !("data" in u)) return item;
         break;
@@ -439,12 +492,17 @@ export function children(e: Expr): readonly Expr[] {
       return [e.body, ...axisExprs(e.axis), ...addrExprs(e.at)];
     case "fold":
       return [...Object.values(e.init), ...Object.values(e.step), ...axisExprs(e.axis), ...addrExprs(e.at), e.result];
-    case "iterate":
-      return [...Object.values(e.init), ...Object.values(e.step), ...(e.until === undefined ? [] : [e.until]), e.result];
+    case "iterate": {
+      const axis = limitAxis(e);
+      return [...Object.values(e.init), ...Object.values(e.step), ...(axis === undefined ? [] : axisExprs(axis)), ...(e.until === undefined ? [] : [e.until]), e.result];
+    }
+    case "fix":
+      return [e.init, e.step];
     case "ref":
       return addrExprs(e.at);
     case "lit":
     case "var":
+    case "last":
     case "ext":
       return [];
   }

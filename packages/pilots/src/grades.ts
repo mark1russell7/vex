@@ -7,7 +7,7 @@
  * - `rank`: 1 plus the number of other students of the class with a larger score.
  * - `above`: `true` if the score of the student is above the mean of the class.
  */
-import { space, vex, type Space } from "@mark1russell7/vex";
+import { space, vex, type CompileFn, type Space } from "@mark1russell7/vex";
 import { AngleDomain, BoolDomain, ColorDomain, NumDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
 import { runFormulas, type FormulaCells } from "./formula-run.ts";
 
@@ -78,7 +78,7 @@ export const GRADE_FORMULAS: Readonly<Record<(typeof GRADE_COLUMNS)[number], str
   above: "= score > classMean",
 };
 
-/** The columns with the formula language. */
-export function gradeFormula(classes: readonly SchoolClass[]): FormulaCells {
-  return runFormulas(gradeSpace(classes), ["name", "score"], GRADE_FORMULAS);
+/** The columns with the formula language. The optional `compile` is the compiler of the run, for example `tiered`. */
+export function gradeFormula(classes: readonly SchoolClass[], compile?: CompileFn): FormulaCells {
+  return runFormulas(gradeSpace(classes), ["name", "score"], GRADE_FORMULAS, compile);
 }

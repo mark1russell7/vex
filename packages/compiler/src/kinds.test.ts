@@ -59,7 +59,7 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
 
   it("takes the op of the first domain of the kind of the receiver, also for the name of a list op and for texts and booleans", () => {
     const e = op("concat", op("upper", s), op("max", n, lit(5)));
-    expect(sitesOf(e)).toMatchObject({ direct: 3, guarded: 0 });
+    expect(sitesOf(e)).toMatchObject({ direct: 4, guarded: 0 });
     expect(expectSame(e)).toBe(1);
     const tests = op("and", op("eq", s, v("t")), op("xor", b, lit(true)));
     expect(sitesOf(tests)).toMatchObject({ direct: 2, guarded: 0 });
@@ -68,7 +68,7 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
 
   it("gives the error of the interpreter for an argument of a kind that the op does not accept", () => {
     const e = op("ifError", op("add", n, lit("x")), lit(7));
-    expect(sitesOf(e).source).toContain("= F;");
+    expect(sitesOf(e).source).toMatch(/= s\d+_\d+\(/);
     expect(expectSame(e)).toBe(1);
   });
 
@@ -91,8 +91,8 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
     expect(sitesOf(e, options)).toMatchObject({ direct: 1, guarded: 0 });
     // Only the third record breaks the schema, so only its run goes to tier 1.
     expect(expectSame(e, options)).toBe(1);
-    // A component that is not finite is not valid in XYDomain. The check of the result finds it, and tier 1 gives the error.
-    expect(expectSame(e, options, { k: Number.POSITIVE_INFINITY, t: "x" })).toBe(3);
+    // A component that is not finite is not valid in XYDomain. The check of the result finds it, and tier 2 gives the error.
+    expect(expectSame(e, options, { k: Number.POSITIVE_INFINITY, t: "x" })).toBe(1);
     // An op can give a value of another kind than it declares. The checks of the interpreter keep such a value too.
     const Liar = defineDomain({ name: "Liar", is: (u: unknown): u is number => typeof u === "number", primitive: "number", ops: { pt: { fn: (a: number): unknown => a * 2, returns: "domain:XY" } } });
     expect(expectSame(op("pt", n), { domains: [Liar, XYDomain], schema: SCHEMA })).toBe(1);
@@ -120,7 +120,7 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
     const e = op("mix", n, v("k"));
     expect(sitesOf(e, { domains: [Mix], schema: SCHEMA })).toMatchObject({ direct: 1 });
     expect(expectSame(e, { domains: [Mix], schema: SCHEMA })).toBe(1);
-    expect(sitesOf(op("mix", n, s), { domains: [Mix], schema: SCHEMA }).source).toContain("= F;");
+    expect(sitesOf(op("mix", n, s), { domains: [Mix], schema: SCHEMA }).source).toMatch(/= s\d+_\d+\(/);
   });
 
   it("checks a result with the domain of its kind: valid of that domain, the dispatch of the checks, or nothing", () => {
@@ -134,6 +134,19 @@ describe("KIND.STATIC: an op site whose values have known kinds", () => {
     const dup = op("ifError", op("dup", op("dup", s)), lit("long"));
     expect(sitesOf(dup, { domains: [Short], schema: SCHEMA }).source).toContain(".valid(");
     expect(expectSame(dup, { domains: [Short], schema: SCHEMA })).toBe(1);
+    // COMPILE.ERRORS: at the result, the check of the site gives the error of the interpreter.
+    expectSame(op("dup", op("dup", s)), { domains: [Short], schema: SCHEMA });
+    const Throwing = defineDomain({
+      name: "Throwing",
+      is: (u: unknown): u is string => typeof u === "string",
+      primitive: "string",
+      valid: (x: string): boolean => {
+        if (x.length > 2) throw new Error("no check");
+        return true;
+      },
+      ops: { dup: { fn: (a: string): string => a + a, returns: "domain" } },
+    });
+    expectSame(op("dup", op("dup", s)), { domains: [Throwing], schema: SCHEMA });
     // A domain without a primitive type comes before the booleans, so the checks of the result use the dispatch.
     const gt = op("not", op("gt", n, lit(1)));
     expect(sitesOf(gt, { domains: [NumDomain, Vec2Domain, BoolDomain], schema: SCHEMA }).source).toContain("d1.is(");
@@ -178,10 +191,11 @@ describe("KIND.STATIC: the kinds go through the forms, the bindings, the list op
     ["ifError with two numbers", op("add", op("ifError", op("divide", n, lit(0)), lit(0)), lit(1)), 2],
     ["and and or give booleans", op("not", op("or", op("and", b, b), b)), 1],
     ["a binding", let_({ x: op("add", n, lit(1)) }, op("multiply", v("x"), lit(2))), 2],
-    ["a sum, a count, a mean, a min and a max", op("add", op("add", op("sum", each(axes.all, n)), op("count", each(axes.all, n))), op("add", op("mean", each(axes.all, n)), op("min", each(axes.all, n)))), 3],
-    ["any, all and none", op("and", op("not", op("any", each(axes.all, b))), op("not", op("none", each(axes.all, b)))), 2],
-    ["a node of the memo", op("add", op("max", each(axes.where(axes.all, b), n)), lit(1)), 1],
+    ["a sum, a count, a mean, a min and a max", op("add", op("add", op("sum", each(axes.all, n)), op("count", each(axes.all, n))), op("add", op("mean", each(axes.all, n)), op("min", each(axes.all, n)))), 6],
+    ["any, all and none", op("and", op("not", op("any", each(axes.all, b))), op("not", op("none", each(axes.all, b)))), 4],
+    ["a node of the memo", op("add", op("max", each(axes.where(axes.all, b), n)), lit(1)), 2],
   ];
+  // The failure path of a list op or a memo node has a copy of the sites, so these numbers count both paths.
   it.each(cases)("%s", (_name, e, direct) => {
     expect(sitesOf(e)).toMatchObject({ direct, guarded: 0 });
     expectSame(e);

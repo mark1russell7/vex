@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, listOf, lit, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, monotoneError, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -53,6 +53,11 @@ export interface ModuleOptions {
    * (COMPILE.MODULE.GRAPH). Each entry is an array of the positions of the ends of the edges from its record, in order.
    */
   readonly space?: "array" | "tree" | "graph";
+  /**
+   * The highest step of the language that the host accepts (STEP.MAX). The default is B. A program that needs a higher
+   * step gives a reason that names its step.
+   */
+  readonly maxStep?: VexStep;
   /**
    * True to fuse the chains of list ops into loops (`COMPILER.md` §7.6), and false for the code without fusion
    * (COMPILE.MODULE.FUSE.OFF). The default is true. In this version, the two values print the same code.
@@ -89,16 +94,20 @@ export type Emitted = { readonly ok: true; readonly source: string } | { readonl
 /** The error of a construct that a standalone module does not have. */
 class NotStandalone extends Error {}
 
-/** The error that stops the second print of a fast sum (`#packed`). Then the sum keeps the code of its first print. */
+/**
+ * The error that stops the second print of a fast sum (`#packed`) or of the steps of a fold (`#packedSteps`). Then the
+ * loop keeps the code of its first print.
+ */
 class NoPack extends Error {}
 
 /**
- * The state of the second print of a fast sum (`#packed`). It has the level and the focus of its loop. It also has
- * the local name of the pack of each column of the run that the term reads.
+ * The state of the second print of a fast sum (`#packed`) or of the steps of a fold (`#packedSteps`). It has the foci
+ * of the loops whose reads of a column read its pack. It also has the local name of the pack of each column.
  */
 interface Pack {
-  readonly level: number;
-  readonly j: string;
+  readonly foci: Set<string>;
+  /** True when a column of the function that the printer prints has a pack too, with a variable in that function. */
+  readonly calls: boolean;
   readonly cols: Map<string, string>;
   /** The count of the calls that the second print puts at their place. A count over `INLINES` stops the print. */
   inlines: number;
@@ -212,7 +221,7 @@ interface Part {
 const FOCUS_TAGS: ReadonlySet<string> = new Set(["ref", "ext", "call", "each", "fold"]);
 
 /** This function tells if an expression has a node that can read at the focus. */
-const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || children(e).some(readsFocus);
+const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || (e.tag === "iterate" && limitAxis(e) !== undefined) || children(e).some(readsFocus);
 
 /**
  * This function tells if an expression has a node that can read a cell: a read of a cell or a call. The interpreter
@@ -300,13 +309,30 @@ interface Ctx {
   readonly fns: ReadonlyMap<string, BoundFn>;
 }
 
+/** The code of the step of one name of a loop: the statements of its new value and the statement that sets it. */
+interface StepPart {
+  readonly name: string;
+  readonly s: readonly string[];
+  readonly set: string;
+  /** True when the value of the step cannot throw. */
+  readonly safe: boolean;
+}
+
+/** The printed step of a loop: its statements, their levels, the names that append to their own lists, and the code of each name. */
+interface LoopStep {
+  readonly s: readonly string[];
+  readonly deps: ReadonlySet<number>;
+  readonly owners: readonly Owner[];
+  readonly parts: readonly StepPart[];
+}
+
 /** The parts of a printed fold that its scan reads (COMPILE.MODULE.SCAN): its names, its targets, its test, its steps and its result. */
 interface ScanParts {
   readonly loop: number;
   readonly names: { readonly s: readonly string[]; readonly vars: ReadonlyMap<string, Name>; readonly deps: ReadonlySet<number> };
   readonly t: { readonly s: readonly string[]; readonly j: string; readonly key: readonly string[]; readonly check: readonly string[]; readonly skip: string | undefined; readonly inner: Ctx; readonly tests: readonly Expr[] };
   readonly test: Code | undefined;
-  readonly step: { readonly s: readonly string[]; readonly deps: ReadonlySet<number>; readonly owners: readonly Owner[] };
+  readonly step: LoopStep;
   readonly result: Code;
 }
 
@@ -389,13 +415,13 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | "LS" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
  * lists that the facts prove clean. Thus it has no scan of `V`, no `VW` and no test of the sentinel.
  */
-type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LVC" | "LPC";
+type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LSC" | "LVC" | "LPC";
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX";
@@ -665,19 +691,33 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // The keys depth first, with each parent before its children, and the position and the size of the subtree of each
   // record. Thus the descendants of a record are the keys after it, as many as its subtree has under it.
   PR: [
-    "function PR(h, r, n) {",
-    "  const o = [], at = new Int32Array(n), z = new Int32Array(n), st = [];",
-    "  for (let q = r.length - 1; q >= 0; q--) st.push(r[q]);",
-    "  while (st.length > 0) {",
-    "    const k = st.pop();",
-    "    at[k] = o.length;",
-    "    o.push(k);",
-    "    for (let q = h[k].length - 1; q >= 0; q--) st.push(h[k][q]);",
+    "function PR(P, n) {",
+    "  const f = new Int32Array(n).fill(-1), x = new Int32Array(n), o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n);",
+    "  let r = -1;",
+    "  for (let i = n - 1; i >= 0; i--) {",
+    "    const p = P[i];",
+    "    if (p < 0) {",
+    "      x[i] = r;",
+    "      r = i;",
+    "    } else {",
+    "      x[i] = f[p];",
+    "      f[p] = i;",
+    "    }",
+    "  }",
+    "  let m = 0;",
+    "  for (let k = r; k >= 0; ) {",
+    "    at[k] = m;",
+    "    o[m++] = k;",
+    "    if (f[k] >= 0) k = f[k];",
+    "    else {",
+    "      while (k >= 0 && x[k] < 0) k = P[k];",
+    "      if (k >= 0) k = x[k];",
+    "    }",
     "  }",
     "  for (let q = n - 1; q >= 0; q--) {",
-    "    const k = o[q];",
-    "    z[k] = 1;",
-    "    for (const c of h[k]) z[k] += z[c];",
+    "    const k = o[q], p = P[k];",
+    "    z[k]++;",
+    "    if (p >= 0) z[p] += z[k];",
     "  }",
     "  return [o, at, z];",
     "}",
@@ -719,8 +759,11 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A column of a direct fill (COMPILE.MODULE.SHEET.DIRECT): the error sentinel of a cell changes to VEX_ERROR.
   DO: "function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }",
   // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
-  // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
+  // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items. One key gets the list, so it is not frozen.
   LO: 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
+  // The list of a run that each key gets (COMPILE.MODULE.FUSE.OUT): LO, but frozen, because the keys share the object. LS
+  // keeps no object on the array, because a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
+  LS: 'function LS(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LS(v, h - 1) : v } }))) }); }',
   // A plain list of a result (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with no keys. An error
   // item is VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
   LP: "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
@@ -756,22 +799,43 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   // The sort in place (COMPILE.MODULE.FUSE): a clean list that is fresh is its own sort buffer, so the sort makes no
   // copy. No other part holds the array, so a failure leaves no changed list that a part reads. The sort is stable.
+  // A list of 64 items or fewer gets an insertion sort (COMPILE.MODULE.FUSE.SORT), which calls no comparator function.
+  // Its test ">" moves an item only past a larger value, so equal values keep their order. A longer list gets the
+  // stable sort of the engine. The kinds of the sort values go through the same check before each of the two sorts.
   SBI: [
     "function SBI(l) {",
-    "  const t = l.length > 0 ? typeof l[0][1] : \"number\";",
-    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  return l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "  const n = l.length, t = n > 0 ? typeof l[0][1] : \"number\";",
+    "  for (let i = 0; i < n; i++) { const v = l[i][1]; if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F(); }",
+    "  if (n > 64) l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "  else for (let i = 1; i < n; i++) {",
+    "    const x = l[i], v = x[1];",
+    "    let j = i - 1;",
+    "    for (; j >= 0 && l[j][1] > v; j--) l[j + 1] = l[j];",
+    "    l[j + 1] = x;",
+    "  }",
+    "  return l;",
     "}",
   ].join("\n"),
-  // The option by: each slot of the array holds the pair of its item and its sort value, in order, during the sort.
+  // The option by: the array k holds the sort value of each item, so the sort makes no pair for an item. f runs once
+  // for each item, in order, and the array l does not change before the check of the sort values. A long list sorts an
+  // array of indices by k, and then reads the items from a copy of l.
   SKI: [
     "function SKI(l, f) {",
-    "  const n = l.length;",
-    "  for (let i = 0; i < n; i++) l[i] = [l[i], f(l[i][1])];",
-    "  const t = n > 0 ? typeof l[0][1] : \"number\";",
-    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
-    "  for (let i = 0; i < n; i++) l[i] = l[i][0];",
+    "  const n = l.length, k = new Array(n);",
+    "  for (let i = 0; i < n; i++) k[i] = f(l[i][1]);",
+    "  const t = n > 0 ? typeof k[0] : \"number\";",
+    "  for (const v of k) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  if (n > 64) {",
+    "    const o = new Array(n), c = l.slice();",
+    "    for (let i = 0; i < n; i++) o[i] = i;",
+    "    o.sort((a, b) => (k[a] < k[b] ? -1 : k[a] > k[b] ? 1 : 0));",
+    "    for (let i = 0; i < n; i++) l[i] = c[o[i]];",
+    "  } else for (let i = 1; i < n; i++) {",
+    "    const v = k[i], x = l[i];",
+    "    let j = i - 1;",
+    "    for (; j >= 0 && k[j] > v; j--) { k[j + 1] = k[j]; l[j + 1] = l[j]; }",
+    "    k[j + 1] = v; l[j + 1] = x;",
+    "  }",
     "  return l;",
     "}",
   ].join("\n"),
@@ -797,6 +861,7 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   NTC: "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
   FSC: "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
   LOC: 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
+  LSC: 'function LSC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LSC(v, h - 1) : v } }))) }); }',
   LPC: "function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }",
   // LV and LVC keep one object on the array. A clean list gives the same object from both.
   LVC: [
@@ -809,7 +874,7 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  return o;",
     "}",
   ].join("\n"),
-  // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`.
+  // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`. No two cells share it, so LC uses LO.
   LC: "function LC(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LO(d[k], h); return d; }",
   // A plain column of lists (COMPILE.MODULE.LIST.PLAIN): each cell with a list gives an array.
   LCP: "function LCP(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LP(d[k], h); return d; }",
@@ -908,8 +973,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "    else D[c][k] = x;",
     "  };",
     "  const o = (c) => {",
-    "    const d = D[c], out = [];",
-    "    for (let k = 0; k < n; k++) out.push(d[k] === E ? VEX_ERROR : d[k]);",
+    "    const d = D[c], out = new Array(n);",
+    "    for (let k = 0; k < n; k++) out[k] = d[k] === E ? VEX_ERROR : d[k];",
     "    return out;",
     "  };",
     "  return { r, f, o };",
@@ -1107,13 +1172,13 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
-  SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [], LCP: ["LP"],
-  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LVC: [], LPC: [],
+  SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
+  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
   SBI: ["F"], SKI: ["F"], QA: [],
 };
 
 /** The clean form of each helper that gives a list of the code to the outside (COMPILE.MODULE.FUSE.CLEAN). */
-const CLEAN_FORMS = { LO: "LOC", LV: "LVC", LP: "LPC" } as const;
+const CLEAN_FORMS = { LO: "LOC", LS: "LSC", LV: "LVC", LP: "LPC" } as const;
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
 type TreePart = "children" | "siblings" | "order";
@@ -1122,7 +1187,7 @@ type TreePart = "children" | "siblings" | "order";
 const TREE_PARTS: Readonly<Record<TreePart, readonly [TreeHelper, string]>> = {
   children: ["CH", "const [H, RT] = CH(P, n);"],
   siblings: ["SG", "const [GP, SI] = SG(P, H, RT, n);"],
-  order: ["PR", "const [PO, PI, SZ] = PR(H, RT, n);"],
+  order: ["PR", "const [PO, PI, SZ] = PR(P, n);"],
 };
 
 /** An axis whose targets in a tree space are a range of an array of positions: an axis of a tree, or a window. */
@@ -1205,6 +1270,10 @@ function listy(e: Expr, scope: ListScope): boolean {
     case "fold":
     case "iterate":
       return listy(e.result, scopeIn(e.init, scope));
+    // A module has no `fix`, and a column gives a boolean or a number (COMPILE.FIX).
+    case "fix":
+    case "last":
+      return false;
     case "ext":
       return scope.cell(e);
     case "ref":
@@ -1336,7 +1405,9 @@ function cleanForm(e: Expr, fact: (name: string) => boolean): boolean {
     case "call":
     case "each":
     case "ext":
+    case "fix":
     case "fn":
+    case "last":
     case "rec":
     case "ref":
     // Stryker restore StringLiteral,ConditionalExpression
@@ -1363,6 +1434,11 @@ function refsOf(e: Expr, name: string): number {
       return refsIn(Object.values(e.bind), name) + (name in e.bind ? 0 : refsOf(e.body, name));
     case "fn":
       return e.params.includes(name) ? 0 : again(refsOf(e.body, name));
+    // A module has no `fix`. The printer gives the reason (COMPILE.FIX).
+    case "fix":
+      return refsOf(e.init, name) + again(refsOf(e.step, name));
+    case "last":
+      return 0;
     case "each": {
       // Only the body sees the names of the items (AXIS.LIST.SCOPE). The tests of the axis evaluate for each item.
       const list = listOf(e.axis);
@@ -1372,12 +1448,14 @@ function refsOf(e: Expr, name: string): number {
     }
     case "fold":
     case "iterate": {
-      // The steps and the result see the names of the loop. The tests of a fold read only the names outside the fold.
+      // The steps and the result see the names of the loop. The tests of a fold or of a data limit read only the names outside the loop.
       const hidden = name in e.init;
       const steps = [...Object.values(e.step), ...(e.tag === "iterate" && e.until !== undefined ? [e.until] : [])];
-      const once = e.tag === "fold" ? [...(listOf(e.axis) === undefined ? [] : [listOf(e.axis) as Expr]), ...addrExprs(e.at)] : [];
+      const axis = e.tag === "fold" ? e.axis : limitAxis(e);
+      const list = axis === undefined ? undefined : listOf(axis);
+      const once = [...(list === undefined ? [] : [list]), ...(e.tag === "fold" ? addrExprs(e.at) : [])];
       // Stryker disable next-line ArrayDeclaration: refsOf of a string gives NaN, and again(NaN) gives 0.
-      const tests = e.tag === "fold" ? axisExprs(e.axis).filter((x) => x !== listOf(e.axis)) : [];
+      const tests = axis === undefined ? [] : axisExprs(axis).filter((x) => x !== list);
       const item = e.tag === "fold" && e.as?.includes(name) === true;
       return refsIn([...Object.values(e.init), ...once], name) + again(refsIn(tests, name)) + (hidden || item ? 0 : again(refsIn(steps, name))) + (hidden ? 0 : refsOf(e.result, name));
     }
@@ -1441,6 +1519,8 @@ function readCounts(root: Expr): ReadonlyMap<Expr, number> {
       case "each":
       // Stryker disable next-line StringLiteral: an extension has no children.
       case "ext":
+      case "fix":
+      case "last":
       case "fn":
       // Stryker disable next-line StringLiteral: a literal has no children.
       case "lit":
@@ -1549,8 +1629,30 @@ function namesOf(e: Expr, out = new Set<string>()): Set<string> {
  */
 const COLUMN_WORK = 10;
 
-/** This function gives the head of a loop over targets: from `lo` up to `hi`, or from `hi` down to `lo` in the reverse order. */
-const forHead = (j: string, lo: string, hi: string, reverse: boolean): string => (reverse ? `for (let ${j} = ${hi} - 1; ${j} >= ${lo}; ${j}--) {` : `for (let ${j} = ${lo}; ${j} < ${hi}; ${j}++) {`);
+/** The parts of the head of a loop over targets: the first value, the condition and the step. */
+interface ForParts {
+  readonly init: string;
+  readonly cond: string;
+  readonly next: string;
+}
+
+/** This function gives the parts of a loop over targets: from `lo` up to `hi`, or from `hi` down to `lo` in the reverse order. */
+const forParts = (j: string, lo: string, hi: string, reverse: boolean): ForParts =>
+  reverse ? { init: `${hi} - 1`, cond: `${j} >= ${lo}`, next: `${j}--` } : { init: lo, cond: `${j} < ${hi}`, next: `${j}++` };
+
+/** This function gives the head of a loop over targets from its parts. */
+const forHead = (j: string, p: ForParts): string => `for (let ${j} = ${p.init}; ${p.cond}; ${p.next}) {`;
+
+/**
+ * This function gives the value that stops the step `x` of the name `name` of a fold (COMPILE.MODULE.EXIT), or
+ * undefined. The step `and(name, ...)` stops at false, and the step `or(name, ...)` stops at true. A name of `as` is
+ * not a name of `init`, so the first argument reads the name of the fold.
+ */
+const stopOf = (x: Expr, name: string): boolean | undefined => {
+  if (x.tag !== "app" || (x.op !== "and" && x.op !== "or")) return undefined;
+  const [head] = x.args;
+  return head?.tag === "var" && head.name === name ? x.op === "or" : undefined;
+};
 
 /** This function tells if an expression has a loop in a loop: an axis, a fold or an iteration in another one. */
 function nestsLoops(e: Expr, inLoop = false): boolean {
@@ -1750,13 +1852,16 @@ function isTokens(t: string): boolean {
   return true;
 }
 
+/** The source of an arrow function with plain parameters: its parameters and its body. */
+const ARROW = /^\(?\s*((?:[A-Za-z_$][\w$]*\s*,\s*)*[A-Za-z_$][\w$]*)\s*\)?\s*=>\s*([\s\S]*)/;
+
 /**
  * This function gives the inline form of the source of an arrow function. The body of the function must be an
  * expression of operators, numbers, its parameters and the functions of `CALLS`. Such a body cannot throw for primitive
  * values (§7.1). The inline form is the text of the function itself, so it has its bits.
  */
 function inlineForm(src: string): InlineForm | undefined {
-  const m = /^\(?\s*((?:[A-Za-z_$][\w$]*\s*,\s*)*[A-Za-z_$][\w$]*)\s*\)?\s*=>\s*([\s\S]*)/.exec(src);
+  const m = ARROW.exec(src);
   if (m === null) return undefined;
   const params = (m[1] as string).split(",").map((x) => x.trim());
   const parts: (string | number)[] = [];
@@ -1784,6 +1889,54 @@ function inlineForm(src: string): InlineForm | undefined {
 
 /** This function gives the text of an inline form without spaces, with `#i` for the parameter `at(i)`. */
 const patternOf = (form: InlineForm, at: (p: number) => number): string => form.parts.map((p) => (typeof p === "number" ? `#${at(p)}` : p.replaceAll(/\s/g, ""))).join("");
+
+/** The results of an op that are not values (CALL.RESULT). */
+const NOT_VALUES: readonly unknown[] = [undefined, null, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+/** This function gives a text without the content of its parentheses, brackets and braces. */
+function outlineOf(t: string): string {
+  let depth = 0;
+  let out = "";
+  for (const c of t) {
+    if (")]}".includes(c)) depth--;
+    if (depth === 0) out += c;
+    if ("([{".includes(c)) depth++;
+  }
+  return out;
+}
+
+/** This function tells if each operator of a part of an expression is a comparison, so the part gives a boolean. */
+function isComparison(part: string): boolean {
+  const operators = part.match(/>>>?=?|<<=?|[=!]==?|[<>]=?|[&|^?,=]+/g);
+  return operators !== null && operators.every((x) => /^([=!]==?|[<>]=?)$/.test(x));
+}
+
+/** This function tells if an expression gives a boolean or an object. An object needs parentheses in an arrow body. */
+function isValueText(t: string, inParentheses: boolean): boolean {
+  const outline = outlineOf(t);
+  if (outline === "{}") return inParentheses;
+  if (outline === "()") return isValueText(t.slice(1, -1).trim(), true);
+  return outline.split(/&&|\|\|/).every((part) => isComparison(part) || /^\s*!+[\w$.()\s]*$/.test(part));
+}
+
+/**
+ * This function tells if the text of an op proves that its result is a value (COMPILE.MODULE.RESULT). The proofs are a
+ * comparison, a negation, an `&&` or an `||` of these, and an object literal. A proof reads only the expression body of
+ * an arrow function. A quote, a regular expression and a comment can hide a bracket, so they stop the proof.
+ */
+function givesValue(src: string): boolean {
+  const body = ARROW.exec(src)?.[2];
+  return body !== undefined && !/["'`/]/.test(body) && isValueText(body.trim(), false);
+}
+
+/** This function tells if a check `valid` refuses a value: it gives false, or it throws. */
+function refuses(valid: (x: never) => boolean, value: unknown): boolean {
+  try {
+    return !valid(value as never);
+  } catch {
+    return true;
+  }
+}
 
 /** The reserved words of the strict code of a module, and the two names that strict code does not bind. */
 const RESERVED: ReadonlySet<string> = new Set(
@@ -1850,6 +2003,8 @@ class Printer {
   readonly #ops = new Map<string, number>();
   /** The inline form of each function of an op, or undefined for a function that the module calls. */
   readonly #forms = new Map<string, InlineForm | undefined>();
+  /** The ops whose text does not prove that the result is a value, so their results get the check of a value. */
+  readonly #unproved = new Set<string>();
   /** The functions of ops that the module calls, not in an inline form. */
   readonly #called = new Set<string>();
   /** The key of the expression of each code that is a constant of the run, and the read of each hoisted constant by key. */
@@ -1861,6 +2016,8 @@ class Printer {
   readonly #columned = new WeakSet<Expr>();
   /** The kind of each column at the start of a run that holds no list. A column of a call is not in this map. */
   readonly #runColumns = new Map<string, Kind | undefined>();
+  /** The function and the kind of each column of a call that holds no list. Only a read in that function reads its pack. */
+  readonly #callColumns = new Map<string, { readonly scope: CallScope; readonly kind: Kind | undefined }>();
   /** The code of each printed function, by its name. A fast sum looks in it for the columns that a call reads. */
   readonly #specCode = new Map<string, string>();
   /** The module variable of the pack of each column of the run, by the name of the column. */
@@ -1953,10 +2110,20 @@ class Printer {
    * This method gives the code of a list in the form of the helper `form`: a `vex.list`, or a plain array for `LP`
    * (COMPILE.MODULE.LIST.PLAIN). A list that the facts prove clean uses the clean form of the helper (COMPILE.MODULE.FUSE.CLEAN).
    */
-  envelope(v: Value, form: "LO" | "LV" | "LP"): string {
+  envelope(v: Value, form: keyof typeof CLEAN_FORMS): string {
     const list = v.list as ListInfo;
     const helper = this.#clean(list, true) ? CLEAN_FORMS[form] : form;
     return `${this.use(helper)}(${v.code}, ${String(depthOf(list))})`;
+  }
+
+  /**
+   * This method gives the code of a list that is the value of the run at a key. With `fuse`, a `vex.list` that reads no
+   * key evaluates once, on its first read, so each key gets one object (COMPILE.MODULE.FUSE.OUT). The keys share that
+   * object, so only that object is frozen. A plain array stays one array for each key, because a host can change an array.
+   */
+  runList(v: Value, plain: boolean): string {
+    if (plain || !this.#fuse || v.deps.size > 0) return this.envelope(v, plain ? "LP" : "LO");
+    return this.#hoist(bare({ ...v, code: this.envelope(v, "LS"), plain: false }), true).v.code;
   }
 
   /** This method gives the name of a part of the tree, for example `H` for the children, and marks the part as read. */
@@ -1968,7 +2135,8 @@ class Printer {
   /**
    * This method gives the check of a result of a kind, or undefined for a result that needs no check. A number must be
    * finite, and the domain of the kind can check the value with valid. The law checker of the test kit checks the
-   * declaration `returns` of each op (KIND.RETURNS), so the module trusts the kind itself.
+   * declaration `returns` of each op (KIND.RETURNS), so the module trusts the kind of each value. A result that is not a
+   * value does not break the declaration, and `#value` gives its check (COMPILE.MODULE.RESULT).
    */
   check(kind: Kind): string | undefined {
     const d = this.#facts.checkOf(kind);
@@ -1993,6 +2161,26 @@ class Printer {
   #checked(kind: Kind, code: string): string {
     const k = this.check(kind);
     return k === undefined ? code : `${k}(${code})`;
+  }
+
+  /**
+   * This method tells if the check of a kind can miss a result that is not a value. The check of a number finds each
+   * such result, and a check `valid` finds them when it refuses each one.
+   */
+  #missesNoValue(kind: Kind): boolean {
+    if (kind === "number") return false;
+    const valid = this.#domains[this.#facts.checkOf(kind) as number]?.valid;
+    return valid === undefined || !NOT_VALUES.every((x) => refuses(valid, x));
+  }
+
+  /**
+   * This method gives the code of the result of the op `name` with the check of a value, if the op needs it. The
+   * interpreter gives an error for `undefined`, `null` and a number that is not finite (CALL.RESULT).
+   */
+  #value(name: string, code: string): string {
+    if (!this.#unproved.has(name)) return code;
+    this.top.set("k_value", `const k_value = (x) => (x === undefined || x === null || (typeof x === "number" && !Number.isFinite(x)) ? ${this.use("F")}() : x);`);
+    return `k_value(${code})`;
   }
 
   #valid(d: number, domain: string, kind: Kind, valid: (x: never) => boolean): string | undefined {
@@ -2119,7 +2307,7 @@ class Printer {
     if (key !== undefined) return bare(this.#read(key));
     const keys = this.#memo.get(e);
     // In the second print of a fast sum, a column of the run at the item is the read of its pack, with no print of its parts.
-    const packed = this.#pack?.level === ctx.level && this.#columned.has(e) ? this.#packRead(this.#columns.get(this.#constKey(e, ctx)), ctx) : undefined;
+    const packed = this.#packAt(ctx) && this.#columned.has(e) ? this.#packRead(this.#columns.get(this.#constKey(e, ctx)), ctx) : undefined;
     if (packed !== undefined) return packed;
     const c = keys !== undefined && this.#inside !== e ? this.#unpacked(() => this.#memoized(e, keys, ctx)) : this.#node(e, ctx);
     if (c.v.deps.size === 0) {
@@ -2265,19 +2453,30 @@ class Printer {
     return work;
   }
 
+  /** This method tells if a second print (`#packed`, `#packedSteps`) reads the packs of the columns at the focus of `ctx`. */
+  #packAt(ctx: Ctx): boolean {
+    return this.#pack !== undefined && ctx.focus !== undefined && this.#pack.foci.has(ctx.focus);
+  }
+
   /**
-   * This method gives the read of the pack of a column in the second print of a fast sum (`#packed`), or undefined. The
-   * column must be a column of the run, and the read must be at the item of the loop.
+   * This method gives the read of the pack of a column in a second print (`#packed`, `#packedSteps`), or undefined. The
+   * column must be a column of the run, or a column of the function that the printer prints. The read must be at a
+   * focus of the print. The read holds the value of the column or the sentinel, as a read of the column does.
    */
   #packRead(name: string | undefined, ctx: Ctx): Code | undefined {
     const pack = this.#pack;
-    if (pack === undefined || name === undefined || ctx.level !== pack.level || ctx.focus !== pack.j || !this.#runColumns.has(name)) return undefined;
+    if (pack === undefined || name === undefined || !this.#packAt(ctx)) return undefined;
+    const own = this.#callColumns.get(name);
+    if (!this.#runColumns.has(name) && (!pack.calls || own?.scope !== this.#scopes.at(-1))) return undefined;
     let local = pack.cols.get(name);
     if (local === undefined) {
       local = this.fresh("pk");
       pack.cols.set(name, local);
     }
-    return bare({ code: `${this.use("G")}(${local}[${pack.j}])`, kind: this.#runColumns.get(name), safe: false, deps: new Set([ctx.level]) });
+    const held = `${local}[${ctx.focus as string}]`;
+    // A column of a call reads a parameter, so its read keeps the marker of the parameters.
+    const deps = new Set(own === undefined ? [ctx.level] : [ctx.level, own.scope.param]);
+    return bare({ code: `${this.use("G")}(${held})`, kind: own === undefined ? this.#runColumns.get(name) : own.kind, safe: false, held, deps });
   }
 
   /** This method gives the read of a column of the run. Two parts with the same structure share one column. */
@@ -2291,7 +2490,10 @@ class Printer {
       // A column of a call is at the start of the body of its function, so each call has its own.
       const scope = this.#callScope(c, ctx);
       (scope?.decls ?? this.run).push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
-      if (scope === undefined && c.v.list === undefined) this.#runColumns.set(name, c.v.kind);
+      if (c.v.list === undefined) {
+        if (scope === undefined) this.#runColumns.set(name, c.v.kind);
+        else this.#callColumns.set(name, { scope, kind: c.v.kind });
+      }
       this.#columns.set(key, name);
     }
     this.#columned.add(e);
@@ -2337,6 +2539,10 @@ class Printer {
         return this.#fold(e, ctx);
       case "iterate":
         return this.#iterate(e, ctx);
+      case "fix":
+      case "last":
+        // COMPILE.FIX: a module refuses a fixed point with a reason. Tier 1 and the kernel run it.
+        throw new NotStandalone('a fixed point ("fix"), which a module does not have yet');
       case "ext":
         return this.#cell(e, ctx);
     }
@@ -2596,7 +2802,7 @@ class Printer {
     if (bound === undefined) throw new NotStandalone(`a call of "${e.fn}", which is not a function`);
     if (bound.fn.params.length !== e.args.length) throw new NotStandalone(`a call of "${e.fn}" with ${String(e.args.length)} arguments, not ${String(bound.fn.params.length)}`);
     // The second print of a fast sum puts the body of a function at the place of its call (`#inline`).
-    if (this.#pack?.level === ctx.level) return this.#inline(bound, e, ctx);
+    if (this.#packAt(ctx)) return this.#inline(bound, e, ctx);
     const s: string[] = [];
     const args = e.args.map((x): Arg => {
       // An argument can be a list, as a binding of a let can (COMPILE.MODULE.LIST.ARG).
@@ -2821,6 +3027,7 @@ class Printer {
       const src = copied(fn, each, `the op "${op}" of the domain ${d.name}`);
       // An inline form cannot throw for primitive values only.
       this.#forms.set(name, lists.size === 0 && kinds.every((k) => primitiveOf(k) !== undefined) ? inlineForm(src) : undefined);
+      if (!givesValue(src) && this.#missesNoValue(site.returns)) this.#unproved.add(name);
       this.top.set(name, `const ${name} = ${src};`);
     }
     const form = this.#forms.get(name);
@@ -2829,12 +3036,13 @@ class Printer {
     if (inline) {
       const text = form.parts.map((x) => (typeof x === "number" ? `(${(values[x] as Code).v.code})` : x)).join("");
       const checked = this.check(site.returns);
-      const code = checked === undefined ? `(${text})` : `${checked}(${text})`;
-      return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: checked === undefined && values.every((x) => x.v.safe), deps } };
+      const value = this.#value(name, text);
+      const code = checked === undefined ? `(${value})` : `${checked}(${value})`;
+      return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: checked === undefined && value === text && values.every((x) => x.v.safe), deps } };
     }
     this.#called.add(name);
     // An exception of the op is an error of Vex: the boundary around the op catches it.
-    const code = this.#checked(site.returns, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`);
+    const code = this.#checked(site.returns, this.#value(name, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`));
     return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: false, deps } };
   }
 
@@ -2930,6 +3138,8 @@ class Printer {
     readonly j: string;
     /** The head of the loop, and the statements at the start of each item before the try and inside it. */
     readonly head: string;
+    /** The parts of the head. An early exit (COMPILE.MODULE.EXIT) goes on from the next target with them. */
+    readonly parts: ForParts;
     readonly key: readonly string[];
     readonly check: readonly string[];
     readonly skip: string | undefined;
@@ -2962,7 +3172,8 @@ class Printer {
       const texts = (list.v.list as ListInfo).texts === true;
       const a = this.fresh("A");
       const q = this.fresh("q");
-      const head = reverse ? `for (let ${q} = ${a}.length - 1; ${q} >= 0; ${q}--) {` : `for (let ${q} = 0; ${q} < ${a}.length; ${q}++) {`;
+      const parts = forParts(q, "0", `${a}.length`, reverse);
+      const head = forHead(q, parts);
       const key = [`const ${j} = ${a}[${q}][0];`];
       // The loop over a clean list has no test of the sentinel (COMPILE.MODULE.FUSE.CLEAN).
       const clean = this.#clean(list.v.list);
@@ -2973,8 +3184,10 @@ class Printer {
         s.push(...named.s);
         check.push(...named.check);
       }
-      return { s, j, head, key, check, checkSafe: clean, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level };
+      return { s, j, head, parts, key, check, checkSafe: clean, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level };
     }
+    // The focus of each other axis is the position of a record, so a loop in a second print reads the packs there too.
+    this.#pack?.foci.add(j);
     const s: string[] = [];
     let lo = "0";
     let hi = "n";
@@ -2991,17 +3204,22 @@ class Printer {
     }
     const startSafe = at.every((m) => m.t === "origin");
     if (base.t === "window" && (!Number.isInteger(base.from) || !Number.isInteger(base.to))) throw new NotStandalone('the axis "window" with a bound that is not an integer');
+    // The ancestors are a walk up the parents, with no array (COMPILE.MODULE.TREE.ALLOC). The reverse order needs the array.
+    if (this.#tree && base.t === "ancestors" && !reverse) {
+      const parts = { init: `P[${f as string}]`, cond: `${j} >= 0`, next: `${j} = P[${j}]` };
+      return { s, j, head: forHead(j, parts), parts, key: [], check: [], checkSafe: true, skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+    }
     // In a tree space, the targets of a tree axis and of a window are a range of an array of positions.
     if (this.#tree && isTreeAxis(base)) {
       const range = this.#treeRange(base, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+      return { s: [...s, ...range.s], j, head: forHead(q, forParts(q, range.lo, range.hi, reverse)), parts: forParts(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: range.skip, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
     }
     // In a graph space, the targets of an axis of a graph are an array of positions. A graph has no offsets and no tree.
     if (this.#graph && GRAPH_AXES.has(base.t)) {
       const range = this.#graphRange(base.t, f as string);
       const q = this.fresh("q");
-      return { s: [...s, ...range.s], j, head: forHead(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+      return { s: [...s, ...range.s], j, head: forHead(q, forParts(q, range.lo, range.hi, reverse)), parts: forParts(q, range.lo, range.hi, reverse), key: [`const ${j} = ${range.a}[${q}];`], check: [], checkSafe: true, skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
     }
     if (this.#graph && base.t === "window") throw new NotStandalone('the axis "window" in a graph space');
     if (base.t === "others") skip = f;
@@ -3011,7 +3229,7 @@ class Printer {
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
       hi = h;
     } else if (base.t !== "all") throw new NotStandalone(`the axis "${base.t}"`);
-    return { s, j, head: forHead(j, lo, hi, reverse), key: [], check: [], checkSafe: true, skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+    return { s, j, head: forHead(j, forParts(j, lo, hi, reverse)), parts: forParts(j, lo, hi, reverse), key: [], check: [], checkSafe: true, skip, fixed: f === undefined, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
   }
 
   /**
@@ -3164,7 +3382,7 @@ class Printer {
     if (this.#pack !== undefined || !PACK_OPS.has(op) || step !== undefined || body.v.kind !== "number") return undefined;
     if (!this.#packable(target.body, inner.fns, new Set()) || !this.#reaches(body)) return undefined;
     const j = inner.focus as string;
-    const pack: Pack = { level: inner.level, j, cols: new Map(), inlines: 0 };
+    const pack: Pack = { foci: new Set([j]), calls: false, cols: new Map(), inlines: 0 };
     const scopes = this.#scopes.length;
     const outer = this.#inside;
     this.#pack = pack;
@@ -3186,19 +3404,28 @@ class Printer {
     // Each other read of the item is a value that no column holds, so the term keeps its first code.
     const rest = text.replaceAll(new RegExp(String.raw`\b(?:${used.map(([, local]) => local).join("|")})\[${j}\]`, "g"), "");
     if (new RegExp(String.raw`\b${j}\b`).test(rest)) return undefined;
-    const lets = used.map(([col, local]) => {
-      let name = this.#packs.get(col);
-      if (name === undefined) {
-        name = this.fresh("PK");
-        this.#packs.set(col, name);
-        this.run.push(`let ${name};`);
-      }
-      return `const ${local} = ${name} || (${name} = ${this.use("QA")}(n, ${col}));`;
-    });
+    const lets = this.#packLets(used);
     const items = [...second.s, `const ${r.v} = ${second.v.code};`, r.step];
     const head = `for (let ${j} = 0; ${j} < n; ${j}++) {`;
     if (strict) return [...lets, "try {", ...ind([head, ...ind(items), "}"]), "} catch {", `  ${this.use("F")}();`, "}"];
     return [...lets, head, ...ind(["try {", ...ind([`for (; ${j} < n; ${j}++) {`, ...ind(items), "}"]), "} catch {}"]), "}"];
+  }
+
+  /**
+   * This method gives the statements that read the packs of some columns before a loop. Each pair has a column and its
+   * local name. The first loop that reads a pack makes it. The variable of the pack of a column of the run is in the
+   * run. The variable of the pack of a column of a call is in the function of the call.
+   */
+  #packLets(used: readonly (readonly [string, string])[]): string[] {
+    return used.map(([col, local]) => {
+      let name = this.#packs.get(col);
+      if (name === undefined) {
+        name = this.fresh("PK");
+        this.#packs.set(col, name);
+        (this.#callColumns.get(col)?.scope.decls ?? this.run).push(`let ${name};`);
+      }
+      return `const ${local} = ${name} || (${name} = ${this.use("QA")}(n, ${col}));`;
+    });
   }
 
   /**
@@ -3739,7 +3966,7 @@ class Printer {
    * `ownForm`, and no step of another name and no `until` reads it. The tests of a fold read only the names outside the
    * fold, so they cannot read it. A name in `adopt` has a first list that its appends can take (COMPILE.MODULE.FUSE.ADOPT).
    */
-  #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>, adopt: ReadonlySet<string>, until?: Expr): { readonly s: string[]; readonly deps: ReadonlySet<number>; readonly owners: readonly Owner[] } {
+  #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>, adopt: ReadonlySet<string>, until?: Expr): LoopStep {
     const owners: Owner[] = [];
     const nodes: Expr[] = [];
     const steps = Object.entries(step);
@@ -3755,8 +3982,7 @@ class Printer {
       nodes.push(...own);
     }
     try {
-      const { s, deps } = this.#steps(step, inner, vars);
-      return { s, deps, owners };
+      return { ...this.#steps(step, inner, vars), owners };
     } finally {
       for (const node of nodes) this.#own.delete(node);
     }
@@ -3800,10 +4026,14 @@ class Printer {
     return owners.flatMap((o) => (o.w === undefined ? [] : [`let ${o.w} = ${o.adopt ? o.read.code : "null"};`]));
   }
 
-  /** This method gives the statements of one step of a loop, without the variables of COMPILE.MODULE.APPEND.OWN. */
-  #steps(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>): { readonly s: string[]; readonly deps: ReadonlySet<number> } {
+  /**
+   * This method gives the statements of one step of a loop, without the variables of COMPILE.MODULE.APPEND.OWN. It also
+   * gives the statements of each name alone, for the rest of a fold after its exit (`#foldExit`).
+   */
+  #steps(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>): { readonly s: string[]; readonly deps: ReadonlySet<number>; readonly parts: readonly StepPart[] } {
     const s: string[] = [];
     const sets: string[] = [];
+    const parts: StepPart[] = [];
     const deps = new Set<number>();
     for (const [name, x] of Object.entries(step)) {
       this.#wantList.add(x);
@@ -3812,11 +4042,13 @@ class Printer {
       if (c.v.kind !== v.kind || (c.v.list === undefined) !== (v.list === undefined)) throw new NotStandalone(`a step of a loop changes the kind of the name "${name}"`);
       if (v.list !== undefined && !fits(v.list, c.v.list as ListInfo)) throw new NotStandalone(`a step of a loop gives the name "${name}" a list that does not fit its first list`);
       const t = this.fresh("t");
-      s.push(...c.s, `const ${t} = ${c.v.code};`);
+      const value = [...c.s, `const ${t} = ${c.v.code};`];
+      s.push(...value);
       sets.push(`${v.code} = ${t};`);
+      parts.push({ name, s: value, set: `${v.code} = ${t};`, safe: c.v.safe });
       for (const d of c.v.deps) deps.add(d);
     }
-    return { s: [...s, ...sets], deps };
+    return { s: [...s, ...sets], deps, parts };
   }
 
   /**
@@ -3828,6 +4060,8 @@ class Printer {
     const loop = this.#loops++;
     const names = this.#loopNames(e.init, e.step, ctx, loop);
     const inner: Ctx = { ...ctx, env: names.env };
+    // The data limit reads the names outside the loop, after the first values (ITERATE.LIMIT.DATA).
+    const limit = this.#limit(e, ctx);
     // A loop at a place that takes a list gives its result there (LOOP.LIST).
     if (this.#wantList.has(e)) this.#wantList.add(e.result);
     const until = e.until === undefined ? undefined : this.expr(e.until, inner);
@@ -3836,12 +4070,27 @@ class Printer {
     const k = this.fresh("k");
     const body = [
       ...(until === undefined ? [] : [...until.s, `if (${this.#boolean(until.v)}) break;`]),
-      `if (${k} === ${String(e.limit)}) ${until === undefined ? "break;" : `${this.use("F")}();`}`,
+      `if (${k} === ${limit.code}) ${until === undefined ? "break;" : `${this.use("F")}();`}`,
       ...step.s,
     ];
     const inside = [...(until?.v.deps ?? []), ...step.deps, ...result.v.deps].filter((d) => d !== loop);
-    const deps = new Set([...names.deps, ...inside]);
-    return { s: [...names.s, ...this.#ownVars(step.owners), `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+    const deps = new Set([...names.deps, ...limit.deps, ...inside]);
+    return { s: [...names.s, ...limit.s, ...this.#ownVars(step.owners), `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+  }
+
+  /**
+   * The number of steps of an iteration. A data limit is the strict count of the targets of its axis. An error of the
+   * axis, of a test or of an item throws. A count above the cap throws too (ITERATE.LIMIT.ERROR).
+   */
+  #limit(e: ExprOf<"iterate">, ctx: Ctx): { readonly s: readonly string[]; readonly code: string; readonly deps: ReadonlySet<number> } {
+    const [targets] = splitLimit(e) ?? [];
+    if (targets === undefined) {
+      const limit = e.limit as number;
+      return { s: [], code: String(limit), deps: new Set() };
+    }
+    const count = this.expr(app("count", targets, lit({ strict: true })), ctx);
+    const n = this.fresh("n");
+    return { s: [...count.s, `const ${n} = ${count.v.code};`, `if (${n} > ${String(MAX_ITERATIONS)}) ${this.use("F")}();`], code: n, deps: count.v.deps };
   }
 
   /**
@@ -3860,21 +4109,94 @@ class Printer {
     if (tests.some((x) => x.v.deps.has(CELLS))) throw new NotStandalone("a test of the axis of a fold reads a cell");
     // Only the steps see the names of the items (AXIS.LIST.SCOPE). A name of `as` is not a name of `init`, so the read of
     // each name of the fold stays its read, and an append into its own list keeps its owner (COMPILE.MODULE.APPEND.OWN).
-    const step = this.#loopStep(e.step, { ...t.inner, env: withNames(names.env, t.items) }, names.vars, names.adopt);
-    this.#readsNoTarget(t.texts, t.inner.level, [...tests.map((x) => x.v.deps), step.deps]);
-    const result = this.#loopResult(e.result, { ...ctx, env: names.env }, step.owners);
-    const scan = this.#scan(e, { loop, names, t, test: tests[0], step, result });
+    const stepCtx: Ctx = { ...t.inner, env: withNames(names.env, t.items) };
+    const first = this.#loopStep(e.step, stepCtx, names.vars, names.adopt);
+    this.#readsNoTarget(t.texts, t.inner.level, [...tests.map((x) => x.v.deps), first.deps]);
+    const result = this.#loopResult(e.result, { ...ctx, env: names.env }, first.owners);
+    const scan = this.#scan(e, { loop, names, t, test: tests[0], step: first, result });
     if (scan !== undefined) return scan;
-    const body = [
+    // A fold over all the records can read the packs of its columns (COMPILE.MODULE.PAIRS).
+    const packed = this.#packedSteps(e, t, stepCtx, names, first);
+    const step = packed?.step ?? first;
+    const item = [
       ...t.key,
       ...(t.skip === undefined ? [] : [`if (${t.j} === ${t.skip}) continue;`]),
       ...t.check,
       ...tests.flatMap((c) => [...c.s, `if (!${this.#boolean(c.v)}) continue;`]),
-      ...step.s,
     ];
+    const body = [...item, ...step.s, ...this.#foldExit(e, t, item, tests, step, names.vars, result)];
     const inside = [...tests.flatMap((c) => [...c.v.deps]), ...step.deps].filter((d) => d !== loop && d !== t.inner.level && d !== t.item);
     const deps = new Set([...names.deps, ...t.start, ...inside, ...[...result.v.deps].filter((d) => d !== loop)]);
-    return { s: [...names.s, ...this.#ownVars(step.owners), ...t.s, t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+    return { s: [...names.s, ...this.#ownVars(step.owners), ...t.s, ...(packed?.lets ?? []), t.head, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+  }
+
+  /**
+   * This method gives the second print of the steps of a fold over all the records (COMPILE.MODULE.PAIRS), or
+   * undefined. The axis has no test, no address and no reverse order, and no name holds a list. The second print reads
+   * the pack of a column at the focus of the fold and of each loop in its steps. A column of the function that the
+   * printer prints has a pack too, which each call makes again.
+   *
+   * Each call at such a focus is the body of its function at the place of the call (`#inline`). A pack holds the value
+   * or the sentinel of the column at each record. Thus each read gives the value of a read of the column. Where the
+   * second print fails, the fold keeps its first print.
+   */
+  #packedSteps(e: ExprOf<"fold">, t: { readonly j: string; readonly fixed: boolean; readonly tests: readonly Expr[] }, inner: Ctx, names: { readonly vars: ReadonlyMap<string, Name>; readonly adopt: ReadonlySet<string> }, first: LoopStep): { readonly step: LoopStep; readonly lets: readonly string[] } | undefined {
+    if (this.#pack !== undefined || testsOf(e.axis).base.t !== "all" || !t.fixed || t.tests.length > 0 || first.owners.length > 0) return undefined;
+    if ([...names.vars.values()].some((x) => x.list !== undefined)) return undefined;
+    // The first print must read a column that can have a pack: a column of the run, or a column of this function.
+    const scope = this.#scopes.at(-1);
+    const read = first.s.join("\n");
+    const columns = [...this.#runColumns.keys(), ...[...this.#callColumns].flatMap(([name, c]) => (c.scope === scope ? [name] : []))];
+    if (!columns.some((name) => read.includes(`${name}(`))) return undefined;
+    const pack: Pack = { foci: new Set([t.j]), calls: true, cols: new Map(), inlines: 0 };
+    const scopes = this.#scopes.length;
+    const outer = this.#inside;
+    this.#pack = pack;
+    let step: LoopStep;
+    try {
+      step = this.#loopStep(e.step, inner, names.vars, names.adopt);
+    } catch (err) {
+      if (!(err instanceof NoPack || err instanceof NotStandalone)) throw err;
+      this.#scopes.length = scopes;
+      this.#inside = outer;
+      return undefined;
+    } finally {
+      this.#pack = undefined;
+    }
+    const text = step.s.join("\n");
+    return { step, lets: this.#packLets([...pack.cols].filter(([, local]) => text.includes(`${local}[`))) };
+  }
+
+  /**
+   * This method gives the exit of a fold (COMPILE.MODULE.EXIT): the statements after each step, or none. A name whose
+   * step is `and(name, ...)` stops at false, and a name whose step is `or(name, ...)` stops at true. Then each later
+   * step of the name gives the same value and evaluates no other argument. When each such name stops, the loop leaves.
+   * The rest of the targets runs only the steps of the other names, with the checks and the tests of each target. Thus
+   * an error of a later target is still the error of the fold. When these steps cannot throw and the result does not
+   * read their names, the loop leaves at once.
+   */
+  #foldExit(e: ExprOf<"fold">, t: { readonly parts: ForParts; readonly checkSafe: boolean }, item: readonly string[], tests: readonly Code[], step: LoopStep, vars: ReadonlyMap<string, Name>, result: Code): string[] {
+    if (step.owners.length > 0) return [];
+    const stops: string[] = [];
+    const rest: StepPart[] = [];
+    for (const p of step.parts) {
+      const stop = stopOf(e.step[p.name] as Expr, p.name);
+      if (stop === undefined) rest.push(p);
+      else stops.push(`${stop ? "" : "!"}${(vars.get(p.name) as Name).code}`);
+    }
+    if (stops.length === 0) return [];
+    const test = stops.join(" && ");
+    const reads = [result.v.code, ...result.s].join("\n");
+    // A part with statements of its own can have a loop or a try block, so only a part with one statement is quiet.
+    const quiet =
+      t.checkSafe &&
+      tests.every((c) => c.s.length === 0 && this.#safeBoolean(c.v)) &&
+      rest.every((p) => p.safe && p.s.length === 1 && !new RegExp(String.raw`\b${(vars.get(p.name) as Name).code}\b`).test(reads));
+    if (quiet) return [`if (${test}) break;`];
+    // The rest goes on from the next target, in the order of the loop, with the parts of the head of the loop.
+    const { cond, next } = t.parts;
+    const residual = [...item, ...rest.flatMap((p) => p.s), ...rest.map((p) => p.set)];
+    return [`if (${test}) {`, ...ind([`for (${next}; ${cond}; ${next}) {`, ...ind(residual), "}", "break;"]), "}"];
   }
 
   /**
@@ -4018,8 +4340,9 @@ class Printer {
     const site = this.#facts.staticSite(test.op, keyFirst ? [kind, t.v.kind] : [t.v.kind, kind]);
     if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
     // A static site of a domain has the function of the op of that domain.
-    const form = inlineForm(Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn));
-    if (form?.params.length !== 2) return undefined;
+    const src = Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn);
+    const form = inlineForm(src);
+    if (form?.params.length !== 2 || !givesValue(src)) return undefined;
     const before = tests.slice(0, at).map((x) => this.#hoist(this.expr(x, loop)));
     const after = tests.slice(at + 1).map((x) => this.#hoist(this.expr(x, loop)));
     const body = this.#hoist(this.expr(target.body, loop));
@@ -4181,10 +4504,10 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     return reasonOf(thrown);
   }
   const { name, tree, graph } = run;
-  // A tree checks its parents, and it computes the parts that the program reads. The siblings and the order need the
-  // children.
+  // A tree checks its parents, and it computes the parts that the program reads. The siblings need the children. The
+  // order reads only the parents (COMPILE.MODULE.TREE.ALLOC).
   if (tree) p.use("PT");
-  if (p.treeParts.size > 0) p.treeParts.add("children");
+  if (p.treeParts.has("siblings")) p.treeParts.add("children");
   const parts = (["children", "siblings", "order"] as const).filter((x) => p.treeParts.has(x));
   for (const x of parts) p.use(TREE_PARTS[x][0]);
   // A graph checks its edges, and it computes the predecessors if the program reads them.
@@ -4244,8 +4567,8 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
-  // LOOP.SIZE: a module refuses the steps that the interpreter refuses. A program nested too deep fails in the printer.
-  const size = nestingOf(expr) > MAX_NESTING ? undefined : sizeError(expr, options);
+  // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
+  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
   if (size !== undefined) return { ok: false, reason: size };
   const p = new Printer(expr, options);
   let value: Code;
@@ -4256,8 +4579,8 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
     return reasonOf(thrown);
   }
   // A list gives a vex.list (COMPILE.MODULE.LIST.RESULT), or a plain array (COMPILE.MODULE.LIST.PLAIN).
-  const result = value.v.list === undefined ? value.v.code : p.envelope(value.v, run.plain ? "LP" : "LO");
-  const body = ["const out = [];", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out.push(${result});`, "  } catch {", "    out.push(VEX_ERROR);", "  }", "}", "return out;"];
+  const result = value.v.list === undefined ? value.v.code : p.runList(value.v, run.plain);
+  const body = ["const out = new Array(n);", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out[o] = ${result};`, "  } catch {", "    out[o] = VEX_ERROR;", "  }", "}", "return out;"];
   return printModule(p, options, run, body);
 }
 
@@ -4322,7 +4645,7 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
     const shape = shapeError(f.expr);
-    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : sizeError(f.expr, options);
+    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options) ?? monotoneError(f.expr, options));
     const reason = shape ?? size;
     if (reason !== undefined) return { ok: false, reason: `${formulaText(f)}: ${reason}` };
   }

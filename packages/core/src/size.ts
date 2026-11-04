@@ -10,7 +10,8 @@
  * or no bound. The check also keeps the kinds of each value, because the kind of the receiver selects the op.
  */
 import { isOpName, type AnyDomain, type OpSpec, type ReturnKind, type SizeMeasure, type SizeRule, type SizeTerm, type SizeUse } from "./domain.ts";
-import { addrExprs, children, listOf, type Axis, type Expr, type ExprOf, type ItemNames } from "./ir.ts";
+import { addrExprs, children, limitAxis, listOf, type Axis, type Expr, type ExprOf, type ItemNames } from "./ir.ts";
+import { joinKind as kindOfJoin } from "./fix.ts";
 import { isListOp, isVexList, LIST_SIZES, type ListOp } from "./list.ts";
 
 /** The options of the check of sizes: the domains and the functions of the host, as for `compile`. */
@@ -312,6 +313,13 @@ class Checker {
       case "fold":
       case "iterate":
         return this.#loop(e, env);
+      case "fix":
+        // A column gives a boolean or a number, so a list of the program cannot grow through it.
+        this.shape(e.init, env);
+        this.shape(e.step, env);
+        return zero(kindOfJoin(e.join) === "boolean" ? BOOLEAN : NUMBER);
+      case "last":
+        return zero(SCALAR);
       case "fn":
         return zero(NO_KIND);
     }
@@ -593,6 +601,9 @@ class Checker {
 
   #loop(e: ExprOf<"fold"> | ExprOf<"iterate">, env: Env): Shape {
     const list = e.tag === "fold" ? this.#axis(e.axis, e.at, env) : undefined;
+    // ITERATE.LIMIT.DATA: a data limit has the bound of a fold over its axis, and the steps of iterate have no item.
+    const axis = e.tag === "iterate" ? limitAxis(e) : undefined;
+    const sized = axis === undefined ? undefined : this.#axis(axis, undefined, env);
     const names = Object.keys(e.init);
     const init = new Map(names.map((n) => [n, this.shape(e.init[n] as Expr, env)]));
     const ids = new Map(names.map((n) => [n, this.#fresh()]));
@@ -685,7 +696,7 @@ class Checker {
         return [n, joinShape(a, b)];
       }),
     );
-    const last = loop.last(starts, list?.count ?? (e.tag === "iterate" ? constant(e.limit) : SOME));
+    const last = loop.last(starts, list?.count ?? sized?.count ?? (e.tag === "iterate" && typeof e.limit === "number" ? constant(e.limit) : SOME));
     const renv = new Map(env);
     for (const n of names) {
       const a = assumed.get(n) as Assumed;
@@ -842,8 +853,10 @@ function label(e: Expr): string {
     case "each":
     case "ext":
     case "fn":
+    case "fix":
     case "fold":
     case "iterate":
+    case "last":
     case "let":
     case "lit":
     case "rec":

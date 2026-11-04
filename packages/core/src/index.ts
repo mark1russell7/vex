@@ -4,10 +4,12 @@
  */
 export * from "./result.ts";
 export * from "./errors.ts";
+export * from "./error-text.ts";
 export * from "./ir.ts";
 export * from "./space.ts";
 export * from "./domain.ts";
 export * from "./list.ts";
+export { asList } from "./array-list.ts";
 export * from "./trace.ts";
 export * from "./evaluate.ts";
 export * from "./deps.ts";
@@ -18,4 +20,6 @@ export * from "./plan.ts";
 export * from "./traversal.ts";
 export * from "./sheet.ts";
 export * from "./builder.ts";
+export { monotoneError, type MonotoneOptions } from "./monotone.ts";
 export * from "./size.ts";
+export * from "./steps.ts";

@@ -107,13 +107,13 @@ describe("COMPILE.MODULE.LIST.RESULT: a list as the value of a program", () => {
       expectSame(e, []);
     }
     expectSame(each(axes.children, inv), RECORDS, PARENTS);
-    // A list of the run is one array for each key, and each key gives its own vex.list.
+    // A list of the run is one array for each key. With fuse, each key gets one vex.list (COMPILE.MODULE.FUSE.OUT).
     const m = emitModule(each(axes.all, ref("v")), NUM);
-    // The list is clean, so the run reads it with LOC, the clean form of LO (COMPILE.MODULE.FUSE.CLEAN).
-    expect(m.ok && m.source).toContain("out.push(LOC(c");
+    // The list is clean, so the run reads it with LSC, the clean form of LS (COMPILE.MODULE.FUSE.CLEAN).
+    expect(m.ok && m.source).toContain("return LSC(c");
     const off = emitModule(each(axes.all, ref("v")), { ...NUM, fuse: false });
-    expect(off.ok && off.source).toContain("out.push(LO(c");
-    const loaded = make((m as { source: string }).source);
+    expect(off.ok && off.source).toContain("out[o] = LO(c");
+    const loaded = make((off as { source: string }).source);
     const [first, second] = loaded.run([{ v: 1 }, { v: 0 }], {}) as unknown as unknown[];
     expect(first).toStrictEqual({ kind: "vex.list", items: [{ key: "0", result: { ok: true, value: 1 } }, { key: "1", result: { ok: true, value: 0 } }] });
     expect(first).not.toBe(second);

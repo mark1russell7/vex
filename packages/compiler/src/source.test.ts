@@ -24,8 +24,12 @@ const sourceOf = (e: Expr, options?: GenerateOptions): string => {
   return g.ok ? g.source : `no source: ${g.reason}\n`;
 };
 
-const expectGolden = async (name: string, e: Expr, options?: GenerateOptions): Promise<void> => {
-  await expect(sourceOf(e, options)).toMatchFileSnapshot(`./__golden__/${name}.js`);
+/**
+ * This function compares the source with its golden file. A golden file is output of the compiler and test data, not
+ * source. Thus a new golden file has the extension `.js.txt`, outside the rule `typed-scripts`. A script does not use it.
+ */
+const expectGolden = async (name: string, e: Expr, options?: GenerateOptions, extension = ".js"): Promise<void> => {
+  await expect(sourceOf(e, options)).toMatchFileSnapshot(`./__golden__/${name}${extension}`);
 };
 
 describe("COMPILE.SOURCE: the generated source", () => {
@@ -99,6 +103,25 @@ describe("COMPILE.SOURCE: the generated source", () => {
 
   it("a list and an extension stop the program at an error", async () => {
     await expectGolden("stops", rec({ list: each(axes.all, ref("n")), errors: app("errors", each(axes.all, ref("n"))), ext: ext("note", "a") }));
+  });
+
+  it("COMPILE.EXT: an error of an extension that the program catches stays in tier 2", async () => {
+    const note = ext("note", "a");
+    await expectGolden(
+      "ext-errors",
+      rec({
+        // ifError catches the error of the extension. The argument before it has a block of its own, so its error skips no extension.
+        caught: app("ifError", app("add", ref("n"), note), lit(0)),
+        args: app("ifError", app("add", ref("n"), ref("m"), note, ref("q")), lit(0)),
+        // A list op skips the error item. A list that can call an extension stops the program at a failure of the op.
+        items: app("count", each(axes.all, note)),
+        strict: app("ifError", app("sum", each(axes.all, note), lit({ strict: true })), lit(0)),
+        // The list of the second list op calls no extension, so its failures stay in tier 2.
+        plain: app("ifError", app("sum", each(axes.all, ref("n")), lit({ strict: true })), lit(0)),
+      }),
+      undefined,
+      ".js.txt",
+    );
   });
 
   it("the fast path of each kind of op site, for the options", async () => {

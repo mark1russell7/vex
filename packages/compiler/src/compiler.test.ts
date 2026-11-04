@@ -218,7 +218,7 @@ const SITES = space.record({
 function expectSame(e: Expr, fast: boolean, run: RunOptions = RUN, options: CompileOptions = OPTIONS): void {
   const p = tiered(e, options);
   expect(fromCore(p.run(run))).toStrictEqual(fromCore(evaluate(e, { ...options, ...run })));
-  // Each program of these tests has generated code. Without a value from it, the one run has one fallback.
+  // Each program of these tests has generated code. Without a result from it, the one run has one fallback.
   expect(p.tier).toBe(2);
   expect(p).not.toHaveProperty("reason");
   expect(p.stats).toEqual({ runs: 1, fallbacks: fast ? 0 : 1 });
@@ -243,17 +243,17 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
     ["a path", ref("box.v"), true],
     ["the record", ref([]), true],
     ["a field at an address", ref("n", [key("B")]), true],
-    ["a missing field", ref("s", [key("B")]), false],
-    ["an address that does not exist", ref("n", [key("Z")]), false],
-    ["a path through a number", ref("n.x"), false],
+    ["a missing field", ref("s", [key("B")]), true],
+    ["an address that does not exist", ref("n", [key("Z")]), true],
+    ["a path through a number", ref("n.x"), true],
     // NAV.COMPUTED: the expressions of an address evaluate in tier 2, and a bad key or position falls back.
-    ["a field at a computed key", ref("n", [key(ref("s"))]), false],
+    ["a field at a computed key", ref("n", [key(ref("s"))]), true],
     ["a field at a computed key that exists", ref("n", [key(lit("C"))]), true],
     ["a field at a computed position", ref("n", [index(app("double", n))]), true],
-    ["a computed key that is not a text", ref("n", [key(n)]), false],
-    ["a computed position outside the keys", ref("n", [index(lit(3))]), false],
-    ["a computed position that is not whole", ref("n", [index(lit(0.5))]), false],
-    ["a computed move whose expression fails", ref("n", [index(ref("missing"))]), false],
+    ["a computed key that is not a text", ref("n", [key(n)]), true],
+    ["a computed position outside the keys", ref("n", [index(lit(3))]), true],
+    ["a computed position that is not whole", ref("n", [index(lit(0.5))]), true],
+    ["a computed move whose expression fails", ref("n", [index(ref("missing"))]), true],
     ["two computed moves", ref("n", [key(lit("B")), index(n)]), true],
     ["a list from a computed position", all(ref("n", [index(lit(2))])), true],
     ["a list op from a computed position", app("sum", each(axes.where(axes.all, ref("b")), n, [index(lit(1))])), true],
@@ -261,70 +261,70 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
     ["a fold", fold(axes.all, { s: lit(0) }, { s: app("add", v("s"), n) }, v("s")), true],
     ["a fold with a test and an address", fold(axes.where(axes.others, ref("b")), { s: lit(0), k: n }, { s: app("add", v("s"), v("k")) }, v("s"), [key("B")]), true],
     ["a fold over a table", fold(axes.table("T"), { s: lit(0) }, { s: app("add", v("s"), n) }, v("s")), true],
-    ["a fold whose step fails", fold(axes.all, { s: lit("") }, { s: ref("s") }, v("s")), false],
-    ["a fold whose test is not a boolean", fold(axes.where(axes.all, n), { s: lit(0) }, { s: n }, v("s")), false],
+    ["a fold whose step fails", fold(axes.all, { s: lit("") }, { s: ref("s") }, v("s")), true],
+    ["a fold whose test is not a boolean", fold(axes.where(axes.all, n), { s: lit(0) }, { s: n }, v("s")), true],
     ["an iteration", iterate(3, { x: lit(1) }, { x: app("double", v("x")) }, v("x")), true],
     ["an iteration that a test stops", iterate(9, { x: lit(1) }, { x: app("double", v("x")) }, v("x"), app("gt", v("x"), lit(5))), true],
-    ["an iteration whose test is never true", iterate(2, { x: lit(1) }, { x: app("double", v("x")) }, v("x"), app("gt", v("x"), lit(50))), false],
-    ["an iteration whose test is not a boolean", iterate(2, { x: lit(1) }, { x: v("x") }, v("x"), v("x")), false],
+    ["an iteration whose test is never true", iterate(2, { x: lit(1) }, { x: app("double", v("x")) }, v("x"), app("gt", v("x"), lit(50))), true],
+    ["an iteration whose test is not a boolean", iterate(2, { x: lit(1) }, { x: v("x") }, v("x"), v("x")), true],
     ["a step of another kind", iterate(2, { x: lit(1) }, { x: lit("a") }, v("x")), false],
     ["the swap of two names", iterate(3, { a: lit(1), b: lit(2) }, { a: v("b"), b: v("a") }, rec({ a: v("a"), b: v("b") })), true],
-    ["a name that is not a field", ref("__proto__"), false],
+    ["a name that is not a field", ref("__proto__"), true],
     ["a variable of the run", v("c"), true],
-    ["a name without a binding", v("nope"), false],
+    ["a name without a binding", v("nope"), true],
     ["a binding", let_({ a: n }, app("double", v("a"))), true],
     ["a binding of a literal", let_({ a: lit(2) }, v("a")), true],
     ["a binding with an error that the body does not read", let_({ a: ref("missing") }, n), true],
-    ["a binding with an error that the body reads", let_({ a: ref("missing") }, v("a")), false],
+    ["a binding with an error that the body reads", let_({ a: ref("missing") }, v("a")), true],
     ["a record", rec({ a: n, b: lit("x") }), true],
     ["0 and -0", rec({ a: lit(0), b: lit(-0) }), true],
     ["a method without arguments", app("get0", box), true],
     ["a method with one argument", app("plus", box, box), true],
     ["a number that the op lifts", app("plus", box, lit(2)), true],
     ["a method with two arguments", app("mix", box, box, lit(3)), true],
-    ["an argument of the wrong kind", app("mix", box, box, lit("3")), false],
-    ["an argument that is not of the domain", app("plus", box, lit("x")), false],
+    ["an argument of the wrong kind", app("mix", box, box, lit("3")), true],
+    ["an argument that is not of the domain", app("plus", box, lit("x")), true],
     ["a method with three arguments", app("sum3", box, lit(1), lit(2), lit(3)), true],
     ["a function of the spec", app("twice", box), true],
     ["a method of a domain with methods all", app("upper", ref("tag")), true],
     ["an op that is also a list op", app("max", box, ref("box", [key("C")])), true],
-    ["a result that is not finite", app("bad", box), false],
-    ["a result that is not valid", app("plus", ref("box", [key("C")]), lit(7)), false],
-    ["a method that throws", app("boom", box), false],
+    ["a result that is not finite", app("bad", box), true],
+    ["a result that is not valid", app("plus", ref("box", [key("C")]), lit(7)), true],
+    ["a method that throws", app("boom", box), true],
     ["a method that fills the call stack", app("deep", box), false],
-    ["a method without a value", app("nothing", box), false],
-    ["an op that the domain does not have", app("nope", box), false],
+    ["a method without a value", app("nothing", box), true],
+    ["an op that the domain does not have", app("nope", box), true],
     ["a free function", app("double", n), true],
     ["a free function without arguments", app("zero"), true],
-    ["a free function that throws", app("throws", n), false],
-    ["an unknown function without arguments", app("nope"), false],
+    ["a free function that throws", app("throws", n), true],
+    ["an unknown function without arguments", app("nope"), true],
     ["an op of numbers", app("add", n, lit(2)), true],
     ["if", app("if", ref("b"), lit(1), lit(2)), true],
-    ["if with false", app("if", app("not", ref("b")), lit(1), lit(2)), false],
-    ["if with a condition that is not a boolean", app("if", n, lit(1), lit(2)), false],
-    ["if without arguments", app("if"), false],
-    ["if without the branch that it selects", app("if", ref("b", [key("B")]), lit(1)), false],
+    ["if with false", app("if", app("not", ref("b")), lit(1), lit(2)), true],
+    ["if with a condition that is not a boolean", app("if", n, lit(1), lit(2)), true],
+    ["if without arguments", app("if"), true],
+    ["if without the branch that it selects", app("if", ref("b", [key("B")]), lit(1)), true],
     ["and", app("and", ref("b"), ref("b", [key("B")])), true],
     ["or", app("or", ref("b", [key("B")]), ref("b")), true],
     ["or that stops", app("or", ref("b"), n), true],
-    ["and with an argument that is not a boolean", app("and", ref("b"), n), false],
-    ["and without arguments", app("and"), false],
+    ["and with an argument that is not a boolean", app("and", ref("b"), n), true],
+    ["and without arguments", app("and"), true],
     ["ifError with a value", app("ifError", n, lit(0)), true],
     ["ifError with an error", app("ifError", ref("missing"), lit(0)), true],
-    ["ifError with an error and no second argument", app("ifError", ref("missing")), false],
-    ["ifError without arguments", app("ifError"), false],
+    ["ifError with an error and no second argument", app("ifError", ref("missing")), true],
+    ["ifError without arguments", app("ifError"), true],
     ["ifError does not hide #DEPTH!", app("ifError", app("deep", box), lit(0)), false],
     ["a list", all(n), true],
     ["a list with an error item", all(ref("s")), false],
     ["an extension", ext("echo", { a: 1 }), true],
-    ["an extension with an error", ext("no", null), false],
-    ["an extension that throws", ext("throws", null), false],
-    ["an unknown extension", ext("nope", null), false],
+    ["an extension with an error", ext("no", null), true],
+    ["an extension that throws", ext("throws", null), true],
+    ["an unknown extension", ext("nope", null), true],
   ];
   it.each(cases)("%s", (_title, e, fast) => expectSame(e, fast));
 
-  it("a method op on a text, which has no methods", () => expectSame(app("toUpperCase", ref("s")), false));
-  it("a list op without arguments", () => expectSame(app("count"), false));
+  it("a method op on a text, which has no methods", () => expectSame(app("toUpperCase", ref("s")), true));
+  it("a list op without arguments", () => expectSame(app("count"), true));
   it("ifError and then a list op", () => expectSame(rec({ a: app("ifError", ref("missing"), lit(0)), b: app("count", all(n)) }), true));
   it("a result that is not finite, without a domain of numbers", () => expectSame(app("values", all(app("bad", box))), true, RUN, { domains: [BoxDomain] }));
   it("the check of the result stops at the first domain that accepts it, also without valid", () => {
@@ -346,8 +346,8 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
   it("an op without a value, in each item", () => expectSame(app("values", all(app("and"))), true));
   it("a free function of a list", () => expectSame(app("double", all(n)), true));
   it("AXIS.TABLE: the origin of an axis that is not a table stays the origin", () => expectSame(app("sum", all(ref("n", [{ t: "origin" }]))), true));
-  it("an inherited method is not a method", () => expectSame(app("toString", ref("tag")), false));
-  it("an inherited function is not a free function", () => expectSame(app("toString"), false));
+  it("an inherited method is not a method", () => expectSame(app("toString", ref("tag")), true));
+  it("an inherited function is not a free function", () => expectSame(app("toString"), true));
   it("the options null of a list op", () => expectSame(app("sum", all(n), lit(null)), true));
   it("an inherited name is not a table", () => expectSame(app("count", all(app("count", each(axes.table("toString"), n)))), true));
   it("a name without a binding, in each item, without the variables of the run", () => expectSame(app("count", all(v("zz"))), true, { space: S, origin: "A" }));
@@ -360,14 +360,14 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
     const FnsDomain = defineDomain({ name: "Fns", is: (u: unknown): u is () => number => typeof u === "function", methods: "all", ops: {} });
     const s1 = space.record({ A: { f: Object.assign(() => 1, { twice: () => 2 }) } });
     expectSame(app("twice", ref("f")), true, { space: s1, origin: "A" }, { domains: [FnsDomain] });
-    expectSame(app("bind", ref("f")), false, { space: s1, origin: "A" }, { domains: [FnsDomain] });
+    expectSame(app("bind", ref("f")), true, { space: s1, origin: "A" }, { domains: [FnsDomain] });
   });
   it("a domain that accepts each value does not take an op without arguments", () => {
     const Everything = defineDomain({ name: "Everything", is: (u: unknown): u is unknown => u === u, ops: { zero: { fn: () => 1 } } });
     expectSame(app("zero"), true, RUN, { domains: [Everything], fns: { zero: () => 0 } });
   });
-  it("an own property that is not a function is not a method", () => expectSame(app("get0", box), false, { space: space.record({ A: { box: Object.assign(new Box(1), { get0: 5 }) } }), origin: "A" }));
-  it("a name that cannot be an op", () => expectSame(app("constructor", box), false));
+  it("an own property that is not a function is not a method", () => expectSame(app("get0", box), true, { space: space.record({ A: { box: Object.assign(new Box(1), { get0: 5 }) } }), origin: "A" }));
+  it("a name that cannot be an op", () => expectSame(app("constructor", box), true));
   it("an argument after the declared parameters has any kind", () => expectSame(app("max", box, box, lit(1)), true));
   it("a method of a later domain", () => expectSame(app("get0", ref("tag")), true));
   it("a program without options", () => expectSame(app("sum", all(n)), true, RUN, {}));
@@ -375,13 +375,13 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
     const Throws = defineDomain({ name: "Throws", is: (u: unknown): u is number => typeof u === "number", valid: (): boolean => {
       throw new Error("valid");
     }, ops: {} });
-    expectSame(app("sum", all(n)), false, RUN, { domains: [Throws] });
+    expectSame(app("sum", all(n)), true, RUN, { domains: [Throws] });
   });
-  it("an origin that is not a key gives #REF!", () => expectSame(n, false, { ...RUN, origin: "Z" }));
-  it("a variable without the variables of the run", () => expectSame(v("c"), false, { space: S, origin: "A" }));
+  it("an origin that is not a key gives #REF!", () => expectSame(n, true, { ...RUN, origin: "Z" }));
+  it("a variable without the variables of the run", () => expectSame(v("c"), true, { space: S, origin: "A" }));
   it("a variable that is not enumerable has no binding, as in the interpreter", () => {
-    expectSame(v("c"), false, { ...RUN, vars: Object.defineProperty({}, "c", { value: 1, enumerable: false }) });
-    expectSame(v("c"), false, { ...RUN, vars: Object.create({ c: 1 }) as Record<string, unknown> });
+    expectSame(v("c"), true, { ...RUN, vars: Object.defineProperty({}, "c", { value: 1, enumerable: false }) });
+    expectSame(v("c"), true, { ...RUN, vars: Object.create({ c: 1 }) as Record<string, unknown> });
   });
   it("0 and -0 stay different constants", () => {
     const r = tiered(rec({ a: lit(0), b: lit(-0) }), OPTIONS).run(RUN);
@@ -399,7 +399,7 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
 
 describe("COMPILE.TIERED: the site of an op gives the result of the interpreter for each receiver", () => {
   const at = { space: SITES, origin: "A" };
-  // The value at G has the form of a list, so the list op "max" applies to it in the interpreter, and tier 1 gives it.
+  // The value at G has the form of a list, so the list op "max" applies to it, in tier 2 too (COMPILE.LIST.VALUE).
   const cases: readonly (readonly [string, Expr, boolean])[] = [
     ["a method without arguments", app("get0", box), true],
     ["a method with one argument", app("plus", box, ref("arg")), true],
@@ -419,7 +419,7 @@ describe("COMPILE.TIERED: the site of an op gives the result of the interpreter 
     ["a method that is not an op", app("hidden", box), true],
     ["a declared op without a method, and a free function", app("ghost", box), true],
     ["a name that cannot be an op", app("constructor", box), true],
-    ["a list op name", app("max", box, ref("arg")), false],
+    ["a list op name", app("max", box, ref("arg")), true],
   ];
   it.each(cases)("%s", (_title, op, fast) => expectSame(app("values", all(op)), fast, at));
 
@@ -438,13 +438,11 @@ describe("COMPILE.TIERED: the site of an op gives the result of the interpreter 
     const s4 = space.record(records);
     const options = { ...OPTIONS, domains: [BoxDomain, PlainDomain, TagDomain, NumDomain] };
     // Each op has arguments that the fast path takes: an argument that is not a number, or a number at a parameter
-    // that does not lift. A number at the parameter of a domain fails in the fast path too.
+    // that does not lift.
     const ops = [
       app("get0", box),
       app("plus", box, ref("arg")),
       app("pair", box, ref("arg"), ref("k")),
-      app("pair", box, lit(2), ref("k")),
-      app("opt", box, lit(2)),
       app("mix", box, ref("arg"), ref("k")),
       app("span", box, ref("arg"), ref("arg")),
       app("upper", ref("tag")),
@@ -459,6 +457,14 @@ describe("COMPILE.TIERED: the site of an op gives the result of the interpreter 
       // The first receiver has a descriptor read for its own properties. The next three use the method of the site.
       expect(reads).toBe(1);
     }
+    // A number at the parameter of a domain fails at each receiver, and the dispatch reads the descriptor of each receiver.
+    for (const op of [app("pair", box, lit(2), ref("k")), app("opt", box, lit(2))]) {
+      const e = app("values", all(op));
+      const expected = evaluate(e, { ...options, space: s4, origin: "K1" });
+      reads = 0;
+      expect(tiered(e, options).run({ space: s4, origin: "K1" })).toEqual(expected);
+      expect(reads).toBe(4);
+    }
   });
 });
 
@@ -466,10 +472,10 @@ describe("COMPILE.TIERED: a list op over an axis is one loop with the result of 
   const ops = ["count", "sum", "mean", "min", "max", "first", "values", "keys", "errors"] as const;
   it.each(ops)("%s over all", (op) => expectSame(app(op, all(n)), true));
   it.each(["any", "all", "none"] as const)("%s over all", (op) => expectSame(app(op, all(ref("b"))), true));
-  it.each(["any", "all", "none"] as const)("%s with an item that is not a boolean", (op) => expectSame(app(op, all(n)), false));
-  it.each(["sum", "mean", "min", "max"] as const)("%s with an item that is not a number", (op) => expectSame(app(op, all(ref("tag"))), false));
+  it.each(["any", "all", "none"] as const)("%s with an item that is not a boolean", (op) => expectSame(app(op, all(n)), true));
+  it.each(["sum", "mean", "min", "max"] as const)("%s with an item that is not a number", (op) => expectSame(app(op, all(ref("tag"))), true));
   it.each(["mean", "min", "max", "first", "reduce"] as const)("%s of no items", (op) =>
-    expectSame(app(op, where(lit(false), n), lit("add")), false),
+    expectSame(app(op, where(lit(false), n), lit("add")), op !== "reduce"),
   );
 
   const cases: readonly (readonly [string, Expr, boolean])[] = [
@@ -478,29 +484,30 @@ describe("COMPILE.TIERED: a list op over an axis is one loop with the result of 
     ["where with a test that is not a boolean", app("sum", where(n, n)), true],
     ["where in where", app("count", each(axes.where(axes.where(axes.all, ref("b")), app("gt", n, lit(1))), n)), true],
     ["an axis from an address", app("count", each(axes.others, n, [key("B")])), true],
-    ["an axis from an address that does not exist", app("count", each(axes.others, n, [key("Z")])), false],
+    ["an axis from an address that does not exist", app("count", each(axes.others, n, [key("Z")])), true],
     ["the axis table, where the origin is the target", app("sum", each(axes.table("T"), ref("n", [{ t: "origin" }]))), true],
-    ["a table that does not exist", app("count", each(axes.table("nope"), n)), false],
-    ["an axis that the space does not have", app("count", each(axes.neighbors(8), n)), false],
+    ["a table that does not exist", app("count", each(axes.table("nope"), n)), true],
+    ["an axis that the space does not have", app("count", each(axes.neighbors(8), n)), true],
     ["a binding over the axis", app("sum", let_({ a: lit(1) }, all(app("add", n, v("a"))))), true],
     ["the items with an error are skipped", app("sum", all(ref("big"))), true],
     ["strict, with no error item", app("sum", all(n), lit({ strict: true })), true],
     ["strict, with an error item", app("sum", all(ref("s")), lit({ strict: true })), false],
     ["errors with an error item", app("errors", all(ref("s"))), false],
-    ["a sum that is not finite", app("sum", all(ref("big", [key("C")]))), false],
+    ["a sum that is not finite", app("sum", all(ref("big", [key("C")]))), true],
     ["reduce", app("reduce", all(box), lit("plus")), true],
     ["reduce with options", app("reduce", all(n), lit("add"), lit({ strict: true })), true],
     ["reduce with a name that is not a text", app("reduce", all(n), lit(1)), false],
     ["reduce without a name", app("reduce", all(n)), false],
-    ["reduce with an op that no domain has", app("reduce", all(n), lit("nope")), false],
-    ["reduce with a step that fails", app("reduce", all(box), lit("bad")), false],
+    ["reduce with an op that no domain has", app("reduce", all(n), lit("nope")), true],
+    ["reduce with a step that fails", app("reduce", all(box), lit("bad")), true],
     ["a list op inside an item", app("sum", all(app("count", each(axes.others, n)))), true],
     ["a list op inside an item fails, so the item is skipped", app("count", all(app("min", each(axes.where(axes.others, lit(false)), n)))), true],
     ["a step inside an item fails, so the item is skipped", app("count", all(app("reduce", all(ref("tag")), lit("nope")))), true],
     ["strict inside an item, with an error item", app("count", all(app("sum", all(ref("s")), lit({ strict: true })))), true],
     ["ifError inside an item", app("sum", all(app("ifError", ref("big"), lit(0)))), true],
-    ["an extension error inside an item", app("count", all(ext("no", null))), false],
-    ["a list op over a list value", let_({ xs: all(n) }, app("count", v("xs"))), false],
+    // COMPILE.EXT: the list op skips the error item in tier 2 too.
+    ["an extension error inside an item", app("count", all(ext("no", null))), true],
+    ["a list op over a list value", let_({ xs: all(n) }, app("count", v("xs"))), true],
   ];
   it.each(cases)("%s", (_title, e, fast) => expectSame(e, fast));
 

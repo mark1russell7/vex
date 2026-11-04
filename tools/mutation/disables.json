@@ -1,23 +1,11 @@
 [
   {
-    "file": "packages/compiler/src/facts.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression: a node that is not an app has no field op, so the set does not have it"
-  },
-  {
     "file": "packages/compiler/src/lower.ts",
     "comment": "// Stryker disable next-line UnaryOperator: with +0 as the special key, 0 and -0 still get different constants"
   },
   {
     "file": "packages/compiler/src/lower.ts",
     "comment": "// Stryker disable next-line all: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/lower.ts",
-    "comment": "// Stryker disable StringLiteral,ConditionalExpression: listReason stops these ops before the lowering"
-  },
-  {
-    "file": "packages/compiler/src/lower.ts",
-    "comment": "// Stryker disable next-line all: listReason stops these ops before the lowering"
   },
   {
     "file": "packages/compiler/src/lower.ts",
@@ -161,6 +149,10 @@
   },
   {
     "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
   },
   {
@@ -174,14 +166,6 @@
   {
     "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
-  },
-  {
-    "file": "packages/compiler/src/runtime.ts",
-    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
-  },
-  {
-    "file": "packages/compiler/src/runtime.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression: a call of undefined throws, and the catch also gives F"
   },
   {
     "file": "packages/compiler/src/runtime.ts",
@@ -205,7 +189,15 @@
   },
   {
     "file": "packages/compiler/src/runtime.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression: a call of undefined throws, and the program gives F for it too"
+    "comment": "// Stryker disable next-line ArrowFunction,StringLiteral: an error item throws below, so no one reads this error"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
   },
   {
     "file": "packages/compiler/src/sheet-order.ts",
@@ -384,6 +376,10 @@
     "comment": "// Stryker disable next-line ConditionalExpression,BlockStatement: the cache holds only lists that pass the check again"
   },
   {
+    "file": "packages/core/src/monotone.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: only a Refusal comes here, and a mutant that always takes it reads its field"
+  },
+  {
     "file": "packages/core/src/plan.ts",
     "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value"
   },
@@ -462,6 +458,10 @@
   {
     "file": "packages/core/src/space.ts",
     "comment": "// Stryker disable next-line BlockStatement: the body gives undefined, and an empty body gives undefined too"
+  },
+  {
+    "file": "packages/core/src/steps.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: without the shortcut, the walk gives the same answer"
   },
   {
     "file": "packages/core/src/write.ts",

@@ -51,7 +51,7 @@ export function run(records, vars) {
   const c4 = L(() => {
     return k_domain_XY(op_1_2(G(c3()), k_domain_XY(op_0_0(v0, v0))));
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let b5;
@@ -60,9 +60,9 @@ export function run(records, vars) {
       } catch {
         b5 = E;
       }
-      out.push(({ "left": k_number(op_1_7(G(b5))), "top": k_number(op_1_8(G(b5))), "width": R[o]["w"], "height": R[o]["h"] }));
+      out[o] = ({ "left": k_number(op_1_7(G(b5))), "top": k_number(op_1_8(G(b5))), "width": R[o]["w"], "height": R[o]["h"] });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
+import { app, axes, call, dataLimit, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
@@ -1415,8 +1415,11 @@ describe("COMPILE.MODULE.TREE: a module of a tree space", () => {
     expect(parts(op("count", each(axes.children, n)))).toBe("PT CH");
     expect(parts(op("count", each(axes.siblings, n)))).toBe("PT CH SG");
     expect(parts(ref("n", [offset(1)]))).toBe("PT CH SG SO");
-    expect(parts(op("count", each(axes.descendants, n)))).toBe("PT CH PR");
-    expect(parts(op("count", each(axes.ancestors, n)))).toBe("PT AN");
+    expect(parts(op("count", each(axes.descendants, n)))).toBe("PT PR");
+    expect(parts(rec({ a: op("count", each(axes.descendants, n)), b: op("count", each(axes.children, n)) }))).toBe("PT CH PR");
+    // COMPILE.MODULE.TREE.ALLOC: the ancestors are a walk up the parents, and only the reverse order needs their array.
+    expect(parts(op("count", each(axes.ancestors, n)))).toBe("PT");
+    expect(parts(op("count", each(axes.reverse(axes.ancestors), n)))).toBe("PT AN");
     expect(parts(op("count", each(axes.reachable, n)))).toBe("PT CH BF");
     expect(parts(op("count", each(axes.all, n)))).toBe("PT");
     expect(parts(ref("n", [PARENT]), OPTIONS)).toBe("");
@@ -1426,6 +1429,7 @@ describe("COMPILE.MODULE.TREE: a module of a tree space", () => {
     expect(sourceOf(ref("n", [offset(1), PARENT]))).toContain('R[(X(o + 1, n), F())]["n"]');
     expect(sourceOf(ref("n", [offset(1), PARENT]), TREE)).toContain('R[UP(P, SO(GP, SI, o, 1))]["n"]');
     expect(reasonOf(op("count", each(axes.descendants, n)))).toBe('the axis "descendants"');
+    expect(reasonOf(op("count", each(axes.ancestors, n)))).toBe('the axis "ancestors"');
     expect(reasonOf(op("count", each(axes.reachable, n)))).toBe('the axis "reachable"');
     // A tree space has no neighbors of a grid, and a module has no axis other or table.
     expect(reasonOf(op("count", each(axes.neighbors(4), n)), TREE)).toBe('the axis "neighbors"');
@@ -1523,7 +1527,7 @@ const treeProgram = programOf({
   axes: [axes.children, axes.ancestors, axes.descendants, axes.siblings, axes.window(-1, 1), axes.successors, axes.predecessors, axes.reachable, axes.reverse(axes.children), axes.reverse(axes.descendants), axes.reverse(axes.ancestors), axes.reverse(axes.window(-2, 0)), axes.all, axes.others],
   ats: [undefined, [PARENT], [offset(1)], [index(1)], [{ t: "origin" as const }], [PARENT, PARENT], [index(n)]],
   foldAts: [undefined, [PARENT], [offset(-1)]],
-  boolAxes: [axes.children, axes.descendants, axes.siblings],
+  boolAxes: [axes.children, axes.descendants, axes.siblings, axes.ancestors, axes.reverse(axes.ancestors)],
 });
 
 /**
@@ -1546,6 +1550,33 @@ const record = fc.record({
   b: fc.boolean(),
 });
 const records = fc.array(record, { maxLength: 6 });
+
+/** The parent of the position `i` in each shape of a tree, or a negative number for a root. */
+const SHAPES: readonly ((i: number) => number)[] = [
+  // A chain, one root with each other key as its child, and a forest of roots.
+  (i) => i - 1,
+  (i) => (i === 0 ? -1 : 0),
+  () => -1,
+  // A balanced tree, a spine with one leaf at each key, and two chains.
+  (i) => ((i + 1) >> 1) - 1,
+  (i) => (i === 0 ? -1 : i - 2 + (i & 1)),
+  (i) => i - 2,
+];
+
+/**
+ * The records and the parents of a tree of one of `SHAPES`. A shuffle gives each position its key, so a parent can come
+ * after its child in the key order.
+ */
+const shapedTrees: fc.Arbitrary<readonly [readonly unknown[], readonly number[]]> = fc.tuple(fc.constantFrom(...SHAPES), fc.array(record, { maxLength: 12 })).chain(([shape, rs]) => {
+  const keys = rs.map((_r, i) => i);
+  return fc.shuffledSubarray(keys, { minLength: keys.length, maxLength: keys.length }).map((order): readonly [readonly unknown[], readonly number[]] => {
+    const parents = keys.map(() => -1);
+    order.forEach((k, i) => {
+      parents[k] = order[shape(i)] ?? -1;
+    });
+    return [rs, parents];
+  });
+});
 
 /**
  * The records of a random tree and their parents. A random order of the keys gives each key a parent among the keys
@@ -1713,6 +1744,33 @@ describe("COMPILE.MODULE: random programs", () => {
     expect(sample.filter(([, p]) => p.some((x, k) => x > k)).length).toBeGreaterThan(60);
   });
 
+  it("P17 COMPILE.MODULE.TREE.ALLOC: a module gives the value of the interpreter in a tree of each shape, in each key order", () => {
+    // Each fold stops at false or at true. A name with no stop goes on, so the rest of the walk gives its value too.
+    const stops = fc.tuple(fc.constantFrom("and", "or"), treeProgram.bool, treeProgram.num, fc.constantFrom(axes.ancestors, axes.reverse(axes.ancestors))).map(([o, test, x, a]) => {
+      const y = lit(o === "and");
+      return fold(a, { y, s: lit(0) }, { y: op(o, v("y"), test), s: op("subtract", x, v("s")) }, op("if", v("y"), v("s"), lit(-1)));
+    });
+    fc.assert(
+      fc.property(fc.oneof(treeProgram.num, treeProgram.bool, stops), shapedTrees, fc.integer({ min: -3, max: 3 }), (e, [rs, parents], a) => {
+        expectSameTree(make(sourceOf(e, TREE)), e, rs, parents, { a, t: "x" });
+      }),
+    );
+    // Each shape occurs: a chain of all the keys, a key with all the other keys as its children, and a key order with a
+    // parent after its child.
+    const sample = fc.sample(shapedTrees, { seed: 20261103, numRuns: 400 });
+    expect(sample.filter(([, p]) => p.length > 4 && Math.max(...p.map((_x, k) => depth(p, k))) === p.length - 1).length).toBeGreaterThan(20);
+    expect(sample.filter(([, p]) => p.length > 4 && p.filter((x) => x < 0).length === 1 && new Set(p).size === 2).length).toBeGreaterThan(20);
+    expect(sample.filter(([, p]) => p.some((x, k) => x > k)).length).toBeGreaterThan(100);
+  });
+
+  it("COMPILE.MODULE.TREE.ALLOC: a chain of 5000 keys has no recursion and no limit of depth in the walk and in the order", () => {
+    const count = 5000;
+    const rs = Array.from({ length: count }, () => ({ n: 1, w: 1, s: "x", b: true }));
+    const parents = rs.map((_r, i) => i - 1);
+    const e = rec({ up: op("count", each(axes.ancestors, n)), down: op("count", each(axes.descendants, n)) });
+    expect(make(sourceOf(e, TREE)).run(rs, VARS, parents)).toEqual(rs.map((_r, i) => ({ up: i, down: count - 1 - i })));
+  });
+
   it("P17 COMPILE.MODULE.GRAPH COMPILE.MODULE.REDUCE: a module of a graph space gives the value of the interpreter at each key, or VEX_ERROR", () => {
     fc.assert(
       fc.property(fc.oneof(graphProgram.num, graphProgram.bool), graphs, fc.integer({ min: -3, max: 3 }), (e, [rs, edges], a) => {
@@ -1729,6 +1787,64 @@ describe("COMPILE.MODULE: random programs", () => {
   it("P17 COMPILE.MODULE: a module gives the value of the interpreter at each key, or VEX_ERROR", () => {
     fc.assert(
       fc.property(fc.oneof(program.num, program.bool), records, fc.integer({ min: -3, max: 3 }), fc.constantFrom("x", "y"), (e, rs, a, t) => {
+        expectSame(make(sourceOf(e)), e, rs, { a, t });
+      }),
+    );
+  });
+});
+
+describe("a data limit in a module (ITERATE.LIMIT.DATA)", () => {
+  const count = (a: Axis, until?: Expr): Expr => iterate(dataLimit(a), { i: lit(0) }, { i: op("add", v("i"), lit(1)) }, v("i"), until);
+  const CAP = op("fill", lit(100_000), lit(0));
+
+  it("ITERATE.LIMIT.DATA COMPILE.MODULE: a module counts the targets of an axis, as the interpreter does", () => {
+    const programs = [
+      count(axes.all),
+      count(axes.others),
+      count(axes.window(-1, 0)),
+      count(axes.reverse(axes.all)),
+      count(axes.where(axes.all, ref("b"))),
+      count(axes.where(axes.where(axes.all, ref("b")), op("gt", n, lit(0)))),
+      count(axes.list(each(axes.all, n))),
+      count(axes.list(op("fill", lit(3), lit(0)))),
+      count(axes.all, op("gt", v("i"), lit(1))),
+      op("ifError", count(axes.all, op("gt", v("i"), lit(99))), lit(-1)),
+      op("add", n, count(axes.all)),
+    ];
+    for (const e of programs) expectSame(make(sourceOf(e)), e, MANY);
+  });
+
+  it("ITERATE.LIMIT.DATA COMPILE.MODULE: a limit reads the field of a test, and a limit over the focus is not a constant", () => {
+    // The module reads the field b only in the test of the limit, so the reads of the limit must count.
+    const e = count(axes.where(axes.all, ref("b")));
+    expect(sourceOf(e)).toContain('["b"]');
+    // Each node has its own count of children, so one constant for all keys gives the wrong value.
+    const children = count(axes.children);
+    expectSameTree(make(sourceOf(children, TREE)), children, TREE_RECORDS, PARENTS, VARS, TREE);
+    expect(sourceOf(count(axes.all))).not.toContain("children");
+  });
+
+  it("ITERATE.LIMIT.DATA COMPILE.MODULE: the limit reads the names outside the loop, after init", () => {
+    const outer = let_({ xs: each(axes.all, n) }, iterate(dataLimit(axes.list(v("xs"))), { xs: lit(0) }, { xs: op("add", v("xs"), lit(1)) }, v("xs")));
+    expectSame(make(sourceOf(outer)), outer, MANY);
+    const first = iterate(dataLimit(axes.all), { i: op("divide", lit(1), op("subtract", n, n)) }, {}, v("i"));
+    expectSame(make(sourceOf(first)), first, MANY);
+  });
+
+  it("ITERATE.LIMIT.ERROR COMPILE.MODULE: a module gives VEX_ERROR for each limit that is not valid", () => {
+    const above = iterate(dataLimit(axes.list(op("append", CAP, op("fill", lit(1), lit(1))))), {}, {}, lit(1));
+    const fits = iterate(dataLimit(axes.list(CAP)), {}, {}, lit(1));
+    const item = count(axes.list(each(axes.all, op("divide", lit(1), op("subtract", n, n)))));
+    const caught = op("ifError", above, lit(-1));
+    for (const e of [above, fits, item, caught]) expectSame(make(sourceOf(e)), e);
+  });
+
+  it("P17 ITERATE.LIMIT.DATA COMPILE.MODULE: a module of a random program with a data limit gives the value of the interpreter", () => {
+    const limited = fc
+      .tuple(fc.constantFrom<Axis>(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.where(axes.all, ref("b"))), program.num, program.num)
+      .map(([a, init, step]) => iterate(dataLimit(a), { s: init }, { s: op("add", v("s"), step) }, v("s")));
+    fc.assert(
+      fc.property(limited, records, fc.integer({ min: -3, max: 3 }), fc.constantFrom("x", "y"), (e, rs, a, t) => {
         expectSame(make(sourceOf(e)), e, rs, { a, t });
       }),
     );

@@ -38,8 +38,11 @@ import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./arra
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { vexError, type ErrorCode, type ErrorDetails, type ErrorKind, type VexError } from "./errors.ts";
+import { limitError, overLimitMessage, worstError } from "./limit-error.ts";
 import type { CompileOptions } from "./evaluate.ts";
-import { MAX_ITERATIONS, type Axis, type FixedMove } from "./ir.ts";
+import { errorText } from "./error-text.ts";
+import { fixRounds, fixValueError, joinValues, worstRow } from "./fix.ts";
+import { MAX_ITERATIONS, type Axis, type FixJoin, type FixedMove } from "./ir.ts";
 import { isVexList, LIST_OPS, vexList, type ListItem } from "./list.ts";
 import { fail as vexFail, ok as vexOk, type Result } from "./result.ts";
 import { isVexError } from "./same.ts";
@@ -48,7 +51,7 @@ import { applyMove, axisTargets, type Space } from "./space.ts";
 // ---------------------------------------------------------------- the contracts
 
 /** The kinds of the terms of Vex. A part in the position of a term has one of these kinds (DOC.TERM). */
-export const TERM_KINDS: readonly (readonly string[])[] = [["lit"], ["ref"], ["record"], ["let"], ["call"], ["each"], ["fold"], ["iterate"], ["ops"], ["ext"]];
+export const TERM_KINDS: readonly (readonly string[])[] = [["lit"], ["ref"], ["record"], ["let"], ["call"], ["each"], ["fold"], ["iterate"], ["fix"], ["last"], ["ops"], ["ext"]];
 
 /** A term: an envelope of a term kind, or a bare value, which is a literal. */
 const TERM: PartShape = { shape: "term", of: "lit", kinds: TERM_KINDS };
@@ -58,6 +61,8 @@ const AXIS: PartShape = { shape: "term", kinds: [["axes"]] };
 /** The address of `each` and `fold`: a reference that gives a key of the space, not a value (DOC.ADDRESS). */
 const ADDRESS: PartShape = { shape: "term", kinds: [["ref"]], address: true };
 const NO_VALUE: PartShape = { shape: "one", values: [null] };
+/** The limit of `iterate`: a bare whole number, or the size of an axis (ITERATE.LIMIT.DATA). */
+const LIMIT: PartShape = { shape: "term", of: "limit", kinds: [["limit"], ["size"]] };
 
 /** This function gives the shape of a record with these fields and no other fields (DOC.CONSTRUCT). */
 const closed = (fields: Readonly<Record<string, PartShape>>, required: readonly string[]): PartShape => ({ shape: "record", fields, required, closed: true });
@@ -119,9 +124,29 @@ function worldOfVex(): World {
       },
       iterate: {
         verbs: { eval: "vex.iterate" },
-        parts: closed({ limit: { shape: "number", whole: true, min: 0, max: MAX_ITERATIONS }, init: NAMES, step: NAMES, until: TERM, result: TERM }, ["limit", "init", "step", "result"]),
+        parts: closed({ limit: LIMIT, init: NAMES, step: NAMES, until: TERM, result: TERM }, ["limit", "init", "step", "result"]),
         scope: LOOP_SCOPE,
         summary: "Up to limit steps, until a test is true, and a result.",
+      },
+      fix: {
+        verbs: { eval: "vex.fix" },
+        parts: closed({ name: { shape: "text" }, join: { shape: "one", values: ["or", "and", "max", "min"] }, init: TERM, step: TERM }, ["name", "join", "init", "step"]),
+        summary: "A column: a step at each row in rounds, until no row changes (step B).",
+      },
+      last: {
+        verbs: { eval: "vex.last" },
+        parts: { shape: "text" },
+        summary: "The value of the focus in the last round of a fix (step B).",
+      },
+      limit: {
+        verbs: { eval: "vex.limit" },
+        parts: { shape: "number", whole: true, min: 0, max: MAX_ITERATIONS },
+        summary: "The limit of iterate as a whole number: the bare number of step A.",
+      },
+      size: {
+        verbs: { eval: "vex.size" },
+        parts: closed({ axis: AXIS }, ["axis"]),
+        summary: "The limit of iterate from the data: the number of targets of an axis (step B).",
       },
       ops: { kinds: {}, fallback: { verbs: { eval: "formula.op" }, parts: TERMS, summary: "An op, applied to the values of its arguments." } },
       ext: { kinds: {}, fallback: { verbs: { eval: "formula.ext" }, summary: "An extension: its handler gives the value of its data." } },
@@ -223,14 +248,17 @@ class Place implements HostThing {
   readonly origin: string;
   readonly focus: string;
   readonly failure: EvalError | undefined;
+  /** The columns of the `fix` nodes around this position, by name (FIX.LAST). A column is no name of the program. */
+  readonly columns: ReadonlyMap<string, ReadonlyMap<string, unknown>> | undefined;
 
-  constructor(space: Space, tables: Readonly<Record<string, Space>>, origin: string, focus: string, failure?: EvalError) {
+  constructor(space: Space, tables: Readonly<Record<string, Space>>, origin: string, focus: string, failure?: EvalError, columns?: ReadonlyMap<string, ReadonlyMap<string, unknown>>) {
     (this as { [THING]: true })[THING] = true;
     this.space = space;
     this.tables = tables;
     this.origin = origin;
     this.focus = focus;
     this.failure = failure;
+    this.columns = columns;
   }
 
   /** The text of the position for a trace. */
@@ -240,12 +268,17 @@ class Place implements HostThing {
 
   /** This method gives the position of a key of the same space, with the same origin. */
   to(focus: string): Place {
-    return new Place(this.space, this.tables, this.origin, focus);
+    return new Place(this.space, this.tables, this.origin, focus, undefined, this.columns);
+  }
+
+  /** This method gives this position with a new column of a `fix`. */
+  withColumn(name: string, column: ReadonlyMap<string, unknown>): Place {
+    return new Place(this.space, this.tables, this.origin, this.focus, undefined, new Map(this.columns).set(name, column));
   }
 
   /** This method gives the position with a failure, for a move that failed. */
   failed(failure: EvalError): Place {
-    return new Place(this.space, this.tables, this.origin, this.focus, failure);
+    return new Place(this.space, this.tables, this.origin, this.focus, failure, this.columns);
   }
 
   /** This method reads one field of the record at the focus. */
@@ -495,7 +528,32 @@ function withItem(names: Readonly<Record<string, unknown>>, as: readonly string[
 /** This function gives the names `as` of a loop, or `undefined` (AXIS.LIST.SCOPE). */
 const itemNamesOf = (value: unknown): readonly string[] | undefined => (value as { readonly as?: readonly string[] }).as;
 
-/** The evaluators of the loops: each, fold and iterate (LOOP.NAMES, FOLD.ORDER, ITERATE.LIMIT). */
+/**
+ * This function evaluates a part at each row of a column. Each row runs, also after an error (FIX.ERROR).
+ */
+function rowsOf(part: Part, at: Place, context: Context, name: string, join: FixJoin): Outcome<ReadonlyMap<string, unknown>> {
+  const out = new Map<string, unknown>();
+  const errors: EvalError[] = [];
+  for (const key of at.space.keys) {
+    const r = part.evaluate({ ...context, self: at.to(key) });
+    const wrong = r.ok ? fixValueError(name, join, r.value) : undefined;
+    if (!r.ok) errors.push(r.error);
+    else if (wrong !== undefined) errors.push(kernelError(wrong.kind, wrong.message));
+    else out.set(key, r.value);
+  }
+  if (errors.length === 0) return ok(out);
+  return { ok: false, error: worstRow(errors) ?? kernelError("args", `${String(errors.length)} rows failed`, { causes: errors.map(toVexError) }) };
+}
+
+/** This function gives the value of the row of the focus. The focus of an item of the axis `list` can be no row (FIX.LAST). */
+function rowAt(name: string, column: ReadonlyMap<string, unknown> | undefined, at: Place): Outcome {
+  const value = column?.get(at.focus);
+  if (value !== undefined) return ok(value);
+  const { kind, message } = errorText.lastKey(name, at.focus);
+  return failed(kind, message);
+}
+
+/** The evaluators of the loops: each, fold, iterate and fix (LOOP.NAMES, FOLD.ORDER, ITERATE.LIMIT, FIX.ROUNDS). */
 const LOOPS: Readonly<Record<string, EvalFn>> = {
   "vex.each": ({ value, context }) => {
     const found = targetsOf(value, context);
@@ -530,12 +588,27 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
     return partAt(value, "result").evaluate({ ...context, names });
   },
 
+  "vex.limit": ({ value }) => ok(value),
+
+  // ITERATE.LIMIT.ERROR: each failure of the size of an axis is one error. Only an error of the run stays as it is.
+  "vex.size": ({ value, context }) => {
+    const found = targetsOf(value, context);
+    if (!found.ok) return { ok: false, error: toKernelError(limitError(toVexError(found.error))) };
+    const { targets } = found.value;
+    const cause = worstError(targets.flatMap((t) => t.error ?? []));
+    if (cause !== undefined) return { ok: false, error: toKernelError(limitError(cause)) };
+    return targets.length > MAX_ITERATIONS ? failed("limit", overLimitMessage(targets.length)) : ok(targets.length);
+  },
+
   "vex.iterate": ({ value, context }) => {
-    const { init, step, until } = partsOf(value);
-    const limit = (value as { readonly limit: number }).limit;
+    const { init, limit: bound, step, until } = partsOf(value);
     const first = bindAll(init, context, context.names);
     if (!first.ok) return first;
     let names = first.value;
+    // The limit evaluates at the node, after the first values and before the steps (ITERATE.LIMIT.DATA).
+    const counted = (bound as Part).evaluate(context);
+    if (!counted.ok) return counted;
+    const limit = counted.value as number;
     for (let k = 0; ; k++) {
       const here: Context = { ...context, names };
       if (until !== undefined) {
@@ -553,6 +626,39 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
       names = next.value;
     }
     return partAt(value, "result").evaluate({ ...context, names });
+  },
+
+  "vex.fix": ({ value, context }) => {
+    const self = selfOf(context);
+    if (!(self instanceof Place)) return { ok: false, error: self };
+    const { name, join } = value as { readonly name: string; readonly join: FixJoin };
+    const first = rowsOf(partAt(value, "init"), self, context, name, join);
+    if (!first.ok) return first;
+    let column = first.value;
+    const { keys } = self.space;
+    const limit = fixRounds(keys.length);
+    for (let round = 1; round <= limit; round++) {
+      const stepped = rowsOf(partAt(value, "step"), self.withColumn(name, column), context, name, join);
+      if (!stepped.ok) return stepped;
+      const next = new Map<string, unknown>();
+      let changed = false;
+      for (const key of keys) {
+        const joined = joinValues(join, column.get(key), stepped.value.get(key));
+        changed ||= joined !== column.get(key);
+        next.set(key, joined);
+      }
+      if (!changed) return rowAt(name, column, self);
+      column = next;
+    }
+    const { kind, message } = errorText.fixLimit(name, limit);
+    return failed(kind, message);
+  },
+
+  "vex.last": ({ value, context }) => {
+    const self = selfOf(context);
+    if (!(self instanceof Place)) return { ok: false, error: self };
+    const name = value as string;
+    return rowAt(name, self.columns?.get(name), self);
   },
 };
 

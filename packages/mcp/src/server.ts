@@ -24,6 +24,7 @@ const spaceInput = z
   })
   .describe("The space: the records and their keys");
 const vars = z.record(z.string(), z.unknown()).optional().describe("The values of the variables of the run");
+const maxStep = z.enum(["A", "B", "C"]).optional().describe("The highest step of the language that the tool accepts. The default is B. A program above it is not valid, and the reason names its step.");
 
 /** The version of the package. The file package.json is one folder above the source and above the build. */
 const VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { readonly version: string }).version;
@@ -58,18 +59,18 @@ export const vexModule: ProcedureModule = defineModule("vex", [
   }),
   defineProcedure({
     path: ["vex", "check"],
-    input: z.object({ program, domains }),
+    input: z.object({ program, domains, maxStep }),
     output: json,
     metadata: {
       title: "Check a Vex program",
-      description: "Checks a program as JSON. Gives its number of nodes, its nesting, the fields that it reads, and if the compiler gives it generated code. A program that is not valid gives the reason.",
+      description: "Checks a program as JSON. Gives its step with the reason, its number of nodes, its nesting, the fields that it reads, and if the compiler gives it generated code. A program that is not valid gives the reason.",
       effects: PURE,
     },
     handler: (input) => check(input),
   }),
   defineProcedure({
     path: ["vex", "evaluate"],
-    input: z.object({ program, space: spaceInput, origins: z.array(z.string()).optional().describe("The keys to evaluate at. The default is each key."), domains, vars }),
+    input: z.object({ program, space: spaceInput, origins: z.array(z.string()).optional().describe("The keys to evaluate at. The default is each key."), domains, vars, maxStep }),
     output: json,
     metadata: {
       title: "Evaluate a Vex program",
@@ -80,11 +81,11 @@ export const vexModule: ProcedureModule = defineModule("vex", [
   }),
   defineProcedure({
     path: ["vex", "explain"],
-    input: z.object({ program, space: spaceInput, origin: z.string().describe("The key to evaluate at"), domains, vars }),
+    input: z.object({ program, space: spaceInput, origin: z.string().describe("The key to evaluate at"), domains, vars, maxStep }),
     output: json,
     metadata: {
       title: "Explain a Vex program at one key",
-      description: "Gives the trace of a program at one key: each node, with its focus, its reads and its result. Use it to find where an error starts.",
+      description: "Gives the step of a program and the trace of the program at one key: each node, with its focus, its reads and its result. Use it to find where an error starts.",
       effects: PURE,
     },
     handler: (input) => explainAt(input),
@@ -102,6 +103,7 @@ export const vexModule: ProcedureModule = defineModule("vex", [
         .enum(["array", "tree", "graph"])
         .optional()
         .describe("The space of the records. The default is array. The run of a tree takes the parents too: the position of the parent of each record, or -1 for a root. The run of a graph takes the edges too: for each record, the positions of the ends of its edges."),
+      maxStep,
     }),
     output: json,
     metadata: {

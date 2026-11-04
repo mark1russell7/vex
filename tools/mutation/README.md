@@ -37,7 +37,7 @@ A standalone module copies the text of each op function of a domain. A mutated d
 
 A mutant at the top level of a module can make the module throw when it loads. Then each test file that imports the module stops before its tests, and Vitest reports no test. Stryker sees no failed test, so it reports a survivor. Thus `core/load.test.ts` loads the modules of the core inside a test, and that test fails for such a mutant.
 
-A test file with an import that finds no file in the copy also does not load. `layout.mjs` lists each folder that `prepare.mjs` copies. Then `prepare.mjs` fails for each relative import that finds no file in the copy (V-066). When a test reads a file of another folder of the repository, add that folder to `COPIES`.
+A test file with an import that finds no file in the copy also does not load. `layout.mjs` lists each folder that `prepare.mjs` copies. Then `prepare.mjs` fails for each relative import that finds no file in the copy (V-072). When a test reads a file of another folder of the repository, add that folder to `COPIES`.
 
 ## A local run
 

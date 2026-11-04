@@ -1,26 +1,16 @@
 import type { Result } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { BOM_COLUMNS, bomFormula, bomReference, bomVex, type Part } from "./bom.ts";
+import { BOM_BIKE, BOM_BROKEN, bomProduct as product } from "./inputs.ts";
+import { BOM_COLUMNS, bomFormula, bomReference, bomVex } from "./bom.ts";
 
 const plain = (r: Result<unknown>): unknown => (r.ok ? r.value : r.error.code);
-
-/** A random product: each part after the first has an earlier part as its parent, or it is another top assembly. */
-const product: fc.Arbitrary<Part[]> = fc
-  .array(fc.record({ parent: fc.nat(), top: fc.boolean(), qty: fc.integer({ min: 1, max: 6 }), cost: fc.integer({ min: 0, max: 10000 }).map((n) => n / 100) }), { minLength: 1, maxLength: 14 })
-  .map((rows) => rows.map((r, i) => ({ id: `p${i}`, qty: r.qty, cost: r.cost, ...(i === 0 || r.top ? {} : { parent: `p${r.parent % i}` }) })));
 
 describe("the bill of materials pilot", () => {
   // bike (labor 100) ─┬─ wheel ×2 (20) ─┬─ spoke ×32 (0.25)
   //                   │                 └─ tube ×1 (5)
   //                   └─ seat ×1 (15)
-  const bike: Part[] = [
-    { id: "bike", qty: 1, cost: 100 },
-    { id: "wheel", parent: "bike", qty: 2, cost: 20 },
-    { id: "spoke", parent: "wheel", qty: 32, cost: 0.25 },
-    { id: "tube", parent: "wheel", qty: 1, cost: 5 },
-    { id: "seat", parent: "bike", qty: 1, cost: 15 },
-  ];
+  const bike = BOM_BIKE;
 
   it("gives the hand-checked costs and counts of a bike", () => {
     // wheel: 20 + 32 x 0.25 + 1 x 5 = 33. bike: 100 + 2 x 33 + 1 x 15 = 181.
@@ -53,7 +43,7 @@ describe("the bill of materials pilot", () => {
   });
 
   it("gives an error value with a reason for a part without a quantity, and the cost of the parent is an error too", () => {
-    const broken = bike.map((p) => (p.id === "tube" ? ({ id: "tube", parent: "wheel", cost: 5 } as unknown as Part) : p));
+    const broken = BOM_BROKEN;
     for (const cells of [bomVex(broken), bomFormula(broken)]) {
       const wheel = cells("wheel", "rolled");
       expect(wheel.ok ? "a value" : wheel.error.code).toBe("#N/A");

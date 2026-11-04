@@ -128,6 +128,7 @@ const r_count = (a, c) => c;
 const s_or = (a, c, x) => a || x;
 const r_id = (a) => a;
 const op_2_7 = (a, b) => a.includes(b);
+const k_value = (x) => (x === undefined || x === null || (typeof x === "number" && !Number.isFinite(x)) ? F() : x);
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;
@@ -255,7 +256,7 @@ export function run(records, vars) {
     for (let j64 = 0; j64 < n; j64++) {
       let x67;
       try {
-        if (!op_2_7(R[j64]["s"], G(q61))) continue;
+        if (!k_value(op_2_7(R[j64]["s"], G(q61)))) continue;
         x67 = R[j64]["w"];
       } catch {
         continue;
@@ -264,7 +265,7 @@ export function run(records, vars) {
     }
     return n66;
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let k3;
@@ -291,9 +292,9 @@ export function run(records, vars) {
       } catch {
         t54 = 0;
       }
-      out.push(({ "group": m1(k3), "again": k_number((m1(k5)) * (2)), "shared": m1(k7), "prefix": m9(R[o]["n"]), "keyFirst": m12(R[o]["n"]), "scan": m15(R[o]["n"]), "body": m18(R[o]["n"]), "two": m25(R[o]["w"], R[o]["n"]), "nested": m31(R[o]["n"]), "twice": m38(R[o]["n"], R[o]["n"]), "constant": G(c47), "notList": k_number(Math.max((m49(R[o]["n"])), (1))), "first": t54, "anyNot": (!(m56(R[o]["n"]))), "text": m59(R[o]["s"]), "contains": m62(R[o]["s"]) }));
+      out[o] = ({ "group": m1(k3), "again": k_number((m1(k5)) * (2)), "shared": m1(k7), "prefix": m9(R[o]["n"]), "keyFirst": m12(R[o]["n"]), "scan": m15(R[o]["n"]), "body": m18(R[o]["n"]), "two": m25(R[o]["w"], R[o]["n"]), "nested": m31(R[o]["n"]), "twice": m38(R[o]["n"], R[o]["n"]), "constant": G(c47), "notList": k_number(Math.max((m49(R[o]["n"])), (1))), "first": t54, "anyNot": (!(m56(R[o]["n"]))), "text": m59(R[o]["s"]), "contains": m62(R[o]["s"]) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

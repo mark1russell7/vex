@@ -22,7 +22,7 @@ export function run(records, vars) {
   const c0 = T(() => k_number((v0) + (1)));
   const c1 = T(() => k_number((v0) + (2)));
   const c2 = T(() => k_number((1) / (k_number((v0) - (2)))));
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t3;
@@ -31,9 +31,9 @@ export function run(records, vars) {
       } catch {
         t3 = -1;
       }
-      out.push(({ "x": k_number((G(c0)) * (R[o]["n"])), "y": k_number((R[o]["n"]) - (G(c0))), "z": k_number((R[o]["n"]) - (G(c1))), "q": k_number((R[o]["n"]) + (G(c2))), "r": t3 }));
+      out[o] = ({ "x": k_number((G(c0)) * (R[o]["n"])), "y": k_number((R[o]["n"]) - (G(c0))), "z": k_number((R[o]["n"]) - (G(c1))), "q": k_number((R[o]["n"]) + (G(c2))), "r": t3 });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

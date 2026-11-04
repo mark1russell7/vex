@@ -17,7 +17,7 @@ function repoRoot(): string {
   return dir;
 }
 
-/** The part of `tools/mutation/layout.mjs` that this test reads. */
+/** The part of `tools/mutation/layout.ts` that this test reads. */
 interface Layout {
   readonly unresolvedImports: (root: string) => readonly string[];
 }
@@ -27,7 +27,7 @@ describe("the copy of the mutation lane", () => {
   // that the file kills survives. On 2026-11-03, three test files of the compiler did not load.
   it("V-072: each relative import of a file of the copy finds a file of the copy", async () => {
     const root = repoRoot();
-    const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.mjs")).href)) as Layout;
+    const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.ts")).href)) as Layout;
     expect(layout.unresolvedImports(root)).toEqual([]);
   });
 });

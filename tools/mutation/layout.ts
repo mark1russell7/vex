@@ -6,14 +6,21 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-/** @typedef {{ readonly from: string, readonly to: string, readonly tests: boolean }} Copy */
+/** A copy of the lane. */
+export interface Copy {
+  /** This is the folder of the repository. */
+  readonly from: string;
+  /** This is the folder of the copy in tools/mutation. */
+  readonly to: string;
+  /** With true, the copy keeps the test files. */
+  readonly tests: boolean;
+}
 
 /**
  * The copies of the lane: a folder of the repository (`from`), its folder in tools/mutation (`to`), and if the copy
  * keeps the test files. Stryker mutates the files of `work/` only. The other copies stay as they are.
- * @type {readonly Copy[]}
  */
-export const COPIES = [
+export const COPIES: readonly Copy[] = [
   // The sources and the tests of the four published packages.
   ...["core", "domains", "testkit", "compiler"].map((p) => ({ from: `packages/${p}/src`, to: `work/${p}`, tests: true })),
   // A standalone module copies the text of each op function. Stryker adds its counters to the functions of
@@ -28,24 +35,20 @@ export const COPIES = [
 /** A relative import or export of a module: `from "./x"`, `import "./x"` or `import("./x")`. */
 const IMPORT = /(?:\bfrom|\bimport\(?)\s*["'](\.{1,2}\/[^"']+)["']/gu;
 
-/** @type {(path: string) => boolean} */
-const isTest = (path) => path.endsWith(".test.ts");
+const isTest = (path: string): boolean => path.endsWith(".test.ts");
 
 /**
  * This function gives each relative import of a copied file that finds no file in the copy, as `<file>: <import>`.
  * The file of a path of the copy is the file of the repository that a copy puts at that path.
- * @type {(root: string) => string[]}
  */
-export function unresolvedImports(root) {
+export function unresolvedImports(root: string): string[] {
   const lane = join(root, "tools", "mutation");
-  /** @type {(path: string) => boolean} */
-  const inCopy = (path) =>
+  const inCopy = (path: string): boolean =>
     COPIES.some((c) => {
       const rest = relative(join(lane, c.to), path);
       return rest !== "" && !rest.startsWith("..") && !isAbsolute(rest) && (c.tests || !isTest(path)) && existsSync(join(root, c.from, rest));
     });
-  /** @type {string[]} */
-  const out = [];
+  const out: string[] = [];
   for (const c of COPIES) {
     const files = readdirSync(join(root, c.from), { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts") && (c.tests || !isTest(f)));
     for (const f of files) {

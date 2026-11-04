@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { check, dataOf, DEFAULT_DOMAINS, domainsOf, evaluateAll, explainAt, jsonOf, moduleOf, programOf, spaceOf, ToolError } from "./tools.ts";
+import { check, compilerVersion, dataOf, DEFAULT_DOMAINS, domainsOf, evaluateAll, explainAt, jsonOf, moduleOf, programOf, spaceOf, ToolError } from "./tools.ts";
 import { Vec2 } from "@mark1russell7/vex-domains";
+
+/** The text of the compiler of this repository: a working copy. */
+const WORKING_COPY = `${(JSON.parse(readFileSync(new URL("../../compiler/package.json", import.meta.url), "utf8")) as { readonly version: string }).version} (working copy)`;
 
 const vec = (x: number, y: number): unknown => ({ $vex: "domain", domain: "Vec2", value: [x, y] });
 const ref = (field: string): unknown => ({ tag: "ref", path: [field] });
@@ -158,11 +162,17 @@ describe("the tools", () => {
     expect(text).toContain("3");
   });
 
+  it("vex_module names the version of its compiler in each result", () => {
+    expect(compilerVersion({ version: "1.2.3", main: "./build/index.js" })).toBe("1.2.3");
+    expect(compilerVersion({ version: "1.2.3", main: "./src/index.ts" })).toBe("1.2.3 (working copy)");
+    expect(moduleOf({ program: app("add", ref("n"), lit(1)), domains: ["NumDomain"], schema: { fields: { n: "number" } } })).toMatchObject({ ok: true, compiler: WORKING_COPY });
+  });
+
   it("vex_module gives the source of a module, or the reason that the program cannot be one", () => {
     const m = moduleOf({ program: app("add", ref("n"), lit(1)), domains: ["NumDomain"], schema: { fields: { n: "number" } }, name: "plusOne" }) as { readonly ok: boolean; readonly source: string };
     expect(m.ok).toBe(true);
     expect(m.source).toContain("export function plusOne(");
-    expect(moduleOf({ program: { tag: "ext", kind: "note", data: null }, schema: {} })).toEqual({ ok: false, reason: 'the extension "note"' });
+    expect(moduleOf({ program: { tag: "ext", kind: "note", data: null }, schema: {} })).toEqual({ ok: false, reason: 'the extension "note"', compiler: WORKING_COPY });
     // COMPILE.MODULE.TREE: the module of a tree space takes the parents.
     const children = { tag: "each", axis: { t: "children" }, body: ref("n") };
     const tree = moduleOf({ program: app("count", children), schema: { fields: { n: "number" } }, space: "tree" }) as { readonly ok: boolean; readonly source: string };

@@ -1,6 +1,6 @@
 /**
- * The gate that a workflow does not hide a failed test. It reads each file of `.github/workflows`, and it fails on each
- * place that `workflowFaults` finds. Start `node scripts/workflow-gate.ts`.
+ * The gate that a workflow does not hide a failed test and does not make a record with no gate. It reads each file of
+ * `.github/workflows`, and it fails on each place that `workflowFaults` finds. Start `node scripts/workflow-gate.ts`.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { workflowFaults } from "../packages/testkit/src/workflow-faults.ts";

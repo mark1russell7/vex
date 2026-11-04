@@ -239,6 +239,24 @@ The workflow `places-gate.yml` holds the rule. It removes the limit and compiles
 
 A row at 2 times the places is a record only, because a program there can fall on each side of the line. So the gate does not find a limit that is one doubling too low. That limit refuses more programs, so it is safe. The gate also checks with `placesOf` that each row is the largest program of its shape, so a change of the count fails the gate.
 
+This table gives the lowest and the highest worst sample of three runs, each of five fresh processes, on the commits `758319b`, `46fc20d` and `4f9bace`. The spread of a row is the difference. The margin is the distance from the nearest value to the line of 1,024 MB.
+
+| Row | Part of the gate | Readings | Spread | Margin |
+| --- | --- | --- | --- | --- |
+| plain, depth 14 | under the line | 552 to 562 MB | 10 MB | 462 MB |
+| constant, depth 13 | under the line | 557 to 566 MB | 9 MB | 458 MB |
+| loop, depth 13 | under the line | 486 to 491 MB | 5 MB | 533 MB |
+| plain, depth 16 | over the line | 1,584 to 1,661 MB | 77 MB | 560 MB |
+| constant, depth 15 | over the line | 1,675 to 1,699 MB | 24 MB | 651 MB |
+| loop, depth 15 | over the line | 1,459 to 1,473 MB | 14 MB | 435 MB |
+| plain, depth 15 | record | 893 to 930 MB | 37 MB | 94 MB |
+| constant, depth 14 | record | 920 to 1,065 MB | 145 MB | none |
+| loop, depth 14 | record | 790 to 881 MB | 91 MB | 143 MB |
+
+Each row of the gate keeps a margin of at least 3 times the widest spread of the gate rows. The cause of the spread is not known.
+
+The row of constant depth 14 sits at the line, and the noise of the row is wider than the margin. Its last reading of 1,006 MB is 18 MB under the line, which is 1.8 %. One reading of this row decides nothing. If this row becomes a gate, it needs a median of repeats, not one reading.
+
 #### The faults of a module (COMPILE.MODULE.FAULT)
 
 A catch of a module holds an exception of a function of a domain, because the interpreter gives an error for it. The same catch also holds a fault of the printed code. Then a defect of the printer is a value, and only a differential test finds it.

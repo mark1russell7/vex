@@ -10,7 +10,8 @@
  * A key reads the origin or a name from outside the node, and nothing that the node changes. Inside the node, the
  * value of the key replaces the key. Thus the value of the node depends only on the space and the values of the keys.
  */
-import { addrExprs, isListOp, listOf, type Addr, type Axis, type Expr } from "@mark1russell7/vex";
+import { addrExprs, children, isListOp, listOf, type Addr, type Axis, type Expr } from "@mark1russell7/vex";
+import { originalOf } from "./unshared.ts";
 
 /** A read of the focus of the expression, outside its own loops. */
 const FOCUS = 1;
@@ -207,13 +208,19 @@ function eachUnderLets(e: Expr | undefined): { readonly lets: readonly Extract<E
  * loop outside its keys. A node inside such a node can be in the memo too. Thus the first evaluation of the outer
  * node evaluates the inner node once. The function `loops` tells if a list op is one loop with an `each`. In a module,
  * each list op is one. In tier 2, the ops of `isFusedOp` are.
+ *
+ * A node at two places of the program has one object in the source, and the compile gives each place a copy. A node of
+ * the memo at one place is a node of the memo at each place, so the second pass finds the other copies.
  */
 export function memoNodes(expr: Expr, loops: (op: string) => boolean = isListOp): ReadonlyMap<Expr, readonly Expr[]> {
   const out = new Map<Expr, readonly Expr[]>();
-  const visit = (e: Expr): void => {
+  const note = (e: Expr): void => {
     const pure = new Set<Expr>();
     const keys = keysOf(e, true, new Set(), pure, true);
     if (keys !== undefined && loopOutside(e, new Set([...keys, ...pure]))) out.set(e, keys);
+  };
+  const visit = (e: Expr): void => {
+    note(e);
     if (e.tag === "app") {
       // A list op over an `each` under `let` expressions is one loop, so that `each` and those `let` expressions have
       // no value of their own. Their parts can be in the memo.
@@ -238,5 +245,11 @@ export function memoNodes(expr: Expr, loops: (op: string) => boolean = isListOp)
     }
   };
   visit(expr);
+  const found = new Set([...out.keys()].map(originalOf));
+  const copies = (e: Expr): void => {
+    if (!out.has(e) && found.has(originalOf(e))) note(e);
+    children(e).forEach(copies);
+  };
+  copies(expr);
   return out;
 }

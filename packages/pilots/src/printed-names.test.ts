@@ -3,7 +3,7 @@
  * without a declaration. A module of a test of this package goes through the same gate in the setup of the tests. The
  * gate misses a read before a declaration through a closure, a TypeError, a RangeError and a wrong value with no exception.
  */
-import { emitModule, MODULE_GLOBALS } from "@mark1russell7/vex-compiler/module";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { domainsOf, programOf } from "@mark1russell7/vex-mcp";
 import { describe, expect, it } from "vitest";
 import { nameFaults } from "../../compiler/src/test-names.ts";
@@ -14,7 +14,7 @@ const MODULES = [...IREKO_COMMITTED, ...IREKO_NOT_COMMITTED];
 
 describe("V-081 COMPILE.MODULE: the names of the printed modules", () => {
   it.each<Faults>(["value", "throw"])("V-081: each module of ireko with the faults %s has a declaration for each name", (faults) => {
-    expect(MODULES.flatMap((which) => nameFaults(irekoSource(which, faults), MODULE_GLOBALS).map((x) => `${which}: ${x}`))).toStrictEqual([]);
+    expect(MODULES.flatMap((which) => nameFaults(irekoSource(which, faults)).map((x) => `${which}: ${x}`))).toStrictEqual([]);
   });
 
   it("V-081: each module of the corpus has a declaration for each name", () => {
@@ -22,7 +22,7 @@ describe("V-081 COMPILE.MODULE: the names of the printed modules", () => {
       corpus.programs.flatMap((c) => {
         const domains = domainsOf(c.domains);
         const m = emitModule(programOf(c.program, domains), { domains });
-        return m.ok ? [nameFaults(m.source, MODULE_GLOBALS).map((x) => `${c.name}: ${x}`)] : [];
+        return m.ok ? [nameFaults(m.source).map((x) => `${c.name}: ${x}`)] : [];
       }),
     );
     expect(printed.length).toBeGreaterThan(0);

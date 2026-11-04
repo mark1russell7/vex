@@ -214,6 +214,23 @@ The parser is a runtime dependency, because the option `domains` takes a domain 
 
 The test `packages/pilots/src/runner-text.test.ts` prints each module of ireko with Node, with `tsx` and in Vitest, and compares the bytes. The test also has the case `(a && b) || c`, because a formatter keeps these parentheses and `tsx` removes them.
 
+#### The limit of the places of a program (COMPILE.PLACES)
+
+A place is a node at one position of the tree of a program. A program can use one object at many places, so a small object can have an exponential count of places. The compile takes time at each place, and tier 2 prints code at each place. The count comes first, and its walk visits each object once, so the refusal takes little time at each depth.
+
+A module and tier 2 refuse a program with more than 32,768 places. The interpreter runs such a program, and `tiered` gives tier 1. This is a stated difference: a module refuses a program that the interpreter runs.
+
+The limit comes from a measure of doubling programs on a CI runner, with a heap of 2,048 MB. The rule is the largest measured depth at which each form stays under half of the heap.
+
+| Places | Slowest compile | Most code | Most memory |
+| --- | --- | --- | --- |
+| 2,047 | 208 ms | 6.8 MB | 183 MB |
+| 8,191 | 700 ms | 31 MB | 350 MB |
+| 32,767 | 3.0 s | 140 MB | 936 MB |
+| 131,071 | The heap ends in tier 2 | | |
+
+The largest module of `ireko` has 2,138 places, so the limit is 15 times that program.
+
 #### The faults of a module (COMPILE.MODULE.FAULT)
 
 A catch of a module holds an exception of a function of a domain, because the interpreter gives an error for it. The same catch also holds a fault of the printed code. Then a defect of the printer is a value, and only a differential test finds it.
@@ -1666,6 +1683,7 @@ The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its l
 | COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
 | COMPILE.MODULE.FAULT | With `faults` at `throw`, a fault of the printed code leaves the run | Each copy of a function of a domain has a wrapper that gives the error of Vex for each exception. Each other catch rethrows each value that is not the error of Vex. No op prints at its call. |
 | COMPILE.MODULE.BYTES | A committed module equals its print | The workflow `module-bytes.yml` prints each module from a pinned commit and compares the bytes. |
+| COMPILE.PLACES | A compile refuses a program with more than 32,768 places | The count visits each object once, before each other walk. The interpreter runs such a program, and `tiered` gives tier 1. |
 | COMPILE.MODULE.TEXT | The text of a copied function does not depend on the runner | The compiler parses the text and prints the tree. A text that is not one expression stays as it is. |
 | COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |
 | COMPILE.MODULE.SIZE.DEAD | A helper, an op or a constant of the run that no code reads is not printed | A constant has a form that catches each failure. |

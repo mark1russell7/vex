@@ -1888,7 +1888,9 @@ describe("COMPILE.MODULE: random programs", () => {
     const modes = fc.constantFrom<Partial<ModuleOptions>>({ faults: "value" }, { faults: "throw" }, { fuse: false }, { keys: true });
     fc.assert(
       fc.property(fc.oneof(reused, program.num), modes, (e, mode) => {
-        expect(nameFaults(sourceOf(e, { ...OPTIONS, ...mode }), MODULE_GLOBALS)).toStrictEqual([]);
+        // The option keys refuses this one shape. Each other refusal fails the test.
+        const m = emitModule(e, { ...OPTIONS, ...mode });
+        expect(m.ok ? nameFaults(m.source) : [m.reason].filter((x) => !x.startsWith('an offset or the axis "window"'))).toStrictEqual([]);
       }),
     );
   });

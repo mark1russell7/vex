@@ -10,9 +10,20 @@ const ORIGINALS = new WeakMap<Expr, Expr>();
 
 /**
  * The most places that a program can have for a compile (COMPILE.PLACES). A place is a node at one position of the tree
- * of the program, so a shared object counts once for each place. The compile takes time at each place.
+ * of the program, so a shared object counts once for each place. The compile takes time at each place. The limit is
+ * the largest measured depth of a doubling program at which each form stays under half of a heap of 2,048 MB. This is
+ * 15 times the largest module of `ireko`. `docs/COMPILER.md` has the measures.
  */
-export const MAX_PLACES = 1 << 16;
+export const MAX_PLACES: number = 1 << 15;
+
+/** This function gives the parts of a node. A node that is not valid has no parts here, and the check of the shape gives its reason. */
+function partsOf(x: Expr): readonly Expr[] {
+  try {
+    return children(x).filter((part) => typeof part === "object" && (part as unknown) !== null);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * This function gives the number of places of the expressions, with a walk that visits each object once. So it takes
@@ -27,10 +38,10 @@ export function placesOf(exprs: readonly Expr[]): number {
       todo.pop();
     } else if (open.has(x)) {
       todo.pop();
-      counts.set(x, children(x).reduce((sum, part) => sum + (counts.get(part) ?? Infinity), 1));
+      counts.set(x, partsOf(x).reduce((sum, part) => sum + (counts.get(part) ?? Infinity), 1));
     } else {
       open.add(x);
-      todo.push(...children(x).filter((part) => !counts.has(part)));
+      todo.push(...partsOf(x).filter((part) => !counts.has(part)));
     }
   }
   return exprs.reduce((sum, e) => sum + (counts.get(e) as number), 0);

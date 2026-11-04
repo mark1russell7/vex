@@ -7,7 +7,14 @@
  * does not find a read before a declaration through a closure, a TypeError, a RangeError or a wrong value with no
  * exception. A value test finds these.
  */
+import { runInNewContext } from "node:vm";
 import { parse } from "acorn";
+
+/**
+ * The names that a module can read from its host: the names of the global object of a new context. The language gives
+ * this list, so the list does not grow with each miss of the gate. Node adds its own names to its main context only.
+ */
+export const LANGUAGE_GLOBALS: ReadonlySet<string> = new Set(runInNewContext("Object.getOwnPropertyNames(globalThis)") as string[]);
 
 /** A node of the tree of a text. */
 interface AstNode {
@@ -240,7 +247,7 @@ export function namesOfText(source: string): TextNames {
 }
 
 /** This function gives one line for each fault of the text of a module. `globals` has the names that a module can read from its host. */
-export function nameFaults(source: string, globals: ReadonlySet<string>): readonly string[] {
+export function nameFaults(source: string, globals: ReadonlySet<string> = LANGUAGE_GLOBALS): readonly string[] {
   const { free, early } = namesOfText(source);
   const missing = [...free].filter(([name]) => !globals.has(name)).map(([name, line]) => `line ${String(line)}: the name ${name} has no declaration`);
   return [...missing, ...early.map((x) => `line ${String(x.line)}: a read of ${x.name} before its declaration`)];

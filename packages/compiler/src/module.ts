@@ -2191,7 +2191,7 @@ class Printer {
   readonly #scopes: CallScope[] = [];
   /** The work of the body of each bound function, by the number of its binding. */
   readonly #fnWork = new Map<number, number>();
-  /** The expressions whose code is a constant of the run. */
+  /** The expressions whose code is a constant of the run. Each entry is the original of a copy, so a second place of a shared list has the fact too. */
   readonly #constant = new WeakSet<Expr>();
   /** The expressions at a place that takes a list: a binding, the head of a list op and the list of an axis. */
   readonly #wantList = new WeakSet<Expr>();
@@ -2500,7 +2500,7 @@ class Printer {
     if (c.v.deps.size === 0) {
       // A constant of the run with the structure of an earlier one is that constant.
       this.#keyOf.set(c, this.#constKey(e, ctx));
-      this.#constant.add(e);
+      this.#constant.add(originalOf(e));
     }
     // A list is a value only at a place that takes a list: a result, a binding, an argument, a field and the body of a
     // function take one. A condition, an argument of and or of or, and a key of get take no list.
@@ -2638,7 +2638,7 @@ class Printer {
    * adds the work of the body of its function, because the body evaluates at each call.
    */
   #work(e: Expr, fns: ReadonlyMap<string, BoundFn>): number {
-    if (this.#memo.has(e) || this.#constant.has(e)) return 1;
+    if (this.#memo.has(e) || this.#constant.has(originalOf(e))) return 1;
     // Stryker disable next-line ConditionalExpression: a node that is not a call has no field fn, so the map gives undefined
     const body = e.tag === "call" ? this.#bodyWork(fns.get(e.fn)) : 0;
     return children(e).reduce((sum, x) => sum + this.#work(x, fns), 1 + body);
@@ -3935,7 +3935,7 @@ class Printer {
    * nodes do not fuse. Options that are not a literal give the reason of `flat`, so they do not fuse either.
    */
   #fusedStrict(e: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): boolean | undefined {
-    if (!this.#fuse || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e) || !this.#bodyList(e, ctx)) return undefined;
+    if (!this.#fuse || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(originalOf(e)) || !this.#bodyList(e, ctx)) return undefined;
     try {
       return this.#strict("flat", rest);
     } catch {
@@ -4007,7 +4007,7 @@ class Printer {
 
   /** This method gives the node `e` when a fused loop can print it as a stage, and undefined when the loop reads its array. */
   #stageOf(e: Expr, ctx: Ctx): ExprOf<"app"> | undefined {
-    return e.tag === "app" && !this.#memo.has(e) && !ctx.keys.has(e) && !this.#constant.has(e) && (this.#work(e, ctx.fns) < COLUMN_WORK || !readsFocus(e)) ? e : undefined;
+    return e.tag === "app" && !this.#memo.has(e) && !ctx.keys.has(e) && !this.#constant.has(originalOf(e)) && (this.#work(e, ctx.fns) < COLUMN_WORK || !readsFocus(e)) ? e : undefined;
   }
 
   /**
@@ -4015,7 +4015,7 @@ class Printer {
    * not. A node of the memo, a key of a column and a constant of the run keep their arrays, because other parts read them.
    */
   #link(e: Expr, ctx: Ctx): boolean | undefined {
-    if (e.tag !== "app" || e.op !== "append" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e)) return undefined;
+    if (e.tag !== "app" || e.op !== "append" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(originalOf(e))) return undefined;
     return this.#appendStrict(e, ctx);
   }
 
@@ -4026,7 +4026,7 @@ class Printer {
    * loops, so they need no test of a stage.
    */
   #pushes(e: Expr, ctx: Ctx): boolean {
-    if (e.tag !== "app" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e)) return false;
+    if (e.tag !== "app" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(originalOf(e))) return false;
     const [head, ...rest] = e.args;
     if (e.op === "flat") return head?.tag === "each" && this.#fusedStrict(head, rest, ctx) !== undefined;
     if (e.op === "append") return this.#link(e, ctx) !== undefined && e.args.slice(0, 2).some((x) => this.#pushes(x, ctx));

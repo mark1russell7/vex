@@ -1,7 +1,7 @@
 /** The gate of the names of a printed module. */
 import { describe, expect, it } from "vitest";
 import { MODULE_GLOBALS } from "./module.ts";
-import { nameFaults, namesOfText } from "./test-names.ts";
+import { LANGUAGE_GLOBALS, nameFaults, namesOfText } from "./test-names.ts";
 
 const freeOf = (source: string): readonly string[] => [...namesOfText(source).free.keys()];
 
@@ -44,6 +44,13 @@ describe("the names of the text of a module", () => {
   it("finds a read before a declaration in the same function, and misses a read through a closure", () => {
     expect(nameFaults("x; const x = 1;\nconst y = y + 1;", MODULE_GLOBALS)).toStrictEqual(["line 1: a read of x before its declaration", "line 2: a read of y before its declaration"]);
     expect(nameFaults("const f = () => x; f(); const x = 1;", MODULE_GLOBALS)).toStrictEqual([]);
+  });
+
+  it("the language gives the list of the globals, and the list has each global of the printer", () => {
+    expect([...MODULE_GLOBALS].filter((x) => !LANGUAGE_GLOBALS.has(x))).toStrictEqual([]);
+    expect(["String", "TypeError", "NaN", "Infinity"].filter((x) => !LANGUAGE_GLOBALS.has(x))).toStrictEqual([]);
+    expect(["process", "require", "fetch", "o2"].filter((x) => LANGUAGE_GLOBALS.has(x))).toStrictEqual([]);
+    expect(nameFaults("String(NaN); new TypeError(Infinity);")).toStrictEqual([]);
   });
 
   it("a global of the host is not a fault of a name", () => {

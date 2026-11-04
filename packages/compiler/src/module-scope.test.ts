@@ -110,9 +110,33 @@ describe("V-080 COMPILE.MODULE: an object that a program uses at two places has 
   });
 });
 
+describe("V-080 COMPILE.MODULE: a shared list and the memo", () => {
+  const originOf = ref("n", [{ t: "origin" }]);
+  const shared = each(axes.where(axes.all, app("eq", n, originOf)), ref("n"));
+  /** This function gives the functions of the memo in a module. */
+  const memos = (e: Expr): number => {
+    const m = emitModule(e, OPTIONS);
+    return m.ok ? [...m.source.matchAll(/^const md+ = /gm)].length : Number.NaN;
+  };
+
+  it("V-080 COMPILE.MODULE: one shared list at several places of one scope has one memo", () => {
+    const e = rec({ a: app("take", shared, lit(1)), b: app("take", shared, lit(2)), c: app("sum", shared) });
+    expect(memos(e)).toBe(1);
+    expectSame(e);
+  });
+
+  it("V-080 COMPILE.MODULE: a shared list with a key from a name has a value for each scope", () => {
+    const keyed = each(axes.where(axes.all, app("eq", n, v("x"))), ref("n"));
+    const take = app("take", keyed, lit(1));
+    expectSame(let_({ x: originOf }, rec({ a: take, b: let_({ x: add(originOf, lit(1)) }, take) })));
+  });
+});
+
+/** This function gives the count of the items near a value. */
+const count = (x: Expr): Expr => app("sum", each(near(x, v("u")), lit(1)));
+
 describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps the markers of the column", () => {
   const origin = ref("n", [{ t: "origin" }]);
-  const count = (x: Expr): Expr => app("sum", each(near(x, v("u")), lit(1)));
 
   it("V-081: a column of a call reads the origin", () => {
     expectSame(called(steps(count(origin))));

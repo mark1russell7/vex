@@ -25,7 +25,7 @@ jobs:
       - name: The branch, with the limit
         run: |
           cp tools/keyscope/doubling-child.mjs packages/pilots/scripts/doubling-child.mjs
-          node tools/keyscope/doubling.mjs limit packages/pilots/scripts/doubling-child.mjs plain,constant,loop,let 10,20,30,40
+          node tools/keyscope/doubling.mjs limit packages/pilots/scripts/doubling-child.mjs plain,constant,loop,let 10,14,15,20,30,40
       - name: The branch, without the limit
         run: |
           sed -i 's/MAX_PLACES = 1 << 16/MAX_PLACES = 2 ** 60/' packages/compiler/src/unshared.ts

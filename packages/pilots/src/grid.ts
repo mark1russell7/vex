@@ -1,11 +1,8 @@
 /**
- * The grid pilot (docs/REVIEW.md §11, P5). The grid layout of the Graph project puts items in a uniform
+ * The grid pilot (docs/REVIEW.md §11, P5). The layout puts items in a uniform
  * row-major grid. The cell is the largest item, and the number of columns comes from the configuration or from
  * the width of the bounds. This module has the layout twice: as plain TypeScript, and as one Vex program that
  * evaluates at each item. The tests show that the two give the same rectangles.
- *
- * Graph is a private repository, so this module does not copy its code. `gridReference` follows the behavior
- * of the Graph strategy, step by step.
  */
 import { fail, ok, space, vex, vexError, type ArrayKey, type ChainOf, type ExtHandler, type Merge, type Root } from "@mark1russell7/vex";
 import { NumDomain, Vec2Domain } from "@mark1russell7/vex-domains";
@@ -16,7 +13,7 @@ export interface GridItem {
   readonly height?: number;
 }
 
-/** The configuration of the grid. A `columns` value below 1 means "automatic". The default `gap` is 12. */
+/** The configuration of the grid. A `columns` value below 1 means "automatic". The default `gap` is 0. */
 export interface GridConfig {
   readonly columns?: number;
   readonly gap?: number;
@@ -36,29 +33,28 @@ export interface Rect {
   readonly height: number;
 }
 
-/** This function gives the grid layout in plain TypeScript, with the behavior of the Graph strategy. */
-export function gridReference(items: readonly GridItem[], bounds: Bounds, config: GridConfig = {}): readonly Rect[] {
-  const n = items.length;
-  if (n === 0) return [];
-  const gap = config.gap ?? 12;
-  let cellW = 0;
-  let cellH = 0;
-  for (const it of items) {
-    cellW = Math.max(cellW, it.width ?? 0);
-    cellH = Math.max(cellH, it.height ?? 0);
-  }
-  cellW = Math.max(1, cellW);
-  cellH = Math.max(1, cellH);
-  let cols = config.columns ?? 0;
-  if (!(cols >= 1)) {
-    const byWidth = Math.max(1, Math.floor((bounds.width + gap) / (cellW + gap)));
-    cols = Math.max(1, Math.min(byWidth, Math.ceil(Math.sqrt(n))));
-  }
-  return items.map((it, i) => ({
-    left: (i % cols) * (cellW + gap),
-    top: Math.floor(i / cols) * (cellH + gap),
-    width: it.width ?? cellW,
-    height: it.height ?? cellH,
+/** This function gives the size of a cell: the largest item size in each dimension, with a floor of 1. */
+function largestSize(items: readonly GridItem[]): { readonly width: number; readonly height: number } {
+  const sizes = (dimension: "width" | "height"): readonly number[] => items.map((item) => item[dimension] ?? 0);
+  return { width: Math.max(1, ...sizes("width")), height: Math.max(1, ...sizes("height")) };
+}
+
+/** This function gives the columns of an automatic grid: the cells that fit in `room`, at most the ceiling of the square root of `count`. */
+function automaticColumns(count: number, room: number, stride: number): number {
+  return Math.min(Math.max(1, Math.floor(room / stride)), Math.ceil(Math.sqrt(count)));
+}
+
+/** This function gives the grid layout in plain TypeScript. Each item goes to its row and its column by its index. */
+export function gridReference(items: readonly GridItem[], bounds: Bounds, { columns = 0, gap = 0 }: GridConfig = {}): readonly Rect[] {
+  const cell = largestSize(items);
+  const strideX = cell.width + gap;
+  const strideY = cell.height + gap;
+  const perRow = columns >= 1 ? columns : automaticColumns(items.length, bounds.width + gap, strideX);
+  return items.map(({ width = cell.width, height = cell.height }, index) => ({
+    left: (index % perRow) * strideX,
+    top: Math.floor(index / perRow) * strideY,
+    width,
+    height,
   }));
 }
 
@@ -91,7 +87,7 @@ export const gridRoot = (items: readonly GridItem[]): GridRoot => vex(NumDomain,
  * `vec2` makes a vector from two numbers, and the ops `x` and `y` give its components.
  */
 export function gridProgram(root: GridRoot, bounds: Bounds, config: GridConfig = {}): GridChain {
-  const gap = config.gap ?? 12;
+  const gap = config.gap ?? 0;
   // The cell: the component-wise maximum of the sizes of the items. A missing size counts as 0, and the cell is at
   // least 1 by 1. The op max of Vec2 lifts the number 1 to the vector (1, 1).
   const cell = root

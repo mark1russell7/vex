@@ -81,13 +81,13 @@ const ENGINE_PARENTS = [-1, 0, 0, 1, 1, -1];
 describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
   it("COMPILE.MODULE.SHEET: the engine of ireko as a module gives the results of SheetRun, and a column without its kind gives a reason", async () => {
     const source = sourceOf(ENGINE, { ...TREE, kinds: { size: "number", x: "number" } });
-    await expect(source).toMatchFileSnapshot("__golden__/module-sheet.js");
+    await expect(sourceOf(ENGINE, { ...TREE, kinds: { size: "number", x: "number" }, faults: "value" })).toMatchFileSnapshot("__golden__/module-sheet.js");
     // Each read of the engine reads a finished cell, so its fill has no search (COMPILE.MODULE.SHEET.DIRECT). A read of
     // the next sibling can read a cell that is not finished, so that sheet keeps the search.
     expect(isDirect(source)).toBe(true);
     const next = new Map([...ENGINE, ["next", app("ifError", cell("next", [offset(1)]), ref("v"))]]);
     const search = sourceOf(next, { ...TREE, kinds: { size: "number", x: "number", next: "number" } });
-    await expect(search).toMatchFileSnapshot("__golden__/module-sheet-search.js");
+    await expect(sourceOf(next, { ...TREE, kinds: { size: "number", x: "number", next: "number" }, faults: "value" })).toMatchFileSnapshot("__golden__/module-sheet-search.js");
     expect(isDirect(search)).toBe(false);
     expectSame(make(search), next, ENGINE_RECORDS, ENGINE_PARENTS);
     const m = make(source);

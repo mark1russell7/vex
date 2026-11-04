@@ -3,6 +3,7 @@ import { emitModule, emitSheetModule } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BandDomain, type Band } from "./ireko-band.ts";
+import { irekoRun } from "./ireko-modules.ts";
 import { bandLimit, childRecord, NODE_FIXED_KIDS, NODE_INFINITE, shapeChild as child, shapeExtent as extent, shapeLeaf as leaf, SHAPES_INFINITE, shapeTree as tree, type ShapeChild as Child } from "./inputs.ts";
 import { boxShape, joinShapes, MAX_BANDS, mergeBands, moveShape, NODE_SCHEMA, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapeSpace, shapesTree, type Shape, type ShapeRecord } from "./ireko-shapes.ts";
 
@@ -196,14 +197,9 @@ const nodeShape = (value: unknown): Shape => {
 };
 
 describe("the ireko shapes pilot for one node", () => {
-  const m = emitModule(NODE_SHAPE, { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" });
-  if (!m.ok) throw new Error(m.reason);
-  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
-  const run = new Function(`${m.source.replaceAll(/^export /gm, "")}
-return nodeShape;`)() as (records: unknown, vars: unknown) => readonly unknown[];
+  const run = irekoRun("shape") as (records: unknown, vars: unknown) => readonly unknown[];
 
   it("COMPILE.MODULE.LIST.INPUT: the module of one node reads the shapes of the children as input, and gives the join of ireko with the same bits", () => {
-    expect(m.source).not.toContain("import");
     fc.assert(
       fc.property(fc.array(child, { minLength: 1, maxLength: 6 }), extent, extent, bandLimit(4), (kids, w, h, limit) => {
         const values = run(kids.map(childRecord), { w, h, limit });

@@ -96,7 +96,7 @@ describe("COMPILE.MODULE.SHEET.COMPUTED: a computed move in a module of a sheet"
     expect(hasSearch(same(crossed, { a: "number", b: "number" }))).toBe(true);
   });
 
-  it("V-073 COMPILE.MODULE.SHEET.COMPUTED NAV.COMPUTED: a failing move does not stop the read of a cell in a later expression", () => {
+  it("V-074 COMPILE.MODULE.SHEET.COMPUTED NAV.COMPUTED: a failing move does not stop the read of a cell in a later expression", () => {
     // SheetRun evaluates the expressions before the first move, so it finds the cycle before the move fails.
     const self = [index(cell("a"))];
     for (const moves of [[offset(-1), ...self], [offset(9), index(ref("at")), ...self], [index(lit(99)), ...self], [key(lit("x")), ...self]]) {

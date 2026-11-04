@@ -10,7 +10,7 @@ const bounds = fc.record({ width: fc.integer({ min: 0, max: 2000 }), height: fc.
 const config = fc.record({ columns: fc.integer({ min: -1, max: 6 }), gap: fc.integer({ min: 0, max: 40 }) }, { requiredKeys: [] });
 
 describe("the grid pilot", () => {
-  it("the Graph unit test: four items of 100 by 100 in bounds of 400 by 400, with a gap of 10", () => {
+  it("four items of 100 by 100 in bounds of 400 by 400, with a gap of 10", () => {
     const items = [{ width: 100, height: 100 }, { width: 100, height: 100 }, { width: 100, height: 100 }, { width: 100, height: 100 }];
     const expected = [
       { left: 0, top: 0, width: 100, height: 100 },
@@ -42,7 +42,7 @@ describe("the grid pilot", () => {
 
   it("an item without a size gets the cell size, and the trace shows the reads of the cell", () => {
     const items: readonly GridItem[] = [{ width: 50, height: 20 }, {}];
-    expect(gridVex(items, { width: 500, height: 100 })[1]).toEqual({ left: 62, top: 0, width: 50, height: 20 });
+    expect(gridVex(items, { width: 500, height: 100 })[1]).toEqual({ left: 50, top: 0, width: 50, height: 20 });
     const root = gridRoot(items);
     const trace = gridProgram(root, { width: 500, height: 100 }).explain("1");
     expect(trace.events.some((e) => e.tag === "ext" && e.result.ok && e.result.value === 1)).toBe(true);

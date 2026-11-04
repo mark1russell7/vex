@@ -35,9 +35,9 @@ const Boom = defineDomain({
 const OPTIONS: GenerateOptions = { domains: [Boom, NumDomain, TextDomain], extensions };
 
 const S = space.array([
-  { n: 3, id: "1", t: "a" },
-  { n: 1, id: "2", t: "b" },
-  { n: 2, id: "0", t: "a" },
+  { n: 3, id: "1", t: "a", fr: [1, 2] },
+  { n: 1, id: "2", t: "b", fr: [] },
+  { n: 2, id: "0", t: "a", fr: [2, null] },
 ]);
 const ns = each(axes.all, ref("n"));
 const ts = each(axes.all, ref("t"));
@@ -54,6 +54,10 @@ const VARS = {
   flat: vexList([good("0", vexList([good("a", 1)])), hurt("1")]),
   array: [4, 5],
   holes: [4, undefined],
+  none: [],
+  frozen: Object.freeze([2, 1, 2]),
+  texts: ["0", "z", "0"],
+  nested: [[1, 2], [3, null], []],
 };
 const hurtItems = lit(VARS.hurt);
 const take1 = app("take", ns, lit(1));
@@ -379,6 +383,8 @@ function rec2(a: Expr, b: Expr): Expr {
   return { tag: "rec", fields: { a, b } };
 }
 
+// The list ops in the body of a list op: tier 1 gives `errors` over a hole.
+const BODY_OPS = fc.constantFrom("count", "keys", "errors", "first", "values", "sum", "sortBy");
 const COUNTS = fc.constantFrom<Expr>(lit(0), lit(1), lit(2), lit(9), lit(-1), lit("x"), ref("n"));
 const KEYS = fc.constantFrom<Expr>(lit("0"), lit("1"), lit("z"), lit(1), ref("id"));
 
@@ -386,7 +392,7 @@ const KEYS = fc.constantFrom<Expr>(lit("0"), lit("1"), lit("z"), lit(1), ref("id
 const arbList: fc.Arbitrary<Expr> = fc.letrec<{ l: Expr }>((tie) => ({
   l: fc.oneof(
     { maxDepth: 3, depthSize: "small", withCrossShrink: true },
-    fc.constantFrom<Expr>(ns, ts, empty, outside, v("array"), v("holes"), v("hurt"), v("flat"), v("big"), each(axes.others, ref("n")), each(axes.all, app("nth", ns, ref("n"))), each(axes.where(axes.all, app("gt", ref("n"), lit(1))), ref("n"))),
+    fc.constantFrom<Expr>(ns, ts, empty, outside, v("array"), v("holes"), v("none"), v("frozen"), v("texts"), v("nested"), ref("fr"), lit([1]), v("hurt"), v("flat"), v("big"), each(axes.others, ref("n")), each(axes.all, app("nth", ns, ref("n"))), each(axes.where(axes.all, app("gt", ref("n"), lit(1))), ref("n"))),
     fc.tuple(fc.constantFrom("take", "drop"), tie("l"), COUNTS).map(([op, a, n]): Expr => app(op, a, n)),
     fc.tuple(fc.constantFrom("append", "without"), tie("l"), tie("l")).map(([op, a, b]): Expr => app(op, a, b)),
     fc.tuple(fc.constantFrom("sortBy", "distinct", "flat"), tie("l")).map(([op, a]): Expr => app(op, a)),
@@ -416,6 +422,12 @@ const arbValue: fc.Arbitrary<Expr> = fc.oneof(
   fc.tuple(arbList, ITEMS).map(([a, x]): Expr => app("first", named(axes.reverse(axes.list(a)), x))),
   fc.tuple(arbList, ITEMS).map(([a, x]): Expr => app("count", named(axes.where(axes.list(a), app("gt", ref("n"), lit(1))), x))),
   fc.tuple(arbList, ITEMS).map(([a, x]): Expr => fold(axes.list(a), { s: lit(0) }, { s: app("add", v("s"), app("ifError", x, lit(0))) }, v("s"), undefined, AS)),
+  // COMPILE.LIST.ARRAY: a list op in the body of a list op. An exception of the runtime must not be an error item (V-064).
+  fc.tuple(fc.constantFrom("count", "sum", "values"), BODY_OPS, arbList).map(([outer, op, a]): Expr => app(outer, each(axes.all, app(op, a)))),
+  fc.tuple(BODY_OPS, arbList).map(([op, a]): Expr => app("sum", each(axes.all, app(op, a, lit({ strict: true }))))),
+  fc.tuple(BODY_OPS, arbList).map(([op, a]): Expr => app("ifError", app(op, a), lit(-1))),
+  fc.tuple(BODY_OPS, arbList).map(([op, a]): Expr => let_({ x: app(op, a) }, lit(1))),
+  fc.tuple(BODY_OPS, arbList).map(([op, a]): Expr => fold(axes.all, { s: lit(0) }, { s: app("add", v("s"), app("ifError", app("count", app(op, a)), lit(0))) }, v("s"))),
 );
 
 function agree(e: Expr, s: Space, k: string, tally: { values: number; fast: number }): void {

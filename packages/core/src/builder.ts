@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec, PrimitiveKind } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type DataLimit, type Expr, type FixedMove, type ItemNames, type Move } from "./ir.ts";
+import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fix as fixExpr, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, last as lastExpr, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type DataLimit, type Expr, type FixedMove, type FixJoin, type ItemNames, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { ok, toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -31,6 +31,12 @@ const argToken = <T>(expr: Expr): Arg<T> => ({ kind: "vex.arg", expr });
 
 
 // ---------------------------------------------------------------- type helpers
+
+/**
+ * The value of a column with the join `J`: a boolean for `or` and `and`, and a number for `max` and `min` (FIX.KIND). A
+ * union of joins has no one kind, so it gives `never`.
+ */
+export type FixValue<J extends FixJoin> = [J] extends ["or" | "and"] ? boolean : [J] extends ["max" | "min"] ? number : never;
 
 /** The keys of any member of a union of record types. */
 type AllKeys<O> = O extends unknown ? keyof O : never;
@@ -229,6 +235,17 @@ export interface ChainBase<Ctx extends ChainContext, T> {
     result: (vars: LoopVars<Ctx, I>) => ArgInput<R, Ctx, false>,
     opts?: { readonly until?: (vars: LoopVars<Ctx, I>) => ArgInput<boolean, Ctx, false> },
   ): ChainOf<Ctx, R>;
+  /**
+   * This method makes a fixed-point column (BUILD.FIX). `init` gives each row its value of round 0. `step` gets a chain
+   * of the last round at the focus, and it gives the next value of the row. `join` keeps each row on one way (FIX.JOIN).
+   * The value of the chain is the row of the focus, and the rounds end when no row changes (FIX.ROUNDS).
+   */
+  fix<J extends FixJoin>(
+    name: string,
+    join: J,
+    init: ArgInput<FixValue<J>, Ctx, false>,
+    step: (last: ChainOf<Ctx, FixValue<J>>) => NoInfer<ArgInput<FixValue<J>, Ctx, false>>,
+  ): ChainOf<Ctx, FixValue<J>>;
   /** This method binds names for the body. The body gets a variable token for each name. */
   with<const B extends Readonly<Record<string, unknown>>, U>(
     binds: B,
@@ -666,6 +683,22 @@ function inItemLoop<T>(build: () => T): T {
 }
 
 /**
+ * The number of the open steps of `fix`. The name of a column ends with this number. Thus an inner `fix` does not hide
+ * the column around it, also when the chain of the inner `fix` starts at the root (BUILD.FIX).
+ */
+let fixDepth = 0;
+
+/** This function gives the value of `build`, with the next number for the columns inside it. */
+function inFixStep<T>(build: () => T): T {
+  fixDepth += 1;
+  try {
+    return build();
+  } finally {
+    fixDepth -= 1;
+  }
+}
+
+/**
  * This function tells if the expression reads the name, in one of its parts. It uses a stack, not recursion. An `each`
  * or a `fold` can have the name in its item names (`as`). Then it binds the name again for its body or its step, and
  * those parts do not count (V-065). A chain made at the same depth of the loops has the same names, so a fold can hold such a chain in its step.
@@ -849,6 +882,15 @@ class ChainImpl {
     // The list of a limit reads the names outside the iteration, so the chain of the limit comes first (ITERATE.LIMIT.DATA).
     const bound = isChainLike(limit) ? dataLimit({ t: "list", list: toExpr(limit, this.#s.addr) }) : limit;
     return chainOf({ ...this.#s, expr: iterateExpr(bound, first, next, toExpr(r, this.#s.addr), until) }, r);
+  }
+
+  fix(name: string, join: FixJoin, init: unknown, step: (last: ChainImpl) => unknown): ChainImpl {
+    const { addr, depth } = this.#s;
+    const column = `${name}$${String(fixDepth)}`;
+    // The read has no address, and an axis moves the focus of the read (FIX.LAST).
+    const read = new ChainImpl({ ...this.#s, expr: lastExpr(column), addr: [], depth: depth + 1 });
+    const next = inFixStep(() => toExpr(step(read), addr));
+    return new ChainImpl({ ...this.#s, expr: fixExpr(column, join, toExpr(init, addr), next) });
   }
 
   #axis(a: Axis, body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {

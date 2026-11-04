@@ -13,6 +13,7 @@ import { INVOICE_FORMULAS } from "./invoice.ts";
 import { ESCAPE_PROGRAM } from "./ireko-audit.ts";
 import { GRID_PROGRAM } from "./ireko-grid.ts";
 import { LAYERS_PROGRAM } from "./ireko-layers.ts";
+import { TREE_PROGRAM } from "./ireko-tree.ts";
 import { MEASURE_COLUMNS } from "./ireko-measure.ts";
 import { PLACE_COLUMNS } from "./ireko-place.ts";
 import { RADIAL_PROGRAM } from "./ireko-radial.ts";
@@ -45,6 +46,7 @@ export const PILOTS: readonly [string, Expr][] = [
   ["grid", GRID_PROGRAM],
   ["radial", RADIAL_PROGRAM],
   ["layers", LAYERS_PROGRAM],
+  ["tree", TREE_PROGRAM],
   ["nodeShape", NODE_SHAPE],
   ["schema", SCHEMA_PROGRAM],
   ["force", forceProgram(PILOT_FORCE)],

@@ -3,6 +3,7 @@
  * operators of a spreadsheet. A minus sign before a value comes first. Then come `^`, then `*` and `/`, then `+`
  * and `-`, then `&`, and last the comparisons. Each node of the tree has the span of its text, for error messages.
  */
+import type { FixJoin } from "@mark1russell7/vex";
 
 /** A part of the source text, from `start` to `end` (not included). */
 export interface Span {
@@ -204,7 +205,14 @@ export type Ast =
       readonly names: readonly LoopName[];
       readonly result: Ast;
       readonly span: Span;
-    };
+    }
+  /** `FIX(name, join, first, step)`: a column with one value for each row, after the rounds of its step (FORMULA.FIX). */
+  | { readonly k: "fix"; readonly fnSpan: Span; readonly name: string; readonly join: FixJoin; readonly first: Ast; readonly step: Ast; readonly span: Span }
+  /** `LAST(name)`: the value of the row in the last round of the `FIX` with the name (FORMULA.FIX). */
+  | { readonly k: "last"; readonly fnSpan: Span; readonly name: string; readonly span: Span };
+
+/** The words of the joins of `FIX`, by their capital letters. */
+const FIX_JOINS: ReadonlyMap<string, FixJoin> = new Map([["OR", "or"], ["AND", "and"], ["MAX", "max"], ["MIN", "min"]]);
 
 const PRECEDENCE: Readonly<Record<BinaryOp, number>> = { "=": 1, "<>": 1, "<": 1, "<=": 1, ">": 1, ">=": 1, "&": 2, "+": 3, "-": 3, "*": 4, "/": 4, "^": 5 };
 
@@ -356,6 +364,12 @@ export function parseFormula(src: string): Ast {
     return { nav, axis };
   };
 
+  /** This function gives the word of a name of the function `fn`. Another syntax tree is an error. */
+  const wordOf = (name: Ast, fn: string): string => {
+    if (name.k !== "name" || name.nav.length > 0 || !/^[A-Za-z_]\w*$/.test(name.name)) throw new FormulaSyntaxError(`a name of ${fn} must be a word, for example x`, name.span);
+    return name.name;
+  };
+
   /**
    * This function reads the names of a loop and its result: `name, first, step` for each name, and then the result.
    * `until` permits a last argument `UNTIL test`.
@@ -380,9 +394,9 @@ export function parseFormula(src: string): Ast {
     const names: LoopName[] = [];
     for (let k = 0; k + 1 < args.length; k += 3) {
       const [name, first, step] = [args[k], args[k + 1], args[k + 2]] as [Ast, Ast, Ast];
-      if (name.k !== "name" || name.nav.length > 0 || !/^[A-Za-z_]\w*$/.test(name.name)) throw new FormulaSyntaxError(`a name of ${fn} must be a word, for example x`, name.span);
-      if (names.some((n) => n.name === name.name)) throw new FormulaSyntaxError(`the name "${name.name}" is already a name of this ${fn}`, name.span);
-      names.push({ name: name.name, span: name.span, first, step });
+      const word = wordOf(name, fn);
+      if (names.some((n) => n.name === word)) throw new FormulaSyntaxError(`the name "${word}" is already a name of this ${fn}`, name.span);
+      names.push({ name: word, span: name.span, first, step });
     }
     return { names, result, ...(test === undefined ? {} : { until: test }), close };
   };
@@ -405,6 +419,26 @@ export function parseFormula(src: string): Ast {
     }
     const { names, result, close } = parseLoop("FOLD", false);
     return { k: "fold", fnSpan: fnTok.span, nav, axis, ...(where === undefined ? {} : { where }), names, result, span: { start: fnTok.span.start, end: close.span.end } };
+  };
+
+  const parseFix = (fnTok: Token): Ast => {
+    const name = wordOf(parseExpr(0), "FIX");
+    expect(",", `"," after the name of FIX`);
+    const joinTok = next();
+    const join = joinTok.t === "id" ? FIX_JOINS.get(joinTok.v.toUpperCase()) : undefined;
+    if (join === undefined) throw new FormulaSyntaxError("the join of FIX must be OR, AND, MAX or MIN", joinTok.span);
+    expect(",", `"," after the join of FIX`);
+    const first = parseExpr(0);
+    expect(",", `"," after the first value of FIX`);
+    const step = parseExpr(0);
+    const close = expect(")", `")" after the step of FIX`);
+    return { k: "fix", fnSpan: fnTok.span, name, join, first, step, span: { start: fnTok.span.start, end: close.span.end } };
+  };
+
+  const parseLast = (fnTok: Token): Ast => {
+    const name = wordOf(parseExpr(0), "LAST");
+    const close = expect(")", `")" after the name of LAST`);
+    return { k: "last", fnSpan: fnTok.span, name, span: { start: fnTok.span.start, end: close.span.end } };
   };
 
   const parseAggregate = (fn: AggregateName, fnTok: Token): Ast => {
@@ -443,6 +477,8 @@ export function parseFormula(src: string): Ast {
     const upper = fnTok.v.toUpperCase();
     if (upper === "ITERATE") return parseIterate(fnTok);
     if (upper === "FOLD") return parseFold(fnTok);
+    if (upper === "FIX") return parseFix(fnTok);
+    if (upper === "LAST") return parseLast(fnTok);
     // The axis "all" and the function ALL have one name. An axis name before "(" is a function, not an axis. The
     // axis rows(from, to) is the exception: it has its offsets in parentheses.
     const axisAt = i + navLength(i);

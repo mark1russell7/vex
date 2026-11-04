@@ -31,6 +31,8 @@ const BUILT_INS: readonly FunctionInfo[] = [
   { name: "ALL", signature: "ALL(axis.column) or ALL(axis [WHERE test], test)", summary: "TRUE when the test is TRUE at each row of the axis." },
   { name: "ITERATE", signature: "ITERATE(limit, name, first, step, ..., result, [UNTIL test])", summary: "The result after up to `limit` steps. Each step gives each name its next value. A true test stops the steps." },
   { name: "FOLD", signature: "FOLD(axis [WHERE test], name, first, step, ..., result)", summary: "The result after one step at each row of the axis, in order. Each step gives each name its next value." },
+  { name: "FIX", signature: "FIX(name, join, first, step)", summary: "A column with a value for each row. The rounds repeat the step until no row changes. The join is OR, AND, MAX or MIN, and it moves each row one way." },
+  { name: "LAST", signature: "LAST(name)", summary: "The value of the row in the last round of the FIX with the name. A step of that FIX can read it." },
   { name: "RANK", signature: "RANK(value)", summary: "1 plus the number of other rows with a larger value. The row with the largest value has the rank 1." },
   { name: "VEC", signature: "VEC(x, y)", summary: "The vector with the components x and y." },
   { name: "X", signature: "X(vector)", summary: "The x component of the vector." },

@@ -174,7 +174,7 @@ describe("COMPILE.MODULE.NAME: the name of the run hides nothing", () => {
   it("V-082 COMPILE.MODULE.NAME: no declaration at the top of a golden file is a language global", () => {
     const golden = new URL("./__golden__/", import.meta.url);
     const files = readdirSync(golden).filter((f) => /^module-.*\.js$/.test(f));
-    const declared = files.flatMap((f) => [...readFileSync(new URL(f, golden), "utf8").matchAll(/^(?:export )?(?:function|const|class) (\S+?)\b/gm)].map((x) => x[1]));
+    const declared = files.flatMap((f) => [...readFileSync(new URL(f, golden), "utf8").matchAll(/^(?:export )?(?:function|const|class) (\S+?)\b/gm)].flatMap((x) => x.slice(1)));
     expect(declared.length).toBeGreaterThan(100);
     expect(declared.filter((x) => LANGUAGE_GLOBALS.has(x))).toStrictEqual([]);
   });

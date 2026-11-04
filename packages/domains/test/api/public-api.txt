@@ -1,0 +1,468 @@
+# The public API of @mark1russell7/vex-domains
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 49 names
+
+Angle: build/index.d.ts#Angle
+AngleDomain: build/index.d.ts#AngleDomain
+AngleOps: build/index.d.ts#AngleOps
+BoolDomain: build/index.d.ts#BoolDomain
+BoolOps: build/index.d.ts#BoolOps
+Color: build/index.d.ts#Color
+ColorDomain: build/index.d.ts#ColorDomain
+ColorOps: build/index.d.ts#ColorOps
+DateDomain: build/index.d.ts#DateDomain
+DateOps: build/index.d.ts#DateOps
+Fn: build/index.d.ts#Fn
+FnDomain: build/index.d.ts#FnDomain
+FnOps: build/index.d.ts#FnOps
+Insets: build/index.d.ts#Insets
+InsetsDomain: build/index.d.ts#InsetsDomain
+InsetsOps: build/index.d.ts#InsetsOps
+JsonDomain: build/index.d.ts#JsonDomain
+JsonFieldSchema: build/index.d.ts#JsonFieldSchema
+JsonItemKind: build/index.d.ts#JsonItemKind
+JsonKind: build/index.d.ts#JsonKind
+JsonLeaf: build/index.d.ts#JsonLeaf
+JsonOps: build/index.d.ts#JsonOps
+JsonValue: build/index.d.ts#JsonValue
+LiftedNDVectorDomain: build/index.d.ts#LiftedNDVectorDomain
+LiftedNDVectorOps: build/index.d.ts#LiftedNDVectorOps
+LocalDate: build/index.d.ts#LocalDate
+MAX_DAYS: build/index.d.ts#MAX_DAYS
+Maybe: build/index.d.ts#Maybe
+MaybeDomain: build/index.d.ts#MaybeDomain
+MaybeOps: build/index.d.ts#MaybeOps
+NDVector: build/index.d.ts#NDVector
+NDVectorDomain: build/index.d.ts#NDVectorDomain
+NDVectorOps: build/index.d.ts#NDVectorOps
+NumDomain: build/index.d.ts#NumDomain
+NumOps: build/index.d.ts#NumOps
+NumRecord: build/index.d.ts#NumRecord
+NumRecordDomain: build/index.d.ts#NumRecordDomain
+NumRecordOps: build/index.d.ts#NumRecordOps
+SCHEMA_DOMAINS: build/index.d.ts#SCHEMA_DOMAINS
+SCHEMA_PROGRAM: build/index.d.ts#SCHEMA_PROGRAM
+TextDomain: build/index.d.ts#TextDomain
+TextOps: build/index.d.ts#TextOps
+Vec2: build/index.d.ts#Vec2
+Vec2Domain: build/index.d.ts#Vec2Domain
+Vec2Ops: build/index.d.ts#Vec2Ops
+XY: build/index.d.ts#XY
+XYDomain: build/index.d.ts#XYDomain
+XYOps: build/index.d.ts#XYOps
+schemaOf: build/index.d.ts#schemaOf
+
+## Declarations
+
+### build/index.d.ts#Angle
+export declare class Angle {
+  readonly radians: number;
+  constructor(radians: number);
+  static fromDegrees(deg: number): Angle;
+  static readonly zero: Angle;
+  add(o: Angle): Angle;
+  subtract(o: Angle): Angle;
+  scale(k: number): Angle;
+  normalize(): Angle;
+  toVec2(length?: number): Vec2;
+  sin(): number;
+  cos(): number;
+  degrees(): number;
+  toString(): string;
+}
+
+### build/index.d.ts#AngleDomain
+export declare const AngleDomain: Domain<"Angle", Angle, AngleOps>;
+
+### build/index.d.ts#AngleOps
+export type AngleOps = OpTable<Angle, "add" | "subtract" | "scale" | "normalize" | "toVec2" | "sin" | "cos" | "degrees", "add" | "subtract">;
+
+### build/index.d.ts#BoolDomain
+export declare const BoolDomain: Domain<"Bool", boolean, BoolOps>;
+
+### build/index.d.ts#BoolOps
+export type BoolOps = {
+  readonly and: FnOp<boolean, BoolFn2>;
+  readonly or: FnOp<boolean, BoolFn2>;
+  readonly xor: FnOp<boolean, BoolFn2>;
+  readonly not: FnOp<boolean, BoolFn1>;
+  readonly eq: FnOp<boolean, BoolFn2>;
+};
+
+### build/index.d.ts#Color
+export declare class Color {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  readonly a: number;
+  constructor(r: number, g: number, b: number, a?: number);
+  static gray(n: number): Color;
+  static readonly none: Color;
+  add(o: Color): Color;
+  multiply(factor: number): Color;
+  clamp(lo?: number, hi?: number): Color;
+  mix(o: Color, t: number): Color;
+  luminance(): number;
+  relativeLuminance(): number;
+  contrast(o: Color): number;
+  equals(o: Color): boolean;
+  toArray(): readonly [number, number, number, number];
+  toString(): string;
+}
+
+### build/index.d.ts#ColorDomain
+export declare const ColorDomain: Domain<"Color", Color, ColorOps>;
+
+### build/index.d.ts#ColorOps
+export type ColorOps = OpTable<Color, "add" | "multiply" | "clamp" | "mix" | "luminance" | "relativeLuminance" | "contrast" | "equals">;
+
+### build/index.d.ts#DateDomain
+export declare const DateDomain: Domain<"Date", LocalDate, DateOps>;
+
+### build/index.d.ts#DateOps
+export type DateOps = OpTable<LocalDate, "add" | "subtract" | "addMonths" | "endOfMonth" | "year" | "month" | "day" | "weekday" | "gt" | "gte" | "lt" | "lte" | "eq">;
+
+### build/index.d.ts#Fn
+export declare class Fn {
+  readonly fn: (...args: never[]) => unknown;
+  constructor(fn: (...args: never[]) => unknown);
+  invoke(...args: readonly unknown[]): unknown;
+}
+
+### build/index.d.ts#FnDomain
+export declare const FnDomain: Domain<"Fn", Fn, FnOps>;
+
+### build/index.d.ts#FnOps
+export type FnOps = OpTable<Fn, "invoke">;
+
+### build/index.d.ts#Insets
+export interface Insets {
+  readonly startX: number;
+  readonly startY: number;
+  readonly endX: number;
+  readonly endY: number;
+}
+
+### build/index.d.ts#InsetsDomain
+export declare const InsetsDomain: Domain<"Insets", Insets, InsetsOps>;
+
+### build/index.d.ts#InsetsOps
+export type InsetsOps = {
+  readonly startX: FnOp<Insets, InsetsNum1>;
+  readonly startY: FnOp<Insets, InsetsNum1>;
+  readonly endX: FnOp<Insets, InsetsNum1>;
+  readonly endY: FnOp<Insets, InsetsNum1>;
+  readonly start: FnOp<Insets, InsetsXY1>;
+  readonly end: FnOp<Insets, InsetsXY1>;
+  readonly startVec2: FnOp<Insets, InsetsVec1>;
+  readonly endVec2: FnOp<Insets, InsetsVec1>;
+  readonly add: FnOp<Insets, (a: Insets, b: Insets) => Insets> & {
+    readonly liftScalar: true;
+  };
+  readonly scale: FnOp<Insets, (a: Insets, k: number) => Insets>;
+};
+
+### build/index.d.ts#JsonDomain
+export declare const JsonDomain: Domain<"Json", JsonValue, JsonOps>;
+
+### build/index.d.ts#JsonFieldSchema
+export interface JsonFieldSchema {
+  readonly path: string;
+  readonly kinds: readonly string[];
+  readonly count: number;
+}
+
+### build/index.d.ts#JsonItemKind
+export type JsonItemKind = JsonKind | "null";
+
+### build/index.d.ts#JsonKind
+export type JsonKind = "boolean" | "number" | "string" | "array" | "object";
+
+### build/index.d.ts#JsonLeaf
+export interface JsonLeaf {
+  readonly path: string;
+  readonly kind: JsonItemKind;
+  readonly value?: unknown;
+}
+
+### build/index.d.ts#JsonOps
+export type JsonOps = {
+  readonly kind: FnOp<JsonValue, (v: JsonValue) => JsonKind>;
+  readonly kinds: FnOp<JsonValue, (c: JsonValue) => readonly JsonItemKind[]>;
+  readonly fields: FnOp<JsonValue, (o: JsonValue) => readonly string[]>;
+  readonly field: FnOp<JsonValue, (o: JsonValue, k: unknown) => unknown>;
+  readonly leaves: FnOp<JsonValue, (o: JsonValue, depth: number) => readonly JsonLeaf[]>;
+};
+
+### build/index.d.ts#JsonValue
+export type JsonValue = string | number | boolean | readonly unknown[] | {
+  readonly [key: string]: unknown;
+};
+
+### build/index.d.ts#LiftedNDVectorDomain
+export declare const LiftedNDVectorDomain: Domain<"NDVector(lifted)", NDVector, LiftedNDVectorOps>;
+
+### build/index.d.ts#LiftedNDVectorOps
+export type LiftedNDVectorOps = OpTable<NDVector, NDOpNames, "add" | "subtract" | "multiply" | "dot">;
+
+### build/index.d.ts#LocalDate
+export declare class LocalDate {
+  readonly days: number;
+  constructor(days: number);
+  static of(year: number, month: number, day: number): LocalDate;
+  static parse(text: string): LocalDate | undefined;
+  year(): number;
+  month(): number;
+  day(): number;
+  weekday(): number;
+  add(n: number): LocalDate;
+  subtract(x: LocalDate | number): LocalDate | number;
+  addMonths(n: number): LocalDate;
+  endOfMonth(n: number): LocalDate;
+  gt(o: LocalDate): boolean;
+  gte(o: LocalDate): boolean;
+  lt(o: LocalDate): boolean;
+  lte(o: LocalDate): boolean;
+  eq(o: LocalDate): boolean;
+  toString(): string;
+}
+
+### build/index.d.ts#MAX_DAYS
+export declare const MAX_DAYS = 1e8;
+
+### build/index.d.ts#Maybe
+export declare class Maybe<T> {
+  private constructor();
+  static top<T>(value: T): Maybe<T>;
+  static bottom<T = never>(): Maybe<T>;
+  isTop(): boolean;
+  isBottom(): boolean;
+  map<U>(f: (value: T) => U): Maybe<U>;
+  chain<U>(f: (value: T) => Maybe<U>): Maybe<U>;
+  valueOr<U>(fallback: U): T | U;
+}
+
+### build/index.d.ts#MaybeDomain
+export declare const MaybeDomain: Domain<"Maybe", Maybe<unknown>, MaybeOps>;
+
+### build/index.d.ts#MaybeOps
+export type MaybeOps = OpTable<Maybe<unknown>, "isTop" | "isBottom" | "map" | "chain" | "valueOr">;
+
+### build/index.d.ts#NDVector
+export declare class NDVector<K extends string = string> {
+  readonly c: Readonly<Record<K, number>>;
+  constructor(c: Readonly<Record<K, number>>);
+  static of<K extends string>(entries: readonly (readonly [K, number])[]): NDVector<K>;
+  static zero<K extends string>(keys?: readonly K[]): NDVector<K>;
+  keys(): readonly K[];
+  get(k: string): number;
+  set<K2 extends string>(k: K2, v: number): NDVector<K | K2>;
+  map(f: (name: K, v: number) => number): NDVector<K>;
+  pick<K2 extends K>(keys: readonly K2[], keepZeros?: boolean): NDVector<K2>;
+  withKeys<K2 extends string>(keys: readonly K2[]): NDVector<K | K2>;
+  add<K2 extends string>(o: NDVector<K2>): NDVector<K | K2>;
+  subtract<K2 extends string>(o: NDVector<K2>): NDVector<K | K2>;
+  multiply<K2 extends string>(o: NDVector<K2>): NDVector<K | K2>;
+  min<K2 extends string>(o: NDVector<K2>): NDVector<K | K2>;
+  max<K2 extends string>(o: NDVector<K2>): NDVector<K | K2>;
+  mergePreferNonZero<K2 extends string>(o: NDVector<K2>): NDVector<K | K2>;
+  scale(k: number): NDVector<K>;
+  clamp(lo: number, hi: number): NDVector<K>;
+  dot(o: NDVector): number;
+  length(): number;
+  norm1(): number;
+  normInf(): number;
+  equals(o: NDVector): boolean;
+  isFinite(): boolean;
+  toJSON(): Readonly<Record<K, number>>;
+  toString(): string;
+}
+
+### build/index.d.ts#NDVectorDomain
+export declare const NDVectorDomain: Domain<"NDVector", NDVector, NDVectorOps>;
+
+### build/index.d.ts#NDVectorOps
+export type NDVectorOps = OpTable<NDVector, NDOpNames>;
+
+### build/index.d.ts#NumDomain
+export declare const NumDomain: Domain<"Num", number, NumOps>;
+
+### build/index.d.ts#NumOps
+export type NumOps = {
+  readonly add: FnOp<number, NumFn2>;
+  readonly subtract: FnOp<number, NumFn2>;
+  readonly multiply: FnOp<number, NumFn2>;
+  readonly divide: FnOp<number, NumFn2>;
+  readonly mod: FnOp<number, NumFn2>;
+  readonly pow: FnOp<number, NumFn2>;
+  readonly min: FnOp<number, NumFn2>;
+  readonly max: FnOp<number, NumFn2>;
+  readonly clamp: FnOp<number, NumFn3>;
+  readonly abs: FnOp<number, NumFn1>;
+  readonly negate: FnOp<number, NumFn1>;
+  readonly sign: FnOp<number, NumFn1>;
+  readonly sqrt: FnOp<number, NumFn1>;
+  readonly ln: FnOp<number, NumFn1>;
+  readonly exp: FnOp<number, NumFn1>;
+  readonly log10: FnOp<number, NumFn1>;
+  readonly sin: FnOp<number, NumFn1>;
+  readonly cos: FnOp<number, NumFn1>;
+  readonly asin: FnOp<number, NumFn1>;
+  readonly hypot: FnOp<number, NumFn2>;
+  readonly date: FnOp<number, (year: number, month: number, day: number) => LocalDate>;
+  readonly vec2: FnOp<number, (x: number, y: number) => Vec2>;
+  readonly xy: FnOp<number, (x: number, y: number) => XY>;
+  readonly insets: FnOp<number, (startX: number, startY: number, endX: number, endY: number) => Insets>;
+  readonly floor: FnOp<number, NumFn1>;
+  readonly ceil: FnOp<number, NumFn1>;
+  readonly round: FnOp<number, NumFn1>;
+  readonly gt: FnOp<number, NumTest>;
+  readonly gte: FnOp<number, NumTest>;
+  readonly lt: FnOp<number, NumTest>;
+  readonly lte: FnOp<number, NumTest>;
+  readonly eq: FnOp<number, NumTest>;
+};
+
+### build/index.d.ts#NumRecord
+export type NumRecord = Readonly<Record<string, number>>;
+
+### build/index.d.ts#NumRecordDomain
+export declare const NumRecordDomain: Domain<"NumRecord", NumRecord, NumRecordOps>;
+
+### build/index.d.ts#NumRecordOps
+export type NumRecordOps = {
+  readonly toNDVector: FnOp<NumRecord, (r: NumRecord) => NDVector>;
+};
+
+### build/index.d.ts#SCHEMA_DOMAINS
+export declare const SCHEMA_DOMAINS: readonly AnyDomain[];
+
+### build/index.d.ts#SCHEMA_PROGRAM
+export declare const SCHEMA_PROGRAM: Expr;
+
+### build/index.d.ts#TextDomain
+export declare const TextDomain: Domain<"Text", string, TextOps>;
+
+### build/index.d.ts#TextOps
+export type TextOps = {
+  readonly concat: FnOp<string, (a: string, b: unknown) => string>;
+  readonly length: FnOp<string, (a: string) => number>;
+  readonly codePoints: FnOp<string, (a: string) => VexList<number>>;
+  readonly upper: FnOp<string, TextFn1>;
+  readonly lower: FnOp<string, TextFn1>;
+  readonly trim: FnOp<string, TextFn1>;
+  readonly contains: FnOp<string, (a: string, b: string) => boolean>;
+  readonly eq: FnOp<string, (a: string, b: string) => boolean>;
+};
+
+### build/index.d.ts#Vec2
+export declare class Vec2 {
+  readonly x: number;
+  readonly y: number;
+  constructor(x: number, y: number);
+  static of(x: number, y: number): Vec2;
+  static scalar(n: number): Vec2;
+  static readonly zero: Vec2;
+  static readonly one: Vec2;
+  add(o: Vec2): Vec2;
+  subtract(o: Vec2): Vec2;
+  multiply(o: Vec2): Vec2;
+  divide(o: Vec2): Vec2;
+  min(o: Vec2): Vec2;
+  max(o: Vec2): Vec2;
+  scale(k: number): Vec2;
+  negate(): Vec2;
+  halve(): Vec2;
+  abs(): Vec2;
+  sign(): Vec2;
+  round(): Vec2;
+  floor(): Vec2;
+  ceil(): Vec2;
+  clamp(lo: number, hi: number): Vec2;
+  swap(): Vec2;
+  compose(main: number, cross: number): Vec2;
+  select(a: Vec2, b: Vec2): Vec2;
+  rotate(radians: number): Vec2;
+  normalize(): Vec2;
+  minAxis(): Vec2;
+  lerp(o: Vec2, t: number): Vec2;
+  length(): number;
+  lengthSq(): number;
+  distance(o: Vec2): number;
+  dot(o: Vec2): number;
+  along(dir: Vec2): number;
+  across(dir: Vec2): number;
+  cross(o: Vec2): number;
+  angle(): number;
+  area(): number;
+  sum(): number;
+  minComponent(): number;
+  maxComponent(): number;
+  equals(o: Vec2): boolean;
+  anyNonPositive(): boolean;
+  allPositive(): boolean;
+  anyNegative(): boolean;
+  allNonNegative(): boolean;
+  anyZero(): boolean;
+  allZero(): boolean;
+  anyLessThan(n: number): boolean;
+  allLessThan(n: number): boolean;
+  anyGreaterThan(n: number): boolean;
+  allGreaterThan(n: number): boolean;
+  toJSON(): {
+    readonly x: number;
+    readonly y: number;
+  };
+  toString(): string;
+}
+
+### build/index.d.ts#Vec2Domain
+export declare const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops>;
+
+### build/index.d.ts#Vec2Ops
+export type Vec2Ops = OpTable<Vec2, Vec2OpNames, "add" | "subtract" | "multiply" | "divide" | "min" | "max" | "select"> & {
+  readonly x: FnOp<Vec2, (v: Vec2) => number>;
+  readonly y: FnOp<Vec2, (v: Vec2) => number>;
+};
+
+### build/index.d.ts#XY
+export interface XY {
+  readonly x: number;
+  readonly y: number;
+}
+
+### build/index.d.ts#XYDomain
+export declare const XYDomain: Domain<"XY", XY, XYOps>;
+
+### build/index.d.ts#XYOps
+export type XYOps = {
+  readonly x: FnOp<XY, XYNum1>;
+  readonly y: FnOp<XY, XYNum1>;
+  readonly add: FnOp<XY, XYFn2>;
+  readonly subtract: FnOp<XY, XYFn2>;
+  readonly multiply: FnOp<XY, XYFn2>;
+  readonly divide: FnOp<XY, XYFn2>;
+  readonly min: FnOp<XY, XYFn2>;
+  readonly max: FnOp<XY, XYFn2>;
+  readonly scale: FnOp<XY, (a: XY, k: number) => XY>;
+  readonly negate: FnOp<XY, XYFn1>;
+  readonly abs: FnOp<XY, XYFn1>;
+  readonly sign: FnOp<XY, XYFn1>;
+  readonly minAxis: FnOp<XY, XYFn1>;
+  readonly floor: FnOp<XY, XYFn1>;
+  readonly ceil: FnOp<XY, XYFn1>;
+  readonly round: FnOp<XY, XYFn1>;
+  readonly dot: FnOp<XY, (a: XY, b: XY) => number>;
+  readonly length: FnOp<XY, XYNum1>;
+  readonly distance: FnOp<XY, (a: XY, b: XY) => number>;
+  readonly area: FnOp<XY, XYNum1>;
+  readonly sum: FnOp<XY, XYNum1>;
+  readonly equals: FnOp<XY, (a: XY, b: XY) => boolean>;
+};
+
+### build/index.d.ts#schemaOf
+export declare function schemaOf(docs: readonly unknown[]): readonly JsonFieldSchema[];

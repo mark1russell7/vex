@@ -1,0 +1,1597 @@
+# The public API of @mark1russell7/vex
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 253 names
+
+Addr: build/index.d.ts#Addr
+AllowsOther: build/index.d.ts#AllowsOther
+AnyDomain: build/index.d.ts#AnyDomain
+Arg: build/index.d.ts#Arg
+ArgInput: build/index.d.ts#ArgInput
+ArgValue: build/index.d.ts#ArgValue
+ArrayKey: build/index.d.ts#ArrayKey
+Axis: build/index.d.ts#Axis
+AxisBody: build/index.d.ts#AxisBody
+AxisOpts: build/index.d.ts#AxisOpts
+CELL_KIND: build/index.d.ts#CELL_KIND
+CONSTRUCT_STEPS: build/index.d.ts#CONSTRUCT_STEPS
+CallArgs: build/index.d.ts#CallArgs
+CallReturn: build/index.d.ts#CallReturn
+CallableFns: build/index.d.ts#CallableFns
+CellFormulas: build/index.d.ts#CellFormulas
+CellRef: build/index.d.ts#CellRef
+ChainBase: build/index.d.ts#ChainBase
+ChainContext: build/index.d.ts#ChainContext
+ChainOf: build/index.d.ts#ChainOf
+CompileFn: build/index.d.ts#CompileFn
+CompileOptions: build/index.d.ts#CompileOptions
+DEFAULT_MAX_STEP: build/index.d.ts#DEFAULT_MAX_STEP
+DataLimit: build/index.d.ts#DataLimit
+DeclaredType: build/index.d.ts#DeclaredType
+Dependency: build/index.d.ts#Dependency
+Direction: build/index.d.ts#Direction
+Domain: build/index.d.ts#Domain
+DomainFor: build/index.d.ts#DomainFor
+DomainMembers: build/index.d.ts#DomainMembers
+DomainSpec: build/index.d.ts#DomainSpec
+DomainValue: build/index.d.ts#DomainValue
+type Envelope: @mark1russell7/coeval#Envelope (external)
+ErrorCode: build/index.d.ts#ErrorCode
+ErrorDetails: build/index.d.ts#ErrorDetails
+ErrorExtra: build/index.d.ts#ErrorExtra
+ErrorKind: build/index.d.ts#ErrorKind
+ErrorText: build/index.d.ts#ErrorText
+EvalOptions: build/index.d.ts#EvalOptions
+Expr: build/index.d.ts#Expr
+ExprOf: build/index.d.ts#ExprOf
+ExprTag: build/index.d.ts#ExprTag
+ExtContext: build/index.d.ts#ExtContext
+ExtHandler: build/index.d.ts#ExtHandler
+FixJoin: build/index.d.ts#FixJoin
+FixValue: build/index.d.ts#FixValue
+FixedMove: build/index.d.ts#FixedMove
+FnCalls: build/index.d.ts#FnCalls
+FnDef: build/index.d.ts#FnDef
+FnOp: build/index.d.ts#FnOp
+FnParamKind: build/index.d.ts#FnParamKind
+FnTable: build/index.d.ts#FnTable
+FreeFn: build/index.d.ts#FreeFn
+GridKey: build/index.d.ts#GridKey
+ItemNames: build/index.d.ts#ItemNames
+type Json: @mark1russell7/coeval#Json (external)
+KernelPlan: build/index.d.ts#KernelPlan
+KernelRunOptions: build/index.d.ts#KernelRunOptions
+KeysOfType: build/index.d.ts#KeysOfType
+KindValue: build/index.d.ts#KindValue
+LIST_OPS: build/index.d.ts#LIST_OPS
+LIST_SIZES: build/index.d.ts#LIST_SIZES
+Law: build/index.d.ts#Law
+LiftedOp: build/index.d.ts#LiftedOp
+ListBody: build/index.d.ts#ListBody
+ListChain: build/index.d.ts#ListChain
+ListItem: build/index.d.ts#ListItem
+ListOp: build/index.d.ts#ListOp
+ListOps: build/index.d.ts#ListOps
+ListOptions: build/index.d.ts#ListOptions
+ListOpts: build/index.d.ts#ListOpts
+LoopNext: build/index.d.ts#LoopNext
+LoopStep: build/index.d.ts#LoopStep
+LoopVar: build/index.d.ts#LoopVar
+LoopVars: build/index.d.ts#LoopVars
+MAX_DOCUMENT_DEPTH: build/index.d.ts#MAX_DOCUMENT_DEPTH
+MAX_ITERATIONS: build/index.d.ts#MAX_ITERATIONS
+MAX_NESTING: build/index.d.ts#MAX_NESTING
+Merge: build/index.d.ts#Merge
+MethodKeys: build/index.d.ts#MethodKeys
+ModuleForm: build/index.d.ts#ModuleForm
+Monoid: build/index.d.ts#Monoid
+Monotone: build/index.d.ts#Monotone
+type MonotoneOptions: build/index.d.ts#MonotoneOptions
+Move: build/index.d.ts#Move
+Names: build/index.d.ts#Names
+NoFns: build/index.d.ts#NoFns
+OpNames: build/index.d.ts#OpNames
+OpParams: build/index.d.ts#OpParams
+OpReturn: build/index.d.ts#OpReturn
+OpSpec: build/index.d.ts#OpSpec
+OpTable: build/index.d.ts#OpTable
+OpsProxy: build/index.d.ts#OpsProxy
+Optional: build/index.d.ts#Optional
+OtherMembers: build/index.d.ts#OtherMembers
+ParamChains: build/index.d.ts#ParamChains
+ParamKind: build/index.d.ts#ParamKind
+Position: build/index.d.ts#Position
+PrimitiveKind: build/index.d.ts#PrimitiveKind
+Program: build/index.d.ts#Program
+ProgramStep: build/index.d.ts#ProgramStep
+Read: build/index.d.ts#Read
+ReduceOpts: build/index.d.ts#ReduceOpts
+ResolvedOp: build/index.d.ts#ResolvedOp
+Result: build/index.d.ts#Result
+ReturnKind: build/index.d.ts#ReturnKind
+Root: build/index.d.ts#Root
+RunOptions: build/index.d.ts#RunOptions
+SPECIAL_FORMS: build/index.d.ts#SPECIAL_FORMS
+Sheet: build/index.d.ts#Sheet
+SheetOptions: build/index.d.ts#SheetOptions
+SheetRoot: build/index.d.ts#SheetRoot
+SheetRow: build/index.d.ts#SheetRow
+SheetRun: build/index.d.ts#SheetRun
+SheetTable: build/index.d.ts#SheetTable
+SizeMeasure: build/index.d.ts#SizeMeasure
+SizeOptions: build/index.d.ts#SizeOptions
+SizeRule: build/index.d.ts#SizeRule
+SizeTerm: build/index.d.ts#SizeTerm
+SizeTerms: build/index.d.ts#SizeTerms
+SizeUse: build/index.d.ts#SizeUse
+Space: build/index.d.ts#Space
+SpaceKind: build/index.d.ts#SpaceKind
+SpecialForm: build/index.d.ts#SpecialForm
+StepOptions: build/index.d.ts#StepOptions
+TERM_KINDS: build/index.d.ts#TERM_KINDS
+Trace: build/index.d.ts#Trace
+TraceEvent: build/index.d.ts#TraceEvent
+TraceSink: build/index.d.ts#TraceSink
+Traversal: build/index.d.ts#Traversal
+TraversalItem: build/index.d.ts#TraversalItem
+VEX_STEPS: build/index.d.ts#VEX_STEPS
+VEX_STEP_NAMES: build/index.d.ts#VEX_STEP_NAMES
+VEX_WORLD: build/index.d.ts#VEX_WORLD
+ValueOf: build/index.d.ts#ValueOf
+ValueOfDomain: build/index.d.ts#ValueOfDomain
+VexEntry: build/index.d.ts#VexEntry
+VexError: build/index.d.ts#VexError
+VexList: build/index.d.ts#VexList
+VexOptions: build/index.d.ts#VexOptions
+type VexStep: build/index.d.ts#VexStep
+addrExprs: build/index.d.ts#addrExprs
+app: build/index.d.ts#app
+applyMove: build/index.d.ts#applyMove
+asList: build/index.d.ts#asList
+axes: build/index.d.ts#axes
+axisExprs: build/index.d.ts#axisExprs
+axisTargets: build/index.d.ts#axisTargets
+call: build/index.d.ts#call
+cell: build/index.d.ts#cell
+chainResult: build/index.d.ts#chainResult
+children: build/index.d.ts#children
+codeOf: build/index.d.ts#codeOf
+columnOrder: build/index.d.ts#columnOrder
+compile: build/index.d.ts#compile
+dataLimit: build/index.d.ts#dataLimit
+defineDomain: build/index.d.ts#defineDomain
+deps: build/index.d.ts#deps
+describeType: build/index.d.ts#describeType
+domainOf: build/index.d.ts#domainOf
+each: build/index.d.ts#each
+errorAt: build/index.d.ts#errorAt
+errorText: build/index.d.ts#errorText
+evaluate: build/index.d.ts#evaluate
+explain: build/index.d.ts#explain
+ext: build/index.d.ts#ext
+fail: build/index.d.ts#fail
+findMethod: build/index.d.ts#findMethod
+fix: build/index.d.ts#fix
+fixAddr: build/index.d.ts#fixAddr
+fixRounds: build/index.d.ts#fixRounds
+fixValueError: build/index.d.ts#fixValueError
+fn: build/index.d.ts#fn
+fold: build/index.d.ts#fold
+formatError: build/index.d.ts#formatError
+formatTrace: build/index.d.ts#formatTrace
+fromDocument: build/index.d.ts#fromDocument
+getOr: build/index.d.ts#getOr
+index: build/index.d.ts#index
+isAxis: build/index.d.ts#isAxis
+isCellRef: build/index.d.ts#isCellRef
+isDepthError: build/index.d.ts#isDepthError
+isDocument: build/index.d.ts#isDocument
+isExpr: build/index.d.ts#isExpr
+isFieldName: build/index.d.ts#isFieldName
+isFixedAddr: build/index.d.ts#isFixedAddr
+isListOp: build/index.d.ts#isListOp
+isMove: build/index.d.ts#isMove
+isNone: build/index.d.ts#isNone
+isOpName: build/index.d.ts#isOpName
+isSome: build/index.d.ts#isSome
+isStackOverflow: build/index.d.ts#isStackOverflow
+isVexList: build/index.d.ts#isVexList
+iterate: build/index.d.ts#iterate
+joinKind: build/index.d.ts#joinKind
+kernelPlan: build/index.d.ts#kernelPlan
+key: build/index.d.ts#key
+labelOf: build/index.d.ts#labelOf
+last: build/index.d.ts#last
+let_: build/index.d.ts#let_
+liftsAt: build/index.d.ts#liftsAt
+limitAxis: build/index.d.ts#limitAxis
+listItemKind: build/index.d.ts#listItemKind
+listOf: build/index.d.ts#listOf
+listOps: build/index.d.ts#listOps
+lit: build/index.d.ts#lit
+mapResult: build/index.d.ts#mapResult
+matchesKind: build/index.d.ts#matchesKind
+monoids: build/index.d.ts#monoids
+monotoneError: build/index.d.ts#monotoneError
+moveExpr: build/index.d.ts#moveExpr
+nestingOf: build/index.d.ts#nestingOf
+noKeyError: build/index.d.ts#noKeyError
+none: build/index.d.ts#none
+offset: build/index.d.ts#offset
+ok: build/index.d.ts#ok
+origin: build/index.d.ts#origin
+other: build/index.d.ts#other
+parent: build/index.d.ts#parent
+parse: build/index.d.ts#parse
+previewValue: build/index.d.ts#previewValue
+programStep: build/index.d.ts#programStep
+readsOf: build/index.d.ts#readsOf
+rec: build/index.d.ts#rec
+ref: build/index.d.ts#ref
+resolveAddr: build/index.d.ts#resolveAddr
+resolveOp: build/index.d.ts#resolveOp
+ruleOf: build/index.d.ts#ruleOf
+safeIs: build/index.d.ts#safeIs
+serialize: build/index.d.ts#serialize
+shapeError: build/index.d.ts#shapeError
+sizeError: build/index.d.ts#sizeError
+sizeOf: build/index.d.ts#sizeOf
+some: build/index.d.ts#some
+space: build/index.d.ts#space
+splitLimit: build/index.d.ts#splitLimit
+stepError: build/index.d.ts#stepError
+toDocument: build/index.d.ts#toDocument
+toKernelError: build/index.d.ts#toKernelError
+toOptional: build/index.d.ts#toOptional
+toPath: build/index.d.ts#toPath
+toVexError: build/index.d.ts#toVexError
+toVexResult: build/index.d.ts#toVexResult
+traversal: build/index.d.ts#traversal
+v: build/index.d.ts#v
+vex: build/index.d.ts#vex
+vexChecker: build/index.d.ts#vexChecker
+vexDefinitions: build/index.d.ts#vexDefinitions
+vexError: build/index.d.ts#vexError
+vexList: build/index.d.ts#vexList
+vexMachine: build/index.d.ts#vexMachine
+vexSelf: build/index.d.ts#vexSelf
+worstRow: build/index.d.ts#worstRow
+
+## Declarations
+
+### build/index.d.ts#Addr
+export type Addr = readonly Move[];
+
+### build/index.d.ts#AllowsOther
+export type AllowsOther<K extends string> = string extends K ? true : `${number}` extends K ? true : [Exclude<K, LastOf<K>>] extends [never] ? false : [Exclude<Exclude<K, LastOf<K>>, LastOf<Exclude<K, LastOf<K>>>>] extends [never] ? true : false;
+
+### build/index.d.ts#AnyDomain
+export type AnyDomain = Domain<string, any, Readonly<Record<string, OpSpec<any>>>>;
+
+### build/index.d.ts#Arg
+export interface Arg<T> {
+  readonly kind: "vex.arg";
+  readonly expr: Expr;
+  readonly [ARG_TYPE]?: T;
+}
+
+### build/index.d.ts#ArgInput
+export type ArgInput<P, Ctx extends ChainContext, Lift extends boolean> = (P extends string ? never : P) | KeysOfType<Ctx["record"], P> | Arg<P> | ChainOf<Ctx, P> | (Lift extends true ? ([P] extends [DomainValue<DomainFor<Ctx["domains"], P>>] ? LiftedNumber<Ctx> : never) : never);
+
+### build/index.d.ts#ArgValue
+export type ArgValue<Ctx extends ChainContext, A> = A extends Arg<infer T> ? T : A extends {
+  readonly kind: "vex.chain";
+} ? ValueOf<A> : A extends keyof Ctx["record"] & string ? NonNullable<Ctx["record"][A]> : A;
+
+### build/index.d.ts#ArrayKey
+export type ArrayKey = `${number}`;
+
+### build/index.d.ts#Axis
+export type Axis = {
+  readonly t: "all";
+} | {
+  readonly t: "others";
+} | {
+  readonly t: "other";
+} | {
+  readonly t: "neighbors";
+  readonly n: 4 | 8;
+} | {
+  readonly t: "children";
+} | {
+  readonly t: "ancestors";
+} | {
+  readonly t: "descendants";
+} | {
+  readonly t: "siblings";
+} | {
+  readonly t: "window";
+  readonly from: number;
+  readonly to: number;
+} | {
+  readonly t: "table";
+  readonly name: string;
+} | {
+  readonly t: "successors";
+} | {
+  readonly t: "predecessors";
+} | {
+  readonly t: "reachable";
+} | {
+  readonly t: "list";
+  readonly list: Expr;
+} | {
+  readonly t: "reverse";
+  readonly axis: Axis;
+} | {
+  readonly t: "where";
+  readonly axis: Axis;
+  readonly test: Expr;
+};
+
+### build/index.d.ts#AxisBody
+export type AxisBody<Ctx extends ChainContext, U> = ChainBase<Ctx, U> | ListBody<U>;
+
+### build/index.d.ts#AxisOpts
+export interface AxisOpts<Ctx extends ChainContext, T> {
+  readonly where?: (c: ChainOf<Ctx, T>) => ChainBase<Ctx, boolean>;
+  readonly reverse?: boolean;
+}
+
+### build/index.d.ts#CELL_KIND
+export declare const CELL_KIND = "vex.cell";
+
+### build/index.d.ts#CONSTRUCT_STEPS
+export declare const CONSTRUCT_STEPS: Readonly<Record<ExprTag | typeof ITERATE_SIZE, VexStep>>;
+
+### build/index.d.ts#CallArgs
+export type CallArgs<Ctx extends ChainContext, N extends keyof FnsOf<Ctx>> = MapArgs<RestParams<FnParams<FnsOf<Ctx>[N]>>, Ctx, false>;
+
+### build/index.d.ts#CallReturn
+export type CallReturn<Ctx extends ChainContext, N extends keyof FnsOf<Ctx>> = FnsOf<Ctx>[N] extends ((...args: never[]) => infer R) ? R : unknown;
+
+### build/index.d.ts#CallableFns
+export type CallableFns<Ctx extends ChainContext, T> = { [K in keyof FnsOf<Ctx>]: [T] extends [FirstParam<FnParams<FnsOf<Ctx>[K]>>] ? K : never; }[keyof FnsOf<Ctx>] & string;
+
+### build/index.d.ts#CellFormulas
+export type CellFormulas = ReadonlyMap<string, ReadonlyMap<string, Expr>>;
+
+### build/index.d.ts#CellRef
+export interface CellRef {
+  readonly column: string;
+  readonly at: readonly FixedMove[];
+}
+
+### build/index.d.ts#ChainBase
+export interface ChainBase<Ctx extends ChainContext, T> {
+  readonly kind: "vex.chain";
+  readonly [CHAIN_VALUE]?: T;
+  readonly program: Expr;
+  at(k: Ctx["keys"]): Optional<T>;
+  value(k: Ctx["keys"]): Optional<T>;
+  result(k: Ctx["keys"]): Result<T>;
+  explain(k: Ctx["keys"]): Trace;
+  all(): Traversal<Ctx["keys"], T>;
+  from<P extends keyof Ctx["record"] & string>(field: P): ChainOf<Ctx, NonNullable<Ctx["record"][P]>>;
+  to(k: Ctx["keys"] | ChainBase<Ctx, string>): ChainOf<Ctx, T>;
+  index(i: number | ChainBase<Ctx, number>): ChainOf<Ctx, T>;
+  offset(...d: readonly number[]): ChainOf<Ctx, T>;
+  origin(): ChainOf<Ctx, T>;
+  parent(): ChainOf<Ctx, T>;
+  ifError<U>(fallback: ArgInput<U, Ctx, false> | T): ChainOf<Ctx, T | U>;
+  if<U, V>(this: ChainBase<Ctx, boolean>, then: ArgInput<U, Ctx, false>, otherwise: ArgInput<V, Ctx, false>): ChainOf<Ctx, U | V>;
+  call<N extends CallableFns<Ctx, T>>(name: N, ...args: CallArgs<Ctx, N>): ChainOf<Ctx, CallReturn<Ctx, N>>;
+  fork<const B extends Readonly<Record<string, (c: ChainOf<Ctx, T>) => ChainBase<Ctx, unknown>>>>(branches: B): ChainOf<Ctx, { readonly [N in keyof B]: ValueOf<ReturnType<B[N]>>; }>;
+  iterate<const I extends Readonly<Record<string, unknown>>, U>(limit: number | DataLimit | ListChain<Ctx, unknown>, init: I, step: (vars: LoopVars<Ctx, I>) => NoInfer<LoopStep<Ctx, I>>, result: (vars: LoopVars<Ctx, I>) => ListChain<Ctx, U>, opts?: {
+    readonly until?: (vars: LoopVars<Ctx, I>) => ArgInput<boolean, Ctx, false>;
+  }): ListChain<Ctx, U>;
+  iterate<const I extends Readonly<Record<string, unknown>>, R>(limit: number | DataLimit | ListChain<Ctx, unknown>, init: I, step: (vars: LoopVars<Ctx, I>) => NoInfer<LoopStep<Ctx, I>>, result: (vars: LoopVars<Ctx, I>) => ArgInput<R, Ctx, false>, opts?: {
+    readonly until?: (vars: LoopVars<Ctx, I>) => ArgInput<boolean, Ctx, false>;
+  }): ChainOf<Ctx, R>;
+  fix<J extends FixJoin>(name: string, join: J, init: ArgInput<FixValue<J>, Ctx, false>, step: (last: ChainOf<Ctx, FixValue<J>>) => NoInfer<ArgInput<FixValue<J>, Ctx, false>>): ChainOf<Ctx, FixValue<J>>;
+  with<const B extends Readonly<Record<string, unknown>>, U>(binds: B, body: (c: ChainOf<Ctx, T>, vars: { readonly [N in keyof B]: Arg<ArgValue<Ctx, B[N]>>; }) => ChainBase<Ctx, U>): ChainOf<Ctx, U>;
+  functions<const F extends Readonly<Record<string, FnDef<readonly FnParamKind[], unknown>>>, U>(fns: F, body: (c: ChainOf<Ctx, T>, call: FnCalls<Ctx, F>) => ChainBase<Ctx, U>): ChainOf<Ctx, U>;
+  others<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  neighbors<U>(n: 4 | 8, body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  each<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  children<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  ancestors<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  descendants<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  siblings<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  window<U>(from: number, to: number, body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  table<U>(name: string, body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  successors<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  predecessors<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+  reachable<U>(body: (c: ChainOf<Ctx, T>) => AxisBody<Ctx, U>, opts?: AxisOpts<Ctx, T>): ListChain<Ctx, U>;
+}
+
+### build/index.d.ts#ChainContext
+export interface ChainContext {
+  readonly domains: readonly AnyDomain[];
+  readonly keys: string;
+  readonly record: unknown;
+  readonly fns?: FnTable;
+}
+
+### build/index.d.ts#ChainOf
+export type ChainOf<Ctx extends ChainContext, T> = ChainBase<Ctx, T> & ([DomainFor<Ctx["domains"], T>] extends [never] ? unknown : DomainMembers<Ctx, DomainFor<Ctx["domains"], T>>) & (AllowsOther<Ctx["keys"]> extends true ? OtherMembers<Ctx, T> : unknown);
+
+### build/index.d.ts#CompileFn
+export type CompileFn = (expr: Expr, options: CompileOptions) => Program;
+
+### build/index.d.ts#CompileOptions
+export type CompileOptions = Pick<EvalOptions, "domains" | "fns" | "extensions" | "maxStep">;
+
+### build/index.d.ts#DEFAULT_MAX_STEP
+export declare const DEFAULT_MAX_STEP: VexStep;
+
+### build/index.d.ts#DataLimit
+export interface DataLimit {
+  readonly axis: Axis;
+}
+
+### build/index.d.ts#DeclaredType
+export type DeclaredType<Decl, N extends string> = N extends keyof Decl ? Decl[N] : unknown;
+
+### build/index.d.ts#Dependency
+export interface Dependency {
+  readonly at: Addr;
+  readonly path: readonly string[];
+  readonly axes: readonly Axis["t"][];
+  readonly axisAt: readonly Addr[];
+}
+
+### build/index.d.ts#Direction
+export type Direction = "before" | "after" | "down";
+
+### build/index.d.ts#Domain
+export interface Domain<Name extends string = string, D = unknown, Ops extends Readonly<Record<string, OpSpec<D>>> = Readonly<Record<string, OpSpec<D>>>> extends DomainSpec<Name, D, Ops> {
+  readonly kind: "vex.domain";
+}
+
+### build/index.d.ts#DomainFor
+export type DomainFor<Dms extends readonly AnyDomain[], T> = Dms extends readonly [infer H, ...infer R extends readonly AnyDomain[]] ? [T] extends [never] ? never : [T] extends [DomainValue<H>] ? H : DomainFor<R, T> : never;
+
+### build/index.d.ts#DomainMembers
+export interface DomainMembers<Ctx extends ChainContext, Dm> {
+  readonly _: OpsProxy<Ctx, Dm>;
+}
+
+### build/index.d.ts#DomainSpec
+export interface DomainSpec<Name extends string, D, Ops extends Readonly<Record<string, OpSpec<D>>>> {
+  readonly name: Name;
+  readonly is: (u: unknown) => u is D;
+  readonly primitive?: PrimitiveKind;
+  readonly fields?: readonly string[];
+  readonly ops: Ops;
+  readonly size?: "fixed";
+  readonly methods?: "declared" | "all";
+  readonly fromScalar?: (n: number) => D;
+  readonly valid?: (d: D) => boolean;
+  readonly show?: (d: D) => string;
+  readonly encode?: (d: D) => unknown;
+  readonly decode?: (json: unknown) => D;
+  readonly samples?: () => readonly D[];
+  readonly moduleForm?: ModuleForm;
+}
+
+### build/index.d.ts#DomainValue
+export type DomainValue<Dm> = Dm extends Domain<string, infer D, infer _Ops> ? D : never;
+
+### build/index.d.ts#ErrorCode
+export type ErrorCode = Extract<KernelCode, "#REF!" | "#N/A" | "#VALUE!" | "#NAME?" | "#NUM!" | "#CALC!" | "#ARGS" | "#CYCLE!" | "#DEPTH!">;
+
+### build/index.d.ts#ErrorDetails
+export interface ErrorDetails {
+  readonly path?: readonly number[];
+  readonly origin?: string;
+  readonly focus?: string;
+  readonly op?: string;
+  readonly causes?: readonly VexError[];
+  readonly thrown?: unknown;
+}
+
+### build/index.d.ts#ErrorExtra
+export interface ErrorExtra {
+  readonly causes?: readonly VexError[];
+  readonly thrown?: unknown;
+}
+
+### build/index.d.ts#ErrorKind
+export type ErrorKind = "unknown-key" | "not-a-pair" | "out-of-bounds" | "no-offset" | "no-grid" | "no-tree" | "no-table" | "no-graph" | "missing-field" | "empty" | "not-instance" | "kind-mismatch" | "unknown-op" | "unbound" | "not-finite" | "invalid-value" | "threw" | "undefined-result" | "args" | "cycle" | "depth" | "bad-expression" | "limit";
+
+### build/index.d.ts#ErrorText
+export interface ErrorText {
+  readonly kind: ErrorKind;
+  readonly message: string;
+  readonly op?: string;
+}
+
+### build/index.d.ts#EvalOptions
+export interface EvalOptions {
+  readonly space: Space;
+  readonly origin: string;
+  readonly domains?: readonly AnyDomain[];
+  readonly fns?: Readonly<Record<string, FreeFn>>;
+  readonly extensions?: Readonly<Record<string, ExtHandler>>;
+  readonly vars?: Readonly<Record<string, unknown>>;
+  readonly tables?: Readonly<Record<string, Space>>;
+  readonly trace?: TraceSink;
+  readonly maxStep?: VexStep;
+}
+
+### build/index.d.ts#Expr
+export type Expr = {
+  readonly tag: "lit";
+  readonly value: unknown;
+} | {
+  readonly tag: "ref";
+  readonly path: readonly string[];
+  readonly at?: Addr;
+} | {
+  readonly tag: "app";
+  readonly op: string;
+  readonly args: readonly Expr[];
+} | {
+  readonly tag: "let";
+  readonly bind: Readonly<Record<string, Expr>>;
+  readonly body: Expr;
+} | {
+  readonly tag: "var";
+  readonly name: string;
+} | {
+  readonly tag: "rec";
+  readonly fields: Readonly<Record<string, Expr>>;
+} | {
+  readonly tag: "each";
+  readonly axis: Axis;
+  readonly body: Expr;
+  readonly at?: Addr;
+  readonly as?: ItemNames;
+} | {
+  readonly tag: "fold";
+  readonly axis: Axis;
+  readonly init: Names;
+  readonly step: Names;
+  readonly result: Expr;
+  readonly at?: Addr;
+  readonly as?: ItemNames;
+} | {
+  readonly tag: "iterate";
+  readonly limit: number | DataLimit;
+  readonly init: Names;
+  readonly step: Names;
+  readonly until?: Expr;
+  readonly result: Expr;
+} | {
+  readonly tag: "fix";
+  readonly name: string;
+  readonly join: FixJoin;
+  readonly init: Expr;
+  readonly step: Expr;
+} | {
+  readonly tag: "last";
+  readonly name: string;
+} | {
+  readonly tag: "fn";
+  readonly params: readonly string[];
+  readonly body: Expr;
+} | {
+  readonly tag: "call";
+  readonly fn: string;
+  readonly args: readonly Expr[];
+} | {
+  readonly tag: "ext";
+  readonly kind: string;
+  readonly data: unknown;
+};
+
+### build/index.d.ts#ExprOf
+export type ExprOf<T extends ExprTag> = Extract<Expr, {
+  readonly tag: T;
+}>;
+
+### build/index.d.ts#ExprTag
+export type ExprTag = Expr["tag"];
+
+### build/index.d.ts#ExtContext
+export interface ExtContext {
+  readonly space: Space;
+  readonly position: Position;
+  readonly path: readonly number[];
+}
+
+### build/index.d.ts#ExtHandler
+export type ExtHandler = (data: unknown, ctx: ExtContext) => Result<unknown>;
+
+### build/index.d.ts#FixJoin
+export type FixJoin = "or" | "and" | "max" | "min";
+
+### build/index.d.ts#FixValue
+export type FixValue<J extends FixJoin> = [J] extends ["or" | "and"] ? boolean : [J] extends ["max" | "min"] ? number : never;
+
+### build/index.d.ts#FixedMove
+export type FixedMove = Exclude<Move, {
+  readonly t: "key" | "index";
+}> | {
+  readonly t: "key";
+  readonly key: string;
+} | {
+  readonly t: "index";
+  readonly i: number;
+};
+
+### build/index.d.ts#FnCalls
+export type FnCalls<Ctx extends ChainContext, F> = { readonly [N in keyof F]: F[N] extends FnDef<infer P, infer R> ? (...args: { readonly [I in keyof P]: ArgInput<KindValue<P[I]>, Ctx, false>; }) => ChainOf<Ctx, R> : never; };
+
+### build/index.d.ts#FnDef
+export interface FnDef<P extends readonly FnParamKind[], R> {
+  readonly kind: "vex.fn";
+  readonly params: P;
+  readonly [FN_RESULT]?: R;
+}
+
+### build/index.d.ts#FnOp
+export type FnOp<D, F extends (self: D, ...args: never[]) => unknown> = OpSpec<D> & {
+  readonly fn: F;
+};
+
+### build/index.d.ts#FnParamKind
+export type FnParamKind = PrimitiveKind | "any";
+
+### build/index.d.ts#FnTable
+export type FnTable = Readonly<Record<string, (...args: never[]) => unknown>>;
+
+### build/index.d.ts#FreeFn
+export type FreeFn = ((...args: readonly unknown[]) => unknown) & {
+  readonly size?: SizeRule;
+  readonly returns?: ReturnKind;
+  readonly monotone?: readonly Monotone[];
+};
+
+### build/index.d.ts#GridKey
+export type GridKey = `${number},${number}`;
+
+### build/index.d.ts#ItemNames
+export type ItemNames = readonly [item: string] | readonly [item: string, index: string];
+
+### build/index.d.ts#KernelPlan
+export interface KernelPlan {
+  readonly doc: Envelope | undefined;
+  run(opts: KernelRunOptions): Result<unknown>;
+  evaluate(opts: KernelRunOptions): Result$1;
+  reference(opts: KernelRunOptions): Result$1;
+  agree(opts: KernelRunOptions, other?: () => Result<unknown>): Agreement;
+}
+
+### build/index.d.ts#KernelRunOptions
+export type KernelRunOptions = Omit<RunOptions, "trace">;
+
+### build/index.d.ts#KeysOfType
+export type KeysOfType<O, T> = { [P in keyof O]-?: [NonNullable<O[P]>] extends [never] ? never : NonNullable<O[P]> extends T ? P : never; }[keyof O] & string;
+
+### build/index.d.ts#KindValue
+export type KindValue<K> = K extends "number" ? number : K extends "string" ? string : K extends "boolean" ? boolean : unknown;
+
+### build/index.d.ts#LIST_OPS
+export declare const LIST_OPS: ReadonlySet<string>;
+
+### build/index.d.ts#LIST_SIZES
+export declare const LIST_SIZES: Readonly<Record<ListOp | "fill", SizeRule>>;
+
+### build/index.d.ts#Law
+export type Law = "commutative" | "associative" | "idempotent";
+
+### build/index.d.ts#LiftedOp
+export type LiftedOp<D> = OpSpec<D> & {
+  readonly liftScalar: true;
+};
+
+### build/index.d.ts#ListBody
+export interface ListBody<U> {
+  readonly kind: "vex.list-chain";
+  readonly [CHAIN_VALUE]?: U;
+  readonly program: Expr;
+}
+
+### build/index.d.ts#ListChain
+export interface ListChain<Ctx extends ChainContext, U> {
+  readonly kind: "vex.list-chain";
+  readonly [CHAIN_VALUE]?: VexList<U>;
+  readonly program: Expr;
+  fold<const I extends Readonly<Record<string, unknown>>, V>(init: I, step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>, index: ChainOf<Ctx, number>) => NoInfer<LoopStep<Ctx, I>>, result: (vars: LoopVars<Ctx, I>) => ListChain<Ctx, V>): ListChain<Ctx, V>;
+  fold<const I extends Readonly<Record<string, unknown>>, R>(init: I, step: (vars: LoopVars<Ctx, I>, item: ChainOf<Ctx, U>, index: ChainOf<Ctx, number>) => NoInfer<LoopStep<Ctx, I>>, result: (vars: LoopVars<Ctx, I>) => ArgInput<R, Ctx, false>): ChainOf<Ctx, R>;
+  count(opts?: ListOpts): ChainOf<Ctx, number>;
+  sum(this: ListChain<Ctx, number>, opts?: ListOpts): ChainOf<Ctx, number>;
+  mean(this: ListChain<Ctx, number>, opts?: ListOpts): ChainOf<Ctx, number>;
+  min(this: ListChain<Ctx, number>, opts?: ListOpts): ChainOf<Ctx, number>;
+  max(this: ListChain<Ctx, number>, opts?: ListOpts): ChainOf<Ctx, number>;
+  any(this: ListChain<Ctx, boolean>, opts?: ListOpts): ChainOf<Ctx, boolean>;
+  all(this: ListChain<Ctx, boolean>, opts?: ListOpts): ChainOf<Ctx, boolean>;
+  none(this: ListChain<Ctx, boolean>, opts?: ListOpts): ChainOf<Ctx, boolean>;
+  values(opts?: ListOpts): ChainOf<Ctx, readonly U[]>;
+  keys(opts?: ListOpts): ChainOf<Ctx, readonly Ctx["keys"][]>;
+  errors(): ChainOf<Ctx, readonly VexError[]>;
+  first(opts?: ListOpts): ChainOf<Ctx, U>;
+  reduce(op: OpNames<DomainFor<Ctx["domains"], U>>, opts?: ReduceOpts<Ctx>): ChainOf<Ctx, U>;
+  sortBy(opts?: ListOpts): ListChain<Ctx, U>;
+  take(n: number, opts?: ListOpts): ListChain<Ctx, U>;
+  nth(i: number, opts?: ListOpts): ChainOf<Ctx, U>;
+  setNth<V>(i: number | ChainBase<Ctx, number>, value: ChainBase<Ctx, V> | Arg<V>, opts?: ListOpts): ListChain<Ctx, U | V>;
+  get(k: Ctx["keys"] | ChainBase<Ctx, string>, opts?: ListOpts): ChainOf<Ctx, U>;
+  drop(n: number, opts?: ListOpts): ListChain<Ctx, U>;
+  append<V>(other: ListChain<Ctx, V>, opts?: ListOpts): ListChain<Ctx, U | V>;
+  without<V>(other: ListChain<Ctx, V>, opts?: ListOpts): ListChain<Ctx, U>;
+  flat<V>(this: ListChain<Ctx, VexList<V>>, opts?: ListOpts): ListChain<Ctx, V>;
+  distinct(opts?: ListOpts): ListChain<Ctx, U>;
+  group(keys: ListChain<Ctx, string>, opts?: ListOpts): ListChain<Ctx, VexList<U>>;
+  join(this: ListChain<Ctx, string>, sep: string | ChainBase<Ctx, string>, opts?: ListOpts): ChainOf<Ctx, string>;
+  each<V>(body: (c: ChainOf<Ctx, null>, item: ChainOf<Ctx, U>, index: ChainOf<Ctx, number>) => AxisBody<Ctx, V>, opts?: AxisOpts<Ctx, null>): ListChain<Ctx, V>;
+  result(k: Ctx["keys"]): Result<VexList<U>>;
+  at(k: Ctx["keys"]): Optional<VexList<U>>;
+  explain(k: Ctx["keys"]): Trace;
+}
+
+### build/index.d.ts#ListItem
+export interface ListItem<T = unknown> {
+  readonly key: string;
+  readonly result: Result<T>;
+}
+
+### build/index.d.ts#ListOp
+export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth" | "setNth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf" | "distinct" | "group" | "join";
+
+### build/index.d.ts#ListOps
+export interface ListOps {
+  readonly list: (op: ListOp, list: VexList, rest: readonly unknown[], position: Position, path: readonly number[]) => Result<unknown>;
+  readonly array: (op: ListOp, array: readonly unknown[], rest: readonly unknown[], position: Position, path: readonly number[]) => Result<unknown>;
+  readonly fill: (values: readonly unknown[], position: Position, path: readonly number[]) => Result<VexList>;
+}
+
+### build/index.d.ts#ListOptions
+export interface ListOptions {
+  readonly strict?: boolean;
+}
+
+### build/index.d.ts#ListOpts
+export interface ListOpts {
+  readonly strict?: boolean;
+}
+
+### build/index.d.ts#LoopNext
+export type LoopNext<Ctx extends ChainContext, A> = IsList<A> extends true ? ListChain<Ctx, ItemsOf<A>> : ArgInput<LoopValue<Ctx, A>, Ctx, false>;
+
+### build/index.d.ts#LoopStep
+export type LoopStep<Ctx extends ChainContext, I> = { readonly [N in keyof I]?: LoopNext<Ctx, I[N]>; };
+
+### build/index.d.ts#LoopVar
+export type LoopVar<Ctx extends ChainContext, A> = IsList<A> extends true ? ListChain<Ctx, ItemsOf<A>> : ChainOf<Ctx, LoopValue<Ctx, A>>;
+
+### build/index.d.ts#LoopVars
+export type LoopVars<Ctx extends ChainContext, I> = { readonly [N in keyof I]: LoopVar<Ctx, I[N]>; };
+
+### build/index.d.ts#MAX_DOCUMENT_DEPTH
+export declare const MAX_DOCUMENT_DEPTH = 4096;
+
+### build/index.d.ts#MAX_ITERATIONS
+export declare const MAX_ITERATIONS = 1e5;
+
+### build/index.d.ts#MAX_NESTING
+export declare const MAX_NESTING = 500;
+
+### build/index.d.ts#Merge
+export type Merge<O> = { readonly [P in AllKeys<O>]: FieldType<O, P>; };
+
+### build/index.d.ts#MethodKeys
+export type MethodKeys<D> = { [P in keyof D]-?: D[P] extends ((...args: never[]) => unknown) ? P : never; }[keyof D] & string;
+
+### build/index.d.ts#ModuleForm
+export interface ModuleForm {
+  readonly is?: (u: unknown) => boolean;
+  readonly fromScalar?: (n: number) => unknown;
+  readonly samples?: () => readonly unknown[];
+  readonly literal?: (value: unknown) => Readonly<Record<string, unknown>> | undefined;
+  readonly ops?: Readonly<Record<string, {
+    readonly fn?: (self: never, ...args: never[]) => unknown;
+    readonly identity?: () => unknown;
+    readonly returns?: ReturnKind;
+  }>>;
+}
+
+### build/index.d.ts#Monoid
+export interface Monoid<M> {
+  readonly empty: M;
+  readonly concat: (a: M, b: M) => M;
+}
+
+### build/index.d.ts#Monotone
+export type Monotone = "up" | "down";
+
+### build/index.d.ts#MonotoneOptions
+interface MonotoneOptions {
+  readonly domains?: readonly AnyDomain[];
+  readonly fns?: Readonly<Record<string, unknown>>;
+}
+
+### build/index.d.ts#Move
+export type Move = {
+  readonly t: "key";
+  readonly key: string | Expr;
+} | {
+  readonly t: "index";
+  readonly i: number | Expr;
+} | {
+  readonly t: "other";
+} | {
+  readonly t: "offset";
+  readonly d: readonly number[];
+} | {
+  readonly t: "origin";
+} | {
+  readonly t: "parent";
+};
+
+### build/index.d.ts#Names
+export type Names = Readonly<Record<string, Expr>>;
+
+### build/index.d.ts#NoFns
+export type NoFns = Record<never, never>;
+
+### build/index.d.ts#OpNames
+export type OpNames<Dm> = (keyof OpsOf<Dm> & string) | (Dm extends {
+  readonly methods: "all";
+} ? MethodKeys<DomainValue<Dm>> : never);
+
+### build/index.d.ts#OpParams
+export type OpParams<Dm, M extends string> = FnOf<Dm, M> extends ((...args: infer P) => unknown) ? P : never;
+
+### build/index.d.ts#OpReturn
+export type OpReturn<Dm, M extends string> = FnOf<Dm, M> extends ((...args: never[]) => infer R) ? R : never;
+
+### build/index.d.ts#OpSpec
+export interface OpSpec<D = never> {
+  readonly fn?: (self: D, ...args: never[]) => unknown;
+  readonly laws?: readonly Law[];
+  readonly identity?: () => D;
+  readonly liftScalar?: boolean | readonly boolean[];
+  readonly params?: readonly ParamKind[];
+  readonly returns?: ReturnKind;
+  readonly size?: SizeRule;
+  readonly monotone?: readonly Monotone[];
+}
+
+### build/index.d.ts#OpTable
+export type OpTable<D, Names extends string, Lifted extends string = never> = { readonly [N in Names]: N extends Lifted ? LiftedOp<D> : OpSpec<D>; };
+
+### build/index.d.ts#OpsProxy
+export type OpsProxy<Ctx extends ChainContext, Dm> = { readonly [M in OpNames<Dm>]: (...args: MapArgs<OpParams<Dm, M>, Ctx, Lifts<Dm, M>>) => ChainOf<Ctx, OpReturn<Dm, M>>; };
+
+### build/index.d.ts#Optional
+export type Optional<T> = Optional$1<T>;
+
+### build/index.d.ts#OtherMembers
+export interface OtherMembers<Ctx extends ChainContext, T> {
+  other(): ChainOf<Ctx, T>;
+}
+
+### build/index.d.ts#ParamChains
+export type ParamChains<Ctx extends ChainContext, P extends readonly FnParamKind[]> = { readonly [I in keyof P]: ChainOf<Ctx, KindValue<P[I]>>; };
+
+### build/index.d.ts#ParamKind
+export type ParamKind = "domain" | "number" | "boolean" | "string" | "any";
+
+### build/index.d.ts#Position
+export interface Position {
+  readonly origin: string;
+  readonly focus: string;
+}
+
+### build/index.d.ts#PrimitiveKind
+export type PrimitiveKind = "number" | "string" | "boolean";
+
+### build/index.d.ts#Program
+export interface Program {
+  readonly expr: Expr;
+  run(opts: RunOptions): Result<unknown>;
+  explain(opts: Omit<RunOptions, "trace">): Trace;
+}
+
+### build/index.d.ts#ProgramStep
+export interface ProgramStep {
+  readonly step: VexStep;
+  readonly reason: string;
+  readonly construct?: string;
+  readonly path?: readonly number[];
+}
+
+### build/index.d.ts#Read
+export interface Read {
+  readonly key: string;
+  readonly path: readonly string[];
+  readonly ok: boolean;
+}
+
+### build/index.d.ts#ReduceOpts
+export interface ReduceOpts<Ctx extends ChainContext> extends ListOpts {
+  readonly domain?: Ctx["domains"][number]["name"];
+}
+
+### build/index.d.ts#ResolvedOp
+export interface ResolvedOp {
+  readonly domain: AnyDomain;
+  readonly spec: OpSpec<unknown>;
+  readonly call: (args: readonly unknown[]) => unknown;
+}
+
+### build/index.d.ts#Result
+export type Result<T> = {
+  readonly ok: true;
+  readonly value: T;
+} | {
+  readonly ok: false;
+  readonly error: VexError;
+};
+
+### build/index.d.ts#ReturnKind
+export type ReturnKind = ParamKind | `domain:${string}` | `list:${PrimitiveKind}`;
+
+### build/index.d.ts#Root
+export interface Root<Ctx extends ChainContext> {
+  from<P extends keyof Ctx["record"] & string>(field: P): ChainOf<Ctx, NonNullable<Ctx["record"][P]>>;
+  start<const T>(value: T): ChainOf<Ctx, ArgValue<Ctx, T>>;
+  of<P extends keyof Ctx["record"] & string>(k: Ctx["keys"], field: P): Arg<NonNullable<Ctx["record"][P]>>;
+  field<T>(path: string): Arg<T>;
+  lit<const T>(value: T): Arg<T>;
+  ofPath<T>(k: Ctx["keys"], path: string): Arg<T>;
+  rec<const F extends Readonly<Record<string, unknown>>>(fields: F): Arg<{ readonly [N in keyof F]: ArgValue<Ctx, F[N]>; }>;
+  list<U = unknown>(items?: readonly (readonly [Ctx["keys"], U])[]): ListChain<Ctx, U>;
+  ext<T>(kind: string, data?: unknown): Arg<T>;
+  sheet(): Sheet<Ctx, object>;
+  fn<const P extends readonly FnParamKind[], R>(params: P, body: (...params: ParamChains<Ctx, P>) => ChainBase<Ctx, R>): FnDef<P, R>;
+  readonly space: Space<Ctx["keys"], Ctx["record"]>;
+}
+
+### build/index.d.ts#RunOptions
+export type RunOptions = Pick<EvalOptions, "space" | "origin" | "vars" | "trace" | "tables">;
+
+### build/index.d.ts#SPECIAL_FORMS
+export declare const SPECIAL_FORMS: ReadonlySet<string>;
+
+### build/index.d.ts#Sheet
+export interface Sheet<Ctx extends ChainContext, Cols, Decl = object> {
+  column<const N extends string, C extends ChainBase<Ctx, DeclaredType<Decl, N>>>(name: N, formula: (r: SheetRoot<Ctx, Cols & Decl>) => C): Sheet<Ctx, Cols & { readonly [P in N]: ValueOf<C>; }, Decl>;
+  declare<D extends Readonly<Record<string, unknown>>>(): Sheet<Ctx, Cols, Decl & D>;
+  cellFormula<const N extends keyof (Cols & Decl) & string>(k: Ctx["keys"], column: N, formula: (r: SheetRoot<Ctx, Cols & Decl>) => ChainBase<Ctx, (Cols & Decl)[N]>): Sheet<Ctx, Cols, Decl>;
+  readonly columns: Readonly<Record<string, Expr>>;
+  readonly cellFormulas: Readonly<Record<string, Readonly<Record<string, Expr>>>>;
+  result<N extends keyof Cols & string>(k: Ctx["keys"], column: N): Result<Cols[N]>;
+  at<N extends keyof Cols & string>(k: Ctx["keys"], column: N): Optional<Cols[N]>;
+  explain(k: Ctx["keys"], column: keyof Cols & string): Trace;
+  table(): readonly SheetRow<Ctx["keys"], Cols>[];
+}
+
+### build/index.d.ts#SheetOptions
+export type SheetOptions = Omit<EvalOptions, "origin" | "trace" | "tables"> & {
+  readonly cells?: CellFormulas;
+  readonly name?: string;
+  readonly tables?: ReadonlyMap<string, SheetTable>;
+  readonly compile?: CompileFn;
+};
+
+### build/index.d.ts#SheetRoot
+export interface SheetRoot<Ctx extends ChainContext, Cols> extends Root<Ctx> {
+  cell<N extends keyof Cols & string>(column: N, at?: Ctx["keys"] | Addr): Arg<Cols[N]>;
+  cell<T>(column: string, at?: Ctx["keys"] | Addr): Arg<T>;
+}
+
+### build/index.d.ts#SheetRow
+export interface SheetRow<K extends string, Cols> {
+  readonly key: K;
+  readonly cells: { readonly [N in keyof Cols]: Result<Cols[N]>; };
+}
+
+### build/index.d.ts#SheetRun
+export declare class SheetRun {
+  constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions, budget?: number);
+  cell(column: string, key: string, table?: string): Result<unknown>;
+  explain(column: string, key: string, table?: string): Trace;
+  fill(table?: string): void;
+  warm(column: string, key: string, table?: string): void;
+}
+
+### build/index.d.ts#SheetTable
+export interface SheetTable {
+  readonly space: Space;
+  readonly columns: ReadonlyMap<string, Expr>;
+  readonly cells?: CellFormulas;
+}
+
+### build/index.d.ts#SizeMeasure
+export type SizeMeasure = "size" | "count" | "inner" | "item" | "part";
+
+### build/index.d.ts#SizeOptions
+export interface SizeOptions {
+  readonly domains?: readonly AnyDomain[];
+  readonly fns?: Readonly<Record<string, unknown>>;
+}
+
+### build/index.d.ts#SizeRule
+export type SizeRule = "scalar" | "fixed" | "reduce" | SizeTerms;
+
+### build/index.d.ts#SizeTerm
+export type SizeTerm = SizeUse | readonly [use: SizeUse, of: SizeMeasure];
+
+### build/index.d.ts#SizeTerms
+export interface SizeTerms {
+  readonly size: readonly SizeTerm[];
+  readonly count?: readonly SizeTerm[];
+  readonly inner?: readonly SizeTerm[];
+  readonly item?: readonly SizeTerm[];
+  readonly part?: readonly SizeTerm[];
+  readonly rest?: SizeUse;
+  readonly limit?: number;
+  readonly keys?: "position";
+  readonly constant?: true;
+  readonly union?: true;
+  readonly byParts?: SizeTerms;
+}
+
+### build/index.d.ts#SizeUse
+export type SizeUse = 0 | 1 | "scaled" | "many" | "unbounded" | "text" | "copies" | "each" | "number" | "limit";
+
+### build/index.d.ts#Space
+export interface Space<K extends string = string, O = unknown> {
+  readonly kind: SpaceKind;
+  readonly keys: readonly K[];
+  readonly records?: readonly (O | undefined)[];
+  has(k: string): k is K;
+  get(k: string): O | undefined;
+  coords(k: string): readonly number[] | undefined;
+  keyAt(coords: readonly number[]): K | undefined;
+  parentOf?(k: string): K | undefined;
+  childrenOf?(k: string): readonly K[];
+  successorsOf?(k: string): readonly K[];
+  predecessorsOf?(k: string): readonly K[];
+}
+
+### build/index.d.ts#SpaceKind
+export type SpaceKind = "record" | "array" | "grid" | "tree" | "graph";
+
+### build/index.d.ts#SpecialForm
+export type SpecialForm = "if" | "and" | "or" | "ifError";
+
+### build/index.d.ts#StepOptions
+export interface StepOptions {
+  readonly maxStep?: VexStep;
+}
+
+### build/index.d.ts#TERM_KINDS
+export declare const TERM_KINDS: readonly (readonly string[])[];
+
+### build/index.d.ts#Trace
+export interface Trace {
+  readonly events: readonly TraceEvent[];
+  readonly result: Result<unknown>;
+}
+
+### build/index.d.ts#TraceEvent
+export interface TraceEvent {
+  readonly path: readonly number[];
+  readonly tag: ExprTag;
+  readonly label: string;
+  readonly origin: string;
+  readonly focus: string;
+  readonly reads?: readonly Read[];
+  readonly round?: {
+    readonly index: number;
+    readonly changed: readonly string[];
+  };
+  readonly result: Result<unknown>;
+}
+
+### build/index.d.ts#TraceSink
+export interface TraceSink {
+  readonly events: TraceEvent[];
+}
+
+### build/index.d.ts#Traversal
+export interface Traversal<K extends string, T> {
+  readonly items: readonly TraversalItem<K, T>[];
+  strict(): Traversal<K, T>;
+  get(k: K): Optional<T>;
+  values(): readonly T[];
+  keys(): readonly K[];
+  errors(): readonly VexError[];
+  count(): Optional<number>;
+  sum(this: Traversal<K, number>): Optional<number>;
+  mean(this: Traversal<K, number>): Optional<number>;
+  min(this: Traversal<K, number>): Optional<number>;
+  max(this: Traversal<K, number>): Optional<number>;
+  any(this: Traversal<K, boolean>): Optional<boolean>;
+  all(this: Traversal<K, boolean>): Optional<boolean>;
+  none(this: Traversal<K, boolean>): Optional<boolean>;
+  reduce(op: string): Optional<T>;
+  reduceResult(op: "count" | "sum" | "mean" | "min" | "max" | "any" | "all" | "none" | "reduce", reduceOp?: string): Result<unknown>;
+  map<U>(f: (value: T, key: K) => U): Traversal<K, U>;
+  fold<M>(monoid: Monoid<M>, f: (value: T) => M): M;
+}
+
+### build/index.d.ts#TraversalItem
+export interface TraversalItem<K extends string, T> {
+  readonly key: K;
+  readonly result: Result<T>;
+}
+
+### build/index.d.ts#VEX_STEPS
+export declare const VEX_STEPS: StepLadder<VexStep>;
+
+### build/index.d.ts#VEX_STEP_NAMES
+export declare const VEX_STEP_NAMES: readonly VexStep[];
+
+### build/index.d.ts#VEX_WORLD
+export declare const VEX_WORLD: World;
+
+### build/index.d.ts#ValueOf
+export type ValueOf<C> = C extends {
+  readonly [CHAIN_VALUE]?: infer T;
+} ? T : never;
+
+### build/index.d.ts#ValueOfDomain
+export type ValueOfDomain<Dm> = DomainValue<Dm>;
+
+### build/index.d.ts#VexEntry
+export interface VexEntry<Dms extends readonly AnyDomain[], F extends FnTable = NoFns> {
+  over<K extends string, O>(s: Space<K, O>): Root<{
+    readonly domains: Dms;
+    readonly keys: K;
+    readonly record: Merge<O>;
+    readonly fns: F;
+  }>;
+  readonly domains: Dms;
+}
+
+### build/index.d.ts#VexError
+export interface VexError {
+  readonly code: ErrorCode;
+  readonly kind: ErrorKind;
+  readonly message: string;
+  readonly path: readonly number[];
+  readonly origin?: string;
+  readonly focus?: string;
+  readonly op?: string;
+  readonly causes?: readonly VexError[];
+  readonly thrown?: unknown;
+}
+
+### build/index.d.ts#VexList
+export interface VexList<T = unknown> {
+  readonly kind: "vex.list";
+  readonly items: readonly ListItem<T>[];
+}
+
+### build/index.d.ts#VexOptions
+export interface VexOptions<F extends FnTable = FnTable> {
+  readonly fns?: F;
+  readonly extensions?: Readonly<Record<string, ExtHandler>>;
+}
+
+### build/index.d.ts#VexStep
+type VexStep = "A" | "B" | "C";
+
+### build/index.d.ts#addrExprs
+export declare const addrExprs: (at: Addr | undefined) => readonly Expr[];
+
+### build/index.d.ts#app
+export declare const app: (op: string, ...args: readonly Expr[]) => ExprOf<"app">;
+
+### build/index.d.ts#applyMove
+export declare function applyMove(s: Space, at: Position, m: FixedMove): Result<string>;
+
+### build/index.d.ts#asList
+export declare const asList: (u: unknown, missing: (message: string) => VexError) => VexList | undefined;
+
+### build/index.d.ts#axes
+export declare const axes: {
+  readonly all: Axis;
+  readonly others: Axis;
+  readonly other: Axis;
+  readonly neighbors: (n?: 4 | 8) => Axis;
+  readonly children: Axis;
+  readonly ancestors: Axis;
+  readonly descendants: Axis;
+  readonly siblings: Axis;
+  readonly window: (from: number, to: number) => Axis;
+  readonly table: (name: string) => Axis;
+  readonly successors: Axis;
+  readonly predecessors: Axis;
+  readonly reachable: Axis;
+  readonly reverse: (axis: Axis) => Axis;
+  readonly list: (list: Expr) => Axis;
+  readonly where: (axis: Axis, test: Expr) => Axis;
+};
+
+### build/index.d.ts#axisExprs
+export declare function axisExprs(a: Axis): readonly Expr[];
+
+### build/index.d.ts#axisTargets
+export declare function axisTargets(s: Space, at: Position, a: Exclude<Axis, {
+  readonly t: "where";
+}>): Result<readonly string[]>;
+
+### build/index.d.ts#call
+export declare const call: (name: string, ...args: Expr[]) => ExprOf<"call">;
+
+### build/index.d.ts#cell
+export declare const cell: (column: string, at?: Addr) => Expr;
+
+### build/index.d.ts#chainResult
+export declare const chainResult: <T, U>(r: Result<T>, f: (value: T) => Result<U>) => Result<U>;
+
+### build/index.d.ts#children
+export declare function children(e: Expr): readonly Expr[];
+
+### build/index.d.ts#codeOf
+export declare const codeOf: (kind: ErrorKind) => ErrorCode;
+
+### build/index.d.ts#columnOrder
+export declare function columnOrder(columns: ReadonlyMap<string, Expr>, cells: CellFormulas): readonly string[];
+
+### build/index.d.ts#compile
+export declare function compile(source: Expr | Envelope, opts?: CompileOptions): Program;
+
+### build/index.d.ts#dataLimit
+export declare const dataLimit: (axis: Axis) => DataLimit;
+
+### build/index.d.ts#defineDomain
+export declare function defineDomain<const Name extends string, D, const Ops extends Readonly<Record<string, OpSpec<D>>>>(spec: DomainSpec<Name, D, Ops>): Domain<Name, D, Ops>;
+
+### build/index.d.ts#deps
+export declare function deps(e: Expr): readonly Dependency[];
+
+### build/index.d.ts#describeType
+export declare function describeType(u: unknown): string;
+
+### build/index.d.ts#domainOf
+export declare function domainOf(domains: readonly AnyDomain[], value: unknown): AnyDomain | undefined;
+
+### build/index.d.ts#each
+export declare function each(axis: Axis, body: Expr, at?: Addr, as?: ItemNames): ExprOf<"each">;
+
+### build/index.d.ts#errorAt
+export declare function errorAt(t: ErrorText, pos: Position, path: readonly number[], extra?: ErrorExtra): VexError;
+
+### build/index.d.ts#errorText
+export declare const errorText: {
+  readonly unbound: (name: string) => ErrorText;
+  readonly functionValue: (name: string) => ErrorText;
+  readonly noFunction: (name: string) => ErrorText;
+  readonly notFunction: (name: string) => ErrorText;
+  readonly arity: (name: string, params: number, args: number) => ErrorText;
+  readonly noHandler: (kind: string) => ErrorText;
+  readonly threw: (op: string) => ErrorText;
+  readonly missing: (key: string, where: string) => ErrorText;
+  readonly readThrew: (key: string, where: string) => ErrorText;
+  readonly args: (count: number, what: string) => ErrorText;
+  readonly noTable: (name: string) => ErrorText;
+  readonly untilKind: (value: unknown) => ErrorText;
+  readonly limit: (limit: number) => ErrorText;
+  readonly fixKind: (name: string, join: string, kind: string, value: unknown) => ErrorText;
+  readonly fixNumber: (name: string, value: unknown) => ErrorText;
+  readonly fixLimit: (name: string, rounds: number) => ErrorText;
+  readonly lastKey: (name: string, key: string) => ErrorText;
+  readonly whereKind: (value: unknown) => ErrorText;
+  readonly domainNoOp: (domain: string, op: string) => ErrorText;
+  readonly noOp: (op: string) => ErrorText;
+  readonly noDomain: (op: string, self: unknown) => ErrorText;
+  readonly needsArgument: (op: string, i: number) => ErrorText;
+  readonly needsArguments: (op: string) => ErrorText;
+  readonly notBoolean: (op: string, i: number, value: unknown) => ErrorText;
+  readonly badParam: (op: string, i: number, value: unknown, kind: ParamKind, domain: string) => ErrorText;
+  readonly noValue: (op: string) => ErrorText;
+  readonly notFinite: (op: string, value: number) => ErrorText;
+  readonly invalid: (op: string, domain: string) => ErrorText;
+  readonly validThrew: (op: string, domain: string) => ErrorText;
+  readonly axisList: (value: unknown) => ErrorText;
+  readonly needsItems: (op: string, what: "numbers" | "booleans", item: unknown) => ErrorText;
+  readonly empty: (op: string) => ErrorText;
+  readonly reduceName: (name: unknown) => ErrorText;
+  readonly noStep: (op: string, value: unknown) => ErrorText;
+};
+
+### build/index.d.ts#evaluate
+export declare function evaluate(expr: Expr | Envelope, opts: EvalOptions): Result<unknown>;
+
+### build/index.d.ts#explain
+export declare function explain(expr: Expr | Envelope, opts: Omit<EvalOptions, "trace">): Trace;
+
+### build/index.d.ts#ext
+export declare const ext: (kind: string, data: unknown) => ExprOf<"ext">;
+
+### build/index.d.ts#fail
+export declare const fail: <T = never>(error: VexError) => Result<T>;
+
+### build/index.d.ts#findMethod
+export declare function findMethod(self: unknown, name: string): ((...args: unknown[]) => unknown) | undefined;
+
+### build/index.d.ts#fix
+export declare function fix(name: string, join: FixJoin, init: Expr, step: Expr): ExprOf<"fix">;
+
+### build/index.d.ts#fixAddr
+export declare function fixAddr(addr: Addr, values: readonly unknown[], at: Position): Result<readonly FixedMove[]>;
+
+### build/index.d.ts#fixRounds
+export declare const fixRounds: (rows: number) => number;
+
+### build/index.d.ts#fixValueError
+export declare function fixValueError(name: string, join: FixJoin, value: unknown): ErrorText | undefined;
+
+### build/index.d.ts#fn
+export declare const fn: (params: readonly string[], body: Expr) => ExprOf<"fn">;
+
+### build/index.d.ts#fold
+export declare function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Addr, as?: ItemNames): ExprOf<"fold">;
+
+### build/index.d.ts#formatError
+export declare const formatError: (e: VexError) => string;
+
+### build/index.d.ts#formatTrace
+export declare function formatTrace(trace: Trace, domains?: readonly AnyDomain[]): string;
+
+### build/index.d.ts#fromDocument
+export declare function fromDocument(doc: unknown, domains?: readonly AnyDomain[]): Result<Expr>;
+
+### build/index.d.ts#getOr
+export declare const getOr: <T, U>(o: Optional<T>, fallback: U) => T | U;
+
+### build/index.d.ts#index
+export declare function index(i: number): FixedMove;
+export declare function index(i: number | Expr): Move;
+
+### build/index.d.ts#isAxis
+export declare function isAxis(u: unknown): u is Axis;
+
+### build/index.d.ts#isCellRef
+export declare const isCellRef: (u: unknown) => u is CellRef;
+
+### build/index.d.ts#isDepthError
+export declare const isDepthError: (e: VexError) => boolean;
+
+### build/index.d.ts#isDocument
+export declare function isDocument(u: unknown): u is Envelope$1;
+
+### build/index.d.ts#isExpr
+export declare function isExpr(u: unknown): u is Expr;
+
+### build/index.d.ts#isFieldName
+export declare const isFieldName: (seg: string) => boolean;
+
+### build/index.d.ts#isFixedAddr
+export declare const isFixedAddr: (at: Addr | undefined) => at is readonly FixedMove[];
+
+### build/index.d.ts#isListOp
+export declare const isListOp: (op: string) => op is ListOp;
+
+### build/index.d.ts#isMove
+export declare function isMove(u: unknown): u is Move;
+
+### build/index.d.ts#isNone
+export declare const isNone: <T>(o: Optional<T>) => o is {
+  readonly tag: "none";
+};
+
+### build/index.d.ts#isOpName
+export declare const isOpName: (name: string) => boolean;
+
+### build/index.d.ts#isSome
+export declare const isSome: <T>(o: Optional<T>) => o is {
+  readonly tag: "some";
+  readonly value: T;
+};
+
+### build/index.d.ts#isStackOverflow
+export declare function isStackOverflow(thrown: unknown): boolean;
+
+### build/index.d.ts#isVexList
+export declare const isVexList: (u: unknown) => u is VexList;
+
+### build/index.d.ts#iterate
+export declare function iterate(limit: number | DataLimit, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate">;
+
+### build/index.d.ts#joinKind
+export declare const joinKind: (join: FixJoin) => "boolean" | "number";
+
+### build/index.d.ts#kernelPlan
+export declare function kernelPlan(source: Expr | Envelope, opts?: CompileOptions): KernelPlan;
+
+### build/index.d.ts#key
+export declare function key(k: string): FixedMove;
+export declare function key(k: string | Expr): Move;
+
+### build/index.d.ts#labelOf
+export declare function labelOf(e: Expr): string;
+
+### build/index.d.ts#last
+export declare function last(name: string): ExprOf<"last">;
+
+### build/index.d.ts#let_
+export declare const let_: (bind: Readonly<Record<string, Expr>>, body: Expr) => ExprOf<"let">;
+
+### build/index.d.ts#liftsAt
+export declare const liftsAt: (lift: OpSpec<unknown>["liftScalar"], index: number) => boolean;
+
+### build/index.d.ts#limitAxis
+export declare const limitAxis: (e: ExprOf<"iterate">) => Axis | undefined;
+
+### build/index.d.ts#listItemKind
+export declare const listItemKind: (r: ReturnKind | undefined) => PrimitiveKind | undefined;
+
+### build/index.d.ts#listOf
+export declare function listOf(a: Axis): Expr | undefined;
+
+### build/index.d.ts#listOps
+export declare function listOps(opts?: CompileOptions): ListOps;
+
+### build/index.d.ts#lit
+export declare const lit: (value: unknown) => ExprOf<"lit">;
+
+### build/index.d.ts#mapResult
+export declare const mapResult: <T, U>(r: Result<T>, f: (value: T) => U) => Result<U>;
+
+### build/index.d.ts#matchesKind
+export declare function matchesKind(kind: ParamKind, value: unknown, domain: AnyDomain): boolean;
+
+### build/index.d.ts#monoids
+export declare const monoids: {
+  readonly sum: Monoid<number>;
+  readonly product: Monoid<number>;
+  readonly all: Monoid<boolean>;
+  readonly any: Monoid<boolean>;
+};
+
+### build/index.d.ts#monotoneError
+export declare function monotoneError(e: Expr, opts: MonotoneOptions): string | undefined;
+
+### build/index.d.ts#moveExpr
+export declare function moveExpr(m: Move): Expr | undefined;
+
+### build/index.d.ts#nestingOf
+export declare function nestingOf(e: Expr): number;
+
+### build/index.d.ts#noKeyError
+export declare const noKeyError: (origin: string) => VexError;
+
+### build/index.d.ts#none
+export declare const none: <T = never>() => Optional<T>;
+
+### build/index.d.ts#offset
+export declare const offset: (...d: readonly number[]) => FixedMove;
+
+### build/index.d.ts#ok
+export declare const ok: <T>(value: T) => Result<T>;
+
+### build/index.d.ts#origin
+export declare const origin: FixedMove;
+
+### build/index.d.ts#other
+export declare const other: FixedMove;
+
+### build/index.d.ts#parent
+export declare const parent: FixedMove;
+
+### build/index.d.ts#parse
+export declare function parse(text: string, domains?: readonly AnyDomain[]): Result<Expr>;
+
+### build/index.d.ts#previewValue
+export declare function previewValue(u: unknown): string;
+
+### build/index.d.ts#programStep
+export declare function programStep(e: Expr): ProgramStep;
+
+### build/index.d.ts#readsOf
+export declare function readsOf(columns: ReadonlyMap<string, Expr>, cells: CellFormulas, self: string): {
+  readonly columns: ReadonlySet<string>;
+  readonly directions: ReadonlySet<Direction>;
+};
+
+### build/index.d.ts#rec
+export declare const rec: (fields: Readonly<Record<string, Expr>>) => ExprOf<"rec">;
+
+### build/index.d.ts#ref
+export declare function ref(path: string | readonly string[], at?: Addr): ExprOf<"ref">;
+
+### build/index.d.ts#resolveAddr
+export declare function resolveAddr(s: Space, at: Position, addr: readonly FixedMove[] | undefined): Result<string>;
+
+### build/index.d.ts#resolveOp
+export declare function resolveOp(domain: AnyDomain, self: unknown, name: string): ResolvedOp | undefined;
+
+### build/index.d.ts#ruleOf
+export declare function ruleOf(d: AnyDomain, spec: OpSpec<unknown>, domains: readonly AnyDomain[]): SizeRule | undefined;
+
+### build/index.d.ts#safeIs
+export declare function safeIs(d: AnyDomain, value: unknown): boolean;
+
+### build/index.d.ts#serialize
+export declare function serialize(e: Expr, domains?: readonly AnyDomain[]): Result<string>;
+
+### build/index.d.ts#shapeError
+export declare function shapeError(u: unknown): string | undefined;
+
+### build/index.d.ts#sizeError
+export declare function sizeError(e: Expr, opts?: SizeOptions): string | undefined;
+
+### build/index.d.ts#sizeOf
+export declare const sizeOf: (e: Expr) => number;
+
+### build/index.d.ts#some
+export declare const some: <T>(value: T) => Optional<T>;
+
+### build/index.d.ts#space
+export declare const space: {
+  readonly record: <const R extends Readonly<Record<string, unknown>>>(records: R) => Space<keyof R & string, R[keyof R]>;
+  readonly array: <O>(items: readonly O[]) => Space<ArrayKey, O>;
+  readonly grid: <O>(rows: readonly (readonly O[])[]) => Space<GridKey, O>;
+  readonly tree: <const R extends Readonly<Record<string, unknown>>>(records: R, parents: Readonly<Partial<Record<keyof R & string, (keyof R & string) | null>>>) => Space<keyof R & string, R[keyof R]>;
+  readonly graph: <const R extends Readonly<Record<string, unknown>>>(records: R, edges: Readonly<Partial<Record<keyof R & string, readonly (keyof R & string)[]>>>) => Space<keyof R & string, R[keyof R]>;
+};
+
+### build/index.d.ts#splitLimit
+export declare function splitLimit(e: ExprOf<"iterate">): readonly [ExprOf<"each">, ExprOf<"iterate">] | undefined;
+
+### build/index.d.ts#stepError
+export declare function stepError(e: Expr, opts?: StepOptions): string | undefined;
+
+### build/index.d.ts#toDocument
+export declare function toDocument(e: Expr, domains?: readonly AnyDomain[]): Result<Envelope$1>;
+
+### build/index.d.ts#toKernelError
+export declare const toKernelError: (e: VexError) => EvalError;
+
+### build/index.d.ts#toOptional
+export declare const toOptional: <T>(r: Result<T>) => Optional<T>;
+
+### build/index.d.ts#toPath
+export declare const toPath: (path: string | readonly string[]) => readonly string[];
+
+### build/index.d.ts#toVexError
+export declare function toVexError(e: EvalError): VexError;
+
+### build/index.d.ts#toVexResult
+export declare const toVexResult: (r: Result$1) => Result<unknown>;
+
+### build/index.d.ts#traversal
+export declare function traversal<K extends string, T>(items: readonly TraversalItem<K, T>[], env: TraversalEnv, isStrict?: boolean): Traversal<K, T>;
+
+### build/index.d.ts#v
+export declare const v: (name: string) => ExprOf<"var">;
+
+### build/index.d.ts#vex
+export declare function vex<const Dms extends readonly AnyDomain[]>(...domains: Dms): VexEntry<Dms> & {
+  withOptions<const F extends FnTable = NoFns>(options: VexOptions<F>): VexEntry<Dms, F>;
+};
+
+### build/index.d.ts#vexChecker
+export declare function vexChecker(): Machine;
+
+### build/index.d.ts#vexDefinitions
+export declare function vexDefinitions(opts?: CompileOptions): Definitions;
+
+### build/index.d.ts#vexError
+export declare function vexError(kind: ErrorKind, message: string, details?: ErrorDetails): VexError;
+
+### build/index.d.ts#vexList
+export declare const vexList: <T>(items: readonly ListItem<T>[]) => VexList<T>;
+
+### build/index.d.ts#vexMachine
+export declare function vexMachine(opts?: CompileOptions): Machine;
+
+### build/index.d.ts#vexSelf
+export declare function vexSelf(space: Space, origin: string, tables?: Readonly<Record<string, Space>>): HostThing;
+
+### build/index.d.ts#worstRow
+export declare function worstRow<E extends {
+  readonly code: string;
+}>(errors: readonly E[]): E | undefined;

@@ -1,0 +1,411 @@
+# The public API of @mark1russell7/vex-testkit
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 58 names
+
+ArbOptions: build/index.d.ts#ArbOptions
+ArbSheet: build/index.d.ts#ArbSheet
+ArbTwoTables: build/index.d.ts#ArbTwoTables
+Arg: build/index.d.ts#Arg
+AxisName: build/index.d.ts#AxisName
+BuilderChain: build/index.d.ts#BuilderChain
+Comparable: build/index.d.ts#Comparable
+DynChain: build/index.d.ts#DynChain
+DynRoot: build/index.d.ts#DynRoot
+FIELDS: build/index.d.ts#FIELDS
+FixGraph: build/index.d.ts#FixGraph
+GraphInput: build/index.d.ts#GraphInput
+LawOptions: build/index.d.ts#LawOptions
+LawProperty: build/index.d.ts#LawProperty
+LawResult: build/index.d.ts#LawResult
+ModelOptions: build/index.d.ts#ModelOptions
+MoveCall: build/index.d.ts#MoveCall
+PATHS: build/index.d.ts#PATHS
+RECORD_KEYS: build/index.d.ts#RECORD_KEYS
+Reduction: build/index.d.ts#Reduction
+RefOutcome: build/index.d.ts#RefOutcome
+ReferenceOptions: build/index.d.ts#ReferenceOptions
+ReferenceSheetRun: build/index.d.ts#ReferenceSheetRun
+SHEET_COLUMNS: build/index.d.ts#SHEET_COLUMNS
+Step: build/index.d.ts#Step
+TreeInput: build/index.d.ts#TreeInput
+VAR: build/index.d.ts#VAR
+arbChain: build/index.d.ts#arbChain
+arbChangedDocument: build/index.d.ts#arbChangedDocument
+arbExpr: build/index.d.ts#arbExpr
+arbFixExpr: build/index.d.ts#arbFixExpr
+arbFixGraph: build/index.d.ts#arbFixGraph
+arbFixProgram: build/index.d.ts#arbFixProgram
+arbGraphInput: build/index.d.ts#arbGraphInput
+arbLiteral: build/index.d.ts#arbLiteral
+arbMove: build/index.d.ts#arbMove
+arbNumberExpr: build/index.d.ts#arbNumberExpr
+arbNumberSpace: build/index.d.ts#arbNumberSpace
+arbOrigin: build/index.d.ts#arbOrigin
+arbRecord: build/index.d.ts#arbRecord
+arbSheet: build/index.d.ts#arbSheet
+arbSheetFormula: build/index.d.ts#arbSheetFormula
+arbSpace: build/index.d.ts#arbSpace
+arbTreeInput: build/index.d.ts#arbTreeInput
+arbTwoTables: build/index.d.ts#arbTwoTables
+assertLaws: build/index.d.ts#assertLaws
+chainText: build/index.d.ts#chainText
+checkLaws: build/index.d.ts#checkLaws
+fromCore: build/index.d.ts#fromCore
+fromReference: build/index.d.ts#fromReference
+lawProperties: build/index.d.ts#lawProperties
+modelChain: build/index.d.ts#modelChain
+referenceEvaluate: build/index.d.ts#referenceEvaluate
+runChain: build/index.d.ts#runChain
+sheetCellsOf: build/index.d.ts#sheetCellsOf
+sheetColumnsOf: build/index.d.ts#sheetColumnsOf
+sheetRowsOf: build/index.d.ts#sheetRowsOf
+structuralEqual: build/index.d.ts#structuralEqual
+
+## Declarations
+
+### build/index.d.ts#ArbOptions
+export interface ArbOptions {
+  readonly domainValue: fc.Arbitrary<unknown>;
+  readonly ops: readonly string[];
+  readonly maxDepth?: number;
+}
+
+### build/index.d.ts#ArbSheet
+export interface ArbSheet {
+  readonly formulas: readonly [Expr, Expr, Expr];
+  readonly own: readonly (readonly [string, number, Expr])[];
+  readonly rows: readonly number[];
+  readonly reads: readonly (readonly [string, string])[];
+}
+
+### build/index.d.ts#ArbTwoTables
+export interface ArbTwoTables {
+  readonly main: readonly [Expr, Expr, Expr];
+  readonly other: readonly [Expr, Expr, Expr];
+  readonly mainRows: readonly number[];
+  readonly otherRows: readonly number[];
+  readonly reads: readonly (readonly [string, string, string])[];
+}
+
+### build/index.d.ts#Arg
+export type Arg = {
+  readonly k: "field";
+  readonly path: string;
+} | {
+  readonly k: "lit";
+  readonly value: number | boolean;
+} | {
+  readonly k: "of";
+  readonly key: string;
+  readonly path: string;
+} | {
+  readonly k: "chain";
+  readonly chain: BuilderChain;
+} | {
+  readonly k: "var";
+  readonly name: string;
+} | {
+  readonly k: "rootLit";
+  readonly value: number | boolean | string;
+} | {
+  readonly k: "rootField";
+  readonly path: string;
+} | {
+  readonly k: "rec";
+  readonly a: Arg;
+  readonly b: Arg;
+};
+
+### build/index.d.ts#AxisName
+export type AxisName = "others" | "each" | "neighbors4" | "neighbors8" | "children" | "ancestors" | "descendants" | "siblings" | "window" | "successors" | "predecessors" | "reachable";
+
+### build/index.d.ts#BuilderChain
+export interface BuilderChain {
+  readonly head: {
+    readonly t: "from";
+    readonly path: string;
+  } | {
+    readonly t: "start";
+    readonly value: number | boolean | string;
+  };
+  readonly steps: readonly Step[];
+}
+
+### build/index.d.ts#Comparable
+export type Comparable = {
+  readonly ok: true;
+  readonly value: unknown;
+} | {
+  readonly ok: false;
+  readonly code: string;
+};
+
+### build/index.d.ts#DynChain
+export interface DynChain {
+  readonly kind: string;
+  readonly program: Expr;
+  readonly _: Readonly<Record<string, (...a: readonly unknown[]) => DynChain>>;
+  [member: string]: unknown;
+  result?(k: string): Result<unknown>;
+}
+
+### build/index.d.ts#DynRoot
+export interface DynRoot {
+  from(p: string): DynChain;
+  start(v: unknown): DynChain;
+  of(k: string, p: string): unknown;
+  lit(v: unknown): unknown;
+  field(p: string): unknown;
+  rec(fields: Readonly<Record<string, unknown>>): unknown;
+}
+
+### build/index.d.ts#FIELDS
+export declare const FIELDS: readonly string[];
+
+### build/index.d.ts#FixGraph
+export interface FixGraph {
+  readonly records: Readonly<Record<string, {
+    readonly n: number;
+    readonly b: boolean;
+  }>>;
+  readonly edges: Readonly<Record<string, readonly string[]>>;
+}
+
+### build/index.d.ts#GraphInput
+export interface GraphInput {
+  readonly records: Readonly<Record<string, unknown>>;
+  readonly edges: Readonly<Record<string, readonly string[]>>;
+}
+
+### build/index.d.ts#LawOptions
+export interface LawOptions<D> {
+  readonly arb: fc.Arbitrary<D>;
+  readonly eq?: (a: unknown, b: unknown) => boolean;
+  readonly numRuns?: number;
+  readonly domains?: readonly AnyDomain[];
+}
+
+### build/index.d.ts#LawProperty
+export interface LawProperty {
+  readonly name: string;
+  readonly check: (numRuns: number) => LawResult;
+}
+
+### build/index.d.ts#LawResult
+export interface LawResult {
+  readonly name: string;
+  readonly ok: boolean;
+  readonly message?: string;
+}
+
+### build/index.d.ts#ModelOptions
+export interface ModelOptions {
+  readonly keys: readonly string[];
+  readonly paths: readonly string[];
+  readonly ops: readonly string[];
+  readonly fns: readonly string[];
+  readonly reduceOps: readonly string[];
+  readonly reductions: readonly Reduction["op"][];
+  readonly depth: number;
+  readonly binds?: boolean;
+}
+
+### build/index.d.ts#MoveCall
+export type MoveCall = {
+  readonly t: "to";
+  readonly key: string;
+} | {
+  readonly t: "index";
+  readonly i: number;
+} | {
+  readonly t: "offset";
+  readonly d: readonly number[];
+} | {
+  readonly t: "other";
+} | {
+  readonly t: "origin";
+} | {
+  readonly t: "parent";
+};
+
+### build/index.d.ts#PATHS
+export declare const PATHS: readonly (readonly string[])[];
+
+### build/index.d.ts#RECORD_KEYS
+export declare const RECORD_KEYS: readonly string[];
+
+### build/index.d.ts#Reduction
+export interface Reduction {
+  readonly op: "count" | "sum" | "mean" | "min" | "max" | "any" | "all" | "none" | "values" | "first" | "keys" | "errors" | "reduce";
+  readonly with?: string;
+  readonly strict: boolean;
+}
+
+### build/index.d.ts#RefOutcome
+export type RefOutcome = {
+  readonly ok: true;
+  readonly value: unknown;
+} | {
+  readonly ok: false;
+  readonly code: ErrorCode;
+};
+
+### build/index.d.ts#ReferenceOptions
+export interface ReferenceOptions {
+  readonly space: Space;
+  readonly origin: string;
+  readonly domains?: readonly AnyDomain[];
+  readonly fns?: Readonly<Record<string, (...a: readonly unknown[]) => unknown>>;
+  readonly tables?: Readonly<Record<string, Space>>;
+  readonly vars?: Readonly<Record<string, unknown>>;
+  readonly extensions?: Readonly<Record<string, ExtHandler>>;
+}
+
+### build/index.d.ts#ReferenceSheetRun
+export declare class ReferenceSheetRun {
+  constructor(columns: ReadonlyMap<string, Expr>, opts: SheetOptions);
+  cell(column: string, key: string, table?: string): Result<unknown>;
+}
+
+### build/index.d.ts#SHEET_COLUMNS
+export declare const SHEET_COLUMNS: readonly ["A", "B", "C"];
+
+### build/index.d.ts#Step
+export type Step = {
+  readonly t: "from";
+  readonly path: string;
+} | {
+  readonly t: "move";
+  readonly m: MoveCall;
+} | {
+  readonly t: "op";
+  readonly op: string;
+  readonly args: readonly Arg[];
+} | {
+  readonly t: "call";
+  readonly name: string;
+  readonly args: readonly Arg[];
+} | {
+  readonly t: "ifError";
+  readonly fallback: Arg;
+} | {
+  readonly t: "fork";
+  readonly a: readonly Step[];
+  readonly b: readonly Step[];
+} | {
+  readonly t: "with";
+  readonly bind: Arg;
+  readonly body: readonly Step[];
+} | {
+  readonly t: "axis";
+  readonly axis: AxisName;
+  readonly body: readonly Step[];
+  readonly where?: readonly Step[];
+  readonly reduce?: Reduction;
+};
+
+### build/index.d.ts#TreeInput
+export interface TreeInput {
+  readonly records: Readonly<Record<string, unknown>>;
+  readonly parents: Readonly<Record<string, string | null>>;
+}
+
+### build/index.d.ts#VAR
+export declare const VAR = "x";
+
+### build/index.d.ts#arbChain
+export declare function arbChain(o: ModelOptions, depth?: number, vars?: boolean): fc.Arbitrary<BuilderChain>;
+
+### build/index.d.ts#arbChangedDocument
+export declare const arbChangedDocument: (opts: ArbOptions, domains: readonly AnyDomain[]) => fc.Arbitrary<unknown>;
+
+### build/index.d.ts#arbExpr
+export declare function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr>;
+
+### build/index.d.ts#arbFixExpr
+export declare function arbFixExpr(maxDepth?: number): fc.Arbitrary<Expr>;
+
+### build/index.d.ts#arbFixGraph
+export declare const arbFixGraph: fc.Arbitrary<FixGraph>;
+
+### build/index.d.ts#arbFixProgram
+export declare function arbFixProgram(maxDepth?: number): fc.Arbitrary<Expr>;
+
+### build/index.d.ts#arbGraphInput
+export declare const arbGraphInput: (domainValue: fc.Arbitrary<unknown>) => fc.Arbitrary<GraphInput>;
+
+### build/index.d.ts#arbLiteral
+export declare const arbLiteral: (domainValue: fc.Arbitrary<unknown>) => fc.Arbitrary<unknown>;
+
+### build/index.d.ts#arbMove
+export declare const arbMove: fc.Arbitrary<FixedMove>;
+
+### build/index.d.ts#arbNumberExpr
+export declare function arbNumberExpr(maxDepth?: number): fc.Arbitrary<Expr>;
+
+### build/index.d.ts#arbNumberSpace
+export declare const arbNumberSpace: fc.Arbitrary<Space>;
+
+### build/index.d.ts#arbOrigin
+export declare const arbOrigin: (s: Space) => fc.Arbitrary<string>;
+
+### build/index.d.ts#arbRecord
+export declare const arbRecord: (domainValue: fc.Arbitrary<unknown>) => fc.Arbitrary<unknown>;
+
+### build/index.d.ts#arbSheet
+export declare const arbSheet: fc.Arbitrary<ArbSheet>;
+
+### build/index.d.ts#arbSheetFormula
+export declare const arbSheetFormula: (tables?: readonly string[]) => fc.Arbitrary<Expr>;
+
+### build/index.d.ts#arbSpace
+export declare const arbSpace: (domainValue: fc.Arbitrary<unknown>) => fc.Arbitrary<Space>;
+
+### build/index.d.ts#arbTreeInput
+export declare const arbTreeInput: (domainValue: fc.Arbitrary<unknown>) => fc.Arbitrary<TreeInput>;
+
+### build/index.d.ts#arbTwoTables
+export declare const arbTwoTables: fc.Arbitrary<ArbTwoTables>;
+
+### build/index.d.ts#assertLaws
+export declare function assertLaws<D>(domain: AnyDomain, opts: LawOptions<D>): void;
+
+### build/index.d.ts#chainText
+export declare function chainText(c: BuilderChain): string;
+
+### build/index.d.ts#checkLaws
+export declare function checkLaws<D>(domain: AnyDomain, opts: LawOptions<D>): readonly LawResult[];
+
+### build/index.d.ts#fromCore
+export declare const fromCore: (r: Result<unknown>) => Comparable;
+
+### build/index.d.ts#fromReference
+export declare const fromReference: (r: RefOutcome) => Comparable;
+
+### build/index.d.ts#lawProperties
+export declare function lawProperties<D>(domain: AnyDomain, opts: LawOptions<D>): readonly LawProperty[];
+
+### build/index.d.ts#modelChain
+export declare function modelChain(c: BuilderChain): Expr;
+
+### build/index.d.ts#referenceEvaluate
+export declare function referenceEvaluate(e: Expr | Envelope, opts: ReferenceOptions): RefOutcome;
+
+### build/index.d.ts#runChain
+export declare function runChain(c: BuilderChain, root: DynRoot, vars?: Readonly<Record<string, unknown>>): DynChain;
+
+### build/index.d.ts#sheetCellsOf
+export declare function sheetCellsOf(own: ArbSheet["own"]): Map<string, Map<string, Expr>>;
+
+### build/index.d.ts#sheetColumnsOf
+export declare const sheetColumnsOf: (fs: readonly Expr[]) => Map<string, Expr>;
+
+### build/index.d.ts#sheetRowsOf
+export declare const sheetRowsOf: (vs: readonly number[]) => Space;
+
+### build/index.d.ts#structuralEqual
+export declare function structuralEqual(a: unknown, b: unknown): boolean;

@@ -11,6 +11,7 @@
  */
 import { isOpName, type AnyDomain, type OpSpec, type ReturnKind, type SizeMeasure, type SizeRule, type SizeTerm, type SizeUse } from "./domain.ts";
 import { addrExprs, children, limitAxis, listOf, type Axis, type Expr, type ExprOf, type ItemNames } from "./ir.ts";
+import { joinKind as kindOfJoin } from "./fix.ts";
 import { isListOp, isVexList, LIST_SIZES, type ListOp } from "./list.ts";
 
 /** The options of the check of sizes: the domains and the functions of the host, as for `compile`. */
@@ -312,6 +313,13 @@ class Checker {
       case "fold":
       case "iterate":
         return this.#loop(e, env);
+      case "fix":
+        // A column gives a boolean or a number, so a list of the program cannot grow through it.
+        this.shape(e.init, env);
+        this.shape(e.step, env);
+        return zero(kindOfJoin(e.join) === "boolean" ? BOOLEAN : NUMBER);
+      case "last":
+        return zero(SCALAR);
       case "fn":
         return zero(NO_KIND);
     }
@@ -845,8 +853,10 @@ function label(e: Expr): string {
     case "each":
     case "ext":
     case "fn":
+    case "fix":
     case "fold":
     case "iterate":
+    case "last":
     case "let":
     case "lit":
     case "rec":

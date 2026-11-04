@@ -36,7 +36,7 @@ const testFiles = ["core", "domains", "testkit", "compiler", "site", "formula", 
       return false;
     }
   })
-  .flatMap((p) => files(p, (f) => /\.test\.tsx?$/.test(f)));
+  .flatMap((p) => files(p, (f) => /\.(?:test|spec)\.tsx?$/.test(f)));
 
 /** The titles of the tests and groups: the first string argument of `describe(`, `it(` and `test(`. */
 const titles: readonly string[] = testFiles.flatMap((f) =>

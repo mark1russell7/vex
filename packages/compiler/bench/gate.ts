@@ -44,6 +44,9 @@
  * A PR that makes a ratio better sets its limit lower in the same PR.
  * With `GATE_GC=1`, each case also prints the garbage collections of each arm in its timed runs (gc.ts, GATEGC).
  * With `GATE_ALLOC`, the process gives the allocations of one arm and no time (alloc.ts, TREEALLOC).
+ * With `GATE_ABLATE=1`, the check of a catch (CATCHFAULT, the cases after the variants of RADIALGAP) has its own cases. Their
+ * second arm is the same module with no check, so the ratio is the cost of the check, with the A/A band of that arm. Their
+ * limit is 1, and check (b) is a record only. No pull request starts these cases.
  * With `GATE_LIMIT_WALK=1`, the walk of a data limit gives two more cases (limit-walk.ts, LIMITCOST). Their second arm is
  * the module with a count at each key, not hand-written loops. Their limit is 1: the fix must not cost time. Check (b)
  * is a record only. No pull request starts these cases.
@@ -53,7 +56,7 @@ import type { Space } from "@mark1russell7/vex";
 import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
 import { radialArrange, radialRun } from "../../pilots/src/ireko-radial.ts";
-import { handBoth, handPairs, handSum, loadRadial, ringOf } from "./ablation.ts";
+import { catchCheck, errorRecords, handBoth, handPairs, handSum, loadErrors, loadRadial, ringOf } from "./ablation.ts";
 import { countAtEachKey, loadWalk, walkRecords } from "./limit-walk.ts";
 import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapesTree, type ShapeRecord } from "../../pilots/src/ireko-shapes.ts";
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
@@ -64,6 +67,7 @@ import { cpus } from "node:os";
 import { envLine, paired } from "../../core/bench/measure.ts";
 import { limitsFor, limitsText, type CaseLimits, type ModelLimits } from "../../core/bench/processes.ts";
 import type { AllocArm, AllocRegime } from "./alloc.ts";
+import type { ErrorsRun, RadialRun } from "./ablation.ts";
 import { GC_ON, gcRecorder } from "./gc.ts";
 
 /** The limits of each case, from the 10 runs in the header. A case with no `maxSlow` has check (b) as a record only. */
@@ -203,6 +207,24 @@ const ablationCase = (name: string, edit: (source: string) => string): ReturnTyp
   return { title: `the radial module of ireko, a full ring of 60 children, nested, ablation ${name}`, compiled: { run: () => variant(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limits: limitsOf("nested") };
 };
 
+// The check of a catch of a module (CATCHFAULT). The second arm is the module as it prints today, so each process pairs the
+// two forms. A variant must give the result of the module on the case input, or the gate stops.
+const catchCase = (name: string, after: () => void, before: () => void): Case => {
+  if (JSON.stringify(after()) !== JSON.stringify(before())) throw new Error(`gate: the catch variant ${name} gives another result.`);
+  return { title: `the check of a catch, ${name}, against the module with no check`, compiled: { run: after, tier: 2, fallbacks: () => 0 }, hand: before, limits: limitsOf("walk") };
+};
+const radialCatch = (name: string, variant: RadialRun): Case => {
+  const { space: s, vars } = radialRun(ringOf(60, "nested"));
+  const base = loadRadial((source) => source);
+  return catchCase(`${name}, a full ring of 60 children`, () => variant(s.records, vars), () => base(s.records, vars));
+};
+// Each key of this module takes the path of a throw, so each run calls the check once for each record.
+const errorsCatch = (name: string, variant: ErrorsRun): Case => {
+  const records = errorRecords(1000);
+  const base = loadErrors((source) => source);
+  return catchCase(`${name}, 1000 keys with a caught error`, () => variant(records, {}), () => base(records, {}));
+};
+
 // The walk of a between program with a data limit (LIMITCOST). The tree has one edge for each node, so a count at each key
 // costs the square of the nodes. The variant must give the result of the module on the case input, or the gate stops.
 const walkCase = (branch: number, depth: number): Case => {
@@ -234,7 +256,18 @@ const CASES_BASE: readonly (() => Case)[] = [
   () => treeCase(1000),
   () => shapesCase(10, 3),
 ];
-const CASES_ABLATE: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1" ? [() => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : [];
+const CASES_ABLATE: readonly (() => Case)[] =
+  process.env["GATE_ABLATE"] === "1"
+    ? [
+        () => ablationCase("hand sum", handSum),
+        () => ablationCase("hand pairs", handPairs),
+        () => ablationCase("hand both", handBoth),
+        () => radialCatch("instanceof in each catch", loadRadial(catchCheck)),
+        () => radialCatch("the form throw", loadRadial((source) => source, "throw")),
+        () => errorsCatch("instanceof in each catch", loadErrors(catchCheck)),
+        () => errorsCatch("the form throw", loadErrors((source) => source, "throw")),
+      ]
+    : [];
 const CASES_WALK: readonly (() => Case)[] = process.env["GATE_LIMIT_WALK"] === "1" ? [() => walkCase(10, 3), () => walkCase(10, 4)] : [];
 const CASES: readonly (() => Case)[] = [...CASES_BASE, ...CASES_ABLATE, ...CASES_WALK];
 

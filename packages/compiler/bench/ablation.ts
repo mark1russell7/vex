@@ -1,15 +1,17 @@
 // The ablation of RADIALGAP (step 3 of the fleet item): variants of the radial module of ireko, made by text edits of the
 // emitted source. Each edit fails when its text is not in the source, so a change of the emitter stops the gate and does
 // not measure a variant that is the same as the module. The test in `ablation.test.ts` checks each edit on each push.
+import { app, lit, ref, type Expr } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, type RadialInput } from "../../pilots/src/ireko-radial.ts";
 import { emitModule } from "../src/module.ts";
 
 /** This type is the run of the radial module: the records and the variables of a ring give its result. */
 export type RadialRun = (records: unknown, vars: unknown) => unknown;
 
-/** This function loads the radial module, with the source changed by `edit`. */
-export const loadRadial = (edit: (source: string) => string): RadialRun => {
-  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial", faults: "value" });
+/** This function loads the radial module, with the source changed by `edit`. The option `faults` selects the form of the module. */
+export const loadRadial = (edit: (source: string) => string, faults: "value" | "throw" = "value"): RadialRun => {
+  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial", faults });
   if (!m.ok) throw new Error(m.reason);
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
   const load = new Function(`${edit(m.source.replaceAll(/^export /gm, ""))}\nreturn radial;`) as () => RadialRun;
@@ -113,3 +115,40 @@ export const handPairs = (source: string): string => replaceFunction(withArrays(
 
 /** This edit applies the two transplants together. */
 export const handBoth = (source: string): string => replaceFunction(replaceFunction(withArrays(source), SUM_HEAD, HAND_SUM), PAIRS_HEAD, HAND_PAIRS);
+
+// The cost of a check in each catch of the form `value` (CATCHFAULT). The check rethrows a ReferenceError, so a read of a
+// name that the module does not declare leaves the run. The edit does not change the catch inside the copy of a function
+// of a domain, as `keepFaults` does not. Such a copy is one line of the module.
+const COPY_LINE = /^const (?:op|v)_/;
+const CATCH_CHECK = "function H(x) { if (x instanceof ReferenceError) throw x; }
+";
+
+/** This edit makes each catch of the printed code rethrow a ReferenceError. */
+export const catchCheck = (source: string): string => {
+  if (!source.includes("catch {")) throw new Error("ablation: the module has no catch.");
+  const lines = source.split("
+").map((line) => (COPY_LINE.test(line) ? line : line.replaceAll("catch {", "catch ($) { H($);")));
+  return replaceOnce(lines.join("
+"), "const E = {};
+", `const E = {};
+${CATCH_CHECK}`);
+};
+
+/** This type is the run of the module of the many errors. */
+export type ErrorsRun = (records: unknown, vars: unknown) => readonly unknown[];
+
+/** The program with one caught error at each record that has `z` at 0: the error of Vex holds the value 0 at its key. */
+export const ERRORS_PROGRAM: Expr = app("ifError", app("divide", ref("x"), ref("z")), lit(0));
+
+/** This function gives `n` records with `z` at 0, so each key takes the path of a throw. */
+export const errorRecords = (n: number): readonly { readonly x: number; readonly z: number }[] => Array.from({ length: n }, (_, i) => ({ x: i + 1, z: 0 }));
+
+/** This function loads the module of the many errors, with the source changed by `edit`. */
+export const loadErrors = (edit: (source: string) => string, faults: "value" | "throw" = "value"): ErrorsRun => {
+  const m = emitModule(ERRORS_PROGRAM, { domains: [NumDomain], schema: { fields: { x: "number", z: "number" } }, name: "errors", faults });
+  if (!m.ok) throw new Error(m.reason);
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
+  const load = new Function(`${edit(m.source.replaceAll(/^export /gm, ""))}
+return errors;`) as () => ErrorsRun;
+  return load();
+};

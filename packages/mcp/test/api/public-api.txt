@@ -1,0 +1,130 @@
+# The public API of @mark1russell7/vex-mcp
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 20 names
+
+CATALOG: build/index.d.ts#CATALOG
+DEFAULT_DOMAINS: build/index.d.ts#DEFAULT_DOMAINS
+type Entry: build/index.d.ts#Entry
+type RunInput: build/index.d.ts#RunInput
+type SpaceInput: build/index.d.ts#SpaceInput
+ToolError: build/index.d.ts#ToolError
+catalogText: build/index.d.ts#catalogText
+check: build/index.d.ts#check
+createHost: build/index.d.ts#createHost
+dataOf: build/index.d.ts#dataOf
+domainText: build/index.d.ts#domainText
+domainsOf: build/index.d.ts#domainsOf
+evaluateAll: build/index.d.ts#evaluateAll
+explainAt: build/index.d.ts#explainAt
+jsonOf: build/index.d.ts#jsonOf
+moduleOf: build/index.d.ts#moduleOf
+programOf: build/index.d.ts#programOf
+resultJson: build/index.d.ts#resultJson
+spaceOf: build/index.d.ts#spaceOf
+vexModule: build/index.d.ts#vexModule
+
+## bin: 1 commands
+
+vex-mcp: ./build/main.js
+
+## Declarations
+
+### build/index.d.ts#CATALOG
+export declare const CATALOG: readonly Entry[];
+
+### build/index.d.ts#DEFAULT_DOMAINS
+export declare const DEFAULT_DOMAINS: readonly AnyDomain[];
+
+### build/index.d.ts#Entry
+interface Entry {
+  readonly name: string;
+  readonly d: AnyDomain;
+  readonly type: string;
+  readonly sample: unknown;
+  readonly about: string;
+}
+
+### build/index.d.ts#RunInput
+interface RunInput {
+  readonly program: unknown;
+  readonly space: SpaceInput;
+  readonly domains?: readonly string[] | undefined;
+  readonly vars?: Readonly<Record<string, unknown>> | undefined;
+  readonly maxStep?: VexStep | undefined;
+}
+
+### build/index.d.ts#SpaceInput
+interface SpaceInput {
+  readonly kind: "array" | "record" | "grid" | "tree" | "graph";
+  readonly records: unknown;
+  readonly parents?: Readonly<Record<string, string | null>> | undefined;
+  readonly edges?: Readonly<Record<string, readonly string[]>> | undefined;
+}
+
+### build/index.d.ts#ToolError
+export declare class ToolError extends Error {}
+
+### build/index.d.ts#catalogText
+export declare function catalogText(): string;
+
+### build/index.d.ts#check
+export declare function check(input: {
+  readonly program: unknown;
+  readonly domains?: readonly string[] | undefined;
+  readonly maxStep?: VexStep | undefined;
+}): unknown;
+
+### build/index.d.ts#createHost
+export declare function createHost(faces?: McpHostOptions["faces"]): McpHost;
+
+### build/index.d.ts#dataOf
+export declare function dataOf(data: unknown, domains: readonly AnyDomain[]): unknown;
+
+### build/index.d.ts#domainText
+export declare function domainText(self: Entry): string;
+
+### build/index.d.ts#domainsOf
+export declare function domainsOf(names: readonly string[] | undefined): readonly AnyDomain[];
+
+### build/index.d.ts#evaluateAll
+export declare function evaluateAll(input: RunInput & {
+  readonly origins?: readonly string[] | undefined;
+}): unknown;
+
+### build/index.d.ts#explainAt
+export declare function explainAt(input: RunInput & {
+  readonly origin: string;
+}): string;
+
+### build/index.d.ts#jsonOf
+export declare function jsonOf(value: unknown, domains: readonly AnyDomain[]): unknown;
+
+### build/index.d.ts#moduleOf
+export declare function moduleOf(input: {
+  readonly program: unknown;
+  readonly domains?: readonly string[] | undefined;
+  readonly schema: Schema;
+  readonly name?: string | undefined;
+  readonly space?: "array" | "tree" | "graph" | undefined;
+  readonly maxStep?: VexStep | undefined;
+}): unknown;
+
+### build/index.d.ts#programOf
+export declare function programOf(program: unknown, domains: readonly AnyDomain[], maxStep?: VexStep): Expr;
+
+### build/index.d.ts#resultJson
+export declare function resultJson(r: Result<unknown>, domains: readonly AnyDomain[]): {
+  readonly ok: boolean;
+  readonly value?: unknown;
+  readonly error?: unknown;
+};
+
+### build/index.d.ts#spaceOf
+export declare function spaceOf(input: SpaceInput, domains: readonly AnyDomain[]): Space;
+
+### build/index.d.ts#vexModule
+export declare const vexModule: ProcedureModule;

@@ -53,6 +53,8 @@ export type Gates = Pick<Minimums, "minimums"> & Partial<Pick<Minimums, "ungated
 export const minimumSources = 5;
 /** The margin of a minimum: the worst number of runs, divided by 1.1. */
 export const minimumMargin = 1.1;
+/** The words at the start of the message of a property with no minimum. Such a message tells of the file of the minimums, and not of the code. */
+const noMinimumYet = "no minimums yet";
 
 /**
  * This function gives the message of a failure for a record, or `undefined` when the record passes. With `recordOnly`,
@@ -62,8 +64,24 @@ export function verdict(record: RunRecord, gates: Gates, recordOnly: boolean): s
   if (!record.interrupted || recordOnly || gates.ungated?.[record.key] !== undefined) return undefined;
   const least = gates.minimums[record.key];
   const done = `The property "${record.key}" stopped at its time budget after ${String(record.runs)} of ${String(record.target)} runs`;
-  if (least === undefined) return `${done}, and it has no minimum of runs. Derive the minimums with scripts/weekly-minimums.ts.`;
+  if (least === undefined) return `${noMinimumYet}: ${done}, and it has no minimum of runs. Derive the minimums with scripts/weekly-minimums.ts.`;
   return record.runs < least ? `${done}. Its minimum is ${String(least)} runs.` : undefined;
+}
+
+/**
+ * This function gives the lines of the summary of a run. The counts are apart, so a file with no minimums does not
+ * read as a fault of the code. Each failed property has a line with its key.
+ */
+export function runSummary(records: readonly RunRecord[], gates: Gates, recordOnly: boolean): string[] {
+  const failed = records.filter((r) => r.failed);
+  const messages = records.filter((r) => !r.failed).flatMap((r) => verdict(r, gates, recordOnly) ?? []);
+  const waiting = messages.filter((m) => m.startsWith(noMinimumYet)).length;
+  return [
+    `- Failed properties, each with a counterexample: ${String(failed.length)} of ${String(records.length)}.`,
+    ...failed.map((r) => `  - ${r.key}`),
+    `- Properties under their minimum of runs: ${String(messages.length - waiting)}.`,
+    `- Properties that stopped at the budget, with ${noMinimumYet}: ${String(waiting)}.`,
+  ];
 }
 
 /** This function gives the note of a record of an ungated property that reached its budget, or `undefined`. */

@@ -6,7 +6,8 @@
  * The variable `FC_TIME_LIMIT_MS` gives each property a time budget (the weekly run of one million runs). A property
  * that reaches the budget fails when it did fewer runs than its minimum in the file of `FC_MIN_RUNS_FILE`
  * (`fc-budget.ts`). An ungated property passes, and the run names it in its log and in its job summary. With
- * `FC_RECORD_ONLY`, no minimum applies. `FC_RECORD_FILE` gets one record for each property.
+ * `FC_RECORD_ONLY`, no minimum applies. `FC_RECORD_FILE` gets one record for each property, and
+ * `scripts/weekly-summary.ts` counts these records for the job summary.
  * A counterexample is a failure, as without a budget.
  */
 import { appendFileSync, readFileSync } from "node:fs";

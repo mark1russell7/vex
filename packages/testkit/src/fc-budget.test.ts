@@ -1,11 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { deriveMinimums, parseRecords, ungatedNote, verdict, type RunRecord } from "./fc-budget.ts";
+import { deriveMinimums, parseRecords, runSummary, ungatedNote, verdict, type RunRecord } from "./fc-budget.ts";
 
 const record = (key: string, runs: number, more: Partial<RunRecord> = {}): RunRecord => ({ key, runs, target: 1_000_000, interrupted: true, failed: false, cpu: "test", ...more });
 /** One set of records for each number, each with the one property `a`. */
 const setsOf = (xs: readonly number[]): Record<string, RunRecord[]> => Object.fromEntries(xs.map((n, i) => [`run-${String(i)}`, [record("a", n)]]));
 
 describe("the minimum of runs of the weekly long run", () => {
+  it("tells a property with no minimum apart from a failed property in the summary of a run", () => {
+    const records = [record("a", 700), record("b", 700), record("c", 5, { failed: true }), record("d", 1_000_000, { interrupted: false })];
+    expect(verdict(record("a", 700), { minimums: {} }, false)).toMatch(/^no minimums yet: The property "a" stopped/);
+    expect(runSummary(records, { minimums: {} }, false)).toStrictEqual([
+      "- Failed properties, each with a counterexample: 1 of 4.",
+      "  - c",
+      "- Properties under their minimum of runs: 0.",
+      "- Properties that stopped at the budget, with no minimums yet: 2.",
+    ]);
+    expect(runSummary(records, { minimums: { a: 800 } }, false)).toStrictEqual([
+      "- Failed properties, each with a counterexample: 1 of 4.",
+      "  - c",
+      "- Properties under their minimum of runs: 1.",
+      "- Properties that stopped at the budget, with no minimums yet: 1.",
+    ]);
+    expect(runSummary(records, { minimums: {} }, true).at(-1)).toBe("- Properties that stopped at the budget, with no minimums yet: 0.");
+  });
+
   it("passes a property that did all its runs, also with no minimum", () => {
     expect(verdict(record("a", 1_000_000, { interrupted: false }), { minimums: {} }, false)).toBeUndefined();
   });

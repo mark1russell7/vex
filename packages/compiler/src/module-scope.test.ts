@@ -157,4 +157,8 @@ describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps t
   it("V-081: a call at the focus of a second print has an argument that its function does not read", () => {
     expectSame(unread(called(steps(add(call("h", origin), count(v("u")))))));
   });
+
+  it("V-081: a safe value drops the print of a column of a call that reads the origin", () => {
+    expectSame(called(app("ifError", lit(0), steps(count(origin)))));
+  });
 });

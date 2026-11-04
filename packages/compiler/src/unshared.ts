@@ -10,9 +10,14 @@ const ORIGINALS = new WeakMap<Expr, Expr>();
 
 /**
  * The most places that a program can have for a compile (COMPILE.PLACES). A place is a node at one position of the tree
- * of the program, so a shared object counts once for each place. The compile takes time at each place. The limit is
- * the largest measured depth of a doubling program at which each form stays under half of a heap of 2,048 MB. This is
- * 15 times the largest module of `ireko`. `docs/COMPILER.md` has the measures.
+ * of the program, so a shared object counts once for each place. The compile takes time at each place.
+ *
+ * The rule: the largest program of each doubling shape under this limit stays under 1,024 MB, half of a heap of 2,048 MB.
+ * At 4 times the places, at least one shape goes over that line. The workflow `places-gate.yml` holds this rule.
+ *
+ * The worst of 5 fresh processes in tier 2 at the limit is 560 MB (plain), 566 MB (constant) and 489 MB (loop).
+ * At 4 times the places it is 1,661 MB, 1,699 MB and 1,469 MB. The limit is 15 times the largest module of `ireko`.
+ * `docs/COMPILER.md` has the measures.
  */
 export const MAX_PLACES: number = 1 << 15;
 

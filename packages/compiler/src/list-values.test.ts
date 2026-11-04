@@ -92,7 +92,7 @@ describe("COMPILE.LIST.VALUE: a list as a value in tier 2", () => {
     ["setNth with an error item and strict", app("setNth", hurtItems, lit(0), lit(1), lit({ strict: true })), false],
     ["setNth that skips an error item", app("setNth", hurtItems, lit(1), lit(1)), true],
     ["setNth in a loop", iterate(3, { a: ns, i: lit(0) }, { a: app("setNth", v("a"), v("i"), app("add", app("nth", v("a"), v("i")), lit(1))), i: app("add", v("i"), lit(1)) }, v("a")), true],
-    ["setNth on an array", app("setNth", v("array"), lit(1), lit(9)), false],
+    ["setNth on an array", app("setNth", v("array"), lit(1), lit(9)), true],
     ["get at the key of the field", app("get", ns, ref("id")), true],
     ["append and a loop that grows", iterate(3, { a: empty }, { a: app("append", v("a"), ns) }, v("a")), true],
     ["a fold that grows a list", fold(axes.all, { a: empty }, { a: app("append", v("a"), app("take", ns, lit(1))) }, app("count", v("a"))), true],

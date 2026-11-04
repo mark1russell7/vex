@@ -126,7 +126,7 @@ function resultsOf(e: Expr, options: ModuleOptions): { readonly got: unknown; re
   const s = space.array(RECORDS);
   const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: VARS, domains: options.domains ?? [] }));
   const m = make(source);
-  return { got: m.run(structuredClone(RECORDS), VARS), want: results.map((r) => (r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR)) };
+  return { got: m.run(structuredClone(RECORDS), VARS), want: results.map((x) => (x.ok ? asModule(x.value, m.VEX_ERROR) : m.VEX_ERROR)) };
 }
 
 /** This function compares the module of a program with the interpreter, in each form of `faults` and of `fuse`. */
@@ -149,7 +149,7 @@ function catchHits(e: Expr): number {
   return hits([...(parts?.decls.values() ?? []), ...(parts?.lines ?? [])].join("\n"), /catch \{/g);
 }
 
-/** A pass, a program, a text and the mark of the pass in the print, with the count for a plain text and for that text. */
+/** A pass, a program and a text. `plain` counts the mark of the pass with a plain text, and `hit` counts it with that text. */
 interface Reach {
   readonly pass: string;
   readonly shape: Shape;
@@ -161,7 +161,7 @@ interface Reach {
 
 /** Each pass that a text reaches. The names come from the printer, so the first test of this file also checks them. */
 const REACHES: readonly Reach[] = [
-  { pass: "onceCells", shape: SHAPES.unreadCall, text: "G(c6())", mark: / = L\(/g, plain: 0, hit: 1 },
+  { pass: "onceCells", shape: SHAPES.unreadCall, text: "G(c6())", mark: / = L\(/g, plain: 0, hit: 2 },
   { pass: "deadConstants", shape: SHAPES.unreadCall, text: "c6", mark: /const c\d+/g, plain: 1, hit: 2 },
   { pass: "deadConstants", shape: SHAPES.each, text: "c3", mark: /const c\d+/g, plain: 1, hit: 2 },
   { pass: "#defers", shape: SHAPES.unreadCall, text: "c6(", mark: / = L\(/g, plain: 0, hit: 2 },
@@ -209,8 +209,8 @@ describe("V-079: a text pass does not change a text of the program", () => {
   });
 
   it("V-079 COMPILE.MODULE.FAULT: the pass narrows each catch of the code in a line with a text, and in a declaration", () => {
-    const { decls, lines } = keepFaults({ decls: new Map([["A", 'const A = () => { try { f("catch {"); } catch { g(); } };'], ["B", "const B = (x) => /catch {/.test(x) || /'/.test(x);"]]), lines: ['  } catch { use("catch {", 1); try { x(); } catch { y("a"); }'] }, new Set());
-    expect(lines).toStrictEqual(['  } catch ($f) { FK($f); use("catch {", 1); try { x(); } catch ($f) { FK($f); y("a"); }']);
+    const { decls, lines } = keepFaults({ decls: new Map([["A", 'const A = () => { try { f("catch {"); } catch { g(); } };'], ["B", "const B = (x) => /catch {/.test(x) || /'/.test(x);"]]), lines: ['  } catch { use("catch {", 1); try { x(); } catch { y("a"); }', 'catch { use("a"); }'] }, new Set());
+    expect(lines).toStrictEqual(['  } catch ($f) { FK($f); use("catch {", 1); try { x(); } catch ($f) { FK($f); y("a"); }', 'catch ($f) { FK($f); use("a"); }']);
     expect(decls.get("A")).toBe('const A = () => { try { f("catch {"); } catch ($f) { FK($f); g(); } };');
     expect(decls.get("B")).toBe("const B = (x) => /catch {/.test(x) || /'/.test(x);");
   });
@@ -239,6 +239,7 @@ describe("V-079: a text pass does not change a text of the program", () => {
       expect(onceCells(lines)).toStrictEqual(lines);
     }
     expect(onceCells([...cell("c1", "f(x)"), '  use("a", G(c1()), "b");'])).toStrictEqual(['  use("a", G(f(x)), "b");']);
+    expect(onceCells([...cell("c1", '"$&$1"'), "G(c1());"])).toStrictEqual(['G("$&$1");']);
   });
 
   it("V-079 COMPILE.MODULE.SIZE.INLINE: the pass finds a call in code, for each kind of literal", () => {
@@ -250,6 +251,7 @@ describe("V-079: a text pass does not change a text of the program", () => {
   it("V-079 COMPILE.MODULE.SIZE.ALIAS: the pass renames each read in code, and no text", () => {
     expect(aliases(["  const a2 = b1;", "  use(a2, \"a2\", 'a2', `a2`, a2);"])).toStrictEqual(["  use(b1, \"a2\", 'a2', `a2`, b1);"]);
     expect(aliases(["  const a2 = b1;", "  use({ a2: a2, b: a2 }, [...a2], x.a2, x?.a2, 1e2, a2x);"])).toStrictEqual(["  use({ a2: b1, b: b1 }, [...b1], x.a2, x?.a2, 1e2, a2x);"]);
+    expect(aliases(["  const a2 = b1;", "  use(ba2, $a2, a2$, 0xa2, { b: 0, a2 : a2 }, t ? a2 : 0, `a2${a2}`);"])).toStrictEqual(["  use(ba2, $a2, a2$, 0xa2, { b: 0, a2 : b1 }, t ? b1 : 0, `a2${b1}`);"]);
   });
 
   it("V-079 P17: each text that a pass looks for keeps its value in each program", { timeout: propertyTimeout(120_000) }, () => {

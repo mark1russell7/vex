@@ -4,10 +4,32 @@
  *
  * Each value that the interpreter can give as an error has a check. The block of the check tells what a failure does
  * (`Fail`). A list op skips an error item, and an error in the first argument of `ifError` gives the second argument.
- * Each other error stops the program with `FALLBACK`. An error of an extension is such an error too, but `#DEPTH!` of an
- * extension stops the program (COMPILE.EXT).
+ * These contexts drop the error, so the check has no error site. In each other context, the check has the site of its
+ * error, and the program ends with that error or a binding keeps it (`keeps`). A check without a site stops the program
+ * with `FALLBACK`. `#DEPTH!` of an extension stops the program too (COMPILE.EXT).
+ *
+ * After a failure, the interpreter still evaluates the later arguments of a node, and two errors give `#ARGS`. The value
+ * path of generated code has no flags for this. A failure jumps to a copy of the later arguments (`#chain`), which only
+ * the failure path reads. A copy uses flags, so the size of the code stays near the size of the program times its depth.
  */
-import { addrExprs, children, isFieldName, isListOp, MAX_NESTING, nestingOf, shapeError, type Addr, type Axis, type Expr, type ExprOf, type ListOp, type Names, type PrimitiveKind } from "@mark1russell7/vex";
+import {
+  addrExprs,
+  children,
+  errorText,
+  isFieldName,
+  isListOp,
+  MAX_NESTING,
+  nestingOf,
+  shapeError,
+  type Addr,
+  type Axis,
+  type ErrorText,
+  type Expr,
+  type ExprOf,
+  type ListOp,
+  type Names,
+  type PrimitiveKind,
+} from "@mark1russell7/vex";
 import { factsOf, listReason, MAX_CALLS, primitiveOf, type Facts, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
@@ -17,14 +39,18 @@ import {
   constant,
   FALLBACK_EXPR,
   FIXED_LOCALS,
+  keeps,
   local,
   num,
   ORIGIN,
+  plainOf,
   prim,
   RETURN,
   SPACE,
+  STOP,
   TABLES,
   VARS,
+  type ErrorSite,
   type Fail,
   type LExpr,
   type LoopProgram,
@@ -34,10 +60,14 @@ import {
 /** The error of an expression that the compiler cannot lower. Then the program operates in tier 1. */
 export class Unsupported extends Error {}
 
-/** A bound name: its value, and the flag that tells if its binding gave a value. Without a flag, it always does. */
+/**
+ * A bound name: its value, and the flag that tells if its binding gave a value. Without a flag, it always does. After a
+ * failure, `error` is the lazy error of the binding, if the context of the binding keeps it.
+ */
 interface Bound {
   readonly value: LExpr;
   readonly ok?: LExpr;
+  readonly error?: LExpr;
 }
 
 /** A bound function: its node, the path of its node, and the scope of its binding. */
@@ -66,6 +96,18 @@ interface Block {
 }
 
 const block = (fail: Fail): Block => ({ stmts: [], fail });
+
+/**
+ * The number of nodes that the failure paths of a program can copy. Past it, a node with two or more arguments that can
+ * fail keeps no error, so tier 1 gives its result. Thus the size of the code has a limit.
+ */
+export const MAX_COPIED = 2000;
+
+/**
+ * The number of arguments of a node that `#chain` takes. Each argument that can fail adds a level of blocks, and the
+ * printer and the JavaScript parser recurse over the levels. A node with more arguments keeps no error.
+ */
+export const MAX_CHAINED = 64;
 
 /** This function gives the axis inside the `where` axes of an axis. */
 const baseAxis = (a: Axis): Exclude<Axis, { readonly t: "where" }> => (a.t === "where" ? baseAxis(a.axis) : a);
@@ -106,8 +148,8 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   if (lists !== undefined) throw new Unsupported(lists);
   const l = new Lowerer(memoNodes(expr), facts, schema);
   const b = block(RETURN);
-  l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space");
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
+  l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space", l.site(b, top, { t: "key" }));
   const value = l.expr(expr, top, [], b);
   b.stmts.push({ t: "return", value });
   return { body: b.stmts, locals: l.locals, constants: l.constants };
@@ -117,8 +159,14 @@ class Lowerer {
   locals = FIXED_LOCALS;
   labels = 0;
   memos = 0;
-  /** The number of bodies of functions that the lowering put at calls (MAX_CALLS). */
+  /** The number of bodies of functions that the lowering put at calls (MAX_CALLS). A copy does not count. */
   #calls = 0;
+  /** The depth of the copies of the failure paths around the lowering. Inside a copy, a node has no memo. */
+  #copying = 0;
+  /** The number of nodes that the copies have so far (MAX_COPIED). */
+  #copied = 0;
+  /** The answers of `#mayExt`, for each map of functions. */
+  readonly #exts = new WeakMap<ReadonlyMap<string, BoundFn>, Map<Expr, boolean>>();
   readonly #memo: ReadonlyMap<Expr, readonly Expr[]>;
   /** The keys of the nodes of the memo whose code the lowering makes, with their values. */
   #keys: ReadonlyMap<Expr, Bound> = new Map();
@@ -156,7 +204,7 @@ class Lowerer {
    */
   #declared(b: Block, x: LExpr, kind: PrimitiveKind | undefined, reason: string): LExpr {
     if (kind === undefined) return x;
-    b.stmts.push({ t: "check", ok: prim(KIND_CHECKS[kind], x), reason, fail: RETURN });
+    b.stmts.push({ t: "check", ok: prim(KIND_CHECKS[kind], x), reason, fail: STOP });
     return this.#typed(x, kind);
   }
   readonly constants: unknown[] = [];
@@ -193,20 +241,34 @@ class Lowerer {
     return local(n);
   }
 
-  check(b: Block, ok: LExpr, reason: string): void {
-    b.stmts.push({ t: "check", ok, reason, fail: b.fail });
+  /**
+   * This method gives the lazy error of a site, where the block keeps it. `undefined` tells that the block drops the
+   * error, so the site is not a constant of the program.
+   */
+  site(b: Block, s: Pick<Scope, "origin" | "focus">, site: ErrorSite, ...operands: LExpr[]): LExpr | undefined {
+    return keeps(b.fail) ? call("err", { t: "site", i: this.constants.push(site) - 1 }, s.origin, s.focus, ...operands) : undefined;
+  }
+
+  /** This method gives the lazy error of a text. */
+  #text(b: Block, s: Scope, path: readonly number[], text: ErrorText): LExpr | undefined {
+    return this.site(b, s, { t: "text", text, path });
+  }
+
+  /** This method adds a check. Without a lazy error, the failure is the plain failure of the block. */
+  check(b: Block, ok: LExpr, reason: string, error?: LExpr): void {
+    b.stmts.push(error === undefined ? { t: "check", ok, reason, fail: plainOf(b.fail) } : { t: "check", ok, reason, fail: b.fail, error });
   }
 
   /** This method gives a new local with the value of a call of the runtime, and a check that the value is not `FALLBACK`. */
-  checked(b: Block, value: LExpr, reason: string): LExpr {
+  checked(b: Block, value: LExpr, reason: string, error?: LExpr): LExpr {
     const x = this.value(b, value);
-    this.check(b, prim("!==", x, FALLBACK_EXPR), reason);
+    this.check(b, prim("!==", x, FALLBACK_EXPR), reason, error);
     return x;
   }
 
   /** This method adds a failure: the interpreter always gives an error here. */
-  fail(b: Block): LExpr {
-    b.stmts.push({ t: "fail", fail: b.fail });
+  fail(b: Block, error?: LExpr): LExpr {
+    b.stmts.push(error === undefined ? { t: "fail", fail: plainOf(b.fail) } : { t: "fail", fail: b.fail, error });
     return FALLBACK_EXPR;
   }
 
@@ -217,12 +279,20 @@ class Lowerer {
       if (key.ok !== undefined) this.check(b, key.ok, "a key with a value");
       return key.value;
     }
-    const keys = this.#memo.get(e);
+    const keys = this.#copying > 0 ? undefined : this.#memo.get(e);
     return keys === undefined ? this.#node(e, s, path, b) : this.#memoized(e, keys, s, path, b);
+  }
+
+  /** This method lowers a copy of a part of a failure path. */
+  #copy(make: () => void): void {
+    this.#copying++;
+    make();
+    this.#copying--;
   }
 
   /** This method lowers a node itself, without the memo. */
   #node(e: Expr, s: Scope, path: readonly number[], b: Block): LExpr {
+    if (this.#copying > 0) this.#copied++;
     switch (e.tag) {
       case "lit":
         return this.constant(e.value);
@@ -231,12 +301,12 @@ class Lowerer {
       case "var": {
         const bound = s.env.get(e.name);
         // A function is not a value (FN.VALUE): tier 1 gives the error. A name of a loop hides a function with its name.
-        if (bound === undefined && s.fns.has(e.name)) return this.fail(b);
+        if (bound === undefined && s.fns.has(e.name)) return this.fail(b, this.#text(b, s, path, errorText.functionValue(e.name)));
         if (bound === undefined) {
-          const x = this.checked(b, call("var", local(VARS), this.constant(e.name)), "a variable");
+          const x = this.checked(b, call("var", local(VARS), this.constant(e.name)), "a variable", this.#text(b, s, path, errorText.unbound(e.name)));
           return this.#declared(b, x, primitiveOf(this.#schema.vars?.[e.name]), "a variable of the schema");
         }
-        if (bound.ok !== undefined) this.check(b, bound.ok, "a binding with a value");
+        this.#read(b, bound, "a binding with a value");
         return bound.value;
       }
       case "let":
@@ -248,7 +318,7 @@ class Lowerer {
       case "call":
         return this.#call(e, s, path, b);
       case "rec": {
-        const values = this.#all(Object.values(e.fields), s, path, 0, b);
+        const values = this.#all(Object.values(e.fields), s, path, 0, "fields", b);
         return this.value(b, call("rec", this.constant(Object.keys(e.fields)), array(...values)));
       }
       case "app":
@@ -258,18 +328,19 @@ class Lowerer {
       case "iterate":
         return this.#iterate(e, s, path, b);
       case "each": {
-        // A list keeps its error items, and generated code makes no error values. Thus an error item stops the program.
+        // A list keeps its error items, and generated code makes no error items. Thus an error item stops the program, and
+        // tier 1 gives the list.
         const keys = this.locals++;
         const values = this.locals++;
         b.stmts.push({ t: "let", n: keys, value: array() }, { t: "let", n: values, value: array() });
-        this.#loop(e, s, path, b, () => RETURN, (body, key, v) => {
+        this.#loop(e, s, path, b, () => STOP, (body, key, v) => {
           body.stmts.push({ t: "push", n: keys, value: key }, { t: "push", n: values, value: v });
         });
         return this.value(b, call("list", local(keys), local(values)));
       }
       case "ext": {
         // COMPILE.EXT: an error of an extension is an error of the block. The runtime throws for #DEPTH!, which stops the program.
-        return this.checked(b, call("ext", this.constant(e.kind), this.constant(e.data), s.space, s.origin, s.focus, this.constant(path)), "an extension");
+        return this.checked(b, call("ext", this.constant(e.kind), this.constant(e.data), s.space, s.origin, s.focus, this.constant(path)), "an extension", this.site(b, s, { t: "ext", kind: e.kind, path }));
       }
     }
   }
@@ -278,33 +349,52 @@ class Lowerer {
    * This method gives the value of a node that depends only on the space (§7.2). The memo has an entry for each space.
    * Without the entry of the space, the node evaluates in a block, and an error of it makes an entry without a value.
    * An exception stops the program, so the memo gets no entry for it.
+   *
+   * The entry has no error, because the error of a node depends on its position and on its child nodes. Where the context
+   * keeps the error, a copy of the node evaluates after a read of such an entry. The copy gives the error at this position.
+   * A node of the memo and its keys use no extension, so this second evaluation has no effect.
    */
   #memoized(e: Expr, keys: readonly Expr[], s: Scope, path: readonly number[], b: Block): LExpr {
     const memo: LExpr = { t: "memo", id: this.memos++ };
     // Each key evaluates here, in a block of its own, as a binding does.
-    const values = keys.map((k): Bound => this.#attempt(b, (inner) => this.expr(k, s, path, inner)));
+    const values = keys.map((k): Bound => this.#attempt(b, (inner) => this.expr(k, s, path, inner), false));
     const tuple = array(...values.flatMap((k) => [k.value, flag(k)]));
     const h = this.locals++;
     const outer = this.#keys;
     this.#keys = new Map([...outer, ...keys.map((k, i): [Expr, Bound] => [k, values[i] as Bound])]);
     const compute = block(b.fail);
-    const node = this.#attempt(compute, (inner) => this.#node(e, s, path, inner));
+    const node = this.#attempt(compute, (inner) => this.#node(e, s, path, inner), false);
     this.#keys = outer;
     compute.stmts.push({ t: "set", n: h, value: prim("memoPut", memo, s.space, tuple, node.value, flag(node)) });
     b.stmts.push({ t: "let", n: h, value: prim("memoGet", memo, s.space, tuple) }, { t: "if", cond: prim("!", prim("isValue", local(h))), yes: compute.stmts, no: [] });
-    this.check(b, prim("entryOk", local(h)), "a value of the memo");
+    const entry = prim("entryOk", local(h));
+    const stop: LStmt = { t: "check", ok: entry, reason: "a value of the memo", fail: plainOf(b.fail) };
+    if (keeps(b.fail) && this.#copied < MAX_COPIED) {
+      const copy = block(b.fail);
+      this.#copy(() => this.#node(e, s, path, copy));
+      b.stmts.push({ t: "if", cond: prim("!", entry), yes: [...copy.stmts, stop], no: [] });
+    } else {
+      b.stmts.push(stop);
+    }
     // Each entry of the memo comes from the code of the node, so it has the kind of the value of the node.
     return this.#typed(this.value(b, prim("entryValue", local(h))), this.kindOf(node.value));
   }
 
   /**
    * This method lowers the arguments of an op or the fields of a record, with the child indexes from `first`. After an
-   * error, the interpreter still evaluates the later arguments, and an extension there can give `#DEPTH!` (`#all` of the
-   * interpreter). Thus, where the program catches the error, each argument before the last one that can use an
-   * extension has its own block (COMPILE.EXT). Then a failure skips no extension.
+   * error, the interpreter still evaluates the later arguments, and two errors give `#ARGS` (`#all` of the interpreter).
+   * Where the context keeps the error of two or more arguments that can fail, `#chain` or `#collect` lowers them.
+   *
+   * An extension in a later argument can give `#DEPTH!`. Thus, where the program catches the error, each argument before
+   * the last one that can use an extension has its own block (COMPILE.EXT). Then a failure skips no extension.
    */
-  #all(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, b: Block): LExpr[] {
-    const last = b.fail === RETURN ? -1 : xs.findLastIndex((x) => this.#mayExt(x, s.fns));
+  #all(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, what: string, b: Block): LExpr[] {
+    if (keeps(b.fail) && xs.filter((x) => x.tag !== "lit").length > 1) {
+      if (this.#copying > 0) return this.#collect(xs, s, path, first, what, b);
+      if (this.#copied < MAX_COPIED && xs.length <= MAX_CHAINED) return this.#chain(xs, s, path, first, what, b);
+      return this.#all(xs, s, path, first, what, { stmts: b.stmts, fail: plainOf(b.fail) });
+    }
+    const last = b.fail.t === "return" || b.fail.t === "stop" ? -1 : xs.findLastIndex((x) => this.#mayExt(x, s.fns));
     const parts = xs.map((x, i): Bound => {
       const at = [...path, first + i];
       return i < last ? this.#attempt(b, (inner) => this.expr(x, s, at, inner)) : { value: this.expr(x, s, at, b) };
@@ -314,31 +404,102 @@ class Lowerer {
   }
 
   /**
+   * This method lowers arguments on the value path, with no new check. A failure of an argument keeps its error in a
+   * local of the argument. It then jumps to the copy of the next argument that can fail. After the last copy, the errors
+   * give the error of the node (`args` of the runtime). The copies clear the locals, for the next turn of a loop.
+   *
+   * Each argument evaluates once: the value path gives up at the failure, and the copies start after it.
+   */
+  #chain(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, what: string, b: Block): LExpr[] {
+    const end = this.labels++;
+    const parts = xs.map((x, i) => {
+      const label = this.labels++;
+      const error = this.locals++;
+      const part = block({ t: "break", label, keep: error });
+      const at = [...path, first + i];
+      return { x, at, label, error, value: this.expr(x, s, at, part), stmts: part.stmts };
+    });
+    const values = parts.map((p) => p.value);
+    const failing = parts.filter((p) => p.stmts.length > 0);
+    if (failing.length === 0) return values;
+    let body: LStmt[] = [...parts.flatMap((p) => p.stmts), { t: "break", label: end }];
+    failing.forEach((p, i) => {
+      body = [{ t: "block", label: p.label, body }];
+      const next = failing[i + 1];
+      if (next === undefined) return;
+      const label = this.labels++;
+      const copy = block({ t: "break", label, keep: next.error });
+      this.#copy(() => this.expr(next.x, s, next.at, copy));
+      body.push({ t: "block", label, body: copy.stmts });
+    });
+    const inner = block(b.fail);
+    const error = this.value(inner, this.#argsError(s, path, what, failing.map((p) => local(p.error))));
+    inner.stmts.push(...failing.map((p): LStmt => ({ t: "set", n: p.error, value: { t: "none" } })));
+    this.fail(inner, error);
+    b.stmts.push({ t: "block", label: end, body: [...body, ...inner.stmts] });
+    return values;
+  }
+
+  /**
+   * This method lowers arguments in a copy. The value path does not read a copy, so each argument can have its own block
+   * and its flag. A node in a copy thus adds no other copy, and the size of the code stays near the size of the node.
+   */
+  #collect(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, what: string, b: Block): LExpr[] {
+    const parts = xs.map((x, i): Bound => this.#attempt(b, (inner) => this.expr(x, s, [...path, first + i], inner)));
+    const errors = parts.flatMap((p) => (p.ok === undefined ? [] : [prim("unless", p.ok, p.value)]));
+    if (errors.length > 0) {
+      const error = this.value(b, this.#argsError(s, path, what, errors));
+      this.check(b, prim("!", prim("isValue", error)), "the arguments have values", error);
+    }
+    return parts.map((p) => p.value);
+  }
+
+  /** This method gives the call of the runtime that makes the error of some arguments. */
+  #argsError(s: Scope, path: readonly number[], what: string, errors: readonly LExpr[]): LExpr {
+    const site = this.constants.push({ t: "args", what, path } satisfies ErrorSite) - 1;
+    return call("args", { t: "site", i: site }, s.origin, s.focus, array(...errors));
+  }
+
+  /**
    * This method tells if an expression can call an extension. A call reads the body of its function, and the bodies of
-   * the functions of that body. A function cannot call itself, so the search ends.
+   * the functions of that body. A function cannot call itself, so the search ends. Each node has one answer for each
+   * map of functions, because functions can call each other many times (V-068).
    */
   #mayExt(e: Expr, fns: ReadonlyMap<string, BoundFn>): boolean {
-    if (e.tag === "ext") return true;
+    let answers = this.#exts.get(fns);
+    if (answers === undefined) {
+      answers = new Map();
+      this.#exts.set(fns, answers);
+    }
+    const known = answers.get(e);
+    if (known !== undefined) return known;
     const bound = e.tag === "call" ? fns.get(e.fn) : undefined;
-    if (bound !== undefined && this.#mayExt(bound.fn.body, bound.scope.fns)) return true;
-    return children(e).some((x) => this.#mayExt(x, fns));
+    const answer = e.tag === "ext" || (bound !== undefined && this.#mayExt(bound.fn.body, bound.scope.fns)) || children(e).some((x) => this.#mayExt(x, fns));
+    answers.set(e, answer);
+    return answer;
   }
 
   /**
    * This method evaluates an expression in a block whose errors end the block, as a binding does. It gives the value
-   * and the flag that tells if the value exists. Without statements, the expression always has a value, so it gets no flag.
+   * and the flag that tells if the value exists. Without statements, the expression always has a value, so it gets no
+   * flag. With `keep`, a failure keeps its lazy error in the local of the value: only the failure path writes it there.
    */
-  #attempt(b: Block, make: (inner: Block) => LExpr): Bound {
+  #attempt(b: Block, make: (inner: Block) => LExpr, keep = keeps(b.fail)): Bound {
     const label = this.labels++;
-    const attempt = block({ t: "break", label });
+    const v = this.locals++;
+    const attempt = block(keep ? { t: "break", label, keep: v } : { t: "break", label });
     const value = make(attempt);
     if (attempt.stmts.length === 0) return { value };
-    const v = this.locals++;
     const ok = this.locals++;
     this.#typed(local(v), this.kindOf(value));
     attempt.stmts.push({ t: "set", n: v, value }, { t: "set", n: ok, value: bool(true) });
     b.stmts.push({ t: "let", n: ok, value: bool(false) }, { t: "block", label, body: attempt.stmts });
-    return { value: local(v), ok: local(ok) };
+    return keep ? { value: local(v), ok: local(ok), error: local(v) } : { value: local(v), ok: local(ok) };
+  }
+
+  /** This method adds the check of a read of a bound name. An error of the binding is the error of the read. */
+  #read(b: Block, bound: Bound, reason: string): void {
+    if (bound.ok !== undefined) this.check(b, bound.ok, reason, bound.error);
   }
 
   /**
@@ -346,16 +507,19 @@ class Lowerer {
    * A segment that cannot name a field always gives an error.
    */
   #ref(e: ExprOf<"ref">, s: Scope, path: readonly number[], b: Block): LExpr {
-    const record = e.at === undefined || e.at.length === 0 ? s.rec : prim("get", s.space, this.#address(e.at, s, path, 0, b));
-    if (!e.path.every(isFieldName)) return this.fail(b);
+    const moved = e.at === undefined || e.at.length === 0 ? undefined : this.#address(e.at, s, path, 0, b);
+    const key = moved ?? s.focus;
+    const missing = (where: string): LExpr | undefined => this.site(b, s, { t: "missing", where, path }, key);
     const n = this.locals++;
     const x = local(n);
-    b.stmts.push({ t: "let", n, value: record });
-    this.check(b, prim("isValue", x), "a record");
-    for (const seg of e.path) {
-      this.check(b, prim("isObject", x), "an object");
+    b.stmts.push({ t: "let", n, value: moved === undefined ? s.rec : prim("get", s.space, moved) });
+    this.check(b, prim("isValue", x), "a record", missing(e.path.length === 0 ? "(record)" : e.path.join(".")));
+    for (const [i, seg] of e.path.entries()) {
+      const where = e.path.slice(0, i + 1).join(".");
+      if (!isFieldName(seg)) return this.fail(b, missing(where));
+      this.check(b, prim("isObject", x), "an object", missing(where));
       b.stmts.push({ t: "set", n, value: prim("member", x, this.constant(seg)) });
-      this.check(b, prim("isValue", x), "a field");
+      this.check(b, prim("isValue", x), "a field", missing(where));
     }
     const [field, ...more] = e.path;
     // Tier 2 knows only the primitive kinds. A value of a domain goes through the dispatch of the runtime.
@@ -385,13 +549,19 @@ class Lowerer {
 
   /**
    * This method lowers a call (FN.CALL). The body of the function goes at the place of the call, with the values of the
-   * arguments for its parameters. The body sees the names of the place of its binding. A call that is not valid goes
-   * to tier 1.
+   * arguments for its parameters. The body sees the names of the place of its binding.
    */
   #call(e: ExprOf<"call">, s: Scope, path: readonly number[], b: Block): LExpr {
-    const bound = s.env.has(e.fn) ? undefined : s.fns.get(e.fn);
-    if (bound?.fn.params.length !== e.args.length) return this.fail(b);
-    if (++this.#calls > MAX_CALLS) throw new Unsupported(`the calls put the bodies of functions in more than ${String(MAX_CALLS)} places`);
+    const value = s.env.get(e.fn);
+    if (value !== undefined) {
+      this.#read(b, value, "a binding with a value");
+      return this.fail(b, this.#text(b, s, path, errorText.notFunction(e.fn)));
+    }
+    const bound = s.fns.get(e.fn);
+    // The name can be a variable of the run: only the run tells the error.
+    if (bound === undefined) return this.fail(b, this.site(b, s, { t: "call", name: e.fn, path }, local(VARS)));
+    if (bound.fn.params.length !== e.args.length) return this.fail(b, this.#text(b, s, path, errorText.arity(e.fn, bound.fn.params.length, e.args.length)));
+    if (this.#copying === 0 && ++this.#calls > MAX_CALLS) throw new Unsupported(`the calls put the bodies of functions in more than ${String(MAX_CALLS)} places`);
     const env = new Map(bound.scope.env);
     bound.fn.params.forEach((p, i) => env.set(p, this.#attempt(b, (inner) => this.expr(e.args[i] as Expr, s, [...path, i], inner))));
     return this.expr(bound.fn.body, { ...s, env, fns: bound.scope.fns }, [...bound.path, 0], b);
@@ -404,7 +574,7 @@ class Lowerer {
         return this.#if(args, s, path, b);
       case "and":
       case "or":
-        return args.length === 0 ? this.fail(b) : this.#andOr(op === "or", args, 0, s, path, b);
+        return args.length === 0 ? this.fail(b, this.#text(b, s, path, errorText.needsArguments(op))) : this.#andOr(op === "or", args, 0, s, path, b);
       case "ifError":
         return this.#ifError(args, s, path, b);
     }
@@ -412,24 +582,24 @@ class Lowerer {
       const target = eachUnderLets(args[0]);
       if (target !== undefined) return this.#fused(op, e, target, s, path, b);
     }
-    const values = this.#all(args, s, path, 0, b);
+    const values = this.#all(args, s, path, 0, "arguments", b);
     const kinds = values.map((x) => this.kindOf(x));
     // A static site checks the kind of its result, so the result has the kind that the op declares (KIND.RETURNS).
     const site = this.#facts.staticSite(op, kinds);
-    const x = this.checked(b, { t: "op", name: this.index(op), args: values, kinds }, "an op");
+    const x = this.checked(b, { t: "op", name: this.index(op), args: values, kinds }, "an op", this.site(b, s, { t: "op", op, path }));
     return this.#typed(x, site?.t === "fn" ? primitiveOf(site.returns) : undefined);
   }
 
   /** The condition must be a boolean. Only the branch that the condition selects is evaluated. */
   #if(args: readonly Expr[], s: Scope, path: readonly number[], b: Block): LExpr {
     const [cond, yes, no] = args;
-    if (cond === undefined) return this.fail(b);
-    const c = this.#boolean(this.expr(cond, s, [...path, 0], b), b);
+    if (cond === undefined) return this.fail(b, this.#text(b, s, path, errorText.needsArgument("if", 0)));
+    const c = this.#boolean(this.expr(cond, s, [...path, 0], b), b, s, { t: "boolean", op: "if", i: 0, path });
     const r = this.locals++;
     const kinds: (PrimitiveKind | undefined)[] = [];
     const branch = (x: Expr | undefined, i: number): LStmt[] => {
       const inner = block(b.fail);
-      const value = x === undefined ? this.fail(inner) : this.expr(x, s, [...path, i], inner);
+      const value = x === undefined ? this.fail(inner, this.#text(inner, s, path, errorText.needsArgument("if", i))) : this.expr(x, s, [...path, i], inner);
       kinds.push(this.kindOf(value));
       inner.stmts.push({ t: "set", n: r, value });
       return inner.stmts;
@@ -440,7 +610,7 @@ class Lowerer {
 
   /** `or` stops at the first `true`, and `and` at the first `false`. Each argument before the stop must be a boolean. */
   #andOr(isOr: boolean, args: readonly Expr[], i: number, s: Scope, path: readonly number[], b: Block, r = this.locals++): LExpr {
-    const x = this.#boolean(this.expr(args[i] as Expr, s, [...path, i], b), b);
+    const x = this.#boolean(this.expr(args[i] as Expr, s, [...path, i], b), b, s, { t: "boolean", op: isOr ? "or" : "and", i, path });
     this.#typed(local(r), "boolean");
     if (i === args.length - 1) {
       b.stmts.push({ t: "set", n: r, value: x });
@@ -459,7 +629,7 @@ class Lowerer {
    */
   #ifError(args: readonly Expr[], s: Scope, path: readonly number[], b: Block): LExpr {
     const [first, second] = args;
-    if (first === undefined) return this.fail(b);
+    if (first === undefined) return this.fail(b, this.#text(b, s, path, errorText.needsArgument("ifError", 1)));
     const label = this.labels++;
     const r = this.locals++;
     const ok = this.locals++;
@@ -467,20 +637,20 @@ class Lowerer {
     const value = this.expr(first, s, [...path, 0], attempt);
     attempt.stmts.push({ t: "set", n: r, value }, { t: "set", n: ok, value: bool(true) });
     const otherwise = block(b.fail);
-    const fallback = second === undefined ? this.fail(otherwise) : this.expr(second, s, [...path, 1], otherwise);
+    const fallback = second === undefined ? this.fail(otherwise, this.#text(otherwise, s, path, errorText.needsArgument("ifError", 1))) : this.expr(second, s, [...path, 1], otherwise);
     otherwise.stmts.push({ t: "set", n: r, value: fallback });
     b.stmts.push({ t: "let", n: ok, value: bool(false) }, { t: "block", label, body: attempt.stmts }, { t: "if", cond: prim("!", local(ok)), yes: otherwise.stmts, no: [] });
     return this.#typed(local(r), join(this.kindOf(value), this.kindOf(fallback)));
   }
 
   /** A value of a known kind needs no check. */
-  #boolean(x: LExpr, b: Block): LExpr {
-    if (this.kindOf(x) !== "boolean") this.check(b, prim("isBoolean", x), "a boolean");
+  #boolean(x: LExpr, b: Block, s: Pick<Scope, "origin" | "focus">, site: ErrorSite): LExpr {
+    if (this.kindOf(x) !== "boolean") this.check(b, prim("isBoolean", x), "a boolean", this.site(b, s, site, x));
     return x;
   }
 
-  #number(x: LExpr, b: Block): LExpr {
-    if (this.kindOf(x) !== "number") this.check(b, prim("isNumber", x), "a number");
+  #number(x: LExpr, b: Block, s: Scope, site: ErrorSite): LExpr {
+    if (this.kindOf(x) !== "number") this.check(b, prim("isNumber", x), "a number", this.site(b, s, site, x));
     return x;
   }
 
@@ -488,6 +658,11 @@ class Lowerer {
    * This method lowers a list op over an `each` into one loop. Like the interpreter, the loop skips an error item, and
    * with the option `strict` the list op fails at an error item. `errors` gives the error values, so an error item of
    * `errors` stops the program.
+   *
+   * The loop checks the items in the order of the interpreter, so the first bad item is the item of the interpreter. Two
+   * cases differ. With `strict`, the first error item of the whole list comes before a check of the op. With an extension
+   * in the list, the interpreter evaluates each item before the op. In both cases, a check of the op keeps no error.
+   * The later arguments evaluate before the loop, and the interpreter evaluates them after the list, so they keep no error.
    */
   #fused(op: ListOp, e: ExprOf<"app">, target: ExprOf<"each">, s: Scope, path: readonly number[], b: Block): LExpr {
     // The `let` expressions above the `each`, from the outside in.
@@ -498,21 +673,22 @@ class Lowerer {
       at = [...at, Object.keys(x.bind).length];
     }
     // COMPILE.EXT: the interpreter evaluates each item of the list before the op, and an extension in an item can give
-    // #DEPTH!. Thus where the program catches the error of the op, a failure that would skip the later items stops the
-    // program, if the list can call an extension.
-    const skip: Block = b.fail !== RETURN && this.#mayExt(e.args[0] as Expr, s.fns) ? { stmts: b.stmts, fail: RETURN } : b;
-    const rest = this.#all(e.args.slice(1), s, path, 1, skip);
+    // #DEPTH!. Thus a failure that would skip the later items stops the program, if the list can call an extension.
+    const skip: Block = this.#mayExt(e.args[0] as Expr, s.fns) ? { stmts: b.stmts, fail: STOP } : b;
+    const plain: Block = { stmts: b.stmts, fail: plainOf(skip.fail) };
+    const rest = this.#all(e.args.slice(1), s, path, 1, "arguments", plain);
     const options = op === "reduce" ? rest[1] : rest[0];
     const strict = options === undefined ? undefined : this.value(b, prim("===", call("opts", options), bool(true)));
     const name = rest[0];
     if (op === "reduce") {
-      if (name === undefined) return this.fail(skip);
-      this.check(skip, prim("isString", name), "an op name");
+      if (name === undefined) return this.fail(plain);
+      this.check(plain, prim("isString", name), "an op name");
     }
     const items = (label: number): Fail => {
-      if (op === "errors") return RETURN;
+      if (op === "errors") return STOP;
       return strict === undefined ? { t: "continue", label } : { t: "continue", label, strict: { cond: strict, else: skip.fail } };
     };
+    const opFail = strict === undefined ? skip.fail : plain.fail;
 
     const acc = this.locals++;
     const n = this.typedLocal("number");
@@ -524,15 +700,17 @@ class Lowerer {
       body.stmts.push({ t: "set", n, value: prim("+", local(n), num(1)) });
     };
     // A check of the list op itself is in the loop, but its failure is a failure of the list op.
-    const opCheck = (body: Block): Block => ({ stmts: body.stmts, fail: skip.fail });
+    const opCheck = (body: Block): Block => ({ stmts: body.stmts, fail: opFail });
     const firstThen = (body: Block, v: LExpr, then: (later: Block) => LExpr): void => {
-      const later = block(skip.fail);
+      const later = block(opFail);
       later.stmts.push({ t: "set", n: acc, value: then(later) });
       body.stmts.push({ t: "if", cond: prim("===", local(n), num(0)), yes: [{ t: "set", n: acc, value: v }], no: later.stmts });
     };
     const nonEmpty = (): void => {
-      this.check(b, prim("!==", local(n), num(0)), "a list that is not empty");
+      this.check(b, prim("!==", local(n), num(0)), "a list that is not empty", this.#text(b, s, path, errorText.empty(op)));
     };
+    const opError = (): LExpr | undefined => this.site(b, s, { t: "op", op, path });
+    const numbers: ErrorSite = { t: "items", op, what: "numbers", path };
 
     switch (op) {
       case "count":
@@ -542,16 +720,16 @@ class Lowerer {
       case "mean":
         init(num(0));
         this.#loop(target, inner, at, b, items, (body, _key, v) => {
-          body.stmts.push({ t: "set", n: acc, value: prim("+", local(acc), this.#number(v, opCheck(body))) });
+          body.stmts.push({ t: "set", n: acc, value: prim("+", local(acc), this.#number(v, opCheck(body), s, numbers)) });
           count(body);
         });
-        if (op === "sum") return this.#typed(this.checked(b, call("result", local(acc)), "a finite sum"), "number");
+        if (op === "sum") return this.#typed(this.checked(b, call("result", local(acc)), "a finite sum", opError()), "number");
         nonEmpty();
-        return this.#typed(this.checked(b, call("result", prim("/", local(acc), local(n))), "a finite mean"), "number");
+        return this.#typed(this.checked(b, call("result", prim("/", local(acc), local(n))), "a finite mean", opError()), "number");
       case "min":
       case "max":
         this.#loop(target, inner, at, b, items, (body, _key, v) => {
-          this.#number(v, opCheck(body));
+          this.#number(v, opCheck(body), s, numbers);
           firstThen(body, v, () => prim(op, local(acc), v));
           count(body);
         });
@@ -562,7 +740,7 @@ class Lowerer {
       case "none":
         init(bool(op === "all"));
         this.#loop(target, inner, at, b, items, (body, _key, v) => {
-          body.stmts.push({ t: "set", n: acc, value: prim(op === "all" ? "&&" : "||", local(acc), this.#boolean(v, opCheck(body))) });
+          body.stmts.push({ t: "set", n: acc, value: prim(op === "all" ? "&&" : "||", local(acc), this.#boolean(v, opCheck(body), s, { t: "items", op, what: "booleans", path })) });
         });
         return op === "none" ? prim("!", local(acc)) : this.#typed(local(acc), "boolean");
       case "first":
@@ -584,10 +762,11 @@ class Lowerer {
         return this.value(b, call("frozen", array()));
       case "reduce":
         this.#loop(target, inner, at, b, items, (body, _key, v) => {
-          firstThen(body, v, (later) => this.checked(later, call("step", name as LExpr, local(acc), v), "a step of reduce"));
+          firstThen(body, v, (later) => this.checked(later, call("step", name as LExpr, local(acc), v), "a step of reduce", this.site(later, s, { t: "step", path }, name as LExpr)));
           count(body);
         });
-        nonEmpty();
+        // An empty list can give the identity of the op, so tier 1 gives its result.
+        this.check(plain, prim("!==", local(n), num(0)), "a list that is not empty");
         return local(acc);
       // listReason stops a program with these ops before the lowering, so this case is defensive.
       // Stryker disable StringLiteral,ConditionalExpression: listReason stops these ops before the lowering
@@ -620,8 +799,8 @@ class Lowerer {
    */
   #address(at: Addr, s: Scope, path: readonly number[], first: number, b: Block): LExpr {
     const values = addrExprs(at).map((x, i) => this.expr(x, s, [...path, first + i], b));
-    const args = [s.space, s.origin, s.focus, this.constant(at), ...(values.length === 0 ? [] : [array(...values)])];
-    return this.checked(b, call("addr", ...args), "an address");
+    const moves = values.length === 0 ? [] : [array(...values)];
+    return this.checked(b, call("addr", s.space, s.origin, s.focus, this.constant(at), ...moves), "an address", this.site(b, s, { t: "addr", at, path }, s.space, ...moves));
   }
 
   #loop(e: ExprOf<"each">, s: Scope, path: readonly number[], b: Block, items: (label: number) => Fail, onItem: (body: Block, key: LExpr, value: LExpr) => void): void {
@@ -653,13 +832,13 @@ class Lowerer {
     let idx: LExpr | undefined;
     if (base.t === "table") {
       // The axis table moves the evaluation to the space of its table, and there the origin is the target.
-      space = this.checked(b, call("table", local(TABLES), this.constant(base.name)), "a table");
+      space = this.checked(b, call("table", local(TABLES), this.constant(base.name)), "a table", this.#text(b, s, path, errorText.noTable(base.name)));
       over = call("keys", space);
     } else if (base.t === "all" || base.t === "others") {
       over = call("keys", s.space);
       if (base.t === "others") skip = from;
     } else {
-      const targets = this.checked(b, { t: "targets", axis: this.index(base), args: [s.space, s.origin, from] }, "the targets of an axis");
+      const targets = this.checked(b, { t: "targets", axis: this.index(base), args: [s.space, s.origin, from] }, "the targets of an axis", this.site(b, s, { t: "axis", axis: base, path }, s.space, from));
       over = prim("keysOf", targets);
       idx = this.value(b, prim("idxOf", targets));
     }
@@ -674,7 +853,8 @@ class Lowerer {
     const slot = idx === undefined ? local(index) : prim("member", idx, local(index));
     const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec: prim("recordAt", records, slot, space, key) };
     whereTests(axis).forEach((test, i) => {
-      const ok = this.#boolean(this.expr(test, at, [...path, firstTest + i], body), body);
+      const testPath = [...path, firstTest + i];
+      const ok = this.#boolean(this.expr(test, at, testPath, body), body, at, { t: "test", path: testPath });
       body.stmts.push({ t: "if", cond: prim("!", ok), yes: [{ t: "next" }], no: [] });
     });
     each(body, key, at);
@@ -720,11 +900,13 @@ class Lowerer {
     b.stmts.push({ t: "let", n: k, value: num(0) });
     const body = block(b.fail);
     if (e.until !== undefined) {
-      const stop = this.#boolean(this.expr(e.until, inner, [...path, tests], body), body);
+      const stop = this.#boolean(this.expr(e.until, inner, [...path, tests], body), body, inner, { t: "until", path: [...path, tests] });
       body.stmts.push({ t: "check", ok: prim("!", stop), reason: "the test until", fail: { t: "break", label } });
     }
     // At the limit, an iteration without a test ends, and an iteration with a test fails.
-    body.stmts.push({ t: "check", ok: prim("!==", local(k), num(e.limit)), reason: "the limit of iterate", fail: e.until === undefined ? { t: "break", label } : b.fail });
+    const more = prim("!==", local(k), num(e.limit));
+    if (e.until === undefined) body.stmts.push({ t: "check", ok: more, reason: "the limit of iterate", fail: { t: "break", label } });
+    else this.check(body, more, "the limit of iterate", this.#text(body, s, path, errorText.limit(e.limit)));
     this.#loopStep(e.step, inner, path, first, body, locals);
     body.stmts.push({ t: "set", n: k, value: prim("+", local(k), num(1)) });
     b.stmts.push({ t: "repeat", label, body: body.stmts });

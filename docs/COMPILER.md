@@ -51,7 +51,7 @@ At run time, a program operates in one of three tiers:
 | 1 | The closure compiler (`compile` of today) | Each page, also a page that does not permit `eval` |
 | 2 | Generated JavaScript | A page that permits `new Function`, and each build |
 
-A tier-2 program is specialized to the kinds of values that it expects. A check that fails sends that one evaluation to tier 1, so the result is the result of the interpreter (§4.1).
+A tier-2 program is specialized to the kinds of values that it expects. A check that fails gives the error of the interpreter. Tier 1 gives the few results that tier 2 cannot give (§4.1).
 
 A build is tier 2 with declared kinds in place of observed kinds. Thus the run-time compiler and the build-time compiler are one design.
 
@@ -92,7 +92,7 @@ The loop IR is a small language of statements:
 - a running value for a reduction: a count, a sum, a minimum
 - a direct call of an op function, or a primitive operation on numbers
 - a read of a field of a record, by the index of a constant
-- a check, with the reason that it fails
+- a check, with the reason that it fails, and the site of its error (§4.1.1)
 - a return
 
 The lowering joins an axis and its reduction into one loop, so it makes no list. A list exists only when the program gives a list. A move of an address becomes a call of a space function of the core (`applyMove`, `axisTargets`). In an array space or a grid, it becomes a computed index.
@@ -107,11 +107,9 @@ The lowering joins an axis and its reduction into one loop, so it makes no list.
 
 ### 4.1 Checks and the fallback
 
-The generated code expects the usual case: each field exists, each value has its expected kind, each number is finite, and no op fails. A check guards each of these facts. When a check fails, the generated function stops and gives the value `FALLBACK`. Then the same evaluation runs again in tier 1, and its result is the result.
+The generated code expects the usual case: each field exists, each value has its expected kind, each number is finite, and no op fails. A check guards each of these facts. A failed check ends the program with the error of the interpreter (§4.1.1). Where tier 2 cannot give the result, the generated function gives the value `FALLBACK`. Then the same evaluation runs again in tier 1, and its result is the result.
 
-Thus generated code does not make an error value. Each error of Vex (`#REF!`, `#N/A`, `#NUM!` and the others) comes from the interpreter, with its message, its path and its location.
-
-A failed check stops the program only where the error is the result. In three contexts, the error is not the result:
+A failed check ends the program only where the error is the result. In three contexts, the error is not the result:
 
 - In an item of a list op, the error makes an error item. The list op skips it, and with the option `strict`, the list op fails.
 - In the first argument of `ifError`, the error gives the second argument.
@@ -119,7 +117,7 @@ A failed check stops the program only where the error is the result. In three co
 
 An exception in an op is the error `#CALC!` of that op, so it follows the same rules. A full call stack (`#DEPTH!`) always stops the program, because no list op and no `ifError` hides it.
 
-An error of an extension follows the same rules (COMPILE.EXT). An extension without a handler and an exception of a handler are errors too. The runtime gives `FALLBACK` for each such error. For `#DEPTH!` of an extension, the runtime throws, so the program stops. Thus the interpreter and tier 2 have the same rule for an extension and for an op.
+An error of an extension follows the same rules (COMPILE.EXT). An extension without a handler and an exception of a handler are errors too. For `#DEPTH!` of an extension, the runtime throws, so tier 1 gives the result. Thus the interpreter and tier 2 have the same rule for an extension and for an op.
 
 Example: `IFERROR(row(-1).closing, 792)` reads a row that does not exist. The cell extension gives `#REF!`, and tier 2 gives 792.
 
@@ -130,7 +128,34 @@ A failure jumps to the end of its block, but the interpreter still evaluates som
 - **The later arguments.** The interpreter evaluates each argument of an op and each field of a record, also after an error (`#all`). Each argument before the last argument that can use an extension gets a block of its own. A check after the arguments reads the flags.
 - **The later items.** The interpreter makes each item of a list before the list op. A failure of the op stops the loop, for example the first error item with `strict`. If the list can use an extension, such a failure stops the program. A failure of the other arguments of the op also stops it. Then tier 1 gives the result.
 
-A function call can use an extension in the body of its function, or in the body of a function of that body. A program without an extension gets the same code as before.
+A function call can use an extension in the body of its function, or in the body of a function of that body.
+
+### 4.1.1 The error results of tier 2
+
+Tier 2 gives the error result of a program itself (COMPILE.ERRORS). The value path does not change: it has no new check, no new flag and no new allocation. Only the failure path has new code.
+
+**The lazy error.** A failed check keeps a small record: its site, the origin, the focus and the runtime operands. The site is a constant of the program. A function of the runtime that fails also records its detail in two variables. The detail is the thrown value, the result that failed its checks, or a foreign error. A record has no text. When the program ends with a lazy error, `take` of the runtime makes the error of the interpreter from it (`materialize`). This step uses the error texts of the core (`errorText`, `errorAt`). So the two tiers have one copy of each message.
+
+The signal stays `FALLBACK`. The generated code puts the lazy error in a slot of the runtime, and it gives `FALLBACK`. `tiered` then reads the slot. An empty slot sends the run to tier 1. An exception also gives `FALLBACK` with an empty slot. Thus `load` keeps its contract.
+
+**A context that drops the error.** An item of a list op and the first argument of `ifError` drop the error, so their checks keep nothing. A binding of `let` keeps its error in the local of its value. Only a failure writes there, and a read of the name tests the flag of the binding.
+
+**`#ARGS`.** The interpreter evaluates each argument, also after an error (`#all`). Two errors give `#ARGS`. The value path has no flags for this. Each argument has a block for its failure, and the code after this block is a copy of the next argument that can fail. Thus a failure jumps to the copies of the later arguments, and each argument evaluates once. The order of evaluation is the order of the interpreter, and no extension runs twice.
+
+A copy can read flags, because the value path does not read a copy (`#collect`). So a node in a copy adds no other copy. The size of the code grows with the depth of the failing nodes, not with the number of their paths. `MAX_COPIED` limits the nodes of the copies. Past the limit, a node with two arguments that can fail keeps no error, and tier 1 gives its result. `MAX_CHAINED` limits the arguments of a chain in the same way, because each argument that can fail adds a level of blocks.
+
+**The memo.** An entry of the memo holds a value or the mark of a failure. The error depends on the position and on the child nodes, so the entry has no error. After a read of a failed entry, where the context keeps the error, a copy of the node evaluates at this position. A node of the memo uses no extension, so this has no effect. The value path reads one flag, as before.
+
+**What stays with tier 1.** These results still use `FALLBACK`:
+
+- `#DEPTH!` of an extension and a full call stack, by the rule above.
+- A list with an error item, and the op `errors` on such an item, because generated code makes no error item.
+- A failed kind check of a schema, because it is no error of the interpreter.
+- `reduce` on an empty list, because the result can be the identity of the op.
+- An op that fails in a list op, where the list can use an extension or the option `strict` is set. The interpreter makes each item first, so an earlier error item or `#DEPTH!` can come first.
+- A failed argument of a list op after its list, because the interpreter evaluates the list first.
+- An exception of a getter of a record.
+- A node with two failed arguments past `MAX_COPIED`.
 
 ### 4.2 The same bits
 
@@ -196,9 +221,9 @@ A run knows which cell reads which cell. After a change of one record, only the 
 
 ### 7.6 Fusion of list ops
 
-This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 6 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT).
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 7 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT). The seventh step gives one frozen `vex.list` for each run (COMPILE.MODULE.FUSE.OUT).
 
-The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus the other IDs stay in this section until their tests exist. Then they move to the spec.
+The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus an ID stayed in this section until its test existed. Then it moved to the spec.
 
 #### The cost of a chain of list ops
 
@@ -316,7 +341,7 @@ The clean form does not move a part of the code. Thus each part evaluates in the
 - `sortBy` with `by` collects the pairs of the item and its sort value in the loop of the stage before it. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
 - `LO` of a fused chain makes the items of the `vex.list` in the loop.
 - **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it. An append of `fill(1, x)` into that array pushes the item directly. The rules of the adoption follow this list.
-- **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LO` for each run. Each key gets that object.
+- **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LO` for each run. Each key gets that object. The printer tests the levels of the value: a value with no levels reads no key. The `L` of the envelope evaluates on the first read, so a run with no keys makes no envelope. An error stays the error of each key. `LO` and `LOC` give a frozen list, and they keep no object on the array.
 - The fused code uses no new global, so the test of `MODULE_GLOBALS` (V-060) does not change. It makes no own property on an array.
 
 #### The rules of the adoption
@@ -402,13 +427,9 @@ With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_dom
 - `fold` and `iterate` over the axis `list`, in the first steps. Their steps read the list in order, so they can be sinks later.
 - Tier 2 of the run time (`tiered`). Its lowering has its own fusion of the aggregates (`#fused` of `lower.ts`).
 
-#### Planned requirement IDs
+#### Requirement IDs
 
-This ID moves to `spec/README.md` with the test that names it:
-
-- `COMPILE.MODULE.FUSE.OUT`: A value of the run that does not depend on the key has one `vex.list` for each run.
-
-`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6.
+`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6, and `COMPILE.MODULE.FUSE.OUT` moved with step 7. Step 7 added the frozen form to `COMPILE.MODULE.LIST.RESULT`.
 
 #### Measure before a release
 
@@ -422,7 +443,7 @@ A release that claims a speed gain carries its bench result in the pull request.
 
 #### The steps of the work
 
-Each step is one pull request. P17 and the golden files check each step, and the step changes no value.
+Each step is one pull request. P17 and the golden files check each step, and the step changes no value. Step 7 changes no value too, but its list is frozen.
 
 1. Add the option `fuse` (COMPILE.MODULE.FUSE.OFF) with no effect, and a bench case for `SHAPE_COLUMNS` in `bench/gate.ts`. Done.
 2. Add the facts `clean`, `fresh` and the count of the reads of each list node (COMPILE.MODULE.FUSE.FACTS). Do not change the printed code. Done.
@@ -430,7 +451,7 @@ Each step is one pull request. P17 and the golden files check each step, and the
 4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). Done.
 5. Fuse the chains of `append`, and make `sortBy` a sink. Done. A chain fuses only when a part pushes its items, because a copy loop costs more than `concat`. In a sheet with a search, a chain that reads a cell keeps its arrays. The interpreter reads each cell of an append also after an error, and the fused chain stops at the first error.
 6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT). Done. A literal is not fresh, so a loop that starts with the empty literal keeps its first copy. That copy has no items, so its cost is small. Then an append of `fill(1, x)` into the array pushes its item directly, with no `FI` and no `AOC`.
-7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions).
+7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions). Done. A list of a result is frozen in each form. These forms are a value that reads a key, a column of lists of a sheet and a module of `fuse` false. Thus the option `fuse` does not change the contract. With `fuse` false, each key keeps its own envelope, so a bench can compare the two forms. A plain array stays one array for each key, and it is not frozen. The decision covers only the `vex.list`, and a host can change an array. A column of a sheet keeps one frozen list for each cell.
 8. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
 
 These golden files change. The files in `packages/core/src/__golden__` do not change, because they are the IR and the traces of tier 1:
@@ -442,12 +463,12 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | 4 | `module-list-build.js`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
 | 5 | `module-fuse.js`. The programs of the other files have no chain of `append` with a part that pushes. |
 | 6 | `module-fuse.js`, also for the direct push. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
-| 7 | `module-fuse.js`, and each golden file of a module whose value is a list |
+| 7 | `module-fuse.js`, the one golden file of a module whose value is a list. The two hashes of the modules of `fuse` false in the tests change only by the text of `LO`. |
 
 #### Open questions
 
 - **The form of one envelope for each run (decided 2026-10-29).** The value of the run is one frozen `vex.list` for each run, as `LV` gives, and each key gets that object. These facts support the decision:
-  - The interpreter is the reference, and its `vexList` is frozen (`packages/core/src/list.ts`). The `LO` of today gives a list that is not frozen, so the frozen form agrees with the reference.
+  - The interpreter is the reference, and its `vexList` is frozen (`packages/core/src/list.ts`). The `LO` before step 7 gave a list that was not frozen, so the frozen form agrees with the reference.
   - The memo of a module already gives the same object at each origin (§13.2, the memo of each space). Thus the identity of a value is not a part of the contract.
   - The host of ireko only reads the value (`valuesOf` in `shape-vex.ts`).
   - A host that changes the value of the run gets a `TypeError` in strict code, or no change. The project treats this as a breaking change. Thus step 7 goes into a MINOR version (0.18.0 or later), with a changeset that tells the change.
@@ -1340,7 +1361,7 @@ The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 %
 - The helper `LP` gives the result, and `LPC` is its clean form (COMPILE.MODULE.FUSE.CLEAN). The helper `LCP` gives a column of lists of a sheet.
 - The module prints no types. The host declares them: `T[]` for a list of `T`, and `T | typeof VEX_ERROR` for an item that can be an error.
 
-In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out[o] = LPC(G(c136()), 1)` replaces `out[o] = LOC(G(c136()), 1)`. The value at each key is `[rows, columns]`, two arrays of bands. The module has 12864 bytes, and the default module has 13470 bytes. The golden file `module-plain.js` keeps its text.
+In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out[o] = LPC(G(c136()), 1)` replaces the read `out[o] = G(c137())` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12520 bytes, and the default module has 13209 bytes. The golden file `module-plain.js` keeps its text.
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
 

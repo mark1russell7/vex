@@ -758,9 +758,10 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A cell without a formula has the error sentinel from the start, as the error of its read.
   // A column of a direct fill (COMPILE.MODULE.SHEET.DIRECT): the error sentinel of a cell changes to VEX_ERROR.
   DO: "function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }",
-  // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
-  // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
-  LO: 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
+  // A list of a result (COMPILE.MODULE.LIST.RESULT): a frozen `vex.list` with a text key for each item, as the interpreter
+  // gives. An error item has the error VEX_ERROR. The depth `h` is the number of the levels of lists in the items. LO
+  // keeps no object on the array, because a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
+  LO: 'function LO(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } }))) }); }',
   // A plain list of a result (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with no keys. An error
   // item is VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
   LP: "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
@@ -836,7 +837,7 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   NTC: "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
   FSC: "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
-  LOC: 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
+  LOC: 'function LOC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } }))) }); }',
   LPC: "function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }",
   // LV and LVC keep one object on the array. A clean list gives the same object from both.
   LVC: [
@@ -2021,6 +2022,17 @@ class Printer {
     const list = v.list as ListInfo;
     const helper = this.#clean(list, true) ? CLEAN_FORMS[form] : form;
     return `${this.use(helper)}(${v.code}, ${String(depthOf(list))})`;
+  }
+
+  /**
+   * This method gives the code of a list that is the value of the run at a key. With `fuse`, a `vex.list` that reads no
+   * key evaluates once, on its first read, so each key gets one object (COMPILE.MODULE.FUSE.OUT). A plain array stays
+   * one array for each key, because a host can change an array.
+   */
+  runList(v: Value, plain: boolean): string {
+    const code = this.envelope(v, plain ? "LP" : "LO");
+    if (plain || !this.#fuse || v.deps.size > 0) return code;
+    return this.#hoist(bare({ ...v, code, plain: false }), true).v.code;
   }
 
   /** This method gives the name of a part of the tree, for example `H` for the children, and marks the part as read. */
@@ -4430,7 +4442,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
     return reasonOf(thrown);
   }
   // A list gives a vex.list (COMPILE.MODULE.LIST.RESULT), or a plain array (COMPILE.MODULE.LIST.PLAIN).
-  const result = value.v.list === undefined ? value.v.code : p.envelope(value.v, run.plain ? "LP" : "LO");
+  const result = value.v.list === undefined ? value.v.code : p.runList(value.v, run.plain);
   const body = ["const out = new Array(n);", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out[o] = ${result};`, "  } catch {", "    out[o] = VEX_ERROR;", "  }", "}", "return out;"];
   return printModule(p, options, run, body);
 }

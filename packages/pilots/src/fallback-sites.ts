@@ -69,6 +69,7 @@ function opLocals(program: LoopProgram): Map<number, string> {
           break;
         case "check":
         case "fail":
+        case "break":
         case "next":
         case "push":
         case "return":
@@ -101,6 +102,8 @@ function contextOf(lines: readonly string[], at: number, body: number): string {
 
 /** The text of the statement that gives `FALLBACK`. */
 const RETURN_F = "return F;";
+/** The statement that ends a program with an error. The probe names its site too, so it can name each failed check. */
+const RAISE = /return raise_\([^;]*;/;
 
 /**
  * This function makes the probe of a program with the options of its compile. It gives `undefined` when the program
@@ -129,6 +132,7 @@ export function siteProbe(expr: Expr, options: GenerateOptions = {}): SiteProbe 
       });
       return String(stops.length - 1);
     };
+    if (RAISE.test(line)) return line.replace(RAISE, `return P_.stop(${stop()});`);
     if (line.includes(RETURN_F)) return line.replaceAll(RETURN_F, `return P_.stop(${stop()});`);
     // A check that ends a block or skips an item does not stop the program. The probe notes it.
     const check = comment === undefined ? null : /^(\s*if \(!\(.*?\)\)) (break L\d+;|continue L\d+;|\{ if \()/.exec(line);

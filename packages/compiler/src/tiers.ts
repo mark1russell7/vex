@@ -10,7 +10,7 @@ import { factsOf, type Schema } from "./facts.ts";
 export type GenerateOptions = CompileOptions & { readonly schema?: Schema };
 import { printJs } from "./js.ts";
 import type { LoopProgram } from "./loop.ts";
-import { lower, NoFixedPoint, Unsupported } from "./lower.ts";
+import { lower, Unsupported } from "./lower.ts";
 import { createRuntime, FALLBACK } from "./runtime.ts";
 
 /**
@@ -43,8 +43,6 @@ export function generate(source: Expr | Envelope, options: GenerateOptions = {})
     if (size !== undefined) return { ok: false, reason: size };
     return { ok: true, program, source: printJs(program, facts), options };
   } catch (thrown) {
-    // COMPILE.FIX: the lowering stops at a fixed point before the checks, so the reason of a check comes first.
-    if (thrown instanceof NoFixedPoint) return { ok: false, reason: refusal(read.value, options) ?? thrown.message };
     // A stack overflow in the lowering of a deep expression also goes to tier 1.
     return { ok: false, reason: thrown instanceof Unsupported ? thrown.message : "the lowering threw an exception" };
   }

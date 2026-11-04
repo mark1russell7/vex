@@ -21,18 +21,6 @@
   },
   {
     "file": "packages/compiler/src/memo.ts",
-    "comment": "// Stryker disable next-line StringLiteral: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/memo.ts",
-    "comment": "// Stryker disable next-line StringLiteral: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/memo.ts",
-    "comment": "// Stryker disable next-line ArrayDeclaration: after the check, each part has its keys, so no one reads the default list"
-  },
-  {
-    "file": "packages/compiler/src/memo.ts",
     "comment": "// Stryker disable StringLiteral,ConditionalExpression: see the comment above"
   },
   {

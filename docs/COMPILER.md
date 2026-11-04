@@ -214,6 +214,16 @@ The parser is a runtime dependency, because the option `domains` takes a domain 
 
 The test `packages/pilots/src/runner-text.test.ts` prints each module of ireko with Node, with `tsx` and in Vitest, and compares the bytes. The test also has the case `(a && b) || c`, because a formatter keeps these parentheses and `tsx` removes them.
 
+#### The growth of a print (COMPILE.GROWTH)
+
+A key of a place holds what each read of an expression means at that place. A table in `scope-key.ts` walks each expression once. It keeps the form of the expression: the number of its structure and a shared list of its reads. A key at a new place reads that list, so its cost is linear in the reads and the binders of the expression.
+
+A form depends on the map `keys` of the nodes of the memo, so the table keeps the forms for each content of that map. The table seals such a map at its first read. A change after that read is a refusal with a reason, and it does not give a wrong key. The other maps of a scope have no copy in the table, because each key reads them as they stand. The tests of `scope-key.test.ts` change a map after a read and show both results.
+
+The gate `bench/growth.ts` runs in the speed gate. It compiles 13 shapes at two legal sizes, each in five fresh processes, as programs from JSON. It reads the exponent of the median time and of the bytes against the places. An exponent does not depend on the CPU model. A ratio at one size does not find a return to a quadratic pass.
+
+The key lists of `origin` are a limit of the output. Each node of the memo prints a list with one entry for each level around it. So the text of the shape `origin` is quadratic in its levels. The largest legal program has 166 levels and 248,611 bytes. A smaller text needs a change of the bytes of each module. The shapes `origin` and `wideorigin` have their own limits of bytes in `test/growth.ts`, at their measured slopes, so a worse text fails.
+
 #### The limit of the places of a program (COMPILE.PLACES)
 
 A place is a node at one position of the tree of a program. A program can use one object at many places, so a small object can have an exponential count of places. The compile takes time at each place, and tier 2 prints code at each place. The count comes first, and its walk visits each object once, so the refusal takes little time at each depth.

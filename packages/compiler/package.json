@@ -58,6 +58,7 @@
     "test:watch": "vitest",
     "bench:gate": "node bench/gate-processes.ts",
     "bench:places": "node bench/places.ts",
+    "bench:growth": "node bench/growth.ts",
     "bench:gate:one": "node bench/gate.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
   },

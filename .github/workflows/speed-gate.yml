@@ -65,6 +65,7 @@ jobs:
             packages/core/bench/**
             packages/compiler/src/**
             packages/compiler/bench/**
+            packages/compiler/test/growth.ts
             packages/domains/src/**
             packages/pilots/src/ireko-*.ts
             .github/workflows/speed-gate.yml
@@ -136,6 +137,9 @@ jobs:
           GATE_NODE_FLAGS: ${{ inputs.node_flags }}
           GATE_GC: ${{ inputs.gc && '1' || '0' }}
         run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a gates.txt
+      # The gate of the growth reads exponents, so it has no limit for each CPU model (COMPILE.GROWTH).
+      - if: ${{ !cancelled() && !inputs.case }}
+        run: pnpm --filter @mark1russell7/vex-compiler run bench:growth | tee -a gates.txt
       - if: ${{ !cancelled() }}
         run: |
           {

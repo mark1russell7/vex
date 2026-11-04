@@ -55,6 +55,8 @@ A function name has no difference between capital and small letters.
 - **[FORMULA.AGGREGATE.OP]** Without an axis, `MIN`, `MAX` and `SUM` are ops of the domains, for example `MIN(a, b)` of two numbers. `AVERAGE`, `COUNT`, `ANY` and `ALL` without an axis are errors.
 - **[FORMULA.ITERATE]** `ITERATE(limit, name, first, step, ..., result)` is the loop `iterate` (spec `ITERATE.LIMIT`). Each name has a first value and a step, and in a step or in the result the name reads its value. A last argument `UNTIL test` is the test `until`. `limit` is a whole number from 0 to 100000 in the formula.
 - **[FORMULA.FOLD]** `FOLD(axis WHERE test, name, first, step, ..., result)` is the loop `fold` (spec `FOLD.ORDER`). The axis is an axis of an aggregate of this table. Each step evaluates at a row of the axis, and the test cannot read the names.
+- **[FORMULA.FIX]** `FIX(name, join, first, step)` is the node `fix` (spec `FIX.ROUNDS`). `join` is the word `OR`, `AND`, `MAX` or `MIN`, in capital or small letters. `name` is a word, and it does not hide a column. `first` and `step` evaluate at each row. A step that the check of the core refuses gives `#VALUE!` (spec `FIX.MONOTONE`).
+- **[FORMULA.LAST]** `LAST(name)` is the node `last` (spec `FIX.LAST`). A `LAST` outside a step of a `FIX` of its name is a syntax error. The first value of a `FIX` is outside its step. The check of the core refuses a read of a `FIX` in the step of an inner `FIX`.
 - **[FORMULA.RANK]** `RANK(value)` is 1 plus the number of other rows with a larger value. An error at another row makes the rank an error. `RANK` is not valid inside an aggregate.
 
 ## 7. Grids

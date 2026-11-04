@@ -3087,7 +3087,7 @@ class Printer {
     // statements read their keys, so the marker of the parameters gives no level.
     const levels = (d: number): readonly number[] => (d === spec.origin ? [ctx.originLevel] : d === spec.focus ? [ctx.level] : d === spec.param ? [] : [d]);
     const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap(levels)]);
-    const position = spec.deps.has(spec.origin) ? [ctx.focus, ctx.origin] : spec.deps.has(spec.focus) ? [ctx.focus] : [];
+    const position = [...(spec.deps.has(spec.focus) ? [ctx.focus] : []), ...(spec.deps.has(spec.origin) ? [ctx.origin] : [])];
     return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps, list: heldList(spec.list) } };
   }
 
@@ -3164,7 +3164,8 @@ class Printer {
     const global = [...body.v.deps].every((d) => markers.has(d));
     const name = this.fresh("fn");
     if (hasLoop(bound.fn.body) || this.#defers(body)) this.#deferred.add(name);
-    const position = body.v.deps.has(origin) ? [k, o] : body.v.deps.has(focus) ? [k] : [];
+    // A parameter is here only if the body reads it, so the text of a call reads only the levels of its deps (V-085).
+    const position = [...(body.v.deps.has(focus) ? [k] : []), ...(body.v.deps.has(origin) ? [o] : [])];
     const head = `const ${name} = (${[...names, ...position].join(", ")}) =>`;
     // The columns of the call come first. Each one reads a binding of the root only after the binding has its value.
     const s = [...scope.decls, ...body.s];

@@ -23,9 +23,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 8 merged, the size of the printer is #242 | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
-| MODNESTED | A module reads a list inside a list, and a schema takes list fields. | compiler | P1 | in progress: #253 | |
 | NIGHTLY1103 | The Nightly of 2026-11-03 is green again. | quality | P1 | in progress: #206 | |
-| SIZECOPY | The size rule accepts a step that only copies a list. | core | P1 | in progress: #259 | |
 
 ## Next
 

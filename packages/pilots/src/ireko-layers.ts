@@ -211,8 +211,8 @@ const push = (list: Expr, x: Expr): Expr => op("append", list, one(x));
 const lastOf = (list: Expr): Expr => subtract(op("count", list), lit(1));
 const pop = (list: Expr): Expr => op("take", list, lastOf(list));
 const top = (list: Expr): Expr => nth(list, lastOf(list));
-/** The list `list` with `x` at the position `i`. Each step copies the list, because no op changes one item. */
-const put = (list: Expr, i: Expr, x: Expr): Expr => each(axes.list(list), when(eq(v("$j"), i), x, v("$old")), undefined, ["$old", "$j"]);
+/** The list `list` with `x` at the position `i`. */
+const put = (list: Expr, i: Expr, x: Expr): Expr => op("setNth", list, i, x);
 
 /** The items of a list of a list of lists, for a list op of a module (gap: `listy` does not know that `nth` gives a list). */
 export const items = (list: Expr): Expr => each(axes.list(list), v("$item"), undefined, ["$item"]);

@@ -612,13 +612,13 @@ Vex has no loop, so each program ends. The language keeps this property, and it 
 - `iterate(n, init, step)`: `n` steps of an expression. A fixed point stops at a stable value or at a limit.
 - **Domain kernels**: ops of a domain for the algorithms of data structures. Vex composes them.
 
-These give the strategies of ireko that are not formulas today:
+`packages/pilots` has these strategies of ireko as programs:
 
 | ireko | In Vex |
 |---|---|
-| `tree`, the tidy tree | A `fold` over the siblings: `contour.merge(child.contour.shift(offset))`, with a contour domain |
-| `layers`, the layers | The layer of a node is a recurrence over its predecessors, with a graph space and a sheet. The order of a layer is `iterate(8, ...)`. |
-| `avoid`, the router | An op of a routing domain |
+| `tree`, the tidy tree | A `fold` over the children, with lists of bands as names (`ireko-tree.ts`) |
+| `layers`, the layers | `iterate` loops with lists as names, for the search, the longest path and the eight passes (`ireko-layers.ts`) |
+| `avoid`, the router | A heap and a search in `iterate` loops (`ireko-route.ts`). The item ASTAROP of the roadmap gives a kernel op. |
 
 Each new construct goes through each stage. The stages are the interpreter, `explain`, `deps`, JSON, the builder, the formulas, the reference interpreter of the test kit and the compiler.
 
@@ -1409,7 +1409,7 @@ The pilot found these gaps:
 
 - A list op cannot take `nth` of a list of lists in a module. The reason is `the list op "count"`. The program puts `each` over the axis `list` around the value.
 - A variable of the schema cannot be a list. Thus the first record holds the edges in the fields `froms` and `tos`.
-- No op changes one item of a list. Thus each change of a state copies the list, and the search costs O(k(k + E)) where ireko costs O(k + E).
+- The program changes one item of a list with `setNth`. Each change of a state copies the list, so the search costs O(k(k + E)) where ireko costs O(k + E). On 1000 children and 1500 edges, the module takes 11.9 times the time of ireko. On 4000 children and 6000 edges, it takes 23.2 times. These are medians of 9 processes in CI. `setNth` took 24 % from the time of the module at 4000 children, against the `each` that it replaces.
 - The node `fix` has no module until the change of tier 2 and modules merges. Thus the longest path uses `iterate`.
 - The fields of the edges are arrays, and a list op on an array goes to tier 1 (V-064). Thus a run of tier 2 with an edge gives the value of tier 1.
 

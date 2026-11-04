@@ -83,7 +83,7 @@ A use case is a real program from a real domain. Each use case gives three thing
 
 | Area | Use case | What it stresses |
 |---|---|---|
-| Layout | The Jqy audit (done), the Graph grid (done), alignment and spacing checks | Tree spaces, moves, `others` with `where` |
+| Layout | The Jqy audit (done), a uniform grid (done), alignment and spacing checks | Tree spaces, moves, `others` with `where` |
 | Spreadsheets | A loan schedule, a budget with categories, a grade book, stock reorder points | Sheets, recurrences, tree sums, ranks |
 | Simulation | Life (done), Langton's ant, heat diffusion, flocking | Grids, `neighbors`, distances in `others` |
 | Validation | Cross-field form rules, invoice lines against the invoice total, CSV rows | Error values, `ifError`, records |

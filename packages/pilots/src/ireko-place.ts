@@ -9,7 +9,8 @@
  * the same bits. ireko has the MIT license and the same author.
  */
 import { app, cell, lit, ref, space, v, type Expr, type Space } from "@mark1russell7/vex";
-import type { Schema, SheetModuleOptions } from "@mark1russell7/vex-compiler";
+import type { Schema } from "@mark1russell7/vex-compiler";
+import type { SheetModuleOptions } from "@mark1russell7/vex-compiler/module";
 import { BoolDomain, NumDomain } from "@mark1russell7/vex-domains";
 
 /**

@@ -129,7 +129,7 @@ The sign of 0 is 0, so a gap of 0 on that axis gives no push. If two boxes have 
 
 ## Vectors in a standalone module
 
-`emitModule` of `@mark1russell7/vex-compiler` prints a program as a module without Vex. It copies the text of the functions of each domain, so it cannot copy the class `Vec2`. `XYDomain` has the same ops for plain `{ x, y }` data:
+`emitModule` of `@mark1russell7/vex-compiler` prints a program as a module without Vex. A module has no import, so it holds a `Vec2` as plain `{ x, y }` data, the data of `toJSON`. Each op of `Vec2Domain` gives the bits of the interpreter. A module takes plain data or `Vec2` values, and it gives plain data. Put `NumDomain` before `Vec2Domain`. `XYDomain` is a second domain of plain `{ x, y }` data:
 
 - The op `xy` of `NumDomain` makes a value of `XYDomain`. Its declaration `returns: "domain:XY"` gives the module the kind of each vector.
 - No op of `XYDomain` lifts a number. Write `max(xy(1, 1))`, not `max(1)`.
@@ -138,7 +138,7 @@ The sign of 0 is 0, so a gap of 0 on that axis gives no push. If two boxes have 
 
 ```ts doctest
 import { app, axes, fold, lit, ref, v } from "@mark1russell7/vex";
-import { emitModule } from "@mark1russell7/vex-compiler";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { BoolDomain, NumDomain, XYDomain } from "@mark1russell7/vex-domains";
 
 const size = app("xy", ref("w"), ref("h"));

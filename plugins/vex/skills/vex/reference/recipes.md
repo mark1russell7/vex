@@ -164,7 +164,7 @@ A program keeps the value of each node that depends only on the space. Thus the 
 
 ```ts doctest
 import { app, axes, each, ref } from "@mark1russell7/vex";
-import { emitModule } from "@mark1russell7/vex-compiler";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { NumDomain } from "@mark1russell7/vex-domains";
 
 const share = app("divide", ref("v"), app("sum", each(axes.all, ref("v"))));
@@ -175,11 +175,11 @@ m.ok; // => true
 
 A module of a tree takes the option `space: "tree"` (from 0.11.2). Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The module has the move `parent` and the axes of a tree.
 
-A module of a graph takes the option `space: "graph"` (from 0.13.2). Its run takes the edges after the variables: for each record, an array of the positions of the ends of its edges. The module has the axes of a graph and `reduce`. A module cannot copy the methods of `Vec2Domain`, so use `XYDomain` in a module.
+A module of a graph takes the option `space: "graph"` (from 0.13.2). Its run takes the edges after the variables: for each record, an array of the positions of the ends of its edges. The module has the axes of a graph and `reduce`. From the next release, a module copies the plain form of `Vec2Domain`, so a program can use `Vec2Domain` or `XYDomain` in a module.
 
 ```ts doctest
 import { app, axes, each, ref } from "@mark1russell7/vex";
-import { emitModule } from "@mark1russell7/vex-compiler";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { NumDomain } from "@mark1russell7/vex-domains";
 
 // The cost of the team of each person: the salary plus the salaries of the persons under the person.
@@ -195,7 +195,7 @@ A host gives the records in an array, and the parents in an array of the same le
 
 ```ts doctest
 import { app, axes, cell, each, ref } from "@mark1russell7/vex";
-import { emitSheetModule } from "@mark1russell7/vex-compiler";
+import { emitSheetModule } from "@mark1russell7/vex-compiler/module";
 import { NumDomain } from "@mark1russell7/vex-domains";
 
 // The cost of each node: its own pay plus the costs of its children.
@@ -211,7 +211,7 @@ A cell can hold a list (from 0.13.3). A later formula reads the list with the li
 
 ```ts doctest
 import { app, axes, cell, each, ref } from "@mark1russell7/vex";
-import { emitSheetModule } from "@mark1russell7/vex-compiler";
+import { emitSheetModule } from "@mark1russell7/vex-compiler/module";
 import { NumDomain } from "@mark1russell7/vex-domains";
 
 // The pay of each node and of each node under it, as a list. Then the largest pay of each subtree.
@@ -232,7 +232,7 @@ The run gives each list as a `vex.list`, with the keys as text. An error item ha
 
 ```ts doctest
 import { app, lit, ref } from "@mark1russell7/vex";
-import { emitModule } from "@mark1russell7/vex-compiler";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { BoolDomain, InsetsDomain, NumDomain, XYDomain } from "@mark1russell7/vex-domains";
 
 const sides = app("add", app("insets", lit(0), lit(0), lit(0), lit(0)), ref("pad"));

@@ -1,5 +1,5 @@
 /**
- * The grid pilot: the grid layout of the Graph project as one Vex program. The reader changes the number of
+ * The grid pilot: a uniform grid layout as one Vex program. The reader changes the number of
  * items, the columns, the gap and the width of the bounds. The program evaluates at each item and gives its
  * rectangle. A chip shows if the rectangles of the program are equal to the rectangles of the plain TypeScript
  * implementation.
@@ -55,7 +55,7 @@ export default function GridPilot(): ReactElement {
   return (
     <section className="vx-frame" aria-label="The grid pilot">
       <header>
-        <strong>The grid layout of Graph, as one formula</strong>
+        <strong>A uniform grid layout, as one formula</strong>
         <span className="vx-row">
           <span className="vx-chip" data-state={agrees ? "pass" : "fail"} data-testid="grid-agrees">
             {agrees ? "equal to the reference" : "different from the reference"}

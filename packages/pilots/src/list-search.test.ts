@@ -1,5 +1,6 @@
 import { evaluate, sizeError, space, type Expr } from "@mark1russell7/vex";
-import { emitModule, tiered } from "@mark1russell7/vex-compiler";
+import { tiered } from "@mark1russell7/vex-compiler";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { fromCore, fromReference, referenceEvaluate } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";

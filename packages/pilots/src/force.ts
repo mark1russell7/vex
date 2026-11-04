@@ -1,5 +1,5 @@
 /**
- * The force pilot: a force-directed layout of the nodes of a graph, as the force layouts of Graph do. The positions of
+ * The force pilot: a force-directed layout of the nodes of a graph. The positions of
  * all nodes are the state of one loop: a list of `Vec2` values by key (LOOP.LIST). Each step reads the old position of
  * each node by its key (LIST.GET). Each node pushes the other nodes away, a spring pulls the two ends of each edge
  * together, and a mild pull goes to the center.
@@ -7,9 +7,8 @@
  * The Vex program uses the typed builder. The name `pos` of `iterate` is a list chain (BUILD.LIST.LOOP), and the result
  * is the list of the last positions. A record has its key in the field `id`, because `get` takes the key as a value.
  *
- * `forceProgram` is the same layout as a standalone module over a graph space (COMPILE.MODULE.GRAPH). A module copies
- * the functions of the ops, and the ops of `Vec2Domain` are methods of a class. Thus the module form uses `XYDomain`,
- * the plain data with the same arithmetic, and `dot(gap, gap)` in place of `lengthSq`.
+ * `forceProgram` is the same layout as a standalone module over a graph space (COMPILE.MODULE.GRAPH). It uses `XYDomain`,
+ * the plain data with the arithmetic of `Vec2`, and `dot(gap, gap)` in place of `lengthSq`.
  */
 import { app, ref, space, vex, type Expr } from "@mark1russell7/vex";
 import type { Schema } from "@mark1russell7/vex-compiler";

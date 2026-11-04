@@ -62,6 +62,7 @@ checkLaws(IntervalDomain, { arb: intervals }).every((r) => r.ok); // => true
 | `encode` and `decode` | The JSON form of a value, for a literal in a serialized program |
 | `primitive` | Only for a domain of all the numbers, texts or booleans and no other value |
 | `samples` | Some values. The compiler gives them to an op and to its copy in a module. |
+| `moduleForm` | The parts that a module copies in place of the parts of the domain. The interpreter does not read them. |
 
 ## A domain for a standalone module
 
@@ -72,7 +73,7 @@ checkLaws(IntervalDomain, { arb: intervals }).every((r) => r.ok); // => true
 - Use plain data for the values. A test with `instanceof` reads the name of a class, so the module cannot copy it.
 - Give `samples`. The compiler compares each op with its copy on the samples.
 
-`Vec2Domain` uses a class, so a program with `Vec2` values operates in the interpreter and in `tiered`, but not in a standalone module. `XYDomain` has the same ops for plain `{ x, y }` data, and the op `xy` of `NumDomain` makes its values. Use it for a 2D program in a module.
+A domain with a class gives a `moduleForm`. It holds plain functions for the methods, `is` for plain data, `samples`, and `literal` for the values of a program. `Vec2Domain` has one, so a program with `Vec2` values operates in a module too. The module gives plain `{ x, y }` data, the `toJSON` of a `Vec2`. It takes plain data or `Vec2` values. A module keeps two limits. Put `NumDomain` before `Vec2Domain`. A number that an op lifts, as in `add(p, 1)`, stops the module.
 
 Two domains of plain objects share a module only if each declares `fields`, the exact field names of its values. The law checker tests this declaration. `XYDomain` and `InsetsDomain` declare it.
 

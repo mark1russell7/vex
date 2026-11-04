@@ -1,21 +1,16 @@
 import { SheetRun } from "@mark1russell7/vex";
-import { emitSheetModule } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { placeTreeInput as tree } from "./inputs.ts";
-import { PLACE_COLUMNS, PLACE_DOMAINS, PLACE_KINDS, PLACE_SCHEMA, placeSpace, placeTree, type PlacedRecord, type PlaceRecord, type PlaceVars } from "./ireko-place.ts";
+import { irekoRun } from "./ireko-modules.ts";
+import { PLACE_COLUMNS, PLACE_DOMAINS, placeSpace, placeTree, type PlacedRecord, type PlaceRecord, type PlaceVars } from "./ireko-place.ts";
 
 type Columns = Readonly<Record<string, readonly unknown[]>>;
 type Run = (records: unknown, vars: unknown, parents: unknown) => Columns;
 
 /** This function gives the run of the standalone module of the sheet, as the build of ireko writes it. */
 function moduleOf(): Run {
-  const m = emitSheetModule(PLACE_COLUMNS, { domains: PLACE_DOMAINS, schema: PLACE_SCHEMA, kinds: PLACE_KINDS, space: "tree", name: "placeOf" });
-  if (!m.ok) throw new Error(m.reason);
-  expect(m.source).not.toContain("import");
-  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitSheetModule, as in the build of ireko.
-  return new Function(`${m.source.replaceAll(/^export /gm, "")}
-return placeOf;`)() as Run;
+  return irekoRun("place") as Run;
 }
 
 /** This function gives the output of the place pass from the columns of a run. */

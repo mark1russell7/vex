@@ -31,9 +31,11 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, type Move, moveExpr, type Names, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, evaluate, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, type Move, moveExpr, type Names, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
+import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
+import { keepFaults, tidy, type Tidied } from "./module-tidy.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 
 /** The options of a standalone module. */
@@ -77,6 +79,12 @@ export interface ModuleOptions {
    * same text as without the option. The default is false.
    */
   readonly keys?: boolean;
+  /**
+   * What a catch of the module does with an exception that no function of a domain gives (COMPILE.MODULE.FAULT). The
+   * default `value` gives the error of Vex for each exception. With `throw`, the exception leaves the run, so a fault
+   * of the printed code does not become a value. An exception of a function of a domain stays an error of Vex.
+   */
+  readonly faults?: "value" | "throw";
 }
 
 /** The options of a module of a sheet (COMPILE.MODULE.SHEET): the options of a module, and the parts of a sheet. */
@@ -259,6 +267,12 @@ const readsCells = (e: Expr): boolean => e.tag === "ext" || e.tag === "call" || 
 /** This function tells if an expression is the literal 1. */
 // Stryker disable next-line OptionalChaining: each caller gives an argument.
 const isOne = (e: Expr | undefined): boolean => e?.tag === "lit" && e.value === 1;
+
+/** This function tells if an expression reads nothing of a run: it has only literals and ops. */
+const isClosed = (e: Expr): boolean => e.tag === "lit" || (e.tag === "app" && e.args.every((x) => isClosed(x)));
+
+/** The space of the evaluation of an expression that reads nothing of a run. */
+const ONE_RECORD = spaces.array([{}]);
 
 /** A name of the program in the code: its variable, its kind, true when it can hold the error sentinel, and its levels. */
 interface Name {
@@ -1253,6 +1267,15 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   SBI: ["F"], SKI: ["F"], QA: [],
 };
 
+/**
+ * The forms of the helpers of the list fields, for a module where each list field has the depth 0. The test of the
+ * value takes the place of the recursion, and the helper has no argument `h` (COMPILE.MODULE.SIZE.FLAT).
+ */
+const FLAT_LIST_HELPERS: Readonly<Record<"LI" | "LA", string>> = {
+  LI: HELPERS.LI.replace("LI(x, h, t)", "LI(x, t)").replace("h > 0 ? LI(r.value, h - 1, t) : ", ""),
+  LA: HELPERS.LA.replace("LA(x, h, t)", "LA(x, t)").replace("h > 0 ? LA(y, h - 1, t) : ", ""),
+};
+
 /** The clean form of each helper that gives a list of the code to the outside (COMPILE.MODULE.FUSE.CLEAN). */
 const CLEAN_FORMS = { LO: "LOC", LS: "LSC", LV: "LVC", LP: "LPC" } as const;
 
@@ -1799,6 +1822,16 @@ const plainValue = (code: string, kind: Kind | undefined): Value => ({ code, kin
 /** This function gives the code of a value with no statements. */
 const bare = (v: Value): Code => ({ s: [], v });
 
+/**
+ * This function gives a domain in the form of a module (COMPILE.MODULE.FORM). Each part of the form replaces the part of
+ * the domain, so the printer reads one domain of plain data. A domain without a form stays the same object.
+ */
+function formOf(d: AnyDomain): AnyDomain {
+  const form = d.moduleForm;
+  if (form === undefined) return d;
+  return { ...d, ...form, ops: Object.fromEntries(Object.entries(d.ops).map(([name, spec]) => [name, { ...spec, ...form.ops?.[name] }])) } as AnyDomain;
+}
+
 /** This function gives the code of a literal. A value that is not a finite number, a text, a boolean or null has no code. */
 function literal(value: unknown): Value {
   if (typeof value === "number") {
@@ -1865,7 +1898,7 @@ function sameCall(a: () => unknown, b: () => unknown): boolean {
  * the same for the samples of their kinds.
  */
 function copied(f: (...a: never[]) => unknown, each: readonly (readonly unknown[])[], what: string): string {
-  const src = Function.prototype.toString.call(f);
+  const src = functionText(f);
   let copy: (...a: unknown[]) => unknown;
   try {
     // oxlint-disable-next-line typescript/no-implied-eval -- the source is the source of a function of a domain.
@@ -2040,6 +2073,8 @@ class Printer {
   readonly helpers = new Set<Helper>();
   /** The declarations at the top of the module: the functions of the domains and the checks of the results. */
   readonly top = new Map<string, string>();
+  /** The names of `top` that hold a copy of a function of a domain (COMPILE.MODULE.FAULT). */
+  readonly copies = new Set<string>();
   /** The array of the lists of each field of the input that the program reads (COMPILE.MODULE.LIST.INPUT). */
   readonly inputs = new Map<string, string>();
   /** The statements at the start of a run: the constants of the run and the functions of the memo. */
@@ -2140,7 +2175,7 @@ class Printer {
     this.#keys = keys;
     this.#fuse = options.fuse !== false;
     this.#starts = starts;
-    this.#domains = options.domains ?? [];
+    this.#domains = (options.domains ?? []).map(formOf);
     this.#facts = factsOf({ domains: this.#domains });
     this.#schema = options.schema;
     this.#memo = memoOf(expr);
@@ -2274,8 +2309,14 @@ class Printer {
     // A check that is Number.isFinite of a number adds nothing to the check of the result.
     const form = inlineForm(src);
     if (kind === "number" && form !== undefined && patternOf(form, (p) => p) === "Number.isFinite(#0)") return undefined;
-    this.top.set(name, `const ${name} = ${src};`);
+    this.#copy(name, src);
     return name;
+  }
+
+  /** This method keeps the copy of a function of a domain as a declaration of the module. */
+  #copy(name: string, src: string): void {
+    this.top.set(name, `const ${name} = ${src};`);
+    this.copies.add(name);
   }
 
   /** This method gives the samples of a kind: the samples of a primitive type, or the samples of a domain (KIND.DOMAIN). */
@@ -2316,7 +2357,7 @@ class Printer {
     const name = `is_${String(d)}`;
     if (!this.top.has(name)) {
       const src = copied(domain.is, [[...SAMPLES.number, ...SAMPLES.string, ...SAMPLES.boolean, null, {}, [], ...this.#samples(kind)]], `the test "is" of the domain ${domain.name}`);
-      this.top.set(name, `const ${name} = ${src};`);
+      this.#copy(name, src);
     }
     return name;
   }
@@ -2467,9 +2508,21 @@ class Printer {
     return e.kind === CELL_KIND && isCellRef(e.data) ? this.#sheet?.lists.get(e.data.column) : undefined;
   }
 
+  /**
+   * This method gives the code of a literal. A value of a domain with a module form is an object of plain data, with the
+   * kind of its domain (COMPILE.MODULE.FORM). Such a value is a constant of the run, so it gets a variable.
+   */
+  #literal(value: unknown): Value {
+    for (const d of this.#domains) {
+      const data = d.moduleForm?.literal?.(value);
+      if (data !== undefined) return { code: `({ ${Object.entries(data).map(([k, x]) => `${k}: ${literal(x).code}`).join(", ")} })`, kind: kindOfDomain(d), safe: true, deps: NO_DEPS };
+    }
+    return literal(value);
+  }
+
   /** This method prints a list literal (LIST.LITERAL) as an array of pairs of a key and a value. An error item holds the sentinel. */
   #listLiteral(l: VexList): Code {
-    const values = l.items.map((it) => (it.result.ok ? literal(it.result.value) : undefined));
+    const values = l.items.map((it) => (it.result.ok ? this.#literal(it.result.value) : undefined));
     const kinds = values.flatMap((x) => (x === undefined ? [] : [x.kind]));
     const code = `[${l.items.map((it, i) => `[${JSON.stringify(it.key)}, ${values[i]?.code ?? "E"}]`).join(", ")}]`;
     const has = l.items.length > 0;
@@ -2602,7 +2655,7 @@ class Printer {
   #node(e: Expr, ctx: Ctx): Code {
     switch (e.tag) {
       case "lit":
-        return isVexList(e.value) ? this.#listLiteral(e.value) : bare(literal(e.value));
+        return isVexList(e.value) ? this.#listLiteral(e.value) : bare(this.#literal(e.value));
       case "ref":
         return this.#ref(e, ctx);
       case "var":
@@ -3108,12 +3161,31 @@ class Printer {
     const value = values[1]?.v;
     // FI gives a new array of checked values, so the list is clean and fresh.
     const list: ListInfo = { item: value?.kind, inner: heldList(value?.list), texts: true, clean: true, fresh: true };
+    if (this.#fillsNothing(e, values[1])) {
+      // The helper stays in the names of the module, so the option `name` has the same refusal. The last pass removes it.
+      this.use("FI");
+      return { s: [], v: { code: "[]", kind: undefined, safe: true, deps, list } };
+    }
     // The one item of an append of an owner has the key 0, as FI gives it (COMPILE.MODULE.FUSE.ADOPT). The append uses FI
     // only when it does not push the item.
     const one = this.#ones.has(e) && values.length === 2 && isOne(e.args[0]);
     const v: Value = { code: `${one ? "FI" : this.use("FI")}(${values.map((x) => x.v.code).join(", ")})`, kind: undefined, safe: false, deps, list };
     if (one) this.#ones.set(e, { v, item: `[0, ${(value as Value).code}]` });
     return { s: stmtsOf(...values), v };
+  }
+
+  /**
+   * This method tells if `fill` gives no items and cannot fail, so `[]` is its code (COMPILE.MODULE.SIZE.FILL). The count
+   * must be the literal 0. The code of the value cannot throw, or the value reads nothing of a run and the interpreter
+   * gives the empty list. A value that fails keeps FI, so the list keeps its error. The option `fuse` must be true.
+   */
+  #fillsNothing(e: ExprOf<"app">, value: Code | undefined): boolean {
+    const [count, x] = e.args;
+    if (!this.#fuse || value === undefined || x === undefined || e.args.length !== 2 || count?.tag !== "lit" || count.value !== 0) return false;
+    if (value.s.length === 0 && value.v.safe) return true;
+    if (!isClosed(x)) return false;
+    const r = evaluate(e, { space: ONE_RECORD, origin: "0", domains: this.#domains });
+    return r.ok && isVexList(r.value) && r.value.items.length === 0;
   }
 
   /**
@@ -3138,7 +3210,7 @@ class Printer {
    */
   #lifted(x: Code, domain: number, d: AnyDomain): Code {
     const name = `lift_${domain}`;
-    this.top.set(name, `const ${name} = ${copied(d.fromScalar as (...a: never[]) => unknown, [SAMPLES.number], `the lift of the domain ${d.name}`)};`);
+    this.#copy(name, copied(d.fromScalar as (...a: never[]) => unknown, [SAMPLES.number], `the lift of the domain ${d.name}`));
     return { s: x.s, v: { ...x.v, code: `${name}(${x.v.code})`, kind: kindOfDomain(d), safe: false, plain: false } };
   }
 
@@ -3165,7 +3237,7 @@ class Printer {
       // An inline form cannot throw for primitive values only.
       this.#forms.set(name, lists.size === 0 && kinds.every((k) => primitiveOf(k) !== undefined) ? inlineForm(src) : undefined);
       if (!givesValue(src) && this.#missesNoValue(site.returns)) this.#unproved.add(name);
-      this.top.set(name, `const ${name} = ${src};`);
+      this.#copy(name, src);
     }
     const form = this.#forms.get(name);
     // An inline form takes each argument once, or a plain argument more often, so each argument evaluates once.
@@ -3734,7 +3806,7 @@ class Printer {
     const [i, d] = only;
     const name = `id_${String(i)}_${String(this.#opIndex(op))}`;
     // Stryker disable next-line ConditionalExpression: the copy of an identity is always the same, so the test only saves time
-    if (!this.top.has(name)) this.top.set(name, `const ${name} = ${copied((d.ops[op] as { readonly identity: () => unknown }).identity, [], `the identity of the op "${op}" of the domain ${d.name}`)};`);
+    if (!this.top.has(name)) this.#copy(name, copied((d.ops[op] as { readonly identity: () => unknown }).identity, [], `the identity of the op "${op}" of the domain ${d.name}`));
     return { code: `${name}()`, kind: kindOfDomain(d) };
   }
 
@@ -3972,6 +4044,8 @@ class Printer {
       return { s: () => [], deps: NO_DEPS, safe: true, list: empty.v.list };
     }
     const raw = this.#listOf(e, ctx);
+    // A `fill` that gives no items pushes nothing (COMPILE.MODULE.SIZE.FILL).
+    if (raw.v.code === "[]") return { s: () => [], deps: raw.v.deps, safe: true, list: raw.v.list };
     const clean = this.#clean(raw.v.list);
     const s = (settle: boolean): readonly string[] => {
       const c = settle ? this.#hoist(raw, hasLoop(e)) : raw;
@@ -4318,7 +4392,8 @@ class Printer {
 
   /**
    * The number of steps of an iteration. A data limit is the strict count of the targets of its axis. An error of the
-   * axis, of a test or of an item throws. A count above the cap throws too (ITERATE.LIMIT.ERROR).
+   * axis, of a test or of an item throws. A count above the cap throws too (ITERATE.LIMIT.ERROR). A count that reads no
+   * key is a constant of the run, so each key reads one value and not the targets (COMPILE.MODULE.LIMIT.ONCE).
    */
   #limit(e: ExprOf<"iterate">, ctx: Ctx): { readonly s: readonly string[]; readonly code: string; readonly deps: ReadonlySet<number> } {
     const [targets] = splitLimit(e) ?? [];
@@ -4326,7 +4401,7 @@ class Printer {
       const limit = e.limit as number;
       return { s: [], code: String(limit), deps: new Set() };
     }
-    const count = this.expr(app("count", targets, lit({ strict: true })), ctx);
+    const count = this.#hoist(this.expr(app("count", targets, lit({ strict: true })), ctx), true);
     const n = this.fresh("n");
     return { s: [...count.s, `const ${n} = ${count.v.code};`, `if (${n} > ${String(MAX_ITERATIONS)}) ${this.use("F")}();`], code: n, deps: count.v.deps };
   }
@@ -4466,7 +4541,7 @@ class Printer {
     // The test is an op whose inline form cannot fail, as for the prefixes of a node that keeps its items (`#cached`).
     const site = this.#facts.staticSite(x.op, sides.map((c) => c.v.kind));
     if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
-    const form = inlineForm(Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[x.op] as { fn: (...a: never[]) => unknown }).fn));
+    const form = inlineForm(functionText(((this.#domains[site.domain] as AnyDomain).ops[x.op] as { fn: (...a: never[]) => unknown }).fn));
     if (form?.params.length !== 2) return undefined;
     // `#0` is the value of the target and `#1` is the key, in the order of the parameters of the op.
     const pattern = patternOf(form, (i) => (at === 0 ? 1 - i : i));
@@ -4578,7 +4653,7 @@ class Printer {
     const site = this.#facts.staticSite(test.op, keyFirst ? [kind, t.v.kind] : [t.v.kind, kind]);
     if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
     // A static site of a domain has the function of the op of that domain.
-    const src = Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn);
+    const src = functionText(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn);
     const form = inlineForm(src);
     if (form?.params.length !== 2 || !givesValue(src)) return undefined;
     const before = tests.slice(0, at).map((x) => this.#hoist(this.expr(x, loop)));
@@ -4711,12 +4786,14 @@ function reasonOf(thrown: unknown): Emitted {
 /**
  * This function gives the code of the check of a field of a record `r` at the position `i`. The check of a list keeps
  * the array of the list when the program reads the field (COMPILE.MODULE.LIST.INPUT). With `plain`, the field holds a
- * plain list (COMPILE.MODULE.LIST.PLAIN). The code is true for a field against the schema.
+ * plain list (COMPILE.MODULE.LIST.PLAIN). With `flat`, the helper has no argument for the depth. The code is true for a
+ * field against the schema.
  */
-function fieldCheck(p: Printer, field: string, kind: Kind | ListKind, plain: boolean): string {
+function fieldCheck(p: Printer, field: string, kind: Kind | ListKind, plain: boolean, flat: boolean): string {
   const input = `r[${JSON.stringify(field)}]`;
   if (typeof kind !== "object") return p.against(kind, input);
-  const read = `${p.use(plain ? "LA" : "LI")}(${input}, ${String(depthOf(listOfKind(kind)))}, ${p.test(leafOf(kind))})`;
+  const depth = flat ? "" : `${String(depthOf(listOfKind(kind)))}, `;
+  const read = `${p.use(plain ? "LA" : "LI")}(${input}, ${depth}${p.test(leafOf(kind))})`;
   const keep = p.inputs.get(field);
   return `${keep === undefined ? read : `(${keep}[i] = ${read})`} === undefined`;
 }
@@ -4735,10 +4812,12 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   };
   const fields = Object.entries(options.schema.fields ?? {});
   const vars = Object.entries(options.schema.vars ?? {});
+  // With no other depth, the list helpers have no argument for the depth (COMPILE.MODULE.SIZE.FLAT).
+  const flat = options.fuse !== false && fields.every(([, k]) => typeof k !== "object" || depthOf(listOfKind(k)) === 0);
   let fieldChecks: string;
   let varChecks: string;
   try {
-    fieldChecks = fields.map(([f, k]) => ` || ${fieldCheck(p, f, k, run.plain)}`).join("");
+    fieldChecks = fields.map(([f, k]) => ` || ${fieldCheck(p, f, k, run.plain, flat)}`).join("");
     varChecks = vars.map(([v, k]) => ` || ${p.against(k, `vars[${JSON.stringify(v)}]`)}`).join("");
   } catch (thrown) {
     return reasonOf(thrown);
@@ -4759,18 +4838,8 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   const declared = new Set<string>(["VexContractError", "VEX_ERROR", "E", ...(p.memos ? ["Z"] : []), ...(helpers.has("S") ? ["N", "W"] : []), ...helpers, ...p.top.keys()]);
   const bad = nameReason(name, declared);
   if (bad !== undefined) return { ok: false, reason: bad };
-  const lines = [
-    "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
-    "/** The error of a run whose input does not keep the schema of the program. */",
-    "export class VexContractError extends Error {}",
-    "/** The value of a key where the program gives an error of Vex. */",
-    "export const VEX_ERROR = Object.freeze({ vexError: true });",
-    "const E = {};",
-    ...(p.memos ? ["const Z = {};"] : []),
-    // The values of an item of a node that keeps its items: excluded by a later test, and of the wrong kind.
-    ...(helpers.has("S") ? ["const N = {}, W = {};"] : []),
-    ...[...helpers].map((h) => (h === "S" ? helperS(p.features) : HELPERS[h])),
-    ...p.top.values(),
+  const textOf = (h: Helper): string => (h === "S" ? helperS(p.features) : flat && (h === "LI" || h === "LA") ? FLAT_LIST_HELPERS[h] : HELPERS[h]);
+  const start = [
     `export function ${name}(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
@@ -4785,8 +4854,24 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     ...(graph ? ["  const GO = GR(edges, n);", ...(p.into ? ["  const GN = GI(GO, n);"] : [])] : []),
     ...(p.runKeys ? ["  const KM = KC(keys, n);"] : []),
     ...[...p.vars].map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
-    ...ind(p.run),
-    ...ind(body),
+  ];
+  const all: Tidied = { decls: new Map<string, string>([...[...helpers].map((h) => [h as string, textOf(h)] as const), ...p.top]), lines: [...ind(p.run), ...ind(body)] };
+  // The text with fuse false stays the form of the version before this pass (COMPILE.MODULE.FUSE.OFF).
+  const small = options.fuse === false ? all : tidy({ ...all, kept: start.join("\n"), globals: MODULE_GLOBALS }, options.faults);
+  const { decls, lines: statements } = options.faults === "throw" ? keepFaults(small, p.copies) : small;
+  const lines = [
+    "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
+    "/** The error of a run whose input does not keep the schema of the program. */",
+    "export class VexContractError extends Error {}",
+    "/** The value of a key where the program gives an error of Vex. */",
+    "export const VEX_ERROR = Object.freeze({ vexError: true });",
+    "const E = {};",
+    ...(p.memos ? ["const Z = {};"] : []),
+    // The values of an item of a node that keeps its items: excluded by a later test, and of the wrong kind.
+    ...(decls.has("S") ? ["const N = {}, W = {};"] : []),
+    ...decls.values(),
+    ...start,
+    ...statements,
     "}",
     "",
   ];

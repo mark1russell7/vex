@@ -47,10 +47,10 @@ function expectSame(e: Expr): void {
   const loaded = make(m.source);
   const s = space.array(RECORDS);
   const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: VARS, domains: DOMAINS }));
-  expect.soft(loaded.run(structuredClone(RECORDS), VARS)).toStrictEqual(results.map((r) => (r.ok ? r.value : loaded.VEX_ERROR)));
   const fast = tiered(e, { domains: DOMAINS, schema: SCHEMA });
   expect.soft(fast.tier).toBe(2);
   expect.soft(s.keys.map((origin) => fromCore(fast.run({ space: s, origin, vars: VARS })))).toStrictEqual(results.map((r) => fromCore(r)));
+  expect.soft(loaded.run(structuredClone(RECORDS), VARS)).toStrictEqual(results.map((r) => (r.ok ? r.value : loaded.VEX_ERROR)));
 }
 
 describe("V-078 COMPILE.MODULE: a name that an expression binds is not a name of the place of the expression", () => {
@@ -102,5 +102,25 @@ describe("V-080 COMPILE.MODULE: an object that a program uses at two places has 
     const shared = v("x");
     const origin = ref("n", [{ t: "origin" }]);
     expectSame(let_({ x: origin }, app("sum", each(axes.where(axes.all, app("eq", n, shared)), let_({ x: lit(7) }, shared)))));
+  });
+});
+
+describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps the markers of the column", () => {
+  const origin = ref("n", [{ t: "origin" }]);
+  const near = (x: Expr, u: Expr): Expr => axes.where(axes.all, app("eq", n, add(x, u)));
+  const count = (x: Expr): Expr => app("sum", each(near(x, v("u")), lit(1)));
+  const steps = (term: Expr): Expr => fold(axes.all, { s: lit(0) }, { s: add(n, term) }, v("s"));
+  const called = (body: Expr): Expr => let_({ g: fn(["u"], body) }, call("g", lit(0)));
+
+  it("V-081: a column of a call reads the origin", () => {
+    expectSame(called(steps(count(origin))));
+  });
+
+  it("V-081: a strict sum in a column of a call reads the origin", () => {
+    expectSame(called(steps(app("sum", each(near(origin, v("u")), lit(1)), lit({ strict: true })))));
+  });
+
+  it("V-081: a column of a call reads a binding of the focus of the function", () => {
+    expectSame(called(let_({ y: n }, steps(count(v("y"))))));
   });
 });

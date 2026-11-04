@@ -27,6 +27,9 @@ function files(dir: string, test: (f: string) => boolean): readonly string[] {
   return out;
 }
 
+/** This function tells if CI runs a file of tests: a Vitest file, or a browser test under the `testDir` of Playwright. */
+const isTestFile = (f: string): boolean => /\.test\.tsx?$/.test(f) || /[\\/]site[\\/]e2e[\\/][^\\/]+\.spec\.ts$/.test(f);
+
 const testFiles = ["core", "domains", "testkit", "compiler", "site", "formula", "pilots", "mcp"]
   .map((p) => join(repo, "packages", p))
   .filter((p) => {
@@ -36,12 +39,15 @@ const testFiles = ["core", "domains", "testkit", "compiler", "site", "formula", 
       return false;
     }
   })
-  .flatMap((p) => files(p, (f) => /\.(?:test|spec)\.tsx?$/.test(f)));
+  .flatMap((p) => files(p, isTestFile));
 
-/** The titles of the tests and groups: the first string argument of `describe(`, `it(` and `test(`. */
-const titles: readonly string[] = testFiles.flatMap((f) =>
-  [...readFileSync(f, "utf8").matchAll(/\b(?:describe|it|test)(?:\.\w+)?\(\s*"([^"]+)"/g)].map((m) => m[1] ?? ""),
-);
+/** The title of a test or a group that runs: the first string argument of `describe(`, `it(` and `test(`. A skipped test has no title here. */
+const TITLE = /\b(?:describe|it|test)(?:\.(?!skip\b|fixme\b|todo\b)\w+)?\(\s*"([^"]+)"/g;
+
+/** This function gives the titles in the source of a file of tests. */
+const titlesOf = (source: string): readonly string[] => [...source.matchAll(TITLE)].map((m) => m[1] ?? "");
+
+const titles: readonly string[] = testFiles.flatMap((f) => titlesOf(readFileSync(f, "utf8")));
 
 const REQ = /\b[A-Z][A-Z0-9-]*(?:\.[A-Z0-9][A-Z0-9-]*)+\b/g;
 const specIds = new Set(["spec/README.md", "spec/formula.md"].flatMap((p) => [...read(p).matchAll(/\*\*\[([A-Z0-9.-]+)\]\*\*/g)].map((m) => m[1] ?? "")));
@@ -82,6 +88,17 @@ describe("the specification is executable", () => {
 
   it("each requirement ID in a test title is in the specification", () => {
     expect([...testedIds].filter((id) => !specIds.has(id))).toEqual([]);
+  });
+
+  it("a skipped test or a browser file that CI does not run names no defect", () => {
+    const skipped = ['test.skip("V-999: a", f)', 'test.fixme("V-999: b", f)', 'it.todo("V-999: c")', 'describe.skip("V-999: d", f)'];
+    expect(titlesOf(skipped.join("\n"))).toEqual([]);
+    expect(titlesOf('test("V-999: e", f)')).toEqual(["V-999: e"]);
+    expect(isTestFile(join(repo, "packages", "site", "e2e", "app.spec.ts"))).toBe(true);
+    expect(isTestFile(join(repo, "packages", "site", "src", "app.spec.ts"))).toBe(false);
+    // The rule above holds only while Playwright reads that folder and CI starts Playwright.
+    expect(read("packages/site/playwright.config.ts")).toContain('testDir: "./e2e"');
+    expect(read(".github/workflows/ci.yml")).toContain("pnpm --filter @vex/site run test:e2e");
   });
 
   it("each defect with the status test has a test that names it", () => {

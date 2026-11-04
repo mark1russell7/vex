@@ -220,6 +220,9 @@ class Walk {
       case "LabeledStatement":
         this.#all(n["body"], scope);
         return;
+      case "ExportSpecifier":
+        this.#all(n["local"], scope);
+        return;
       case "BreakStatement":
       case "ContinueStatement":
         return;

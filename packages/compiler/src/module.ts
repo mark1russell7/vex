@@ -35,7 +35,7 @@ import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type C
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
-import { keepFaults, tidy, type Tidied } from "./module-tidy.ts";
+import { keepFaults, namesOfCode, tidy, type Tidied, wordsOf } from "./module-tidy.ts";
 import { canonical, keyText } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 import { originalOf, placesError, unsharedAll } from "./unshared.ts";
@@ -46,8 +46,8 @@ export interface ModuleOptions {
   /** The kinds of the fields of the records and of the variables. A module reads only the names of its schema. */
   readonly schema: Schema;
   /**
-   * The name of the function that the module exports. The default is `run`. A reserved word, a name that the module
-   * declares and a global that a module reads (`MODULE_GLOBALS`) are not names of the run (V-060).
+   * The name of the function that the module exports. The default is `run`. A reserved word, `VEX_ERROR` and
+   * `VexContractError` are not names of the run (V-060). Each other name hides nothing from the code (COMPILE.MODULE.NAME).
    */
   readonly name?: string;
   /**
@@ -2095,15 +2095,27 @@ const RESERVED: ReadonlySet<string> = new Set(
   "await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield arguments eval".split(" "),
 );
 
-/**
- * This function gives the reason that a name cannot be the name of the run, or `undefined` for a good name (V-060). A
- * reserved word does not parse, and a second declaration of a name of the module does not parse. The function of the
- * run with the name of a global of `MODULE_GLOBALS` hides that global from the code of the module.
- */
-function nameReason(name: string, declared: ReadonlySet<string>): string | undefined {
+/** The names that each module exports. A run with such a name is a second export, and the module does not parse. */
+const MODULE_EXPORTS: ReadonlySet<string> = new Set(["VEX_ERROR", "VexContractError"]);
+
+/** The comment of the class of a contract error in each module. */
+const ERROR_NOTE = "/** The error of a run whose input does not keep the schema of the program. */";
+
+/** This function gives the reason that a name cannot be the name of the run, or `undefined` for a good name (V-060). */
+function nameReason(name: string): string | undefined {
   if (RESERVED.has(name)) return `the name "${name}" is a reserved word of JavaScript`;
-  if (MODULE_GLOBALS.has(name)) return `the name "${name}" is a global that a module reads`;
-  return declared.has(name) ? `the name "${name}" is a name of the module` : undefined;
+  return MODULE_EXPORTS.has(name) ? `the name "${name}" is a name of the module` : undefined;
+}
+
+/**
+ * This function gives the name of the function of the run (COMPILE.MODULE.NAME). A function with a name of the code hides
+ * that name from the code. Thus the run of such a module has an internal name that the code does not have.
+ */
+function innerName(name: string, code: ReadonlySet<string>): string {
+  if (!code.has(name)) return name;
+  let at = 0;
+  while (code.has(`run$${String(at)}`)) at += 1;
+  return `run$${String(at)}`;
 }
 
 class Printer {
@@ -2456,7 +2468,7 @@ class Printer {
     const hit = key === undefined ? undefined : this.#constants.get(key);
     if (hit !== undefined) return hit;
     // A pack is a local of the loop of a second print, so a constant of the run cannot read it (V-077).
-    if (this.#readsPack(c)) throw new NoPack();
+    if (this.#readsPack([c.v.code, ...c.s])) throw new NoPack();
     const name = this.fresh("c");
     const deferred = lazy || this.#defers(c);
     if (deferred) {
@@ -2659,10 +2671,19 @@ class Printer {
     return work;
   }
 
-  /** This method tells if a code reads a pack of the second print that the printer prints. */
-  #readsPack(c: Code): boolean {
-    const text = [c.v.code, ...c.s].join("\n");
+  /** This method tells if some lines read a pack of the second print that the printer prints. */
+  #readsPack(lines: readonly string[]): boolean {
+    const text = lines.join("\n");
     return [...(this.#pack?.cols.values() ?? [])].some((local) => text.includes(`${local}[`));
+  }
+
+  /**
+   * This method adds some lines to the run. A pack is a local of the loop of a second print, so a line of the run
+   * cannot read it (V-077, V-084). Then the second print stops, and the loop keeps its first print.
+   */
+  #intoRun(lines: readonly string[]): void {
+    if (this.#readsPack(lines)) throw new NoPack();
+    this.run.push(...lines);
   }
 
   /** This method tells if a second print (`#packed`, `#packedSteps`) reads the packs of the columns at the focus of `ctx`. */
@@ -3078,7 +3099,7 @@ class Printer {
     // statements read their keys, so the marker of the parameters gives no level.
     const levels = (d: number): readonly number[] => (d === spec.origin ? [ctx.originLevel] : d === spec.focus ? [ctx.level] : d === spec.param ? [] : [d]);
     const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap(levels)]);
-    const position = spec.deps.has(spec.origin) ? [ctx.focus, ctx.origin] : spec.deps.has(spec.focus) ? [ctx.focus] : [];
+    const position = [...(spec.deps.has(spec.focus) ? [ctx.focus] : []), ...(spec.deps.has(spec.origin) ? [ctx.origin] : [])];
     return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps, list: heldList(spec.list) } };
   }
 
@@ -3155,7 +3176,8 @@ class Printer {
     const global = [...body.v.deps].every((d) => markers.has(d));
     const name = this.fresh("fn");
     if (hasLoop(bound.fn.body) || this.#defers(body)) this.#deferred.add(name);
-    const position = body.v.deps.has(origin) ? [k, o] : body.v.deps.has(focus) ? [k] : [];
+    // A parameter is here only if the body reads it, so the text of a call reads only the levels of its deps (V-085).
+    const position = [...(body.v.deps.has(focus) ? [k] : []), ...(body.v.deps.has(origin) ? [o] : [])];
     const head = `const ${name} = (${[...names, ...position].join(", ")}) =>`;
     // The columns of the call come first. Each one reads a binding of the root only after the binding has its value.
     const s = [...scope.decls, ...body.s];
@@ -4643,7 +4665,7 @@ class Printer {
     const arrow = (params: string, lines: readonly string[], code: string): readonly string[] => (lines.length === 0 ? [`(${params}) => ${code}`] : [`(${params}) => {`, ...ind(lines), `  return ${code};`, "}"]);
     const fns = [arrow("", names.s, pack), arrow(t.j, value.s, value.v.code), [`(t, q) => ${keyTest}`], arrow(`${s}, ${t.j}`, [...unpack, ...step.s], pack), arrow(s, [...unpack, ...result.s], result.v.code)];
     const name = this.fresh("P");
-    this.run.push(`const ${name} = ${this.use("PF")}(n,`, ...ind(fns.flatMap((f, i) => [...f.slice(0, -1), `${f.at(-1) as string}${i < fns.length - 1 ? "," : ""}`])), ");");
+    this.#intoRun([`const ${name} = ${this.use("PF")}(n,`, ...ind(fns.flatMap((f, i) => [...f.slice(0, -1), `${f.at(-1) as string}${i < fns.length - 1 ? "," : ""}`])), ");"]);
     const q = this.fresh("q");
     return { s: this.#store(q, key), v: { code: `${name}(${q})`, kind: result.v.kind, safe: false, deps: key.v.deps } };
   }
@@ -4681,19 +4703,19 @@ class Printer {
     let fn = this.#structures.get(structure);
     if (fn === undefined) {
       fn = this.fresh("m");
-      this.#structures.set(structure, fn);
       this.memos = true;
       const cached = varying.length === 1 ? this.#cached(e, varying[0] as Expr, bodyCtx, fn) : undefined;
       if (cached !== undefined) {
         this.#kinds.set(fn, cached.kind);
-        this.run.push(...cached.lines);
+        this.#intoRun(cached.lines);
       } else {
         // The loop of the node gives statements.
         const body = this.expr(e, bodyCtx);
         this.#kinds.set(fn, body.v.kind);
         this.#lists.set(fn, heldList(body.v.list));
-        this.run.push(`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});");
+        this.#intoRun([`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});"]);
       }
+      this.#structures.set(structure, fn);
     }
     this.#inside = outer;
     // Each key of the function gets its value, or the error sentinel.
@@ -4930,13 +4952,11 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   if (p.into) p.use("GI");
   if (p.runKeys) p.use("KC");
   [...p.helpers].toSorted().forEach(add);
-  // The names that this module declares at its top: the constants, the helpers and the declarations of the printer.
-  const declared = new Set<string>(["VexContractError", "VEX_ERROR", "E", ...(p.memos ? ["Z"] : []), ...(helpers.has("S") ? ["N", "W"] : []), ...helpers, ...p.top.keys()]);
-  const bad = nameReason(name, declared);
+  const bad = nameReason(name);
   if (bad !== undefined) return { ok: false, reason: bad };
   const textOf = (h: Helper): string => (h === "S" ? helperS(p.features) : flat && (h === "LI" || h === "LA") ? FLAT_LIST_HELPERS[h] : HELPERS[h]);
+  const params = `(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`;
   const start = [
-    `export function ${name}(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
     "  const n = R.length;",
@@ -4956,9 +4976,9 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   // The text with fuse false stays the form of the version before this pass (COMPILE.MODULE.FUSE.OFF).
   const small = options.fuse === false ? all : tidy({ ...all, kept: start.join("\n"), globals: MODULE_GLOBALS }, options.faults);
   const { decls, lines: statements } = options.faults === "throw" ? keepFaults(small, p.copies) : small;
-  const lines = [
+  const textWith = (head: string, tail: readonly string[]): string => [
     "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
-    "/** The error of a run whose input does not keep the schema of the program. */",
+    ERROR_NOTE,
     "export class VexContractError extends Error {}",
     "/** The value of a key where the program gives an error of Vex. */",
     "export const VEX_ERROR = Object.freeze({ vexError: true });",
@@ -4967,12 +4987,18 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     // The values of an item of a node that keeps its items: excluded by a later test, and of the wrong kind.
     ...(decls.has("S") ? ["const N = {}, W = {};"] : []),
     ...decls.values(),
+    `${head}${params}`,
     ...start,
     ...statements,
     "}",
+    ...tail,
     "",
-  ];
-  return { ok: true, source: lines.join("\n") };
+  ].join("\n");
+  // The check reads each line of the module, with the copies of the ops. The function of the run has no name in that text.
+  const code = textWith("function", []);
+  // The parse of the names takes time, so it starts only for a name that is a word of the code. The fixed note holds the word `run`.
+  const inner = wordsOf(code.replace(ERROR_NOTE, "")).includes(name) ? innerName(name, namesOfCode(code)) : name;
+  return { ok: true, source: inner === name ? textWith(`export function ${name}`, []) : textWith(`function ${inner}`, [`export { ${inner} as ${name} };`]) };
 }
 
 /**

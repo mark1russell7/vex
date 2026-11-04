@@ -51,6 +51,20 @@ function columnOf(program: Expr): readonly unknown[] {
   return list.items.map((item) => value(item.result));
 }
 
+/** The compiler checks that the types refuse each call of this function. */
+const refused = (): void => {
+  // @ts-expect-error -- "unknown" is not a join
+  G.start(0).fix("x", "unknown", false, () => false);
+  // @ts-expect-error -- a number is not a value of the join "or"
+  G.start(0).fix("x", "or", 0, () => false);
+  // @ts-expect-error -- a number is not a next value of the join "or"
+  G.start(0).fix("x", "or", false, () => 0);
+  // @ts-expect-error -- a boolean is not a next value of the join "max"
+  G.start(0).fix("x", "max", 0, () => true);
+  // @ts-expect-error -- a union of joins has no one kind
+  G.start(0).fix("x", wideJoin(), 0, () => 0);
+};
+
 describe("the method fix of a chain (BUILD.FIX)", () => {
   it("BUILD.FIX: the method gives the node of the IR, with the number of the open steps after the name", () => {
     expect(G.start(0).fix("x", "or", false, (lastRound) => lastRound).program).toEqual(fix("x$0", "or", lit(false), last("x$0")));
@@ -72,16 +86,6 @@ describe("the method fix of a chain (BUILD.FIX)", () => {
     expectTypeOf<FixValue<"or" | "and">>().toEqualTypeOf<boolean>();
     expectTypeOf<FixValue<"max" | "min">>().toEqualTypeOf<number>();
     expectTypeOf<FixValue<"or" | "max">>().toBeNever();
-    const refused = (): void => {
-      // @ts-expect-error -- "unknown" is not a join
-      G.start(0).fix("x", "unknown", false, () => false);
-      // @ts-expect-error -- a number is not a value of the join "or"
-      G.start(0).fix("x", "or", 0, () => false);
-      // @ts-expect-error -- a boolean is not a value of the join "max"
-      G.start(0).fix("x", "max", 0, () => true);
-      // @ts-expect-error -- a union of joins has no one kind
-      G.start(0).fix("x", wideJoin(), 0, () => 0);
-    };
     expect(refused).toBeTypeOf("function");
   });
 

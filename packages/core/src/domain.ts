@@ -96,7 +96,16 @@ export interface OpSpec<D = never> {
    * loop cannot use its result in the size of a list name (LOOP.SIZE).
    */
   readonly size?: SizeRule;
+  /**
+   * This field gives the direction of the result of the op for each argument, with the receiver first (FIX.OPS). `up`
+   * means that the result does not fall as the argument rises. `down` means that the result does not rise. An op without
+   * it cannot take a value that reads `last`, and an argument without a direction must not read `last`.
+   */
+  readonly monotone?: readonly Monotone[];
 }
+
+/** A direction of an op: the result follows the argument (`up`) or moves against it (`down`). */
+export type Monotone = "up" | "down";
 
 /** A JavaScript type of primitive values that a domain can accept. */
 export type PrimitiveKind = "number" | "string" | "boolean";

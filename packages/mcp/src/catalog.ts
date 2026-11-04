@@ -97,15 +97,15 @@ export function domainText(self: Entry): string {
     const params = declared === undefined ? `${type}, …` : [type, ...declared.map((k) => paramText(k, type))].join(", ");
     const lift = spec.liftScalar === true ? "yes" : Array.isArray(spec.liftScalar) ? "some" : "";
     const identity = spec.identity === undefined ? "" : d.show === undefined ? JSON.stringify(spec.identity()) : d.show(spec.identity());
-    return `| \`${name}\` | \`${name}(${params})\` | ${resultOf(self, name, spec)} | ${lift} | ${(spec.laws ?? []).join(", ")} | ${identity} |`;
+    return `| \`${name}\` | \`${name}(${params})\` | ${resultOf(self, name, spec)} | ${lift} | ${(spec.laws ?? []).join(", ")} | ${identity} | ${(spec.monotone ?? []).join(", ")} |`;
   });
   return [
     `## \`${self.name}\``,
     "",
     `${self.about} The values are of the type \`${type}\`.${d.fromScalar === undefined ? "" : " A number lifts to a value of the domain."}`,
     "",
-    "| Op | Call | Result | Lifts numbers | Laws | Identity |",
-    "|---|---|---|---|---|---|",
+    "| Op | Call | Result | Lifts numbers | Laws | Identity | Moves |",
+    "|---|---|---|---|---|---|---|",
     ...rows,
   ].join("\n");
 }
@@ -119,6 +119,7 @@ The function \`catalogText\` of \`packages/mcp\` makes this file from the domain
 - "Lifts numbers" means that a number argument becomes a value of the domain, for example 2 becomes the vector (2, 2).
 - "Laws" are the claims of the op. The law checker of \`@mark1russell7/vex-testkit\` tests them.
 - "Identity" is the value of \`reduce\` over an empty list.
+- "Moves" gives the direction of the result for each argument, with the receiver first. The check of \`fix\` reads it. An op with no directions cannot take a value that reads \`last\`.
 - "not declared" means that the op does not declare the kinds of its result or of its parameters.
 
 ## The ops of the core
@@ -152,6 +153,15 @@ These ops apply to each value. They are not ops of a domain.
 A list op skips error items. The option \`{ strict: true }\` gives the first error. A literal can be a list, for example the empty list \`{ "kind": "vex.list", "items": [] }\`, and a name of a loop can hold a list.
 
 An array of a field or of a name is a list where a list op or the axis \`list\` needs one. The keys are the positions, from \`"0"\`. Thus \`count(fr)\`, \`nth(fr, 1)\` and \`take(fr, 2)\` read the array \`fr\`. A domain or a function of the host with the op comes first.
+
+## The fixed point
+
+The node \`fix(name, join, init, step)\` gives a column: a value for each row of the space. Its \`step\` reads the last round with \`last(name)\`. The join \`or\` or \`max\` moves a row up, and \`and\` or \`min\` moves a row down.
+
+- The check proves that the step does not fall when the last round rises. A step without a proof gives an error before a run.
+- Over a list that reads \`last\`, these list ops have a direction: \`any\`, \`all\`, \`min\` and \`max\` move up, and \`none\` moves down.
+- The first argument of an op that reads \`last\` must have a known kind, for example \`add(last("d"), ref("w"))\`.
+- A column of \`n\` rows makes \`n + 1\` rounds at most. A column that still changes then gives \`#NUM!\`.
 
 ## The names of a loop over a list
 

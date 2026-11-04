@@ -115,6 +115,28 @@ describe("the tools", () => {
     expect(() => check({ program, maxStep: "A" })).toThrow(`up to A: ${reason} (STEP.MAX)`);
   });
 
+  it("STEP.TOOLS STEP.MAX FIX.MONOTONE: vex_check gives step B for a column, and it gives the reason of a step without a proof", () => {
+    const up = { tag: "last", name: "x" };
+    const column = (step: unknown): unknown => ({ tag: "fix", name: "x", join: "or", init: lit(false), step });
+    const program = column(app("or", up, lit(false)));
+    const reason = 'the node "fix" at the root needs step B';
+    expect(check({ program })).toMatchObject({ ok: true, step: "B", stepReason: reason });
+    expect(() => check({ program, maxStep: "A" })).toThrow(`up to A: ${reason} (STEP.MAX)`);
+    expect(() => check({ program: column(app("not", up)) })).toThrow('the step of the "fix" "x" does not move one way: it moves against the last round');
+    expect(() => check({ program: column(app("eq", up, lit(true))) })).toThrow('the op "eq" has no rule of direction');
+  });
+
+  it("STEP.TOOLS FIX.TRACE: vex_explain gives each round of a column", () => {
+    const program = { tag: "fix", name: "x", join: "max", init: lit(1), step: app("clamp", app("add", { tag: "last", name: "x" }, lit(1)), lit(0), lit(3)) };
+    const space = { kind: "array", records: [{}, {}, {}] } as const;
+    const text = explainAt({ program, space, origin: "0" });
+    expect(text.split("\n")[0]).toBe('step B: the node "fix" at the root needs step B');
+    expect(text).toContain("fix x max: round 0, 3 rows changed");
+    expect(text).toContain("fix x max: round 2, 3 rows changed");
+    expect(text).toContain("fix x max: round 3, 0 rows changed");
+    expect(text).not.toContain("round 4");
+  });
+
   it("STEP.TOOLS: vex_check gives the step and the reason, and vex_explain gives the step on its first line", () => {
     const program = app("add", ref("n"), lit(1));
     const space = { kind: "array", records: [{ n: 2 }] } as const;

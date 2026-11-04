@@ -1,15 +1,15 @@
 Num (fromScalar -, valid yes, encode -, methods -)
-  add(number) | no lift | laws [commutative, associative] | identity 0 | fn
-  subtract(number) | no lift | no laws | no identity | fn
+  add(number) | no lift | laws [commutative, associative] | identity 0 | moves [up, up] | fn
+  subtract(number) | no lift | no laws | no identity | moves [up, down] | fn
   multiply(number) | no lift | laws [commutative, associative] | identity 1 | fn
   divide(number) | no lift | no laws | no identity | fn
   mod(number) | no lift | no laws | no identity | fn
   pow(number) | no lift | no laws | no identity | fn
-  min(number) | no lift | laws [commutative, associative, idempotent] | no identity | fn
-  max(number) | no lift | laws [commutative, associative, idempotent] | no identity | fn
-  clamp(number, number) | no lift | no laws | no identity | fn
+  min(number) | no lift | laws [commutative, associative, idempotent] | no identity | moves [up, up] | fn
+  max(number) | no lift | laws [commutative, associative, idempotent] | no identity | moves [up, up] | fn
+  clamp(number, number) | no lift | no laws | no identity | moves [up, up, up] | fn
   abs(?) | no lift | no laws | no identity | fn
-  negate(?) | no lift | no laws | no identity | fn
+  negate(?) | no lift | no laws | no identity | moves [down] | fn
   sqrt(?) | no lift | no laws | no identity | fn
   ln(?) | no lift | no laws | no identity | fn
   exp(?) | no lift | no laws | no identity | fn
@@ -21,9 +21,9 @@ Num (fromScalar -, valid yes, encode -, methods -)
   date(number, number) | no lift | no laws | no identity | fn
   vec2(number) | no lift | no laws | no identity | fn
   xy(number) | no lift | no laws | no identity | fn
-  floor(?) | no lift | no laws | no identity | fn
-  ceil(?) | no lift | no laws | no identity | fn
-  round(?) | no lift | no laws | no identity | fn
+  floor(?) | no lift | no laws | no identity | moves [up] | fn
+  ceil(?) | no lift | no laws | no identity | moves [up] | fn
+  round(?) | no lift | no laws | no identity | moves [up] | fn
   gt(number) | no lift | no laws | no identity | fn
   gte(number) | no lift | no laws | no identity | fn
   lt(number) | no lift | no laws | no identity | fn
@@ -31,10 +31,10 @@ Num (fromScalar -, valid yes, encode -, methods -)
   eq(number) | no lift | laws [commutative] | no identity | fn
 
 Bool (fromScalar -, valid -, encode -, methods -)
-  and(boolean) | no lift | laws [commutative, associative, idempotent] | identity true | fn
-  or(boolean) | no lift | laws [commutative, associative, idempotent] | identity false | fn
+  and(boolean) | no lift | laws [commutative, associative, idempotent] | identity true | moves [up, up] | fn
+  or(boolean) | no lift | laws [commutative, associative, idempotent] | identity false | moves [up, up] | fn
   xor(boolean) | no lift | laws [commutative, associative] | identity false | fn
-  not(?) | no lift | no laws | no identity | fn
+  not(?) | no lift | no laws | no identity | moves [down] | fn
   eq(boolean) | no lift | laws [commutative] | no identity | fn
 
 Text (fromScalar -, valid -, encode -, methods -)

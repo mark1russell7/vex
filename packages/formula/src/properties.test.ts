@@ -69,8 +69,11 @@ function inline(e: Expr, name: string, by: Expr): Expr {
       const loop = { ...e, init: inlineNames(e.init, name, by), step: inlineNames(e.step, name, by), result: inline(e.result, name, by) };
       return e.until === undefined ? loop : { ...loop, until: inline(e.until, name, by) };
     }
+    case "fix":
+      return { ...e, init: inline(e.init, name, by), step: inline(e.step, name, by) };
     case "lit":
     case "var":
+    case "last":
       return e;
   }
 }

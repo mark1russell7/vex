@@ -4,8 +4,8 @@
  *
  * Each printed module of a test also goes through the gate of `names.ts`. Thus a read of a name with no declaration
  * fails at the print. The gate misses a read before a declaration through a closure, a TypeError, a RangeError and a
- * wrong value with no exception. The parser of the gate has less stack than the printer, so a module past that stack goes
- * to the gate COMPILE.GROWTH, which reads the largest legal modules with a larger stack.
+ * wrong value with no exception. The parser of the gate has less stack than the printer. The gate COMPILE.GROWTH has a
+ * larger stack, so it reads each module past that stack.
  *
  * Each key of a print also goes through the gate of `key-gate.ts`, so a key that differs from its plain key fails at the print.
  */

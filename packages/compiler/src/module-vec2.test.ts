@@ -100,7 +100,7 @@ const undecided = (name: string): string => `the kinds of the values of "${name}
 
 describe("each op of Vec2Domain in tier 1, tier 2 and a module (P17 COMPILE.MODULE.FORM)", () => {
   it("COMPILE.MODULE.FORM: the table has each op of the domain", () => {
-    expect(OPS).toHaveLength(45);
+    expect(OPS).toHaveLength(47);
     expect(OPS).toEqual(expect.arrayContaining(["x", "y", "add", "select", "normalize", "allGreaterThan"]));
   });
 

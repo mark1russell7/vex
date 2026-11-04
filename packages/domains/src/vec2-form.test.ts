@@ -13,7 +13,7 @@ const form = Vec2Domain.moduleForm as NonNullable<typeof Vec2Domain.moduleForm>;
 const formOps = form.ops as NonNullable<typeof form.ops>;
 const domain: AnyDomain = Vec2Domain;
 
-const COMPONENTS = [-2, -0, 0, 1, 3, Number.MIN_VALUE, 1e300];
+const COMPONENTS = [-2, -0, 0, 1, 3, Number.MIN_VALUE, 1e300, Number.NaN];
 const VECTORS = COMPONENTS.flatMap((x) => COMPONENTS.map((y) => new Vec2(x, y)));
 /** Fewer vectors for an op with two vectors after its receiver. */
 const FEW = [-2, -0, 0, 1].flatMap((x) => [-2, 0, 1].map((y) => new Vec2(x, y)));
@@ -38,7 +38,7 @@ describe("the form of Vec2Domain in a module (COMPILE.MODULE.FORM)", () => {
   it("COMPILE.MODULE.FORM: each method op of the domain has a function of the form", () => {
     const methods = Object.entries(Vec2Domain.ops).flatMap(([name, spec]) => ("fn" in spec ? [] : [name]));
     expect(Object.keys(formOps).toSorted()).toStrictEqual(methods.toSorted());
-    expect(methods).toHaveLength(43);
+    expect(methods).toHaveLength(45);
   });
 
   for (const name of Object.keys(formOps)) {

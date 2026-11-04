@@ -26,6 +26,7 @@ export const VEC2_FORM: ModuleForm = {
     negate: { fn: (a: Plain): Plain => ({ x: -a.x, y: -a.y }) },
     halve: { fn: (a: Plain): Plain => ({ x: a.x * 0.5, y: a.y * 0.5 }) },
     abs: { fn: (a: Plain): Plain => ({ x: Math.abs(a.x), y: Math.abs(a.y) }) },
+    sign: { fn: (a: Plain): Plain => ({ x: Math.sign(a.x), y: Math.sign(a.y) }) },
     round: { fn: (a: Plain): Plain => ({ x: Math.round(a.x), y: Math.round(a.y) }) },
     floor: { fn: (a: Plain): Plain => ({ x: Math.floor(a.x), y: Math.floor(a.y) }) },
     ceil: { fn: (a: Plain): Plain => ({ x: Math.ceil(a.x), y: Math.ceil(a.y) }) },
@@ -46,6 +47,7 @@ export const VEC2_FORM: ModuleForm = {
         return len === 0 ? { x: a.x, y: a.y } : { x: a.x * (1 / len), y: a.y * (1 / len) };
       },
     },
+    minAxis: { fn: (a: Plain): Plain => (Number.isNaN(a.x) || Number.isNaN(a.y) ? { x: Number.NaN, y: Number.NaN } : a.x <= a.y ? { x: 1, y: 0 } : { x: 0, y: 1 }) },
     lerp: { fn: (a: Plain, o: Plain, t: number): Plain => ({ x: a.x + (o.x - a.x) * t, y: a.y + (o.y - a.y) * t }) },
     length: { fn: (a: Plain): number => Math.hypot(a.x, a.y) },
     lengthSq: { fn: (a: Plain): number => a.x * a.x + a.y * a.y },

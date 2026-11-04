@@ -415,13 +415,13 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | "LS" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
  * lists that the facts prove clean. Thus it has no scan of `V`, no `VW` and no test of the sentinel.
  */
-type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LVC" | "LPC";
+type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LSC" | "LVC" | "LPC";
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX";
@@ -758,10 +758,12 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A cell without a formula has the error sentinel from the start, as the error of its read.
   // A column of a direct fill (COMPILE.MODULE.SHEET.DIRECT): the error sentinel of a cell changes to VEX_ERROR.
   DO: "function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }",
-  // A list of a result (COMPILE.MODULE.LIST.RESULT): a frozen `vex.list` with a text key for each item, as the interpreter
-  // gives. An error item has the error VEX_ERROR. The depth `h` is the number of the levels of lists in the items. LO
+  // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
+  // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items. One key gets the list, so it is not frozen.
+  LO: 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
+  // The list of a run that each key gets (COMPILE.MODULE.FUSE.OUT): LO, but frozen, because the keys share the object. LS
   // keeps no object on the array, because a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
-  LO: 'function LO(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } }))) }); }',
+  LS: 'function LS(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LS(v, h - 1) : v } }))) }); }',
   // A plain list of a result (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with no keys. An error
   // item is VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
   LP: "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
@@ -837,7 +839,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   NTC: "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
   FSC: "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
-  LOC: 'function LOC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } }))) }); }',
+  LOC: 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
+  LSC: 'function LSC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LSC(v, h - 1) : v } }))) }); }',
   LPC: "function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }",
   // LV and LVC keep one object on the array. A clean list gives the same object from both.
   LVC: [
@@ -850,7 +853,7 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  return o;",
     "}",
   ].join("\n"),
-  // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`.
+  // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`. No two cells share it, so LC uses LO.
   LC: "function LC(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LO(d[k], h); return d; }",
   // A plain column of lists (COMPILE.MODULE.LIST.PLAIN): each cell with a list gives an array.
   LCP: "function LCP(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LP(d[k], h); return d; }",
@@ -1148,13 +1151,13 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
-  SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [], LCP: ["LP"],
-  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LVC: [], LPC: [],
+  SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
+  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
   SBI: ["F"], SKI: ["F"], QA: [],
 };
 
 /** The clean form of each helper that gives a list of the code to the outside (COMPILE.MODULE.FUSE.CLEAN). */
-const CLEAN_FORMS = { LO: "LOC", LV: "LVC", LP: "LPC" } as const;
+const CLEAN_FORMS = { LO: "LOC", LS: "LSC", LV: "LVC", LP: "LPC" } as const;
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
 type TreePart = "children" | "siblings" | "order";
@@ -2073,7 +2076,7 @@ class Printer {
    * This method gives the code of a list in the form of the helper `form`: a `vex.list`, or a plain array for `LP`
    * (COMPILE.MODULE.LIST.PLAIN). A list that the facts prove clean uses the clean form of the helper (COMPILE.MODULE.FUSE.CLEAN).
    */
-  envelope(v: Value, form: "LO" | "LV" | "LP"): string {
+  envelope(v: Value, form: keyof typeof CLEAN_FORMS): string {
     const list = v.list as ListInfo;
     const helper = this.#clean(list, true) ? CLEAN_FORMS[form] : form;
     return `${this.use(helper)}(${v.code}, ${String(depthOf(list))})`;
@@ -2081,13 +2084,12 @@ class Printer {
 
   /**
    * This method gives the code of a list that is the value of the run at a key. With `fuse`, a `vex.list` that reads no
-   * key evaluates once, on its first read, so each key gets one object (COMPILE.MODULE.FUSE.OUT). A plain array stays
-   * one array for each key, because a host can change an array.
+   * key evaluates once, on its first read, so each key gets one object (COMPILE.MODULE.FUSE.OUT). The keys share that
+   * object, so only that object is frozen. A plain array stays one array for each key, because a host can change an array.
    */
   runList(v: Value, plain: boolean): string {
-    const code = this.envelope(v, plain ? "LP" : "LO");
-    if (plain || !this.#fuse || v.deps.size > 0) return code;
-    return this.#hoist(bare({ ...v, code, plain: false }), true).v.code;
+    if (plain || !this.#fuse || v.deps.size > 0) return this.envelope(v, plain ? "LP" : "LO");
+    return this.#hoist(bare({ ...v, code: this.envelope(v, "LS"), plain: false }), true).v.code;
   }
 
   /** This method gives the name of a part of the tree, for example `H` for the children, and marks the part as read. */

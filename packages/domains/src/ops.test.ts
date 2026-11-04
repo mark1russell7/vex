@@ -187,7 +187,7 @@ describe("the ops of XYDomain", () => {
     expect(samples.every((s) => XYDomain.is(s) && XYDomain.valid?.(s) === true)).toBe(true);
     expect(Object.entries(XYDomain.ops).map(([name, op]) => `${name}: ${op.returns ?? "?"}`)).toEqual([
       "x: number", "y: number", "add: domain", "subtract: domain", "multiply: domain", "divide: domain", "min: domain", "max: domain", "scale: domain", "negate: domain",
-      "abs: domain", "floor: domain", "ceil: domain", "round: domain", "dot: number", "length: number", "distance: number", "area: number", "sum: number", "equals: boolean",
+      "abs: domain", "sign: domain", "minAxis: domain", "floor: domain", "ceil: domain", "round: domain", "dot: number", "length: number", "distance: number", "area: number", "sum: number", "equals: boolean",
     ]);
   });
 });

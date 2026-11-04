@@ -30,7 +30,7 @@ In the JSON form of a program, a literal vector is `{ "$vex": "domain", "domain"
 
 The ops `add`, `subtract`, `multiply`, `divide`, `min` and `max` of `Vec2Domain` work on each component. A number argument of these ops becomes a vector with that number twice. Thus `size._.max(1)` makes a size of at least 1 by 1, and `cell._.add(gap)` adds the gap in the two dimensions.
 
-`floor`, `ceil`, `round`, `abs`, `clamp`, `scale`, `negate` and `select` work on each component too. `dot`, `length`, `distance`, `area`, `sum`, `minComponent` and `maxComponent` give a number. The [domains page](../../reference/domains/) lists each op.
+`floor`, `ceil`, `round`, `abs`, `sign`, `clamp`, `scale`, `negate` and `select` work on each component too. `dot`, `length`, `distance`, `area`, `sum`, `minComponent` and `maxComponent` give a number. The [domains page](../../reference/domains/) lists each op.
 
 ## Reduce a list of vectors
 
@@ -100,6 +100,32 @@ capped.at("column"); // => some(new Vec2(145, 100))
 ```
 
 With a mask of bounds, a 0 means no bound: `hi._.select(v._.min(hi), v)` bounds each component of `v` by `hi`, except where `hi` has a 0.
+
+## The push of a force separation
+
+A force separation pushes two boxes apart along the axis of their smallest overlap, with the sign of their gap. Two ops of `Vec2Domain` give the parts of the push:
+
+| Op | Value |
+|---|---|
+| `v._.sign()` | The sign of each component: 1, -1 or 0 |
+| `v._.minAxis()` | (1, 0) if `x <= y`, else (0, 1). A tie gives (1, 0) |
+
+`minAxis` compares the signed values. For the sizes, write `v._.abs()._.minAxis()`. A component `NaN` gives `#NUM!`.
+
+```ts doctest
+const pairs = vex(NumDomain, Vec2Domain).over(space.array([
+  { gap: new Vec2(3, 1), half: new Vec2(5, 8) },
+  { gap: new Vec2(1, -6), half: new Vec2(5, 8) },
+]));
+const gap = pairs.from("gap");
+const overlap = pairs.from("half")._.subtract(gap._.abs());
+const push = overlap._.minAxis()._.multiply(gap._.sign())._.multiply(overlap);
+
+push.at("0"); // => some(new Vec2(2, 0))
+push.at("1"); // => some(new Vec2(0, -2))
+```
+
+The sign of 0 is 0, so a gap of 0 on that axis gives no push. If two boxes have the same center, give the gap a direction first.
 
 ## Vectors in a standalone module
 

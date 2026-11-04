@@ -21,6 +21,7 @@ export type NumOps = {
   readonly clamp: FnOp<number, NumFn3>;
   readonly abs: FnOp<number, NumFn1>;
   readonly negate: FnOp<number, NumFn1>;
+  readonly sign: FnOp<number, NumFn1>;
   readonly sqrt: FnOp<number, NumFn1>;
   readonly ln: FnOp<number, NumFn1>;
   readonly exp: FnOp<number, NumFn1>;
@@ -63,6 +64,8 @@ export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", numb
     clamp: { fn: (a: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, a)), params: ["number", "number"], returns: "number" },
     abs: { fn: (a: number): number => Math.abs(a), returns: "number" },
     negate: { fn: (a: number): number => -a, returns: "number" },
+    // NUM.SIGN: the check of the result turns NaN into #NUM!, and an infinite number has a sign.
+    sign: { fn: (a: number): number => Math.sign(a), returns: "number" },
     sqrt: { fn: (a: number): number => Math.sqrt(a), returns: "number" },
     ln: { fn: (a: number): number => Math.log(a), returns: "number" },
     exp: { fn: (a: number): number => Math.exp(a), returns: "number" },

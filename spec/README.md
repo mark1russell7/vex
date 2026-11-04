@@ -268,6 +268,15 @@ A layout rule often works along a main axis and a cross axis, for example the to
 - **[JSON.LEAVES]** `leaves(o, depth)` gives the leaves of the object `o`, in the order of a walk over its own fields, as `fields` reads them. The walk goes into an object with fields when the path of its field has fewer than `depth` keys. Each leaf is a record `{ path, kind, value }` with the kind of `kinds`, and a `"null"` leaf has no `value`. A path joins the keys with `.`, but after an empty path it is the key alone. A number `depth` that is not a whole number from 1 to 100 gives `#CALC!`. A receiver that is not an object, and a value that is not JSON, give `#CALC!` too.
 - **[JSON.FIELD]** `field(o, k)` gives the value of the own field `k` of the object `o`. A missing key, a field that is `null`, a key that is not a text and a receiver that is not an object give `#CALC!`. Thus an inherited member, for example `constructor`, is not a field.
 
+### 7.3 The sign and the smallest axis
+
+A force separation pushes two boxes apart along the axis of their smallest overlap, with the sign of their gap. For the overlap `o` and the gap `g`, the push is `minAxis(o) * sign(g) * o`. A gap of 0 on that axis gives no push.
+
+- **[NUM.SIGN]** `sign(n)` gives the value of `Math.sign(n)`: 1 for a positive number, -1 for a negative number, 0 for 0 and -0 for -0. An infinite number gives 1 or -1, because an op checks its result and not its receiver. `NaN` gives `#NUM!`.
+- **[VEC2.SIGN]** `sign(v)` of `Vec2Domain` gives the sign of each component, as NUM.SIGN tells. A component `NaN` gives `#NUM!`, as VEC2.FINITE tells. An infinite component gives 1 or -1.
+- **[VEC2.MINAXIS]** `minAxis(v)` gives (1, 0) if `x <= y`, else (0, 1). The comparison uses the signed values, and `minAxis(abs(v))` compares the sizes. A tie gives (1, 0), and 0 and -0 tie. Infinite values compare as numbers. A component `NaN` gives `#NUM!`. For finite components, `along(v, minAxis(v))` gives `minComponent(v)`, and `across(v, minAxis(v))` gives `maxComponent(v)`.
+- **[XY.SIGN]** `sign` and `minAxis` of `XYDomain` give the components of the same ops of `Vec2Domain`. Each one is a function of plain data, so a standalone module can copy it.
+
 ## 8. The builder
 
 - **[BUILD.IMMUTABLE]** A builder call gives a new chain. An earlier chain does not change.

@@ -9,6 +9,10 @@
   },
   {
     "file": "packages/compiler/src/lower.ts",
+    "comment": "// Stryker disable next-line ArrowFunction: each check of a row is in its own block, so the loop reads no failure"
+  },
+  {
+    "file": "packages/compiler/src/lower.ts",
     "comment": "// Stryker disable next-line BooleanLiteral: a value without a flag always exists, so each constant gives the same entries"
   },
   {
@@ -144,6 +148,10 @@
     "comment": "// Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code"
   },
   {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line all: for the axis all with no address, #targetLoop gives no statements, key, check or skip, so this test is always false"
+  },
+  {
     "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
   },
@@ -194,22 +202,6 @@
   {
     "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
-  },
-  {
-    "file": "packages/compiler/src/sheet-order.ts",
-    "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/sheet-order.ts",
-    "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/sheet-order.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression,LogicalOperator: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/sheet-order.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
   },
   {
     "file": "packages/core/src/builder.ts",

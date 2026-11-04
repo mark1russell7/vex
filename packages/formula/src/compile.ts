@@ -3,7 +3,7 @@
  * A value column is a field of the row records, so a read of it is a `ref`. A formula column is a column of a
  * sheet, so a read of it is a cell reference. Thus a cycle of formula columns gives `#CYCLE!`.
  */
-import { app, axes, cell, each, fold, index, iterate, key, let_, lit, offset, origin, parent, ref, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
+import { app, axes, cell, each, fix, fold, index, iterate, key, last, let_, lit, offset, origin, parent, ref, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { BUILT_IN_NAMES, OP_NAMES } from "./functions.ts";
 import { ADDRESS, AGGREGATES, axisText, FormulaSyntaxError, parseFormula, type AggAxis, type AggregateName, type Ast, type AxisName, type BinaryOp, type LoopName, type Nav, type Span } from "./syntax.ts";
@@ -163,6 +163,8 @@ function columnOf(table: string, cols: TableContext, name: string, span: Span): 
 /** This function compiles a syntax tree. A problem gives a result with an error. */
 export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
   const reads: string[] = [];
+  // The names of the steps of FIX around a node. An aggregate makes a new scope, and a read in its body stays valid.
+  let fixes: ReadonlySet<string> = new Set();
   const column = (name: string, span: Span): { readonly name: string; readonly formula: boolean } => {
     if (name.includes(".")) throw new FormulaSyntaxError(`a column name has no dot: "${name}"`, span);
     const found = findColumn(ctx, name);
@@ -341,6 +343,17 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
         const names = loopNames(a.names, s, { ...rows, loops: withNames(s, a.names) });
         return fold(axis, names.first, names.step, go(a.result, { ...s, loops: withNames(s, a.names) }), [...s.base, ...a.nav.map((n) => navMove(n, s))]);
       }
+      case "fix": {
+        const first = go(a.first, s);
+        const outer = fixes;
+        fixes = new Set([...outer, a.name]);
+        const step = go(a.step, s);
+        fixes = outer;
+        return fix(a.name, a.join, first, step);
+      }
+      case "last":
+        if (!fixes.has(a.name)) throw new FormulaSyntaxError(`LAST(${a.name}) needs a step of a FIX with the name ${a.name}`, a.span);
+        return last(a.name);
     }
   };
 

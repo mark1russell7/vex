@@ -72,6 +72,7 @@ Numbers. A result that is not finite gives `#NUM!`. The values are of the type `
 | `clamp` | `clamp(number, number, number)` | number |  |  |  | up, up, up |
 | `abs` | `abs(number)` | number |  |  |  |  |
 | `negate` | `negate(number)` | number |  |  |  | down |
+| `sign` | `sign(number)` | number |  |  |  | up |
 | `sqrt` | `sqrt(number)` | number |  |  |  |  |
 | `ln` | `ln(number)` | number |  |  |  |  |
 | `exp` | `exp(number)` | number |  |  |  |  |
@@ -83,6 +84,7 @@ Numbers. A result that is not finite gives `#NUM!`. The values are of the type `
 | `date` | `date(number, number, number)` | LocalDate |  |  |  |  |
 | `vec2` | `vec2(number, number)` | Vec2 |  |  |  |  |
 | `xy` | `xy(number, number)` | XY |  |  |  |  |
+| `insets` | `insets(number, number, number, number)` | Insets |  |  |  |  |
 | `floor` | `floor(number)` | number |  |  |  | up |
 | `ceil` | `ceil(number)` | number |  |  |  | up |
 | `round` | `round(number)` | number |  |  |  | up |
@@ -136,6 +138,7 @@ Texts. The values are of the type `string`.
 | `negate` | `negate(Vec2)` | Vec2 |  |  |  |  |
 | `halve` | `halve(Vec2)` | Vec2 |  |  |  |  |
 | `abs` | `abs(Vec2)` | Vec2 |  |  |  |  |
+| `sign` | `sign(Vec2)` | Vec2 |  |  |  |  |
 | `round` | `round(Vec2)` | Vec2 |  |  |  |  |
 | `floor` | `floor(Vec2)` | Vec2 |  |  |  |  |
 | `ceil` | `ceil(Vec2)` | Vec2 |  |  |  |  |
@@ -145,6 +148,7 @@ Texts. The values are of the type `string`.
 | `select` | `select(Vec2, Vec2, Vec2)` | Vec2 | yes |  |  |  |
 | `rotate` | `rotate(Vec2, number)` | Vec2 |  |  |  |  |
 | `normalize` | `normalize(Vec2)` | Vec2 |  |  |  |  |
+| `minAxis` | `minAxis(Vec2)` | Vec2 |  |  |  |  |
 | `lerp` | `lerp(Vec2, Vec2, number)` | Vec2 |  |  |  |  |
 | `length` | `length(Vec2)` | number |  |  |  |  |
 | `lengthSq` | `lengthSq(Vec2)` | number |  |  |  |  |
@@ -187,6 +191,8 @@ Texts. The values are of the type `string`.
 | `scale` | `scale(XY, number)` | XY |  |  |  |  |
 | `negate` | `negate(XY)` | XY |  |  |  |  |
 | `abs` | `abs(XY)` | XY |  |  |  |  |
+| `sign` | `sign(XY)` | XY |  |  |  |  |
+| `minAxis` | `minAxis(XY)` | XY |  |  |  |  |
 | `floor` | `floor(XY)` | XY |  |  |  |  |
 | `ceil` | `ceil(XY)` | XY |  |  |  |  |
 | `round` | `round(XY)` | XY |  |  |  |  |
@@ -196,6 +202,23 @@ Texts. The values are of the type `string`.
 | `area` | `area(XY)` | number |  |  |  |  |
 | `sum` | `sum(XY)` | number |  |  |  |  |
 | `equals` | `equals(XY, XY)` | boolean |  | commutative |  |  |
+
+## `InsetsDomain`
+
+The four sides of an inset as plain data: `{ startX, startY, endX, endY }`, or `insets` of `NumDomain`. `start` and `end` give `XY` values, and a module can copy them. `startVec2` and `endVec2` give `Vec2` values, and a module refuses them. A side that is not finite gives `#NUM!`. The values are of the type `Insets`. A number lifts to a value of the domain.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity | Moves |
+|---|---|---|---|---|---|---|
+| `startX` | `startX(Insets)` | number |  |  |  |  |
+| `startY` | `startY(Insets)` | number |  |  |  |  |
+| `endX` | `endX(Insets)` | number |  |  |  |  |
+| `endY` | `endY(Insets)` | number |  |  |  |  |
+| `start` | `start(Insets)` | XY |  |  |  |  |
+| `end` | `end(Insets)` | XY |  |  |  |  |
+| `startVec2` | `startVec2(Insets)` | Vec2 |  |  |  |  |
+| `endVec2` | `endVec2(Insets)` | Vec2 |  |  |  |  |
+| `add` | `add(Insets, Insets)` | Insets | yes | commutative, associative | (0, 0, 0, 0) |  |
+| `scale` | `scale(Insets, number)` | Insets |  |  |  |  |
 
 ## `NDVectorDomain`
 

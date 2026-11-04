@@ -105,11 +105,12 @@ const FREE: SiteFacts = Object.freeze({ t: "free" });
 /**
  * The op of a site whose values have known kinds (KIND.STATIC):
  * - `fn`: the function of the op of the domain `domain`. `bad` is true when an argument has a kind that the op does
- *   not accept, so the interpreter gives an error. `returns` is the kind of the result, if the op declares it.
+ *   not accept, so the interpreter gives an error. `returns` is the kind of the result, if the op declares it. `lifted`
+ *   has the positions after the receiver of the numbers that `fromScalar` lifts, if the caller asks for them.
  * - `free`: no domain that accepts the receiver has the op, and a free function has the name.
  */
 export type StaticSite =
-  | { readonly t: "fn"; readonly domain: number; readonly bad: boolean; readonly returns: Kind | undefined }
+  | { readonly t: "fn"; readonly domain: number; readonly bad: boolean; readonly returns: Kind | undefined; readonly lifted?: readonly number[] }
   | { readonly t: "free" };
 
 const STATIC_FREE: StaticSite = Object.freeze({ t: "free" });
@@ -134,13 +135,22 @@ function fits(domain: AnyDomain, param: ParamKind | undefined, arg: Kind | undef
   return arg === (param === "domain" ? kindOfDomain(domain) : param);
 }
 
+/** This function tells if two domains declare different field names, so they have no common value (KIND.FIELDS). */
+function disjoint(a: AnyDomain, b: AnyDomain | undefined): boolean {
+  const x = a.fields;
+  const y = b?.fields;
+  return x !== undefined && y !== undefined && (x.length !== y.length || x.some((name) => !y.includes(name)));
+}
+
 /**
  * This function tells if a domain accepts a value of a kind. A domain with a primitive type accepts its type, and a
- * domain without one accepts the values of its kind. For another value, it gives `undefined`: its `is` can accept it.
+ * domain without one accepts the values of its kind. It does not accept a value of a domain with other fields. For
+ * another value, it gives `undefined`: its `is` can accept it.
  */
-function accepts(d: AnyDomain, kind: Kind): boolean | undefined {
+function accepts(domains: readonly AnyDomain[], d: AnyDomain, kind: Kind): boolean | undefined {
   if (d.primitive !== undefined) return d.primitive === kind;
-  return kind === kindOfDomain(d) ? true : undefined;
+  if (kind === kindOfDomain(d)) return true;
+  return disjoint(d, domains.find((x) => kindOfDomain(x) === kind)) ? false : undefined;
 }
 
 /** The facts of the options. */
@@ -155,9 +165,10 @@ export interface Facts {
   /**
    * This function gives the op of a site with the kinds of its values, the receiver first. When the kinds do not decide
    * the op, it gives `undefined`. Each domain before the op must declare a primitive type. Then the interpreter takes
-   * the same op at each run. `lists` has the positions of the values that are lists, after the receiver.
+   * the same op at each run. `lists` has the positions of the values that are lists, after the receiver. A number that
+   * the op lifts gives `undefined`, unless `lift` is true: then the caller lifts the numbers at the positions `lifted`.
    */
-  staticSite(name: string, kinds: readonly (Kind | undefined)[], lists?: ReadonlySet<number>): StaticSite | undefined;
+  staticSite(name: string, kinds: readonly (Kind | undefined)[], lists?: ReadonlySet<number>, lift?: boolean): StaticSite | undefined;
   /**
    * This function gives the index of the domain that checks a result of a kind. When no domain accepts such a value,
    * it gives -1. When a domain without a primitive type comes first, it gives `undefined`.
@@ -168,6 +179,8 @@ export interface Facts {
    * op for each receiver, for example `fill` (LIST.FILL).
    */
   own(name: string): boolean;
+  /** This function gives the number of domains with an identity of the op `name`, as `#reduce` of the interpreter counts them (LIST.EMPTY). */
+  identities(name: string): number;
 }
 
 /** This function gives the facts of a set of options. */
@@ -177,12 +190,12 @@ export function factsOf(options: Options): Facts {
   const last = domains.findLastIndex((d) => d.valid !== undefined);
   return {
     checks: domains.slice(0, last + 1).map((d) => d.valid !== undefined),
-    staticSite(name, kinds, lists = NO_LISTS) {
+    staticSite(name, kinds, lists = NO_LISTS, lift = false) {
       const [self, ...args] = kinds;
       // A primitive value is not a list, so a list op name is an op of a domain here, as in the interpreter.
       if (self === undefined) return undefined;
       for (const [i, d] of domains.entries()) {
-        const takes = accepts(d, self);
+        const takes = accepts(domains, d, self);
         if (takes === undefined) return undefined;
         const e = takes ? entryOf(d, name) : undefined;
         // A primitive value has no methods, so only the function of a spec is an op for it. The domain of a value without
@@ -191,18 +204,19 @@ export function factsOf(options: Options): Facts {
           if (takes && d.primitive === undefined) return undefined;
           continue;
         }
-        // A lifted number goes through fromScalar: the site keeps the dispatch of the runtime.
-        // A list is not a number, so the interpreter does not lift it.
-        if (d.fromScalar !== undefined && args.some((a, j) => a !== "string" && a !== "boolean" && !lists.has(j + 1) && liftsAt(e.spec.liftScalar, j))) return undefined;
-        const ok = args.map((a, j) => fits(d, e.spec.params?.[j], a, lists.has(j + 1)));
+        // A lifted number goes through fromScalar: the site keeps the dispatch of the runtime, or the caller lifts it. A
+        // list is not a number, and neither is a value of another kind, so the interpreter does not lift them.
+        const lifted = d.fromScalar === undefined ? [] : args.flatMap((a, j) => ((a === undefined || a === "number") && !lists.has(j + 1) && liftsAt(e.spec.liftScalar, j) ? [j] : []));
+        if (lifted.some((j) => !lift || args[j] === undefined)) return undefined;
+        const ok = args.map((a, j) => fits(d, e.spec.params?.[j], lifted.includes(j) ? kindOfDomain(d) : a, lists.has(j + 1)));
         if (ok.includes(undefined)) return undefined;
-        return { t: "fn", domain: i, bad: ok.includes(false), returns: returnsOf(d, e.spec.returns) };
+        return { t: "fn", domain: i, bad: ok.includes(false), returns: returnsOf(d, e.spec.returns), ...(lifted.length === 0 ? {} : { lifted }) };
       }
       return fns !== undefined && Object.hasOwn(fns, name) ? STATIC_FREE : undefined;
     },
     checkOf(kind) {
       for (const [i, d] of domains.entries()) {
-        const takes = accepts(d, kind);
+        const takes = accepts(domains, d, kind);
         if (takes === undefined) return undefined;
         if (takes) return i;
       }
@@ -210,6 +224,9 @@ export function factsOf(options: Options): Facts {
     },
     own(name) {
       return domains.every((d) => entryOf(d, name) === undefined) && !(fns !== undefined && Object.hasOwn(fns, name));
+    },
+    identities(name) {
+      return domains.filter((d) => Object.hasOwn(d.ops, name) && (d.ops[name] as OpSpec<unknown>).identity !== undefined).length;
     },
     site(name, arity) {
       // Without values, the interpreter takes no op of a domain. A list op can have a list as its receiver.

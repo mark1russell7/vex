@@ -26,6 +26,8 @@ export type XYOps = {
   readonly scale: FnOp<XY, (a: XY, k: number) => XY>;
   readonly negate: FnOp<XY, XYFn1>;
   readonly abs: FnOp<XY, XYFn1>;
+  readonly sign: FnOp<XY, XYFn1>;
+  readonly minAxis: FnOp<XY, XYFn1>;
   readonly floor: FnOp<XY, XYFn1>;
   readonly ceil: FnOp<XY, XYFn1>;
   readonly round: FnOp<XY, XYFn1>;
@@ -46,6 +48,7 @@ export const XYDomain: Domain<"XY", XY, XYOps> = defineDomain<"XY", XY, XYOps>({
   name: "XY",
   // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
   size: "fixed",
+  fields: ["x", "y"],
   // A plain object: its prototype is Object.prototype or null, so an instance of a class such as Vec2 is not an XY.
   is: (u: unknown): u is XY => typeof u === "object" && u !== null && [Object.prototype, null].includes(Object.getPrototypeOf(u) as object | null) && Object.keys(u).length === 2 && typeof (u as XY).x === "number" && typeof (u as XY).y === "number",
   valid: (v: XY): boolean => Number.isFinite(v.x) && Number.isFinite(v.y),
@@ -63,6 +66,9 @@ export const XYDomain: Domain<"XY", XY, XYOps> = defineDomain<"XY", XY, XYOps>({
     scale: { fn: (a: XY, k: number): XY => ({ x: a.x * k, y: a.y * k }), params: ["number"], returns: "domain" },
     negate: { fn: (a: XY): XY => ({ x: -a.x, y: -a.y }), params: [], returns: "domain" },
     abs: { fn: (a: XY): XY => ({ x: Math.abs(a.x), y: Math.abs(a.y) }), params: [], returns: "domain" },
+    sign: { fn: (a: XY): XY => ({ x: Math.sign(a.x), y: Math.sign(a.y) }), params: [], returns: "domain" },
+    // The rules of minAxis of Vec2 (VEC2.MINAXIS). NaN components fail the check of the result, so `NaN` gives #NUM!.
+    minAxis: { fn: (a: XY): XY => (Number.isNaN(a.x) || Number.isNaN(a.y) ? { x: Number.NaN, y: Number.NaN } : a.x <= a.y ? { x: 1, y: 0 } : { x: 0, y: 1 }), params: [], returns: "domain" },
     floor: { fn: (a: XY): XY => ({ x: Math.floor(a.x), y: Math.floor(a.y) }), params: [], returns: "domain" },
     ceil: { fn: (a: XY): XY => ({ x: Math.ceil(a.x), y: Math.ceil(a.y) }), params: [], returns: "domain" },
     round: { fn: (a: XY): XY => ({ x: Math.round(a.x), y: Math.round(a.y) }), params: [], returns: "domain" },

@@ -91,6 +91,10 @@ corner._.x().at("0"); // => { tag: "some", value: 40 }
 
 When the math works along a main axis and a cross axis, as in a stack, write it once. The axis `dir` is (1, 0) or (0, 1). `v._.along(dir)` and `v._.across(dir)` give the two components, and `dir._.compose(main, cross)` makes the vector. A `Vec2` cannot have an infinite bound. For a bound on one component, `mask._.select(a, b)` takes `a` where the mask is not 0. These ops need 0.12.0.
 
+For the four sides of an inset, use `InsetsDomain` and the op `insets`. A number lifts to four sides in `add`. `start` and `end` give `XY` values, and `startVec2` and `endVec2` give `Vec2` values.
+
+For a push along the smallest axis, as in a force separation, use `overlap._.minAxis()._.multiply(gap._.sign())._.multiply(overlap)`. `minAxis` gives (1, 0) or (0, 1), a tie gives (1, 0), and it compares signed values. The sign of 0 is 0, so a gap of 0 gives no push.
+
 For a standalone module, use `XYDomain` and the op `xy` instead: their vectors are plain `{ x, y }` data. Refer to [make a domain](reference/domains.md#a-domain-for-a-standalone-module).
 
 ## The IR
@@ -108,7 +112,7 @@ The builder makes an expression: a tree of plain data. Code can make the same tr
 | `each(axis, body, at?, as?)` | A list: `body` at each target of `axis` |
 | `fold(axis, init, step, result, at?, as?)` | A loop over the targets of `axis`, in order |
 | `iterate(limit, init, step, result, until?)` | A loop of at most `limit` steps. `limit` is a number, or `dataLimit(axis)` for the count of an axis or a list (step B) |
-| `fix(name, join, init, step)`, `last(name)` | A column: `step` repeats at each row until no row changes, and `last(name)` reads the last round at the focus. `join` is `or` or `max` to move up, and `and` or `min` to move down (step B) |
+| `fix(name, join, init, step)`, `last(name)` | A column: `step` repeats at each row until no row changes, and `last(name)` reads the last round at the focus. `join` is `or` or `max` to move up, and `and` or `min` to move down (step B). The method `fix` of a chain gives the step a chain of `last` |
 | `ext(kind, data)` | The value of an extension handler |
 
 The moves are `key(k)`, `index(i)`, `offset(...d)`, `other`, `origin` and `parent`. `key` and `index` also take an expression. The axes are in `axes`, for example `axes.all`, `axes.others`, `axes.window(from, to)`, `axes.reverse(axis)`, `axes.list(expr)` and `axes.where(axis, test)`. In the builder, the option `reverse: true` of an axis gives the reverse order.
@@ -141,7 +145,7 @@ evaluate(cell, { space: sizes, origin: "0", domains: [NumDomain, Vec2Domain] });
 
 A function cannot call itself, so each call ends. Use `iterate` for a loop, and a sheet for a calculation over the levels of a tree. Use `fix` for a calculation over a graph with cycles.
 
-The node `fix` makes a column of step B. Rounds repeat its step until no row changes. A check proves that the rows move one way, so a step without a proof gives an error before a run. A column of `n` rows makes `n + 1` rounds at most, and `#NUM!` follows if it still changes. Tier 2 and modules do not have `fix` yet: tier 2 stays in tier 1, and a module refuses the program with a reason.
+The node `fix` makes a column of step B. Rounds repeat its step until no row changes. A check proves that the rows move one way, so a step without a proof gives an error before a run. A column of `n` rows makes `n + 1` rounds at most, and `#NUM!` follows if it still changes. Tier 2 and modules lower `fix`, with the results of tier 1.
 
 ```ts doctest
 import { app, call, evaluate, fn, let_, lit, ref, space, v } from "@mark1russell7/vex";

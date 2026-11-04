@@ -21,10 +21,14 @@
  * | radial, 12 children, linked | 3.19, 3.00, 3.14, 2.95, 3.16 | 2.75, 2.75, 3.11, 3.03, 3.29 | 3.34 (C) | 3.34 (C) |
  * | radial, 60 children, nested | 3.90, 3.86, 3.81, 3.84, 3.82 | 3.56, 3.55, 3.83, 3.42, 4.06 | 3.29 (C) | 3.29 (C) |
  * | tree, 1000 nodes | 1.00, 1.06, 0.98, 1.05, 0.99 | 1.05, 1.06, 0.99, 0.99, 1.02 | 1.06 | 1.14 |
- * | shapes, 1111 nodes | 1.63, 1.70, 1.58, 1.63, 1.58 | 1.63, 1.68, 1.61, 1.83, 1.59 | 1.68 | 2.08 |
+ * | shapes, 1111 nodes | 1.63, 1.70, 1.58, 1.63, 1.58 | 1.63, 1.68, 1.61, 1.83, 1.59 | 1.68 | 1.74 (D) |
  * | the growth of the share of each value | 2.00, 2.00, 2.01, 2.00, 2.00 | 2.00, 2.00, 2.00, 2.01, 1.99 | 2.03 | 2.03 |
  *
  * (a) Each limit is the worst run median plus the spread of the run medians, rounded up (STRATEGY.md of the fleet).
+ * (D) Run 41773861998 of speed-gate.yml (reps D1 to D5, on main at 62acda4, with the freeze rule of #228) gave the
+ * shapes limit of the other models. The medians are 1.63 (9V45), 1.57 (9V74), 1.52, 1.56 and 1.62 (7763). The worst
+ * median plus the spread is 1.63 + 0.11, so the limit is 1.74. The limit of the 7763 stays 1.68, because three runs do
+ * not make a limit. These runs have no Xeon, and Xeon runners gave 1.83 on two models, so a Xeon keeps the old 2.08.
  * (b) The rate p is the upper Wilson end (95 %) of the rate of processes above the limit in the derivation runs. The
  * largest count L is the smallest count with P(Binomial(11, p) > L) under 1 %. For the 7763, L is 3 or 4, and (b) fails a
  * run with a slow rate of 0.5 in 73 % to 89 % of runs, and 21 % to 43 % at 0.3. For other models, L is 2: 97 % at 0.5, 69 % at 0.3.
@@ -40,6 +44,9 @@
  * A PR that makes a ratio better sets its limit lower in the same PR.
  * With `GATE_GC=1`, each case also prints the garbage collections of each arm in its timed runs (gc.ts, GATEGC).
  * With `GATE_ALLOC`, the process gives the allocations of one arm and no time (alloc.ts, TREEALLOC).
+ * With `GATE_LIMIT_WALK=1`, the walk of a data limit gives two more cases (limit-walk.ts, LIMITCOST). Their second arm is
+ * the module with a count at each key, not hand-written loops. Their limit is 1: the fix must not cost time. Check (b)
+ * is a record only. No pull request starts these cases.
  * Start: node packages/compiler/bench/gate.ts
  */
 import type { Space } from "@mark1russell7/vex";
@@ -47,6 +54,7 @@ import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
 import { radialArrange, radialRun } from "../../pilots/src/ireko-radial.ts";
 import { handBoth, handPairs, handSum, loadRadial, ringOf } from "./ablation.ts";
+import { countAtEachKey, loadWalk, walkRecords } from "./limit-walk.ts";
 import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapesTree, type ShapeRecord } from "../../pilots/src/ireko-shapes.ts";
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
@@ -64,8 +72,9 @@ const LIMITS = {
   linked: { "7763": { limit: 3.34, slow: 3.34, maxSlow: 3 }, other: { limit: 3.34, slow: 3.34, maxSlow: 3 } },
   nested: { "7763": { limit: 3.29, slow: 3.29, maxSlow: 3 }, other: { limit: 3.29, slow: 3.29, maxSlow: 3 } },
   tree: { "7763": { limit: 1.06, slow: 1.06, maxSlow: 4 }, other: { limit: 1.14, slow: 1.14, maxSlow: 2 } },
-  shapes: { "7763": { limit: 1.68, slow: 1.68 }, other: { limit: 2.08, slow: 2.08 } },
+  shapes: { "7763": { limit: 1.68, slow: 1.68 }, Xeon: { limit: 2.08, slow: 2.08 }, other: { limit: 1.74, slow: 1.74 } },
   share: { "7763": { limit: 2.03, slow: 2.03 }, other: { limit: 2.03, slow: 2.03 } },
+  walk: { "7763": { limit: 1, slow: 1 }, other: { limit: 1, slow: 1 } },
 } as const satisfies Readonly<Record<string, ModelLimits>>;
 const CPU = cpus()[0]?.model ?? "";
 /** This function gives the limits of a case for the CPU model of this runner. */
@@ -193,6 +202,16 @@ const ablationCase = (name: string, edit: (source: string) => string): ReturnTyp
   return { title: `the radial module of ireko, a full ring of 60 children, nested, ablation ${name}`, compiled: { run: () => variant(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limits: limitsOf("nested") };
 };
 
+// The walk of a between program with a data limit (LIMITCOST). The tree has one edge for each node, so a count at each key
+// costs the square of the nodes. The variant must give the result of the module on the case input, or the gate stops.
+const walkCase = (branch: number, depth: number): Case => {
+  const records = walkRecords(branch, depth);
+  const after = loadWalk((source) => source);
+  const before = loadWalk(countAtEachKey);
+  if (JSON.stringify(before(records, {})) !== JSON.stringify(after(records, {}))) throw new Error("gate: the variant of the walk gives another result.");
+  return { title: `the walk of a data limit, a tree of ${String(records.length)} nodes, against a count at each key`, compiled: { run: () => after(records, {}), tier: 2, fallbacks: () => 0 }, hand: () => before(records, {}), limits: limitsOf("walk") };
+};
+
 // Each case is a function that makes the case, so a process makes only its own case (MODELLIMITS). When each process made
 // all cases, the three ablation variants ran in the process of the shapes case too. Its ratio on the 7763 went from 1.58
 // to 1.66 (7 runs) to 1.67 to 1.77 (6 runs with GATE_ABLATE=1).
@@ -214,7 +233,9 @@ const CASES_BASE: readonly (() => Case)[] = [
   () => treeCase(1000),
   () => shapesCase(10, 3),
 ];
-const CASES: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, () => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : CASES_BASE;
+const CASES_ABLATE: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1" ? [() => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : [];
+const CASES_WALK: readonly (() => Case)[] = process.env["GATE_LIMIT_WALK"] === "1" ? [() => walkCase(10, 3), () => walkCase(10, 4)] : [];
+const CASES: readonly (() => Case)[] = [...CASES_BASE, ...CASES_ABLATE, ...CASES_WALK];
 
 // With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
 // changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run

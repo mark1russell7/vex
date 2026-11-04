@@ -119,6 +119,22 @@ const toC = evaluate(app("nth", each(axes.all, hops), lit(2)), options);
 toC.ok && toC.value; // => 2
 ```
 
+The method `fix` of a chain makes the same column in the builder. Its step gets a chain of the last round. The types accept no `last` outside a step, and the join gives the kind of the chain. The chain of the last round goes inside the body of the axis, because an axis moves the focus of a read.
+
+```ts doctest
+import { space, vex } from "@mark1russell7/vex";
+import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
+
+const graph = vex(NumDomain, BoolDomain, TextDomain).over(space.graph({ a: { id: "a" }, b: { id: "b" }, c: { id: "c" }, d: { id: "d" } }, { a: ["b"], b: ["a", "c"], c: [], d: ["a"] }));
+const isSource = graph.from("id")._.eq(graph.start(0).origin().from("id"));
+
+const reach = graph.start(0).fix("reach", "or", isSource, (lastRound) => graph.start(0).predecessors(() => lastRound).any());
+const reached = graph.start(0).each((row) => row.from("id"), { where: () => reach }).join(",");
+reached.at("a"); // => some("a,b,c")
+```
+
+A formula of the sheet has the words `FIX` and `LAST`, and `FIX(reach, OR, flagged, ANY(ancestors, LAST(reach)))` is a column of a tree. A formula has only the axes of a table. It has no axis `predecessors`, so a graph needs the builder or the IR.
+
 The start `far` means "no path", because a value of a `min` column is a finite number. The function `ifError` catches a row with no predecessor, because `min` of an empty list gives `#N/A`.
 
 Each step must not fall when the last round rises. The check refuses `not`, `multiply`, `sum` and `count` over a value that reads `last`. A step can add a number, but a row must stop: add a cap with `min`, or follow paths. A count of rounds above `n + 1` gives `#NUM!`.
@@ -159,7 +175,7 @@ m.ok; // => true
 
 A module of a tree takes the option `space: "tree"` (from 0.11.2). Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The module has the move `parent` and the axes of a tree.
 
-A module of a graph takes the option `space: "graph"` (from 0.13.2). Its run takes the edges after the variables: for each record, an array of the positions of the ends of its edges. The module has the axes of a graph and `reduce`. A module cannot copy the methods of `Vec2Domain`, so use `XYDomain` in a module.
+A module of a graph takes the option `space: "graph"` (from 0.13.2). Its run takes the edges after the variables: for each record, an array of the positions of the ends of its edges. The module has the axes of a graph and `reduce`. From the next release, a module copies the plain form of `Vec2Domain`, so a program can use `Vec2Domain` or `XYDomain` in a module.
 
 ```ts doctest
 import { app, axes, each, ref } from "@mark1russell7/vex";
@@ -209,6 +225,23 @@ m.ok; // => true
 ```
 
 The run gives each list as a `vex.list`, with the keys as text. An error item has the error `VEX_ERROR`. The value of a program in `emitModule` can be a list too.
+
+## A box inset in a module
+
+`InsetsDomain` keeps the four sides of an inset. The program adds `pad` to a zero value, so `pad` can be a number or a value. In a module, a field has one kind, so this schema gives `pad` the kind `number`.
+
+```ts doctest
+import { app, lit, ref } from "@mark1russell7/vex";
+import { emitModule } from "@mark1russell7/vex-compiler";
+import { BoolDomain, InsetsDomain, NumDomain, XYDomain } from "@mark1russell7/vex-domains";
+
+const sides = app("add", app("insets", lit(0), lit(0), lit(0), lit(0)), ref("pad"));
+const box = app("xy", ref("w"), ref("h"));
+const inner = app("subtract", app("subtract", box, app("start", sides)), app("end", sides));
+const m = emitModule(inner, { domains: [NumDomain, XYDomain, InsetsDomain, BoolDomain], schema: { fields: { w: "number", h: "number", pad: "number" } } });
+
+m.ok; // => true
+```
 
 ## A program as data
 

@@ -6,7 +6,6 @@ export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 const Z = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
 function M1(f) {
@@ -21,9 +20,7 @@ function M1(f) {
     return G(r);
   };
 }
-const v_1 = (x) => x;
-const k_boolean = (x) => (v_1(x) ? x : F());
-const k_number = (x) => (Number.isFinite(x) ? x : F());
+const k_boolean = (x) => ((x) ? x : F());
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;

@@ -18,6 +18,10 @@ on:
         description: With true, the gate of the compiler also measures the ablation variants of the nested radial case (RADIALGAP)
         type: boolean
         default: false
+      limit_walk:
+        description: With true, the gate of the compiler also measures the walk of a data limit against a count at each key (LIMITCOST, the cases 6 and 7 without ablate)
+        type: boolean
+        default: false
       case:
         description: The cases of the compiler gate, from 0, separated by commas (5 is shapes). With a case, the core gate does not run. Empty runs all
         type: string
@@ -124,6 +128,7 @@ jobs:
       - if: ${{ !cancelled() }}
         env:
           GATE_ABLATE: ${{ inputs.ablate && '1' || '0' }}
+          GATE_LIMIT_WALK: ${{ inputs.limit_walk && '1' || '0' }}
           GATE_CASE: ${{ inputs.case }}
           GATE_NODE_FLAGS: ${{ inputs.node_flags }}
           GATE_GC: ${{ inputs.gc && '1' || '0' }}

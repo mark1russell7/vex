@@ -10,6 +10,7 @@ Num (fromScalar -, valid yes, encode -, methods -)
   clamp(number, number) | no lift | no laws | no identity | moves [up, up, up] | fn
   abs(?) | no lift | no laws | no identity | fn
   negate(?) | no lift | no laws | no identity | moves [down] | fn
+  sign(?) | no lift | no laws | no identity | moves [up] | fn
   sqrt(?) | no lift | no laws | no identity | fn
   ln(?) | no lift | no laws | no identity | fn
   exp(?) | no lift | no laws | no identity | fn
@@ -21,6 +22,7 @@ Num (fromScalar -, valid yes, encode -, methods -)
   date(number, number) | no lift | no laws | no identity | fn
   vec2(number) | no lift | no laws | no identity | fn
   xy(number) | no lift | no laws | no identity | fn
+  insets(number, number, number) | no lift | no laws | no identity | fn
   floor(?) | no lift | no laws | no identity | moves [up] | fn
   ceil(?) | no lift | no laws | no identity | moves [up] | fn
   round(?) | no lift | no laws | no identity | moves [up] | fn
@@ -59,6 +61,7 @@ Vec2 (fromScalar (2, 2), valid yes, encode yes, methods -)
   negate() | no lift | no laws | no identity | method
   halve() | no lift | no laws | no identity | method
   abs() | no lift | no laws | no identity | method
+  sign() | no lift | no laws | no identity | method
   round() | no lift | no laws | no identity | method
   floor() | no lift | no laws | no identity | method
   ceil() | no lift | no laws | no identity | method
@@ -68,6 +71,7 @@ Vec2 (fromScalar (2, 2), valid yes, encode yes, methods -)
   select(domain, domain) | lift true | no laws | no identity | method
   rotate(number) | no lift | no laws | no identity | method
   normalize() | no lift | no laws | no identity | method
+  minAxis() | no lift | no laws | no identity | method
   lerp(domain, number) | no lift | no laws | no identity | method
   length() | no lift | no laws | no identity | method
   lengthSq() | no lift | no laws | no identity | method
@@ -105,6 +109,8 @@ XY (fromScalar -, valid yes, encode -, methods -)
   scale(number) | no lift | no laws | no identity | fn
   negate() | no lift | no laws | no identity | fn
   abs() | no lift | no laws | no identity | fn
+  sign() | no lift | no laws | no identity | fn
+  minAxis() | no lift | no laws | no identity | fn
   floor() | no lift | no laws | no identity | fn
   ceil() | no lift | no laws | no identity | fn
   round() | no lift | no laws | no identity | fn
@@ -114,6 +120,18 @@ XY (fromScalar -, valid yes, encode -, methods -)
   area() | no lift | no laws | no identity | fn
   sum() | no lift | no laws | no identity | fn
   equals(domain) | no lift | laws [commutative] | no identity | fn
+
+Insets (fromScalar (2, 2, 2, 2), valid yes, encode -, methods -)
+  startX() | no lift | no laws | no identity | fn
+  startY() | no lift | no laws | no identity | fn
+  endX() | no lift | no laws | no identity | fn
+  endY() | no lift | no laws | no identity | fn
+  start() | no lift | no laws | no identity | fn
+  end() | no lift | no laws | no identity | fn
+  startVec2() | no lift | no laws | no identity | fn
+  endVec2() | no lift | no laws | no identity | fn
+  add(domain) | lift true | laws [commutative, associative] | identity (0, 0, 0, 0) | fn
+  scale(number) | no lift | no laws | no identity | fn
 
 Color (fromScalar rgba(2, 2, 2, 1), valid yes, encode yes, methods -)
   add(domain) | no lift | laws [commutative, associative] | identity rgba(0, 0, 0, 0) | method

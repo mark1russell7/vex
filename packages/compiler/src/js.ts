@@ -80,6 +80,8 @@ export function printJs(p: LoopProgram, facts: Facts): string {
             return `Math.${x.op}(${a}, ${b})`;
           case "isNumber":
             return `(typeof ${a} === "number")`;
+          case "isFinite":
+            return `Number.isFinite(${a})`;
           case "isBoolean":
             return `(typeof ${a} === "boolean")`;
           case "isString":

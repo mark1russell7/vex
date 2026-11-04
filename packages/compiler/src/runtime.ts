@@ -2,7 +2,7 @@
  * The runtime of generated code. Each function follows the rule of the interpreter of the core. Where the interpreter
  * gives an error value, the function gives `FALLBACK`, and it records the detail of the failure in two variables. On the
  * value path, the runtime makes no error values and no `Result` objects (docs/COMPILER.md §4.1). A list op on a list
- * value is the exception: it runs the code of the interpreter (COMPILE.LIST.VALUE).
+ * value or an array is the exception: it runs the code of the interpreter (COMPILE.LIST.VALUE, COMPILE.LIST.ARRAY).
  *
  * The failure path of generated code keeps a lazy error: the site, the position and the operands. When the program ends
  * with it, `take` gives the error of the interpreter. It uses the error texts of the core (`materialize`).
@@ -17,6 +17,8 @@ import {
   errorAt,
   errorText,
   findMethod,
+  fixRounds,
+  fixValueError,
   isDepthError,
   isListOp,
   isStackOverflow,
@@ -31,6 +33,7 @@ import {
   safeIs,
   vexError,
   vexList,
+  worstRow,
   type Addr,
   type AnyDomain,
   type Axis,
@@ -157,6 +160,10 @@ export interface Runtime {
   axis(axis: BaseAxis): (s: Space, origin: string, focus: string) => Targets | Fallback;
   table(tables: Readonly<Record<string, Space>> | undefined, name: string): unknown;
   keys(s: Space): readonly string[];
+  /** This function gives the index of a key in the keys of a space, or `undefined` for a key outside the space. */
+  rowIndex(s: Space, key: string): number | undefined;
+  /** This function gives the largest number of rounds of a column of a space (FIX.LIMIT). */
+  rounds(s: Space): number;
   /** This function gives the dispatch of an op name with `arity` arguments. Generated code gets it once, when it loads. */
   site(name: string, arity: number): Site;
   /** This function gives a new memo. Generated code gets one for each node of the memo, when it loads. */
@@ -399,6 +406,16 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       }
       case "args":
         return at(errorText.args(operands.length, site.what), { causes: (operands as readonly LazyError[]).map(materialize) });
+      case "fixLimit":
+        return at(errorText.fixLimit(site.name, first as number));
+      case "row":
+        return at(fixValueError(site.name, site.join, first) as ErrorText);
+      case "lastKey":
+        return at(errorText.lastKey(site.name, e.focus));
+      case "rows": {
+        const causes = (operands as readonly LazyError[]).map(materialize);
+        return worstRow(causes) ?? at(errorText.args(causes.length, "rows"), { causes });
+      }
     }
   };
 
@@ -450,6 +467,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return t ?? F;
     },
     keys: (s) => s.keys,
+    rowIndex: (s, key) => indexOf(s).get(key),
+    rounds: (s) => fixRounds(s.keys.length),
     // The dispatch of `app` in the interpreter: the first domain that accepts the receiver and has the op, and else a
     // free function. Generated code has the fast path of each site, and it uses this dispatch for each other case.
     site(name, arity) {
@@ -465,9 +484,14 @@ export function createRuntime(options: RuntimeOptions): Runtime {
           if (r !== undefined) return r;
         }
         // LIST.ARRAY: after the domains and the function of the host, a list op on an array is a list op on a list.
-        // FALLBACK is an error, and a list op skips an error item, so an exception must stop the program (V-064).
-        // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
-        if (listOp && fn === undefined && Array.isArray(values[0])) throw new Error("tier 1 gives a list op on an array");
+        if (listOp && fn === undefined && Array.isArray(values[0])) {
+          const r = lists.array(name, values[0], values.slice(1), NOWHERE, HERE);
+          // The value of `errors` has the position of the call, and a site has no position (COMPILE.LIST.ARRAY). FALLBACK
+          // is an error, and a list op skips an error item, so an exception must stop the program (V-064).
+          // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
+          if (name === "errors" && r.ok && (r.value as readonly unknown[]).length > 0) throw new Error("tier 1 gives the errors of an array");
+          return listResult(r);
+        }
         if (name === "fill" && fn === undefined) return listResult(lists.fill(values, NOWHERE, HERE));
         try {
           if (fn === undefined) return record("no-op", values.length > 0, values[0]);

@@ -520,3 +520,33 @@ describe("COMPILE.MODULE.SHEET.DIRECT: a fill with no search", () => {
     expectSame(make(two), orders, ENGINE_RECORDS, ENGINE_PARENTS);
   });
 });
+
+describe("COMPILE.MODULE.SHEET: the code of a cell and of the run", () => {
+  it("COMPILE.MODULE.SHEET: a formula that cannot throw has no try, in a direct fill and in the search", () => {
+    const kinds = { A: "number", B: "number", C: "number" } as const;
+    const records = [{ v: 2 }, { v: 0 }, { v: 4 }];
+    const plain = new Map<string, Expr>([["A", lit(3)], ["B", app("divide", lit(1), ref("v"))]]);
+    const d = sourceOf(plain, { ...NUM, kinds });
+    expect(isDirect(d)).toBe(true);
+    expect(d).toContain("D[0][o] = 3;");
+    expect(d).not.toMatch(/try \{\n\s*D\[0\]\[o\] = 3;/u);
+    expectSame(make(d), plain, records, undefined);
+    // The column C reads the next key of itself, so the run searches.
+    const search = new Map<string, Expr>([...plain, ["C", app("ifError", cell("C", [offset(1)]), ref("v"))]]);
+    const s = sourceOf(search, { ...NUM, kinds });
+    expect(isDirect(s)).toBe(false);
+    expect(s).toMatch(/const cf\d+ = \(o\) => 3;/u);
+    expectSame(make(s), search, records, undefined);
+  });
+
+  it("COMPILE.MODULE.SHEET: a tree computes the children of each key for the order of its fill, and an array does not", () => {
+    const columns = new Map<string, Expr>([["A", app("add", ref("v"), app("ifError", cell("A", [PARENT]), lit(0)))]]);
+    const tree = sourceOf(columns, { ...TREE, kinds: { A: "number" } });
+    expect(tree).toContain("CH(P, n)");
+    expectSame(make(tree), columns, ENGINE_RECORDS, ENGINE_PARENTS);
+    const before = new Map<string, Expr>([["A", app("add", ref("v"), app("ifError", cell("A", [offset(-1)]), lit(0)))]]);
+    const array = sourceOf(before, { ...NUM, kinds: { A: "number" } });
+    expect(array).not.toContain("CH(");
+    expectSame(make(array), before, ENGINE_RECORDS, undefined);
+  });
+});

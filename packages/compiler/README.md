@@ -46,7 +46,7 @@ Property P17 compares `tiered` with `evaluate` on random programs, random spaces
 These cases operate in tier 1:
 
 - An `each` with an error item, because generated code makes no error values.
-- A list op on an array, and the axis `list` over an error item. A list op on a list value and the axis `list` are in tier 2.
+- `errors` of an array with a hole, and the axis `list` over an error item. A list op on a list value or an array and the axis `list` are in tier 2.
 - An error of an extension, and each exception that is not an error of an op.
 
 A program keeps the value of each node that depends only on the space, for each space (COMPILE.MEMO). Thus a run at each key of a space computes such a node once, for example a total of a column. A node that reads the origin only through a few values, its keys, has an entry for each value of its keys (COMPILE.GROUP). Thus "the largest width in the column of the origin" evaluates once for each column. A space does not change, so the values stay correct.
@@ -81,12 +81,15 @@ The source has no name and no literal of the program. It reads each one from a l
 | `space` | `"array"`, `"tree"` or `"graph"`. The default is `"array"`. |
 | `fuse` | `false` prints the code without the fusion of the list ops. The default is `true`. |
 | `lists` | `"envelope"` gives each list of the input and of the result as a `vex.list`. `"plain"` gives plain arrays of the values, with `VEX_ERROR` for an error item. The default is `"envelope"`. |
+| `keys` | `true` makes the run take the keys of its records as its last argument. The default is `false`. |
 
 `emitSheetModule` also takes `cells`, `kinds` and `budget`.
 
 With `fuse`, a value that does not depend on the key is one `vex.list` at each key, and this object is frozen. Each other `vex.list` of a result is not frozen.
 
 With `lists: "plain"`, the key of an item of the input is the text of its position, and the result has no keys. A list in a record or in an argument of an op stays a `vex.list`. The module prints no types, so the host declares `T[]` for a list of `T`.
+
+With `keys: true`, the last argument of the run is an array with one different text for each record. `get`, `without`, each `vex.list` and the move `key` use these texts. A program that reads no key of a record keeps its text, so the option costs no bytes there. In an array space, a program that reads a key has no offset and no axis `window`.
 
 ## Speed
 

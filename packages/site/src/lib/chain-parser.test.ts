@@ -41,6 +41,11 @@ describe("the chain reader of the Lab", () => {
     expect(valueAt(`root.from("position").others(e => e._.distance("position")).min()`, "B")).toBe(5);
   });
 
+  it("BUILD.FIX: reads the method fix, and its step gets a chain of the last round", () => {
+    expect(valueAt(`root.start(0).fix("x", "max", 1, (v) => root.start(3)._.min(v._.add(1)))`, "A")).toBe(3);
+    expect(valueAt(`root.start(0).fix("x", "or", false, (v) => v)`, "A")).toBe(false);
+  });
+
   it("LOOP.NAMES: reads the loops iterate and fold, and a field of the names of a loop is a chain", () => {
     expect(valueAt(`root.start(0).iterate(4, { x: 1 }, (v) => ({ x: v.x._.multiply(2) }), (v) => v.x)`, "A")).toBe(16);
     expect(valueAt(`root.start(0).each((c) => root.start(0)).fold({ s: 0 }, (v) => ({ s: v.s._.add(root.from("weight")) }), (v) => v.s)`, "B")).toBe(10);

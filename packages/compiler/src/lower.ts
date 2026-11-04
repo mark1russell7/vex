@@ -5,8 +5,10 @@
  * Each value that the interpreter can give as an error has a check. The block of the check tells what a failure does
  * (`Fail`). A list op skips an error item, and an error in the first argument of `ifError` gives the second argument.
  * These contexts drop the error, so the check has no error site. In each other context, the check has the site of its
- * error, and the program ends with that error or a binding keeps it (`keeps`). A check without a site stops the program
- * with `FALLBACK`. `#DEPTH!` of an extension stops the program too (COMPILE.EXT).
+ * error, and the program ends with that error or a binding keeps it (`keeps`). Where the error has a use, a check without
+ * a site stops the program with `FALLBACK`. `#DEPTH!` of an extension stops the program too (COMPILE.EXT).
+ *
+ * A check for a result that only tier 1 can give is no error, so no context drops it (`#decide`, V-071).
  *
  * After a failure, the interpreter still evaluates the later arguments of a node, and two errors give `#ARGS`. The value
  * path of generated code has no flags for this. A failure jumps to a copy of the later arguments (`#chain`), which only
@@ -14,9 +16,11 @@
  */
 import {
   addrExprs,
+  axisExprs,
   children,
   errorText,
   isFieldName,
+  joinKind,
   limitAxis,
   listOf,
   MAX_ITERATIONS,
@@ -28,6 +32,7 @@ import {
   type ErrorText,
   type Expr,
   type ExprOf,
+  type FixJoin,
   type Names,
   type PrimitiveKind,
 } from "@mark1russell7/vex";
@@ -61,9 +66,6 @@ import {
 /** The error of an expression that the compiler cannot lower. Then the program operates in tier 1. */
 export class Unsupported extends Error {}
 
-/** The error of a fixed point, which tier 2 does not have yet (COMPILE.FIX). */
-export class NoFixedPoint extends Unsupported {}
-
 /**
  * A bound name: its value, and the flag that tells if its binding gave a value. Without a flag, it always does. After a
  * failure, `error` is the lazy error of the binding, if the context of the binding keeps it.
@@ -91,6 +93,16 @@ interface Scope {
   readonly fns: ReadonlyMap<string, BoundFn>;
   /** The record at the focus. In a loop, it reads the record by its index (SPACE.RECORDS). */
   readonly rec: LExpr;
+  /** The columns of the steps around the node (COMPILE.FIX): the last round of each name, and its join. */
+  readonly columns: ReadonlyMap<string, FixColumn>;
+  /** The index of the focus in the keys of the space, if the lowering knows it. A read of a column uses it. */
+  readonly slot: LExpr | undefined;
+}
+
+/** A column in the step of its `fix`: the local of an array with the value of each row, and the join of the column. */
+interface FixColumn {
+  readonly local: LExpr;
+  readonly join: FixJoin;
 }
 
 /** A list of statements, and what a failed check in it does. */
@@ -133,6 +145,12 @@ function eachUnderLets(e: Expr | undefined): ExprOf<"each"> | undefined {
   return x?.tag === "each" ? x : undefined;
 }
 
+/** The targets of a round of a column: each key of the space, with no address. */
+const ROWS: Pick<ExprOf<"each">, "axis"> = { axis: { t: "all" } };
+
+/** The primitive operation of each join (FIX.JOIN). The checks of a row give each join a value of its kind. */
+const JOINS = { or: "||", and: "&&", max: "max", min: "min" } as const;
+
 /** The kinds of the values of the primitive operations that always give a boolean. */
 const BOOLEAN_PRIMS: ReadonlySet<string> = new Set(["!", "===", "!==", "isNumber", "isBoolean", "isString", "isValue", "isObject"]);
 
@@ -153,7 +171,7 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
   const l = new Lowerer(memoNodes(expr, isFusedOp), facts, schema);
   const b = block(RETURN);
-  const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
+  const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)), columns: new Map(), slot: undefined };
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space", l.site(b, top, { t: "key" }));
   const value = l.expr(expr, top, [], b);
   b.stmts.push({ t: "return", value });
@@ -209,9 +227,18 @@ class Lowerer {
    */
   #declared(b: Block, x: LExpr, kind: PrimitiveKind | undefined, reason: string): LExpr {
     if (kind === undefined) return x;
-    b.stmts.push({ t: "check", ok: prim(KIND_CHECKS[kind], x), reason, fail: STOP });
+    this.#decide(b, prim(KIND_CHECKS[kind], x), reason);
     return this.#typed(x, kind);
   }
+
+  /**
+   * This method adds a check whose failure is no error of the program. Tier 1 decides the result, so the check stops the
+   * program in each block. `check` is for an error, and a context that catches an error drops its failure (V-071).
+   */
+  #decide(b: Block, ok: LExpr, reason: string): void {
+    b.stmts.push({ t: "check", ok, reason, fail: STOP });
+  }
+
   readonly constants: unknown[] = [];
   readonly #pool = new Map<unknown, number>();
 
@@ -333,9 +360,12 @@ class Lowerer {
       case "iterate":
         return this.#iterate(e, s, path, b);
       case "fix":
-      case "last":
-        // COMPILE.FIX: tier 2 has no fixed point, so the program stays in tier 1 (COMPILE.FALLBACK).
-        throw new NoFixedPoint('a fixed point ("fix")');
+        return this.#fix(e, s, path, b);
+      case "last": {
+        const column = s.columns.get(e.name);
+        // The lowering comes before the checks. A read outside a step fails a check, and that check gives the reason.
+        return column === undefined ? this.fail(b) : this.#rowOf(e.name, column, s, path, b);
+      }
       case "each": {
         // A list keeps its error items, and generated code makes no error items. Thus an error item stops the program, and
         // tier 1 gives the list.
@@ -774,10 +804,20 @@ class Lowerer {
           firstThen(body, v, (later) => this.checked(later, call("step", name as LExpr, local(acc), v), "a step of reduce", this.site(later, s, { t: "step", path }, name as LExpr)));
           count(body);
         });
-        // An empty list can give the identity of the op, so tier 1 gives its result.
-        this.check(plain, prim("!==", local(n), num(0)), "a list that is not empty");
+        // An empty list can give the identity of the op, so tier 1 gives its result. Without one identity, it is an error.
+        if (this.#emptyFails(e)) this.check(plain, prim("!==", local(n), num(0)), "a list that is not empty");
+        else this.#decide(b, prim("!==", local(n), num(0)), "a list that is not empty");
         return local(acc);
     }
+  }
+
+  /**
+   * This method tells if a `reduce` of an empty list always gives an error (LIST.EMPTY). The name of its op is a literal,
+   * and the domains do not have exactly one identity of the op. An option can name a domain, so a third argument tells nothing.
+   */
+  #emptyFails(e: ExprOf<"app">): boolean {
+    const name = e.args[1] as Expr;
+    return e.args.length === 2 && name.tag === "lit" && this.#facts.identities(name.value as string) !== 1;
   }
 
   /**
@@ -828,7 +868,7 @@ class Lowerer {
     let item: { readonly values: LExpr; readonly nth: LExpr } | undefined;
     if (list !== undefined) {
       // The list evaluates at the key of the address (AXIS.LIST).
-      const moved: Scope = from === s.focus ? s : { ...s, focus: from, rec: prim("get", s.space, from) };
+      const moved: Scope = from === s.focus ? s : { ...s, focus: from, rec: prim("get", s.space, from), slot: undefined };
       const value = this.value(b, this.expr(list, moved, [...path, firstTest], b));
       const targets = this.checked(b, call("items", value, bool(base.t === "reverse")), "a list of the axis list", this.site(b, moved, { t: "listAxis", path }, value));
       over = prim("keysOf", targets);
@@ -856,7 +896,7 @@ class Lowerer {
     if (skip !== undefined) body.stmts.push({ t: "if", cond: prim("===", key, skip), yes: [{ t: "next" }], no: [] });
     const slot = idx === undefined ? local(index) : prim("member", idx, local(index));
     const rec = records === undefined ? prim("get", space, key) : prim("recordAt", records, slot, space, key);
-    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec };
+    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec, columns: s.columns, slot: list === undefined ? slot : undefined };
     whereTests(axis).forEach((test, i) => {
       const testPath = [...path, tests + i];
       const ok = this.#boolean(this.expr(test, at, testPath, body), body, at, { t: "test", path: testPath });
@@ -925,6 +965,78 @@ class Lowerer {
   }
 
   /**
+   * This method lowers a fixed point (FIX.ROUNDS). The column is an array with the value of each key, in the order of
+   * the keys. The rows of `init` give its first values, and each round makes the array of the next values. A round
+   * without a change ends the loop with the old array, as the interpreter does. After the last round, an error stops
+   * the column (FIX.LIMIT). The value of the node is the row of the focus.
+   */
+  #fix(e: ExprOf<"fix">, s: Scope, path: readonly number[], b: Block): LExpr {
+    const n = this.locals++;
+    const column: FixColumn = { local: local(n), join: e.join };
+    b.stmts.push({ t: "let", n, value: array() });
+    this.#rows(e, e.init, s, path, 0, b, (row, _at, v) => {
+      row.stmts.push({ t: "push", n, value: v });
+    });
+    const limit = this.value(b, call("rounds", s.space));
+    const label = this.labels++;
+    const k = this.typedLocal("number");
+    b.stmts.push({ t: "let", n: k, value: num(0) });
+    const body = block(b.fail);
+    this.check(body, prim("!==", local(k), limit), "the limit of the rounds", this.site(body, s, { t: "fixLimit", name: e.name, path }, limit));
+    const next = this.locals++;
+    const changed = this.locals++;
+    body.stmts.push({ t: "let", n: next, value: array() }, { t: "let", n: changed, value: bool(false) });
+    // The step has the column in its scope, so an inner `fix` with the same name hides the column.
+    this.#rows(e, e.step, { ...s, columns: new Map([...s.columns, [e.name, column]]) }, path, 1, body, (row, at, v) => {
+      const old = this.value(row, prim("member", column.local, at.slot as LExpr));
+      const value = this.value(row, prim(JOINS[e.join], old, v));
+      row.stmts.push({ t: "if", cond: prim("!==", value, old), yes: [{ t: "set", n: changed, value: bool(true) }], no: [] }, { t: "push", n: next, value });
+    });
+    body.stmts.push(
+      { t: "check", ok: local(changed), reason: "a round that changes a row", fail: { t: "break", label } },
+      { t: "set", n, value: local(next) },
+      { t: "set", n: k, value: prim("+", local(k), num(1)) },
+    );
+    b.stmts.push({ t: "repeat", label, body: body.stmts });
+    return this.#rowOf(e.name, column, s, path, b);
+  }
+
+  /**
+   * This method lowers the evaluation of `x` at each row of a column. An error in a row does not stop the next rows, so
+   * each extension of the round evaluates (FIX.ERROR). After the loop, the errors of the rows give the error of the
+   * node. `each` adds the statements of a row with a good value.
+   */
+  #rows(e: ExprOf<"fix">, x: Expr, s: Scope, path: readonly number[], child: number, b: Block, each: (row: Block, at: Scope, value: LExpr) => void): void {
+    const errors = this.locals++;
+    b.stmts.push({ t: "let", n: errors, value: array() });
+    const kind: ErrorSite = { t: "row", name: e.name, join: e.join, path };
+    // Stryker disable next-line ArrowFunction: each check of a row is in its own block, so the loop reads no failure
+    this.#targetLoop(ROWS, s, path, 0, b, () => b.fail, (body, _key, at) => {
+      const row = this.#attempt(
+        body,
+        (inner) => {
+          const v = this.value(inner, this.expr(x, at, [...path, child], inner));
+          if (joinKind(e.join) === "boolean") this.#boolean(v, inner, at, kind);
+          else this.check(inner, prim("isFinite", v), "a finite number", this.site(inner, at, kind, v));
+          each(inner, at, v);
+          return v;
+        },
+        true,
+      );
+      body.stmts.push({ t: "if", cond: prim("!", row.ok as LExpr), yes: [{ t: "push", n: errors, value: row.value }], no: [] });
+    });
+    const site = this.constants.push({ t: "rows", path } satisfies ErrorSite) - 1;
+    this.check(b, prim("===", prim("member", local(errors), this.constant("length")), num(0)), "the rows have values", call("args", { t: "site", i: site }, s.origin, s.focus, local(errors)));
+  }
+
+  /** This method reads the row of the focus. A focus that is not a key of the space has no row (FIX.LAST). */
+  #rowOf(name: string, column: FixColumn, s: Scope, path: readonly number[], b: Block): LExpr {
+    const x = this.value(b, prim("member", column.local, s.slot ?? call("rowIndex", s.space, s.focus)));
+    this.check(b, prim("isValue", x), "a row of the column", this.site(b, s, { t: "lastKey", name, path }));
+    return this.#typed(x, joinKind(column.join));
+  }
+
+  /**
    * This method gives the number of steps of an iteration. A data limit counts the targets of its axis. Its failure
    * stops the program, and tier 1 gives the error (ITERATE.LIMIT.ERROR).
    */
@@ -934,7 +1046,8 @@ class Lowerer {
     const n = this.typedLocal("number");
     b.stmts.push({ t: "let", n, value: num(0) });
     // The error of a limit that is not valid keeps its cause, so each failure here is the plain failure of the block.
-    const plain: Block = { stmts: b.stmts, fail: plainOf(b.fail) };
+    // COMPILE.EXT: the interpreter evaluates each test, and an extension in a test can give #DEPTH!. Thus a failed test stops the program.
+    const plain: Block = { stmts: b.stmts, fail: axisExprs(axis).some((x) => this.#mayExt(x, s.fns)) ? STOP : plainOf(b.fail) };
     this.#targetLoop({ axis }, s, path, firstTest, plain, () => plain.fail, (body) => {
       body.stmts.push({ t: "set", n, value: prim("+", local(n), num(1)) });
     });

@@ -10,8 +10,7 @@ const op_1_0 = (i, d) => ({
 						lo: i.lo - d,
 						hi: i.hi + d
 					});
-const v_1 = (i) => i.lo <= i.hi;
-const k_domain_Interval = (x) => (v_1(x) ? x : F());
+const k_domain_Interval = (x) => ((x.lo <= x.hi) ? x : F());
 const op_1_1 = (i) => i.hi - i.lo;
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 const op_1_2 = (a, b) => ({

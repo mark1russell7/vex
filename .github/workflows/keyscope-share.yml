@@ -1,5 +1,5 @@
 # Throwaway measure of a draft pull request: the share of generated programs that reach the bad state of V-077 (on the printer of the branch).
-# Head 4f9bace, tree 808ecd4.
+# Head 4f9bace, tree 808ecd4. The counters cover the two places that refuse a pack: `#hoist` and `#intoRun`.
 name: keyscope share
 on:
   push:

@@ -2456,7 +2456,7 @@ class Printer {
     const hit = key === undefined ? undefined : this.#constants.get(key);
     if (hit !== undefined) return hit;
     // A pack is a local of the loop of a second print, so a constant of the run cannot read it (V-077).
-    if (this.#readsPack(c)) throw new NoPack();
+    if (this.#readsPack([c.v.code, ...c.s])) throw new NoPack();
     const name = this.fresh("c");
     const deferred = lazy || this.#defers(c);
     if (deferred) {
@@ -2659,10 +2659,19 @@ class Printer {
     return work;
   }
 
-  /** This method tells if a code reads a pack of the second print that the printer prints. */
-  #readsPack(c: Code): boolean {
-    const text = [c.v.code, ...c.s].join("\n");
+  /** This method tells if some lines read a pack of the second print that the printer prints. */
+  #readsPack(lines: readonly string[]): boolean {
+    const text = lines.join("\n");
     return [...(this.#pack?.cols.values() ?? [])].some((local) => text.includes(`${local}[`));
+  }
+
+  /**
+   * This method adds some lines to the run. A pack is a local of the loop of a second print, so a line of the run
+   * cannot read it (V-077, V-084). Then the second print stops, and the loop keeps its first print.
+   */
+  #intoRun(lines: readonly string[]): void {
+    if (this.#readsPack(lines)) throw new NoPack();
+    this.run.push(...lines);
   }
 
   /** This method tells if a second print (`#packed`, `#packedSteps`) reads the packs of the columns at the focus of `ctx`. */
@@ -4643,7 +4652,7 @@ class Printer {
     const arrow = (params: string, lines: readonly string[], code: string): readonly string[] => (lines.length === 0 ? [`(${params}) => ${code}`] : [`(${params}) => {`, ...ind(lines), `  return ${code};`, "}"]);
     const fns = [arrow("", names.s, pack), arrow(t.j, value.s, value.v.code), [`(t, q) => ${keyTest}`], arrow(`${s}, ${t.j}`, [...unpack, ...step.s], pack), arrow(s, [...unpack, ...result.s], result.v.code)];
     const name = this.fresh("P");
-    this.run.push(`const ${name} = ${this.use("PF")}(n,`, ...ind(fns.flatMap((f, i) => [...f.slice(0, -1), `${f.at(-1) as string}${i < fns.length - 1 ? "," : ""}`])), ");");
+    this.#intoRun([`const ${name} = ${this.use("PF")}(n,`, ...ind(fns.flatMap((f, i) => [...f.slice(0, -1), `${f.at(-1) as string}${i < fns.length - 1 ? "," : ""}`])), ");"]);
     const q = this.fresh("q");
     return { s: this.#store(q, key), v: { code: `${name}(${q})`, kind: result.v.kind, safe: false, deps: key.v.deps } };
   }
@@ -4681,19 +4690,19 @@ class Printer {
     let fn = this.#structures.get(structure);
     if (fn === undefined) {
       fn = this.fresh("m");
-      this.#structures.set(structure, fn);
       this.memos = true;
       const cached = varying.length === 1 ? this.#cached(e, varying[0] as Expr, bodyCtx, fn) : undefined;
       if (cached !== undefined) {
         this.#kinds.set(fn, cached.kind);
-        this.run.push(...cached.lines);
+        this.#intoRun(cached.lines);
       } else {
         // The loop of the node gives statements.
         const body = this.expr(e, bodyCtx);
         this.#kinds.set(fn, body.v.kind);
         this.#lists.set(fn, heldList(body.v.list));
-        this.run.push(`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});");
+        this.#intoRun([`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});"]);
       }
+      this.#structures.set(structure, fn);
     }
     this.#inside = outer;
     // Each key of the function gets its value, or the error sentinel.

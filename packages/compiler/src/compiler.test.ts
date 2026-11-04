@@ -734,9 +734,9 @@ describe("COMPILE.MEMO: a node that depends only on the space evaluates once for
   });
 
   it("COMPILE.GROUP: a key with an error, a key that is an object, and the keys 0 and -0", () => {
-    const signs = { domains: [NumDomain], fns: { sign: (k: unknown, _x: unknown) => (Object.is(k, -0) ? -1 : 1), tick: (x: unknown) => x } };
+    const signs = { domains: [NumDomain], fns: { zeroSign: (k: unknown, _x: unknown) => (Object.is(k, -0) ? -1 : 1), tick: (x: unknown) => x } };
     const zeros = space.record({ A: { z: 0, x: 1 }, B: { z: -0, x: 2 }, C: { x: 3 }, D: { z: { n: 1 }, x: 4 } });
-    const e = app("sum", each(axes.all, app("sign", ref("z", [{ t: "origin" }]), ref("x"))));
+    const e = app("sum", each(axes.all, app("zeroSign", ref("z", [{ t: "origin" }]), ref("x"))));
     const p = tiered(e, signs);
     for (const origin of [...zeros.keys, ...zeros.keys]) expect(p.run({ space: zeros, origin })).toEqual(evaluate(e, { ...signs, space: zeros, origin }));
     expect(p.stats.fallbacks).toBe(0);

@@ -39,7 +39,7 @@ function broken<T>(spec: OpSpec<unknown>, grid: readonly T[], order: (a: T, b: T
 describe("the directions of the ops (FIX.OPS)", () => {
   it("FIX.OPS: each number op with a direction keeps its claim on the grid", () => {
     const ops = claims(NumDomain);
-    expect(ops.map(([name]) => name).toSorted()).toEqual(["add", "ceil", "clamp", "floor", "max", "min", "negate", "round", "subtract"]);
+    expect(ops.map(([name]) => name).toSorted()).toEqual(["add", "ceil", "clamp", "floor", "max", "min", "negate", "round", "sign", "subtract"]);
     for (const [, spec] of ops) expect(broken(spec, NUMBERS, (a, b) => a - b)).toBe(0);
   });
 

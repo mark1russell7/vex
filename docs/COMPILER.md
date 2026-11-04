@@ -1330,7 +1330,7 @@ These parts are not in a module yet:
 - The value of an op of a domain is not a list in a module. The kind of a result cannot tell a list, so the module does not know the facts of its items. Such an op gives the reason "the op "spread" does not declare the kind of its result", with the name of the op.
 - Vex has no op that reads a field of a record. Only an op of a domain reads the lists of a record, and a record is not the receiver of an op in a module.
 - A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
-- The strategies of ireko are not Vex programs. Thus one sheet for the whole measure pass also needs the strategies as Vex programs.
+- Only the strategies `grid`, `radial` and `layers` of ireko are Vex programs. Thus one sheet for the whole measure pass also needs the strategy `tree`.
 - A variable of the schema cannot be a list. Only a field of the schema can be a list (COMPILE.MODULE.LIST.INPUT).
 - A field of a list kind takes only a `vex.list`. A plain array in such a field is against the schema, although the interpreter takes a plain array as a list (LIST.ARRAY).
 
@@ -1349,6 +1349,33 @@ The printer takes the kind of the items of a name that starts with the empty lit
 The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`. Before COMPILE.MODULE.APPEND.OWN, each step copied the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
 
 ireko does not use the module yet. The strategy of a node reads the shapes of its children before it gives their offsets, and a shape needs the offsets. Thus one sheet for the tree needs the strategies as Vex programs. A module for one node is the other way: it takes the shapes of the children as input ("Lists in the input" below).
+
+#### The layers pilot (the strategies)
+
+The strategy `layers` of ireko puts the children of a box in layers, as a flowchart. `LAYERS_PROGRAM` of `@vex/pilots` is one program that evaluates at each child. A depth-first search turns around the edges that close a cycle. The longest path gives the layer of each child. Eight passes order each layer by the mean place of the neighbors. The sizes of the layers then give the offsets.
+
+`layersArrange` copies `strategies/layers.ts` of ireko. Properties compare it with the module, with tier 2 and with the interpreter, on random graphs with cycles, loops and ends outside the children. Fixed cases hold the offsets that the function of ireko gave. On 2026-11-04 a one-time run compared the module and the copy with the function of ireko on 6000 seeded inputs. The bits were the same.
+
+The program differs from ireko in three ways, and these ways keep the result:
+
+- The search is one `iterate` loop. Two list names hold the columns of the stack, and each step finishes one child or follows one edge.
+- A loop of relaxation replaces the queue of Kahn. The longest path of a graph with no cycle has one value.
+- The name `order` replaces the array `place` of ireko. The place of a child is its position in the order of its layer.
+
+The result differs from ireko in two rare cases:
+
+- A sum that is not finite gives an error at each child. ireko keeps the offsets that stay finite, for example with the alignment `start`.
+- Each loop has at most 100000 steps. A graph that needs more steps gives an error, for example a chain of 12501 children.
+
+The pilot found these gaps:
+
+- A list op cannot take `nth` of a list of lists in a module. The reason is `the list op "count"`. The program puts `each` over the axis `list` around the value.
+- A variable of the schema cannot be a list. Thus the first record holds the edges in the fields `froms` and `tos`.
+- No op changes one item of a list. Thus each change of a state copies the list, and the search costs O(k(k + E)) where ireko costs O(k + E).
+- The node `fix` has no module until the change of tier 2 and modules merges. Thus the longest path uses `iterate`.
+- The fields of the edges are arrays, and a list op on an array goes to tier 1 (V-064). Thus a run of tier 2 with an edge gives the value of tier 1.
+
+The source of the module has approximately 26 kB, with `lists: "plain"`. ireko does not use the module yet. It needs a decision about its size budget, a speed check in CI and a wrapper that puts the edges in the first record.
 
 #### Lists of calls (COMPILE.MODULE.LIST.CALL)
 

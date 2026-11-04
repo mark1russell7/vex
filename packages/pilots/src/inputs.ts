@@ -13,6 +13,7 @@ import type { Field, Invoice } from "./invoice.ts";
 import type { Band } from "./ireko-band.ts";
 import type { PlacedBox } from "./ireko-audit.ts";
 import type { GridInput } from "./ireko-grid.ts";
+import type { LayersEdge, LayersInput } from "./ireko-layers.ts";
 import type { FitChild, MeasureVars } from "./ireko-measure.ts";
 import type { PlaceRecord, PlaceVars } from "./ireko-place.ts";
 import { PAIRWISE_LIMIT, type RadialChild, type RadialInput } from "./ireko-radial.ts";
@@ -451,3 +452,35 @@ export const LOAN_FOUR: { readonly months: readonly LoanMonth[]; readonly terms:
 
 /** A long loan of 600 months, for the depth of the stack. */
 export const LOAN_LONG: { readonly months: readonly LoanMonth[]; readonly terms: LoanTerms } = { months: Array.from({ length: 600 }, () => ({ payment: 50, extra: 0 })), terms: { principal: 20000, rate: 0.002 } };
+
+// The layers pilot (ireko-layers.test.ts).
+
+const layersCoord = fc.double({ min: -100, max: 100, noNaN: true, noDefaultInfinity: true });
+const layersSize = fc.double({ min: 0, max: 300, noNaN: true, noDefaultInfinity: true });
+
+/**
+ * Random edges between `k` children. A dense list has cycles. ireko ignores some of the edges. These are an edge from
+ * a child to itself, and an edge with an end that is not a child.
+ */
+export const layersEdges = (k: number): fc.Arbitrary<LayersEdge[]> => {
+  const end = fc.integer({ min: 0, max: Math.max(0, k - 1) });
+  const wild = fc.oneof({ arbitrary: end, weight: 19 }, { arbitrary: fc.constantFrom(-1, k), weight: 1 });
+  return fc.array(fc.record({ from: wild, to: wild }), { maxLength: 3 * k });
+};
+
+/** Random inputs of the strategy `layers`, with up to `most` children. */
+export const layersInput = (most: number): fc.Arbitrary<LayersInput> =>
+  fc.integer({ min: 1, max: most }).chain((k) =>
+    fc.record({
+      mode: fc.constantFrom("nested", "linked"),
+      self: fc.record({ width: layersSize, height: layersSize }),
+      extents: fc.array(fc.record({ x: layersCoord, y: layersCoord, width: layersSize, height: layersSize }), { minLength: k, maxLength: k }),
+      gap: fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true }),
+      options: fc.record({
+        side: fc.constantFrom("bottom", "top", "left", "right"),
+        distance: fc.oneof(fc.constant(0), fc.double({ min: 0, max: 60, noNaN: true, noDefaultInfinity: true })),
+        align: fc.constantFrom("center", "start", "end"),
+      }),
+      edges: layersEdges(k),
+    }),
+  );

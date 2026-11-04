@@ -1,4 +1,4 @@
-# Throwaway measure of a draft pull request: the programs of V-084, V-085 and V-086 on the package of npm at 0.17.2, in each mode.
+# Throwaway measure of a draft pull request: the programs of V-084, V-085 and V-086 on the package of npm at 0.17.2, in three modes.
 name: keyscope tarball
 on:
   push:

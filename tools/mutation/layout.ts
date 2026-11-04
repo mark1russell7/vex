@@ -32,6 +32,8 @@ export const COPIES: readonly Copy[] = [
   { from: "packages/testkit/src", to: "testkit/src", tests: false },
   // The tests of the compiler read the gate of the names by the path "../test/names.ts". Stryker does not mutate this copy.
   { from: "packages/compiler/test", to: "work/test", tests: false },
+  // The files of that folder read the compiler by the path "../src". Stryker does not mutate this copy.
+  { from: "packages/compiler/src", to: "work/src", tests: false },
 ];
 
 /** A relative import or export of a module: `from "./x"`, `import "./x"` or `import("./x")`. */

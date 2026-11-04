@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, monotoneError, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -799,22 +799,43 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   // The sort in place (COMPILE.MODULE.FUSE): a clean list that is fresh is its own sort buffer, so the sort makes no
   // copy. No other part holds the array, so a failure leaves no changed list that a part reads. The sort is stable.
+  // A list of 64 items or fewer gets an insertion sort (COMPILE.MODULE.FUSE.SORT), which calls no comparator function.
+  // Its test ">" moves an item only past a larger value, so equal values keep their order. A longer list gets the
+  // stable sort of the engine. The kinds of the sort values go through the same check before each of the two sorts.
   SBI: [
     "function SBI(l) {",
-    "  const t = l.length > 0 ? typeof l[0][1] : \"number\";",
-    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  return l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "  const n = l.length, t = n > 0 ? typeof l[0][1] : \"number\";",
+    "  for (let i = 0; i < n; i++) { const v = l[i][1]; if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F(); }",
+    "  if (n > 64) l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "  else for (let i = 1; i < n; i++) {",
+    "    const x = l[i], v = x[1];",
+    "    let j = i - 1;",
+    "    for (; j >= 0 && l[j][1] > v; j--) l[j + 1] = l[j];",
+    "    l[j + 1] = x;",
+    "  }",
+    "  return l;",
     "}",
   ].join("\n"),
-  // The option by: each slot of the array holds the pair of its item and its sort value, in order, during the sort.
+  // The option by: the array k holds the sort value of each item, so the sort makes no pair for an item. f runs once
+  // for each item, in order, and the array l does not change before the check of the sort values. A long list sorts an
+  // array of indices by k, and then reads the items from a copy of l.
   SKI: [
     "function SKI(l, f) {",
-    "  const n = l.length;",
-    "  for (let i = 0; i < n; i++) l[i] = [l[i], f(l[i][1])];",
-    "  const t = n > 0 ? typeof l[0][1] : \"number\";",
-    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
-    "  for (let i = 0; i < n; i++) l[i] = l[i][0];",
+    "  const n = l.length, k = new Array(n);",
+    "  for (let i = 0; i < n; i++) k[i] = f(l[i][1]);",
+    "  const t = n > 0 ? typeof k[0] : \"number\";",
+    "  for (const v of k) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  if (n > 64) {",
+    "    const o = new Array(n), c = l.slice();",
+    "    for (let i = 0; i < n; i++) o[i] = i;",
+    "    o.sort((a, b) => (k[a] < k[b] ? -1 : k[a] > k[b] ? 1 : 0));",
+    "    for (let i = 0; i < n; i++) l[i] = c[o[i]];",
+    "  } else for (let i = 1; i < n; i++) {",
+    "    const v = k[i], x = l[i];",
+    "    let j = i - 1;",
+    "    for (; j >= 0 && k[j] > v; j--) { k[j + 1] = k[j]; l[j + 1] = l[j]; }",
+    "    k[j + 1] = v; l[j + 1] = x;",
+    "  }",
     "  return l;",
     "}",
   ].join("\n"),
@@ -1249,6 +1270,10 @@ function listy(e: Expr, scope: ListScope): boolean {
     case "fold":
     case "iterate":
       return listy(e.result, scopeIn(e.init, scope));
+    // A module has no `fix`, and a column gives a boolean or a number (COMPILE.FIX).
+    case "fix":
+    case "last":
+      return false;
     case "ext":
       return scope.cell(e);
     case "ref":
@@ -1380,7 +1405,9 @@ function cleanForm(e: Expr, fact: (name: string) => boolean): boolean {
     case "call":
     case "each":
     case "ext":
+    case "fix":
     case "fn":
+    case "last":
     case "rec":
     case "ref":
     // Stryker restore StringLiteral,ConditionalExpression
@@ -1407,6 +1434,11 @@ function refsOf(e: Expr, name: string): number {
       return refsIn(Object.values(e.bind), name) + (name in e.bind ? 0 : refsOf(e.body, name));
     case "fn":
       return e.params.includes(name) ? 0 : again(refsOf(e.body, name));
+    // A module has no `fix`. The printer gives the reason (COMPILE.FIX).
+    case "fix":
+      return refsOf(e.init, name) + again(refsOf(e.step, name));
+    case "last":
+      return 0;
     case "each": {
       // Only the body sees the names of the items (AXIS.LIST.SCOPE). The tests of the axis evaluate for each item.
       const list = listOf(e.axis);
@@ -1487,6 +1519,8 @@ function readCounts(root: Expr): ReadonlyMap<Expr, number> {
       case "each":
       // Stryker disable next-line StringLiteral: an extension has no children.
       case "ext":
+      case "fix":
+      case "last":
       case "fn":
       // Stryker disable next-line StringLiteral: a literal has no children.
       case "lit":
@@ -1818,13 +1852,16 @@ function isTokens(t: string): boolean {
   return true;
 }
 
+/** The source of an arrow function with plain parameters: its parameters and its body. */
+const ARROW = /^\(?\s*((?:[A-Za-z_$][\w$]*\s*,\s*)*[A-Za-z_$][\w$]*)\s*\)?\s*=>\s*([\s\S]*)/;
+
 /**
  * This function gives the inline form of the source of an arrow function. The body of the function must be an
  * expression of operators, numbers, its parameters and the functions of `CALLS`. Such a body cannot throw for primitive
  * values (§7.1). The inline form is the text of the function itself, so it has its bits.
  */
 function inlineForm(src: string): InlineForm | undefined {
-  const m = /^\(?\s*((?:[A-Za-z_$][\w$]*\s*,\s*)*[A-Za-z_$][\w$]*)\s*\)?\s*=>\s*([\s\S]*)/.exec(src);
+  const m = ARROW.exec(src);
   if (m === null) return undefined;
   const params = (m[1] as string).split(",").map((x) => x.trim());
   const parts: (string | number)[] = [];
@@ -1852,6 +1889,54 @@ function inlineForm(src: string): InlineForm | undefined {
 
 /** This function gives the text of an inline form without spaces, with `#i` for the parameter `at(i)`. */
 const patternOf = (form: InlineForm, at: (p: number) => number): string => form.parts.map((p) => (typeof p === "number" ? `#${at(p)}` : p.replaceAll(/\s/g, ""))).join("");
+
+/** The results of an op that are not values (CALL.RESULT). */
+const NOT_VALUES: readonly unknown[] = [undefined, null, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+/** This function gives a text without the content of its parentheses, brackets and braces. */
+function outlineOf(t: string): string {
+  let depth = 0;
+  let out = "";
+  for (const c of t) {
+    if (")]}".includes(c)) depth--;
+    if (depth === 0) out += c;
+    if ("([{".includes(c)) depth++;
+  }
+  return out;
+}
+
+/** This function tells if each operator of a part of an expression is a comparison, so the part gives a boolean. */
+function isComparison(part: string): boolean {
+  const operators = part.match(/>>>?=?|<<=?|[=!]==?|[<>]=?|[&|^?,=]+/g);
+  return operators !== null && operators.every((x) => /^([=!]==?|[<>]=?)$/.test(x));
+}
+
+/** This function tells if an expression gives a boolean or an object. An object needs parentheses in an arrow body. */
+function isValueText(t: string, inParentheses: boolean): boolean {
+  const outline = outlineOf(t);
+  if (outline === "{}") return inParentheses;
+  if (outline === "()") return isValueText(t.slice(1, -1).trim(), true);
+  return outline.split(/&&|\|\|/).every((part) => isComparison(part) || /^\s*!+[\w$.()\s]*$/.test(part));
+}
+
+/**
+ * This function tells if the text of an op proves that its result is a value (COMPILE.MODULE.RESULT). The proofs are a
+ * comparison, a negation, an `&&` or an `||` of these, and an object literal. A proof reads only the expression body of
+ * an arrow function. A quote, a regular expression and a comment can hide a bracket, so they stop the proof.
+ */
+function givesValue(src: string): boolean {
+  const body = ARROW.exec(src)?.[2];
+  return body !== undefined && !/["'`/]/.test(body) && isValueText(body.trim(), false);
+}
+
+/** This function tells if a check `valid` refuses a value: it gives false, or it throws. */
+function refuses(valid: (x: never) => boolean, value: unknown): boolean {
+  try {
+    return !valid(value as never);
+  } catch {
+    return true;
+  }
+}
 
 /** The reserved words of the strict code of a module, and the two names that strict code does not bind. */
 const RESERVED: ReadonlySet<string> = new Set(
@@ -1918,6 +2003,8 @@ class Printer {
   readonly #ops = new Map<string, number>();
   /** The inline form of each function of an op, or undefined for a function that the module calls. */
   readonly #forms = new Map<string, InlineForm | undefined>();
+  /** The ops whose text does not prove that the result is a value, so their results get the check of a value. */
+  readonly #unproved = new Set<string>();
   /** The functions of ops that the module calls, not in an inline form. */
   readonly #called = new Set<string>();
   /** The key of the expression of each code that is a constant of the run, and the read of each hoisted constant by key. */
@@ -2048,7 +2135,8 @@ class Printer {
   /**
    * This method gives the check of a result of a kind, or undefined for a result that needs no check. A number must be
    * finite, and the domain of the kind can check the value with valid. The law checker of the test kit checks the
-   * declaration `returns` of each op (KIND.RETURNS), so the module trusts the kind itself.
+   * declaration `returns` of each op (KIND.RETURNS), so the module trusts the kind of each value. A result that is not a
+   * value does not break the declaration, and `#value` gives its check (COMPILE.MODULE.RESULT).
    */
   check(kind: Kind): string | undefined {
     const d = this.#facts.checkOf(kind);
@@ -2073,6 +2161,26 @@ class Printer {
   #checked(kind: Kind, code: string): string {
     const k = this.check(kind);
     return k === undefined ? code : `${k}(${code})`;
+  }
+
+  /**
+   * This method tells if the check of a kind can miss a result that is not a value. The check of a number finds each
+   * such result, and a check `valid` finds them when it refuses each one.
+   */
+  #missesNoValue(kind: Kind): boolean {
+    if (kind === "number") return false;
+    const valid = this.#domains[this.#facts.checkOf(kind) as number]?.valid;
+    return valid === undefined || !NOT_VALUES.every((x) => refuses(valid, x));
+  }
+
+  /**
+   * This method gives the code of the result of the op `name` with the check of a value, if the op needs it. The
+   * interpreter gives an error for `undefined`, `null` and a number that is not finite (CALL.RESULT).
+   */
+  #value(name: string, code: string): string {
+    if (!this.#unproved.has(name)) return code;
+    this.top.set("k_value", `const k_value = (x) => (x === undefined || x === null || (typeof x === "number" && !Number.isFinite(x)) ? ${this.use("F")}() : x);`);
+    return `k_value(${code})`;
   }
 
   #valid(d: number, domain: string, kind: Kind, valid: (x: never) => boolean): string | undefined {
@@ -2431,6 +2539,10 @@ class Printer {
         return this.#fold(e, ctx);
       case "iterate":
         return this.#iterate(e, ctx);
+      case "fix":
+      case "last":
+        // COMPILE.FIX: a module refuses a fixed point with a reason. Tier 1 and the kernel run it.
+        throw new NotStandalone('a fixed point ("fix"), which a module does not have yet');
       case "ext":
         return this.#cell(e, ctx);
     }
@@ -2915,6 +3027,7 @@ class Printer {
       const src = copied(fn, each, `the op "${op}" of the domain ${d.name}`);
       // An inline form cannot throw for primitive values only.
       this.#forms.set(name, lists.size === 0 && kinds.every((k) => primitiveOf(k) !== undefined) ? inlineForm(src) : undefined);
+      if (!givesValue(src) && this.#missesNoValue(site.returns)) this.#unproved.add(name);
       this.top.set(name, `const ${name} = ${src};`);
     }
     const form = this.#forms.get(name);
@@ -2923,12 +3036,13 @@ class Printer {
     if (inline) {
       const text = form.parts.map((x) => (typeof x === "number" ? `(${(values[x] as Code).v.code})` : x)).join("");
       const checked = this.check(site.returns);
-      const code = checked === undefined ? `(${text})` : `${checked}(${text})`;
-      return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: checked === undefined && values.every((x) => x.v.safe), deps } };
+      const value = this.#value(name, text);
+      const code = checked === undefined ? `(${value})` : `${checked}(${value})`;
+      return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: checked === undefined && value === text && values.every((x) => x.v.safe), deps } };
     }
     this.#called.add(name);
     // An exception of the op is an error of Vex: the boundary around the op catches it.
-    const code = this.#checked(site.returns, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`);
+    const code = this.#checked(site.returns, this.#value(name, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`));
     return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: false, deps } };
   }
 
@@ -4225,8 +4339,9 @@ class Printer {
     const site = this.#facts.staticSite(test.op, keyFirst ? [kind, t.v.kind] : [t.v.kind, kind]);
     if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
     // A static site of a domain has the function of the op of that domain.
-    const form = inlineForm(Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn));
-    if (form?.params.length !== 2) return undefined;
+    const src = Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn);
+    const form = inlineForm(src);
+    if (form?.params.length !== 2 || !givesValue(src)) return undefined;
     const before = tests.slice(0, at).map((x) => this.#hoist(this.expr(x, loop)));
     const after = tests.slice(at + 1).map((x) => this.#hoist(this.expr(x, loop)));
     const body = this.#hoist(this.expr(target.body, loop));
@@ -4452,7 +4567,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
   // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
-  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options));
+  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
   if (size !== undefined) return { ok: false, reason: size };
   const p = new Printer(expr, options);
   let value: Code;
@@ -4529,7 +4644,7 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
     const shape = shapeError(f.expr);
-    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options));
+    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options) ?? monotoneError(f.expr, options));
     const reason = shape ?? size;
     if (reason !== undefined) return { ok: false, reason: `${formulaText(f)}: ${reason}` };
   }

@@ -61,6 +61,9 @@ import {
 /** The error of an expression that the compiler cannot lower. Then the program operates in tier 1. */
 export class Unsupported extends Error {}
 
+/** The error of a fixed point, which tier 2 does not have yet (COMPILE.FIX). */
+export class NoFixedPoint extends Unsupported {}
+
 /**
  * A bound name: its value, and the flag that tells if its binding gave a value. Without a flag, it always does. After a
  * failure, `error` is the lazy error of the binding, if the context of the binding keeps it.
@@ -329,6 +332,10 @@ class Lowerer {
         return this.#fold(e, s, path, b);
       case "iterate":
         return this.#iterate(e, s, path, b);
+      case "fix":
+      case "last":
+        // COMPILE.FIX: tier 2 has no fixed point, so the program stays in tier 1 (COMPILE.FALLBACK).
+        throw new NoFixedPoint('a fixed point ("fix")');
       case "each": {
         // A list keeps its error items, and generated code makes no error items. Thus an error item stops the program, and
         // tier 1 gives the list.

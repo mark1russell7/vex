@@ -1,11 +1,13 @@
 import { CHECKED } from "./checked.ts";
 import { fromDocument, isDocument, type Envelope } from "./document.ts";
-import { findMethod, isOpName, liftsAt, resolveOp, type AnyDomain, type OpSpec, type ParamKind, type PrimitiveKind, type ResolvedOp, type ReturnKind, type SizeRule } from "./domain.ts";
+import { fixRounds, fixValueError, joinValues, worstRow } from "./fix.ts";
+import { findMethod, isOpName, liftsAt, resolveOp, type AnyDomain, type Monotone, type OpSpec, type ParamKind, type PrimitiveKind, type ResolvedOp, type ReturnKind, type SizeRule } from "./domain.ts";
 import { describeType, errorAt, errorText, type ErrorExtra, type ErrorText } from "./error-text.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
 import { limitError, overLimitMessage, worstError } from "./limit-error.ts";
 import { addrExprs, children, limitAxis, MAX_ITERATIONS, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
+import { monotoneError } from "./monotone.ts";
 import { sizeError } from "./size.ts";
 import { stepError, type VexStep } from "./steps.ts";
 import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOptions, type VexList } from "./list.ts";
@@ -20,7 +22,7 @@ export { describeType };
  * (LOOP.SIZE.OPS). Without it, a step of a loop cannot use its result in the size of a list name. The property
  * `returns` is the kind of its result, as in `OpSpec`. The interpreter does not examine it.
  */
-export type FreeFn = ((...args: readonly unknown[]) => unknown) & { readonly size?: SizeRule; readonly returns?: ReturnKind };
+export type FreeFn = ((...args: readonly unknown[]) => unknown) & { readonly size?: SizeRule; readonly returns?: ReturnKind; readonly monotone?: readonly Monotone[] };
 
 /** The context of an extension handler. */
 export interface ExtContext {
@@ -59,7 +61,7 @@ export interface EvalOptions {
 
 /** The names of a frame: a map of the variables of the caller, or a scope inside it. */
 interface Env {
-  get(name: string): Result<unknown> | undefined;
+  get(name: string | symbol): Result<unknown> | undefined;
 }
 
 /**
@@ -69,16 +71,16 @@ interface Env {
  */
 class Scope implements Env {
   readonly #outer: Env;
-  readonly #names: readonly string[];
+  readonly #names: readonly (string | symbol)[];
   readonly #values: readonly Result<unknown>[];
 
-  constructor(outer: Env, names: readonly string[], values: readonly Result<unknown>[]) {
+  constructor(outer: Env, names: readonly (string | symbol)[], values: readonly Result<unknown>[]) {
     this.#outer = outer;
     this.#names = names;
     this.#values = values;
   }
 
-  get(name: string): Result<unknown> | undefined {
+  get(name: string | symbol): Result<unknown> | undefined {
     const at = this.#names.indexOf(name);
     return at >= 0 ? this.#values[at] : this.#outer.get(name);
   }
@@ -197,7 +199,8 @@ export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Pro
   const deep = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}` : undefined);
   // LOOP.SIZE: a step of a loop that can double the size of a list at each step gives an error before a run.
   // STEP.MAX: a program above the highest step of the host gives an error before a run.
-  const bad = deep ?? sizeError(expr, opts) ?? stepError(expr, opts);
+  // FIX.MONOTONE: a step of a fixed point without a proof that it moves one way gives an error before a run.
+  const bad = deep ?? sizeError(expr, opts) ?? stepError(expr, opts) ?? monotoneError(expr, opts);
   const kind = read.ok ? "bad-expression" : read.error.kind;
   const root: Node = bad === undefined ? new Compiler(opts).node(expr, []) : (f) => fail(vexError(kind, bad, { path: [], origin: f.pos.origin, focus: f.pos.focus }));
   const run = (r: RunOptions): Result<unknown> => {
@@ -325,6 +328,8 @@ class Compiler {
   readonly #ofType = new Map<string, readonly AnyDomain[]>();
   /** The domains without a primitive type. Only they can accept a value of another type, for example an object. */
   readonly #open: readonly AnyDomain[];
+  /** The slot of the column of each `fix` around the node that the compiler reads (FIX.LAST). A symbol is no name of the program. */
+  #columns: ReadonlyMap<string, symbol> = new Map();
 
   constructor(opts: CompileOptions) {
     // Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value
@@ -429,6 +434,10 @@ class Compiler {
         return this.#fold(e, info);
       case "iterate":
         return this.#iterate(e, info);
+      case "fix":
+        return this.#fix(e, info);
+      case "last":
+        return this.#last(e, info);
       case "ext": {
         const extensions = this.#extensions ?? {};
         const handler = Object.hasOwn(extensions, e.kind) ? extensions[e.kind] : undefined;
@@ -669,6 +678,93 @@ class Compiler {
    * This method compiles an iteration (ITERATE.LIMIT, ITERATE.UNTIL, ITERATE.ERROR). The test `until` evaluates before
    * each step and after the last step. `result` evaluates with the last values.
    */
+  /**
+   * This method compiles a fixed-point column (FIX.ROUNDS). Each round evaluates each row from the column of the last
+   * round, so the order of the rows has no effect. The first round without a change ends the rounds.
+   */
+  #fix(e: ExprOf<"fix">, info: Info): Node {
+    const { path } = info;
+    const { name, join } = e;
+    const init = this.node(e.init, [...path, 0]);
+    const slot = Symbol(name);
+    const outer = this.#columns;
+    this.#columns = new Map(outer).set(name, slot);
+    const step = this.node(e.step, [...path, 1]);
+    this.#columns = outer;
+    return (f, c) => {
+      const { keys } = c.space;
+      const first = this.#rows(e, init, f, f.env, c, path);
+      if (!first.ok) return this.#emit(c, info, f, first);
+      let column = first.value;
+      this.#round(c, info, f, 0, keys, column);
+      const limit = fixRounds(keys.length);
+      for (let round = 1; round <= limit; round++) {
+        const stepped = this.#rows(e, step, f, new Scope(f.env, [slot], [ok(column)]), c, path);
+        if (!stepped.ok) return this.#emit(c, info, f, stepped);
+        const next = new Map<string, unknown>();
+        const changed: string[] = [];
+        for (const key of keys) {
+          const old = column.get(key);
+          const value = joinValues(join, old, stepped.value.get(key));
+          if (value !== old) changed.push(key);
+          next.set(key, value);
+        }
+        this.#round(c, info, f, round, changed, next);
+        if (changed.length === 0) return this.#emit(c, info, f, this.#rowOf(name, column, f, path));
+        column = next;
+      }
+      return this.#emit(c, info, f, this.#at(errorText.fixLimit(name, limit), f, path));
+    };
+  }
+
+  /** This method evaluates a node at each row (FIX.ERROR). Each row runs, also after an error, so the rule of the errors has all of them. */
+  #rows(e: ExprOf<"fix">, node: Node, f: Frame, env: Env, c: Ctx, path: readonly number[]): Result<ReadonlyMap<string, unknown>> {
+    const out = new Map<string, unknown>();
+    const errors: VexError[] = [];
+    for (const key of c.space.keys) {
+      const frame: Frame = { pos: { origin: f.pos.origin, focus: key }, env };
+      const r = node(frame, c);
+      const wrong = r.ok ? fixValueError(e.name, e.join, r.value) : undefined;
+      if (!r.ok) errors.push(r.error);
+      else if (wrong !== undefined) errors.push(errorAt(wrong, frame.pos, path));
+      else out.set(key, r.value);
+    }
+    if (errors.length === 0) return ok(out);
+    const worst = worstRow(errors);
+    return worst === undefined ? this.#at(errorText.args(errors.length, "rows"), f, path, { causes: errors }) : fail(worst);
+  }
+
+  /** This method adds a round to the trace: the count of the round, the rows that it changed and the column (FIX.TRACE). */
+  #round(c: Ctx, info: Info, f: Frame, round: number, changed: readonly string[], column: ReadonlyMap<string, unknown>): void {
+    if (c.trace === undefined) return;
+    const items = [...column].map(([key, value]): ListItem => ({ key, result: ok(value) }));
+    c.trace.events.push({
+      path: info.path,
+      tag: info.tag,
+      label: `${info.label}: round ${String(round)}, ${String(changed.length)} rows changed`,
+      origin: f.pos.origin,
+      focus: f.pos.focus,
+      round: { index: round, changed },
+      result: ok(vexList(items)),
+    });
+  }
+
+  /** This method gives the value of the row of the focus. The focus of an item of the axis `list` can be no row (FIX.LAST). */
+  #rowOf(name: string, column: ReadonlyMap<string, unknown>, f: Frame, path: readonly number[]): Result<unknown> {
+    const value = column.get(f.pos.focus);
+    return value === undefined ? this.#at(errorText.lastKey(name, f.pos.focus), f, path) : ok(value);
+  }
+
+  /** This method compiles a read of the last round at the focus (FIX.LAST). The check gives each read a `fix`. */
+  #last(e: ExprOf<"last">, info: Info): Node {
+    const { path } = info;
+    const slot = this.#columns.get(e.name) as symbol;
+    return (f, c) => {
+      const column = f.env.get(slot) as { readonly value: ReadonlyMap<string, unknown> };
+      return this.#emit(c, info, f, this.#rowOf(e.name, column.value, f, path));
+    };
+  }
+
   #iterate(e: ExprOf<"iterate">, info: Info): Node {
     const { path } = info;
     const names = this.#names(e, path);
@@ -1336,6 +1432,10 @@ export function labelOf(e: Expr): string {
       return e.at === undefined ? `${e.tag} ${e.axis.t}` : `${e.tag} ${e.axis.t} from ${e.at.map(moveText).join(".")}`;
     case "iterate":
       return `iterate ${typeof e.limit === "number" ? String(e.limit) : `size of ${e.limit.axis.t}`}`;
+    case "fix":
+      return `fix ${e.name} ${e.join}`;
+    case "last":
+      return `last ${e.name}`;
     case "ext":
       return e.kind;
   }

@@ -1,0 +1,16 @@
+// Throwaway measure: the bytes, the gzip bytes and the hash of each module of ireko.
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
+import { it } from "vitest";
+import { IREKO_COMMITTED, IREKO_NOT_COMMITTED, irekoSource } from "./ireko-modules.ts";
+
+it("bytes", () => {
+  for (const which of [...IREKO_COMMITTED, ...IREKO_NOT_COMMITTED]) {
+    for (const faults of ["value", "throw"] as const) {
+      const t0 = performance.now();
+      const text = irekoSource(which, faults);
+      const ms = Math.round(performance.now() - t0);
+      console.error(`BYTES ${process.env["BYTES_LABEL"] ?? ""} ${which} ${faults} ${String(text.length)} ${String(gzipSync(text).length)} ${createHash("sha256").update(text).digest("hex").slice(0, 12)} ${String(ms)}ms`);
+    }
+  }
+}, 600_000);

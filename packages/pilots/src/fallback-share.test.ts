@@ -12,12 +12,16 @@ function wellFormed(report: ShareReport): void {
     expect(p.fallbacks).toBeGreaterThanOrEqual(0);
     expect(p.runs).toBeGreaterThanOrEqual(p.values);
     expect(p.values).toBeGreaterThanOrEqual(p.tier2Values);
-    expect(p.tier2Values).toBeLessThanOrEqual(p.runs - p.fallbacks);
+    expect(p.tier === 2 ? p.tier2Values + p.tier2Errors : p.runs - p.fallbacks).toBe(p.runs - p.fallbacks);
+    expect(p.tier === 2 ? p.tier2Values : 0).toBe(p.tier2Values);
+    expect(p.runs - p.values).toBeGreaterThanOrEqual(p.tier2Errors);
     expect(p.fallbackReasons.reduce((n, r) => n + r.count, 0)).toBe(p.fallbacks);
     expect(p.tier === 2 || typeof p.reason === "string").toBe(true);
   }
   expect(t.programs).toBe(report.programs.length);
   expect(t.runs).toBeGreaterThanOrEqual(t.tier2Runs + t.fallbacks);
+  expect(t.tier2Runs).toBe(t.tier2ValueRuns + t.tier2ErrorRuns);
+  expect(t.runShare).toBeCloseTo(t.valueRunShare + t.tier2ErrorRuns / Math.max(t.runs, 1));
   expect(t.programShare).toBeGreaterThanOrEqual(0);
   expect(t.programShare).toBeLessThanOrEqual(1);
   expect(t.runShare).toBeGreaterThanOrEqual(0);

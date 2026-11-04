@@ -1,15 +1,20 @@
 /**
  * The runtime of generated code. Each function follows the rule of the interpreter of the core. Where the interpreter
- * gives an error value, the function gives `FALLBACK`, and tier 1 then does the evaluation again (docs/COMPILER.md §4.1).
- * Thus the runtime makes no error values and no `Result` objects.
+ * gives an error value, the function gives `FALLBACK`, and it records the detail of the failure in two variables. On the
+ * value path, the runtime makes no error values and no `Result` objects (docs/COMPILER.md §4.1).
  *
- * Generated code uses the runtime inside a `try`, and an exception gives `FALLBACK` for the whole program. A function
- * of the runtime catches an exception only where the interpreter makes a value of it. In an op, it is `#CALC!`, and in
- * `safeIs`, it is `false`. A full call stack is `#DEPTH!`, which no list op and no `ifError` hides, so it goes on to
- * the program. An extension gives `FALLBACK` for each other error, and it throws for `#DEPTH!` (COMPILE.EXT).
+ * The failure path of generated code keeps a lazy error: the site, the position and the operands. When the program ends
+ * with it, `take` gives the error of the interpreter. It uses the error texts of the core (`materialize`).
+ *
+ * Generated code uses the runtime inside a `try`, and an exception gives `FALLBACK` for the whole program. Tier 1 then
+ * gives the result. A function of the runtime catches an exception only where the interpreter makes a value of it. In
+ * an op, it is `#CALC!`, and in `safeIs`, it is `false`. A full call stack is `#DEPTH!`, which no list op and no
+ * `ifError` hides, so it goes on to the program. An extension throws for `#DEPTH!` too (COMPILE.EXT).
  */
 import {
   axisTargets,
+  errorAt,
+  errorText,
   findMethod,
   isDepthError,
   isListOp,
@@ -18,17 +23,24 @@ import {
   liftsAt,
   matchesKind,
   fixAddr,
+  noKeyError,
   resolveAddr,
   safeIs,
   vexList,
   type Addr,
   type AnyDomain,
   type Axis,
+  type ErrorExtra,
+  type ErrorText,
   type FixedMove,
   type FreeFn,
+  type ParamKind,
+  type Position,
   type Space,
+  type VexError,
 } from "@mark1russell7/vex";
 import { entryOf, type Entry, type Method, type Options } from "./facts.ts";
+import type { ErrorSite } from "./loop.ts";
 
 /** The value of a program that stops at a failed check. */
 export const FALLBACK: unique symbol = Symbol("vex.fallback");
@@ -85,6 +97,42 @@ const NEGATIVE_ZERO = Symbol("-0");
 /** This function tells if a memo keeps an entry with these keys: keys without objects and functions. */
 const kept = (keys: readonly unknown[]): boolean => keys.every((k) => (typeof k !== "object" || k === null) && typeof k !== "function");
 
+/**
+ * The detail of the failure of an op or of an extension, with the meaning of the two variables of the record:
+ * - `threw`: an op threw, and `a` is the thrown value.
+ * - `lift`: `fromScalar` threw. `a` is the thrown value, and `b` the name of the domain.
+ * - `valid`: a check `valid` threw. `a` is the thrown value, and `b` the name of the domain.
+ * - `bad`: a result failed its checks, and `a` is the result.
+ * - `param`: an argument has the wrong kind, and `a` is a `ParamFailure`.
+ * - `no-op`: no domain and no function has the op. `a` tells if the op has a receiver, and `b` is the receiver.
+ * - `no-step`: no domain gives a step of `reduce`, and `a` is the accumulator.
+ * - `no-handler`: an extension has no handler.
+ * - `foreign`: a handler gave an error, and `a` is the error.
+ */
+type Detail = "threw" | "lift" | "valid" | "bad" | "param" | "no-op" | "no-step" | "no-handler" | "foreign";
+
+/** An argument of an op that does not have the kind of its parameter. */
+interface ParamFailure {
+  readonly index: number;
+  readonly value: unknown;
+  readonly kind: ParamKind;
+  readonly domain: string;
+}
+
+/**
+ * A failure that the program keeps: its site, its position, its operands and the detail of the runtime. `materialize`
+ * makes the error of it only if the error is the result of the program.
+ */
+export interface LazyError {
+  readonly site: ErrorSite;
+  readonly origin: string;
+  readonly focus: string;
+  readonly operands: readonly unknown[];
+  readonly detail: Detail;
+  readonly a: unknown;
+  readonly b: unknown;
+}
+
 /** The functions of the runtime. The names are the names of `RuntimeFn` in the loop IR. */
 export interface Runtime {
   readonly F: Fallback;
@@ -106,6 +154,18 @@ export interface Runtime {
   domain(index: number): AnyDomain | undefined;
   /** An exception of an op is the error #CALC! of that op, so this function gives `FALLBACK`. A full call stack goes on. */
   threw(thrown: unknown): Fallback;
+  /** This function records a result that failed its checks. It gives `FALLBACK`. */
+  bad(value: unknown): Fallback;
+  /** This function records an exception of the check `valid` of the domain at an index. It gives `FALLBACK`. */
+  invalid(thrown: unknown, domain: number): Fallback;
+  /** This function gives the lazy error of a failed check, with the record of the last failure. */
+  err(site: ErrorSite, origin: string, focus: string, ...operands: readonly unknown[]): LazyError;
+  /** This function gives the lazy error of the arguments that failed, as `#all` of the interpreter: `undefined` for no error. */
+  args(site: ErrorSite, origin: string, focus: string, errors: readonly (LazyError | undefined)[]): LazyError | undefined;
+  /** This function ends a program with a lazy error. It gives `FALLBACK`, so `load` keeps its contract. */
+  raise(error: LazyError): Fallback;
+  /** This function gives the error of the last `raise`, once. It gives `undefined` when the run ended in another way. */
+  take(): VexError | undefined;
   step(name: string, acc: unknown, value: unknown): unknown;
   result(value: unknown): unknown;
   opts(value: unknown): unknown;
@@ -116,6 +176,9 @@ export interface Runtime {
   var(vars: Readonly<Record<string, unknown>> | undefined, name: string): unknown;
 }
 
+/** The interpreter reads the own enumerable properties of the variables, with `Object.entries`. */
+const hasVar = (vars: Readonly<Record<string, unknown>> | undefined, name: string): vars is Readonly<Record<string, unknown>> => vars !== undefined && Object.prototype.propertyIsEnumerable.call(vars, name);
+
 /** This function makes the runtime of one set of options. */
 export function createRuntime(options: RuntimeOptions): Runtime {
   const domains = options.domains ?? [];
@@ -123,17 +186,38 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const extensions = options.extensions ?? {};
   const F: Fallback = FALLBACK;
 
-  const threw = (thrown: unknown): Fallback => {
-    if (isStackOverflow(thrown)) throw thrown;
+  // The record of the last failure. Each failure writes it before `err` reads it, and a failure makes no object here.
+  let detail: Detail = "threw";
+  let detailA: unknown;
+  let detailB: unknown;
+  // The error of the last `raise`.
+  let raised: LazyError | undefined;
+  const record = (d: Detail, a?: unknown, b?: unknown): Fallback => {
+    detail = d;
+    detailA = a;
+    detailB = b;
     return F;
   };
 
+  // An exception of an op, of `fromScalar` or of a check `valid`.
+  const failure = (d: Detail, thrown: unknown, domain?: string): Fallback => {
+    if (isStackOverflow(thrown)) throw thrown;
+    return record(d, thrown, domain);
+  };
+  const threw = (thrown: unknown): Fallback => failure("threw", thrown);
+
   // The checks of the result of an op: a value, a finite number, and a valid value of its first domain.
   const checked = (value: unknown): unknown => {
-    if (value === undefined || value === null) return F;
-    if (typeof value === "number" && !Number.isFinite(value)) return F;
+    if (value === undefined || value === null) return record("bad", value);
+    if (typeof value === "number" && !Number.isFinite(value)) return record("bad", value);
     for (const d of domains) {
-      if (safeIs(d, value)) return d.valid === undefined || d.valid(value) ? value : F;
+      if (!safeIs(d, value)) continue;
+      if (d.valid === undefined) return value;
+      try {
+        return d.valid(value) ? value : record("bad", value);
+      } catch (thrown) {
+        return failure("valid", thrown, d.name);
+      }
     }
     return value;
   };
@@ -141,16 +225,28 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   // The call of an op, as `#call` of the interpreter: the lift of numbers, the kinds of the parameters, the call, and
   // the checks of the result.
   const invoke = (e: Entry, call: (args: readonly unknown[]) => unknown, rest: readonly unknown[]): unknown => {
+    const lift = e.spec.liftScalar;
+    const from = e.domain.fromScalar;
+    let args = rest;
+    if (lift && from !== undefined) {
+      try {
+        args = rest.map((a, i): unknown => (typeof a === "number" && liftsAt(lift, i) ? from(a) : a));
+      } catch (thrown) {
+        return failure("lift", thrown, e.domain.name);
+      }
+    }
+    const params = e.spec.params;
+    if (params !== undefined) {
+      const index = args.findIndex((a, i) => !matchesKind(params[i] ?? "any", a, e.domain));
+      if (index !== -1) return record("param", { index, value: args[index], kind: params[index] ?? "any", domain: e.domain.name } satisfies ParamFailure);
+    }
+    let value: unknown;
     try {
-      const lift = e.spec.liftScalar;
-      const from = e.domain.fromScalar;
-      const args = lift && from !== undefined ? rest.map((a, i): unknown => (typeof a === "number" && liftsAt(lift, i) ? from(a) : a)) : rest;
-      const params = e.spec.params;
-      if (params !== undefined && !args.every((a, i) => matchesKind(params[i] ?? "any", a, e.domain))) return F;
-      return checked(call(args));
+      value = call(args);
     } catch (thrown) {
       return threw(thrown);
     }
+    return checked(value);
   };
 
   // The op of a name for a receiver: the first domain that accepts the receiver and has the op. `undefined` is no op.
@@ -173,6 +269,103 @@ export function createRuntime(options: RuntimeOptions): Runtime {
 
   // The entries of the op names of reduce. A program can compute such a name, so the runtime keeps them by name.
   const stepEntries = new Map<string, readonly (Entry | undefined)[]>();
+
+  // This function gives the error of a result that failed its checks, as `#checkResult` of the interpreter.
+  const badText = (op: string, value: unknown): ErrorText => {
+    if (value === undefined || value === null) return errorText.noValue(op);
+    if (typeof value === "number" && !Number.isFinite(value)) return errorText.notFinite(op, value);
+    // The checks of a domain gave this failure, so a domain accepts the value.
+    return errorText.invalid(op, (domains.find((d) => safeIs(d, value)) as AnyDomain).name);
+  };
+
+  // This function gives the error of a failure of an op without a domain, as the end of `#app` of the interpreter.
+  const noOpText = (op: string, receiver: boolean, self: unknown): ErrorText => {
+    const accepted = receiver ? domains.find((d) => safeIs(d, self)) : undefined;
+    if (accepted !== undefined) return errorText.domainNoOp(accepted.name, op);
+    return receiver ? errorText.noDomain(op, self) : errorText.noOp(op);
+  };
+
+  // This function gives the error of a failure of the op `op`, from the record of the failure.
+  const opError = (e: LazyError, op: string, at: (text: ErrorText, extra?: ErrorExtra) => VexError): VexError => {
+    switch (e.detail) {
+      case "threw":
+        return at(errorText.threw(op), { thrown: e.a });
+      case "lift":
+        return at(errorText.threw(`${e.b as string}.fromScalar`), { thrown: e.a });
+      case "valid":
+        return at(errorText.validThrew(op, e.b as string), { thrown: e.a });
+      case "bad":
+        return at(badText(op, e.a));
+      case "param": {
+        const p = e.a as ParamFailure;
+        return at(errorText.badParam(op, p.index, p.value, p.kind, p.domain));
+      }
+      case "no-step":
+        return at(errorText.noStep(op, e.a));
+      // The two details of an extension have no op site, so this case is the only other detail.
+      case "no-op":
+      case "foreign":
+      case "no-handler":
+        return at(noOpText(op, e.a as boolean, e.b));
+    }
+  };
+
+  // This function gives the error of an extension, as `#guard` and `#locate` of the interpreter.
+  const extError = (e: LazyError, kind: string, pos: Position, path: readonly number[], at: (text: ErrorText, extra?: ErrorExtra) => VexError): VexError => {
+    if (e.detail === "threw") return at(errorText.threw(kind), { thrown: e.a });
+    if (e.detail === "no-handler") return at(errorText.noHandler(kind));
+    const error = e.a as VexError;
+    return error.origin === undefined ? { ...error, path, origin: pos.origin, focus: pos.focus } : error;
+  };
+
+  /** This function makes the error of a lazy error: the error of the interpreter, with the texts of the core. */
+  const materialize = (e: LazyError): VexError => {
+    const { site, operands } = e;
+    if (site.t === "key") return noKeyError(e.origin);
+    const pos = { origin: e.origin, focus: e.focus };
+    const { path } = site;
+    const at = (text: ErrorText, extra?: ErrorExtra): VexError => errorAt(text, pos, path, extra);
+    const [first, second] = operands;
+    switch (site.t) {
+      case "text":
+        return at(site.text);
+      case "call": {
+        const vars = first as Readonly<Record<string, unknown>> | undefined;
+        return at(hasVar(vars, site.name) ? errorText.notFunction(site.name) : errorText.noFunction(site.name));
+      }
+      case "missing":
+        return at(errorText.missing(first as string, site.where));
+      case "boolean":
+        return at(errorText.notBoolean(site.op, site.i, first));
+      case "items":
+        return at(errorText.needsItems(site.op, site.what, first));
+      case "until":
+        return at(errorText.untilKind(first));
+      case "limit":
+        return at(errorText.limit(first as number));
+      case "test":
+        return at(errorText.whereKind(first));
+      case "op":
+        return opError(e, site.op, at);
+      case "step":
+        return opError(e, first as string, at);
+      case "ext":
+        return extError(e, site.kind, pos, path, at);
+      case "addr": {
+        const values = second as readonly unknown[] | undefined;
+        const fixed = values === undefined ? undefined : fixAddr(site.at, values, pos);
+        if (fixed?.ok === false) return { ...fixed.error, path };
+        const r = resolveAddr(first as Space, pos, fixed === undefined ? (site.at as readonly FixedMove[]) : fixed.value);
+        return { ...(r as Extract<typeof r, { readonly ok: false }>).error, path };
+      }
+      case "axis": {
+        const r = axisTargets(first as Space, { origin: e.origin, focus: second as string }, site.axis);
+        return { ...(r as Extract<typeof r, { readonly ok: false }>).error, path };
+      }
+      case "args":
+        return at(errorText.args(operands.length, site.what), { causes: (operands as readonly LazyError[]).map(materialize) });
+    }
+  };
 
   // The index of each key of a space, for the targets of an axis. A miss of the cache only makes the map again.
   const indexes = new WeakMap<Space, ReadonlyMap<string, number>>();
@@ -243,8 +436,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
         if (listOp && fn === undefined && Array.isArray(values[0])) throw new Error("tier 1 gives a list op on an array");
         try {
-          // Stryker disable next-line ConditionalExpression: a call of undefined throws, and the catch also gives F
-          return fn === undefined ? F : checked(fn(...values));
+          if (fn === undefined) return record("no-op", values.length > 0, values[0]);
+          return checked(fn(...values));
         } catch (thrown) {
           return threw(thrown);
         }
@@ -292,6 +485,23 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     },
     domain: (index) => domains[index],
     threw,
+    bad: (value) => record("bad", value),
+    invalid: (thrown, domain) => failure("valid", thrown, (domains[domain] as AnyDomain).name),
+    err: (site, origin, focus, ...operands) => ({ site, origin, focus, operands, detail, a: detailA, b: detailB }),
+    args(site, origin, focus, errors) {
+      const failed = errors.filter((e) => e !== undefined);
+      return failed.length < 2 ? failed[0] : { site, origin, focus, operands: failed, detail, a: undefined, b: undefined };
+    },
+    raise(error) {
+      raised = error;
+      return F;
+    },
+    take() {
+      const e = raised;
+      if (e === undefined) return undefined;
+      raised = undefined;
+      return materialize(e);
+    },
     // One step of `reduce`: the first domain that accepts the accumulator and has the op. No free function.
     step(name, acc, value) {
       let entries = stepEntries.get(name);
@@ -301,7 +511,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         stepEntries.set(name, entries);
       }
       // Stryker restore ConditionalExpression,BlockStatement,CallExpression
-      return dispatch(entries, name, [acc, value]) ?? F;
+      return dispatch(entries, name, [acc, value]) ?? record("no-step", acc);
     },
     result(value) {
       try {
@@ -318,8 +528,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     frozen: (values) => Object.freeze([...values]),
     ext(kind, data, s, origin, focus, path) {
       const handler = Object.hasOwn(extensions, kind) ? extensions[kind] : undefined;
-      // Stryker disable next-line ConditionalExpression: a call of undefined throws, and the program gives F for it too
-      if (handler === undefined) return F;
+      if (handler === undefined) return record("no-handler");
       let r: ReturnType<typeof handler>;
       try {
         r = handler(data, { space: s, position: { origin, focus }, path });
@@ -331,11 +540,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       // EVAL.DEPTH: no list op and no ifError hides #DEPTH!, so it stops the program as an exception (COMPILE.EXT).
       // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
       if (isDepthError(r.error)) throw new Error("an extension gave #DEPTH!");
-      return F;
+      return record("foreign", r.error);
     },
-    // The interpreter reads the own enumerable properties of the variables, with `Object.entries`.
-    var(vars, name) {
-      return vars !== undefined && Object.prototype.propertyIsEnumerable.call(vars, name) ? vars[name] : F;
-    },
+    var: (vars, name) => (hasVar(vars, name) ? vars[name] : F),
   };
 }

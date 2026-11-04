@@ -84,6 +84,8 @@ The source has no name and no literal of the program. It reads each one from a l
 
 `emitSheetModule` also takes `cells`, `kinds` and `budget`.
 
+A `vex.list` of a result is frozen, as in the interpreter. With `fuse`, a value that does not depend on the key is one object at each key.
+
 With `lists: "plain"`, the key of an item of the input is the text of its position, and the result has no keys. A list in a record or in an argument of an op stays a `vex.list`. The module prints no types, so the host declares `T[]` for a list of `T`.
 
 ## Speed

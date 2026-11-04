@@ -33,7 +33,7 @@ function LI(x, h, t) {
   }
   return o;
 }
-function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }
+function LOC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } }))) }); }
 function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }
 function SKI(l, f) {
   const n = l.length;
@@ -410,10 +410,13 @@ export function nodeShape(records, vars) {
     o135.push([0, G(c134())]);
     return o135;
   });
+  const c137 = L(() => {
+    return LOC(G(c136()), 1);
+  });
   const out = [];
   for (let o = 0; o < n; o++) {
     try {
-      out.push(LOC(G(c136()), 1));
+      out.push(G(c137()));
     } catch {
       out.push(VEX_ERROR);
     }

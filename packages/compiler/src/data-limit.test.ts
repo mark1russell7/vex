@@ -59,7 +59,7 @@ describe("a data limit in tier 2 (ITERATE.LIMIT.DATA)", () => {
     expect(fallbacks(app("ifError", count(axes.all, app("gt", v("i"), lit(9))), lit(-1)))).toBe(0);
     const r = tiered(count(axes.all, app("gt", v("i"), lit(9))), OPTIONS).run({ space: S, origin: "0" });
     expect(r).toMatchObject({ ok: false, error: { code: "#NUM!", kind: "limit" } });
-    expect(fallbacks(count(axes.all, app("gt", v("i"), lit(9))))).toBeGreaterThan(0);
+    expect(fallbacks(count(axes.all, app("gt", v("i"), lit(9))))).toBe(0);
   });
 
   it("ITERATE.LIMIT.DATA P17: the limit reads an outer name, and it evaluates after init", () => {

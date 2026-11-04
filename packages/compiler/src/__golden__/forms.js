@@ -1,100 +1,164 @@
 "use strict";
 const F = R.F;
 const has_ = R.has;
+const raise_ = R.raise;
+const err_ = R.err;
 const rec_ = R.rec;
 const addr_ = R.addr;
 const var_ = R.var;
-const k0 = K[0];
+const args_ = R.args;
 const k3 = K[3];
-const k2 = K[2];
-const k4 = K[4];
-const k5 = K[5];
-const k6 = K[6];
 const k7 = K[7];
-const k8 = K[8];
-const k9 = K[9];
+const k6 = K[6];
 const k10 = K[10];
-const k1 = K[1];
-const k11 = K[11];
-const k12 = K[12];
-const s10_2 = R.site(k10, 2);
+const k15 = K[15];
+const k18 = K[18];
+const k21 = K[21];
+const k23 = K[23];
+const k24 = K[24];
+const k29 = K[29];
+const k5 = K[5];
+const k31 = K[31];
+const k44 = K[44];
+const s29_2 = R.site(k29, 2);
 return function vex(l0, l1, l2, l3) {
-  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23;
+  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37, l38, l39, l40, l41, l42, l43;
   try {
-    if (!(has_(l0, l1))) return F; // the origin is a key of the space
+    if (!(has_(l0, l1))) return raise_(err_(K[0], l1, l1)); // the origin is a key of the space
     l6 = false;
     L0: {
-      l4 = l0.get(l1);
-      if (!((l4 !== undefined && l4 !== null))) break L0; // a record
-      if (!((typeof l4 === "object" || typeof l4 === "function"))) break L0; // an object
-      l4 = l4[k0];
-      if (!((l4 !== undefined && l4 !== null))) break L0; // a field
-      l5 = l4;
+      l5 = l0.get(l1);
+      if (!((l5 !== undefined && l5 !== null))) { l4 = err_(K[1], l1, l1, l1); break L0; } // a record
+      if (!((typeof l5 === "object" || typeof l5 === "function"))) { l4 = err_(K[2], l1, l1, l1); break L0; } // an object
+      l5 = l5[k3];
+      if (!((l5 !== undefined && l5 !== null))) { l4 = err_(K[4], l1, l1, l1); break L0; } // a field
+      l4 = l5;
       l6 = true;
     }
-    l9 = false;
+    l10 = false;
     L2: {
-      l7 = rec_(k3, [k2]);
-      l8 = l7;
-      l9 = true;
+      l9 = rec_(k7, [k6]);
+      l8 = l9;
+      l10 = true;
     }
-    l11 = l0.get(l1);
-    if (!((l11 !== undefined && l11 !== null))) return F; // a record
-    if (!((typeof l11 === "object" || typeof l11 === "function"))) return F; // an object
-    l11 = l11[k4];
-    if (!((l11 !== undefined && l11 !== null))) return F; // a field
-    if (!((typeof l11 === "boolean"))) return F; // a boolean
-    if (l11) {
-      l13 = l0.get(l1);
-      if (!((l13 !== undefined && l13 !== null))) return F; // a record
-      if (!((typeof l13 === "object" || typeof l13 === "function"))) return F; // an object
-      l13 = l13[k5];
-      if (!((l13 !== undefined && l13 !== null))) return F; // a field
-      if (!((typeof l13 === "boolean"))) return F; // a boolean
-      if (l13) {
-        l12 = true;
-      } else {
-        l12 = k6;
-      }
-      l10 = l12;
-    } else {
-      l10 = false;
-    }
-    if (l10) {
-      l15 = l0.get(l1);
-      if (!((l15 !== undefined && l15 !== null))) return F; // a record
-      if (!((typeof l15 === "object" || typeof l15 === "function"))) return F; // an object
-      l15 = l15[k7];
-      if (!((l15 !== undefined && l15 !== null))) return F; // a field
-      l14 = l15;
-    } else {
-      l14 = k8;
-    }
-    l17 = false;
     L3: {
-      if (!(l6)) break L3; // a binding with a value
-      l16 = l5;
-      l17 = true;
+      L11: {
+        L7: {
+          L5: {
+            L4: {
+              l13 = l0.get(l1);
+              if (!((l13 !== undefined && l13 !== null))) { l11 = err_(K[8], l1, l1, l1); break L4; } // a record
+              if (!((typeof l13 === "object" || typeof l13 === "function"))) { l11 = err_(K[9], l1, l1, l1); break L4; } // an object
+              l13 = l13[k10];
+              if (!((l13 !== undefined && l13 !== null))) { l11 = err_(K[11], l1, l1, l1); break L4; } // a field
+              if (!((typeof l13 === "boolean"))) { l11 = err_(K[12], l1, l1, l13); break L4; } // a boolean
+              if (l13) {
+                l15 = l0.get(l1);
+                if (!((l15 !== undefined && l15 !== null))) { l11 = err_(K[13], l1, l1, l1); break L4; } // a record
+                if (!((typeof l15 === "object" || typeof l15 === "function"))) { l11 = err_(K[14], l1, l1, l1); break L4; } // an object
+                l15 = l15[k15];
+                if (!((l15 !== undefined && l15 !== null))) { l11 = err_(K[16], l1, l1, l1); break L4; } // a field
+                if (!((typeof l15 === "boolean"))) { l11 = err_(K[17], l1, l1, l15); break L4; } // a boolean
+                if (l15) {
+                  l14 = true;
+                } else {
+                  l14 = k18;
+                }
+                l12 = l14;
+              } else {
+                l12 = false;
+              }
+              if (l12) {
+                l17 = l0.get(l1);
+                if (!((l17 !== undefined && l17 !== null))) { l11 = err_(K[19], l1, l1, l1); break L4; } // a record
+                if (!((typeof l17 === "object" || typeof l17 === "function"))) { l11 = err_(K[20], l1, l1, l1); break L4; } // an object
+                l17 = l17[k21];
+                if (!((l17 !== undefined && l17 !== null))) { l11 = err_(K[22], l1, l1, l1); break L4; } // a field
+                l16 = l17;
+              } else {
+                l16 = k23;
+              }
+              l20 = false;
+              L6: {
+                if (!(l6)) break L6; // a binding with a value
+                l19 = l4;
+                l20 = true;
+              }
+              if ((!l20)) {
+                l21 = addr_(l0, l1, l1, k24);
+                if (!((l21 !== F))) { l18 = err_(K[25], l1, l1, l0); break L5; } // an address
+                l22 = l0.get(l21);
+                if (!((l22 !== undefined && l22 !== null))) { l18 = err_(K[26], l1, l1, l21); break L5; } // a record
+                if (!((typeof l22 === "object" || typeof l22 === "function"))) { l18 = err_(K[27], l1, l1, l21); break L5; } // an object
+                l22 = l22[k21];
+                if (!((l22 !== undefined && l22 !== null))) { l18 = err_(K[28], l1, l1, l21); break L5; } // a field
+                l23 = s29_2(l22, k5);
+                if (!((l23 !== F))) { l18 = err_(K[30], l1, l1); break L5; } // an op
+                l19 = l23;
+              }
+              L8: {
+                L10: {
+                  l27 = var_(l2, k31);
+                  if (!((l27 !== F))) { l26 = err_(K[32], l1, l1); break L10; } // a variable
+                  break L8;
+                }
+                l28 = args_(K[33], l1, l1, [l26]);
+                l26 = undefined;
+                { l24 = l28; break L7; }
+              }
+              l29 = s29_2(k5, l27);
+              if (!((l29 !== F))) { l24 = err_(K[34], l1, l1); break L7; } // an op
+              if (!(l10)) { l30 = l8; break L11; } // a binding with a value
+              break L3;
+            }
+            L12: {
+              l32 = false;
+              L13: {
+                if (!(l6)) break L13; // a binding with a value
+                l31 = l4;
+                l32 = true;
+              }
+              if ((!l32)) {
+                l33 = addr_(l0, l1, l1, k24);
+                if (!((l33 !== F))) { l18 = err_(K[35], l1, l1, l0); break L12; } // an address
+                l34 = l0.get(l33);
+                if (!((l34 !== undefined && l34 !== null))) { l18 = err_(K[36], l1, l1, l33); break L12; } // a record
+                if (!((typeof l34 === "object" || typeof l34 === "function"))) { l18 = err_(K[37], l1, l1, l33); break L12; } // an object
+                l34 = l34[k21];
+                if (!((l34 !== undefined && l34 !== null))) { l18 = err_(K[38], l1, l1, l33); break L12; } // a field
+                l35 = s29_2(l34, k5);
+                if (!((l35 !== F))) { l18 = err_(K[39], l1, l1); break L12; } // an op
+                l31 = l35;
+              }
+            }
+          }
+          L14: {
+            l39 = false;
+            L16: {
+              l38 = var_(l2, k31);
+              if (!((l38 !== F))) { l37 = err_(K[40], l1, l1); break L16; } // a variable
+              l37 = l38;
+              l39 = true;
+            }
+            l40 = args_(K[41], l1, l1, [(l39 ? undefined : l37)]);
+            if (!((!(l40 !== undefined && l40 !== null)))) { l24 = l40; break L14; } // the arguments have values
+            l41 = s29_2(k5, l37);
+            if (!((l41 !== F))) { l24 = err_(K[42], l1, l1); break L14; } // an op
+          }
+        }
+        L17: {
+          if (!(l10)) { l30 = l8; break L17; } // a binding with a value
+        }
+      }
+      l42 = args_(K[43], l1, l1, [l11, l18, l24, l30]);
+      l11 = undefined;
+      l18 = undefined;
+      l24 = undefined;
+      l30 = undefined;
+      return raise_(l42);
     }
-    if ((!l17)) {
-      l18 = addr_(l0, l1, l1, k9);
-      if (!((l18 !== F))) return F; // an address
-      l19 = l0.get(l18);
-      if (!((l19 !== undefined && l19 !== null))) return F; // a record
-      if (!((typeof l19 === "object" || typeof l19 === "function"))) return F; // an object
-      l19 = l19[k7];
-      if (!((l19 !== undefined && l19 !== null))) return F; // a field
-      l20 = s10_2(l19, k1);
-      if (!((l20 !== F))) return F; // an op
-      l16 = l20;
-    }
-    l21 = var_(l2, k11);
-    if (!((l21 !== F))) return F; // a variable
-    l22 = s10_2(k1, l21);
-    if (!((l22 !== F))) return F; // an op
-    if (!(l9)) return F; // a binding with a value
-    l23 = rec_(k12, [l14, l16, l22, l8]);
-    return l23;
+    l43 = rec_(k44, [l16, l19, l29, l8]);
+    return l43;
   } catch {
     return F;
   }

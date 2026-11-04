@@ -1,5 +1,5 @@
 import { defineDomain, type OpTable } from "@mark1russell7/vex";
-import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, JsonDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { assertLaws, checkLaws, structuralEqual } from "./laws.ts";
@@ -9,9 +9,38 @@ const small = fc.integer({ min: -20, max: 20 });
 /** This function gives the names of the checks of the op xy of NumDomain. */
 const xyChecks = (opts: Parameters<typeof checkLaws>[1]): readonly string[] => checkLaws(NumDomain, opts).map((r) => r.name).filter((n) => n.startsWith("Num.xy"));
 
+type Pair = { readonly a: number; readonly b: number };
+const PAIR: fc.Arbitrary<Pair> = fc.tuple(small, small).map(([a, b]) => ({ a, b }));
+
+/** This function tells if a value is a plain object with the two number fields of `Pair`. */
+const isPair = (u: unknown): u is Pair => typeof u === "object" && u !== null && Object.getPrototypeOf(u) === Object.prototype && Object.keys(u).length === 2 && typeof (u as Pair).a === "number" && typeof (u as Pair).b === "number";
+
+/** This function accepts only a value with one more field. */
+const hasMore = (u: unknown): u is Pair => typeof u === "object" && u !== null && Object.hasOwn(u, "more");
+
+/** This function accepts only a value with an inherited field. */
+const hasInherited = (u: unknown): u is Pair => typeof u === "object" && u !== null && "inherited" in u;
+
+/** This function accepts only an object without a prototype. */
+const noProto = (u: unknown): u is Pair => typeof u === "object" && u !== null && Object.getPrototypeOf(u) === null;
+
+/** This function makes a domain that declares field names, with the test `is`. */
+const pairDomain = (fields: readonly string[], is: (u: unknown) => u is Pair) => defineDomain({ name: "Pair", fields, is, ops: {} });
+
+/** This function tells if the check of the fields of a domain holds for the values of `arb`. */
+const fieldsHold = (d: Parameters<typeof checkLaws>[0], arb: fc.Arbitrary<unknown>): boolean | undefined => checkLaws(d, { arb })[0]?.ok;
+
 describe("P4 DOMAIN.LAWS: each declared law of each domain holds", () => {
   it("Vec2", () => {
     expect(checkLaws(Vec2Domain, { arb: fc.tuple(small, small).map(([x, y]) => new Vec2(x, y)) }).filter((r) => !r.ok)).toEqual([]);
+  });
+  it("Insets", () => {
+    const arb = fc.tuple(small, small, small, small).map(([startX, startY, endX, endY]) => ({ startX, startY, endX, endY }));
+    const r = checkLaws(InsetsDomain, { arb, domains: [XYDomain, Vec2Domain] });
+    expect(r.filter((x) => !x.ok)).toEqual([]);
+    expect(r.map((x) => x.name)).toEqual(expect.arrayContaining(["Insets fields startX startY endX endY", "Insets.add commutative", "Insets.add associative", "Insets.add identity"]));
+    expect(checkLaws(XYDomain, { arb: fc.tuple(small, small).map(([x, y]) => ({ x, y })) }).filter((x) => !x.ok)).toEqual([]);
+    expect(checkLaws(NumDomain, { arb: small, domains: [InsetsDomain] }).filter((x) => !x.ok)).toEqual([]);
   });
   it("NDVector", () => {
     const arb = fc.record({ x: small, y: small, z: small }, { requiredKeys: [] }).map((c) => new NDVector(c as Readonly<Record<string, number>>));
@@ -78,6 +107,32 @@ describe("the law checker finds a false claim (V-016)", () => {
     expect(structuralEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
     expect(structuralEqual({ a: 1, c: 2 }, { a: 1, b: 2 })).toBe(false);
     expect(structuralEqual({ a: { b: [1, 2] } }, { a: { b: [1, 2] } })).toBe(true);
+  });
+
+  it("KIND.FIELDS: a true declaration of the fields holds, in each order of the names", () => {
+    expect(checkLaws(pairDomain(["a", "b"], isPair), { arb: PAIR })).toEqual([{ name: "Pair fields a b", ok: true }]);
+    expect(checkLaws(pairDomain(["b", "a"], isPair), { arb: PAIR })).toEqual([{ name: "Pair fields b a", ok: true }]);
+    const nullProto = PAIR.map((a) => Object.assign(Object.create(null) as object, a));
+    expect(fieldsHold(pairDomain(["a", "b"], noProto), nullProto)).toBe(true);
+  });
+
+  it("KIND.FIELDS: a declaration fails for other names, for fewer names, and for a value that is not a plain object", () => {
+    expect(fieldsHold(pairDomain(["a", "c"], isPair), PAIR)).toBe(false);
+    expect(fieldsHold(pairDomain(["a"], isPair), PAIR)).toBe(false);
+    expect(fieldsHold(pairDomain(["a", "b", "c"], isPair), PAIR)).toBe(false);
+    class Box {
+      readonly a = 1;
+      readonly b = 2;
+    }
+    expect(fieldsHold(pairDomain(["a", "b"], (u): u is Pair => u instanceof Box), fc.constant(new Box()))).toBe(false);
+    // A primitive value is not a plain object, and neither is null.
+    expect(fieldsHold(pairDomain(["a", "b"], (u): u is Pair => u === 1), fc.constant(1))).toBe(false);
+    expect(fieldsHold(pairDomain(["a", "b"], (u): u is Pair => u === null), fc.constant(null))).toBe(false);
+  });
+
+  it("KIND.FIELDS: the check gives each domain the near misses of its values", () => {
+    expect(fieldsHold(pairDomain(["a", "b"], hasMore), PAIR)).toBe(false);
+    expect(fieldsHold(pairDomain(["a", "b"], hasInherited), PAIR)).toBe(false);
   });
 
   it("KIND.PRIMITIVE KIND.RETURNS: a false primitive type and a false kind of a result fail, and true ones hold", () => {

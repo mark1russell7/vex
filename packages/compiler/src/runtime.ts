@@ -17,6 +17,8 @@ import {
   errorAt,
   errorText,
   findMethod,
+  fixRounds,
+  fixValueError,
   isDepthError,
   isListOp,
   isStackOverflow,
@@ -31,6 +33,7 @@ import {
   safeIs,
   vexError,
   vexList,
+  worstRow,
   type Addr,
   type AnyDomain,
   type Axis,
@@ -157,6 +160,10 @@ export interface Runtime {
   axis(axis: BaseAxis): (s: Space, origin: string, focus: string) => Targets | Fallback;
   table(tables: Readonly<Record<string, Space>> | undefined, name: string): unknown;
   keys(s: Space): readonly string[];
+  /** This function gives the index of a key in the keys of a space, or `undefined` for a key outside the space. */
+  rowIndex(s: Space, key: string): number | undefined;
+  /** This function gives the largest number of rounds of a column of a space (FIX.LIMIT). */
+  rounds(s: Space): number;
   /** This function gives the dispatch of an op name with `arity` arguments. Generated code gets it once, when it loads. */
   site(name: string, arity: number): Site;
   /** This function gives a new memo. Generated code gets one for each node of the memo, when it loads. */
@@ -399,6 +406,16 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       }
       case "args":
         return at(errorText.args(operands.length, site.what), { causes: (operands as readonly LazyError[]).map(materialize) });
+      case "fixLimit":
+        return at(errorText.fixLimit(site.name, first as number));
+      case "row":
+        return at(fixValueError(site.name, site.join, first) as ErrorText);
+      case "lastKey":
+        return at(errorText.lastKey(site.name, e.focus));
+      case "rows": {
+        const causes = (operands as readonly LazyError[]).map(materialize);
+        return worstRow(causes) ?? at(errorText.args(causes.length, "rows"), { causes });
+      }
     }
   };
 
@@ -450,6 +467,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return t ?? F;
     },
     keys: (s) => s.keys,
+    rowIndex: (s, key) => indexOf(s).get(key),
+    rounds: (s) => fixRounds(s.keys.length),
     // The dispatch of `app` in the interpreter: the first domain that accepts the receiver and has the op, and else a
     // free function. Generated code has the fast path of each site, and it uses this dispatch for each other case.
     site(name, arity) {

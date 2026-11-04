@@ -9,6 +9,7 @@ export * from "./ireko-band.ts";
 export * from "./ireko-shapes.ts";
 export * from "./ireko-grid.ts";
 export * from "./ireko-radial.ts";
+export * from "./ireko-layers.ts";
 export * from "./ireko-audit.ts";
 export * from "./heat.ts";
 export * from "./flock.ts";

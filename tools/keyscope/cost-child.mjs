@@ -13,7 +13,12 @@ const options = { domains: [NumDomain, BoolDomain, TextDomain], schema: { fields
 
 function program() {
   const start = shape === "constant" ? app("sum", each(axes.all, n)) : n;
-  const up = shape === "loop" ? (x) => app("sum", each(axes.all, app("add", x, x))) : (x) => app("add", x, x);
+  const UPS = {
+    loop: (x) => app("sum", each(axes.all, app("add", x, x))),
+    chain: (x) => app("add", x, n),
+    loopchain: (x) => app("sum", each(axes.all, app("add", x, n))),
+  };
+  const up = UPS[shape] ?? ((x) => app("add", x, x));
   let e = start;
   for (let i = 0; i < depth; i++) e = up(e);
   return form === "json" ? JSON.parse(JSON.stringify(e)) : e;
@@ -21,11 +26,12 @@ function program() {
 
 const e = program();
 if (mode === "walk") {
-  const { placesError, unsharedAll } = await import(new URL("../../compiler/src/unshared.ts", import.meta.url).href);
+  const { placesError, placesOf, unsharedAll } = await import(new URL("../../compiler/src/unshared.ts", import.meta.url).href);
   const t0 = performance.now();
   placesError([e]);
   unsharedAll([e]);
-  process.stdout.write(`${JSON.stringify({ ok: true, ms: performance.now() - t0 })}\n`);
+  const ms = performance.now() - t0;
+  process.stdout.write(`${JSON.stringify({ ok: true, ms, places: placesOf([e]) })}\n`);
 } else {
   const t0 = performance.now();
   const r = mode === "module" ? emitModule(e, options) : compiler.generate(e, options);

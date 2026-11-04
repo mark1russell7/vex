@@ -1125,7 +1125,11 @@ The key of `key` and the position of `index` can be an expression. The expressio
 - Tier 2 evaluates the expressions and gives their values to `addr` of the runtime. The memo counts their reads as reads of the node.
 - A module uses the helpers `I` and `K`, which check the position or the key.
 
-A cell reference is data of an extension, not an expression, so it takes only fixed moves. A formula reads a formula column at a computed row as the one item of the axis `window(0, 0)`, whose address has the computed move.
+A cell reference is data of an extension, not an expression, so its data has only fixed moves. With a computed move, `cell` gives the one item of the axis `window(0, 0)`, whose address has the computed move (SHEET.CELL.COMPUTED).
+
+The column of such a read is static, so the order of the columns sees it. Its key is known only in the run. A read of a finished column reads the array of that column. Another read goes through the search, which finds the edge when the read happens. Thus the module and `SheetRun` make the same reads in the same order. A computed read is the same as a chain of `if` over fixed reads, so the argument of SHEET.ORDER stays. The module has a loop and a list for the window. A program that needs more speed reads a run constant.
+
+The interpreter and tier 2 evaluate each expression of an address before the first move. The code of an address in a module has each expression after the moves before it. Thus a read of a cell in an expression goes into a variable first when a move before it can fail.
 
 #### Tree spaces (design D)
 
@@ -1240,7 +1244,7 @@ The strategies are code of the user, so the pass keeps its loop. It starts the m
 
 `MEASURE_COLUMNS` of `@vex/pilots` is a sheet over a small tree. The node is the root, and its children are the leaves. The columns of the node read the children with `fold` over the axis `children`. The columns of a child read the cells of the node with the move `parent`. Thus the module has no search.
 
-The union of ireko starts each step from the last union. Thus the fold keeps the start and the size of the union, as ireko does. The bits are the same. The node is the root of the tree because a cell takes only fixed moves. In a sheet over an array of the children, a column cannot read the cell of the last child.
+The union of ireko starts each step from the last union. Thus the fold keeps the start and the size of the union, as ireko does. The bits are the same. A sheet over an array of the children can read the union at the last child with a computed move (SHEET.CELL.COMPUTED). A test of the pilot gives the same bits. The node stays the root of the tree for two reasons. A node with no children has no key in an array. The columns of the node have one value for each node.
 
 A property compares the module with `fitNode`, a copy of the code of ireko, on random nodes with up to 30 children and each fit. A second property compares `SheetRun` with `fitNode`. A branch of ireko (`feat/vex-measure`) uses the module in its measure pass. The 217 tests of ireko pass, also its golden SVG files.
 

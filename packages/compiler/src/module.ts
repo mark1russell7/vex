@@ -2736,9 +2736,9 @@ class Printer {
    *
    * The statements of the parts come before the code of their values. The last part that reads a cell keeps its place
    * only if no statement after it can throw. Also, with `all`, a value before it must not throw, or the code of its value
-   * must read no cell.
+   * must read no cell. With `held`, code before the parts can throw, so the last part also goes into a variable.
    */
-  #inOrder(parts: readonly Code[], all: boolean): readonly Code[] {
+  #inOrder(parts: readonly Code[], all: boolean, held = false): readonly Code[] {
     // A read of a finished cell starts no search, so the order of the reads does not change a result.
     if (this.#sheet?.direct === true) return parts;
     const last = parts.findLastIndex((x) => x.v.deps.has(CELLS));
@@ -2746,11 +2746,20 @@ class Printer {
     const before = !all || parts.slice(0, Math.max(last, 0)).every((x) => x.v.safe) || !READS_IN_CODE.test((parts[last] as Code).v.code);
     return parts.map((x, i) => {
       // A part after the last read of a cell cannot stop a read. A part that cannot throw and reads no cell cannot either.
-      if (i > last || (x.v.safe && !x.v.deps.has(CELLS)) || (i === last && after && before)) return x;
+      if (i > last || (x.v.safe && !x.v.deps.has(CELLS)) || (i === last && after && before && !held)) return x;
       const b = this.fresh("b");
       if (all && !x.v.safe) return { s: this.#store(b, x), v: { ...x.v, code: `${this.use("G")}(${b})`, held: b, plain: false } };
       return { s: [...x.s, `const ${b} = ${x.v.code};`], v: { kind: x.v.kind, deps: x.v.deps, list: x.v.list, code: b, safe: true, plain: true } };
     });
+  }
+
+  /**
+   * This method gives the parts of the expressions of an address. The interpreter evaluates each expression before the
+   * first move, but the code of an address has each expression after the moves before it. A move can fail, so it must
+   * not stop a read of a cell in a later expression (COMPILE.MODULE.SHEET).
+   */
+  #addressParts(at: readonly Move[], values: readonly Code[], deps: ReadonlySet<number>): readonly Code[] {
+    return this.#inOrder(this.#settle(values, deps), false, at.findLastIndex((m) => moveExpr(m) !== undefined) > 0);
   }
 
   /**
@@ -2857,7 +2866,7 @@ class Printer {
     const values = this.#addressValues(at, ctx);
     const deps = this.#addressDeps(at, ctx, values);
     // The interpreter evaluates the expressions of the address before its moves, and the first error stops them.
-    const parts = this.#inOrder(this.#settle(values, deps), false);
+    const parts = this.#addressParts(at, values, deps);
     const address = this.#address(at, ctx, parts);
     if (typeof kind === "object") return { s: stmtsOf(...parts), v: { code: `${input as string}[${address}]`, kind: undefined, safe, deps, list: listOfKind(kind, true) } };
     return { s: stmtsOf(...parts), v: { code: `R[${address}][${JSON.stringify(field)}]`, kind, safe, deps } };
@@ -3466,7 +3475,7 @@ class Printer {
     if (f !== undefined) {
       const values = this.#addressValues(at, ctx);
       start = this.#addressDeps(at, ctx, values);
-      const parts = this.#inOrder(this.#settle(values, start), false);
+      const parts = this.#addressParts(at, values, start);
       s.push(...stmtsOf(...parts), `const ${f} = ${this.#address(at, ctx, parts)};`);
     }
     const startSafe = at.every((m) => m.t === "origin");

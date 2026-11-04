@@ -1783,6 +1783,17 @@ describe("COMPILE.MODULE: random programs", () => {
     expect(make(sourceOf(e, TREE)).run(rs, VARS, parents)).toEqual(rs.map((_r, i) => ({ up: i, down: count - 1 - i })));
   });
 
+  it("V-070 COMPILE.MODULE.GRAPH: a sum that overflows in an index gives the error of the interpreter", () => {
+    // The long run of 2026-11-02 found this program after 299,147 runs. The sum of two values of 1e308 is not finite.
+    const e = JSON.parse("{\"tag\":\"ref\",\"path\":[\"w\"],\"at\":[{\"t\":\"index\",\"i\":{\"tag\":\"app\",\"op\":\"sum\",\"args\":[{\"tag\":\"each\",\"axis\":{\"t\":\"where\",\"axis\":{\"t\":\"all\"},\"test\":{\"tag\":\"app\",\"op\":\"and\",\"args\":[{\"tag\":\"app\",\"op\":\"not\",\"args\":[{\"tag\":\"ref\",\"path\":[\"b\"]}]},{\"tag\":\"app\",\"op\":\"or\",\"args\":[{\"tag\":\"app\",\"op\":\"gt\",\"args\":[{\"tag\":\"let\",\"bind\":{\"x\":{\"tag\":\"ref\",\"path\":[\"n\"],\"at\":[{\"t\":\"origin\"}]}},\"body\":{\"tag\":\"app\",\"op\":\"add\",\"args\":[{\"tag\":\"var\",\"name\":\"x\"},{\"tag\":\"lit\",\"value\":0}]}},{\"tag\":\"let\",\"bind\":{\"x\":{\"tag\":\"lit\",\"value\":0}},\"body\":{\"tag\":\"app\",\"op\":\"add\",\"args\":[{\"tag\":\"var\",\"name\":\"x\"},{\"tag\":\"lit\",\"value\":0}]}}]},{\"tag\":\"app\",\"op\":\"not\",\"args\":[{\"tag\":\"app\",\"op\":\"reduce\",\"args\":[{\"tag\":\"each\",\"axis\":{\"t\":\"successors\"},\"body\":{\"tag\":\"ref\",\"path\":[\"b\"]}},{\"tag\":\"lit\",\"value\":\"and\"},{\"tag\":\"lit\",\"value\":{\"domain\":\"Num\"}}]}]}]}]}},\"body\":{\"tag\":\"let\",\"bind\":{\"x\":{\"tag\":\"app\",\"op\":\"ifError\",\"args\":[{\"tag\":\"lit\",\"value\":0},{\"tag\":\"lit\",\"value\":0}]}},\"body\":{\"tag\":\"app\",\"op\":\"add\",\"args\":[{\"tag\":\"var\",\"name\":\"x\"},{\"tag\":\"ref\",\"path\":[\"w\"],\"at\":[{\"t\":\"index\",\"i\":{\"tag\":\"lit\",\"value\":0}}]}]}}}]}}]}") as Expr;
+    const big = { n: -2, w: 1e308, s: "abc", b: false };
+    const rs = [big, big, { n: -2, w: Number.NEGATIVE_INFINITY, s: "x", b: false }, { n: 1, w: 1, s: "", b: false }, { n: 1, w: 0, s: "abc", b: false }];
+    const edges = [[], [], [], [], []];
+    expect(() => {
+      expectSameGraph(make(sourceOf(e, GRAPH)), e, rs, edges, { a: 0, t: "x" });
+    }).not.toThrow();
+  });
+
   it("P17 COMPILE.MODULE.GRAPH COMPILE.MODULE.REDUCE: a module of a graph space gives the value of the interpreter at each key, or VEX_ERROR", () => {
     fc.assert(
       fc.property(fc.oneof(graphProgram.num, graphProgram.bool), graphs, fc.integer({ min: -3, max: 3 }), (e, [rs, edges], a) => {

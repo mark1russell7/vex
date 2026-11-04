@@ -2,7 +2,7 @@
  * Sheets with the compiler (SHEET.COMPILE). A run compiles each formula of a column with `tiered`, and it must give
  * the results of the recursive reference, with each budget of the stack.
  */
-import { app, axes, cell, each, lit, offset, ref, SheetRun, space, type CompileOptions, type Expr, type Result } from "@mark1russell7/vex";
+import { app, axes, cell, each, index, lit, offset, ref, SheetRun, space, type CompileOptions, type Expr, type Result } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { arbSheet, arbTwoTables, ReferenceSheetRun, sheetCellsOf, sheetColumnsOf, sheetRowsOf } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -88,6 +88,43 @@ describe("SHEET.COMPILE: a sheet run with the compiler", () => {
     expect(programs).toHaveLength(1);
     // The first row reads a row that does not exist. The extension gives #REF!, and ifError of tier 2 catches it (COMPILE.EXT).
     expect(programs[0]?.stats).toEqual({ runs: 50, fallbacks: 0 });
+  });
+});
+
+describe("COMPILE.SHEET.COMPUTED: a computed move in tier 2", () => {
+  const rows = space.array([{ v: 1 }, { v: 2 }, { v: 0 }]);
+  const last = app("subtract", app("count", each(axes.all, lit(1))), lit(1));
+
+  /** This function gives the results of a column with the compiler, and the fallbacks. The results must be the results of the reference. */
+  function tiers(columns: ReadonlyMap<string, Expr>, column: string): { readonly got: readonly unknown[]; readonly fallbacks: number } {
+    const { compile, programs } = keeping();
+    const run = new SheetRun(columns, { space: rows, domains: [NumDomain], compile });
+    const got = rows.keys.map((k) => plain(run.cell(column, k)));
+    const reference = new ReferenceSheetRun(columns, { space: rows, domains: [NumDomain] });
+    expect(got).toEqual(rows.keys.map((k) => plain(reference.cell(column, k))));
+    return { got, fallbacks: programs.reduce((n, p) => n + p.stats.fallbacks, 0) };
+  }
+
+  it("COMPILE.SHEET.COMPUTED SHEET.COMPILE: tier 2 gives a read of the last key, with no fallback", () => {
+    const columns = new Map<string, Expr>([
+      ["a", app("add", ref("v"), lit(1))],
+      ["b", cell("a", [index(last)])],
+    ]);
+    expect(tiers(columns, "b")).toEqual({ got: [1, 1, 1], fallbacks: 0 });
+  });
+
+  it("COMPILE.SHEET.COMPUTED SHEET.COMPILE: an error of the cell goes to tier 1, also on a cycle, and the result stays", () => {
+    // The strict `first` sends the error of the cell to tier 1 (COMPILE.LIST.VALUE).
+    const failing = new Map<string, Expr>([
+      ["a", app("divide", lit(1), ref("v"))],
+      ["b", cell("a", [index(last)])],
+    ]);
+    const out = tiers(failing, "b");
+    expect(out.got).toEqual(["#NUM!", "#NUM!", "#NUM!"]);
+    expect(out.fallbacks).toBeGreaterThan(0);
+    // The field v makes the cycle 0 -> 1 -> 2 -> 0.
+    expect(tiers(new Map([["a", cell("a", [index(ref("v"))])]]), "a").got).toEqual(["#CYCLE!", "#CYCLE!", "#CYCLE!"]);
+    expect(tiers(new Map([["a", app("ifError", cell("a", [index(lit(0))]), ref("v"))]]), "a").got).toEqual(["#CYCLE!", 2, 0]);
   });
 });
 

@@ -1,8 +1,9 @@
 /** The limit of the places of a program (COMPILE.PLACES): a compile refuses a large program before each walk that takes the time of the places. */
-import { app, type AnyDomain, axes, each, evaluate, type Expr, fn, call, let_, lit, ref, space, v } from "@mark1russell7/vex";
+import { app, type AnyDomain, evaluate, type Expr, fn, call, let_, lit, ref, space, v } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { doubling, fromCore } from "@mark1russell7/vex-testkit";
 import { describe, expect, it } from "vitest";
+import { LINE_MB, placesFaults, SHAPES, worstRows, type PlacesRow } from "../test/places.ts";
 import { emitModule, emitSheetModule, type ModuleOptions } from "./module.ts";
 import { generate, tiered } from "./tiers.ts";
 import { MAX_PLACES, placesError, placesOf } from "./unshared.ts";
@@ -17,20 +18,6 @@ const REFUSAL_MS = 1000;
 
 /** The first depth with more places than the limit. */
 const OVER = Math.ceil(Math.log2(MAX_PLACES));
-
-/** This function gives a doubling in which each level is a loop. */
-function loops(depth: number): Expr {
-  let e: Expr = n;
-  for (let i = 0; i < depth; i++) e = app("sum", each(axes.all, app("add", e, e)));
-  return e;
-}
-
-/** The doubling programs of the measures: the leaf is a read, a constant of the run, or each level is a loop. */
-const SHAPES: readonly (readonly [string, (depth: number) => Expr])[] = [
-  ["plain", (depth) => doubling(n, depth)],
-  ["constant", (depth) => doubling(app("sum", each(axes.all, n)), depth)],
-  ["loop", loops],
-];
 
 function reasonOf(r: { readonly ok: true } | { readonly ok: false; readonly reason: string }): string | undefined {
   return r.ok ? undefined : r.reason;
@@ -51,6 +38,36 @@ const sized = (places: number): Expr => app("add", ...Array.from({ length: place
 
 const DEPTHS = [10, 20, 30, 40].filter((depth) => depth >= OVER);
 const CASES = ENTRIES.flatMap(([entry, compile]) => SHAPES.flatMap(([shape, make]) => DEPTHS.map((depth) => [entry, shape, depth, compile, make] as const)));
+
+/** This function gives a row of the gate. */
+const row = (depth: number, rssMB: number | undefined, shape = "plain"): PlacesRow => ({ mode: "module", shape, depth, rssMB });
+
+describe("COMPILE.PLACES: the rule of the limit", () => {
+  it("COMPILE.PLACES: the rows keep the rule if the depth stays under the line and the next depth goes over it", () => {
+    expect(placesFaults([row(14, LINE_MB), row(15, LINE_MB + 1), row(15, 10, "loop")], 14)).toStrictEqual([]);
+    expect(placesFaults([row(14, 10), row(15, undefined)], 14)).toStrictEqual([]);
+  });
+
+  it("COMPILE.PLACES: a row of the depth over the line is a fault", () => {
+    expect(placesFaults([row(14, LINE_MB + 1), row(15, undefined)], 14)).toStrictEqual(["module plain at depth 14 goes over 1024 MB. Lower MAX_PLACES."]);
+    expect(placesFaults([row(14, undefined), row(15, undefined)], 14)).toHaveLength(1);
+  });
+
+  it("COMPILE.PLACES: a next depth with each row under the line is a fault", () => {
+    expect(placesFaults([row(14, 10), row(15, LINE_MB)], 14)).toStrictEqual(["each row at depth 15 stays under 1024 MB. Raise MAX_PLACES."]);
+  });
+
+  it("COMPILE.PLACES: rows with no depth of the rule are a fault", () => {
+    expect(placesFaults([row(15, 10)], 14)).toStrictEqual(["the rows do not have the depths 14 and 15"]);
+    expect(placesFaults([row(14, 10)], 14)).toStrictEqual(["the rows do not have the depths 14 and 15"]);
+  });
+
+  it("COMPILE.PLACES: the worst row of three samples is the largest row, and a sample with no result is the worst", () => {
+    expect(worstRows([row(14, 5), row(14, 9), row(14, 7)])).toStrictEqual([row(14, 9)]);
+    expect(worstRows([row(14, 5), row(14, undefined), row(14, 7)])).toStrictEqual([row(14, undefined)]);
+    expect(worstRows([row(14, 5), row(15, 6)])).toHaveLength(2);
+  });
+});
 
 describe("COMPILE.PLACES: a compile counts the places of a program first", () => {
   it("COMPILE.PLACES: a shared object counts once for each place, and the walk visits each object once", () => {

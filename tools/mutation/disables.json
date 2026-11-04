@@ -200,22 +200,6 @@
     "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
   },
   {
-    "file": "packages/compiler/src/sheet-order.ts",
-    "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/sheet-order.ts",
-    "comment": "// Stryker disable next-line EqualityOperator: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/sheet-order.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression,LogicalOperator: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/sheet-order.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
-  },
-  {
     "file": "packages/core/src/builder.ts",
     "comment": "// Stryker disable next-line ConditionalExpression: an undefined option and an absent option are the same"
   },

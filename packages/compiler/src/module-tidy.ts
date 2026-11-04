@@ -244,29 +244,50 @@ const CONSTANT = /^ {2}const (c\d+) = (?:T\(\(\) => .*\)|\[\]);$/;
 /** The first line of a constant of the run with a `try`, with its name. */
 const HELD = /^ {2}let (c\d+);$/;
 
-/** This function gives the name of the constant at the line `at` and its last line, or `undefined` for another line. */
+/** The first line of a column at each depth, with its indent and its name. A column does not run until a read calls it. */
+const COLUMN = /^( *)const (col\d+) = Q\(\(\w+\) => \{$/;
+
+/** The variable of the pack of a column at each depth, with its name. */
+const PACK = /^ *let (PK\d+);$/;
+
+/** This function gives the name of the declaration at the line `at` and its last line, or `undefined` for another line. */
 function constantAt(lines: readonly string[], at: number): { readonly name: string; readonly last: number } | undefined {
   const line = lines[at] as string;
   const one = CONSTANT.exec(line)?.[1];
   if (one !== undefined) return { name: one, last: at };
   const lazy = CELL.exec(line)?.[1];
   if (lazy !== undefined) return { name: lazy, last: lines.indexOf("  });", at) };
+  const column = COLUMN.exec(line);
+  if (column !== null) return { name: column[2] as string, last: lines.indexOf(`${column[1] as string}});`, at) };
+  const pack = PACK.exec(line)?.[1];
+  if (pack !== undefined) return { name: pack, last: at };
   const held = HELD.exec(line)?.[1];
   return held === undefined || lines[at + 1] !== "  try {" ? undefined : { name: held, last: lines.indexOf("  }", at) };
 }
 
+/** This function gives the count of each word of some lines. */
+function wordCounts(lines: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const x of lines) for (const w of wordsOf(x)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  return counts;
+}
+
 /**
  * This function removes each constant of the run that no code reads (COMPILE.MODULE.SIZE.DEAD). The code of a constant
- * has no effect, and the constant holds each failure of that code. A lazy cell with no read does not run.
+ * has no effect, and the constant holds each failure of that code. A lazy cell with no read does not run. A print that
+ * the printer drops leaves its columns and their packs, in the run and in a function, so the pass removes these too. The
+ * parameters of a function come from the code that it keeps, so such a column can read a name with no declaration.
  */
 export function deadConstants(lines: readonly string[]): readonly string[] {
   let out = lines;
+  const counts = wordCounts(lines);
   for (let i = 0; i < out.length; i++) {
     const c = constantAt(out, i);
     if (c === undefined) continue;
-    const rest = [...out.slice(0, i), ...out.slice(c.last + 1)];
-    if (countOf(rest, c.name) > 0) continue;
-    out = rest;
+    const own = wordCounts(out.slice(i, c.last + 1));
+    if (counts.get(c.name) !== own.get(c.name)) continue;
+    out = [...out.slice(0, i), ...out.slice(c.last + 1)];
+    for (const [word, count] of own) counts.set(word, (counts.get(word) as number) - count);
     i = -1;
   }
   return out;

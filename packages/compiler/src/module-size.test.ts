@@ -334,6 +334,23 @@ describe("COMPILE.MODULE.SIZE.DEAD: code that no code reads", () => {
     expect(deadConstants([t, "  const c2 = T(() => G(c1));", "  use(1);"])).toStrictEqual(["  use(1);"]);
   });
 
+  it("COMPILE.MODULE.SIZE.DEAD: the pass removes a column and its pack at each depth, also through a chain of reads", () => {
+    const column = ["    const col1 = Q((j1) => {", "      const f = (k) => {", "        return k;", "      };", "      return f(R[o1]);", "    });"];
+    expect(deadConstants(["  const fn2 = (p1) => {", ...column, "    return 0;", "  };"])).toStrictEqual(["  const fn2 = (p1) => {", "    return 0;", "  };"]);
+    expect(deadConstants(["  let PK1;", "  use(1);"])).toStrictEqual(["  use(1);"]);
+    expect(deadConstants(["  let PK1;", "  const col1 = Q((j) => {", "    return PK1 || 1;", "  });", "  const col2 = Q((j) => {", "    return col1(j);", "  });", "  use(1);"])).toStrictEqual(["  use(1);"]);
+  });
+
+  it("COMPILE.MODULE.SIZE.DEAD: the pass keeps a column or a pack that a line reads", () => {
+    const kept: readonly (readonly string[])[] = [
+      ["  const col1 = Q((j) => {", "    return j;", "  });", "  use(col1(0));"],
+      ["  let PK1;", "  use(PK1);"],
+      // The pack of a column that a line reads.
+      ["  let PK1;", "  const col1 = Q((j) => {", "    return PK1;", "  });", "  use(col1(0));"],
+    ];
+    for (const lines of kept) expect(deadConstants(lines)).toStrictEqual(lines);
+  });
+
   it("COMPILE.MODULE.SIZE.DEAD: the pass keeps a constant that a line reads, and each other statement", () => {
     const kept: readonly (readonly string[])[] = [
       ["  const c1 = T(() => f());", "  use(c1);"],

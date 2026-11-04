@@ -220,14 +220,18 @@ A place is a node at one position of the tree of a program. A program can use on
 
 A module and tier 2 refuse a program with more than 32,768 places. The interpreter runs such a program, and `tiered` gives tier 1. This is a stated difference: a module refuses a program that the interpreter runs.
 
-The limit comes from a measure of doubling programs on a CI runner, with a heap of 2,048 MB. The rule is the largest measured depth at which each form stays under half of the heap.
+The limit comes from a measure of doubling programs on a CI runner, with a heap of 2,048 MB. The rule counts places, because the limit counts places. The largest program of each shape under the limit stays under 1,024 MB, half of the heap. At 4 times the places, at least one shape goes over that line.
 
-| Places | Slowest compile | Most code | Most memory |
-| --- | --- | --- | --- |
-| 2,047 | 208 ms | 6.8 MB | 183 MB |
-| 8,191 | 700 ms | 31 MB | 350 MB |
-| 32,767 | 3.0 s | 140 MB | 936 MB |
-| 131,071 | The heap ends in tier 2 | | |
+This table gives the worst sample of five fresh processes, with the limit removed. Each program has its count of places.
+
+| Shape | Places | Tier 2 memory | Tier 2 compile | Module memory | Module compile |
+| --- | --- | --- | --- | --- | --- |
+| plain, depth 14 | 32,767 | 560 MB | 938 ms | 154 MB | 291 ms |
+| constant, depth 13 | 32,767 | 566 MB | 922 ms | 195 MB | 565 ms |
+| loop, depth 13 | 32,765 | 489 MB | 812 ms | 194 MB | 930 ms |
+| plain, depth 16 | 131,071 | 1,661 MB | 4,154 ms | 243 MB | 1,058 ms |
+| constant, depth 15 | 131,071 | 1,699 MB | 3,996 ms | 283 MB | 2,242 ms |
+| loop, depth 15 | 131,069 | 1,469 MB | 3,094 ms | 327 MB | 3,958 ms |
 
 The largest module of `ireko` has 2,138 places, so the limit is 15 times that program.
 

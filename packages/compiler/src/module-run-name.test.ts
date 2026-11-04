@@ -66,6 +66,18 @@ describe("COMPILE.MODULE.NAME: the name of the run hides nothing", () => {
     expect(runOf(print(WIDTH, optionsOf(domain, "run", faults)), "run")(RECORDS, {})).toStrictEqual([3]);
   });
 
+  it("V-082 COMPILE.MODULE.NAME: a name with a letter outside ASCII is a whole name of the code", () => {
+    const source = print(app("step", ref("n")), optionsOf(shown({ step: (ñame: number): number => ñame + 1 }), "ñame", "value"));
+    expect(source).toContain("export { run$0 as ñame };");
+    expect(runOf(source, "ñame")(RECORDS, {})).toStrictEqual([124]);
+  });
+
+  it("V-082 COMPILE.MODULE.NAME: a default name that only the fixed note of a module holds stays the name of the function", () => {
+    const source = print(WIDTH, optionsOf(shown({ width }), "run", "value"));
+    expect(source).toContain("export function run(records, vars) {");
+    expect(source).not.toContain("run$0");
+  });
+
   it("V-082 COMPILE.MODULE.NAME: a run named Error leaves the class of the contract as an error", () => {
     // The line of the class is outside the code of the run, and it reads the global Error.
     const source = print(WIDTH, optionsOf(shown({ width }), "Error", "throw"));
@@ -162,7 +174,7 @@ describe("COMPILE.MODULE.NAME: the name of the run hides nothing", () => {
   it("V-082 COMPILE.MODULE.NAME: no declaration at the top of a golden file is a language global", () => {
     const golden = new URL("./__golden__/", import.meta.url);
     const files = readdirSync(golden).filter((f) => /^module-.*\.js$/.test(f));
-    const declared = files.flatMap((f) => [...readFileSync(new URL(f, golden), "utf8").matchAll(/^(?:export )?(?:function|const|class) (\S+?)\b/gm)].map((x) => x[1] as string));
+    const declared = files.flatMap((f) => [...readFileSync(new URL(f, golden), "utf8").matchAll(/^(?:export )?(?:function|const|class) (\S+?)\b/gm)].map((x) => x[1]));
     expect(declared.length).toBeGreaterThan(100);
     expect(declared.filter((x) => LANGUAGE_GLOBALS.has(x))).toStrictEqual([]);
   });

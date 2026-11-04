@@ -3,7 +3,7 @@ import { emitSheetModule } from "@mark1russell7/vex-compiler/module";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { fitChild as child, measureVars as vars } from "./inputs.ts";
-import { fitNode, MEASURE_COLUMNS, MEASURE_DOMAINS, measureRecords, measureSpace, type Fit, type FitChild, type MeasureVars } from "./ireko-measure.ts";
+import { fitNode, MEASURE_COLUMNS, MEASURE_DOMAINS, MEASURE_SCHEMA, measureRecords, measureSpace, type Fit, type FitChild, type MeasureVars } from "./ireko-measure.ts";
 import { irekoRun, irekoSource } from "./ireko-modules.ts";
 
 type Columns = Readonly<Record<string, readonly unknown[]>>;

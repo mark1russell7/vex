@@ -1,19 +1,19 @@
 /**
- * The speed of the schema pilot (EXAMPLE.SCHEMA), for the speed job of the nightly workflow. Graph needs 5 ms or less
+ * The speed of the schema pilot (EXAMPLE.SCHEMA), for the speed job of the nightly workflow. A private app needs 5 ms or less
  * for one sample of 20 documents of 30 fields.
  *
  * Start it from the repo root with `node packages/pilots/bench/schema-speed.ts`. It needs Node 24 or later, for the
  * type stripping. It prints one line for each case. With `BENCH_OUT=<file>`, it also writes the records as JSON.
  *
  * Each case runs `RUNS` times (default 40) after `WARM` runs (default 10). Thus the numbers are of the warm interpreter,
- * as in Graph after its first samples. `COLD=1` adds the cold case of `schema.test.ts`: the mean of 5 runs after one.
+ * as in that app after its first samples. `COLD=1` adds the cold case of `schema.test.ts`: the mean of 5 runs after one.
  * `schema-cold.ts` measures the first sample in new processes.
  *
  * Two cases are references in the same run: `TypeScript inferSchema` and `calibration`, a fixed JavaScript work of
  * Map, filter and object steps. Each line gives the ratio of its median to the median of `calibration`. The runners of
  * CI differ by up to 1.4x, and the ratio removes most of that difference. `README.md` tells how to read the numbers.
  *
- * The script fails (exit 1) when a result is not the same as the result of the copy of `inferSchema` of Graph. The
+ * The script fails (exit 1) when a result is not the same as the result of the copy of `inferSchema` of that app. The
  * time does not make it fail.
  */
 import { writeFileSync } from "node:fs";
@@ -31,7 +31,7 @@ interface Row {
   readonly count: number;
 }
 
-// The reference of Graph (stage-schema.ts), as in schema.test.ts.
+// The reference of that app, as in schema.test.ts.
 const isRec = (u: unknown): u is Readonly<Record<string, unknown>> => typeof u === "object" && u !== null && !Array.isArray(u);
 
 function valueKind(value: unknown): string {
@@ -71,8 +71,7 @@ function inferSchema(input: readonly unknown[]): readonly Row[] {
 // The input of the speed case of schema.test.ts: 20 documents of 30 fields.
 const docs = Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${String(f)}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
 
-// A copy of the pilot program before the list ops `distinct`, `group`, `join` and the op `leaves` (v1), cut into stages,
-// and the rewrite (c) of v1 with one fold.
+// A copy of the pilot program before the list ops `distinct`, `group`, `join` and the op `leaves` (v1), cut into stages.
 const EMPTY = lit(vexList([]));
 const loop = (list: Expr, as: ItemNames, body: Expr): Expr => each(axes.list(list), body, undefined, as);
 const one = (x: Expr): Expr => app("fill", lit(1), x);
@@ -95,29 +94,6 @@ const paths = call("distinct", loop(v("notes"), ["n"], field(v("n"), "path")));
 const mine = app("flat", loop(v("notes"), ["n"], app("if", app("eq", field(v("n"), "path"), v("p")), one(v("n")), EMPTY)));
 const wrap = (body: Expr): Expr => let_({ distinct, joinBar }, let_({ arrayKind }, let_({ note }, let_({ level3: level(undefined) }, let_({ level2: level("level3") }, let_({ level1: level("level2") }, let_({ notes }, body)))))));
 const v1 = wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], rec({ path: v("p"), kinds: app("values", call("distinct", loop(mine, ["n"], field(v("n"), "kind")))), count: app("count", call("distinct", loop(mine, ["n"], field(v("n"), "doc")))) })))));
-const has = (list: Expr, x: Expr): Expr => app("ifError", app("gte", app("indexOf", list, x), lit(0)), lit(false));
-const upd = let_(
-  { old: app("nth", v("rows"), v("j")) },
-  rec({
-    path: field(v("old"), "path"),
-    kinds: app("if", has(field(v("old"), "kinds"), field(v("n"), "kind")), field(v("old"), "kinds"), app("append", field(v("old"), "kinds"), one(field(v("n"), "kind")))),
-    count: app("if", app("eq", field(v("old"), "last"), field(v("n"), "doc")), field(v("old"), "count"), app("add", field(v("old"), "count"), lit(1))),
-    last: field(v("n"), "doc"),
-  }),
-);
-const newRow = rec({ path: field(v("n"), "path"), kinds: one(field(v("n"), "kind")), count: lit(1), last: field(v("n"), "doc") });
-const table = fold(
-  axes.list(v("notes")),
-  { paths: EMPTY, rows: EMPTY },
-  {
-    paths: app("if", has(v("paths"), field(v("n"), "path")), v("paths"), app("append", v("paths"), one(field(v("n"), "path")))),
-    rows: let_({ j: app("ifError", app("indexOf", v("paths"), field(v("n"), "path")), lit(-1)) }, app("if", app("lt", v("j"), lit(0)), app("append", v("rows"), one(newRow)), app("append", app("append", app("take", v("rows"), v("j")), one(upd)), app("drop", v("rows"), app("add", v("j"), lit(1)))))),
-  },
-  v("rows"),
-  undefined,
-  ["n"],
-);
-
 const opts = { space: space.array([{}]), origin: "0", domains: SCHEMA_DOMAINS, vars: { docs } };
 const want = JSON.stringify(inferSchema(docs));
 
@@ -140,7 +116,6 @@ const exprs: Readonly<Record<string, Expr>> = {
   "stage: walk only": wrap(app("count", v("notes"))),
   "stage: walk + distinct paths": wrap(app("count", paths)),
   "stage: walk + paths + filter per path": wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], app("count", mine))))),
-  "rewrite (c): one fold": wrap(app("values", loop(table, ["r"], rec({ path: field(v("r"), "path"), kinds: app("values", field(v("r"), "kinds")), count: field(v("r"), "count") })))),
 };
 const cases: Record<string, () => unknown> = Object.fromEntries(Object.entries(exprs).map(([name, e]) => [name, () => evaluate(e, opts)]));
 cases["compile alone"] = () => compile(SCHEMA_PROGRAM, { domains: SCHEMA_DOMAINS });
@@ -157,7 +132,7 @@ cases["calibration"] = () => {
   return size;
 };
 // The cases that must give the records of inferSchema.
-const SAME = new Set(["pilot (evaluate)", "pilot v1 (functions of the walk)", "rewrite (c): one fold", "TypeScript inferSchema"]);
+const SAME = new Set(["pilot (evaluate)", "pilot v1 (functions of the walk)", "TypeScript inferSchema"]);
 
 /** The record of one case: the times in ms, and the check of its result. */
 interface Measure {
@@ -194,7 +169,7 @@ for (let i = 0; i < RUNS; i++) {
   }
 }
 for (const [name] of entries) {
-  // A case of SAME gives the records of Graph. A stage gives a count, and an error of a stage fails too.
+  // A case of SAME gives the records of the reference. A stage gives a count, and an error of a stage fails too.
   const ts = [...(times.get(name) ?? [])];
   // oxlint-disable-next-line unicorn/no-array-sort
   ts.sort((a, b) => a - b);
@@ -206,14 +181,14 @@ const pilot = out.find((o) => o.name === "pilot (evaluate)")?.median ?? Number.N
 const cal = out.find((o) => o.name === "calibration")?.median ?? Number.NaN;
 const ts = out.find((o) => o.name === "TypeScript inferSchema")?.median ?? Number.NaN;
 for (const o of out) {
-  console.info(`${o.name.padEnd(40)} median ${o.median.toFixed(2).padStart(8)} ms  min ${o.min.toFixed(2).padStart(8)}  share of the pilot ${((100 * o.median) / pilot).toFixed(0).padStart(4)} %  per calibration ${(o.median / cal).toFixed(3).padStart(7)}  per TypeScript ${(o.median / ts).toFixed(1).padStart(7)}  same as Graph: ${o.check}`);
+  console.info(`${o.name.padEnd(40)} median ${o.median.toFixed(2).padStart(8)} ms  min ${o.min.toFixed(2).padStart(8)}  share of the pilot ${((100 * o.median) / pilot).toFixed(0).padStart(4)} %  per calibration ${(o.median / cal).toFixed(3).padStart(7)}  per TypeScript ${(o.median / ts).toFixed(1).padStart(7)}  same as the reference: ${o.check}`);
 }
 console.info(`target: 5 ms for one sample, ${(5 / cal).toFixed(3)} per calibration. The warm pilot needs a factor of ${(pilot / 5).toFixed(1)} on this runner.`);
 const file = process.env["BENCH_OUT"];
 if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ mode: "process", context: context(), env: env(), node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
-// A result that is not the result of Graph fails the step. The numbers stay in the report.
+// A result that is not the result of the reference fails the step. The numbers stay in the report.
 const wrong = out.filter((o) => o.check !== "true" && o.check !== "n/a");
 if (wrong.length > 0) {
-  console.error(`not the same as inferSchema of Graph: ${wrong.map((o) => `${o.name} (${o.check})`).join(", ")}`);
+  console.error(`not the same as the reference inferSchema: ${wrong.map((o) => `${o.name} (${o.check})`).join(", ")}`);
   process.exitCode = 1;
 }

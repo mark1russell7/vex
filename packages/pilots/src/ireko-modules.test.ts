@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { childRecord, fitChild, GRID_LINKED, measureVars, NODE_FIXED_KIDS, placeTreeInput, RADIAL_TWO } from "./inputs.ts";
 import { gridRun } from "./ireko-grid.ts";
 import { measureRecords } from "./ireko-measure.ts";
-import { IREKO_COMMITTED, IREKO_FILES, IREKO_NOT_COMMITTED, irekoName, irekoSource, isIrekoModule, loadModule, moduleDrift, PIN_LIMIT, versionsBehind, type IrekoModule } from "./ireko-modules.ts";
+import { IREKO_COMMITTED, IREKO_FILES, IREKO_NOT_COMMITTED, irekoName, irekoSource, isIrekoModule, loadModule, moduleDrift, type IrekoModule } from "./ireko-modules.ts";
 import { radialRun } from "./ireko-radial.ts";
 
 /** One input of a module: the arguments of its function. */
@@ -62,19 +62,6 @@ describe("the bytes of a committed module (COMPILE.MODULE.BYTES)", () => {
     expect(moduleDrift("a.js", "a\nb", "a")).toContain("at line 2.");
     expect(moduleDrift("a.js", "a", "a\nb")).toContain("printed:   (end of the file)");
     expect(moduleDrift("a.js", "a\n", "a")).toContain("committed: (end of the file)");
-  });
-
-  it("COMPILE.MODULE.BYTES: a pin counts the stable versions that come after it", () => {
-    const published = ["0.17.1", "0.17.2", "0.18.0-rc.1", "0.18.0", "0.18.1"];
-    expect(versionsBehind("0.18.1", published)).toBe(0);
-    expect(versionsBehind("0.18.0", published)).toBe(PIN_LIMIT);
-    expect(versionsBehind("0.17.2", published)).toBeGreaterThan(PIN_LIMIT);
-    expect(versionsBehind("0.17.1", published)).toBe(3);
-  });
-
-  it("COMPILE.MODULE.BYTES: a pin ahead of the last release is not behind", () => {
-    expect(versionsBehind("0.19.0", ["0.18.0"])).toBe(0);
-    expect(versionsBehind("0.19.0-rc.1", ["0.18.0"])).toBe(0);
   });
 
   it("COMPILE.MODULE.BYTES: one space is a difference, and each committed module has a path", () => {

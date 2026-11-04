@@ -75,22 +75,9 @@ export function moduleDrift(file: string, printed: string, committed: string): s
     `${file} differs from its print at line ${String(at + 1)}.`,
     `  committed: ${(ours[at] ?? "(end of the file)").slice(0, 120)}`,
     `  printed:   ${(theirs[at] ?? "(end of the file)").slice(0, 120)}`,
-    "Print the file again from the pinned commit of vex:",
+    "Move the pin of vex to the commit that gives this print, and print the file again:",
     "  node packages/pilots/scripts/module-bytes.ts <path of this repository> --write",
   ].join("\n");
-}
-
-/** The largest number of published versions between a pin and the last version of the compiler. */
-export const PIN_LIMIT = 1;
-
-/**
- * This function gives the number of stable versions that come after a pin, in a list in publish order. A version that
- * the list does not hold gives 0, because that commit is ahead of the last release (COMPILE.MODULE.BYTES).
- */
-export function versionsBehind(version: string, published: readonly string[]): number {
-  const stable = published.filter((name) => !name.includes("-"));
-  const at = stable.indexOf(version);
-  return at < 0 ? 0 : stable.length - 1 - at;
 }
 
 /** This function gives the name of the function of a module of ireko. */

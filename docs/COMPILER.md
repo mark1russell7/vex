@@ -202,7 +202,7 @@ Generated code makes no trace. `explain` always operates in tier 0, so the quest
 
 A repository can commit a printed module. The committed file then equals its print byte for byte, or the file is not the program that the repository names. The reusable workflow `.github/workflows/module-bytes.yml` takes a commit of vex, prints each module from that commit and compares the bytes with `packages/pilots/scripts/module-bytes.ts`. The commit is the pin: to print a module again, change the commit and start the script with `--write`. A change of the compiler thus reaches a committed file only by a change of the pin. The gate runs on each runner, because the print does not depend on the runner (COMPILE.MODULE.TEXT).
 
-A pin that stays in one place proves only that the files match an old compiler. A repository with committed modules has no dependency on the compiler, so a release does not move the pin. Thus the gate reads the published versions and fails when the pin is more than one version behind. The repository then moves the pin and prints the files again.
+A pin that stays in one place proves only that the files match an old compiler. A repository with committed modules has no dependency on the compiler, so a release does not move the pin. Thus a repository uses the workflow two times. The check of a pull request takes the pin, and its result depends only on that pull request. A daily run takes the word `latest` and prints from the last release. That run fails only when a release changes the output of a module, so a release with the same output gives no alarm. The repository then moves the pin and prints the files again.
 
 #### The text of a copied function (COMPILE.MODULE.TEXT)
 

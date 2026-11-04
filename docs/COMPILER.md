@@ -254,7 +254,7 @@ A run knows which cell reads which cell. After a change of one record, only the 
 
 ### 7.6 Fusion of list ops
 
-This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 7 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT). The seventh step gives one frozen `vex.list` for each run (COMPILE.MODULE.FUSE.OUT).
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 8 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT). The seventh step gives one frozen `vex.list` for each run (COMPILE.MODULE.FUSE.OUT). The eighth step gives a small sort in place an insertion sort (COMPILE.MODULE.FUSE.SORT).
 
 The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus an ID stayed in this section until its test existed. Then it moved to the spec.
 
@@ -371,10 +371,11 @@ The clean form does not move a part of the code. Thus each part evaluates in the
 - One loop for each source, and one output array for each sink. A fused chain uses no `FI`, `AP`, `FL` or `V`.
 - `fill(1, v)` in a stage prints one push of `[0, v]`. `fill(n, v)` with a computed count prints the check of `FI` and a loop.
 - An append of several parts pushes each part into one output, in order. A part that is a source prints a loop that pushes its items.
-- `sortBy` with `by` collects the pairs of the item and its sort value in the loop of the stage before it. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
+- `sortBy` with `by` collects the items in the loop of the stage before it. `SKI` keeps the sort values in an array of their own, so it makes no pair for an item. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
 - `LO` of a fused chain makes the items of the `vex.list` in the loop.
 - **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it. An append of `fill(1, x)` into that array pushes the item directly. The rules of the adoption follow this list.
 - **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LS` for each run. Each key gets that object. The printer tests the levels of the value: a value with no levels reads no key. The `L` of the envelope evaluates on the first read, so a run with no keys makes no envelope. An error stays the error of each key. `LS` and `LSC` give a frozen list, because the keys share the object. They keep no object on the array. `LO` and `LOC` give a list of one key, and they print no freeze. Thus a module with no shared list has no freeze of a list.
+- **The cheap sort (COMPILE.MODULE.FUSE.SORT).** `SBI` and `SKI` use an insertion sort for a list of 64 items or fewer, and they call no comparator function. The test `>` moves an item only past a larger value, so equal values keep their order. A longer list uses the stable sort of the engine. `SKI` sorts an array of indices by the sort values, and then reads the items from a copy. The check of the kinds of the sort values comes before each of the two sorts. The limit counts the items at the sort, because a fresh list has no error items. Only the sort in place changes. `SB`, `SK`, `SBC` and `SKC` keep the sort of the engine.
 - The fused code uses no new global, so the test of `MODULE_GLOBALS` (V-060) does not change. It makes no own property on an array.
 
 #### The rules of the adoption
@@ -462,7 +463,7 @@ With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_dom
 
 #### Requirement IDs
 
-`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6, and `COMPILE.MODULE.FUSE.OUT` moved with step 7. Step 7 added the frozen form of a shared list to `COMPILE.MODULE.LIST.RESULT`.
+`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6, and `COMPILE.MODULE.FUSE.OUT` moved with step 7. Step 7 added the frozen form of a shared list to `COMPILE.MODULE.LIST.RESULT`. `COMPILE.MODULE.FUSE.SORT` moved with step 8.
 
 #### Measure before a release
 
@@ -485,7 +486,8 @@ Each step is one pull request. P17 and the golden files check each step, and the
 5. Fuse the chains of `append`, and make `sortBy` a sink. Done. A chain fuses only when a part pushes its items, because a copy loop costs more than `concat`. In a sheet with a search, a chain that reads a cell keeps its arrays. The interpreter reads each cell of an append also after an error, and the fused chain stops at the first error.
 6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT). Done. A literal is not fresh, so a loop that starts with the empty literal keeps its first copy. That copy has no items, so its cost is small. Then an append of `fill(1, x)` into the array pushes its item directly, with no `FI` and no `AOC`.
 7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions). Done. Only a list that one object serves to more than one key is frozen, with its array of items and its nested lists. The helpers `LS` and `LSC` print this form. Each other list of a result is not frozen, as in version 0.17.2. These lists are a value that reads a key, a column of lists of a sheet and each list of a module of `fuse` false. Thus the option `fuse` changes the frozen state of a list that reads no key, and it changes no value. With `fuse` false, each key keeps its own envelope, so a bench can compare the two forms. A plain array stays one array for each key, and it is not frozen. The decision covers only the `vex.list`, and a host can change an array. A column of a sheet keeps one list for each cell, so no two keys share a list, and the list is not frozen. A list in an argument or in a field stays frozen (`LV`, `LVC`), as in version 0.17.2 (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). The array keeps that object, so more than one key can read it.
-8. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
+8. Make the sort in place cheap for small lists (COMPILE.MODULE.FUSE.SORT). Done. A list of 64 items or fewer gets an insertion sort, with the results of the interpreter. This step has no bench result, so it claims no speed gain.
+9. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
 
 These golden files change. The files in `packages/core/src/__golden__` do not change, because they are the IR and the traces of tier 1:
 
@@ -497,6 +499,7 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | 5 | `module-fuse.js`. The programs of the other files have no chain of `append` with a part that pushes. |
 | 6 | `module-fuse.js`, also for the direct push. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
 | 7 | `module-fuse.js`, the one golden file of a module whose value is a list. The two hashes of the modules of `fuse` false in the tests change only by the text of `LO`. |
+| 8 | `module-fuse.js` and `module-plain.js`, only by the text of `SKI`. No other golden file prints `SBI` or `SKI`. The two hashes of the modules of `fuse` false do not change. |
 
 #### Open questions
 

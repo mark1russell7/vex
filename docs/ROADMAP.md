@@ -24,14 +24,11 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | LAYERS | The layers and tree strategies of ireko as Vex programs. | ireko | P1 | in progress: layers and tree merged (#247, #251), audit is #254, route is #260 | ENGINE |
 | SHAPESIZE | The ireko layout bundle with the shapes module stays under 17.4 kB. | pilots | P1 | in progress: the cuts are #242, a measure in CI is next | COMPILE-FUSE |
-| MODMOVE | A computed move in `cell()`. | compiler | P2 | in progress: #246 | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
 | LISTSET | The op `setNth` replaces one item of a list. | core | P2 | in progress: #249 | |
 | MODNESTED | A module reads a list inside a list, and a schema takes list fields. | compiler | P1 | in progress: #253 | |
 | NIGHTLY1103 | The Nightly of 2026-11-03 is green again. | quality | P1 | in progress: #206 | |
-| ROUTEPASS | The route pass of ireko as Vex programs. | ireko | P1 | in progress: #260 | LAYERS |
-| MODBYTES | A committed module equals its print byte for byte. A pull request checks the pin, and a daily run checks the last release. | ireko | P1 | in progress: #267 | |
-| MODREPRINT | Print the five committed modules of ireko again from a pinned commit, with their size and time gates. | ireko | P1 | later | MODBYTES |
+| MODREPRINT | Print the five committed modules of ireko again from a pinned commit, with their size and time gates. | ireko | P1 | in progress: ireko#63 | |
 | TEXTCODES | An op reads the code points of a text, so a width estimate is a whole program. | domains | P2 | in progress | |
 | SIZECOPY | The size rule accepts a step that only copies a list. | core | P1 | in progress | LISTSET |
 
@@ -44,7 +41,8 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| AVOIDSET | The avoid router changes one item of its costs with `setNth`, and it gets the speed that ireko needs. | ireko | P1 | later | ROUTEPASS, LISTSET |
+| AVOIDSET | The avoid router changes one item of its costs with `setNth`, and it gets the speed that ireko needs. | ireko | P1 | later | LISTSET |
+| GRADIENT | The derivative of a program against a variable, as a transform of the program. | core | P3 | later: #270 | |
 | DFSOP | A kernel op for a depth-first search, with the order of ties in the spec. | domains | P2 | later | |
 | ASTAROP | A kernel op for the A* search, with the order of ties in the spec. | domains | P2 | later | |
 | STEPC | Step C: functions that call themselves, with a budget of steps. Vex builds it only when a real consumer needs it. | core | P3 | later | |

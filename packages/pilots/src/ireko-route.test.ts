@@ -1,5 +1,6 @@
 import { compile, space, type Expr, type Result, type Space } from "@mark1russell7/vex";
-import { emitModule, tiered, type Schema } from "@mark1russell7/vex-compiler";
+import { tiered, type Schema } from "@mark1russell7/vex-compiler";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { directedEdge, routeLattice, routeNodes, routerEdge } from "./inputs.ts";

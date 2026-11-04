@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, call, dataLimit, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
+import { app, axes, call, dataLimit, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
@@ -1753,7 +1753,7 @@ describe("COMPILE.MODULE: random programs", () => {
     // A step can move to the origin, so the rest of the walk prints an alias of the origin a second time (V-073).
     const stops = fc.tuple(fc.constantFrom("and", "or"), treeProgram.bool, treeProgram.num, fc.constantFrom(axes.ancestors, axes.reverse(axes.ancestors)), fc.boolean()).map(([o, test, x, a, moved]) => {
       const y = lit(o === "and");
-      const value = moved ? op("sum", each(axes.children, x, [origin])) : x;
+      const value = moved ? op("sum", each(axes.children, x, [{ t: "origin" }])) : x;
       return fold(a, { y, s: lit(0) }, { y: op(o, v("y"), test), s: op("subtract", value, v("s")) }, op("if", v("y"), v("s"), lit(-1)));
     });
     fc.assert(
@@ -1771,8 +1771,10 @@ describe("COMPILE.MODULE: random programs", () => {
 
   it("V-073 COMPILE.MODULE.EXIT: a step that moves to the origin gives its value in the rest of a walk", () => {
     // The stop prints the steps a second time. The alias of the origin in the second print must stay a new name.
-    const e = fold(axes.ancestors, { y: lit(true), s: lit(0) }, { y: op("and", v("y"), ref("b")), s: op("add", v("s"), op("sum", each(axes.children, lit(1), [origin]))) }, op("if", v("y"), v("s"), lit(-1)));
-    expectSameTree(make(sourceOf(e, TREE)), e, RECORDS, [1, 2, -1]);
+    const e = fold(axes.ancestors, { y: lit(true), s: lit(0) }, { y: op("and", v("y"), ref("b")), s: op("add", v("s"), op("sum", each(axes.children, lit(1), [{ t: "origin" }]))) }, op("if", v("y"), v("s"), lit(-1)));
+    const m = make(sourceOf(e, TREE));
+    expectSameTree(m, e, RECORDS, [1, 2, -1]);
+    expect(m.run(RECORDS, VARS, [1, 2, -1])).not.toContainEqual(m.VEX_ERROR);
   });
 
   it("COMPILE.MODULE.TREE.ALLOC: a chain of 5000 keys has no recursion and no limit of depth in the walk and in the order", () => {

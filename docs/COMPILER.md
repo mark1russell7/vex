@@ -253,7 +253,7 @@ The first form of this is done (§13.2). `SheetRun.fill` evaluates the cells in 
 
 ### 7.5 Recalculation
 
-A run knows which cell reads which cell. After a change of one record, only the cells that depend on it change. This is for the live editor of ireko and for the drag of a box in Graph.
+A run knows which cell reads which cell. After a change of one record, only the cells that depend on it change. This is for the live editor of ireko and for the drag of a box.
 
 ### 7.6 Fusion of list ops
 
@@ -661,7 +661,7 @@ The status on 2026-10-17:
 - The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 gives them with the code of the interpreter (COMPILE.LIST.VALUE).
 - Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
 - Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 has them (COMPILE.LIST.VALUE).
-- Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus the force layouts of Graph and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
+- Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus force layouts and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
 - Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops come from `XYDomain`, because a module cannot copy the methods of `Vec2Domain`.
 
 The decisions of the third block:

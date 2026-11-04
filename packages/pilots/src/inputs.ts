@@ -278,7 +278,7 @@ const arbs = fc.letrec<{ json: unknown; array: unknown[]; object: Record<string,
 /** Random samples of up to 5 documents: mostly objects, and sometimes other JSON values. */
 export const schemaDocs: fc.Arbitrary<unknown[]> = fc.array(fc.oneof({ arbitrary: arbs.object, weight: 4 }, { arbitrary: arbs.json, weight: 1 }), { maxLength: 5 });
 
-/** The example of Graph: two documents. */
+/** A small example of the schema pilot: two documents. */
 export const SCHEMA_EXAMPLE: readonly unknown[] = [
   { _id: "a", n: 1, tags: ["x"], o: { p: true } },
   { _id: "b", n: "2", o: {} },
@@ -295,7 +295,7 @@ export const SCHEMA_DEEP: readonly unknown[] = [
 /** Null and array documents, and the keys __proto__, constructor and the empty key. */
 export const SCHEMA_ODD_KEYS: readonly unknown[] = [null, [1, 2], JSON.parse('{"__proto__":{"p":1},"":{"q":[null]},"constructor":"c"}') as unknown, 7];
 
-/** This function gives 20 documents of 30 fields, the size of a sample of Graph. */
+/** This function gives 20 documents of 30 fields, the size of a sample. */
 export const schemaSample = (): Record<string, unknown>[] =>
   Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${f}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
 

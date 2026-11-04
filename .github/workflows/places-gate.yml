@@ -1,5 +1,6 @@
-# The gate of the limit of the places (COMPILE.PLACES). The limit has a rule: each doubling program at its depth stays
-# under half of a heap of 2,048 MB, and the next depth does not. Memory runs in CI, not on a shared machine.
+# The gate of the limit of the places (COMPILE.PLACES). The limit has a rule: the largest doubling program of each shape
+# under the limit stays under half of a heap of 2,048 MB, and a program of 4 times its places does not. Memory runs in
+# CI, not on a shared machine.
 name: Places gate
 
 on:
@@ -58,14 +59,14 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # The limit gives the depth, so the gate reads the depth before the next step removes the limit.
+      # The gate checks the rows against the limit, so it reads the limit before the next step removes it.
       - id: limit
-        run: echo "depth=$(node packages/compiler/bench/places.ts depth)" >> "$GITHUB_OUTPUT"
-      # The rows of a depth over the limit reach the compile only with no limit. The grep fails if the edit finds no line.
+        run: echo "places=$(node packages/compiler/bench/places.ts limit)" >> "$GITHUB_OUTPUT"
+      # The rows over the limit reach the compile only with no limit. The grep fails if the edit finds no line.
       - run: |
           sed -i 's/MAX_PLACES: number = .*/MAX_PLACES: number = 2 ** 60;/' packages/compiler/src/unshared.ts
           grep -q 'MAX_PLACES: number = 2 \*\* 60;' packages/compiler/src/unshared.ts
-      - run: node packages/compiler/bench/places.ts rows "${{ steps.limit.outputs.depth }}" 2>&1 | tee rows.txt
+      - run: node packages/compiler/bench/places.ts rows "${{ steps.limit.outputs.places }}" 2>&1 | tee rows.txt
       - if: ${{ !cancelled() }}
         run: |
           {

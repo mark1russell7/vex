@@ -46,11 +46,11 @@ import type { Space } from "@mark1russell7/vex";
 import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
 import { radialArrange, radialRun } from "../../pilots/src/ireko-radial.ts";
-import { handBoth, handPairs, handSum, loadRadial, ringOf } from "./ablation.ts";
-import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapesTree, type ShapeRecord } from "../../pilots/src/ireko-shapes.ts";
+import { freezeEnvelope, handBoth, handPairs, handSum, loadRadial, loadShapes, noFreeze, ringOf } from "./ablation.ts";
+import { MAX_BANDS, shapesTree, type ShapeRecord } from "../../pilots/src/ireko-shapes.ts";
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
-import { emitModule, emitSheetModule, tiered } from "../src/index.ts";
+import { emitModule, tiered } from "../src/index.ts";
 import { cpus } from "node:os";
 import { envLine, paired } from "../../core/bench/measure.ts";
 import { limitsFor, limitsText, type CaseLimits, type ModelLimits } from "../../core/bench/processes.ts";
@@ -160,15 +160,10 @@ const treeCase = (n: number): Case => {
 
 // The shapes pass of ireko as a module of a sheet, against the hand code of the pilot (COMPILE-FUSE, COMPILER.md §7.6).
 // The module has the option fuse, so each step of the fusion shows its gain in this case.
-const shapesModule = once((): TreeRun => {
-  const m = emitSheetModule(SHAPE_COLUMNS, { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", fuse: true });
-  if (!m.ok) throw new Error(m.reason);
-  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitSheetModule, as in the build of ireko.
-  const load = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn shapesOf;`) as () => TreeRun;
-  return load();
-});
+const shapesModule = once((): TreeRun => loadShapes((source) => source));
 
-const shapesCase = (branch: number, depth: number): Case => {
+// With `ablation`, the case measures a variant of the module. The variant must give the result of the module, or the gate stops.
+const shapesCase = (branch: number, depth: number, ablation?: { readonly name: string; readonly edit: (source: string) => string }): Case => {
   // A root and `depth` levels of `branch` children. Each node wants its shape, and each mode is linked.
   const n = Array.from({ length: depth + 1 }, (_, d) => branch ** d).reduce((a, b) => a + b, 0);
   const records = Array.from({ length: n }, (_, i): ShapeRecord => {
@@ -178,8 +173,11 @@ const shapesCase = (branch: number, depth: number): Case => {
   });
   const parents = records.map((r) => r.p);
   const vars = { limit: MAX_BANDS };
-  const shapes = shapesModule();
-  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapes(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes"), nodes: n };
+  const module = shapesModule();
+  const shapes = ablation === undefined ? module : loadShapes(ablation.edit);
+  if (JSON.stringify(shapes(records, vars, parents)) !== JSON.stringify(module(records, vars, parents))) throw new Error(`gate: the variant ${ablation?.name ?? ""} gives another result.`);
+  const suffix = ablation === undefined ? "" : `, ablation ${ablation.name}`;
+  return { title: `the shapes module of ireko, a tree of ${String(n)} nodes${suffix}`, compiled: { run: () => shapes(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes"), nodes: n };
 };
 
 // The ablation of RADIALGAP (step 3, predictions vex-radialgap-ablation-1102, -2 and -3 of the fleet): with GATE_ABLATE=1,
@@ -214,7 +212,7 @@ const CASES_BASE: readonly (() => Case)[] = [
   () => treeCase(1000),
   () => shapesCase(10, 3),
 ];
-const CASES: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, () => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : CASES_BASE;
+const CASES: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, () => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth), () => shapesCase(10, 3, { name: "no freeze", edit: noFreeze }), () => shapesCase(10, 3, { name: "freeze of the envelope only", edit: freezeEnvelope })] : CASES_BASE;
 
 // With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
 // changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run

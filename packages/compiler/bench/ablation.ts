@@ -2,10 +2,34 @@
 // emitted source. Each edit fails when its text is not in the source, so a change of the emitter stops the gate and does
 // not measure a variant that is the same as the module. The test in `ablation.test.ts` checks each edit on each push.
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, type RadialInput } from "../../pilots/src/ireko-radial.ts";
-import { emitModule } from "../src/index.ts";
+import { SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA } from "../../pilots/src/ireko-shapes.ts";
+import { emitModule, emitSheetModule } from "../src/index.ts";
 
 /** This type is the run of the radial module: the records and the variables of a ring give its result. */
 export type RadialRun = (records: unknown, vars: unknown) => unknown;
+
+/** This type is the run of the shapes module: the records, the variables and the parents give its result. */
+export type ShapesRun = (records: unknown, vars: unknown, parents: unknown) => unknown;
+
+/** This function loads the shapes module of a sheet, with the source changed by `edit`. */
+export const loadShapes = (edit: (source: string) => string): ShapesRun => {
+  const m = emitSheetModule(SHAPE_COLUMNS, { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", fuse: true });
+  if (!m.ok) throw new Error(m.reason);
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitSheetModule, as in the build of ireko.
+  const load = new Function(`${edit(m.source.replaceAll(/^export /gm, ""))}\nreturn shapesOf;`) as () => ShapesRun;
+  return load();
+};
+
+const replaceEach = (source: string, from: string, to: string): string => {
+  if (!source.includes(from)) throw new Error(`ablation: the edit needs the text "${from}" in the shapes module.`);
+  return source.replaceAll(from, to);
+};
+
+/** This edit of the shapes module keeps the freeze of each `vex.list`, and removes the freeze of its items. */
+export const freezeEnvelope = (source: string): string => `const KEEP_ = (x) => x;\n${replaceEach(source, "items: Object.freeze(", "items: KEEP_(")}`;
+
+/** This edit of the shapes module removes the freeze of each `vex.list` and of its items. */
+export const noFreeze = (source: string): string => replaceEach(freezeEnvelope(source), 'Object.freeze({ kind: "vex.list"', 'KEEP_({ kind: "vex.list"');
 
 /** This function loads the radial module, with the source changed by `edit`. */
 export const loadRadial = (edit: (source: string) => string): RadialRun => {

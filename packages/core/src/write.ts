@@ -7,7 +7,7 @@ import { isEnvelope, ref as path, typed, type Envelope, type Json, type JsonReco
 import { encodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import type { VexError } from "./errors.ts";
-import type { Axis, Expr, Move } from "./ir.ts";
+import { limitAxis, type Axis, type Expr, type Move } from "./ir.ts";
 
 /** The options of the writer. */
 export interface WriteOptions {
@@ -178,16 +178,20 @@ class Writer {
         const step = Object.keys(e.step);
         const until = e.until === undefined ? NONE : [term(e.until)];
         const after = init.length + step.length;
+        const axis = limitAxis(e);
         return {
-          jobs: [...Object.values(e.init).map(term), ...Object.values(e.step).map(term), ...until, term(e.result)],
-          make: (docs) =>
-            typed("iterate", {
-              limit: e.limit,
-              init: namesOf(init, docs, 0),
+          jobs: [...Object.values(e.init).map(term), ...Object.values(e.step).map(term), ...until, term(e.result), ...(axis === undefined ? [] : [{ t: "axis" as const, a: axis }])],
+          make: (docs) => {
+            const first = { init: namesOf(init, docs, 0) };
+            const limit = axis === undefined ? (e.limit as number) : this.#keep(typed("size", { axis: docs[after + until.length + 1] as Json }), e);
+            return typed("iterate", {
+              // The limit evaluates after the first values, so the order "reads" gives its reads after them.
+              ...(reads ? { ...first, limit } : { limit, ...first }),
               step: namesOf(step, docs, init.length),
               ...(e.until === undefined ? {} : { until: docs[after] as Json }),
               result: docs[after + until.length] as Json,
-            }),
+            });
+          },
         };
       }
       case "ext":

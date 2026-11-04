@@ -211,6 +211,13 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
           const loop: Expr = { tag: "iterate", limit, init: two ? { a: init, b: init } : { a: init }, step: { a: step }, result };
           return until === undefined ? loop : { ...loop, until };
         }),
+      // A limit from the data (ITERATE.LIMIT.DATA). Most limits read a base axis, which tier 2 takes. Some read each axis of a fold.
+      fc
+        .tuple(fc.oneof({ weight: 3, arbitrary: fc.constantFrom(...BASE_AXES) }, { weight: 1, arbitrary: tie("axis") }), tie("expr"), tie("expr"), tie("expr"), fc.option(tie("expr"), { nil: undefined }))
+        .map(([axis, init, step, result, until]): Expr => {
+          const loop: Expr = { tag: "iterate", limit: { axis }, init: { a: init }, step: { a: step }, result };
+          return until === undefined ? loop : { ...loop, until };
+        }),
       // A list as the name of a loop (LOOP.LIST): the step pushes a list onto a, or it removes the first item of a.
       fc
         .tuple(fc.integer({ min: 0, max: 3 }), tie("list"), fc.boolean(), tie("list"), tie("expr"))
@@ -353,6 +360,7 @@ export function arbNumberExpr(maxDepth = 4): fc.Arbitrary<Expr> {
       fc.tuple(tie("expr"), tie("expr")).map(([body, a]): Expr => ({ tag: "let", bind: { f: { tag: "fn", params: ["k"], body: { tag: "app", op: "add", args: [{ tag: "var", name: "k" }, body] } } }, body: { tag: "call", fn: "f", args: [a] } })),
       fc.tuple(tie("axis"), tie("expr")).map(([axis, step]): Expr => ({ tag: "fold", axis, init: { s: num(0) }, step: { s: { tag: "app", op: "add", args: [{ tag: "var", name: "s" }, step] } }, result: { tag: "var", name: "s" } })),
       fc.tuple(fc.integer({ min: 0, max: 3 }), tie("expr")).map(([limit, start]): Expr => ({ tag: "iterate", limit, init: { x: start }, step: { x: { tag: "app", op: "add", args: [{ tag: "var", name: "x" }, num(1)] } }, result: { tag: "var", name: "x" } })),
+      fc.tuple(tie("axis"), tie("expr")).map(([axis, start]): Expr => ({ tag: "iterate", limit: { axis }, init: { x: start }, step: { x: { tag: "app", op: "add", args: [{ tag: "var", name: "x" }, num(1)] } }, result: { tag: "var", name: "x" } })),
     ),
     axis: fc.oneof(
       { depthSize: "small", maxDepth: 2 },

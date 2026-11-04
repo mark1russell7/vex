@@ -5,7 +5,7 @@
  * Each part of the text starts at `root`. A field reference of `root` reads at the focus when the chain evaluates,
  * so a body of an axis can also start at `root`. A cell reference is the argument `root.ext("vex.cell", ...)`.
  */
-import { isListOp, type Axis, type Expr, type Move, type Names } from "@mark1russell7/vex";
+import { isListOp, type Axis, type DataLimit, type Expr, type Move, type Names } from "@mark1russell7/vex";
 
 /** This function gives the text of a string in double quotes, for the Lab reader. */
 const quote = (s: string): string => `"${s.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n").replaceAll("\t", "\\t")}"`;
@@ -100,7 +100,8 @@ function inline(e: Expr, s: Scope): Expr {
     }
     case "iterate": {
       const inside = without(s, Object.keys(e.init));
-      const inlined = { ...e, init: inlineNames(e.init, s), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
+      const limit = typeof e.limit === "number" ? e.limit : { axis: inlineAxis(e.limit.axis, s) };
+      const inlined = { ...e, limit, init: inlineNames(e.init, s), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
       return e.until === undefined ? inlined : { ...inlined, until: inline(e.until, inside) };
     }
     case "fn":
@@ -142,6 +143,9 @@ function inLoop(fields: ReadonlyMap<string, string>, parts: (param: string) => s
 /** The text of a record of the names of a loop: each field and the text of its value. */
 const namesText = (fields: ReadonlyMap<string, string>, names: Names): string => `{ ${Object.entries(names).map(([n, x]) => `${fields.get(n) ?? n}: ${arg(x)}`).join(", ")} }`;
 
+/** The text of the limit of an iteration: a number, or a list chain with one item for each target of the axis. */
+const limitText = (limit: number | DataLimit): string => (typeof limit === "number" ? String(limit) : list({ tag: "each", axis: limit.axis, body: { tag: "lit", value: 0 } }));
+
 /**
  * The text of a loop: an iteration of a chain, or a fold of a list chain. The first values and the tests of a fold
  * have the text outside the loop, because they cannot read its names.
@@ -149,7 +153,7 @@ const namesText = (fields: ReadonlyMap<string, string>, names: Names): string =>
 function loop(e: Extract<Expr, { tag: "fold" | "iterate" }>): string {
   const fields = new Map(Object.keys(e.init).map((n, i) => [n, fieldOf(n, i)] as const));
   const first = namesText(fields, e.init);
-  const head = e.tag === "iterate" ? `root.start(0).iterate(${String(e.limit)}, ` : `${list({ tag: "each", axis: e.axis, body: { tag: "lit", value: 0 }, ...(e.at === undefined ? {} : { at: e.at }) })}.fold(`;
+  const head = e.tag === "iterate" ? `root.start(0).iterate(${limitText(e.limit)}, ` : `${list({ tag: "each", axis: e.axis, body: { tag: "lit", value: 0 }, ...(e.at === undefined ? {} : { at: e.at }) })}.fold(`;
   return inLoop(fields, (p) => {
     const until = e.tag === "iterate" && e.until !== undefined ? `, { until: (${p}) => ${arg(e.until)} }` : "";
     return `${head}${first}, (${p}) => (${namesText(fields, e.step)}), (${p}) => ${arg(e.result)}${until})`;

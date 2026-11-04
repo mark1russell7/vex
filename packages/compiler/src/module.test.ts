@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, call, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
+import { app, axes, call, dataLimit, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
@@ -1787,6 +1787,64 @@ describe("COMPILE.MODULE: random programs", () => {
   it("P17 COMPILE.MODULE: a module gives the value of the interpreter at each key, or VEX_ERROR", () => {
     fc.assert(
       fc.property(fc.oneof(program.num, program.bool), records, fc.integer({ min: -3, max: 3 }), fc.constantFrom("x", "y"), (e, rs, a, t) => {
+        expectSame(make(sourceOf(e)), e, rs, { a, t });
+      }),
+    );
+  });
+});
+
+describe("a data limit in a module (ITERATE.LIMIT.DATA)", () => {
+  const count = (a: Axis, until?: Expr): Expr => iterate(dataLimit(a), { i: lit(0) }, { i: op("add", v("i"), lit(1)) }, v("i"), until);
+  const CAP = op("fill", lit(100_000), lit(0));
+
+  it("ITERATE.LIMIT.DATA COMPILE.MODULE: a module counts the targets of an axis, as the interpreter does", () => {
+    const programs = [
+      count(axes.all),
+      count(axes.others),
+      count(axes.window(-1, 0)),
+      count(axes.reverse(axes.all)),
+      count(axes.where(axes.all, ref("b"))),
+      count(axes.where(axes.where(axes.all, ref("b")), op("gt", n, lit(0)))),
+      count(axes.list(each(axes.all, n))),
+      count(axes.list(op("fill", lit(3), lit(0)))),
+      count(axes.all, op("gt", v("i"), lit(1))),
+      op("ifError", count(axes.all, op("gt", v("i"), lit(99))), lit(-1)),
+      op("add", n, count(axes.all)),
+    ];
+    for (const e of programs) expectSame(make(sourceOf(e)), e, MANY);
+  });
+
+  it("ITERATE.LIMIT.DATA COMPILE.MODULE: a limit reads the field of a test, and a limit over the focus is not a constant", () => {
+    // The module reads the field b only in the test of the limit, so the reads of the limit must count.
+    const e = count(axes.where(axes.all, ref("b")));
+    expect(sourceOf(e)).toContain('["b"]');
+    // Each node has its own count of children, so one constant for all keys gives the wrong value.
+    const children = count(axes.children);
+    expectSameTree(make(sourceOf(children, TREE)), children, TREE_RECORDS, PARENTS, VARS, TREE);
+    expect(sourceOf(count(axes.all))).not.toContain("children");
+  });
+
+  it("ITERATE.LIMIT.DATA COMPILE.MODULE: the limit reads the names outside the loop, after init", () => {
+    const outer = let_({ xs: each(axes.all, n) }, iterate(dataLimit(axes.list(v("xs"))), { xs: lit(0) }, { xs: op("add", v("xs"), lit(1)) }, v("xs")));
+    expectSame(make(sourceOf(outer)), outer, MANY);
+    const first = iterate(dataLimit(axes.all), { i: op("divide", lit(1), op("subtract", n, n)) }, {}, v("i"));
+    expectSame(make(sourceOf(first)), first, MANY);
+  });
+
+  it("ITERATE.LIMIT.ERROR COMPILE.MODULE: a module gives VEX_ERROR for each limit that is not valid", () => {
+    const above = iterate(dataLimit(axes.list(op("append", CAP, op("fill", lit(1), lit(1))))), {}, {}, lit(1));
+    const fits = iterate(dataLimit(axes.list(CAP)), {}, {}, lit(1));
+    const item = count(axes.list(each(axes.all, op("divide", lit(1), op("subtract", n, n)))));
+    const caught = op("ifError", above, lit(-1));
+    for (const e of [above, fits, item, caught]) expectSame(make(sourceOf(e)), e);
+  });
+
+  it("P17 ITERATE.LIMIT.DATA COMPILE.MODULE: a module of a random program with a data limit gives the value of the interpreter", () => {
+    const limited = fc
+      .tuple(fc.constantFrom<Axis>(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.where(axes.all, ref("b"))), program.num, program.num)
+      .map(([a, init, step]) => iterate(dataLimit(a), { s: init }, { s: op("add", v("s"), step) }, v("s")));
+    fc.assert(
+      fc.property(limited, records, fc.integer({ min: -3, max: 3 }), fc.constantFrom("x", "y"), (e, rs, a, t) => {
         expectSame(make(sourceOf(e)), e, rs, { a, t });
       }),
     );

@@ -107,7 +107,7 @@ The builder makes an expression: a tree of plain data. Code can make the same tr
 | `rec(fields)` | A record of values |
 | `each(axis, body, at?, as?)` | A list: `body` at each target of `axis` |
 | `fold(axis, init, step, result, at?, as?)` | A loop over the targets of `axis`, in order |
-| `iterate(limit, init, step, result, until?)` | A loop of at most `limit` steps |
+| `iterate(limit, init, step, result, until?)` | A loop of at most `limit` steps. `limit` is a number, or `dataLimit(axis)` for the count of an axis or a list (step B) |
 | `ext(kind, data)` | The value of an extension handler |
 
 The moves are `key(k)`, `index(i)`, `offset(...d)`, `other`, `origin` and `parent`. `key` and `index` also take an expression. The axes are in `axes`, for example `axes.all`, `axes.others`, `axes.window(from, to)`, `axes.reverse(axis)`, `axes.list(expr)` and `axes.where(axis, test)`. In the builder, the option `reverse: true` of an axis gives the reverse order.

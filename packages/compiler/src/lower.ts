@@ -18,6 +18,8 @@ import {
   errorText,
   isFieldName,
   isListOp,
+  limitAxis,
+  MAX_ITERATIONS,
   MAX_NESTING,
   nestingOf,
   shapeError,
@@ -895,22 +897,42 @@ class Lowerer {
     const tests = first + Object.keys(e.step).length;
     const { env, locals } = this.#loopNames(e.init, s, path, b);
     const inner: Scope = { ...s, env };
+    const limit = this.#limit(e, s, path, tests, b);
+    const untilAt = tests + whereTests(limitAxis(e) ?? { t: "all" }).length;
     const label = this.labels++;
     const k = this.typedLocal("number");
     b.stmts.push({ t: "let", n: k, value: num(0) });
     const body = block(b.fail);
     if (e.until !== undefined) {
-      const stop = this.#boolean(this.expr(e.until, inner, [...path, tests], body), body, inner, { t: "until", path: [...path, tests] });
+      const stop = this.#boolean(this.expr(e.until, inner, [...path, untilAt], body), body, inner, { t: "until", path: [...path, untilAt] });
       body.stmts.push({ t: "check", ok: prim("!", stop), reason: "the test until", fail: { t: "break", label } });
     }
     // At the limit, an iteration without a test ends, and an iteration with a test fails.
-    const more = prim("!==", local(k), num(e.limit));
+    const more = prim("!==", local(k), limit);
     if (e.until === undefined) body.stmts.push({ t: "check", ok: more, reason: "the limit of iterate", fail: { t: "break", label } });
-    else this.check(body, more, "the limit of iterate", this.#text(body, s, path, errorText.limit(e.limit)));
+    else this.check(body, more, "the limit of iterate", this.site(body, s, { t: "limit", path }, limit));
     this.#loopStep(e.step, inner, path, first, body, locals);
     body.stmts.push({ t: "set", n: k, value: prim("+", local(k), num(1)) });
     b.stmts.push({ t: "repeat", label, body: body.stmts });
-    return this.expr(e.result, inner, [...path, tests + (e.until === undefined ? 0 : 1)], b);
+    return this.expr(e.result, inner, [...path, untilAt + (e.until === undefined ? 0 : 1)], b);
+  }
+
+  /**
+   * This method gives the number of steps of an iteration. A data limit counts the targets of its axis. Its failure
+   * stops the program, and tier 1 gives the error (ITERATE.LIMIT.ERROR).
+   */
+  #limit(e: ExprOf<"iterate">, s: Scope, path: readonly number[], firstTest: number, b: Block): LExpr {
+    const axis = limitAxis(e);
+    if (axis === undefined) return num(e.limit as number);
+    const n = this.typedLocal("number");
+    b.stmts.push({ t: "let", n, value: num(0) });
+    // The error of a limit that is not valid keeps its cause, so each failure here is the plain failure of the block.
+    const plain: Block = { stmts: b.stmts, fail: plainOf(b.fail) };
+    this.#targetLoop(axis, undefined, s, path, firstTest, plain, () => plain.fail, (body) => {
+      body.stmts.push({ t: "set", n, value: prim("+", local(n), num(1)) });
+    });
+    this.check(b, prim("===", prim("min", local(n), num(MAX_ITERATIONS)), local(n)), "a data limit in the cap");
+    return local(n);
   }
 
   /** This method lowers a fold (FOLD.ORDER): the loop over the targets, with a step at each target. */

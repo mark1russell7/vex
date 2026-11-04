@@ -3,7 +3,8 @@ import { fromDocument, isDocument, type Envelope } from "./document.ts";
 import { findMethod, isOpName, liftsAt, resolveOp, type AnyDomain, type OpSpec, type ParamKind, type PrimitiveKind, type ResolvedOp, type ReturnKind, type SizeRule } from "./domain.ts";
 import { describeType, errorAt, errorText, type ErrorExtra, type ErrorText } from "./error-text.ts";
 import { formatError, isDepthError, isStackOverflow, vexError, type ErrorKind, type VexError } from "./errors.ts";
-import { addrExprs, children, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
+import { limitError, overLimitMessage, worstError } from "./limit-error.ts";
+import { addrExprs, children, limitAxis, MAX_ITERATIONS, shapeError, type Addr, type Axis, type Expr, type ExprOf, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./array-list.ts";
 import { sizeError } from "./size.ts";
 import { stepError, type VexStep } from "./steps.ts";
@@ -561,12 +562,9 @@ class Compiler {
       // The axis table moves the evaluation to the space of its table, where the origin of this space is not a key.
       // Thus there the origin is the target, and a value of this space goes in through a variable.
       const base = baseAxis(e.axis);
-      let inner = c;
-      if (base.t === "table") {
-        const space = c.tables !== undefined && Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined;
-        if (space === undefined) return this.#emit(c, info, f, this.#at(errorText.noTable(base.name), f, path));
-        inner = { ...c, space };
-      }
+      const axisCtx = this.#axisCtx(base, f, c, path);
+      if (!axisCtx.ok) return this.#emit(c, info, f, axisCtx);
+      const inner = axisCtx.value;
       const ts = targets(from, inner);
       if (!ts.ok) return this.#emit(c, info, f, ts);
       const items: ListItem[] = ts.value.map((t) => {
@@ -630,12 +628,9 @@ class Compiler {
         if (!where.ok) return this.#emit(c, info, f, where);
         from = { pos: { origin: f.pos.origin, focus: where.value }, env: f.env };
       }
-      let inner = c;
-      if (base.t === "table") {
-        const space = c.tables !== undefined && Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined;
-        if (space === undefined) return this.#emit(c, info, f, this.#at(errorText.noTable(base.name), f, path));
-        inner = { ...c, space };
-      }
+      const axisCtx = this.#axisCtx(base, f, c, path);
+      if (!axisCtx.ok) return this.#emit(c, info, f, axisCtx);
+      const inner = axisCtx.value;
       const ts = targets(from, inner);
       if (!ts.ok) return this.#emit(c, info, f, ts);
       for (const t of ts.value) {
@@ -656,15 +651,25 @@ class Compiler {
   #iterate(e: ExprOf<"iterate">, info: Info): Node {
     const { path } = info;
     const names = this.#names(e, path);
-    const untilAt = Object.keys(e.init).length + Object.keys(e.step).length;
+    const counter = { next: Object.keys(e.init).length + Object.keys(e.step).length };
+    const axis = limitAxis(e);
+    const size = axis === undefined ? undefined : this.#size(axis, path, counter);
+    const untilAt = counter.next;
     const untilPath = [...path, untilAt];
     const until = e.until === undefined ? undefined : this.node(e.until, untilPath);
     const result = this.node(e.result, [...path, untilAt + (until === undefined ? 0 : 1)]);
-    const { limit } = e;
+    const fixed = e.limit as number;
     return (f, c) => {
       const first = names.first(f, c);
       if (!first.ok) return this.#emit(c, info, f, first);
       let env = first.value;
+      let limit = fixed;
+      // The data limit evaluates at the node, after the first values and before the steps (ITERATE.LIMIT.DATA).
+      if (size !== undefined) {
+        const counted = size(f, c);
+        if (!counted.ok) return this.#emit(c, info, f, counted);
+        limit = counted.value;
+      }
       for (let k = 0; ; k++) {
         const frame: Frame = { pos: f.pos, env };
         if (until !== undefined) {
@@ -683,6 +688,33 @@ class Compiler {
       }
       return this.#emit(c, info, f, result({ pos: f.pos, env }, c));
     };
+  }
+
+  /**
+   * This method compiles a data limit: the number of targets of an axis (ITERATE.LIMIT.DATA). Each failure of the axis, of
+   * a test or of an item, and a count above the cap, is one error (ITERATE.LIMIT.ERROR).
+   */
+  #size(axis: Axis, path: readonly number[], counter: { next: number }): (f: Frame, c: Ctx) => Result<number> {
+    const targets = this.#targets(axis, path, counter);
+    const base = baseAxis(axis);
+    const invalid = (f: Frame, cause: VexError): Result<never> => fail(limitError(cause, { path, origin: f.pos.origin, focus: f.pos.focus }));
+    return (f, c) => {
+      const inner = this.#axisCtx(base, f, c, path);
+      if (!inner.ok) return invalid(f, inner.error);
+      const ts = targets(f, inner.value);
+      if (!ts.ok) return invalid(f, ts.error);
+      const cause = worstError(ts.value.flatMap(({ test }) => (test === undefined || test.ok ? [] : test.error)));
+      if (cause !== undefined) return invalid(f, cause);
+      const count = ts.value.length;
+      return count > MAX_ITERATIONS ? this.#err("limit", overLimitMessage(count), f, path) : ok(count);
+    };
+  }
+
+  /** This method gives the context of an axis: the space of its table for the axis `table`, or `c` (AXIS.TABLE). */
+  #axisCtx(base: Axis, f: Frame, c: Ctx, path: readonly number[]): Result<Ctx> {
+    if (base.t !== "table") return ok(c);
+    const space = c.tables !== undefined && Object.hasOwn(c.tables, base.name) ? c.tables[base.name] : undefined;
+    return space === undefined ? this.#at(errorText.noTable(base.name), f, path) : ok({ ...c, space });
   }
 
   /** This method compiles the targets of an axis. For `where`, a failed test keeps the target with its error. */
@@ -1282,7 +1314,7 @@ export function labelOf(e: Expr): string {
     case "fold":
       return e.at === undefined ? `${e.tag} ${e.axis.t}` : `${e.tag} ${e.axis.t} from ${e.at.map(moveText).join(".")}`;
     case "iterate":
-      return `iterate ${String(e.limit)}`;
+      return `iterate ${typeof e.limit === "number" ? String(e.limit) : `size of ${e.limit.axis.t}`}`;
     case "ext":
       return e.kind;
   }

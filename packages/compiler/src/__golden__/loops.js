@@ -125,7 +125,7 @@ return function vex(l0, l1, l2, l3) {
                   if (!((l24 !== F))) { l17 = err_(K[16], l1, l1); break L9; } // an op
                   if (!((typeof l24 === "boolean"))) { l17 = err_(K[17], l1, l1, l24); break L9; } // a boolean
                   if (!((!l24))) break L10; // the test until
-                  if (!((l19 !== 10))) { l17 = err_(K[18], l1, l1); break L9; } // the limit of iterate
+                  if (!((l19 !== 10))) { l17 = err_(K[18], l1, l1, 10); break L9; } // the limit of iterate
                   try { l25 = f20_0(l18, k19); } catch (e) { l25 = threw_(e); }
                   if (l25 !== F && typeof l25 !== "number") return F; // the kind of the result
                   if (l25 !== F && !Number.isFinite(l25)) l25 = bad_(l25);
@@ -349,7 +349,7 @@ return function vex(l0, l1, l2, l3) {
                   if (!((l97 !== F))) { l17 = err_(K[68], l1, l1); break L32; } // an op
                   if (!((typeof l97 === "boolean"))) { l17 = err_(K[69], l1, l1, l97); break L32; } // a boolean
                   if (!((!l97))) break L33; // the test until
-                  if (!((l91 !== 10))) { l17 = err_(K[70], l1, l1); break L32; } // the limit of iterate
+                  if (!((l91 !== 10))) { l17 = err_(K[70], l1, l1, 10); break L32; } // the limit of iterate
                   try { l98 = f20_0(l90, k19); } catch (e) { l98 = threw_(e); }
                   if (l98 !== F && typeof l98 !== "number") return F; // the kind of the result
                   if (l98 !== F && !Number.isFinite(l98)) l98 = bad_(l98);

@@ -1,5 +1,74 @@
 # @mark1russell7/vex-testkit
 
+## 0.18.0
+
+### Minor Changes
+
+- 0f69b68: The limit of `iterate` can come from the size of the data. `dataLimit(axis)` gives the number of targets of an axis, and the axis `list` gives the count of a list. The builder also takes a list chain. The interpreter, tier 2 and standalone modules give one value, and a limit that is not valid gives `#NUM!` of the kind `limit`.
+  
+  A program with a data limit is of step B, so `maxStep: "A"` refuses it. A limit that is a number stays at step A.
+  
+  The field `limit` of the type of an `iterate` node has a wider type, so code that reads it as a number must change. This is why the version raises MINOR.
+- f5e4496: A program can calculate a fixed point. The node `fix(name, join, init, step)` makes a column with a value for each row, and `last(name)` reads the last round. The rounds repeat the step until no row changes. The joins `or` and `max` move a row up, and `and` and `min` move a row down.
+  
+  A check proves that each step moves one way, from the kinds of the ops. A step without a proof gives an error with a reason before a run. The function `monotoneError` gives this reason. An op states its direction in the new field `monotone`, and a function of the host does the same. A column of `n` rows makes `n + 1` rounds at most, and a column that still changes gives `#NUM!`. `explain` shows each round. The testkit has `arbFixExpr` and `arbFixGraph`.
+  
+  A program with `fix` is of step B, so `maxStep: "A"` refuses it. The interpreter and the reference tier have the construct.
+  
+  The type `Expr` has two new tags, so a `switch` that covers each tag must change. This is why the version raises MINOR.
+
+### Patch Changes
+
+- a0daad1: Tier 2 gives a list op on an array with the code of the interpreter, so such a run needs no fallback to tier 1. `errors` of an array with a hole stays in tier 1, because its values have the position of the call. `listOps` has the new function `array` (COMPILE.LIST.ARRAY, LIST.OPS).
+- 925c7e8: Tier 2 gives the result of the interpreter for an empty `reduce` in a context that catches an error. Tier 1 gives the identity of the op, also in `ifError`, in an item of a list op and in a test of `where`. A failed test of a data limit does not hide `#DEPTH!` of a later test (V-071, COMPILE.FALLBACK).
+- b74101c: Each published package has the MIT license file in its own folder. Thus npm packs the license with each package. The code does not change.
+- e6532fa: A chain has the method `fix(name, join, init, step)`. It makes a fixed-point column, as `iterate` makes a loop. The step gets a chain of the last round, so a program of the builder has no read of `last` outside a column. The join gives the kind of the chain, and the core exports the type `FixValue`.
+- d430c51: Tier 2 and the standalone modules lower a fixed point. A program with `fix` runs in tier 2 with the result of tier 1. This includes each error value of a row and the failure at the round limit. `emitModule` and `emitSheetModule` make a module of such a program, in place of a refusal.
+  
+  The core exports `fixRounds`, `fixValueError`, `joinKind` and `worstRow` for the compiler. The testkit has `arbFixProgram`, the generator of the test of the tiers.
+  
+  A module refuses a column at a key of a literal or of `fill`, because a module has no record at such a key.
+- f6413f1: `InsetsDomain` keeps the four sides of an inset as plain data, and the op `insets` of `NumDomain` makes a value. A number lifts to four sides, also in a module. A domain can declare `fields`, so two domains of plain objects can share a module.
+  
+  The new op `insets` of `NumDomain` comes before a host function of that name, so `vex-domains` raises MINOR before 1.0.0. The default list of `vex-mcp` has the new domain, so a record with exactly the four sides goes to it before `NumRecordDomain`. An unclear change counts as breaking, so `vex-mcp` raises MINOR too.
+- 2a41f1a: A module counts a data limit that reads no key one time for each run. Thus a walk that stops early does not pay for a count at each key. The values and the errors do not change (COMPILE.MODULE.LIMIT.ONCE).
+- 0bc2ad8: The new list op `setNth(list, i, value)` gives a list with a new value at one position (LIST.SETNTH). The item keeps its key. The op works in the interpreter, in tier 2 and in a standalone module, and a list chain has `setNth(i, value)`. Its size rule counts the list and the value one time each (LOOP.SIZE.SETNTH).
+- 747987a: `cell(column, at)` and `r.cell(column, at)` of a sheet take computed moves, so a formula over an array can read the last key. A read with a computed move gives the same result in the interpreter, in tier 2 and in a standalone module. This is also true on a cycle that only the values make (`SHEET.CELL.COMPUTED`, `COMPILE.MODULE.SHEET.COMPUTED`).
+  
+  A module reads a cell in the expression of a move before a move that can fail, as the interpreter does. Before this change, such a module could miss a cycle.
+  
+  The random sheets of the test kit have reads at a computed position. Before 1.0.0, a new feature raises PATCH.
+- fd057c7: A standalone module gives the error of the interpreter for an op result that is `undefined`, `null` or a number that is not finite. This rule applies to each declaration `returns` (V-070, COMPILE.MODULE.RESULT). Version 0.17.2 gives a value in these cases, and the interpreter gives an error. A project on 0.17.2 with a module of an op that can give such a result has wrong values. Print the module again with this version.
+- 46288d2: The bytes of a module do not depend on the runner (COMPILE.MODULE.TEXT). The compiler parses the text of each copied function and prints the tree. Breaking: `emitModule`, `emitSheetModule` and their types move from the root entry to `@mark1russell7/vex-compiler/module`, so a program that only runs tiers does not load the parser.
+- 54ef960: LOOP.SIZE accepts more steps that do not grow by a factor. A bound is the largest of some sums, so `if` and `ifError` give the larger value (LOOP.SIZE.BRANCH). A fold that copies a list item by item is valid (LOOP.SIZE.COPY). A record from the fields of one item and `take` with a literal limit have the bound of one item (LOOP.SIZE.PART). Each program that the check accepted before stays accepted, and each step that doubles a value stays refused.
+- 7aac6ae: `TextDomain` has the op `codePoints`: the code points of a text as a list of numbers, in each tier (TEXT.CODEPOINTS). The new kind `list:number` of `returns` declares an op of a domain with a list as its result (KIND.RETURNS.LIST). A module takes that op as a list (COMPILE.MODULE.LIST.OP).
+- Updated dependencies [a0daad1]
+- Updated dependencies [925c7e8]
+- Updated dependencies [51d1343]
+- Updated dependencies [b74101c]
+- Updated dependencies [0f69b68]
+- Updated dependencies [e3e577c]
+- Updated dependencies [e6532fa]
+- Updated dependencies [d430c51]
+- Updated dependencies [f5e4496]
+- Updated dependencies [74f129f]
+- Updated dependencies [f6413f1]
+- Updated dependencies [2a41f1a]
+- Updated dependencies [0bc2ad8]
+- Updated dependencies [4ab792d]
+- Updated dependencies [4c98dff]
+- Updated dependencies [747987a]
+- Updated dependencies [fd057c7]
+- Updated dependencies [968b9a5]
+- Updated dependencies [1d3b047]
+- Updated dependencies [bd4ec21]
+- Updated dependencies [54ef960]
+- Updated dependencies [49c267e]
+- Updated dependencies [aceaa11]
+- Updated dependencies [7aac6ae]
+- Updated dependencies [5078ec8]
+  - @mark1russell7/vex@0.18.0
+
 ## 0.17.2
 
 ### Patch Changes

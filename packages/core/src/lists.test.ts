@@ -8,7 +8,7 @@ import { fromDocument, toDocument } from "./document.ts";
 import { defineDomain, type AnyDomain } from "./domain.ts";
 import { evaluate } from "./evaluate.ts";
 import { vexError } from "./errors.ts";
-import { app, axes, axisExprs, call, children, each, fn, fold, isExpr, iterate, let_, lit, rec, ref, v, type Expr } from "./ir.ts";
+import { app, axes, axisExprs, call, children, dataLimit, each, fn, fold, isExpr, iterate, let_, lit, rec, ref, v, type Expr } from "./ir.ts";
 import { isVexList, vexList, type ListItem, type VexList } from "./list.ts";
 import { parse, serialize } from "./json.ts";
 import { ok } from "./result.ts";
@@ -280,6 +280,58 @@ describe("list ops that build lists (LIST.BUILD)", () => {
     // LIST.LENIENT: the error item of the key 3 is not in the list, and strict gives it. The options come after n.
     expect(keysOf(run(app("drop", gaps, lit(1))))).toEqual(["1", "2"]);
     expect(error(run(app("drop", gaps, lit(1), strict))).code).toBe("#REF!");
+  });
+
+  it("LIST.SETNTH: a new value at a position, the item keeps its key, and the other items do not change", () => {
+    const set = (i: number, x: unknown): Expr => app("setNth", ws, lit(i), lit(x));
+    expect(value(run(app("values", set(0, 9))))).toEqual([9, 2, 3, 4]);
+    expect(value(run(app("values", set(3, 9))))).toEqual([1, 2, 3, 9]);
+    expect(keysOf(run(app("setNth", sorted, lit(1), lit(9))))).toEqual(["1", "3", "2", "0"]);
+    expect(value(run(app("get", app("setNth", sorted, lit(1), lit(9)), lit("3"))))).toBe(9);
+    // The value can be any value, also a list, a text and null. The old list does not change.
+    expect(keysOf(run(app("nth", app("setNth", ws, lit(1), sorted), lit(1))))).toEqual(["1", "3", "2", "0"]);
+    expect(value(run(app("values", set(1, "a"))))).toEqual([1, "a", 3, 4]);
+    expect(value(run(app("values", set(1, null))))).toEqual([1, null, 3, 4]);
+    expect(value(run(let_({ a: ws }, rec({ old: app("values", v("a")), now: app("values", app("setNth", v("a"), lit(0), lit(9))) }))))).toEqual({ old: [1, 2, 3, 4], now: [9, 2, 3, 4] });
+    // The position and the value are expressions.
+    expect(value(run(app("values", app("setNth", ws, ref("w"), app("add", ref("w"), lit(5))))))).toEqual([1, 6, 3, 4]);
+    // The value of a name of a loop: each step gives one item a new value.
+    expect(value(run(app("values", iterate(3, { a: ws, i: lit(0) }, { a: app("setNth", v("a"), v("i"), app("add", app("nth", v("a"), v("i")), app("nth", v("a"), v("i")))), i: app("add", v("i"), lit(1)) }, v("a")))))).toEqual([2, 4, 6, 4]);
+    expect(value(run(app("sum", each(axes.list(app("setNth", ws, lit(0), lit(9))), ref("w")))))).toBe(10);
+    // LIST.ARRAY: an array is a list, and the keys are its positions.
+    expect(value(runWith(app("values", app("setNth", v("a"), lit(1), lit(9))), { a: [1, 2] }))).toEqual([1, 9]);
+    expect(keysOf(runWith(app("setNth", v("a"), lit(1), lit(9)), { a: [1, 2] }))).toEqual(["0", "1"]);
+  });
+
+  it("LIST.SETNTH: a bad position gives #VALUE!, a position past the last item gives #N/A, and the list does not grow", () => {
+    for (const bad of [lit(-1), lit(1.5), lit("1"), lit(Number.MAX_SAFE_INTEGER + 1)]) expect(error(run(app("setNth", ws, bad, lit(9))))).toMatchObject({ code: "#VALUE!", kind: "kind-mismatch", op: "setNth" });
+    expect(error(run(app("setNth", ws)))).toMatchObject({ code: "#VALUE!", message: '"setNth" needs a whole number from 0, not undefined' });
+    expect(error(run(app("setNth", ws, lit(4), lit(9))))).toMatchObject({ code: "#N/A", kind: "empty", op: "setNth", message: '"setNth" has no item at the position 4, and the list has 4 items' });
+    expect(error(run(app("setNth", lit(vexList([])), lit(0), lit(9)))).code).toBe("#N/A");
+    // A missing value is an error of the program. The position comes first, as for each list op.
+    expect(error(run(app("setNth", ws, lit(0))))).toMatchObject({ code: "#VALUE!", kind: "bad-expression", message: '"setNth" needs argument 3' });
+    expect(error(run(app("setNth", ws, lit(9)))).code).toBe("#N/A");
+    // An error of a value is the error of the op, as for each op.
+    expect(error(run(app("setNth", ws, lit(0), ref("nope")))).code).toBe("#N/A");
+    expect(error(run(app("setNth", ws, ref("nope"), lit(9)))).code).toBe("#N/A");
+    expect(error(run(app("setNth", ref("nope"), lit(0), lit(9)))).code).toBe("#N/A");
+  });
+
+  it("LIST.SETNTH LIST.LENIENT: the position counts the items with values, an error item goes away, and strict gives the error", () => {
+    // The gaps are 2, 3, 4 and an error item of the key 3, in the order of the keys of the boxes.
+    const count = (e: Expr): unknown => value(run(app("count", e)));
+    expect(count(app("setNth", gaps, lit(0), lit(9)))).toBe(3);
+    expect(count(app("setNth", app("append", gaps, ws), lit(4), lit(9)))).toBe(7);
+    expect(error(run(app("setNth", gaps, lit(3), lit(9)))).code).toBe("#N/A");
+    expect(error(run(app("setNth", gaps, lit(0), lit(9), strict))).code).toBe("#REF!");
+    expect(error(run(app("setNth", missing, lit(0), lit(9)))).code).toBe("#N/A");
+    expect(value(run(app("count", app("setNth", ws, lit(0), lit(9), strict))))).toBe(4);
+    // #DEPTH! is the error of each list op, also without strict.
+    expect(error(run(app("setNth", lit(deep), lit(0), lit(9)))).code).toBe("#DEPTH!");
+  });
+
+  it("LIST.SETNTH LOOP.LIST: a list of setNth gives the limit of a loop from the data", () => {
+    expect(value(run(iterate(dataLimit(axes.list(app("setNth", ws, lit(0), lit(9)))), { n: lit(0) }, { n: app("add", v("n"), lit(1)) }, v("n"))))).toBe(4);
   });
 
   it("LIST.APPEND: the items of the list and then the items of the other list, also with the same keys", () => {

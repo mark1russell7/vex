@@ -476,10 +476,10 @@ type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | 
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
  * lists that the facts prove clean. Thus it has no scan of `V`, no `VW` and no test of the sentinel.
  */
-type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LSC" | "LVC" | "LPC";
+type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "SNC" | "FSC" | "LOC" | "LSC" | "LVC" | "LPC";
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
-type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX";
+type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX" | "SN";
 
 /** The helpers of a tree space (COMPILE.MODULE.TREE). */
 type TreeHelper = "PT" | "CH" | "SG" | "PR" | "UP" | "SO" | "AN" | "BF";
@@ -598,6 +598,17 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   FS: "function FS(l, s) { const o = VW(l); return (s && o.length < l.length) || o.length === 0 ? F() : o[0][1]; }",
   // fill (LIST.FILL, COMPILE.MODULE.FILL): n items with the value v, and the keys 0 to n - 1. A count that is not a whole
   // number from 0 to 100000, or a missing value, is the error of the interpreter. Each item can share the array of a list.
+  // setNth (LIST.SETNTH, COMPILE.MODULE.SETNTH): a new array with a new pair at the position i. The item keeps its key.
+  // V removes the error items, so the position counts the items with values. The old array and its pairs do not change.
+  SN: [
+    "function SN(l, i, v, s) {",
+    "  const x = V(l, s);",
+    "  if (!(Number.isSafeInteger(i) && i >= 0 && i < x.length && v !== undefined)) F();",
+    "  const o = x.slice();",
+    "  o[i] = [x[i][0], v];",
+    "  return o;",
+    "}",
+  ].join("\n"),
   FI: [
     "function FI(n, v) {",
     "  if (!(Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined)) F();",
@@ -930,6 +941,14 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "}",
   ].join("\n"),
   NTC: "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
+  SNC: [
+    "function SNC(l, i, v) {",
+    "  if (!(Number.isSafeInteger(i) && i >= 0 && i < l.length && v !== undefined)) F();",
+    "  const o = l.slice();",
+    "  o[i] = [l[i][0], v];",
+    "  return o;",
+    "}",
+  ].join("\n"),
   FSC: "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
   LOC: 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
   LSC: 'function LSC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LSC(v, h - 1) : v } }))) }); }',
@@ -1237,14 +1256,14 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
   SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], VW: [], NT: ["VW", "F"], CT: ["VW", "F"], FS: ["VW", "F"], FI: ["F"], LI: [], LA: [], LP: [],
-  DR: ["V", "F"], AP: ["V"], AO: ["AP", "V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"],
+  DR: ["V", "F"], AP: ["V"], AO: ["AP", "V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"], SN: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
   KC: ["C"], KP: ["F"], SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
-  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
+  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], SNC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
   SBI: ["F"], SKI: ["F"], QA: [],
 };
 
@@ -1310,7 +1329,7 @@ const BUILD_HELPERS: Readonly<Record<string, BuildHelper>> = { append: "AP", wit
  * The ops whose value is a list: the list ops of LIST.SORT, LIST.TAKE and LIST.BUILD, and `fill` (LIST.FILL). A domain
  * can have the op `fill`. Then the op of the domain gives no list, and the place of a list gives a reason.
  */
-const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "append", "without", "flat", "fill"]);
+const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "setNth", "drop", "append", "without", "flat", "fill"]);
 
 /**
  * The scope of `listy`. `name` tells if a name holds a list, and `fn` gives the bound function of a name. `cell` tells
@@ -1459,7 +1478,7 @@ function cleanNames(firsts: ReadonlyMap<string, boolean>, step: Names, items: re
 }
 
 /** The list ops whose value is clean, because `V` removes each error item or `FI` checks each value. */
-const CLEAN_OPS: ReadonlySet<string> = new Set(["append", "flat", "drop", "take", "without", "sortBy", "fill"]);
+const CLEAN_OPS: ReadonlySet<string> = new Set(["append", "flat", "drop", "take", "setNth", "without", "sortBy", "fill"]);
 
 /**
  * This function tells if the form of an expression proves that its list is clean, with the facts `fact` of the names.
@@ -3129,6 +3148,7 @@ class Printer {
     if (FOLD_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) return this.#let(head, ctx, (body) => app(op, body, ...rest));
     // sortBy and take are list ops for each receiver. Each other list op needs a list, and a domain can have its name.
     if (head !== undefined && (op === "sortBy" || op === "take" || (op === "drop" && this.#isList(head, ctx)))) return this.#order(op, head, rest, ctx);
+    if (head !== undefined && op === "setNth" && this.#isList(head, ctx)) return this.#setNth(head, rest, ctx);
     // With fuse, flat over an each is one loop with one output (COMPILE.MODULE.FUSE).
     const strict = op === "flat" && head?.tag === "each" ? this.#fusedStrict(head, rest, ctx) : undefined;
     if (strict !== undefined) return this.#flatEach(head as ExprOf<"each">, strict, ctx);
@@ -4089,6 +4109,29 @@ class Printer {
     // place gives the array of its list, which no other part holds.
     const facts: ListInfo = { ...(list.v.list as ListInfo), clean: true, fresh: inPlace };
     return { s: stmtsOf(...parts), v: { code: `${this.use(helper)}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: facts } };
+  }
+
+  /**
+   * This method prints `setNth` (LIST.SETNTH, COMPILE.MODULE.SETNTH): a new array with a new value at a position. An
+   * error item is not in the new list, and with strict it is the error of the op. The value can be a list, as for `fill`.
+   */
+  #setNth(head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
+    const [position, value, ...options] = rest;
+    // Without a position or a value the op gives an error at each run, so a module refuses the program.
+    if (position === undefined || value === undefined) throw new NotStandalone('"setNth" without a position and a value');
+    const strict = this.#strict("setNth", options);
+    const list = this.#listOf(head, ctx);
+    this.#wantList.add(value);
+    const raw = [list, this.expr(position, ctx), this.expr(value, ctx)];
+    const deps = depsOf(...raw);
+    const [from, at, put] = this.#inOrder(this.#settle(raw, deps, [head, position, value]), true) as [Code, Code, Code];
+    const info = list.v.list as ListInfo;
+    // The clean form has no scan of V and no option strict (COMPILE.MODULE.FUSE.CLEAN).
+    const clean = this.#clean(info);
+    const args = [from.v.code, at.v.code, put.v.code, ...(clean ? [] : [String(strict)])];
+    // The items have the facts of the list and of the value. V removes each error item, and the value is not the sentinel.
+    const facts: ListInfo = { ...joinLists(info, { item: put.v.kind, inner: heldList(put.v.list) }, "setNth"), clean: true, fresh: false };
+    return { s: stmtsOf(from, at, put), v: { code: `${this.use(clean ? "SNC" : "SN")}(${args.join(", ")})`, kind: undefined, safe: false, deps, list: facts } };
   }
 
   /**

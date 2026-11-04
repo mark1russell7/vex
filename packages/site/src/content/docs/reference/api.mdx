@@ -103,7 +103,7 @@ byW.each((_c, w, i) => w._.multiply(10)._.add(i)).values().at("0"); // => some([
 byW.each((_c, w) => w).fold({ s: 0 }, (x, w, i) => ({ s: x.s._.add(w._.multiply(i)) }), (x) => x.s).at("0"); // => some(8)
 ```
 
-A list chain also builds lists: `drop(n)`, `append(other)`, `without(other)` and `flat()`. The argument `other` is a list chain. The body of an axis can give a list chain. Then the value of each item is a list, and `flat()` joins these lists in order.
+A list chain also builds lists: `drop(n)`, `setNth(i, value)`, `append(other)`, `without(other)` and `flat()`. The argument `other` is a list chain. The body of an axis can give a list chain. Then the value of each item is a list, and `flat()` joins these lists in order.
 
 ```ts doctest
 const rows = vex(NumDomain).over(space.array([{ n: 30 }, { n: 10 }, { n: 20 }]));

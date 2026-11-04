@@ -142,6 +142,7 @@ These ops apply to each value. They are not ops of a domain.
 | \`sortBy(list, { by })\` | A list with the items in the order of the results of the op \`by\` on their values, for example \`sortBy(bands, { by: "from" })\`. The results are numbers or texts. |
 | \`take(list, n)\` | A list of the first \`n\` items |
 | \`nth(list, i)\` | The value of the item at the position \`i\`, from 0 |
+| \`setNth(list, i, value)\` | A list with the new value at the position \`i\`, from 0, as \`nth\` counts. The item keeps its key. A position past the last item gives \`#N/A\`. |
 | \`drop(list, n)\` | A list of the items after the first \`n\` items |
 | \`append(list, other)\` | A list of the items of \`list\`, and then the items of \`other\` |
 | \`without(list, other)\` | A list of the items of \`list\` whose key is not the key of an item of \`other\` |

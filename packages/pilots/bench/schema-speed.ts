@@ -31,7 +31,8 @@ const WARM = Number(process.env["WARM"] ?? 10);
 // The input of the speed case of schema.test.ts: 20 documents of 30 fields.
 const docs = Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${String(f)}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
 
-// A copy of the pilot program before the list ops `distinct`, `group`, `join` and the op `leaves` (v1), cut into stages.
+// A copy of the pilot program before the list ops `distinct`, `group`, `join` and the op `leaves` (v1), cut into stages,
+// and the rewrite (c) of v1 with one fold.
 const EMPTY = lit(vexList([]));
 const loop = (list: Expr, as: ItemNames, body: Expr): Expr => each(axes.list(list), body, undefined, as);
 const one = (x: Expr): Expr => app("fill", lit(1), x);
@@ -54,6 +55,20 @@ const paths = call("distinct", loop(v("notes"), ["n"], field(v("n"), "path")));
 const mine = app("flat", loop(v("notes"), ["n"], app("if", app("eq", field(v("n"), "path"), v("p")), one(v("n")), EMPTY)));
 const wrap = (body: Expr): Expr => let_({ distinct, joinBar }, let_({ arrayKind }, let_({ note }, let_({ level3: level(undefined) }, let_({ level2: level("level3") }, let_({ level1: level("level2") }, let_({ notes }, body)))))));
 const v1 = wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], rec({ path: v("p"), kinds: app("values", call("distinct", loop(mine, ["n"], field(v("n"), "kind")))), count: app("count", call("distinct", loop(mine, ["n"], field(v("n"), "doc")))) })))));
+// The rewrite (c): one row for each path, and `setNth` gives a row its new value (LIST.SETNTH). The step reads the old row
+// one time in each size that it adds, so LOOP.SIZE takes it: the path comes from the note, and the count is a sum.
+const has = (list: Expr, x: Expr): Expr => app("ifError", app("gte", app("indexOf", list, x), lit(0)), lit(false));
+const upd = let_({ old: app("nth", v("rows"), v("j")) }, rec({
+  path: field(v("n"), "path"),
+  kinds: app("if", has(field(v("old"), "kinds"), field(v("n"), "kind")), field(v("old"), "kinds"), app("append", field(v("old"), "kinds"), one(field(v("n"), "kind")))),
+  count: app("add", field(v("old"), "count"), app("if", app("eq", field(v("old"), "last"), field(v("n"), "doc")), lit(0), lit(1))),
+  last: field(v("n"), "doc"),
+}));
+const newRow = rec({ path: field(v("n"), "path"), kinds: one(field(v("n"), "kind")), count: lit(1), last: field(v("n"), "doc") });
+const table = fold(axes.list(v("notes")), { paths: EMPTY, rows: EMPTY }, {
+  paths: app("if", has(v("paths"), field(v("n"), "path")), v("paths"), app("append", v("paths"), one(field(v("n"), "path")))),
+  rows: let_({ j: app("ifError", app("indexOf", v("paths"), field(v("n"), "path")), lit(-1)) }, app("if", app("lt", v("j"), lit(0)), app("append", v("rows"), one(newRow)), app("setNth", v("rows"), v("j"), upd))),
+}, v("rows"), undefined, ["n"]);
 const opts = { space: space.array([{}]), origin: "0", domains: SCHEMA_DOMAINS, vars: { docs } };
 const want = JSON.stringify(schemaReference(docs));
 
@@ -73,6 +88,7 @@ function checkOf(r: unknown, same: boolean): string {
 const exprs: Readonly<Record<string, Expr>> = {
   "pilot (evaluate)": SCHEMA_PROGRAM,
   "pilot v1 (functions of the walk)": v1,
+  "rewrite (c): one fold": wrap(app("values", loop(table, ["r"], rec({ path: field(v("r"), "path"), kinds: app("values", field(v("r"), "kinds")), count: field(v("r"), "count") })))),
   "stage: walk only": wrap(app("count", v("notes"))),
   "stage: walk + distinct paths": wrap(app("count", paths)),
   "stage: walk + paths + filter per path": wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], app("count", mine))))),
@@ -92,7 +108,7 @@ cases["calibration"] = () => {
   return size;
 };
 // The cases that must give the records of schemaReference.
-const SAME = new Set(["pilot (evaluate)", "pilot v1 (functions of the walk)", "TypeScript reference"]);
+const SAME = new Set(["pilot (evaluate)", "pilot v1 (functions of the walk)", "rewrite (c): one fold", "TypeScript reference"]);
 
 /** The record of one case: the times in ms, and the check of its result. */
 interface Measure {

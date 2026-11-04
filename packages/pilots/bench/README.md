@@ -7,6 +7,10 @@ The pilot EXAMPLE.SCHEMA gives the schema of a collection from sample documents.
 
 The job puts the numbers into the artifact `bench-report`, in `bench.txt`, `schema-speed.json` and `schema-cold.json`.
 
+## The two forms of a search
+
+`search-speed.ts` compares two forms of a search in lists (LIST.SETNTH): `setNth` and an `each` that makes the list again. Both forms run in one process, with the order turned each round. An A/A copy gives the noise floor. A ratio is the time of `setNth` divided by the time of `each`, so lower tells faster. No workflow starts this script, and no gate reads it.
+
 ## How to read the numbers
 
 The runners of CI are not all of the same speed. The same code gave a warm median of 21.6 ms on one run and 29.7 ms on the next run. Thus obey these rules:

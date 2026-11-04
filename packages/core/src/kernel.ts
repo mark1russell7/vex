@@ -832,7 +832,7 @@ function group(items: readonly ListItem[], keys: unknown, strict: boolean): unkn
 
 /** This function applies a list op (LIST.*). The error items are skipped, except with `{ strict: true }`, and except `#DEPTH!`. */
 function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[], domains: readonly AnyDomain[]): unknown {
-  const o = WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
+  const o = op === "setNth" ? rest[2] : WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
   const strict = (o as { strict?: unknown } | null | undefined)?.strict === true;
   if (op === "group") return group(items, rest[0], strict);
   const good = goodOf(items, strict);
@@ -865,6 +865,16 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
       if (op === "take") return vexList(good.slice(0, n));
       if (op === "drop") return vexList(good.slice(n));
       return n < vs.length ? vs[n] : stop("empty", `"nth" has no item at the position ${String(n)}`);
+    }
+    case "setNth": {
+      const n = rest[0] as number;
+      if (!Number.isSafeInteger(n) || n < 0) return stop("kind-mismatch", '"setNth" needs a whole number from 0');
+      const old = good[n];
+      if (old === undefined) return stop("empty", `"setNth" has no item at the position ${String(n)}`);
+      if (rest[1] === undefined) return stop("bad-expression", '"setNth" needs argument 3');
+      const next = [...good];
+      next[n] = { key: old.key, result: vexOk(rest[1]) };
+      return vexList(next);
     }
     case "append":
       return vexList([...good, ...otherOf(op, rest[0], strict)]);

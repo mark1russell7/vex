@@ -39,6 +39,9 @@ function sourceOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   return m.source;
 }
 
+/** The reason for a step of a loop that writes a number into a list of text. */
+const NO_FIT = 'a step of a loop gives the name "p" a list that does not fit its first list';
+
 /** This function gives the reason that a program cannot be a module, or "" for a module. */
 function reasonOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   const m = emitModule(e, options);
@@ -292,6 +295,80 @@ const same = (e: Expr, records: readonly unknown[] = POINTS): void => {
   expect(got).toStrictEqual(expected);
 };
 
+/** This function checks a module of each form of fusion against the interpreter, and it gives the number of forms. */
+const both = (e: Expr, records: readonly unknown[] = RECORDS): number => {
+  const forms = [true, false];
+  for (const fuse of forms) expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, records);
+  return forms.length;
+};
+const steps = (list: Expr): Expr => iterate(3, { a: list, i: lit(0) }, { a: op("setNth", v("a"), v("i"), op("add", op("nth", v("a"), v("i")), lit(1))), i: op("add", v("i"), lit(1)) }, v("a"));
+
+describe("COMPILE.MODULE.SETNTH: setNth in a module", () => {
+
+  it("COMPILE.MODULE.SETNTH LIST.SETNTH: a module gives the values, the keys and the errors of the interpreter", () => {
+    const e = rec({
+      sum: op("sum", op("setNth", ns, lit(1), lit(9))),
+      key: guard(op("get", op("setNth", LIT, lit(1), lit(9)), lit("b"))),
+      keys: op("count", op("without", op("setNth", LIT, lit(1), lit(9)), op("take", LIT, lit(1)))),
+      atField: guard(op("sum", op("setNth", ns, n, w))),
+      past: guard(op("count", op("setNth", ns, lit(9), lit(1)))),
+      negative: guard(op("count", op("setNth", ns, lit(-1), lit(1)))),
+      half: guard(op("count", op("setNth", ns, lit(0.5), lit(1)))),
+      lenient: guard(op("sum", op("setNth", BAD, lit(1), lit(5)))),
+      skipped: guard(op("count", op("setNth", BAD, lit(2), lit(5)))),
+      strictSet: guard(op("count", op("setNth", BAD, lit(0), lit(5), strict))),
+      strictGood: guard(op("count", op("setNth", LIT, lit(0), lit(5), strict))),
+      badValue: guard(op("count", op("setNth", ns, lit(0), op("divide", lit(1), op("subtract", n, n))))),
+      empty: guard(op("count", op("setNth", EMPTY, lit(0), lit(1)))),
+      text: op("count", op("setNth", ns, lit(0), lit("a"))),
+      sorted: op("first", op("sortBy", op("setNth", ns, lit(0), lit(9)))),
+      taken: op("sum", op("take", op("setNth", ns, lit(0), lit(9)), lit(1))),
+      again: op("sum", op("setNth", op("setNth", ns, lit(0), lit(9)), lit(1), lit(9))),
+      looped: guard(op("sum", steps(ns))),
+    });
+    expect(both(e)).toBe(2);
+    expect(both(e, RECORDS.slice(0, 2))).toBe(2);
+    expect(both(e, [])).toBe(2);
+  });
+
+  it("COMPILE.MODULE.SETNTH LOOP.LIST: setNth of a text on an empty list starts a list of text, so a step that writes a number gives a reason", () => {
+    const start = op("setNth", EMPTY, lit(0), lit("a"));
+    expect(reasonOf(iterate(0, { p: start }, { p: op("setNth", v("p"), lit(0), lit(0)) }, op("count", v("p"))))).toBe(NO_FIT);
+    expect(reasonOf(iterate(0, { p: start }, { p: op("setNth", v("p"), lit(0), lit("b")) }, op("count", v("p"))))).toBe("");
+  });
+
+  it("COMPILE.MODULE.SETNTH: the old array does not change, and the first form of each name keeps its own items", () => {
+    expect(both(let_({ a: ns }, rec({ old: op("sum", v("a")), now: op("sum", op("setNth", v("a"), lit(0), lit(9))), after: op("sum", v("a")) })))).toBe(2);
+    expect(both(iterate(2, { a: LIT, b: LIT }, { a: op("setNth", v("a"), lit(0), lit(9)), b: v("a") }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })))).toBe(2);
+    expect(both(fold(axes.all, { a: EMPTY }, { a: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), n) }, op("sum", v("a"))))).toBe(2);
+    expect(both(fold(axes.all, { a: EMPTY, b: EMPTY }, { a: op("append", v("a"), op("fill", lit(1), n)), b: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), lit(5)) }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })))).toBe(2);
+  });
+
+  it("COMPILE.MODULE.SETNTH: the value can be a list, and a list of lists keeps its facts", () => {
+    expect(both(op("sum", op("flat", op("setNth", nested(), lit(0), ns))))).toBe(2);
+    expect(both(op("sum", op("flat", op("setNth", nested(), lit(1), EMPTY))))).toBe(2);
+    expect(both(op("count", op("flat", op("setNth", nested(), lit(0), inv))))).toBe(2);
+    expect(both(op("count", op("flat", op("setNth", nested(), lit(0), inv), strict)))).toBe(2);
+  });
+
+  it("COMPILE.MODULE.SETNTH: a module gives a reason for what the facts cannot hold", () => {
+    expect(reasonOf(op("sum", op("setNth", ns)))).toBe('"setNth" without a position and a value');
+    expect(reasonOf(op("sum", op("setNth", ns, lit(0))))).toBe('"setNth" without a position and a value');
+    expect(reasonOf(op("sum", op("setNth", ns, lit(0), lit(1), strict, strict)))).toBe('"setNth" with more than one option');
+    expect(reasonOf(op("sum", op("setNth", ns, lit(0), lit(1), lit({ by: "x" }))))).toBe('the options of "setNth" are not a literal with strict');
+    expect(reasonOf(op("count", op("setNth", ns, lit(0), ns)))).toBe('"setNth" of a list of lists and a list of values');
+    expect(reasonOf(op("count", op("setNth", nested(), lit(0), lit(1))))).toBe('"setNth" of a list of lists and a list of values');
+  });
+
+  it("COMPILE.MODULE.SETNTH COMPILE.MODULE.FUSE.CLEAN: a clean list prints the clean helper, and each other list prints SN", () => {
+    expect(sourceOf(op("sum", op("setNth", ns, lit(0), lit(1))))).toContain("function SNC(");
+    expect(sourceOf(op("sum", op("setNth", BAD, lit(0), lit(1))))).toContain("function SN(");
+    expect(sourceOf(op("sum", op("setNth", ns, lit(0), lit(1))), { ...OPTIONS, fuse: false })).toContain("function SN(");
+    // The list after setNth is clean, so the next op has the clean form too.
+    expect(sourceOf(op("sum", op("setNth", op("setNth", BAD, lit(0), lit(1)), lit(0), lit(2))))).toContain("function SNC(");
+  });
+});
+
 describe("COMPILE.MODULE.SORT.BY: sortBy with the option by in a module", () => {
   it("COMPILE.MODULE.SORT.BY LIST.SORT.BY: a module sorts by the op of the kind of the items, with the values of the interpreter", () => {
     const programs = {
@@ -359,6 +436,7 @@ describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: prope
   const built: fc.Arbitrary<Expr> = fc.oneof(
     base,
     fc.tuple(base, fc.integer({ min: -1, max: 3 }), opts).map(([l, k, o]) => op("drop", l, lit(k), ...o)),
+    fc.tuple(base, fc.integer({ min: -1, max: 3 }), fc.constantFrom<Expr>(n, lit(1), lit("a"), ref("b"), lit(null)), opts).map(([l, k, x, o]) => op("setNth", l, lit(k), x, ...o)),
     fc.tuple(base, base, opts).map(([l, m, o]) => op("append", l, m, ...o)),
     fc.tuple(base, base, opts).map(([l, m, o]) => op("without", l, m, ...o)),
     fc.tuple(base, fc.integer({ min: 0, max: 2 })).map(([l, k]) => op("take", op("sortBy", op("append", l, ns)), lit(k))),
@@ -377,6 +455,7 @@ describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: prope
     fc.constant((l: Expr) => op("sum", let_({ $0: lit(1) }, l))),
     // The list as the state of a loop: a stack, a queue and a layout that reads the old values with get.
     fc.integer({ min: 0, max: 3 }).map((k) => (l: Expr) => let_({ xs: l }, iterate(k, { p: v("xs") }, { p: op("append", op("drop", v("p"), lit(1)), v("xs")) }, op("count", v("p"))))),
+    fc.integer({ min: 0, max: 3 }).map((k) => (l: Expr) => iterate(k, { p: l }, { p: op("setNth", v("p"), lit(0), lit(k)) }, op("count", v("p")))),
     fc.constant((l: Expr) => let_({ xs: l }, fold(axes.all, { st: v("xs") }, { st: op("without", v("st"), each(axes.window(0, 0), n)) }, op("count", v("st"))))),
     fc.integer({ min: 0, max: 3 }).map((k) => (l: Expr) => let_({ xs: l }, op("get", iterate(k, { p: v("xs") }, { p: op("append", each(axes.all, op("get", v("p"), ref("id"))), v("p")) }, v("p")), id))),
   );
@@ -385,7 +464,10 @@ describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: prope
   it("P17 COMPILE.MODULE.LIST LOOP.LIST: a module with the list ops of design E gives the value of the interpreter at each key", () => {
     fc.assert(
       fc.property(programs, records, fc.constantFrom("0", "1", "a", "x"), fc.boolean(), (e, rs, k, fuse) => {
-        expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, rs, { a: 1, k });
+        const options = { ...OPTIONS, fuse };
+        // `setNth` on an empty list can start a list of text. Then the number of the step does not fit, and a module refuses the loop.
+        fc.pre(reasonOf(e, options) !== NO_FIT);
+        expectSame(make(sourceOf(e, options)), e, rs, { a: 1, k });
       }),
     );
   });

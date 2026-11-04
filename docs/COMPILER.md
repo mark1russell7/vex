@@ -313,7 +313,7 @@ The workflow `shapes-bench.yml` of ireko measured vex-compiler 0.17.2 on a tree 
 The groups are the groups of `profile-summary.mjs` of ireko. That script puts `V` in alloc, because `V` is mainly a copy of a list. Three facts make most of this cost unnecessary:
 
 - Most lists exist only between two ops. Such a list needs no array of its own.
-- The value of `append`, `flat`, `drop`, `take`, `without`, `sortBy` and `fill` has no error items, because `V` removes each error item or raises the error. The next op does not know this fact, so `V` scans the list again.
+- The value of `append`, `flat`, `drop`, `take`, `setNth`, `without`, `sortBy` and `fill` has no error items. `V` removes each error item or raises the error. The next op does not know this fact, so `V` scans the list again.
 - The value of the shapes module does not depend on the key. The host reads only the value at the key 0, but `LO` makes the envelope again at each key.
 
 The module already makes one loop for an aggregate over an `each` (the method `#list` of `Printer`). These aggregates are `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first` and `reduce`. Fusion extends that loop to the ops that build a list.
@@ -337,7 +337,7 @@ A chain has a source, zero or more stages and one sink. A source is an array tha
 | `count`, `sum`, `reduce` and the other aggregates | A sink with a running value, as in the module of today |
 | `fold` and `iterate` over the axis `list` | A sink in a later step. In the first steps, the list of a fold is a source. |
 | The list envelope (`LO`) | A sink. The loop makes the items of the `vex.list`. |
-| `get`, `indexOf`, `nth`, `without`, `drop`, `take`, `reverse` of `each` | A barrier in the first steps. The chain stops before the op, and the op reads an array. |
+| `get`, `indexOf`, `nth`, `setNth`, `without`, `drop`, `take`, `reverse` of `each` | A barrier in the first steps. The chain stops before the op, and the op reads an array. |
 
 #### The rule of a fusion
 
@@ -371,7 +371,7 @@ The printer keeps the facts of each list in `ListInfo`. Fusion adds the fact `cl
 
 The kind of an item alone cannot prove the fact, because a list of each kind can hold the sentinel. But the printer checks each value with `G` or a check `k_*` before it stores the value in a list. Only two places put the sentinel into a list: the catch of an item of `each`, and an error item of the input (`LI`). A cell of a column of lists holds the list of another formula, and the first steps do not keep its facts. Thus these rules prove the fact `clean`:
 
-- The value of `append`, `flat`, `drop`, `take`, `without` and `sortBy` is clean, because `V` removes each error item or raises the error.
+- The value of `append`, `flat`, `drop`, `take`, `setNth`, `without` and `sortBy` is clean, because `V` removes each error item or raises the error.
 - The value of `fill` is clean, because its value is a checked value. A list literal is clean when it has no error items. The printer puts `E` at the place of an error item of a literal (LIST.LITERAL).
 - The value of an `each` is clean when its body is `safe`, the fact of the printer for code that cannot throw.
 - A fused chain gives a clean list, because it pushes only items with values.
@@ -492,7 +492,7 @@ With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_dom
 - A list with more than one read. Such a list is a source, as the list of a node of the memo or of a name of a loop is.
 - A list that escapes. It goes into a cell, a column, a field, an argument of an op or a call, or the value of a call.
 - A chain across the body of a function, across `ifError`, or across the body of a constant of the run or a column.
-- The barriers `get`, `indexOf`, `nth`, `without`, `drop`, `take` and `each` with `reverse`. `GT` keeps its index on the array, so `get` needs the array.
+- The barriers `get`, `indexOf`, `nth`, `setNth`, `without`, `drop`, `take` and `each` with `reverse`. `GT` keeps its index on the array, so `get` needs the array.
 - A chain with an option `strict` that is not a literal.
 - A list of the input, with its check `LI`. The check comes before the run, and it throws a `VexContractError`.
 - `fold` and `iterate` over the axis `list`, in the first steps. Their steps read the list in order, so they can be sinks later.
@@ -693,6 +693,7 @@ The status on 2026-10-17:
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
 - Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 has them too (COMPILE.LIST.VALUE, §4.1), but not the axis `list` yet. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
 - The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 gives them with the code of the interpreter (COMPILE.LIST.VALUE).
+- `setNth` is done in the interpreter, tier 2 and a module (LIST.SETNTH, LOOP.SIZE.SETNTH, COMPILE.MODULE.SETNTH). A step replaces one item of a list without an `each`. The size rule counts the list and the value one time each, and no other rule changed. A `rec` with two reads of one old record stays refused, because the rule of `rec` adds its fields.
 - Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). Tier 2 gives a list op on an array with the code of the interpreter (COMPILE.LIST.ARRAY), so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
 - Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 has them (COMPILE.LIST.VALUE).
 - Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus force layouts and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
@@ -1503,6 +1504,16 @@ The shapes pilot found that the value of a call cannot be a list in a module. Be
 | After, with one function `merge` | 29879 | 7029 |
 
 A tree of 111 nodes with three children for each node took approximately 5.3 ms before and 3.7 ms after. A tree of 13 nodes took approximately 0.08 ms in both. A test of one more function for the whole axis gave 27810 bytes, but 7117 bytes after gzip. Thus the pilot keeps only the function `merge`.
+
+#### setNth (COMPILE.MODULE.SETNTH)
+
+`setNth` replaces one item of a list (LIST.SETNTH). Tier 2 needs no change: a list op goes through the generic call of the list ops, and an array goes to tier 1. A module has two helpers:
+
+- `SN` removes the error items with `V`, copies the array and puts a new pair at the position. `SNC` has no scan, for a list that the facts prove clean (COMPILE.MODULE.FUSE.CLEAN).
+- The copy costs one array of pairs at each call. The pairs of the other items are shared, because no helper changes a pair.
+- The value of `setNth` is clean, because `V` removes each error item and the printer checks the new value. It is not `fresh`: a later change can make this fact true.
+- The new item has the kind of the value. The facts join it with the kinds of the items, so another kind leaves the kind of the items unknown.
+- A chain stops before `setNth`, because the op reads an array.
 
 #### fill (COMPILE.MODULE.FILL)
 

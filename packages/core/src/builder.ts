@@ -438,6 +438,11 @@ export interface ListChain<Ctx extends ChainContext, U> {
   /** The value of the item at the position `i`, from 0 (LIST.NTH). */
   nth(i: number, opts?: ListOpts): ChainOf<Ctx, U>;
   /**
+   * This list with `value` as the value of the item at the position `i`, from 0 (LIST.SETNTH). The item keeps its key.
+   * A chain or `lit` gives the value, and a chain can give the position. Both evaluate at the focus.
+   */
+  setNth<V>(i: number | ChainBase<Ctx, number>, value: ChainBase<Ctx, V> | Arg<V>, opts?: ListOpts): ListChain<Ctx, U | V>;
+  /**
    * The value of the first item with the key `k` (LIST.GET). A chain of a text gives the key, and it evaluates at the
    * focus. A key that no item has gives `#N/A`. Thus a step reads the old value of each key.
    */
@@ -1038,6 +1043,9 @@ class ListChainImpl {
   }
   nth(i: number, opts?: ListOpts): ChainImpl {
     return this.#op("nth", [lit(i)], opts);
+  }
+  setNth(i: number | { readonly program: Expr }, value: unknown, opts?: ListOpts): ListChainImpl {
+    return this.#list("setNth", [typeof i === "number" ? lit(i) : i.program, toExpr(value, this.#s.addr)], opts);
   }
   get(k: string | { readonly program: Expr }, opts?: ListOpts): ChainImpl {
     // A text is a key, not a field reference, as for the move to(k).

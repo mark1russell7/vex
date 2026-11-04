@@ -277,10 +277,10 @@ describe("the form of a value in a module (COMPILE.MODULE.FORM)", () => {
 });
 
 describe("the limits of a module of vectors (COMPILE.MODULE.FORM)", () => {
-  it("COMPILE.MODULE.FORM: a number that the op lifts keeps the dispatch of the runtime, so a module gives a reason", () => {
-    expect(reasonOf(op("add", p, lit(1)))).toBe(undecided("add"));
-    expect(reasonOf(op("add", p, n))).toBe(undecided("add"));
-    expect(reasonOf(op("select", p, n, q))).toBe(undecided("select"));
+  it("COMPILE.MODULE.FORM KIND.LIFT: a number that the op lifts goes through the lift of the form, as in the interpreter", () => {
+    for (const e of [op("add", p, lit(1)), op("add", p, n), op("select", p, n, q)]) expect(expectSame(e)).toHaveLength(RECORDS.length);
+    // A value of a kind that the facts do not know keeps the dispatch of the runtime, so a module gives a reason.
+    expect(reasonOf(op("add", p, op("if", op("gt", n, lit(0)), n, s)))).toBe(undecided("add"));
   });
 
   it("COMPILE.MODULE.FORM: a domain without a primitive type before the domain of a number gives a reason", () => {

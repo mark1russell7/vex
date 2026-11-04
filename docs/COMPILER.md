@@ -208,7 +208,7 @@ Each test of the compiler and of the pilots that compares values runs with `thro
 
 The file `packages/pilots/src/ireko-modules.ts` holds the input of each module of ireko. The script `scripts/ireko-module.ts` and the value tests read the same rows, so a value test prints the module of a build with `throw`. The rows of the five committed modules are `measure`, `place`, `shape`, `grid` and `radial`. The rows `layers` and `tree` have no committed file at this time, and their value tests use the table too.
 
-This check examines the print of the compiler at the same commit. It does not examine the text of a committed file, because that text is an older print. At the commit of this check, the print of `place` is the committed text, and the other four prints have other bytes. A fault that an older print holds stays in that file until the next build.
+This check examines the print of the compiler at the same commit. It does not examine the text of a committed file, because that text can be an older print. A fault that an older print holds stays in that file until the next build. The bytes of a print also depend on the program that runs the printer, because a copied function keeps the text that this program gives.
 
 The default stays `value`, because the form with `throw` costs more than the limit of the decision. The limit was 2 % of the minified module. The module of `NODE_SHAPE` grows by 142 bytes after `esbuild --minify` and `gzip -9`, from 2336 to 2478, which is 6.08 %. Without minification, it grows by 92 bytes, from 3629 to 3721. The tree module grows by 182 bytes, which is 5.04 %. The form also adds a call of the wrapper to each call of an op, and it keeps each op as a declaration. This record has no measure of the time of these calls.
 

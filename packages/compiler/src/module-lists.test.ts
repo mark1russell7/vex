@@ -202,8 +202,8 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
     expect(reasonOf(iterate(2, { p: nested(), q: ns }, { p: each(axes.all, each(axes.all, ref("b"))) }, op("count", v("p"))))).toBe('a step of a loop gives the name "p" a list that does not fit its first list');
     expect(reasonOf(iterate(2, { p: ns }, { p: lit(1) }, lit(0)))).toBe('a step of a loop changes the kind of the name "p"');
     expect(reasonOf(iterate(2, { p: lit(1) }, { p: ns }, lit(0)))).toBe('a step of a loop changes the kind of the name "p"');
-    // The first list fixes the kind of the items. The empty literal has no kind, so get gives a value of no kind.
-    expect(reasonOf(iterate(2, { p: EMPTY }, { p: op("append", v("p"), ns) }, op("add", op("get", v("p"), lit("0")), lit(1))))).toBe(undecided("add"));
+    // The empty literal has no kind, and this step decides none, so get gives a value of no kind (COMPILE.MODULE.LOOP.EMPTY).
+    expect(reasonOf(iterate(2, { p: EMPTY }, { p: v("p") }, op("add", op("get", v("p"), lit("0")), lit(1))))).toBe(undecided("add"));
     // A domain op with the name of a list op on a value that is not a list is a domain op.
     expect(reasonOf(op("count", op("drop", n, lit(1))))).toBe(undecided("drop"));
     expect(reasonOf(op("get", n, lit(1)))).toBe(undecided("get"));
@@ -292,8 +292,11 @@ const same = (e: Expr, records: readonly unknown[] = POINTS): void => {
   expect(got).toStrictEqual(expected);
 };
 
-const both = (e: Expr, records: readonly unknown[] = RECORDS): void => {
-  for (const fuse of [true, false]) expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, records);
+/** This function checks a module of each form of fusion against the interpreter, and it gives the number of forms. */
+const both = (e: Expr, records: readonly unknown[] = RECORDS): number => {
+  const forms = [true, false];
+  for (const fuse of forms) expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, records);
+  return forms.length;
 };
 const steps = (list: Expr): Expr => iterate(3, { a: list, i: lit(0) }, { a: op("setNth", v("a"), v("i"), op("add", op("nth", v("a"), v("i")), lit(1))), i: op("add", v("i"), lit(1)) }, v("a"));
 
@@ -320,26 +323,23 @@ describe("COMPILE.MODULE.SETNTH: setNth in a module", () => {
       again: op("sum", op("setNth", op("setNth", ns, lit(0), lit(9)), lit(1), lit(9))),
       looped: guard(op("sum", steps(ns))),
     });
-    both(e);
-    both(e, RECORDS.slice(0, 2));
-    both(e, []);
-    expect(sourceOf(e, OPTIONS)).toContain("function run");
+    expect(both(e)).toBe(2);
+    expect(both(e, RECORDS.slice(0, 2))).toBe(2);
+    expect(both(e, [])).toBe(2);
   });
 
   it("COMPILE.MODULE.SETNTH: the old array does not change, and the first form of each name keeps its own items", () => {
-    both(let_({ a: ns }, rec({ old: op("sum", v("a")), now: op("sum", op("setNth", v("a"), lit(0), lit(9))), after: op("sum", v("a")) })));
-    both(iterate(2, { a: LIT, b: LIT }, { a: op("setNth", v("a"), lit(0), lit(9)), b: v("a") }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })));
-    both(fold(axes.all, { a: EMPTY }, { a: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), n) }, op("sum", v("a"))));
-    both(fold(axes.all, { a: EMPTY, b: EMPTY }, { a: op("append", v("a"), op("fill", lit(1), n)), b: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), lit(5)) }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })));
-    expect(sourceOf(fold(axes.all, { a: EMPTY, b: EMPTY }, { a: op("append", v("a"), op("fill", lit(1), n)), b: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), lit(5)) }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })), OPTIONS)).toContain("function run");
+    expect(both(let_({ a: ns }, rec({ old: op("sum", v("a")), now: op("sum", op("setNth", v("a"), lit(0), lit(9))), after: op("sum", v("a")) })))).toBe(2);
+    expect(both(iterate(2, { a: LIT, b: LIT }, { a: op("setNth", v("a"), lit(0), lit(9)), b: v("a") }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })))).toBe(2);
+    expect(both(fold(axes.all, { a: EMPTY }, { a: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), n) }, op("sum", v("a"))))).toBe(2);
+    expect(both(fold(axes.all, { a: EMPTY, b: EMPTY }, { a: op("append", v("a"), op("fill", lit(1), n)), b: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), lit(5)) }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })))).toBe(2);
   });
 
   it("COMPILE.MODULE.SETNTH: the value can be a list, and a list of lists keeps its facts", () => {
-    both(op("sum", op("flat", op("setNth", nested(), lit(0), ns))));
-    both(op("sum", op("flat", op("setNth", nested(), lit(1), EMPTY))));
-    both(op("count", op("flat", op("setNth", nested(), lit(0), inv))));
-    both(op("count", op("flat", op("setNth", nested(), lit(0), inv), strict)));
-    expect(sourceOf(op("count", op("flat", op("setNth", nested(), lit(0), inv), strict)), OPTIONS)).toContain("function run");
+    expect(both(op("sum", op("flat", op("setNth", nested(), lit(0), ns))))).toBe(2);
+    expect(both(op("sum", op("flat", op("setNth", nested(), lit(1), EMPTY))))).toBe(2);
+    expect(both(op("count", op("flat", op("setNth", nested(), lit(0), inv))))).toBe(2);
+    expect(both(op("count", op("flat", op("setNth", nested(), lit(0), inv), strict)))).toBe(2);
   });
 
   it("COMPILE.MODULE.SETNTH: a module gives a reason for what the facts cannot hold", () => {

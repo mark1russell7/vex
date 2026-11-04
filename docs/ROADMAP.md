@@ -22,7 +22,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 |---|---|---|---|---|---|
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 7 merged, step 8 is #222 | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
-| LAYERS | The layers and tree strategies of ireko as Vex programs. | ireko | P1 | blocked | ENGINE |
+| LAYERS | The layers and tree strategies of ireko as Vex programs. | ireko | P1 | in progress: the layers pilot and the tree pilot are in `engine-next`, ireko does not use them yet | ENGINE |
 
 ## Next
 

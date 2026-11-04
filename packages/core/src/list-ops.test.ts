@@ -36,6 +36,18 @@ describe("LIST.OPS: the list ops of compile for the values of a host", () => {
     expect(ops.list("first", list, [{ strict: true }], here, path)).toStrictEqual(fail(bad));
   });
 
+  it.each<readonly [ListOp, readonly unknown[], readonly unknown[]]>([
+    ["count", [1, null], []],
+    ["sum", [1, undefined, 2], []],
+    ["first", [null, 1], [{ strict: true }]],
+    ["nth", [1], [9]],
+    ["errors", [], []],
+  ])("LIST.OPS LIST.ARRAY: %s of an array gives the result of evaluate, and an error at the position and the path of the call", (op, array, rest) => {
+    const here = { origin: "0", focus: "0" };
+    const r = evaluate(app(op, lit(array), ...rest.map((x) => lit(x))), { space: s, origin: "0" });
+    expect(listOps().array(op, array, rest, here, [])).toStrictEqual(r);
+  });
+
   it("LIST.OPS LIST.FILL: fill gives the list of evaluate, and an error at the call", () => {
     const { fill: make } = listOps();
     expect(make([2, "x"], position, [])).toMatchObject({ ok: true, value: { items: [{ result: { value: "x" } }, { result: { value: "x" } }] } });

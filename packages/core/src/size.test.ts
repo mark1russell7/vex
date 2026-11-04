@@ -264,7 +264,7 @@ describe("the size check of the loops (LOOP.SIZE)", () => {
 
 const set = (x: Expr, value: Expr): Expr => app("setNth", x, lit(0), value);
 const itemOf = (x: Expr, i = 0): Expr => app("nth", x, lit(i));
-const twoNames = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: NONE, y: NONE }, next, v("x"));
+const stepOfTwo = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: NONE, y: NONE }, next, v("x"));
 const pairLoop = (a: Expr, b: Expr): Expr => iterate(12, { a: NONE, b: NONE }, { a, b }, v("a"));
 const copied = (list: Expr, first: Expr = NONE): Expr => fold(axes.list(list), { acc: first }, { acc: app("append", v("acc"), one(v("it"))) }, v("acc"), undefined, ["it"]);
 const copiedTwice = (list: Expr): Expr => fold(axes.list(list), { acc: NONE }, { acc: app("append", app("append", v("acc"), one(v("it"))), one(v("it"))) }, v("acc"), undefined, ["it"]);
@@ -283,6 +283,7 @@ describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
   const ITEM = "a value that uses the lists of the loop more than one time in its largest item";
   // A list of lists: from an empty list, the kinds of the items are not known, so these tests start here.
   const LISTS = lit(vexList([{ key: "0", result: ok(vexList([{ key: "a", result: ok(1) }])) }, { key: "1", result: ok(vexList([{ key: "b", result: ok(2) }])) }]));
+  const lists = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: LISTS, y: NONE }, next, v("x"));
 
   it("LOOP.SIZE.SETNTH: a step takes a value that does not grow, also a value from an old item", () => {
     expect(check(folded(NONE, (x) => set(x, lit(1))))).toBeUndefined();
@@ -317,9 +318,9 @@ describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
   });
 
   it("LOOP.SIZE.SETNTH: the old list of a second name counts as the list", () => {
-    expect(check(twoNames({ y: v("x"), x: set(v("x"), v("y")) }))).toBeDefined();
-    expect(check(fold(axes.all, { x: LISTS, y: NONE }, { y: app("append", itemOf(v("x")), itemOf(v("x"))), x: set(v("x"), v("y")) }, v("x")))).toBeDefined();
-    expect(check(twoNames({ y: itemOf(v("x")), x: set(v("x"), lit(1)) }))).toBeUndefined();
+    expect(check(stepOfTwo({ y: v("x"), x: set(v("x"), v("y")) }))).toBeDefined();
+    expect(check(lists({ y: app("append", itemOf(v("x")), itemOf(v("x"))), x: set(v("x"), v("y")) }))).toBeDefined();
+    expect(check(stepOfTwo({ y: itemOf(v("x")), x: set(v("x"), lit(1)) }))).toBeUndefined();
   });
 
   it("LOOP.SIZE.SETNTH: a value of another kind is valid", () => {

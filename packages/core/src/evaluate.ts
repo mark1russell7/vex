@@ -174,6 +174,8 @@ export function nestingOf(e: Expr): number {
 export interface ListOps {
   /** This function gives the result of a list op on a list. The list is the receiver, and `rest` has the other arguments. */
   readonly list: (op: ListOp, list: VexList, rest: readonly unknown[], position: Position, path: readonly number[]) => Result<unknown>;
+  /** This function gives the result of a list op on an array (LIST.ARRAY). A missing item is an error item with the position and the path. */
+  readonly array: (op: ListOp, array: readonly unknown[], rest: readonly unknown[], position: Position, path: readonly number[]) => Result<unknown>;
   /** This function gives the result of `fill` (LIST.FILL). */
   readonly fill: (values: readonly unknown[], position: Position, path: readonly number[]) => Result<VexList>;
 }
@@ -184,6 +186,7 @@ export function listOps(opts: CompileOptions = {}): ListOps {
   const names = new Map<string, Result<unknown>>();
   return {
     list: (op, list, rest, pos, path) => compiler.listOp(op, list, rest, { pos, env: names }, path),
+    array: (op, array, rest, pos, path) => compiler.arrayOp(op, array, rest, { pos, env: names }, path),
     fill: (values, pos, path) => compiler.fill(values, { pos, env: names }, path),
   };
 }
@@ -920,7 +923,7 @@ class Compiler {
       }
       if (fn !== undefined) return this.#emit(c, info, f, this.#checkResult(this.#invoke(() => fn(...values), op, f, path), f, path, op));
       // LIST.ARRAY and LIST.FILL come after the domains and the functions of the host, so each of their results stays.
-      if (listOp !== undefined && Array.isArray(self)) return this.#emit(c, info, f, this.listOp(listOp, listOfArray(self, this.#missing(f, path)), values.slice(1), f, path));
+      if (listOp !== undefined && Array.isArray(self)) return this.#emit(c, info, f, this.arrayOp(listOp, self, values.slice(1), f, path));
       if (op === "fill") return this.#emit(c, info, f, this.fill(values, f, path));
       if (accepted !== undefined) return this.#emit(c, info, f, this.#at(errorText.domainNoOp(accepted.name, op), f, path));
       if (values.length === 0) return this.#emit(c, info, f, this.#at(errorText.noOp(op), f, path));
@@ -1035,6 +1038,11 @@ class Compiler {
       if (!valid) return this.#at(errorText.invalid(op, d.name), f, path);
     }
     return r;
+  }
+
+  /** This method gives the result of a list op on an array (LIST.ARRAY): the list op on the list of its items. */
+  arrayOp(op: ListOp, array: readonly unknown[], rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
+    return this.listOp(op, listOfArray(array, this.#missing(f, path)), rest, f, path);
   }
 
   listOp(op: ListOp, list: VexList, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {

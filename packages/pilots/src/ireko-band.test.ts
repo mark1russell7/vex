@@ -45,7 +45,7 @@ const PROGRAMS: Readonly<Record<string, Expr>> = {
   join: op("join", own, b),
   overlaps: op("overlaps", own, first),
   // The test of the packing of the strategy tree: a band that overlaps the band before it goes past its far side.
-  pack: op("if", op("overlaps", b, first), op("add", op("subtract", op("max", first), op("min", b)), v("gap")), lit(0)),
+  pack: op("if", op("overlaps", b, first), op("clear", first, b, lit(0), v("gap")), lit(0)),
   // A fold joins the bands of all records into one band that covers them.
   all: fold(axes.all, { u: first }, { u: op("join", v("u"), b) }, fields(v("u"))),
   // A list of bands, as the rows of a shape: nth reads a band, and reduce joins them.
@@ -202,6 +202,8 @@ describe("the band domain of ireko", () => {
     expect(BandDomain.ops.flip.fn(a)).toStrictEqual({ from: 0, to: 40, min: -120, max: -10 });
     // pack of strategies/tree.ts compares two bands with p.from < b.to && b.from < p.to: bands that only touch do not overlap.
     expect([c, { ...c, from: 40 }, { ...c, to: 0 }, { ...c, from: -5, to: 50 }].map((q) => BandDomain.ops.overlaps.fn(a, q))).toStrictEqual([true, false, false, true]);
+    // pack of strategies/tree.ts takes Math.max(place, p.max - b.min + gap), so a clearance of -Infinity leaves the place.
+    expect([BandDomain.ops.clear.fn(a, c, 0, 4), BandDomain.ops.clear.fn(a, c, 200, 4), BandDomain.ops.clear.fn(a, { ...c, min: Number.POSITIVE_INFINITY }, 7, 4)]).toStrictEqual([144, 200, 7]);
     expect([a, c].map((q) => [BandDomain.ops.from.fn(q), BandDomain.ops.to.fn(q), BandDomain.ops.min.fn(q), BandDomain.ops.max.fn(q)])).toStrictEqual([
       [0, 40, 10, 120],
       [30, 90, -20, 60],

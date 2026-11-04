@@ -3,7 +3,7 @@
  * purpose: they make prototype names, missing fields, non-finite numbers, records that throw, and ops that do
  * not exist.
  */
-import { app, axes, each, fix, last, lit, ref, space, toDocument, vexList, type AnyDomain, type Axis, type Expr, type FixedMove, type FixJoin, type Move, type Space } from "@mark1russell7/vex";
+import { app, axes, call, each, fix, fn, last, let_, lit, ref, space, toDocument, v, vexList, type AnyDomain, type Axis, type Expr, type FixedMove, type FixJoin, type Move, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The options of the arbitraries. */
@@ -187,7 +187,7 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
           bind: { [name]: { tag: "fn", params, body: fnBody }, ...(other === undefined ? {} : { a: other }) },
           body: exact ? { tag: "call", fn: name, args: [x, y].slice(0, params.length) } : body,
         })),
-      fc.tuple(fc.constantFrom("f", "g", "a", "b"), fc.array(tie("expr"), { maxLength: 2 })).map(([fn, args]): Expr => ({ tag: "call", fn, args })),
+      fc.tuple(fc.constantFrom("f", "g", "a", "b"), fc.array(tie("expr"), { maxLength: 2 })).map(([name, args]): Expr => ({ tag: "call", fn: name, args })),
       fc.tuple(tie("expr"), tie("expr")).map(([x, y]): Expr => ({ tag: "rec", fields: { x, y } })),
       // The ops on the order of a list (LIST.TAKE, LIST.NTH), with a position that can be wrong.
       fc
@@ -279,14 +279,11 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
 /** The axes of a generated column. Each has targets that do not depend on the order of the rows. */
 const FIX_AXES: readonly Axis[] = [axes.predecessors, axes.successors, axes.reachable, axes.all, axes.others, axes.where(axes.all, ref("b"))];
 
-/** This function generates a `fix` of the name `x` from the parts. */
-const arbFix = (join: FixJoin, init: fc.Arbitrary<Expr>, step: fc.Arbitrary<Expr>): fc.Arbitrary<Expr> => fc.tuple(init, step).map(([a, b]): Expr => fix("x", join, a, b));
+/** This function generates a `fix` from the parts. */
+const arbFix = (join: FixJoin, init: fc.Arbitrary<Expr>, step: fc.Arbitrary<Expr>, name = "x"): fc.Arbitrary<Expr> => fc.tuple(init, step).map(([a, b]): Expr => fix(name, join, a, b));
 
-/**
- * This function generates a program with one `fix` that the check accepts (FIX.MONOTONE). Each read of the fields in the
- * records of `arbFixGraph` works. The ops ignore the order of the rows, so a test can reverse the rows (FIX.ORDER).
- */
-export function arbFixExpr(maxDepth = 3): fc.Arbitrary<Expr> {
+/** This function generates a column of numbers and a column of booleans, each of the name `x`. */
+function arbFixColumns(maxDepth: number): { readonly numbers: fc.Arbitrary<Expr>; readonly booleans: fc.Arbitrary<Expr> } {
   const axis = fc.constantFrom(...FIX_AXES);
   const number = (depth: number): fc.Arbitrary<Expr> => {
     const inner = fc.constant(null).chain(() => number(depth - 1));
@@ -313,11 +310,80 @@ export function arbFixExpr(maxDepth = 3): fc.Arbitrary<Expr> {
   };
   const start = fc.constantFrom<Expr>(ref("n"), lit(0), lit(9), app("if", ref("b"), lit(0), lit(9)));
   const flag = fc.constantFrom<Expr>(ref("b"), lit(false), lit(true), app("not", ref("b")));
+  return {
+    numbers: fc.oneof(arbFix("max", start, number(maxDepth)), arbFix("min", start, number(maxDepth))),
+    booleans: fc.oneof(arbFix("or", flag, boolean(maxDepth)), arbFix("and", flag, boolean(maxDepth))),
+  };
+}
+
+/**
+ * This function generates a program with one `fix` that the check accepts (FIX.MONOTONE). Each read of the fields in the
+ * records of `arbFixGraph` works. The ops ignore the order of the rows, so a test can reverse the rows (FIX.ORDER).
+ */
+export function arbFixExpr(maxDepth = 3): fc.Arbitrary<Expr> {
+  const { numbers, booleans } = arbFixColumns(maxDepth);
+  return fc.oneof(numbers, booleans);
+}
+
+/** A value that is an error at each row where `n` is 0. */
+const FIX_ERROR: Expr = app("divide", lit(8), ref("n"));
+
+/** A boolean that is an error at each row where `n` is 0. */
+const FIX_ERROR_FLAG: Expr = app("gt", FIX_ERROR, lit(1));
+
+/**
+ * This function generates a program for the differential test of the tiers (COMPILE.FIX). The check accepts each one
+ * (FIX.MONOTONE). A step of the column `y` reads its last round and moves it with an op. A step can also read a column
+ * of the name `x`, or give an error value at some rows. A first value can have the wrong kind (FIX.KIND). A step can add 1 at each
+ * round, so a program can reach the round limit (FIX.LIMIT).
+ */
+export function arbFixProgram(maxDepth = 2): fc.Arbitrary<Expr> {
+  const { numbers, booleans } = arbFixColumns(1);
+  const axis = fc.constantFrom(...FIX_AXES);
+  const y = last("y");
+  const move = fc.integer({ min: -1, max: 1 });
+  const number = (depth: number): fc.Arbitrary<Expr> => {
+    const leaf = fc.oneof(fc.constant<Expr>(y), move.map((k): Expr => app("add", y, lit(k))));
+    if (depth <= 0) return leaf;
+    const inner = fc.constant(null).chain(() => number(depth - 1));
+    return fc.oneof(
+      leaf,
+      fc.tuple(inner, numbers).map(([a, c]): Expr => app("max", a, c)),
+      fc.tuple(inner, numbers).map(([a, c]): Expr => let_({ c }, app("min", a, v("c")))),
+      inner.map((a): Expr => app("min", a, FIX_ERROR)),
+      fc.tuple(inner, axis, fc.constantFrom("min", "max")).map(([a, on, op]): Expr => app(op, each(on, a))),
+      fc.tuple(inner, inner).map(([a, b]): Expr => app("if", ref("b"), a, b)),
+      fc.tuple(inner, move).map(([a, k]): Expr => app("ifError", a, lit(k))),
+    );
+  };
+  const boolean = (depth: number): fc.Arbitrary<Expr> => {
+    const leaf = fc.oneof(fc.constant<Expr>(y), fc.constantFrom("and", "or").map((op): Expr => app(op, y, ref("b"))));
+    if (depth <= 0) return leaf;
+    const inner = fc.constant(null).chain(() => boolean(depth - 1));
+    return fc.oneof(
+      leaf,
+      fc.tuple(inner, booleans).map(([a, c]): Expr => app("or", a, c)),
+      fc.tuple(inner, booleans).map(([a, c]): Expr => let_({ c }, app("and", a, v("c")))),
+      inner.map((a): Expr => app("and", a, FIX_ERROR_FLAG)),
+      fc.tuple(inner, axis, fc.constantFrom("any", "all")).map(([a, on, op]): Expr => app(op, each(on, a))),
+      fc.tuple(inner, inner).map(([a, b]): Expr => app("if", ref("b"), a, b)),
+      inner.map((a): Expr => app("ifError", a, lit(false))),
+    );
+  };
+  const start = fc.constantFrom<Expr>(ref("n"), lit(0), lit(9), FIX_ERROR, ref("b"));
+  const flag = fc.constantFrom<Expr>(ref("b"), lit(false), lit(true), FIX_ERROR_FLAG, ref("n"));
+  const column = fc.oneof(
+    arbFix("max", start, number(maxDepth), "y"),
+    arbFix("min", start, number(maxDepth), "y"),
+    arbFix("or", flag, boolean(maxDepth), "y"),
+    arbFix("and", flag, boolean(maxDepth), "y"),
+  );
   return fc.oneof(
-    arbFix("max", start, number(maxDepth)),
-    arbFix("min", start, number(maxDepth)),
-    arbFix("or", flag, boolean(maxDepth)),
-    arbFix("and", flag, boolean(maxDepth)),
+    { weight: 6, arbitrary: column },
+    { weight: 1, arbitrary: column.map((c): Expr => app("ifError", c, lit(0))) },
+    { weight: 1, arbitrary: column.map((c): Expr => let_({ z: c }, v("z"))) },
+    { weight: 1, arbitrary: column.map((c): Expr => app("count", each(axes.all, c))) },
+    { weight: 1, arbitrary: column.map((c): Expr => let_({ f: fn([], c) }, call("f"))) },
   );
 }
 

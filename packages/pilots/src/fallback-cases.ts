@@ -38,6 +38,8 @@ import {
   INVOICE_BAD,
   INVOICE_GOOD,
   invoiceList,
+  layersInput,
+  treeInput,
   LOAN_FOUR,
   LOAN_LONG,
   loanMonth,
@@ -63,8 +65,10 @@ import { ESCAPE_DOMAINS, ESCAPE_PROGRAM, escapeRun } from "./ireko-audit.ts";
 import { GRID_DOMAINS, GRID_PROGRAM, gridRun } from "./ireko-grid.ts";
 import { MEASURE_COLUMNS, MEASURE_DOMAINS, measureRecords, measureSpace } from "./ireko-measure.ts";
 import { PLACE_COLUMNS, PLACE_DOMAINS, placeSpace } from "./ireko-place.ts";
+import { LAYERS_DOMAINS, LAYERS_PROGRAM, layersRun } from "./ireko-layers.ts";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, radialRun } from "./ireko-radial.ts";
 import { MAX_BANDS, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, shapeSpace, type ShapeRecord } from "./ireko-shapes.ts";
+import { TREE_DOMAINS, TREE_PROGRAM, treeRun } from "./ireko-tree.ts";
 import { LOAN_COLUMNS, loanFormula, loanFormulas, type LoanMonth, type LoanTerms } from "./loan.ts";
 import { formulas, PILOTS } from "./programs.ts";
 import { SCHEMA_DOMAINS, SCHEMA_PROGRAM } from "./schema.ts";
@@ -125,6 +129,26 @@ export function pilotCases(o: CaseOptions): ShareCase[] {
         const p = m.program("radial", RADIAL_PROGRAM, { domains: RADIAL_DOMAINS });
         for (const i of [...sample(radialRing(5), 20, o), RADIAL_MIXED]) {
           const { space: s, vars } = radialRun(i);
+          for (const origin of s.keys) p.run({ space: s, origin, vars });
+        }
+      },
+    },
+    {
+      name: "layers",
+      run: (m) => {
+        const p = m.program("layers", LAYERS_PROGRAM, { domains: LAYERS_DOMAINS });
+        for (const i of sample(layersInput(5), 20, o)) {
+          const { space: s, vars } = layersRun(i);
+          for (const origin of s.keys) p.run({ space: s, origin, vars });
+        }
+      },
+    },
+    {
+      name: "tree",
+      run: (m) => {
+        const p = m.program("tree", TREE_PROGRAM, { domains: TREE_DOMAINS });
+        for (const i of sample(treeInput(4, 3), 20, o)) {
+          const { space: s, vars } = treeRun(i);
           for (const origin of s.keys) p.run({ space: s, origin, vars });
         }
       },

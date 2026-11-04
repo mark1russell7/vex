@@ -77,6 +77,8 @@ export function readsFinished(columns: ReadonlyMap<string, Expr>, order: readonl
       const list = listOf(e.axis);
       for (const x of [...(e.tag === "fold" ? [...Object.values(e.init), e.result] : []), ...addrExprs(e.at), ...(list === undefined ? [] : [list])]) todo.push([x, place]);
     } else if (e.tag === "fn") todo.push([e.body, "unknown"]);
+    // The parts of a column evaluate at each row, so a read in them has no place (FIX.ROUNDS).
+    else if (e.tag === "fix") todo.push([e.init, "unknown"], [e.step, "unknown"]);
     else if (e.tag !== "ext") for (const child of children(e)) todo.push([child, place]);
     else if (e.kind === CELL_KIND && isCellRef(e.data)) {
       const { column, at } = e.data;

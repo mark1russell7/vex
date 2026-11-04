@@ -1,0 +1,399 @@
+# The public API of @mark1russell7/vex-compiler
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 22 names
+
+type ErrorSite: build/index.d.ts#ErrorSite
+FALLBACK: build/index.d.ts#FALLBACK
+type Fail: build/index.d.ts#Fail
+type Fallback: build/index.d.ts#Fallback
+type GenerateOptions: build/index.d.ts#GenerateOptions
+type Generated: build/index.d.ts#Generated
+type LExpr: build/index.d.ts#LExpr
+type LStmt: build/index.d.ts#LStmt
+type LazyError: build/index.d.ts#LazyError
+type LoopProgram: build/index.d.ts#LoopProgram
+type PrimOp: build/index.d.ts#PrimOp
+type Runtime: build/index.d.ts#Runtime
+type RuntimeFn: build/index.d.ts#RuntimeFn
+type RuntimeOptions: build/index.d.ts#RuntimeOptions
+type Schema: build/facts-3ZtCfd0v.d.ts#Schema
+type Tier2: build/index.d.ts#Tier2
+type TierStats: build/index.d.ts#TierStats
+type TieredProgram: build/index.d.ts#TieredProgram
+createRuntime: build/index.d.ts#createRuntime
+generate: build/index.d.ts#generate
+load: build/index.d.ts#load
+tiered: build/index.d.ts#tiered
+
+## ./module (build/module-entry.d.ts): 7 names
+
+type Emitted: build/module-entry.d.ts#Emitted
+type ListKind: build/facts-3ZtCfd0v.d.ts#ListKind
+type ModuleOptions: build/module-entry.d.ts#ModuleOptions
+type SheetModuleOptions: build/module-entry.d.ts#SheetModuleOptions
+emitModule: build/module-entry.d.ts#emitModule
+emitSheetModule: build/module-entry.d.ts#emitSheetModule
+functionText: build/module-entry.d.ts#functionText
+
+## Declarations
+
+### build/facts-3ZtCfd0v.d.ts#ListKind
+interface ListKind {
+  readonly list: Kind | ListKind;
+  readonly texts?: boolean;
+}
+
+### build/facts-3ZtCfd0v.d.ts#Schema
+interface Schema {
+  readonly fields?: Readonly<Record<string, Kind | ListKind>>;
+  readonly vars?: Readonly<Record<string, Kind | ListKind>>;
+}
+
+### build/index.d.ts#ErrorSite
+type ErrorSite = {
+  readonly t: "key";
+} | {
+  readonly t: "text";
+  readonly text: ErrorText;
+  readonly path: readonly number[];
+} | {
+  readonly t: "call";
+  readonly name: string;
+  readonly path: readonly number[];
+} | {
+  readonly t: "missing";
+  readonly where: string;
+  readonly path: readonly number[];
+} | {
+  readonly t: "boolean";
+  readonly op: string;
+  readonly i: number;
+  readonly path: readonly number[];
+} | {
+  readonly t: "items";
+  readonly op: string;
+  readonly what: "numbers" | "booleans";
+  readonly path: readonly number[];
+} | {
+  readonly t: "until";
+  readonly path: readonly number[];
+} | {
+  readonly t: "limit";
+  readonly path: readonly number[];
+} | {
+  readonly t: "fixLimit";
+  readonly name: string;
+  readonly path: readonly number[];
+} | {
+  readonly t: "row";
+  readonly name: string;
+  readonly join: FixJoin;
+  readonly path: readonly number[];
+} | {
+  readonly t: "lastKey";
+  readonly name: string;
+  readonly path: readonly number[];
+} | {
+  readonly t: "rows";
+  readonly path: readonly number[];
+} | {
+  readonly t: "test";
+  readonly path: readonly number[];
+} | {
+  readonly t: "listAxis";
+  readonly path: readonly number[];
+} | {
+  readonly t: "op";
+  readonly op: string;
+  readonly path: readonly number[];
+} | {
+  readonly t: "step";
+  readonly path: readonly number[];
+} | {
+  readonly t: "ext";
+  readonly kind: string;
+  readonly path: readonly number[];
+} | {
+  readonly t: "addr";
+  readonly at: Addr;
+  readonly path: readonly number[];
+} | {
+  readonly t: "axis";
+  readonly axis: Exclude<Axis, {
+    readonly t: "where";
+  }>;
+  readonly path: readonly number[];
+} | {
+  readonly t: "args";
+  readonly what: string;
+  readonly path: readonly number[];
+};
+
+### build/index.d.ts#FALLBACK
+export declare const FALLBACK: unique symbol;
+
+### build/index.d.ts#Fail
+type Fail = {
+  readonly t: "return";
+} | {
+  readonly t: "stop";
+} | {
+  readonly t: "continue";
+  readonly label: number;
+  readonly strict?: {
+    readonly cond: LExpr;
+    readonly else: Fail;
+  };
+} | {
+  readonly t: "break";
+  readonly label: number;
+  readonly keep?: number;
+};
+
+### build/index.d.ts#Fallback
+type Fallback = typeof FALLBACK;
+
+### build/index.d.ts#GenerateOptions
+type GenerateOptions = CompileOptions & {
+  readonly schema?: Schema;
+};
+
+### build/index.d.ts#Generated
+type Generated = {
+  readonly ok: true;
+  readonly program: LoopProgram;
+  readonly source: string;
+  readonly options: GenerateOptions;
+} | {
+  readonly ok: false;
+  readonly reason: string;
+};
+
+### build/index.d.ts#LExpr
+type LExpr = {
+  readonly t: "const";
+  readonly i: number;
+} | {
+  readonly t: "local";
+  readonly n: number;
+} | {
+  readonly t: "num";
+  readonly v: number;
+} | {
+  readonly t: "bool";
+  readonly v: boolean;
+} | {
+  readonly t: "fallback";
+} | {
+  readonly t: "none";
+} | {
+  readonly t: "site";
+  readonly i: number;
+} | {
+  readonly t: "array";
+  readonly items: readonly LExpr[];
+} | {
+  readonly t: "prim";
+  readonly op: PrimOp;
+  readonly args: readonly LExpr[];
+} | {
+  readonly t: "call";
+  readonly fn: RuntimeFn;
+  readonly args: readonly LExpr[];
+} | {
+  readonly t: "op";
+  readonly name: number;
+  readonly args: readonly LExpr[];
+  readonly kinds: readonly (PrimitiveKind | undefined)[];
+} | {
+  readonly t: "memo";
+  readonly id: number;
+} | {
+  readonly t: "targets";
+  readonly axis: number;
+  readonly args: readonly [LExpr, LExpr, LExpr];
+};
+
+### build/index.d.ts#LStmt
+type LStmt = {
+  readonly t: "let";
+  readonly n: number;
+  readonly value: LExpr;
+} | {
+  readonly t: "set";
+  readonly n: number;
+  readonly value: LExpr;
+} | {
+  readonly t: "check";
+  readonly ok: LExpr;
+  readonly reason: string;
+  readonly fail: Fail;
+  readonly error?: LExpr;
+} | {
+  readonly t: "fail";
+  readonly fail: Fail;
+  readonly error?: LExpr;
+} | {
+  readonly t: "if";
+  readonly cond: LExpr;
+  readonly yes: readonly LStmt[];
+  readonly no: readonly LStmt[];
+} | {
+  readonly t: "loop";
+  readonly label: number;
+  readonly item: number;
+  readonly index: number;
+  readonly array: number;
+  readonly over: LExpr;
+  readonly body: readonly LStmt[];
+} | {
+  readonly t: "block";
+  readonly label: number;
+  readonly body: readonly LStmt[];
+} | {
+  readonly t: "break";
+  readonly label: number;
+} | {
+  readonly t: "repeat";
+  readonly label: number;
+  readonly body: readonly LStmt[];
+} | {
+  readonly t: "next";
+} | {
+  readonly t: "push";
+  readonly n: number;
+  readonly value: LExpr;
+} | {
+  readonly t: "return";
+  readonly value: LExpr;
+};
+
+### build/index.d.ts#LazyError
+interface LazyError {
+  readonly site: ErrorSite;
+  readonly origin: string;
+  readonly focus: string;
+  readonly operands: readonly unknown[];
+  readonly detail: Detail;
+  readonly a: unknown;
+  readonly b: unknown;
+}
+
+### build/index.d.ts#LoopProgram
+interface LoopProgram {
+  readonly body: readonly LStmt[];
+  readonly locals: number;
+  readonly constants: readonly unknown[];
+}
+
+### build/index.d.ts#PrimOp
+type PrimOp = "+" | "/" | "===" | "!==" | "!" | "||" | "&&" | "min" | "max" | "isNumber" | "isFinite" | "isBoolean" | "isString" | "isValue" | "isObject" | "unless" | "get" | "member" | "records" | "recordAt" | "keysOf" | "idxOf" | "valuesOf" | "memoGet" | "memoPut" | "entryValue" | "entryOk";
+
+### build/index.d.ts#Runtime
+interface Runtime {
+  readonly F: Fallback;
+  has(s: Space, key: string): boolean;
+  addr(s: Space, origin: string, focus: string, at: Addr, values?: readonly unknown[]): unknown;
+  axis(axis: BaseAxis): (s: Space, origin: string, focus: string) => Targets | Fallback;
+  table(tables: Readonly<Record<string, Space>> | undefined, name: string): unknown;
+  keys(s: Space): readonly string[];
+  rowIndex(s: Space, key: string): number | undefined;
+  rounds(s: Space): number;
+  site(name: string, arity: number): Site;
+  memo(): Memo;
+  domain(index: number): AnyDomain | undefined;
+  threw(thrown: unknown): Fallback;
+  bad(value: unknown): Fallback;
+  invalid(thrown: unknown, domain: number): Fallback;
+  err(site: ErrorSite, origin: string, focus: string, ...operands: readonly unknown[]): LazyError;
+  args(site: ErrorSite, origin: string, focus: string, errors: readonly (LazyError | undefined)[]): LazyError | undefined;
+  raise(error: LazyError): Fallback;
+  take(): VexError | undefined;
+  step(name: string, acc: unknown, value: unknown): unknown;
+  result(value: unknown): unknown;
+  opts(value: unknown): unknown;
+  rec(names: readonly string[], values: readonly unknown[]): unknown;
+  list(keys: readonly string[], values: readonly unknown[]): unknown;
+  items(value: unknown, reverse: boolean): ListTargets | Fallback;
+  frozen(values: readonly unknown[]): unknown;
+  ext(kind: string, data: unknown, s: Space, origin: string, focus: string, path: readonly number[]): unknown;
+  var(vars: Readonly<Record<string, unknown>> | undefined, name: string): unknown;
+}
+
+### build/index.d.ts#RuntimeFn
+type RuntimeFn = "has" | "addr" | "table" | "keys" | "rowIndex" | "rounds" | "step" | "result" | "opts" | "rec" | "list" | "items" | "frozen" | "ext" | "var" | "err" | "raise" | "args" | "bad" | "invalid";
+
+### build/index.d.ts#RuntimeOptions
+type RuntimeOptions = Options;
+
+### build/index.d.ts#Tier2
+type Tier2 = (space: Space, origin: string, vars: Readonly<Record<string, unknown>> | undefined, tables: Readonly<Record<string, Space>> | undefined) => unknown;
+
+### build/index.d.ts#TierStats
+interface TierStats {
+  readonly runs: number;
+  readonly fallbacks: number;
+}
+
+### build/index.d.ts#TieredProgram
+interface TieredProgram extends Program {
+  readonly tier: 1 | 2;
+  readonly reason?: string;
+  readonly stats: TierStats;
+}
+
+### build/index.d.ts#createRuntime
+export declare function createRuntime(options: RuntimeOptions): Runtime;
+
+### build/index.d.ts#generate
+export declare function generate(source: Expr | Envelope, options?: GenerateOptions): Generated;
+
+### build/index.d.ts#load
+export declare function load(generated: Extract<Generated, {
+  readonly ok: true;
+}>): Tier2;
+
+### build/index.d.ts#tiered
+export declare function tiered(source: Expr | Envelope, options?: GenerateOptions): TieredProgram;
+
+### build/module-entry.d.ts#Emitted
+type Emitted = {
+  readonly ok: true;
+  readonly source: string;
+} | {
+  readonly ok: false;
+  readonly reason: string;
+};
+
+### build/module-entry.d.ts#ModuleOptions
+interface ModuleOptions {
+  readonly domains?: readonly AnyDomain[];
+  readonly schema: Schema;
+  readonly name?: string;
+  readonly space?: "array" | "tree" | "graph";
+  readonly maxStep?: VexStep;
+  readonly fuse?: boolean;
+  readonly lists?: "envelope" | "plain";
+  readonly keys?: boolean;
+  readonly faults?: "value" | "throw";
+}
+
+### build/module-entry.d.ts#SheetModuleOptions
+interface SheetModuleOptions extends ModuleOptions {
+  readonly cells?: CellFormulas;
+  readonly kinds?: Readonly<Record<string, Kind | ListKind>>;
+  readonly budget?: number;
+}
+
+### build/module-entry.d.ts#emitModule
+export declare function emitModule(source: Expr | Envelope, options: ModuleOptions): Emitted;
+
+### build/module-entry.d.ts#emitSheetModule
+export declare function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions): Emitted;
+
+### build/module-entry.d.ts#functionText
+export declare function functionText(f: (...a: never[]) => unknown): string;

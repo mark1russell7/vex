@@ -1,5 +1,5 @@
 import { app, axes, cell, each, index, lit, offset, ref, SheetRun, space, v as bound, type Expr } from "@mark1russell7/vex";
-import { emitSheetModule } from "@mark1russell7/vex-compiler";
+import { emitSheetModule } from "@mark1russell7/vex-compiler/module";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { fitChild as child, measureVars as vars } from "./inputs.ts";

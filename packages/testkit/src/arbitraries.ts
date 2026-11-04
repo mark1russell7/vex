@@ -317,8 +317,8 @@ function arbFixColumns(maxDepth: number): { readonly numbers: fc.Arbitrary<Expr>
 }
 
 /**
- * This function gives `depth` doublings of `leaf`. Each level is one object at two places of the next level, so the
- * tree of the program has `2 ** depth` leaves and the program has `depth + 1` objects.
+ * This function gives `depth` doublings of `leaf`. Each level is one object at two places of the next level. Thus the
+ * tree of the program has `2 ** depth` leaves, and the program has `depth + 1` objects.
  */
 export function doubling(leaf: Expr, depth: number): Expr {
   let e = leaf;

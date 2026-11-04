@@ -1,10 +1,19 @@
 /** The gate of the names of a printed module. */
+import { app, defineDomain, ref, type AnyDomain } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
-import { MODULE_GLOBALS } from "./module.ts";
-import { LANGUAGE_GLOBALS, nameFaults, namesOfText } from "./test-names.ts";
+import { emitModule, MODULE_GLOBALS } from "./module.ts";
+import { LANGUAGE_GLOBALS, nameFaults, namesOfText } from "../test/names.ts";
 
 const freeOf = (source: string): readonly string[] => [...namesOfText(source).free.keys()];
 
+/** This function gives a domain with an op that reads a name outside itself. No sample of the check of a copy reaches the read. */
+function leaky(): AnyDomain {
+  const outside = { k: 1 };
+  // oxlint-disable-next-line typescript/no-implied-eval -- the test makes an op that reads a name outside itself.
+  const read = new Function("outside", "return (a) => (a === 999 ? outside.k : a);") as (o: unknown) => (a: number) => number;
+  return defineDomain({ name: "Leaky", is: (u: unknown): u is number => typeof u === "number", primitive: "number", ops: { peek: { fn: read(outside), params: ["number"], returns: "number" } } }) as AnyDomain;
+}
 describe("the names of the text of a module", () => {
   it("V-081: a read of a variable of another function has no declaration", () => {
     expect(nameFaults("const f = (p) => { const Q = (k) => R[o2].n; return Q(p); };\nexport const R = [];", MODULE_GLOBALS)).toStrictEqual(["line 1: the name o2 has no declaration"]);
@@ -55,5 +64,9 @@ describe("the names of the text of a module", () => {
 
   it("a global of the host is not a fault of a name", () => {
     expect(nameFaults("Math.abs(1); Fetch(1);", MODULE_GLOBALS)).toStrictEqual(["line 1: the name Fetch has no declaration"]);
+  });
+
+  it("V-081: the setup of the tests puts each module of this package through the gate", () => {
+    expect(() => emitModule(app("peek", ref("n")), { domains: [NumDomain, leaky()], schema: { fields: { n: "number" } } })).toThrow(/a printed module has a fault of a name:\n.*outside/);
   });
 });

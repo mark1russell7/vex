@@ -237,7 +237,7 @@ A catch of a module holds an exception of a function of a domain, because the in
 
 The start of an exception tells the two cases, not its class. A `TypeError` of an op is an error of Vex, and a `TypeError` of the printed code is a fault. With `faults` at `throw`, each copy of a function of a domain has the wrapper `FW`. Each other catch calls `FK`, which rethrows each value that is not the error of Vex.
 
-Each test of the compiler and of the pilots that compares values runs with `throw`. The file `packages/compiler/src/module-fault.setup.ts` sets the option. A test of the text of a module sets `value`.
+Each test of the compiler and of the pilots that compares values runs with `throw`. The file `packages/compiler/test/module-fault.setup.ts` sets the option. A test of the text of a module sets `value`.
 
 The file `packages/pilots/src/ireko-modules.ts` holds the input of each module of ireko. The script `scripts/ireko-module.ts` and the value tests read the same rows, so a value test prints the module of a build with `throw`. The rows of the five committed modules are `measure`, `place`, `shape`, `grid` and `radial`. The rows `layers` and `tree` have no committed file at this time, and their value tests use the table too.
 

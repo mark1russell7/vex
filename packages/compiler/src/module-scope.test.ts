@@ -110,14 +110,15 @@ describe("V-080 COMPILE.MODULE: an object that a program uses at two places has 
   });
 });
 
+/** This function gives the count of the functions of the memo in a module. */
+function memos(e: Expr): number {
+  const m = emitModule(e, OPTIONS);
+  return m.ok ? [...m.source.matchAll(/\bconst m\d+ = M1?\(/g)].length : Number.NaN;
+}
+
 describe("V-080 COMPILE.MODULE: a shared list and the memo", () => {
   const originOf = ref("n", [{ t: "origin" }]);
   const shared = each(axes.where(axes.all, app("eq", n, originOf)), ref("n"));
-  /** This function gives the functions of the memo in a module. */
-  const memos = (e: Expr): number => {
-    const m = emitModule(e, OPTIONS);
-    return m.ok ? [...m.source.matchAll(/^const md+ = /gm)].length : Number.NaN;
-  };
 
   it("V-080 COMPILE.MODULE: one shared list at several places of one scope has one memo", () => {
     const e = rec({ a: app("take", shared, lit(1)), b: app("take", shared, lit(2)), c: app("sum", shared) });

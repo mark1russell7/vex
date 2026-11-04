@@ -1,7 +1,7 @@
 /**
  * The names of the text of a module, for the tests. The gate of a test parses a printed module and fails on a name with
- * no declaration, so a read of a variable that the printer did not declare fails at the print. It needs no input that
- * reaches the read, and a catch of the module cannot hide the read.
+ * no declaration. Thus a read of a variable that the printer did not declare fails at the print. The gate needs no input
+ * that reaches the read, and a catch of the module cannot hide the read.
  *
  * The gate finds two faults: a name with no declaration, and a read before the declaration in the same function. It
  * does not find a read before a declaration through a closure, a TypeError, a RangeError or a wrong value with no

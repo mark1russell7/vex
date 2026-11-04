@@ -74,7 +74,7 @@ const { shape } = fc.letrec<{ shape: Shape }>((tie) => {
 /** This function fills a shape with names. */
 function filled(s: Shape, names: readonly string[]): Expr {
   let i = 0;
-  return s(() => names[i++ % names.length] as string);
+  return s(() => names.at(i++ % names.length) ?? "");
 }
 
 /** This function gives the scope of a site. */

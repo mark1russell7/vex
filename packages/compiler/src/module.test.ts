@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { emitModule, MODULE_GLOBALS, type ModuleOptions } from "./module.ts";
-import { nameFaults } from "./test-names.ts";
+import { nameFaults } from "../test/names.ts";
 import { tiered } from "./tiers.ts";
 import { unshared } from "./unshared.ts";
 

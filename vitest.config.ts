@@ -11,7 +11,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["packages/core/src/**/*.ts", "packages/domains/src/**/*.ts", "packages/testkit/src/**/*.ts", "packages/compiler/src/**/*.ts"],
-      exclude: ["**/*.test.ts", "packages/core/src/test-support.ts", "packages/testkit/src/fc-setup.ts", "packages/compiler/src/module-fault.setup.ts", "packages/compiler/src/test-names.ts"],
+      exclude: ["**/*.test.ts", "packages/core/src/test-support.ts", "packages/testkit/src/fc-setup.ts"],
       reporter: ["text-summary", "text", "json-summary"],
       reportsDirectory: "coverage",
       thresholds: {

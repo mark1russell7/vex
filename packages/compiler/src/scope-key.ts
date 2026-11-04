@@ -1,7 +1,7 @@
 /**
  * The key of an expression at a place of a module. Two expressions at their places have one key only if they have one
- * value, because a key holds what each read of the expression means at that place. A read of a name that the expression
- * binds keeps its spelling, because the structure of the key holds its binder. Another read gives a token of its meaning.
+ * value. A key holds what each read of the expression means at that place. A read of a name that the expression binds
+ * keeps its spelling, because the structure of the key holds its binder. Another read gives a token of its meaning.
  * The root and `./module` of this package do not export this file.
  */
 import type { Expr, ExprOf } from "@mark1russell7/vex";

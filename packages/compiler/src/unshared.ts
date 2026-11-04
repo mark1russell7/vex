@@ -1,6 +1,6 @@
 /**
  * A program can use one object at two places, and a name can have two meanings at those places. The printer and the
- * lowering hold facts of a place by the object of its node, so this file gives each place an object of its own first.
+ * lowering hold facts of a place by the object of its node. Thus this file first gives each place an object of its own.
  * A program from JSON is a tree, so it stays the same objects. The root and `./module` of this package do not export this file.
  */
 import { children, type Expr, MAX_NESTING, nestingOf } from "@mark1russell7/vex";

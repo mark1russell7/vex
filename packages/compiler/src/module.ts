@@ -1267,15 +1267,19 @@ const BUILD_HELPERS: Readonly<Record<string, BuildHelper>> = { append: "AP", wit
  */
 const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "append", "without", "flat", "fill"]);
 
+/** The list ops that give the value of an item (LIST.NTH, LIST.GET) and `first`. An item of a list of lists is a list. */
+const ITEM_OPS: ReadonlySet<string> = new Set(["nth", "first", "get"]);
+
 /**
- * The scope of `listy`. `name` tells if a name holds a list, and `fn` gives the bound function of a name. `cell` tells
- * if a read of a cell gives a list, and `field` tells if a read of a field gives a list (COMPILE.MODULE.LIST.INPUT).
+ * The scope of `listy`. `key` gives the name of a key of a node of the memo. `name`, `cell` and `field` tell if a name, a
+ * cell or a field gives a list with `levels` levels (COMPILE.MODULE.LIST.INPUT). `fn` gives the bound function of a name.
  */
 interface ListScope {
-  readonly name: (name: string) => boolean;
+  readonly key: (e: Expr) => Name | undefined;
+  readonly name: (name: string, levels: number) => boolean;
   readonly fn: (name: string) => ListFn | undefined;
-  readonly cell: (e: ExprOf<"ext">) => boolean;
-  readonly field: (e: ExprOf<"ref">) => boolean;
+  readonly cell: (e: ExprOf<"ext">, levels: number) => boolean;
+  readonly field: (e: ExprOf<"ref">, levels: number) => boolean;
 }
 
 /** A bound function for `listy`: its node, and the scope of its binding (FN.BIND). */
@@ -1284,40 +1288,48 @@ interface ListFn {
   readonly scope: ListScope;
 }
 
+/** This function tells if a list has `levels` levels of lists: 1 for each list, and 2 for a list of lists. */
+function hasLevels(l: ListInfo | undefined, levels: number): boolean {
+  return l !== undefined && (levels === 1 || hasLevels(l.inner, levels - 1));
+}
+
 /**
- * This function tells if an expression gives a list. An each, a list literal and a list op of `LIST_RESULTS` give a
- * list. A name of a list, and a let or a loop whose result is a list, give a list too. A call gives a list when the
- * body of its function gives one (COMPILE.MODULE.LIST.CALL). The scope tells the names and the functions outside the expression.
+ * This function tells if an expression gives a list with `levels` levels of lists (COMPILE.MODULE.LIST.NESTED). An each,
+ * a list literal and a list op of `LIST_RESULTS` give a list. A name of a list, and a let or a loop whose result is a
+ * list, give a list too. A call gives a list when the body of its function gives one (COMPILE.MODULE.LIST.CALL). An op of
+ * `ITEM_OPS` gives one level less than its list. The scope tells the names and the functions outside the expression.
  */
-function listy(e: Expr, scope: ListScope): boolean {
+function listy(e: Expr, scope: ListScope, levels = 1): boolean {
+  const key = scope.key(e);
+  if (key !== undefined) return hasLevels(key.list, levels);
   switch (e.tag) {
     case "each":
-      return true;
+      return levels === 1 || listy(e.body, itemsIn(e, scope), levels - 1);
     case "lit":
-      return isVexList(e.value);
+      // A module has no list literal with lists as items, so a literal has one level.
+      return levels === 1 && isVexList(e.value);
     case "app":
-      // A branch of if and ifError can be a list (COMPILE.MODULE.LIST.RESULT).
-      return LIST_RESULTS.has(e.op) || ((e.op === "if" || e.op === "ifError") && e.args.slice(e.op === "if" ? 1 : 0).some((x) => listy(x, scope)));
+      return listyApp(e, scope, levels);
     case "var":
-      return scope.name(e.name);
+      return scope.name(e.name, levels);
     case "let":
-      return listy(e.body, scopeIn(e.bind, scope));
+      return listy(e.body, scopeIn(e.bind, scope), levels);
     case "fold":
     case "iterate":
-      return listy(e.result, scopeIn(e.init, scope));
+      return listy(e.result, scopeIn(e.init, scope), levels);
     // A module has no `fix`, and a column gives a boolean or a number (COMPILE.FIX).
     case "fix":
     case "last":
       return false;
     case "ext":
-      return scope.cell(e);
+      return scope.cell(e, levels);
     case "ref":
-      return scope.field(e);
+      return scope.field(e, levels);
     case "call": {
       // A call of no function gives a reason in the printer. A value or a parameter with the name of a function makes
       // the printer give that reason too, so the scope does not hide the function.
       const f = scope.fn(e.fn);
-      return f !== undefined && listy(f.fn.body, paramsIn(f, e.args, scope));
+      return f !== undefined && listy(f.fn.body, paramsIn(f, e.args, scope), levels);
     }
     case "fn":
     case "rec":
@@ -1325,27 +1337,56 @@ function listy(e: Expr, scope: ListScope): boolean {
   }
 }
 
+/** This function tells if an op gives a list with `levels` levels of lists (`listy`). */
+function listyApp(e: ExprOf<"app">, scope: ListScope, levels: number): boolean {
+  const { op, args } = e;
+  const argument = (i: number, change: number): boolean => args.slice(i, i + 1).some((x) => listy(x, scope, levels + change));
+  // A branch of if and ifError can be a list (COMPILE.MODULE.LIST.RESULT).
+  if (op === "if" || op === "ifError") return args.slice(op === "if" ? 1 : 0).some((x) => listy(x, scope, levels));
+  if (ITEM_OPS.has(op)) return argument(0, 1);
+  if (!LIST_RESULTS.has(op)) return false;
+  if (levels === 1) return true;
+  if (op === "fill") return argument(1, -1);
+  if (op === "flat") return argument(0, 1);
+  // An empty list literal takes the levels of the other list of append.
+  return argument(0, 0) || (op === "append" && argument(1, 0));
+}
+
+/**
+ * This function gives the scope of the body of an each. The first name `as` holds an item of the list of the axis, so it
+ * has one level less than the list. The second name holds a position (COMPILE.MODULE.LIST.ITEM).
+ */
+function itemsIn(e: ExprOf<"each">, scope: ListScope): ListScope {
+  if (e.as === undefined) return scope;
+  const [item, index] = e.as;
+  // The kernel refuses names `as` over an axis without a list.
+  const list = listOf(e.axis) as Expr;
+  return { ...scope, name: (name, levels) => (name === item ? listy(list, scope, levels + 1) : name !== index && scope.name(name, levels)) };
+}
+
 /**
  * This function gives the scope of some bindings. A value hides a name outside, and a function is not a list. A
  * function sees the scope outside the bindings, so it cannot call itself.
  */
 function scopeIn(bind: Readonly<Record<string, Expr>>, scope: ListScope): ListScope {
-  const lists = new Map<string, boolean>();
   const fns = new Map<string, ListFn>();
-  for (const [name, x] of Object.entries(bind)) {
-    if (x.tag === "fn") fns.set(name, { fn: x, scope });
-    lists.set(name, listy(x, scope));
-  }
-  return { ...scope, name: (name) => lists.get(name) ?? scope.name(name), fn: (name) => fns.get(name) ?? scope.fn(name) };
+  for (const [name, x] of Object.entries(bind)) if (x.tag === "fn") fns.set(name, { fn: x, scope });
+  return { ...scope, name: (name, levels) => (Object.hasOwn(bind, name) ? listy(bind[name] as Expr, scope, levels) : scope.name(name, levels)), fn: (name) => fns.get(name) ?? scope.fn(name) };
 }
 
 /**
  * This function gives the scope of the body of a function at a call. The body sees the scope of the binding of the
- * function, and each parameter holds a list when its argument does.
+ * function, and each parameter has the levels of its argument.
  */
 function paramsIn(f: ListFn, args: readonly Expr[], scope: ListScope): ListScope {
-  const lists = new Map(args.map((x, i) => [f.fn.params[i], listy(x, scope)]));
-  return { ...f.scope, name: (name) => lists.get(name) ?? f.scope.name(name) };
+  const lists = new Map(args.map((x, i) => [f.fn.params[i], x]));
+  return {
+    ...f.scope,
+    name: (name, levels) => {
+      const arg = lists.get(name);
+      return arg === undefined ? f.scope.name(name, levels) : listy(arg, scope, levels);
+    },
+  };
 }
 
 /**
@@ -2373,9 +2414,6 @@ class Printer {
 
   /** This method tells if an expression gives a list at a place that takes one (`listy`). */
   #isList(e: Expr, ctx: Ctx): boolean {
-    // A key of a node of the memo is a name of its function, and the name keeps the facts of a list.
-    const key = ctx.keys.get(e);
-    if (key !== undefined) return key.list !== undefined;
     return listy(e, this.#scopeOf(ctx));
   }
 
@@ -2385,23 +2423,32 @@ class Printer {
    * array of the each, and that array gives the value of the interpreter too (COMPILE.MODULE.LIST.ITEM).
    */
   #bodyList(e: ExprOf<"each">, ctx: Ctx): boolean {
-    if (e.as === undefined) return this.#isList(e.body, ctx);
-    // A list of the axis list is not in the memo, so the body is not a key of a node of the memo.
     const scope = this.#scopeOf(ctx);
+    if (e.as === undefined) return listy(e.body, scope);
     const names: readonly string[] = e.as;
-    return listy(e.body, { ...scope, name: (name) => names.includes(name) || scope.name(name) });
+    return listy(e.body, { ...scope, name: (name, levels) => names.includes(name) || scope.name(name, levels) });
   }
 
-  /** This method gives the scope of `listy` at a node: the names and the bound functions of its context. */
+  /** This method gives the scope of `listy` at a node: the keys of its node of the memo, its names and its bound functions. */
   #scopeOf(ctx: Ctx): ListScope {
     return {
-      name: (name) => ctx.env.get(name)?.list !== undefined,
+      // A key of a node of the memo is a name of its function, and the name keeps the facts of a list.
+      key: (e) => ctx.keys.get(e),
+      name: (name, levels) => {
+        const bound = ctx.env.get(name);
+        if (bound !== undefined) return hasLevels(bound.list, levels);
+        const kind = this.#schema.vars?.[name];
+        return typeof kind === "object" && hasLevels(listOfKind(kind), levels);
+      },
       fn: (name) => {
         const bound = ctx.fns.get(name);
         return bound === undefined ? undefined : { fn: bound.fn, scope: this.#scopeOf(bound.ctx) };
       },
-      cell: (x) => this.#cellList(x) !== undefined,
-      field: (x) => typeof this.#schema.fields?.[x.path.join(".")] === "object",
+      cell: (x, levels) => hasLevels(this.#cellList(x), levels),
+      field: (x, levels) => {
+        const kind = this.#schema.fields?.[x.path.join(".")];
+        return typeof kind === "object" && hasLevels(listOfKind(kind), levels);
+      },
     };
   }
 
@@ -2798,7 +2845,8 @@ class Printer {
       code = `v${this.vars.size}`;
       this.vars.set(name, code);
     }
-    return plainValue(code, kind);
+    // The check of the run keeps the array of a list of the variables (COMPILE.MODULE.LIST.VAR).
+    return typeof kind === "object" ? { ...plainValue(code, undefined), list: listOfKind(kind, true) } : plainValue(code, kind);
   }
 
   /**
@@ -3017,7 +3065,11 @@ class Printer {
     if (FOLD_OPS.has(op) && head?.tag === "each" && !this.#bodyList(head, ctx)) return this.#list(op, head, rest, ctx);
     // A list op over a let with only literal options is the list op over the body of the let, so an each in the body
     // is one loop with a running value, not an array. A builder sheet prints such a let, for example `sum(let($0 = 0, each(…)))`.
-    if (FOLD_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) return this.#let(head, ctx, (body) => app(op, body, ...rest));
+    if (FOLD_OPS.has(op) && head?.tag === "let" && rest.every((x) => x.tag === "lit")) {
+      // The list op over the body is a new node, and an item of a list can be a list. `expr` still examines the place of this op.
+      this.#wantList.add(head);
+      return this.#let(head, ctx, (body) => app(op, body, ...rest));
+    }
     // sortBy and take are list ops for each receiver. Each other list op needs a list, and a domain can have its name.
     if (head !== undefined && (op === "sortBy" || op === "take" || (op === "drop" && this.#isList(head, ctx)))) return this.#order(op, head, rest, ctx);
     // With fuse, flat over an each is one loop with one output (COMPILE.MODULE.FUSE).
@@ -4545,9 +4597,27 @@ function reasonOf(thrown: unknown): Emitted {
 function fieldCheck(p: Printer, field: string, kind: Kind | ListKind, plain: boolean): string {
   const input = `r[${JSON.stringify(field)}]`;
   if (typeof kind !== "object") return p.against(kind, input);
-  const read = `${p.use(plain ? "LA" : "LI")}(${input}, ${String(depthOf(listOfKind(kind)))}, ${p.test(leafOf(kind))})`;
+  const read = listRead(p, input, kind, plain);
   const keep = p.inputs.get(field);
   return `${keep === undefined ? read : `(${keep}[i] = ${read})`} === undefined`;
+}
+
+/** This function gives the code that reads a list of the input with the helper of its form. */
+function listRead(p: Printer, input: string, kind: ListKind, plain: boolean): string {
+  return `${p.use(plain ? "LA" : "LI")}(${input}, ${String(depthOf(listOfKind(kind)))}, ${p.test(leafOf(kind))})`;
+}
+
+/**
+ * This function gives the code of the check of a variable of the run. The check of a list keeps the array of the list
+ * in the variable of the code when the program reads the variable (COMPILE.MODULE.LIST.VAR). The code is true for a
+ * variable against the schema.
+ */
+function varCheck(p: Printer, name: string, kind: Kind | ListKind, plain: boolean): string {
+  const input = `vars[${JSON.stringify(name)}]`;
+  if (typeof kind !== "object") return p.against(kind, input);
+  const read = listRead(p, input, kind, plain);
+  const keep = p.vars.get(name);
+  return `${keep === undefined ? read : `(${keep} = ${read})`} === undefined`;
 }
 
 /**
@@ -4568,11 +4638,12 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   let varChecks: string;
   try {
     fieldChecks = fields.map(([f, k]) => ` || ${fieldCheck(p, f, k, run.plain)}`).join("");
-    varChecks = vars.map(([v, k]) => ` || ${p.against(k, `vars[${JSON.stringify(v)}]`)}`).join("");
+    varChecks = vars.map(([v, k]) => ` || ${varCheck(p, v, k, run.plain)}`).join("");
   } catch (thrown) {
     return reasonOf(thrown);
   }
   const { name, tree, graph } = run;
+  const isListVar = (v: string): boolean => typeof options.schema.vars?.[v] === "object";
   // A tree checks its parents, and it computes the parts that the program reads. The siblings need the children. The
   // order reads only the parents (COMPILE.MODULE.TREE.ALLOC).
   if (tree) p.use("PT");
@@ -4609,11 +4680,12 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     "    const r = R[i];",
     `    if (typeof r !== "object" || r === null${fieldChecks}) C(\`the record \${i} does not keep the schema\`);`,
     "  }",
+    ...[...p.vars].filter(([v]) => isListVar(v)).map(([, code]) => `  let ${code};`),
     `  if (typeof vars !== "object" || vars === null${varChecks}) C("the variables do not keep the schema");`,
     ...(tree ? ["  const P = PT(parents, n);", ...parts.map((x) => `  ${TREE_PARTS[x][1]}`)] : []),
     ...(graph ? ["  const GO = GR(edges, n);", ...(p.into ? ["  const GN = GI(GO, n);"] : [])] : []),
     ...(p.runKeys ? ["  const KM = KC(keys, n);"] : []),
-    ...[...p.vars].map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
+    ...[...p.vars].filter(([v]) => !isListVar(v)).map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
     ...ind(p.run),
     ...ind(body),
     "}",

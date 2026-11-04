@@ -36,7 +36,7 @@ export function run(records, vars) {
   } catch {
     c19 = E;
   }
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       const b0 = (R[o]["b"] && (!(R[o]["b"])));
@@ -60,9 +60,9 @@ export function run(records, vars) {
       } catch {
         t14 = -1;
       }
-      out.push(({ "and": (b0 ? R[o]["n"] : R[o]["w"]), "or": (b1 ? R[o]["n"] : R[o]["w"]), "count": n, "origin": k_number((b8) + (R[o]["n"])), "moved": t14, "lax": G(c19) }));
+      out[o] = ({ "and": (b0 ? R[o]["n"] : R[o]["w"]), "or": (b1 ? R[o]["n"] : R[o]["w"]), "count": n, "origin": k_number((b8) + (R[o]["n"])), "moved": t14, "lax": G(c19) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

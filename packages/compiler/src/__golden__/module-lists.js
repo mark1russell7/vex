@@ -181,7 +181,7 @@ export function run(records, vars) {
     t93 = 0;
   }
   const c97 = t93;
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t28;
@@ -238,9 +238,9 @@ export function run(records, vars) {
         const x74 = R[j70]["n"];
         a72 += x74;
       }
-      out.push(({ "count": n, "countStrict": n, "countTest": c6, "countUnsafe": c11, "sum": G(c16), "sumStrict": c94, "mean": t28, "min": (n33 === 0 ? F() : a32), "max": c95, "any": c45, "all": c50, "none": c96, "first": t63, "from": t69, "fromOrigin": k_number(a72), "nested": n, "outer": m78(R[o]["w"]), "constant": G(c87), "big": c97 }));
+      out[o] = ({ "count": n, "countStrict": n, "countTest": c6, "countUnsafe": c11, "sum": G(c16), "sumStrict": c94, "mean": t28, "min": (n33 === 0 ? F() : a32), "max": c95, "any": c45, "all": c50, "none": c96, "first": t63, "from": t69, "fromOrigin": k_number(a72), "nested": n, "outer": m78(R[o]["w"]), "constant": G(c87), "big": c97 });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

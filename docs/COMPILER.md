@@ -1042,13 +1042,14 @@ Before the loop over the keys, the run makes only the parts of the tree that the
 | Part | Helper | For |
 |---|---|---|
 | The parent of each record, in an `Int32Array` | `PT` | Each tree |
-| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the two parts below |
+| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the part below |
 | The siblings of each record with the record itself, and its position among them | `SG` | `siblings`, `window` and the offsets |
-| The keys depth first, and the position and the size of the subtree of each key | `PR` | `descendants` |
+| The keys depth first, and the position and the size of the subtree of each key, in `Int32Array` | `PR` | `descendants`. It reads only the parents, so a program with only this axis has no `CH` |
 
 Thus the targets of each axis are a range of an array, and the loop over them is a `for` loop over that range. The reverse order is the same loop from the end.
 
 - `children` and `successors` are the children of the focus. `siblings` are the siblings of the focus, and the loop skips the focus.
+- `ancestors` in the forward order are a walk up the parents, with no array (COMPILE.MODULE.TREE.ALLOC). The reverse order reads the array of `AN`. A walk reads each parent once, and the array read each parent and then its own slot. Thus a deep tree costs no more time than before. A chain of `n` keys still has `n` times `n` reads over all the keys.
 - `descendants` are the keys after the focus in the order depth first, as many as the subtree of the focus has under it.
 - `window(from, to)` is the range of the siblings from the position of the focus plus `from` to its position plus `to`.
 - `ancestors` and `reachable` make an array for each loop. `predecessors` is the parent, or no target for a root.
@@ -1360,7 +1361,7 @@ The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 %
 - The helper `LP` gives the result, and `LPC` is its clean form (COMPILE.MODULE.FUSE.CLEAN). The helper `LCP` gives a column of lists of a sheet.
 - The module prints no types. The host declares them: `T[]` for a list of `T`, and `T | typeof VEX_ERROR` for an item that can be an error.
 
-In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out.push(LPC(G(c136()), 1))` replaces the read `out.push(G(c137()))` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12857 bytes, and the default module has 13463 bytes. The golden file `module-plain.js` keeps its text.
+In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out[o] = LPC(G(c136()), 1)` replaces the read `out[o] = G(c137())` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12520 bytes, and the default module has 13209 bytes. The golden file `module-plain.js` keeps its text.
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
 

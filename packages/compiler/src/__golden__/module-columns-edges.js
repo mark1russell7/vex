@@ -212,13 +212,13 @@ export function run(records, vars) {
   } catch {
     c48 = E;
   }
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       const b32 = R[o]["n"];
-      out.push(({ "ten": G(c7), "nine": G(c12), "memo": G(c25), "constant": G(c31), "outside": m34(b32), "keyed": G(c48) }));
+      out[o] = ({ "ten": G(c7), "nine": G(c12), "memo": G(c25), "constant": G(c31), "outside": m34(b32), "keyed": G(c48) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

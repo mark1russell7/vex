@@ -39,7 +39,7 @@ export function run(records, vars, edges) {
   if (typeof vars !== "object" || vars === null || typeof vars["a"] !== "number") C("the variables do not keep the schema");
   const GO = GR(edges, n);
   const GN = GI(GO, n);
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let l0 = 0;
@@ -71,9 +71,9 @@ export function run(records, vars, edges) {
         }
         a16 += x18;
       }
-      out.push(({ "out": l0, "into": l6, "all": k_number(a16) }));
+      out[o] = ({ "out": l0, "into": l6, "all": k_number(a16) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

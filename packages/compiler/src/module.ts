@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, evaluate, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, evaluate, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, moveExpr, nestingOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { tidy, type Tidied } from "./module-tidy.ts";
@@ -1286,6 +1286,10 @@ function listy(e: Expr, scope: ListScope): boolean {
     case "fold":
     case "iterate":
       return listy(e.result, scopeIn(e.init, scope));
+    // A module has no `fix`, and a column gives a boolean or a number (COMPILE.FIX).
+    case "fix":
+    case "last":
+      return false;
     case "ext":
       return scope.cell(e);
     case "ref":
@@ -1417,7 +1421,9 @@ function cleanForm(e: Expr, fact: (name: string) => boolean): boolean {
     case "call":
     case "each":
     case "ext":
+    case "fix":
     case "fn":
+    case "last":
     case "rec":
     case "ref":
     // Stryker restore StringLiteral,ConditionalExpression
@@ -1444,6 +1450,11 @@ function refsOf(e: Expr, name: string): number {
       return refsIn(Object.values(e.bind), name) + (name in e.bind ? 0 : refsOf(e.body, name));
     case "fn":
       return e.params.includes(name) ? 0 : again(refsOf(e.body, name));
+    // A module has no `fix`. The printer gives the reason (COMPILE.FIX).
+    case "fix":
+      return refsOf(e.init, name) + again(refsOf(e.step, name));
+    case "last":
+      return 0;
     case "each": {
       // Only the body sees the names of the items (AXIS.LIST.SCOPE). The tests of the axis evaluate for each item.
       const list = listOf(e.axis);
@@ -1524,6 +1535,8 @@ function readCounts(root: Expr): ReadonlyMap<Expr, number> {
       case "each":
       // Stryker disable next-line StringLiteral: an extension has no children.
       case "ext":
+      case "fix":
+      case "last":
       case "fn":
       // Stryker disable next-line StringLiteral: a literal has no children.
       case "lit":
@@ -2542,6 +2555,10 @@ class Printer {
         return this.#fold(e, ctx);
       case "iterate":
         return this.#iterate(e, ctx);
+      case "fix":
+      case "last":
+        // COMPILE.FIX: a module refuses a fixed point with a reason. Tier 1 and the kernel run it.
+        throw new NotStandalone('a fixed point ("fix"), which a module does not have yet');
       case "ext":
         return this.#cell(e, ctx);
     }
@@ -4596,7 +4613,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
   // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
-  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options));
+  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
   if (size !== undefined) return { ok: false, reason: size };
   const p = new Printer(expr, options);
   let value: Code;
@@ -4673,7 +4690,7 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
     const shape = shapeError(f.expr);
-    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options));
+    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options) ?? monotoneError(f.expr, options));
     const reason = shape ?? size;
     if (reason !== undefined) return { ok: false, reason: `${formulaText(f)}: ${reason}` };
   }

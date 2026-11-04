@@ -561,6 +561,8 @@ The unit tests are in `packages/compiler/src/module-pairs.test.ts`. They compare
 
 ## 8. Bounded iteration
 
+The fixed point `fix` of step B is not in tier 2 or in modules yet (COMPILE.FIX). The lowering stops at the node, and tier 1 gives the result. Tier 2 first gives each reason of a check of tier 1, so a program that is not valid has one reason in each tier. `emitModule` refuses a program with `fix`, also where a `let` does not use the node. The next step of the work lowers a column to an array of rows and a loop of rounds. P17 then tests it against tier 1.
+
 Vex has no loop, so each program ends. The language keeps this property, and it gets **bounded** iteration:
 
 - `fold(axis, init, step)`: a reduction in the order of the axis, with an accumulator in an expression.

@@ -3,14 +3,14 @@
  * 1 is the closure compiler of the core, and it gives each result that tier 2 cannot give. Thus a tiered program gives
  * the results of the interpreter.
  */
-import { compile, fail, fromDocument, isDocument, ok, sizeError, stepError, type CompileOptions, type Envelope, type Expr, type Program, type Space, type VexError } from "@mark1russell7/vex";
+import { compile, fail, fromDocument, isDocument, monotoneError, ok, sizeError, stepError, type CompileOptions, type Envelope, type Expr, type Program, type Space, type VexError } from "@mark1russell7/vex";
 import { factsOf, type Schema } from "./facts.ts";
 
 /** The options of the compiler: the options of `compile`, and the schema of the host (docs/COMPILER.md §3.2). */
 export type GenerateOptions = CompileOptions & { readonly schema?: Schema };
 import { printJs } from "./js.ts";
 import type { LoopProgram } from "./loop.ts";
-import { lower, Unsupported } from "./lower.ts";
+import { lower, NoFixedPoint, Unsupported } from "./lower.ts";
 import { createRuntime, FALLBACK } from "./runtime.ts";
 
 /**
@@ -24,6 +24,9 @@ export type Generated =
 /** A function of tier 2. It gives the value of the program, or `FALLBACK` for each other result. */
 export type Tier2 = (space: Space, origin: string, vars: Readonly<Record<string, unknown>> | undefined, tables: Readonly<Record<string, Space>> | undefined) => unknown;
 
+/** This function gives the reason that tier 1 refuses a program with a good shape, or `undefined`. */
+const refusal = (e: Expr, options: GenerateOptions): string | undefined => sizeError(e, options) ?? stepError(e, options) ?? monotoneError(e, options);
+
 /**
  * This function lowers an expression or a document and prints its source for the options (DOC.ENTRY). The op tables of
  * the domains give the fast path of each op site. It is pure, so a build can use it.
@@ -36,10 +39,12 @@ export function generate(source: Expr | Envelope, options: GenerateOptions = {})
     const facts = factsOf(options);
     const program = lower(read.value, facts, options.schema);
     // LOOP.SIZE, STEP.MAX: tier 2 refuses the programs that tier 1 refuses. The lowering checks the shape and the nesting first.
-    const size = sizeError(read.value, options) ?? stepError(read.value, options);
+    const size = refusal(read.value, options);
     if (size !== undefined) return { ok: false, reason: size };
     return { ok: true, program, source: printJs(program, facts), options };
   } catch (thrown) {
+    // COMPILE.FIX: the lowering stops at a fixed point before the checks, so the reason of a check comes first.
+    if (thrown instanceof NoFixedPoint) return { ok: false, reason: refusal(read.value, options) ?? thrown.message };
     // A stack overflow in the lowering of a deep expression also goes to tier 1.
     return { ok: false, reason: thrown instanceof Unsupported ? thrown.message : "the lowering threw an exception" };
   }

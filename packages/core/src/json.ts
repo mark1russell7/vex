@@ -106,6 +106,8 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
       }
       return each("init") ?? each("step") ?? (u["until"] === undefined ? undefined : child("until")) ?? child("result") ?? ok(out);
     }
+    case "fix":
+      return child("init") ?? child("step") ?? ok(out);
     case "fn":
       return child("body") ?? ok(out);
     case "call":

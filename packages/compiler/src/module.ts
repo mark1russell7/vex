@@ -3092,6 +3092,8 @@ class Printer {
    */
   #rows(e: ExprOf<"fix">, x: Expr, ctx: Ctx, store: (value: string, row: string) => readonly string[]): { readonly s: readonly string[]; readonly deps: ReadonlySet<number> } {
     const { j, head, inner } = this.#targetLoop({ t: "all" }, [], ctx);
+    // A list has the wrong kind for a column, and the check of the row gives the failure (FIX.KIND).
+    this.#wantList.add(x);
     const c = this.#hoist(this.expr(x, inner), hasLoop(x));
     const v = this.fresh("x");
     const F = this.use("F");

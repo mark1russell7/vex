@@ -2,7 +2,7 @@
  * A fixed-point column in tier 2 (COMPILE.FIX). Tier 2 gives each result of tier 1, with the errors of the rows and the
  * failure at the round limit. `module-fix.test.ts` has the tests of the modules.
  */
-import { app, axes, each, evaluate, fix, fn, call, index, last, let_, lit, kernelPlan, monotoneError, origin, programStep, ref, space, toVexResult, vexList, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axes, each, evaluate, ext, fail, fix, fn, call, index, last, let_, lit, kernelPlan, monotoneError, origin, programStep, ref, space, toVexResult, vexError, vexList, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { arbFixExpr, arbFixGraph, type FixGraph } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -34,6 +34,9 @@ function agrees(e: Expr, s: Space = S): readonly number[] {
   for (const at of s.keys) expect(p.run({ space: s, origin: at })).toEqual(evaluate(e, { ...OPTIONS, space: s, origin: at }));
   return [p.tier, p.stats.fallbacks];
 }
+
+/** This function counts the checks of a boolean in generated code. */
+const checksOf = (g: ReturnType<typeof generate>): number => (g.ok ? g.source.split("// a boolean").length - 1 : 0);
 
 describe("a fixed-point column in the tiers (COMPILE.FIX)", () => {
   it("COMPILE.FIX: tier 2 lowers a fix, with the result of tier 1 and no fallback", () => {
@@ -78,6 +81,22 @@ describe("a fixed-point column in the tiers (COMPILE.FIX)", () => {
       expect(two.ok ? [] : [two.error.code, two.error.causes?.length]).toEqual(["#ARGS", 2]);
     }
     expect(agrees(app("ifError", fix("x", "max", lit(0), app("max", X, BROKEN)), lit(7)), ZEROS)).toEqual([2, 0]);
+  });
+
+  it("COMPILE.FIX FIX.ERROR: rows on a cycle give #CYCLE!, not #ARGS", () => {
+    const options = { ...OPTIONS, extensions: { cycle: () => fail(vexError("cycle", "a cycle")) } };
+    const e = fix("x", "max", ext("cycle", null), X);
+    const p = tiered(e, options);
+    const r = p.run({ space: S, origin: "0" });
+    expect([p.tier, r.ok ? "" : r.error.code]).toEqual([2, "#CYCLE!"]);
+    expect(r).toEqual(evaluate(e, { ...options, space: S, origin: "0" }));
+  });
+
+  it("COMPILE.FIX: tier 2 knows the kind of a row, so an op on a row has the checks of an op on a literal", () => {
+    const row = generate(fix("x", "or", lit(true), app("and", last("x"), lit(true))), OPTIONS);
+    const literal = generate(fix("x", "or", lit(true), app("and", lit(true), lit(true))), OPTIONS);
+    expect(checksOf(row)).toBe(checksOf(literal));
+    expect(checksOf(row)).toBeGreaterThan(0);
   });
 
   it("COMPILE.FIX FIX.ROUNDS: a round that moves 0 to -0 changes no row, so the row keeps 0", () => {

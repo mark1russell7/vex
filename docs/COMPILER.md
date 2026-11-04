@@ -554,7 +554,7 @@ The fixed point `fix` of step B is in tier 2 and in modules (COMPILE.FIX, COMPIL
 - A module has one error sentinel, so the first row that fails stops the column. The exception is a row that reads a cell. A flag holds its failure until the end of the loop, so the search of a sheet sees each read.
 - A read of a row has the level `ROUNDS` in a module. A value with this level is not a constant or a column of the run, because a row changes in each round. A column that reads no key is a lazy constant of the run. It evaluates on its first read, as a branch of the interpreter does.
 
-The rules of the kinds and of the limit come from the core (`fixRounds`, `fixValueError`, `joinKind`, `worstRow`), so each tier has one copy of them. One case stays refused: a module has no record at a key of a literal or of `fill`, so a column at such a key gives the reason of the axis `list` (LIST.LITERAL). P17 tests random columns in tier 1, tier 2 and the module (`arbFixProgram`).
+The rules of the kinds and of the limit come from the core (`fixRounds`, `fixValueError`, `joinKind`, `worstRow`), so each tier has one copy of them. One case stays refused. A module has no record at a key of a literal or of `fill`. Thus a column at such a key gives the reason of the axis `list` (LIST.LITERAL). P17 tests random columns in tier 1, tier 2 and the module (`arbFixProgram`).
 
 Vex has no loop, so each program ends. The language keeps this property, and it gets **bounded** iteration:
 

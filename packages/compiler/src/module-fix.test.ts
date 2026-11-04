@@ -2,12 +2,12 @@
  * A fixed-point column in a standalone module (COMPILE.FIX.MODULE) and the differential property over the tiers (P17).
  * The tests compare each result with the interpreter, with `SheetRun` for a sheet.
  */
-import { app, axes, call, cell, each, evaluate, fix, fn, last, let_, lit, ref, SheetRun, space, v, vexList, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axes, call, cell, each, evaluate, fix, fn, fold, last, let_, lit, ref, SheetRun, space, v, vexList, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { arbFixGraph, arbFixProgram, type FixGraph } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { emitModule, emitSheetModule, type ModuleOptions } from "./module.ts";
+import { emitModule, emitSheetModule, listFactsOf, type ModuleOptions } from "./module.ts";
 import { tiered } from "./tiers.ts";
 
 type Run = (records: unknown, vars: unknown, links?: unknown) => readonly unknown[];
@@ -18,6 +18,8 @@ interface Loaded<R> {
 }
 
 const DOMAINS = [NumDomain, BoolDomain, TextDomain];
+/** The text of the round limit in a module. */
+const ROUND_LIMIT = "Math.min(n + 1";
 const SCHEMA = { fields: { n: "number", b: "boolean" } } as const;
 const ARRAY: ModuleOptions = { domains: DOMAINS, schema: SCHEMA };
 const GRAPH: ModuleOptions = { ...ARRAY, space: "graph" };
@@ -47,6 +49,15 @@ function make<R>(source: string): Loaded<R> {
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
   return new Function(`${source.replaceAll(/^export /gm, "")}\nreturn { run, VEX_ERROR };`)() as Loaded<R>;
 }
+
+/** This function gives a count of the items after a fold that appends a value of the row to the list `first`. */
+const folded = (first: Expr): Expr => let_({ m: ref("n") }, app("count", fold(axes.all, { acc: first }, { acc: app("append", v("acc"), app("fill", lit(1), v("m"))) }, v("acc"))));
+
+/** This function gives a sum with a term that costs more than the cost of a column, so the printer makes it a column. */
+const heavy = (x: Expr): Expr => app("sum", each(axes.all, app("add", app("multiply", x, lit(2)), app("multiply", ref("n"), app("add", ref("n"), lit(1))))));
+
+/** This function gives the count of the reads of a list node of a program (COMPILE.MODULE.FUSE.FACTS). */
+const readsOf = (e: Expr, node: Expr): number | undefined => listFactsOf(() => emitModule(e, ARRAY)).facts.get(node)?.reads;
 
 /** This function gives the source of a program, and fails the test for a program that cannot be a module. */
 function sourceOf(e: Expr, options: ModuleOptions = ARRAY): string {
@@ -109,7 +120,7 @@ describe("COMPILE.FIX.MODULE: a module of a column", () => {
     sameInArray(app("sum", each(axes.all, SPREAD)));
     sameInArray(app("not", fix("x", "or", ref("b"), X)));
     sameInArray(app("ifError", LIMIT, lit(-1)));
-    sameInArray(app("if", ref("b"), SETTLED, lit(0)));
+    expect(sameInArray(app("if", ref("b"), SETTLED, lit(0)))).toContain(ROUND_LIMIT);
   });
 
   it("COMPILE.FIX.MODULE: an inner column has its own rows, and an inner name hides the name outside", () => {
@@ -117,7 +128,7 @@ describe("COMPILE.FIX.MODULE: a module of a column", () => {
     sameInArray(fix("y", "max", ref("n"), app("max", last("y"), inner)));
     sameInArray(fix("x", "max", ref("n"), app("max", X, fix("x", "max", lit(2), app("add", lit(0), X)))));
     // The column of the first values reads the row of the key, so each key has its own column.
-    sameInArray(fix("x", "max", ref("n"), app("max", X, app("max", each(axes.others, X)))));
+    expect(sameInArray(fix("x", "max", ref("n"), app("max", X, app("max", each(axes.others, X)))))).toContain(ROUND_LIMIT);
   });
 
   it("COMPILE.FIX.MODULE FIX.LIMIT: a column at the round limit is an error at each key", () => {
@@ -174,15 +185,48 @@ describe("COMPILE.FIX.MODULE: a module of a column", () => {
     const longer = app("count", app("append", v("l"), app("fill", lit(1), lit(1))));
     sameInArray(let_({ l: list }, fix("x", "max", longer, X)));
     sameInArray(let_({ l: list }, fix("x", "max", lit(0), app("max", X, longer))));
+    // A fold at each row takes the list of the name, so the fold must not write to it.
+    sameInArray(let_({ l: list }, fix("x", "max", folded(v("l")), X)));
+    sameInArray(let_({ l: list }, fix("x", "max", lit(0), app("max", X, folded(v("l"))))));
+    sameInArray(let_({ l: list }, let_({ f: fn(["p"], folded(v("p"))) }, fix("x", "max", call("f", v("l")), X))));
+    expect(sameInArray(let_({ l: list }, let_({ f: fn(["p"], folded(v("p"))) }, fix("x", "max", lit(0), app("max", X, call("f", v("l")))))))).toContain(ROUND_LIMIT);
+  });
+
+  it("COMPILE.FIX.MODULE FIX.KIND: a list in a column gives the failure of the kind", () => {
+    const list = app("fill", lit(2), ref("n"));
+    for (const join of ["max", "or"] as const) {
+      sameInArray(fix("x", join, list, lit(0)));
+      sameInArray(fix("x", join, lit(join === "or" ? true : 0), list));
+      sameInArray(fix("x", join, app("if", ref("b"), list, list), lit(0)));
+      sameInArray(app("ifError", fix("x", join, list, lit(0)), lit(7)));
+    }
+    expect(sameInArray(fix("x", "max", list, lit(0)), [])).toContain("Number.isFinite");
+  });
+
+  it("COMPILE.FIX.MODULE COMPILE.MODULE.FUSE.FACTS: the rounds read a list of a column or of a name again and again", () => {
+    const own = app("fill", lit(2), ref("n"));
+    const named = app("fill", lit(2), ref("n"));
+    expect([
+      readsOf(fix("x", "max", own, X), own),
+      readsOf(fix("x", "max", lit(0), own), own),
+      readsOf(let_({ l: named }, fix("x", "max", app("count", v("l")), X)), named),
+      readsOf(let_({ l: named }, fix("x", "max", lit(0), app("max", X, app("count", v("l"))))), named),
+    ]).toEqual([Infinity, Infinity, Infinity, Infinity]);
+  });
+
+  it("COMPILE.FIX.MODULE: the term of a fast sum with a column has no second print of the column", () => {
+    const need = app("add", app("add", app("multiply", ref("n"), ref("n")), app("divide", ref("n"), lit(2))), app("multiply", ref("n"), lit(3)));
+    const g = fn(["r"], app("sum", each(axes.all, app("add", app("multiply", need, v("r")), SETTLED))));
+    const source = sameInArray(let_({ g }, app("add", call("g", lit(3)), call("g", ref("n")))));
+    expect(source.split(ROUND_LIMIT)).toHaveLength(2);
   });
 
   it("COMPILE.FIX.MODULE: a sum over a column reads the rows of the array, and a part with a row stays in the round", () => {
-    const heavy = (x: Expr): Expr => app("sum", each(axes.all, app("add", app("multiply", x, lit(2)), app("multiply", ref("n"), app("add", ref("n"), lit(1))))));
     sameInArray(app("sum", each(axes.all, app("add", SETTLED, ref("n")))));
     const grow = fix("x", "max", lit(0), app("max", X, app("min", lit(5), app("add", app("max", each(axes.all, X)), lit(1)))));
     sameInArray(let_({ f: fn(["p"], app("sum", each(axes.all, app("add", heavy(v("p")), grow)))) }, app("sum", each(axes.all, call("f", ref("n"))))));
     const inFn = let_({ f: fn(["p"], fix("x", "max", lit(0), app("max", X, app("min", lit(4), app("add", app("max", each(axes.all, app("add", app("max", each(axes.all, X)), app("min", lit(1), app("multiply", v("p"), app("multiply", v("p"), v("p"))))))), lit(0)))))) }, call("f", lit(1)));
-    sameInArray(inFn);
+    expect(sameInArray(inFn)).toContain(ROUND_LIMIT);
   });
 
   it("COMPILE.FIX.MODULE: a column at a key of a literal has no row, so a module refuses it with a reason", () => {
@@ -208,8 +252,11 @@ describe("COMPILE.FIX.MODULE: a module of a sheet with a column", () => {
     const broken = app("divide", lit(1), app("subtract", ref("n"), lit(3)));
     // The first row fails, and the next rows read a cell of A. The search evaluates the cells of A in the order of the reads.
     const columns = new Map<string, Expr>([["B", fix("x", "max", lit(0), app("max", X, app("add", cell("A"), broken)))], ["A", app("multiply", ref("n"), lit(2))]]);
-    const source = sameSheet(columns, { A: "number", B: "number" });
-    expect(source).toContain("catch {");
+    sameSheet(columns, { A: "number", B: "number" });
+    // The later rows read A, and A reads B, so B is on a cycle at each key, and `ifError` of A does not hold the cycle.
+    const late = app("if", app("eq", ref("n"), lit(3)), app("divide", lit(1), lit(0)), cell("A"));
+    const cycle = new Map<string, Expr>([["B", fix("x", "max", lit(0), app("max", X, late))], ["A", app("ifError", cell("B"), lit(9))]]);
+    expect(sameSheet(cycle, { A: "number", B: "number" })).toContain("catch {");
     const fine = new Map<string, Expr>([["B", fix("x", "max", lit(0), app("max", X, cell("A")))], ["A", app("multiply", ref("n"), lit(2))]]);
     sameSheet(fine, { A: "number", B: "number" });
   });

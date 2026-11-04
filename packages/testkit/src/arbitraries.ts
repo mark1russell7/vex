@@ -187,7 +187,7 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
           bind: { [name]: { tag: "fn", params, body: fnBody }, ...(other === undefined ? {} : { a: other }) },
           body: exact ? { tag: "call", fn: name, args: [x, y].slice(0, params.length) } : body,
         })),
-      fc.tuple(fc.constantFrom("f", "g", "a", "b"), fc.array(tie("expr"), { maxLength: 2 })).map(([fn, args]): Expr => ({ tag: "call", fn, args })),
+      fc.tuple(fc.constantFrom("f", "g", "a", "b"), fc.array(tie("expr"), { maxLength: 2 })).map(([name, args]): Expr => ({ tag: "call", fn: name, args })),
       fc.tuple(tie("expr"), tie("expr")).map(([x, y]): Expr => ({ tag: "rec", fields: { x, y } })),
       // The ops on the order of a list (LIST.TAKE, LIST.NTH), with a position that can be wrong.
       fc
@@ -325,8 +325,8 @@ const FIX_ERROR_FLAG: Expr = app("gt", FIX_ERROR, lit(1));
 
 /**
  * This function generates a program for the differential test of the tiers (COMPILE.FIX). The check accepts each one
- * (FIX.MONOTONE). A step of the column `y` reads its last round, moves it with an op, reads a column of the name `x`,
- * or gives an error value at some rows. A first value can have the wrong kind (FIX.KIND). A step can add 1 at each
+ * (FIX.MONOTONE). A step of the column `y` reads its last round and moves it with an op. A step can also read a column
+ * of the name `x`, or give an error value at some rows. A first value can have the wrong kind (FIX.KIND). A step can add 1 at each
  * round, so a program can reach the round limit (FIX.LIMIT).
  */
 export function arbFixProgram(maxDepth = 2): fc.Arbitrary<Expr> {

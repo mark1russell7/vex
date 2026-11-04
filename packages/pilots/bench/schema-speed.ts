@@ -55,11 +55,11 @@ const paths = call("distinct", loop(v("notes"), ["n"], field(v("n"), "path")));
 const mine = app("flat", loop(v("notes"), ["n"], app("if", app("eq", field(v("n"), "path"), v("p")), one(v("n")), EMPTY)));
 const wrap = (body: Expr): Expr => let_({ distinct, joinBar }, let_({ arrayKind }, let_({ note }, let_({ level3: level(undefined) }, let_({ level2: level("level3") }, let_({ level1: level("level2") }, let_({ notes }, body)))))));
 const v1 = wrap(let_({ paths }, app("values", loop(v("paths"), ["p"], rec({ path: v("p"), kinds: app("values", call("distinct", loop(mine, ["n"], field(v("n"), "kind")))), count: app("count", call("distinct", loop(mine, ["n"], field(v("n"), "doc")))) })))));
-// The rewrite (c): one row for each path, and `setNth` gives a row its new value (LIST.SETNTH). The step reads the old row
-// one time in each size that it adds, so LOOP.SIZE takes it: the path comes from the note, and the count is a sum.
+// The rewrite (c): one row for each path, and `setNth` gives a row its new value (LIST.SETNTH). LOOP.SIZE takes the step:
+// each part of the new row copies the same part of the old row, or adds to it.
 const has = (list: Expr, x: Expr): Expr => app("ifError", app("gte", app("indexOf", list, x), lit(0)), lit(false));
 const upd = let_({ old: app("nth", v("rows"), v("j")) }, rec({
-  path: field(v("n"), "path"),
+  path: field(v("old"), "path"),
   kinds: app("if", has(field(v("old"), "kinds"), field(v("n"), "kind")), field(v("old"), "kinds"), app("append", field(v("old"), "kinds"), one(field(v("n"), "kind")))),
   count: app("add", field(v("old"), "count"), app("if", app("eq", field(v("old"), "last"), field(v("n"), "doc")), lit(0), lit(1))),
   last: field(v("n"), "doc"),

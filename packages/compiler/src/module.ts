@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, evaluate, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, type Move, moveExpr, type Names, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, evaluate, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, monotoneError, type Move, moveExpr, type Names, nestingError, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
@@ -5084,8 +5084,8 @@ function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: Key
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
-  // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
-  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
+  // COMPILE.MODULE.NESTING, LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses.
+  const size = nestingError(expr) ?? sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options);
   if (size !== undefined) return { ok: false, reason: size };
   const plain = copiesOf(expr, [expr], starts)[0] as Expr;
   const p = new Printer(plain, options, keys, starts);
@@ -5173,8 +5173,7 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
     const shape = shapeError(f.expr);
-    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options) ?? monotoneError(f.expr, options));
-    const reason = shape ?? size;
+    const reason = shape ?? nestingError(f.expr) ?? sizeError(f.expr, options) ?? stepError(f.expr, options) ?? monotoneError(f.expr, options);
     if (reason !== undefined) return { ok: false, reason: `${formulaText(f)}: ${reason}` };
   }
   const kinds = new Map<string, Kind | undefined>();

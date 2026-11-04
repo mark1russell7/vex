@@ -111,7 +111,8 @@ export function Grid(props: GridProps): ReactElement {
   };
 
   return (
-    <div className="vs-grid-wrap">
+    // A sheet scrolls sideways by design. The cut column shows the rest, and the row numbers stay.
+    <div className="vs-grid-wrap" data-overflow-ok>
       <table ref={table} className="vs-grid" role="treegrid" aria-label={`The table ${doc.title}`} aria-rowcount={rows.length + 1} aria-colcount={doc.columns.length + 1} onKeyDown={props.onKeyDown}>
         <thead>
           <tr role="row">

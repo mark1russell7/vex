@@ -35,7 +35,7 @@ function growth(size: number, level: (x: Expr, i: number) => Expr, leaf: Expr): 
 
 /** The moves of the addresses of the generated programs. A computed move holds a program of its own. */
 const moves = (x: fc.Arbitrary<Expr>): fc.Arbitrary<Addr> =>
-  fc.oneof<Addr[]>(fc.constant([]), fc.constant([{ t: "origin" }]), fc.constant([{ t: "key", key: "k" }]), fc.constant([{ t: "parent" }]), fc.constant([{ t: "origin" }, { t: "parent" }]), x.map((value) => [{ t: "key", key: value }]));
+  fc.oneof<fc.Arbitrary<Addr>[]>(fc.constant([]), fc.constant([{ t: "origin" }]), fc.constant([{ t: "key", key: "k" }]), fc.constant([{ t: "parent" }]), fc.constant([{ t: "origin" }, { t: "parent" }]), x.map((value) => [{ t: "key", key: value }]));
 
 /** The programs of the test of the reference: each form that the analysis reads, with few names, so a name can shadow a name. */
 const programs: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => {

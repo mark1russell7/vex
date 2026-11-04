@@ -9,7 +9,7 @@ export type RadialRun = (records: unknown, vars: unknown) => unknown;
 
 /** This function loads the radial module, with the source changed by `edit`. */
 export const loadRadial = (edit: (source: string) => string): RadialRun => {
-  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
+  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial", faults: "value" });
   if (!m.ok) throw new Error(m.reason);
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
   const load = new Function(`${edit(m.source.replaceAll(/^export /gm, ""))}\nreturn radial;`) as () => RadialRun;

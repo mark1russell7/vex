@@ -80,6 +80,7 @@ The source has no name and no literal of the program. It reads each one from a l
 | `name` | The name of the function of the module. The default is `run`. |
 | `space` | `"array"`, `"tree"` or `"graph"`. The default is `"array"`. |
 | `fuse` | `false` prints the code without the fusion of the list ops. The default is `true`. |
+| `faults` | `throw` lets a fault of the printed code leave the run. An exception of a function of a domain stays an error of Vex. The default is `value`, which gives an error of Vex for each exception. |
 | `lists` | `"envelope"` gives each list of the input and of the result as a `vex.list`. `"plain"` gives plain arrays of the values, with `VEX_ERROR` for an error item. The default is `"envelope"`. |
 | `keys` | `true` makes the run take the keys of its records as its last argument. The default is `false`. |
 

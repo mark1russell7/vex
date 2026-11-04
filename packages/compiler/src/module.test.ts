@@ -456,13 +456,13 @@ describe("COMPILE.MODULE: a standalone module", () => {
 
 /** This function compares a module with its golden file and the interpreter (docs/COMPILER.md §10). */
 async function expectGolden(name: string, e: Expr, options: ModuleOptions = OPTIONS): Promise<void> {
-  const source = sourceOf(e, options);
+  const source = sourceOf(e, { ...options, faults: "value" });
   await expect(source).toMatchFileSnapshot(`./__golden__/module-${name}.js`);
   // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
-  const off = sourceOf(e, { ...options, fuse: false });
+  const off = sourceOf(e, { ...options, fuse: false, faults: "value" });
   // A module that fusion does not change has no file of its own for fuse false.
   await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? ".js" : ".off.js.txt"}`);
-  for (const m of [make(source), make(off)]) {
+  for (const m of [make(sourceOf(e, options)), make(sourceOf(e, { ...options, fuse: false }))]) {
     expectSame(m, e, RECORDS, VARS, options);
     expectSame(m, e, MANY, VARS, options);
   }
@@ -756,7 +756,7 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const mv = make(sourceOf(grown, withVar));
     expectSame(mv, grown, [...rows, { iv: { lo: 0, hi: 1 }, n: -2 }], { base: { lo: 10, hi: 11 } }, withVar);
     expect(() => mv.run(rows, { base: 3 })).toThrow(mv.VexContractError);
-    await expect(sourceOf(grown, withVar)).toMatchFileSnapshot("./__golden__/module-kernel.js");
+    await expect(sourceOf(grown, { ...withVar, faults: "value" })).toMatchFileSnapshot("./__golden__/module-kernel.js");
     // The copy of an op must give the same structure at each sample: not another prototype, not null for a record, not a
     // record for null, not other fields, not another function, and not an object for a text. OUTSIDE is a name of the
     // original only.
@@ -805,7 +805,7 @@ describe("COMPILE.MODULE: the text of a module", () => {
     });
     const options: ModuleOptions = { domains: [NumDomain, Odd], schema: { fields: { iv: `domain:${odd}`, n: "number" } } };
     const e = op("span", op("grow", ref("iv"), ref("n")));
-    const source = sourceOf(e, options);
+    const source = sourceOf(e, { ...options, faults: "value" });
     // The check has the index of the domain in its name. This module reads the check one time, so the check holds its body.
     expect(source).toContain("const k_d1 = (x) => ((");
     expect(source).not.toContain("v_1");
@@ -1126,7 +1126,7 @@ describe("COMPILE.MODULE: the text of a module", () => {
     );
     const options: ModuleOptions = { domains: [NumDomain, XYDomain, BoolDomain], schema: { fields: { w: "number", h: "number", i: "number" }, vars: { gap: "number", cols: "number" } } };
     const source = sourceOf(e, options);
-    await expect(source).toMatchFileSnapshot("./__golden__/module-grid-xy.js");
+    await expect(sourceOf(e, { ...options, faults: "value" })).toMatchFileSnapshot("./__golden__/module-grid-xy.js");
     const m = make(source);
     expectSame(m, e, [{ w: 10, h: 20, i: 0 }, { w: 30, h: 5, i: 1 }, { w: 7, h: 7, i: 2 }], { gap: 12, cols: 2 }, options);
     const items = fc.array(fc.record({ w: fc.integer({ min: 0, max: 400 }), h: fc.double({ min: 0, max: 400, noNaN: true }) }), { maxLength: 12 });
@@ -1394,12 +1394,10 @@ describe("COMPILE.MODULE.TREE: a module of a tree space", () => {
       // A node of the memo with a loop over the children of each key evaluates once for each run.
       memo: op("sum", each(axes.all, op("count", each(axes.children, n)))),
     });
-    const source = sourceOf(e, TREE);
-    await expect(source).toMatchFileSnapshot("./__golden__/module-tree.js");
+    await expect(sourceOf(e, { ...TREE, faults: "value" })).toMatchFileSnapshot("./__golden__/module-tree.js");
     // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
-    const off = sourceOf(e, { ...TREE, fuse: false });
-    await expect(off).toMatchFileSnapshot("./__golden__/module-tree.off.js.txt");
-    for (const m of [make(source), make(off)]) {
+    await expect(sourceOf(e, { ...TREE, fuse: false, faults: "value" })).toMatchFileSnapshot("./__golden__/module-tree.off.js.txt");
+    for (const m of [make(sourceOf(e, TREE)), make(sourceOf(e, { ...TREE, fuse: false }))]) {
       expectSameTree(m, e, TREE_RECORDS, PARENTS);
       // A flat tree, a chain, one root with each other key as its child, and an empty tree.
       expectSameTree(m, e, TREE_RECORDS, TREE_RECORDS.map(() => -1));
@@ -1658,8 +1656,8 @@ describe("COMPILE.MODULE: the text of the modules of a fixed set of random progr
     // keeps the values, for example a constant that a module computes twice, or a column of the run that it does not make.
     const programs = fc.sample(fc.oneof(program.num, program.bool, keyed, fc.tuple(keyed, keyed).map(([a, b]) => rec({ a, b }))), { seed: 20261016, numRuns: 60 });
     const lines = programs.map((e, i) => {
-      const source = sourceOf(e);
-      expectSame(make(source), e, MANY);
+      expectSame(make(sourceOf(e)), e, MANY);
+      const source = sourceOf(e, { ...OPTIONS, faults: "value" });
       return `${String(i)} ${String(source.length)} ${createHash("sha256").update(source).digest("hex").slice(0, 16)}`;
     });
     await expect(`${lines.join("\n")}\n`).toMatchFileSnapshot("./__golden__/module-corpus.txt");

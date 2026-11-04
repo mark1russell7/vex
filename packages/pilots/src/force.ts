@@ -1,5 +1,5 @@
 /**
- * The force pilot: a force-directed layout of the nodes of a graph, as the force layouts of Graph do. The positions of
+ * The force pilot: a force-directed layout of the nodes of a graph. The positions of
  * all nodes are the state of one loop: a list of `Vec2` values by key (LOOP.LIST). Each step reads the old position of
  * each node by its key (LIST.GET). Each node pushes the other nodes away, a spring pulls the two ends of each edge
  * together, and a mild pull goes to the center.

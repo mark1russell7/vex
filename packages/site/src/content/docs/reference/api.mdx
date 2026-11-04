@@ -171,7 +171,7 @@ rows.from("n").functions({ scaled }, (c, call) => call.scaled(c)).at("1"); // =>
 |---|---|
 | `column(name, formula)` | Adds a column. The formula gets a root with `cell`, and gives a chain. |
 | `declare<T>()` | Gives the types of columns before their formulas. A formula can then read the column itself or a later column with its type. |
-| `r.cell(column, at)` | In a formula: an argument whose value is the column at the focus, at the key `at`, or at the address `at` |
+| `r.cell(column, at)` | In a formula: an argument whose value is the column at the focus, at the key `at`, or at the address `at`, which can have computed moves |
 | `result(k, column)`, `at(k, column)`, `explain(k, column)` | Evaluates one cell |
 | `table()` | Evaluates each cell in key order, and gives one row for each key |
 | `columns` | The program of each column, as JSON data |

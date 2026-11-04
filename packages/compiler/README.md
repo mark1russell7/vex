@@ -45,8 +45,8 @@ Property P17 compares `tiered` with `evaluate` on random programs, random spaces
 
 These cases operate in tier 1:
 
-- A list value with an error item, because generated code makes no error values.
-- A list op on a list value from a binding or a variable. A list op over an axis is one loop in tier 2.
+- An `each` with an error item, because generated code makes no error values.
+- The axis `list`, and a list op on an array. A list op on a list value is in tier 2: it uses the code of the interpreter.
 - An error of an extension, and each exception that is not an error of an op.
 
 A program keeps the value of each node that depends only on the space, for each space (COMPILE.MEMO). Thus a run at each key of a space computes such a node once, for example a total of a column. A node that reads the origin only through a few values, its keys, has an entry for each value of its keys (COMPILE.GROUP). Thus "the largest width in the column of the origin" evaluates once for each column. A space does not change, so the values stay correct.

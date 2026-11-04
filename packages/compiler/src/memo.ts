@@ -199,9 +199,10 @@ function eachUnderLets(e: Expr | undefined): { readonly lets: readonly Extract<E
 /**
  * This function gives the nodes of `expr` that a program keeps in its memo, each with its keys. Each such node has a
  * loop outside its keys. A node inside such a node can be in the memo too. Thus the first evaluation of the outer
- * node evaluates the inner node once.
+ * node evaluates the inner node once. The function `loops` tells if a list op is one loop with an `each`. In a module,
+ * each list op is one. In tier 2, the ops of `isFusedOp` are.
  */
-export function memoNodes(expr: Expr): ReadonlyMap<Expr, readonly Expr[]> {
+export function memoNodes(expr: Expr, loops: (op: string) => boolean = isListOp): ReadonlyMap<Expr, readonly Expr[]> {
   const out = new Map<Expr, readonly Expr[]>();
   const visit = (e: Expr): void => {
     const pure = new Set<Expr>();
@@ -211,7 +212,7 @@ export function memoNodes(expr: Expr): ReadonlyMap<Expr, readonly Expr[]> {
       // A list op over an `each` under `let` expressions is one loop, so that `each` and those `let` expressions have
       // no value of their own. Their parts can be in the memo.
       const [first, ...rest] = e.args;
-      const fused = isListOp(e.op) ? eachUnderLets(first) : undefined;
+      const fused = loops(e.op) ? eachUnderLets(first) : undefined;
       if (fused === undefined) {
         if (first !== undefined) visit(first);
       } else {

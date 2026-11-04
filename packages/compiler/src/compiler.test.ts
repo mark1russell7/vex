@@ -399,7 +399,7 @@ describe("COMPILE.TIERED: the result of each kind of node is the result of the i
 
 describe("COMPILE.TIERED: the site of an op gives the result of the interpreter for each receiver", () => {
   const at = { space: SITES, origin: "A" };
-  // The value at G has the form of a list, so the list op "max" applies to it in the interpreter, and tier 1 gives it.
+  // The value at G has the form of a list, so the list op "max" applies to it, in tier 2 too (COMPILE.LIST.VALUE).
   const cases: readonly (readonly [string, Expr, boolean])[] = [
     ["a method without arguments", app("get0", box), true],
     ["a method with one argument", app("plus", box, ref("arg")), true],
@@ -419,7 +419,7 @@ describe("COMPILE.TIERED: the site of an op gives the result of the interpreter 
     ["a method that is not an op", app("hidden", box), true],
     ["a declared op without a method, and a free function", app("ghost", box), true],
     ["a name that cannot be an op", app("constructor", box), true],
-    ["a list op name", app("max", box, ref("arg")), false],
+    ["a list op name", app("max", box, ref("arg")), true],
   ];
   it.each(cases)("%s", (_title, op, fast) => expectSame(app("values", all(op)), fast, at));
 
@@ -507,7 +507,7 @@ describe("COMPILE.TIERED: a list op over an axis is one loop with the result of 
     ["ifError inside an item", app("sum", all(app("ifError", ref("big"), lit(0)))), true],
     // COMPILE.EXT: the list op skips the error item in tier 2 too.
     ["an extension error inside an item", app("count", all(ext("no", null))), true],
-    ["a list op over a list value", let_({ xs: all(n) }, app("count", v("xs"))), false],
+    ["a list op over a list value", let_({ xs: all(n) }, app("count", v("xs"))), true],
   ];
   it.each(cases)("%s", (_title, e, fast) => expectSame(e, fast));
 

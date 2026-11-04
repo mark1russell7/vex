@@ -149,13 +149,25 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 **What stays with tier 1.** These results still use `FALLBACK`:
 
 - `#DEPTH!` of an extension and a full call stack, by the rule above.
-- A list with an error item, and the op `errors` on such an item, because generated code makes no error item.
+- An `each` with an error item, because generated code makes no error item.
+- An error of an item that a list op on a list value gives with `strict`, and `#DEPTH!` of such an op (the next paragraph).
+- A list op on an array (V-064).
 - A failed kind check of a schema, because it is no error of the interpreter.
 - `reduce` on an empty list, because the result can be the identity of the op.
 - An op that fails in a list op, where the list can use an extension or the option `strict` is set. The interpreter makes each item first, so an earlier error item or `#DEPTH!` can come first.
 - A failed argument of a list op after its list, because the interpreter evaluates the list first.
 - An exception of a getter of a record.
 - A node with two failed arguments past `MAX_COPIED`.
+
+**Lists as values.** A list op on an `each` is one loop (`count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first`, `values`, `keys`, `errors` and `reduce`). Each other list op, and each list op on another list, is a call of the site of the op. There, `generic` of the runtime calls `listOps` of the core, which is the code of the interpreter (LIST.OPS, COMPILE.LIST.VALUE). No second copy of the list ops exists. Thus the value of a list op is the value of the interpreter, for each list.
+
+The rules of a failure:
+
+- An error of the op has the marker path of the runtime. The runtime keeps the error in the record of the failure, and `materialize` gives it the path and the position of the site. So `ifError`, a binding, `#ARGS` and a list op around the site take it as the error of an op.
+- `#DEPTH!` throws, and tier 1 gives the result. So the V-066 and V-067 rule holds: the program cannot catch it, and it wins over each other error, in each order of the arguments. The order in the interpreter is in `goodItems`, which the runtime shares.
+- An error of an item has another path. It comes from a list of the input with `strict`. It throws too, and tier 1 gives the result.
+
+**A list with an error item.** Generated code makes no error item, because `each` stops the program at one. A list with an error item can only come from the input: a variable, a field or a literal. Tier 2 does not read its items. It gives the list to a list op, and the code of the interpreter skips the error items. Thus such a list stays on the value path, and the shared code is the proof that the result is the same. The differential test `list-values.test.ts` checks it, also with `#DEPTH!` items.
 
 ### 4.2 The same bits
 
@@ -596,10 +608,10 @@ The status on 2026-10-17:
 
 - The reverse axis is done (AXIS.REVERSE). A module prints a loop from the end.
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
-- Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 gives a reason for a program with lists, and tier 1 evaluates it. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
-- The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 and a module give a reason for them, and tier 1 evaluates the program.
-- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives a reason for `indexOf`, `fill`, `distinct`, `group` and `join`. A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
-- Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 gives a reason for them, and tier 1 evaluates the program.
+- Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 has them too (COMPILE.LIST.VALUE, §4.1), but not the axis `list` yet. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
+- The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 gives them with the code of the interpreter (COMPILE.LIST.VALUE).
+- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
+- Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 has them (COMPILE.LIST.VALUE).
 - Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus the force layouts of Graph and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
 - Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops come from `XYDomain`, because a module cannot copy the methods of `Vec2Domain`.
 
@@ -757,7 +769,7 @@ Two caches of the runtime give most of the speed:
 
 The rest of the time goes into the reads of the space and into the checks that the semantics need, for example `valid`. Phase C2 removes this time with the kinds and the inline forms.
 
-These cases operate in tier 1: a list value with an error item, and a list op on a list value. Each exception that is not an error of an op also operates in tier 1. Since COMPILE.EXT, an error of an extension operates in tier 1 only where it is the result (§4.1).
+These cases operate in tier 1: an `each` with an error item, and the axis `list`. Each exception that is not an error of an op also operates in tier 1. Since COMPILE.EXT, an error of an extension operates in tier 1 only where it is the result (§4.1).
 
 An item for the owner: npm trusted publishing needs the package on npm. Before the next release, the owner publishes `@mark1russell7/vex-compiler` once, or adds its trust, as for the other packages.
 

@@ -28,6 +28,9 @@ const inv = each(axes.window(-1, 1), op("divide", lit(1), ref("w")));
 /** A list of one number at each key. Its value depends on the key, so it is not a constant of the run. */
 const one = op("fill", lit(1), n);
 
+/** The loop that copies the items of an array into a fused output. */
+const COPIES = /for \(let i = 0; i < \w+\.length; i\+\+\) (?:\{ if .*)?o\d+\.push\(\w+\[i\]\)/;
+
 /** This function gives the source of a module, and fails the test for a program that cannot be a module. */
 function sourceOf(m: Emitted): string {
   if (!m.ok) throw new Error(m.reason);
@@ -74,8 +77,8 @@ describe("COMPILE.MODULE.FUSE.OFF: the option fuse", () => {
 
   it("COMPILE.MODULE.FUSE.OFF: the default is fuse true, and fuse false prints the module of the version before fusion", () => {
     for (const e of programs) expect(sourceOf(emitModule(e, { ...OPTIONS, fuse: true }))).toBe(sourceOf(emitModule(e, OPTIONS)));
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
-    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
+    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", faults: "value" };
     expect(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: true }))).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
     expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: true }))).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
     // The hashes of the shapes of ireko in version 0.10 of the compiler, before step 3 of COMPILE-FUSE, with the writes of
@@ -95,11 +98,11 @@ describe("COMPILE.MODULE.FUSE.OFF: the option fuse", () => {
   });
 
   it("COMPILE.MODULE.FUSE.OFF COMPILE.MODULE.FUSE.FACTS: the notes of the facts do not change the code of the shapes of ireko", () => {
-    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf" };
+    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", faults: "value" };
     const sheet = listFactsOf(() => emitSheetModule(SHAPE_COLUMNS, shapes));
     expect(sourceOf(sheet.emitted)).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
     expect(sheet.facts.size).toBeGreaterThan(10);
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
     const merged = listFactsOf(() => emitModule(NODE_SHAPE, node));
     expect(sourceOf(merged.emitted)).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
     // The value of the run is the append of the shapes of the rows and of the columns, so it is clean.
@@ -568,7 +571,7 @@ describe("COMPILE.MODULE.FUSE: flat over an each is one loop", () => {
   });
 
   it("COMPILE.MODULE.FUSE: the modules of NODE_SHAPE and of the shapes of ireko keep their golden code", async () => {
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
     const source = sourceOf(emitModule(NODE_SHAPE, node));
     await expect(source).toMatchFileSnapshot("./__golden__/module-fuse.js");
     // The fused chains: the two lists of the bands of the children, UNSORTED, the three sides and the bands that stay.
@@ -599,7 +602,7 @@ describe("COMPILE.MODULE.FUSE.ITEM: the error items of a fused flat", () => {
     const strict = op("ifError", flatOf(body, STRICT), NONE);
     // The lenient loop puts the length of the output back, and the strict loop raises the error.
     expect(printed(lenient, true)).toMatch(/\.length = m\d+;/);
-    expect(printed(strict, true)).toMatch(/catch \{\n\s+F\(\);/);
+    expect(printed(strict, true)).toMatch(/catch \(\$f\) \{ FK\(\$f\);\n\s+F\(\);/);
     // The branches of a filter can throw too: the condition, and the value of the target.
     const filter = flatOf(op("if", op("gt", op("divide", lit(1), ref("w")), lit(0)), op("fill", lit(1), op("divide", n, ref("w"))), NONE));
     for (const x of [lenient, strict, filter, op("ifError", op("flat", each(axes.all, op("if", op("gt", op("divide", lit(1), ref("w")), lit(0)), op("fill", lit(1), n), NONE)), STRICT), NONE)]) expectSame(x);
@@ -654,7 +657,7 @@ describe("COMPILE.MODULE.FUSE: a chain of append is one output", () => {
     }
     // Each fill pushes its item, and the loop of the flat pushes into the output of the chain.
     expect(pushes(printed(fills, true))).toBe(3);
-    expect(printed(withFlat, true)).toMatch(/const o\d+ = o\d+;/);
+    expect(printed(withFlat, true).match(/const o\d+ = \[\];/g)?.length).toBe(1);
     // An append of two arrays has no part that pushes, so it keeps concat or AP.
     expect(printed(op("append", two, two), true)).toContain(".concat(");
     expect(printed(op("append", xs, two), true)).toContain("AP(");
@@ -666,15 +669,15 @@ describe("COMPILE.MODULE.FUSE: a chain of append is one output", () => {
     // The name ys is read two times, so the chain reads its array and a loop copies the items.
     const twice = let_({ ys: near }, op("add", op("count", op("append", one, v("ys"))), op("count", v("ys"))));
     const source = printed(twice, true);
-    expect(source).toMatch(/const z\d+ = /);
+    expect(source).toMatch(COPIES);
     expect(source).not.toMatch(/\.concat\(|\bAP\(/);
     // A list of the run that the program reads two times is a node of the memo, so the chain reads its value.
     const run = each(axes.all, op("fill", lit(1), ref("w")));
     const memo = op("add", op("count", op("append", one, op("flat", run))), op("sum", op("flat", run)));
-    expect(printed(memo, true)).toMatch(/const z\d+ = /);
+    expect(printed(memo, true)).toMatch(COPIES);
     // A constant of the run evaluates once, before the loop over the keys, and the chain copies its items.
     const constant = op("append", one, op("flat", run));
-    expect(printed(constant, true)).toMatch(/const z\d+ = /);
+    expect(printed(constant, true)).toMatch(COPIES);
     for (const x of [twice, memo, constant]) expectSame(x);
   });
 
@@ -994,7 +997,7 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
   });
 
   it("COMPILE.MODULE.FUSE.ADOPT: the accumulators of NODE_SHAPE take their first lists, and the open bands keep their copy", () => {
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
     const on = sourceOf(emitModule(NODE_SHAPE, node));
     // The names out of the sweep and acc of the pairs start with fill(0), so both take their first lists. The step of
     // open reads its list in a binding, so open has no array of its own.

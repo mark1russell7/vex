@@ -7,7 +7,6 @@ const E = {};
 const Z = {};
 const N = {}, W = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
 function M(f) {
@@ -181,10 +180,9 @@ export function run(records, vars) {
       } catch {
         b7 = E;
       }
-      const f15 = o;
       let n17 = 0;
       for (let j14 = 0; j14 < n; j14++) {
-        if (j14 === f15) continue;
+        if (j14 === o) continue;
         if (!((R[j14]["n"]) === (R[o]["n"]))) continue;
         const x18 = R[j14]["n"];
         n17++;

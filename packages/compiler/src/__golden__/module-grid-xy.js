@@ -12,8 +12,7 @@ const op_0_0 = (x, y) => ({
 				x,
 				y
 			});
-const v_1 = (v) => Number.isFinite(v.x) && Number.isFinite(v.y);
-const k_domain_XY = (x) => (v_1(x) ? x : F());
+const k_domain_XY = (x) => ((Number.isFinite(x.x) && Number.isFinite(x.y)) ? x : F());
 const op_1_1 = (a, b) => ({
 				x: Math.max(a.x, b.x),
 				y: Math.max(a.y, b.y)

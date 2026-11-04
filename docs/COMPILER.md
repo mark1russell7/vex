@@ -198,6 +198,21 @@ Generated code makes no trace. `explain` always operates in tier 0, so the quest
 
 ### 4.4 Standalone modules
 
+#### The faults of a module (COMPILE.MODULE.FAULT)
+
+A catch of a module holds an exception of a function of a domain, because the interpreter gives an error for it. The same catch also holds a fault of the printed code. Then a defect of the printer is a value, and only a differential test finds it.
+
+The start of an exception tells the two cases, not its class. A `TypeError` of an op is an error of Vex, and a `TypeError` of the printed code is a fault. With `faults` at `throw`, each copy of a function of a domain has the wrapper `FW`. Each other catch calls `FK`, which rethrows each value that is not the error of Vex.
+
+Each test of the compiler and of the pilots that compares values runs with `throw`. The file `packages/compiler/src/module-fault.setup.ts` sets the option. A test of the text of a module sets `value`.
+
+The file `packages/pilots/src/ireko-modules.ts` holds the input of each module of ireko. The script `scripts/ireko-module.ts` and the value tests read the same rows, so a value test prints the module of a build with `throw`. The rows of the five committed modules are `measure`, `place`, `shape`, `grid` and `radial`. The rows `layers` and `tree` have no committed file at this time, and their value tests use the table too.
+
+This check examines the print of the compiler at the same commit. It does not examine the text of a committed file, because that text can be an older print. A fault that an older print holds stays in that file until the next build. The bytes of a print also depend on the program that runs the printer, because a copied function keeps the text that this program gives.
+
+The default stays `value`, because the form with `throw` costs more than the limit of the decision. The limit was 2 % of the minified module. The module of `NODE_SHAPE` grows by 142 bytes after `esbuild --minify` and `gzip -9`, from 2336 to 2478, which is 6.08 %. Without minification, it grows by 92 bytes, from 3629 to 3721. The tree module grows by 182 bytes, which is 5.04 %. The form also adds a call of the wrapper to each call of an op, and it keeps each op as a declaration. This record has no measure of the time of these calls.
+
+
 A module of the build can operate without the interpreter. Then a failed check throws a `VexContractError` that names the check, because no fallback exists.
 
 A host that guarantees the kinds of its input uses standalone modules. ireko gives its strategies only finite numbers and plain rectangles. Thus ireko uses them. A module with the fallback imports the interpreter.
@@ -213,6 +228,8 @@ The ops of a band are such proofs, so the shapes module of ireko has no new chec
 An op with a value of another kind breaks KIND.RETURNS, and the law checker refuses it. A module has no tier 1, so it does not find such a value.
 
 A standalone module gives each list of its input and of its result as a `vex.list`. With the option `lists: "plain"`, these lists are plain arrays, with `VEX_ERROR` for an error item (COMPILE.MODULE.LIST.PLAIN, §13.3).
+
+A module with `fuse` also has a last pass that removes the code that a run does not need (COMPILE.MODULE.SIZE, §13.3).
 
 ## 5. Safety of generated code
 
@@ -498,7 +515,7 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | Step | Golden files of `packages/compiler/src/__golden__` |
 |---|---|
 | 1, 2 | None |
-| 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-tree.js`, and a new file `.off.js` with the text of `fuse` false for each one |
+| 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-tree.js`, and a new file `.off.js.txt` with the text of `fuse` false for each one |
 | 4 | `module-list-build.js`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
 | 5 | `module-fuse.js`. The programs of the other files have no chain of `append` with a part that pushes. |
 | 6 | `module-fuse.js`, also for the direct push. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
@@ -615,7 +632,7 @@ A data limit (ITERATE.LIMIT.DATA) names an axis, and the limit is the number of 
 
 The cap of 100000 stays. A loop can make heavy steps, so a large input must fail with a defined error and not take a long time. A count above the cap gives `#NUM!` of the kind `limit` (ITERATE.LIMIT.ERROR). The same error wraps each failure of the axis, so a host reads one error for each cause.
 
-Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
+Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. A count that reads no key is a constant of the run, so a module counts one time for each run (COMPILE.MODULE.LIMIT.ONCE). A walk over a list of the nodes then costs its steps at each key, and tier 2 still counts at each key. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
 
 Without `until`, the iteration makes `limit` steps. With `until`, the test evaluates before each step and after the last one. A true test stops the iteration, and with no true test the value is `#NUM!`. The first error of a value, of the test or of `result` is the value of the iteration.
 
@@ -663,7 +680,7 @@ The status on 2026-10-17:
 - Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). Tier 2 gives a list op on an array with the code of the interpreter (COMPILE.LIST.ARRAY), so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
 - Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 has them (COMPILE.LIST.VALUE).
 - Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus the force layouts of Graph and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
-- Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops come from `XYDomain`, because a module cannot copy the methods of `Vec2Domain`.
+- Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops came from `XYDomain`, because a module could not copy the methods of `Vec2Domain` at that time (COMPILE.MODULE.FORM changed this).
 
 The decisions of the third block:
 
@@ -1169,7 +1186,7 @@ A module also has `reduce` with the op of a domain (COMPILE.MODULE.REDUCE). The 
 
 Two domains of plain objects share a module when each declares `fields` (KIND.FIELDS). Without this declaration, the compiler cannot prove that one domain refuses the values of the other. The law checker tests each declaration, so a false claim fails a test. A number at a lifted position goes through a copy of `fromScalar` (KIND.LIFT). `InsetsDomain` uses both. Tier 2 keeps the dispatch of the runtime for this site, because its kinds are primitive.
 
-The ops of `Vec2Domain` are methods of a class, so a module cannot copy them. Thus `forceProgram` of the pilot uses `XYDomain`, the plain data with the same arithmetic. It uses `dot(gap, gap)` in place of `lengthSq`, which gives the same bits. A list was not a value of a module, so the program gives the last position of each node with `get(…, id)`. The list of the loop is a constant of the run, so the run computes it once.
+`forceProgram` of the pilot uses `XYDomain`, the plain data with the arithmetic of `Vec2`. It uses `dot(gap, gap)` in place of `lengthSq`, which gives the same bits. A list was not a value of a module, so the program gives the last position of each node with `get(…, id)`. The list of the loop is a constant of the run, so the run computes it once.
 
 A property compares random programs over random graphs with the interpreter (P17). The graphs have cycles, edges to their own record and two edges to one record. The programs read each axis of a graph, also in the reverse order and from an address, and `reduce` with each option. The force pilot compares the module with `layoutReference` on random graphs, with the same bits. The text of a module of a graph is in the golden file `__golden__/module-graph.js`.
 
@@ -1571,3 +1588,32 @@ The field `as` of `each` and `fold` names the value and the index of each item o
 - The value of an item keeps the facts of its list. Thus an item that is a list is a list in the body. The printer knows these facts only in the loop. So a list op over such an `each` goes over its array when the body can give a list.
 - A name of `as` is not a name of `init` (the check of the document). Thus a step that appends to its own list and reads a name of `as` keeps the append of COMPILE.MODULE.APPEND.OWN.
 - Tier 2 gave a reason for each program with the axis `list` until COMPILE.LIST.AXIS.
+
+#### The smaller form of a module (COMPILE.MODULE.SIZE)
+
+The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its largest modules. Seven rules make their code smaller. Two rules operate in the printer, and the file `module-tidy.ts` holds the others. This file is a last pass over the lines of the module. With `fuse: false`, no rule operates, so that text stays the same (COMPILE.MODULE.FUSE.OFF).
+
+| Rule | The result | The limit of the rule |
+|---|---|---|
+| COMPILE.MODULE.SIZE.FILL | `fill(0, x)` prints `[]`, and a branch with this list prints no block | The count is the literal 0. The code of `x` cannot fail, or tier 1 gives the empty list for a value with only literals and ops. |
+| COMPILE.MODULE.SIZE.KEY | A loop has no `const j = A[q][0];` that no code reads | The line is the first line of the loop, and the head of the loop reads the same array. |
+| COMPILE.MODULE.SIZE.ALIAS | `const a = b;` is not printed, and each read reads `b` | The form is `const`. No line of the block writes `b`, or binds a second `b`. A write outside the block stops the rule when a function of the block can run after it. |
+| COMPILE.MODULE.SIZE.ONCE | A lazy cell prints its value at its read | The cell has one `return` and one read `G(c())`. The read is not in a loop or in a function, other than a lazy cell. |
+| COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
+| COMPILE.MODULE.FAULT | With `faults` at `throw`, a fault of the printed code leaves the run | Each copy of a function of a domain has a wrapper that gives the error of Vex for each exception. Each other catch rethrows each value that is not the error of Vex. No op prints at its call. |
+| COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |
+| COMPILE.MODULE.SIZE.DEAD | A helper, an op or a constant of the run that no code reads is not printed | A constant has a form that catches each failure. |
+
+The reasons for the limits are these:
+
+- A `fill` with a value that fails is an error of the list, also with the count 0. So the rule for a value that can fail must read the result of tier 1. Tier 1 can read only a value with no input, so each other such value keeps `FI`.
+- A read of a key can throw when the array is not the array of the loop. So the rule reads the head of the loop.
+- A lazy cell that a key loop reads stays, because each key must read one shared object (COMPILE.MODULE.FUSE.OUT). `G` stays, because the value of the cell can be `E`.
+- A parameter can have two reads. A name as the argument has no effect and cannot fail, so the number of reads and their order stay the same.
+- The pass counts the words of a line with no parser. A word in a text counts too. This count is too large at most, so it can only stop a rule.
+- The names that a module declares come from the printer before the pass. So the option `name` keeps each refusal.
+
+| Bytes, after minify and gzip level 9 | Before | After |
+|---|---|---|
+| `NODE_SHAPE` | 2611 | 2336 |
+| `SHAPE_COLUMNS` | 3051 | 2841 |

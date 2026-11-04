@@ -1,10 +1,11 @@
 import { compile, type Result } from "@mark1russell7/vex";
-import { emitModule, tiered } from "@mark1russell7/vex-compiler";
+import { tiered } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { layersEdges as edgeList, layersInput as input } from "./inputs.ts";
 import type { Extent } from "./ireko-grid.ts";
-import { LAYERS_DOMAINS, LAYERS_PROGRAM, LAYERS_SCHEMA, layersArrange, layersOf, layersRun, orderOf, type LayersEdge, type LayersInput, type LayersOptions, type LayersOutput } from "./ireko-layers.ts";
+import { irekoRun } from "./ireko-modules.ts";
+import { LAYERS_DOMAINS, LAYERS_PROGRAM, layersArrange, layersOf, layersRun, orderOf, type LayersEdge, type LayersInput, type LayersOptions, type LayersOutput } from "./ireko-layers.ts";
 
 type Offset = { readonly x: number; readonly y: number };
 type LayersRun = ReturnType<typeof layersRun>;
@@ -23,12 +24,7 @@ function arrangeWith(run: (r: { readonly space: LayersRun["space"]; readonly ori
 
 /** This function gives the function of the standalone module of the program. */
 function moduleOf(): (records: unknown, vars: unknown) => readonly Offset[] {
-  const m = emitModule(LAYERS_PROGRAM, { domains: LAYERS_DOMAINS, schema: LAYERS_SCHEMA, name: "layers", lists: "plain" });
-  if (!m.ok) throw new Error(m.reason);
-  expect(m.source).not.toContain("import");
-  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
-  return new Function(`${m.source.replaceAll(/^export /gm, "")}
-return layers;`)() as (records: unknown, vars: unknown) => readonly Offset[];
+  return irekoRun("layers") as (records: unknown, vars: unknown) => readonly Offset[];
 }
 
 /** This function gives the output of the module for one input. */

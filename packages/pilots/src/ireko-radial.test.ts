@@ -1,9 +1,10 @@
 import { compile, type Result } from "@mark1russell7/vex";
-import { emitModule, tiered } from "@mark1russell7/vex-compiler";
+import { tiered } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { RADIAL_MIXED, RADIAL_TWO, radialLarge as large, radialRing as ring } from "./inputs.ts";
-import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, radialArrange, radialRun, type RadialInput, type RadialOutput } from "./ireko-radial.ts";
+import { irekoRun } from "./ireko-modules.ts";
+import { RADIAL_DOMAINS, RADIAL_PROGRAM, radialArrange, radialRun, type RadialInput, type RadialOutput } from "./ireko-radial.ts";
 
 type Offset = { readonly x: number; readonly y: number };
 type RadialRun = ReturnType<typeof radialRun>;
@@ -22,12 +23,7 @@ function arrangeWith(run: (r: { readonly space: RadialRun["space"]; readonly ori
 
 /** This function gives the function of the standalone module of the program. */
 function moduleOf(): (records: unknown, vars: unknown) => readonly Offset[] {
-  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
-  if (!m.ok) throw new Error(m.reason);
-  expect(m.source).not.toContain("import");
-  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
-  return new Function(`${m.source.replaceAll(/^export /gm, "")}
-return radial;`)() as (records: unknown, vars: unknown) => readonly Offset[];
+  return irekoRun("radial") as (records: unknown, vars: unknown) => readonly Offset[];
 }
 
 describe("the ireko radial pilot", () => {

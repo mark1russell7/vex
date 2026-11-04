@@ -377,18 +377,26 @@ const FAULT_KEEP = "function FK(x) { if (x !== E) throw x; }";
 /** The helper that gives the error of Vex for each exception of a copy of a function of a domain. */
 const FAULT_WRAP = "function FW(f) { return (...a) => { try { return f(...a); } catch { throw E; } }; }";
 
+/** This function gives a line where each catch rethrows each value that is not the error of Vex. */
+function narrowCatches(line: string): string {
+  return line.replaceAll("catch {", "catch ($f) { FK($f);");
+}
+
+/** This function gives the declaration of a copy of a function of a domain, inside the wrapper. */
+function wrapFaults(name: string, text: string): string {
+  return `const ${name} = FW(${text.slice(`const ${name} = `.length, -1)});`;
+}
+
 /**
  * This function gives the form of a module where a catch keeps only the error of Vex (COMPILE.MODULE.FAULT). The start
  * of a fault tells the two cases. A copy of a function of a domain gives the error of Vex for each exception, as in the
  * interpreter. Another exception comes from the printed code, and it leaves the run.
  */
 export function keepFaults(parts: Tidied, copies: ReadonlySet<string>): Tidied {
-  const narrow = (line: string): string => line.replaceAll("catch {", "catch ($f) { FK($f);");
-  const wrap = (name: string, text: string): string => `const ${name} = FW(${text.slice(`const ${name} = `.length, -1)});`;
-  const decls = new Map([...parts.decls].map(([name, text]) => [name, copies.has(name) ? wrap(name, text) : narrow(text)]));
+  const decls = new Map([...parts.decls].map(([name, text]) => [name, copies.has(name) ? wrapFaults(name, text) : narrowCatches(text)]));
   decls.set("FK", FAULT_KEEP);
   decls.set("FW", FAULT_WRAP);
-  return { decls, lines: parts.lines.map(narrow) };
+  return { decls, lines: parts.lines.map(narrowCatches) };
 }
 
 /**

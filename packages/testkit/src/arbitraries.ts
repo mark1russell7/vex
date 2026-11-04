@@ -317,6 +317,19 @@ function arbFixColumns(maxDepth: number): { readonly numbers: fc.Arbitrary<Expr>
 }
 
 /**
+ * This function gives `depth` doublings of `leaf`. Each level is one object at two places of the next level, so the
+ * tree of the program has `2 ** depth` leaves and the program has `depth + 1` objects.
+ */
+export function doubling(leaf: Expr, depth: number): Expr {
+  let e = leaf;
+  for (let i = 0; i < depth; i++) e = app("add", e, e);
+  return e;
+}
+
+/** This function generates a doubling of a number with a depth of `maxDepth` or less. A name reads the variable `a` of a program. */
+export const arbDoubling = (maxDepth = 6): fc.Arbitrary<Expr> => fc.tuple(fc.constantFrom<Expr>(ref("n"), v("a"), lit(1)), fc.integer({ min: 0, max: maxDepth })).map(([leaf, depth]) => doubling(leaf, depth));
+
+/**
  * This function generates a program with one `fix` that the check accepts (FIX.MONOTONE). Each read of the fields in the
  * records of `arbFixGraph` works. The ops ignore the order of the rows, so a test can reverse the rows (FIX.ORDER).
  */

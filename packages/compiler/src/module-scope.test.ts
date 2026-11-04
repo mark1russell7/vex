@@ -31,6 +31,9 @@ const TOTAL = app("sum", each(axes.all, n));
 /** Two names with one variable: both values are one constant of the run. */
 const FIVES = { x: lit(5), y: lit(5) };
 
+/** This function gives a function with the parameter `x` and the body `body`, and a call of it. */
+const local = (body: Expr): Expr => let_({ h: fn(["x"], body) }, call("h", lit(1)));
+
 /** This function makes the module of a source with `new Function`. */
 function make(source: string): Loaded {
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
@@ -80,7 +83,6 @@ describe("V-078 COMPILE.MODULE: a name that an expression binds is not a name of
   });
 
   it("V-078: a parameter hides a name in the body of a function", () => {
-    const local = (body: Expr): Expr => let_({ h: fn(["x"], body) }, call("h", lit(1)));
     expectSame(let_(FIVES, rec({ p: local(ten(X)), q: local(ten(Y)), r: n })));
   });
 

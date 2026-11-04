@@ -36,7 +36,9 @@ import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKin
 import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
 import { keepFaults, tidy, type Tidied } from "./module-tidy.ts";
+import { canonical, keyText } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
+import { originalOf, unsharedAll } from "./unshared.ts";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {
@@ -190,6 +192,8 @@ interface ListInfo {
 interface EmptyStarts {
   /** The kinds of the items that the steps give, by the expression of the step of each name. */
   readonly found: Map<Expr, Pick<ListInfo, "item" | "inner">>;
+  /** The expressions of a program with one object at each place. The prints use one set of copies, so `found` holds for each print. */
+  readonly copies: Map<object, readonly Expr[]>;
   /** True for a print that only looks for these kinds. There, each name without a kind counts as an empty list. */
   readonly seek: boolean;
 }
@@ -1890,15 +1894,6 @@ function literal(value: unknown): Value {
   throw new NotStandalone("a literal is not a number, a text, a boolean or null");
 }
 
-/**
- * This function gives a text that is the same for two expressions with the same structure. -0 is not 0. A part with a
- * token gives the token, so the text does not depend on that part. A token is an object, and a literal of a module is
- * not, so a token is not the text of a literal.
- */
-function canonical(e: Expr, token: (x: unknown) => object | undefined): string {
-  return JSON.stringify(e, (_name, x: unknown) => token(x) ?? (Object.is(x, -0) ? { "-0": 0 } : x));
-}
-
 /** The values of each kind that `copied` gives to a function and to its copy. */
 const SAMPLES: Readonly<Record<PrimitiveKind, readonly unknown[]>> = {
   number: [0, 1, -1, 2.5, -0, 1e300, -7],
@@ -2239,8 +2234,12 @@ class Printer {
   listFacts(): ReadonlyMap<Expr, ListFacts> {
     const out = new Map<Expr, ListFacts>();
     // A part that the code reads again holds the array of the node, so the node is not fresh. Each node of a list is a
-    // node of the program, but a node without a count gets the safe count.
-    for (const [e, f] of this.#noted) out.set(e, this.#shared.has(e) ? { ...f, fresh: false, reads: Infinity } : { ...f, reads: this.#reads.get(e) ?? Infinity });
+    // node of the program, but a node without a count gets the safe count. The copies of a shared object give one fact.
+    for (const [e, f] of this.#noted) {
+      const fact = this.#shared.has(e) ? { ...f, fresh: false, reads: Infinity } : { ...f, reads: this.#reads.get(e) ?? Infinity };
+      const old = out.get(originalOf(e));
+      out.set(originalOf(e), old === undefined ? fact : bothPlaces(old, fact));
+    }
     return out;
   }
 
@@ -4804,21 +4803,9 @@ class Printer {
     for (const [name, form] of this.#forms) if (form !== undefined && !this.#called.has(name)) this.top.delete(name);
   }
 
-  /**
-   * This method gives a text that is the same for two expressions with the same structure and the same reads. A name
-   * that the expression does not bind gives its variable in the code, and a key of the memo gives its variable too.
-   */
+  /** This method gives the key of an expression at the place of `ctx`. Two expressions with one key have one value. */
   #constKey(e: Expr, ctx: Ctx): string {
-    // A name gives its variable for each read, also for a read of a name that the expression binds. The variable depends
-    // only on the name, so two expressions with the same text have the same value.
-    return canonical(e, (x) => {
-      const key = ctx.keys.get(x as Expr);
-      if (key !== undefined) return { "@": key.code };
-      const node = x as Expr | undefined;
-      if (node?.tag === "var") return { $: ctx.env.get(node.name)?.code ?? node.name };
-      // A call gives the number of the binding of its function, so two functions with one name give two keys.
-      return node?.tag === "call" ? { "()": node.fn, of: ctx.fns.get(node.fn)?.id ?? null, args: node.args } : undefined;
-    });
+    return keyText(e, ctx);
   }
 }
 
@@ -4993,13 +4980,24 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
  */
 function settledPrint(print: (starts: EmptyStarts) => Emitted): Emitted {
   const found: EmptyStarts["found"] = new Map();
-  const first = print({ found, seek: false });
+  const copies: EmptyStarts["copies"] = new Map();
+  const first = print({ found, copies, seek: false });
   if (first.ok) return first;
   for (let size = -1; size !== found.size; ) {
     size = found.size;
-    print({ found, seek: true });
+    print({ found, copies, seek: true });
   }
-  return print({ found, seek: false });
+  return print({ found, copies, seek: false });
+}
+
+/** This function gives the facts of a node from the facts of two of its places. */
+const bothPlaces = (a: ListFacts, b: ListFacts): ListFacts => ({ clean: a.clean && b.clean, fresh: a.fresh && b.fresh, inner: b.inner.map((x, i) => x && a.inner[i] === true), reads: Math.max(a.reads, b.reads) });
+
+/** This function gives the expressions of a program with one object at each place, the same copies for each print of the program. */
+function copiesOf(program: object, exprs: readonly Expr[], starts: EmptyStarts): readonly Expr[] {
+  const copies = starts.copies.get(program) ?? unsharedAll(exprs);
+  starts.copies.set(program, copies);
+  return copies;
 }
 
 /**
@@ -5036,10 +5034,11 @@ function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: Key
   // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
   const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
   if (size !== undefined) return { ok: false, reason: size };
-  const p = new Printer(expr, options, keys, starts);
+  const plain = copiesOf(expr, [expr], starts)[0] as Expr;
+  const p = new Printer(plain, options, keys, starts);
   let value: Code;
   try {
-    value = p.root(expr);
+    value = p.root(plain);
     p.finish();
   } catch (thrown) {
     return reasonOf(thrown);
@@ -5133,14 +5132,15 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   // A sheet whose reads all read finished cells needs no search: each cell is the value of its formula
   // (COMPILE.MODULE.SHEET.DIRECT). A sheet with formulas of cells always has the search.
   const direct = formulas.every((f) => f.key === undefined) && order.every((c) => readsFinished(columns, order, c, run.tree));
-  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, keyPrint, starts, { columns: index, kinds, lists, direct });
+  const plain = copiesOf(columns, formulas.map((f) => f.expr), starts);
+  const p = new Printer(rec(Object.fromEntries(plain.map((expr, i) => [`f${String(i)}`, expr]))), options, keyPrint, starts, { columns: index, kinds, lists, direct });
   const fns: string[] = [];
   const decls: string[] = [];
   // The statements that put the value of each formula into the array of its column at the key `o`, for a direct fill.
   const blocks = new Map<string, readonly string[]>();
   try {
-    for (const f of formulas) {
-      const code = p.root(f.expr);
+    for (const [i, f] of formulas.entries()) {
+      const code = p.root(plain[i] as Expr);
       const { kind, list } = code.v;
       // The first formula of a column without a kind of the options gives the kind of the column. Each other formula
       // must give a value of that kind, or a list that fits the lists of the column (COMPILE.MODULE.SHEET.LIST).

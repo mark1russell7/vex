@@ -4,6 +4,7 @@
  */
 import { app, axes, call, dataLimit, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+import { arbDoubling, fromCore } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,6 +13,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { emitModule, MODULE_GLOBALS, type ModuleOptions } from "./module.ts";
+import { tiered } from "./tiers.ts";
+import { unshared } from "./unshared.ts";
 
 type Run = (records: unknown, vars: unknown, parents?: unknown) => readonly unknown[];
 interface Loaded {
@@ -88,6 +91,15 @@ function expectSame(m: Loaded, e: Expr, records: readonly unknown[] = RECORDS, v
     return r.ok ? r.value : m.VEX_ERROR;
   });
   expect(got).toStrictEqual(expected);
+}
+
+/** This function compares a program in a module and in the fastest tier with the interpreter at each key. */
+function expectBothTiers(e: Expr, records: readonly unknown[], vars: Readonly<Record<string, unknown>>): void {
+  expectSame(make(sourceOf(e)), e, records, vars);
+  const s = space.array(records);
+  const fast = tiered(e, OPTIONS);
+  const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars, domains: OPTIONS.domains ?? [] }));
+  expect(s.keys.map((origin) => fromCore(fast.run({ space: s, origin, vars })))).toStrictEqual(results.map((r) => fromCore(r)));
 }
 
 /** The options of a module of a tree space (COMPILE.MODULE.TREE), and the move to the parent. */
@@ -1704,7 +1716,7 @@ const reusing = (calls: readonly string[]): fc.Arbitrary<Expr> =>
       // A fast sum with a column in its term, and the list ops. A list op with a test of the origin is a node of the memo.
       tie("num").map((x) => op("sum", each(axes.all, op("add", costly(w), x)))),
       fc.tuple(fc.constantFrom("sum", "count", "max"), fc.constantFrom<Axis>(axes.all, axes.others, axes.window(-1, 0)), fc.option(tie("test"), { nil: undefined }), tie("num")).map(([o, a, test, body]) => op(o, each(test === undefined ? a : axes.where(a, test), body))),
-      fc.tuple(someName, tie("num")).map(([x, body]) => op("sum", each(axes.where(axes.all, op("eq", n, op("add", K, v(x)))), body))),
+      fc.tuple(someName, tie("num")).map(([x, body]) => memoed(x, body)),
       // A function at the place of its call, with a body that reads the names of that place.
       fc.tuple(someName, tie("num"), tie("num")).map(([p, body, arg]) => let_({ h: fn([p], body) }, call("h", arg))),
       ...(calls.includes("f") ? [tie("num").map((x) => call("f", x))] : []),
@@ -1720,6 +1732,25 @@ const reusing = (calls: readonly string[]): fc.Arbitrary<Expr> =>
     ),
   })).num;
 
+/** A read of the origin in a test of an axis: the node of the memo that the program `reused` holds in the field `t`. */
+const memoed = (x: string, body: Expr): Expr => op("sum", each(axes.where(axes.all, op("eq", n, op("add", K, v(x)))), body));
+
+/** This function gives one object for each structure of a program, so one object holds a read under each let. A node of a literal keeps its value. */
+function interned(e: Expr): Expr {
+  const seen = new Map<string, unknown>();
+  const walk = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(walk);
+    if (typeof x !== "object" || x === null) return x;
+    const tag = (x as { readonly tag?: unknown }).tag;
+    const out = tag === "lit" ? x : Object.fromEntries(Object.entries(x).map(([name, part]) => [name, walk(part)]));
+    if (typeof tag !== "string") return out;
+    const text = JSON.stringify(x);
+    if (!seen.has(text)) seen.set(text, out);
+    return seen.get(text);
+  };
+  return walk(e) as Expr;
+}
+
 /** This function gives the body of a function. With `nested`, the body has a column of each call, which reads the parameter `p`. */
 const bodyOf = (body: Expr, p: string, nested: boolean): Expr => (nested ? op("add", body, op("sum", each(axes.all, op("sum", each(axes.all, costly(v(p))))))) : body);
 
@@ -1734,8 +1765,9 @@ const reused: fc.Arbitrary<Expr> = fc
     g: fc.record({ ps: twoNames, body: reusing(["f"]), nested: fc.boolean() }),
     p: reusing(["f", "g"]),
     q: reusing(["f", "g"]),
+    t: fc.tuple(someName, reusing([])).map(([x, body]) => memoed(x, body)),
   })
-  .map(({ roots: [s, u, x], f, g, p, q }) => let_({ s: s as Expr, u: u as Expr, x: x as Expr }, let_({ f: fn([f.p], bodyOf(f.body, f.p, f.nested)) }, let_({ g: fn(g.ps, bodyOf(g.body, g.ps[0], g.nested)) }, rec({ p, q, r: n })))));
+  .map(({ roots: [s, u, x], f, g, p, q, t }) => let_({ s, u, x }, let_({ f: fn([f.p], bodyOf(f.body, f.p, f.nested)) }, let_({ g: fn(g.ps, bodyOf(g.body, g.ps[0], g.nested)) }, rec({ p, q, r: n, t })))));
 
 describe("COMPILE.MODULE: the text of the modules of a fixed set of random programs", () => {
   it("each module gives the value of the interpreter, and the golden file has the hash of the text of each module", async () => {
@@ -1859,6 +1891,18 @@ describe("COMPILE.MODULE: random programs", () => {
     expect(count(/\bconst pk\d+ = /)).toBeGreaterThan(5);
     // A column of a call is in the function of the call.
     expect(count(/^ {2,}const col\d+ = Q\(/m)).toBeGreaterThan(5);
+  });
+
+  it("V-080 P17 COMPILE.MODULE: one object at two places gives the value of the interpreter in a module and in tier 2", () => {
+    fc.assert(
+      fc.property(fc.oneof(reused.map(interned), arbDoubling()), fc.array(record, { minLength: 1, maxLength: 4 }), fc.integer({ min: -3, max: 3 }), (e, rs, a) => {
+        expectBothTiers(e, rs, { a, t: "x" });
+      }),
+    );
+    // A fixed sample holds programs that share objects, and programs of tier 2.
+    const programs = fc.sample(reused.map(interned), { seed: 20261104, numRuns: 100 });
+    expect(programs.filter((e) => unshared(e) !== e).length).toBeGreaterThan(90);
+    expect(programs.filter((e) => tiered(e, OPTIONS).tier === 2).length).toBeGreaterThan(20);
   });
 
   it("P17 COMPILE.MODULE.TREE: a module of a tree space gives the value of the interpreter at each key, or VEX_ERROR", () => {

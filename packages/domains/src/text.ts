@@ -2,7 +2,7 @@
  * The domain of texts. The op `concat` joins a text and a value of any kind. It is the operator `&` of a
  * spreadsheet, and of the formula language of the sheet app.
  */
-import { defineDomain, type Domain, type FnOp } from "@mark1russell7/vex";
+import { defineDomain, type Domain, type FnOp, type VexList } from "@mark1russell7/vex";
 
 type TextFn1 = (a: string) => string;
 
@@ -10,6 +10,7 @@ type TextFn1 = (a: string) => string;
 export type TextOps = {
   readonly concat: FnOp<string, (a: string, b: unknown) => string>;
   readonly length: FnOp<string, (a: string) => number>;
+  readonly codePoints: FnOp<string, (a: string) => VexList<number>>;
   readonly upper: FnOp<string, TextFn1>;
   readonly lower: FnOp<string, TextFn1>;
   readonly trim: FnOp<string, TextFn1>;
@@ -36,6 +37,18 @@ export const TextDomain: Domain<"Text", string, TextOps> = defineDomain<"Text", 
     concat: { fn: (a: string, b: unknown): string => a + textOf(b), params: ["any"], returns: "string", size: { size: [1, "text"] } },
     // The length counts UTF-16 code units, like the function LEN of a spreadsheet.
     length: { fn: (a: string): number => a.length, returns: "number" },
+    // The list has one item for each code point, so a pair of surrogates is one item, and a lone surrogate is an item
+    // with its own value (TEXT.CODEPOINTS). The function reads no name of Vex, so a module can copy it. The rule tells
+    // that the count is at most the length. Each item has a number and a new key, so `keys` adds a part for each item.
+    codePoints: {
+      fn: (a: string): VexList<number> =>
+        Object.freeze({
+          kind: "vex.list",
+          items: Object.freeze(Array.from(a, (ch, i) => ({ key: String(i), result: { ok: true as const, value: ch.codePointAt(0) as number } }))),
+        }),
+      returns: "list:number",
+      size: { size: [1], inner: [0], item: [0], keys: "position" },
+    },
     upper: { fn: (a: string): string => a.toUpperCase(), returns: "string", size: { size: [1] } },
     lower: { fn: (a: string): string => a.toLowerCase(), returns: "string", size: { size: [1] } },
     trim: { fn: (a: string): string => a.trim(), returns: "string", size: { size: [1] } },

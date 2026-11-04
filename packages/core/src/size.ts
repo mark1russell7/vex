@@ -9,7 +9,7 @@
  * the old values of the loops, each with a coefficient. A coefficient tells one use, a fixed number of uses, more uses,
  * or no bound. The check also keeps the kinds of each value, because the kind of the receiver selects the op.
  */
-import { isOpName, type AnyDomain, type OpSpec, type ReturnKind, type SizeMeasure, type SizeRule, type SizeTerm, type SizeUse } from "./domain.ts";
+import { isOpName, listItemKind, type AnyDomain, type OpSpec, type ReturnKind, type SizeMeasure, type SizeRule, type SizeTerm, type SizeUse } from "./domain.ts";
 import { addrExprs, children, limitAxis, listOf, type Axis, type Expr, type ExprOf, type ItemNames } from "./ir.ts";
 import { joinKind as kindOfJoin } from "./fix.ts";
 import { isListOp, isVexList, LIST_SIZES, type ListOp } from "./list.ts";
@@ -717,7 +717,8 @@ function kindOfReturn(r: ReturnKind | undefined, d: AnyDomain | undefined, domai
     const target = domains.find((x) => x.name === r.slice("domain:".length));
     return target === undefined ? ANY : kindOf(tagOf(target));
   }
-  return ANY;
+  const item = listItemKind(r);
+  return item === undefined ? ANY : listKind(kindOf(item));
 }
 
 /** This function gives the kind of the result of a list op. `item` is the kind of the items of the receiver. */

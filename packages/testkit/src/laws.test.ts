@@ -1,4 +1,4 @@
-import { defineDomain, type OpTable } from "@mark1russell7/vex";
+import { defineDomain, vexList, type OpTable } from "@mark1russell7/vex";
 import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -72,6 +72,20 @@ describe("P4 DOMAIN.LAWS: each declared law of each domain holds", () => {
     // A false claim fails: Vec2 is not the domain of the result of xy.
     const wrong = defineDomain({ name: "W", is: (u: unknown): u is number => typeof u === "number", ops: { pair: { fn: (a: number): unknown => ({ x: a, y: a }), params: [], returns: "domain:Vec2" } } });
     expect(checkLaws(wrong, { arb: small, numRuns: 5, domains: [Vec2Domain] }).filter((r) => !r.ok).map((r) => r.name)).toEqual(["W.pair returns domain:Vec2"]);
+  });
+  it("KIND.RETURNS KIND.RETURNS.LIST: a result of a list kind is a list with items of that kind, and an error item does not count", () => {
+    const failed = vexList([{ key: "e", result: { ok: false, error: { code: "#N/A", kind: "not-finite", message: "no", path: [] } } }]);
+    const Lists = defineDomain({
+      name: "Lists",
+      is: (u: unknown): u is number => typeof u === "number",
+      ops: {
+        good: { fn: (a: number): unknown => vexList([{ key: "0", result: { ok: true, value: a } }]), params: [], returns: "list:number" },
+        failed: { fn: (): unknown => failed, params: [], returns: "list:number" },
+        texts: { fn: (a: number): unknown => vexList([{ key: "0", result: { ok: true, value: a } }]), params: [], returns: "list:string" },
+        array: { fn: (a: number): unknown => [a], params: [], returns: "list:number" },
+      },
+    });
+    expect(checkLaws(Lists, { arb: small, numRuns: 5 }).filter((r) => !r.ok).map((r) => r.name)).toEqual(["Lists.texts returns list:string", "Lists.array returns list:number"]);
   });
   it("Num and Bool", () => {
     expect(checkLaws(NumDomain, { arb: small, domains: [XYDomain] }).filter((r) => !r.ok)).toEqual([]);

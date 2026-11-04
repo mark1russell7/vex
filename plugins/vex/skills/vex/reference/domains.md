@@ -81,6 +81,8 @@ A number can lift in a module too. The copy of `fromScalar` lifts it, when the r
 
 An op can give a value of another domain: declare `returns: "domain:Name"`. Then the compiler knows the kind of the result. The law checker checks the result when its option `domains` has that domain.
 
+An op can give a list of a primitive type: declare `returns: "list:number"`, and a size rule. Its function gives a `vex.list`, and reads no name outside itself. A module takes the op as a list (COMPILE.MODULE.LIST.OP).
+
 ## Where the domain goes
 
 A domain of one project starts in that project. Test its laws there. When the domain is general, for example a rectangle or an interval, propose it for `@mark1russell7/vex-domains`. Ask the user, then open an issue on `github.com/mark1russell7/vex` with the domain and its tests.

@@ -1,4 +1,4 @@
-import type { Addr, Axis, ErrorText, PrimitiveKind } from "@mark1russell7/vex";
+import type { Addr, Axis, ErrorText, FixJoin, PrimitiveKind } from "@mark1russell7/vex";
 
 /**
  * The loop IR (docs/COMPILER.md §3.3): a small language of statements between the Vex IR and the back ends. It has
@@ -22,6 +22,8 @@ export type RuntimeFn =
   | "addr" // addr(space, origin, focus, address, values?): the key of an address, with the values of its computed moves
   | "table" // table(tables, name): the space of a table
   | "keys" // keys(space): the keys of a space
+  | "rowIndex" // rowIndex(space, key): the index of a key in the keys of a space, or undefined
+  | "rounds" // rounds(space): the largest number of rounds of a column of the space (FIX.LIMIT)
   | "step" // step(name, acc, value): one step of reduce
   | "result" // result(value): the checks of the value of an op
   | "opts" // opts(value): the read of the option strict of a list op
@@ -49,6 +51,7 @@ export type PrimOp =
   | "min" // Math.min, the minimum of a reduction
   | "max" // Math.max, the maximum of a reduction
   | "isNumber"
+  | "isFinite" // Number.isFinite: a number that is not NaN and not an infinity
   | "isBoolean"
   | "isString"
   | "isValue" // not undefined and not null
@@ -111,6 +114,14 @@ export type ErrorSite =
   | { readonly t: "until"; readonly path: readonly number[] }
   /** The limit of `iterate`, with no true value of the test. Its operand is the number of steps. */
   | { readonly t: "limit"; readonly path: readonly number[] }
+  /** The round limit of a column, with rows that change. Its operand is the number of rounds. */
+  | { readonly t: "fixLimit"; readonly name: string; readonly path: readonly number[] }
+  /** A value of a row of the wrong kind, or a number that is not finite. Its operand is the value. */
+  | { readonly t: "row"; readonly name: string; readonly join: FixJoin; readonly path: readonly number[] }
+  /** A read of a column at a key that is not a row. */
+  | { readonly t: "lastKey"; readonly name: string; readonly path: readonly number[] }
+  /** Two or more rows of a round that failed (FIX.ERROR). Its operands are their errors. */
+  | { readonly t: "rows"; readonly path: readonly number[] }
   /** The test of `where`, without a boolean. Its operand is the value. */
   | { readonly t: "test"; readonly path: readonly number[] }
   /** The axis `list` over a value that is not a list. Its operand is the value. */

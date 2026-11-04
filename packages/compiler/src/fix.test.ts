@@ -15,7 +15,6 @@ const OPTIONS = { domains: DOMAINS, schema: { fields: { id: "string", n: "number
 const KEYS = ["0", "1", "2", "3"];
 const S = space.graph(Object.fromEntries(KEYS.map((k) => [k, { id: k, n: Number(k) }])), { "0": ["1"], "1": ["0", "2"], "2": [], "3": ["3"] });
 const REACH = fix("reach", "or", app("eq", ref("id"), ref("id", [origin])), app("any", each(axes.predecessors, last("reach"))));
-const REASON = 'a fixed point ("fix")';
 const inLet = let_({ y: REACH }, app("or", lit(false), { tag: "var", name: "y" }));
 const inFn = let_({ f: fn([], REACH) }, call("f"));
 const inEach = each(axes.all, REACH);
@@ -28,9 +27,9 @@ function agrees(e: Expr, s: Space = S): readonly number[] {
 }
 
 describe("a fixed-point column in the tiers (COMPILE.FIX)", () => {
-  it("COMPILE.FIX COMPILE.FALLBACK: tier 2 has no fix, so the program stays in tier 1 with the same result", () => {
-    expect(generate(REACH, OPTIONS)).toEqual({ ok: false, reason: REASON });
-    for (const e of [REACH, inLet, inFn, inEach, app("not", REACH)]) expect(agrees(e)).toEqual([1, 0]);
+  it("COMPILE.FIX: tier 2 lowers a fix, with the result of tier 1 and no fallback", () => {
+    expect(generate(REACH, OPTIONS).ok).toBe(true);
+    for (const e of [REACH, inLet, inFn, inEach, app("not", REACH)]) expect(agrees(e)).toEqual([2, 0]);
   });
 
   it("COMPILE.FIX: a read outside a column gives the reason of the check, in each tier", () => {

@@ -21,5 +21,6 @@ export * from "./traversal.ts";
 export * from "./sheet.ts";
 export * from "./builder.ts";
 export { monotoneError, type MonotoneOptions } from "./monotone.ts";
+export { fixRounds, fixValueError, joinKind, worstRow } from "./fix.ts";
 export * from "./size.ts";
 export * from "./steps.ts";

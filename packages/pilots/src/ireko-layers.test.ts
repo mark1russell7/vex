@@ -38,6 +38,8 @@ function moduleRun(run: ReturnType<typeof moduleOf>, i: LayersInput): LayersOutp
 }
 
 const LEAF: Extent = { x: 0, y: 0, width: 120, height: 48 };
+/** This function gives an extent with a width and no height. */
+const flat = (width: number): Extent => ({ x: 0, y: 0, width, height: 0 });
 const DEFAULTS: LayersOptions = { side: "bottom", distance: 0, align: "center" };
 const FAN: readonly LayersEdge[] = [{ from: 0, to: 1 }, { from: 0, to: 2 }];
 const DIAMOND: readonly LayersEdge[] = [...FAN, { from: 1, to: 3 }, { from: 2, to: 3 }];
@@ -102,11 +104,10 @@ describe("the ireko layers pilot", () => {
   });
 
   it("adds in the order of ireko: a sum of the flow in another order changes the last bit", () => {
-    const e = (width: number): Extent => ({ x: 0, y: 0, width, height: 0 });
     const i: LayersInput = {
       mode: "nested",
       self: { width: 0, height: 0 },
-      extents: [e(174.90090279050656), e(0), e(5.126994851237244e-9)],
+      extents: [flat(174.90090279050656), flat(0), flat(5.126994851237244e-9)],
       gap: 0.007812499963498077,
       options: { ...DEFAULTS, side: "left" },
       edges: [{ from: 0, to: 2 }, { from: 2, to: 1 }],

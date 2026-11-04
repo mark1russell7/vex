@@ -10,7 +10,7 @@ The MCP server of [Vex](https://mark1russell7.github.io/vex/). Its tools give th
 | `vex_check` | The step of the program with the reason, the number of nodes, the nesting, the fields that the program reads, and if the compiler gives it generated code |
 | `vex_evaluate` | The value or the error at each key of a space of records |
 | `vex_explain` | The step of the program, and the trace at one key: each node, with its focus, its reads and its result |
-| `vex_module` | The source of a standalone ES module, or the reason that the program cannot be one |
+| `vex_module` | The source of a standalone ES module, or the reason that the program cannot be one. The field `compiler` gives the version of the compiler. A working copy adds `(working copy)`. |
 
 Each tool that takes a program also takes `maxStep`, the highest step that it accepts. The default is B. A program above it is not valid.
 

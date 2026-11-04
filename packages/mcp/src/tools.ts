@@ -3,10 +3,26 @@
  * data. A value of a domain in that data has the JSON form of a literal of the IR, for example
  * `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`. A result has the same form.
  */
+import { createRequire } from "node:module";
 import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, MAX_NESTING, monotoneError, nestingOf, parse, programStep, serialize, shapeError, sizeError, sizeOf, space, stepError, type AnyDomain, type Expr, type Result, type Space, type VexError, type VexStep } from "@mark1russell7/vex";
 import { generate, type Schema } from "@mark1russell7/vex-compiler";
 import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+
+/** The part of a package file that tells the version and the form of a package. */
+interface PackageFile {
+  readonly version: string;
+  readonly main: string;
+}
+
+/** The package file of the compiler that this server uses. */
+const COMPILER: PackageFile = createRequire(import.meta.url)("@mark1russell7/vex-compiler/package.json") as PackageFile;
+
+/**
+ * This function gives the version of a compiler from its package file. A release has its entry in `build`. A working
+ * copy has its entry in `src`, and its code can be newer than its version, so the text tells that.
+ */
+export const compilerVersion = (file: PackageFile): string => (file.main.startsWith("./build/") ? file.version : `${file.version} (working copy)`);
 
 /** The error of a tool for an input that is not valid. The server gives its message to the caller. */
 export class ToolError extends Error {}
@@ -175,10 +191,11 @@ export function explainAt(input: RunInput & { readonly origin: string }): string
   return `step ${step.step}: ${step.reason}\n${formatTrace(explain(e, { space: s, origin: input.origin, domains, vars }), domains)}`;
 }
 
-/** This function gives the source of a standalone ES module of a program, or the reason that it has none. */
+/** This function gives the source of a standalone ES module of a program, or the reason that it has none. Each result names its compiler. */
 export function moduleOf(input: { readonly program: unknown; readonly domains?: readonly string[] | undefined; readonly schema: Schema; readonly name?: string | undefined; readonly space?: "array" | "tree" | "graph" | undefined; readonly maxStep?: VexStep | undefined }): unknown {
   const domains = domainsOf(input.domains);
   const e = programOf(input.program, domains, input.maxStep);
   const m = emitModule(e, { domains, schema: input.schema, ...(input.name === undefined ? {} : { name: input.name }), ...(input.space === undefined ? {} : { space: input.space }) });
-  return m.ok ? { ok: true, source: m.source } : { ok: false, reason: m.reason };
+  const compiler = compilerVersion(COMPILER);
+  return m.ok ? { ok: true, source: m.source, compiler } : { ok: false, reason: m.reason, compiler };
 }

@@ -30,6 +30,11 @@ jobs:
           echo "TREE keyscope $(git rev-parse origin/keyscope) $(git rev-parse origin/keyscope:packages/compiler/src)"
           echo "TREE runname $(git rev-parse origin/runname) $(git rev-parse origin/runname:packages/compiler/src)"
           test "$(git rev-parse HEAD:packages/compiler/src)" = "$(git rev-parse origin/keyscope:packages/compiler/src)"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: mark1russell7/ireko
+          path: ireko-main
+          persist-credentials: false
       - run: pnpm install --frozen-lockfile --filter @vex/pilots...
       - name: Measure
         working-directory: packages/pilots
@@ -41,6 +46,8 @@ jobs:
           measure() { BYTES_LABEL=$1 pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 2>&1 | grep -E "BYTES|FAIL|Tests " || true; }
           pnpm exec vitest run src/zz-places.test.ts --maxWorkers=1 2>&1 | grep -E "PLACES|FAIL" || true
           measure branch
+          echo "COMMITTED start"
+          node scripts/module-bytes.ts ../../ireko-main 2>&1 | tail -30 && echo "COMMITTED equal" || echo "COMMITTED differ"
           git checkout origin/runname -- ../compiler/src ../compiler/test
           measure runname-conditional
           node ../../tools/keyscope/alias-each.mjs ../compiler/src/module.ts
@@ -49,3 +56,7 @@ jobs:
           measure base
           git checkout 3a0019f -- ../compiler/src
           measure old
+          git checkout ead65a70bde9f31b9fef4a8cc35cb69289167298 -- ../compiler/src
+          measure pin
+          git checkout "@mark1russell7/vex-compiler@0.17.2" -- ../compiler/src
+          measure npm

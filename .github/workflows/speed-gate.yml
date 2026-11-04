@@ -23,6 +23,6 @@ jobs:
       - run: |
           git show 912d347:packages/pilots/bench/schema-speed.ts \
             | sed -n '/^interface Row/,/^\/\/ The input of the speed case/p' | sed '$d' \
-            | sed 's/^function schemaReference/export function schemaReference/' > packages/pilots/bench/old-arm.ts
+            | sed 's/^function inferSchema/export function schemaReference/' > packages/pilots/bench/old-arm.ts
           grep -c schemaReference packages/pilots/bench/old-arm.ts
       - run: node packages/pilots/bench/schema-arms.ts

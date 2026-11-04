@@ -340,11 +340,11 @@ describe("the bound of a step: the largest value of some sums (LOOP.SIZE.BRANCH)
   const itemOrFirst = (x: Expr): Expr => each(axes.list(x), when(v("it"), app("first", v("it"))), undefined, ["it"]);
   const twoOrFirst = (x: Expr): Expr => each(axes.list(x), when(app("append", v("it"), v("it")), app("first", v("it"))), undefined, ["it"]);
   /** The names `a1` to `a<n>`. Each name gets the old value of the next names, in a chain of `if`. */
-  const ring = (n: number, also: (names: readonly string[]) => readonly Expr[] = () => []): Expr => {
+  const ring = (n: number, also: (a: string, b: string) => readonly Expr[] = () => []): Expr => {
     const names = Array.from({ length: n }, (_x, i) => `a${String(i + 1)}`);
     const next = names.map((_x, i) => {
       const order = [...names.slice(i + 1), ...names.slice(0, i + 1)].map((name) => v(name));
-      const [head, ...rest] = [...also(names), ...order].toReversed();
+      const [head, ...rest] = [...also("a1", "a2"), ...order].toReversed();
       return [names[i], rest.reduce((acc, x) => when(x, acc), head as Expr)];
     });
     return iterate(12, Object.fromEntries(names.map((name) => [name, NONE])), Object.fromEntries(next) as Readonly<Record<string, Expr>>, v("a1"));
@@ -373,9 +373,9 @@ describe("the bound of a step: the largest value of some sums (LOOP.SIZE.BRANCH)
     expect(check(ring(8))).toBeUndefined();
     expect(check(ring(9))).toBe(refusal("a1", TWICE, 'the op "if"', "iterate"));
     // The same name again in a branch, and a branch with one more item than another branch, add no sum.
-    expect(check(ring(8, (names) => [v(names[0]), v(names[1])]))).toBeUndefined();
-    expect(check(ring(8, (names) => [v(names[1]), app("append", v(names[1]), one(lit(1)))]))).toBeUndefined();
-    expect(check(ring(8, (names) => [app("append", v(names[1]), one(lit(1))), v(names[1])]))).toBeUndefined();
+    expect(check(ring(8, (a, b) => [v(a), v(b)]))).toBeUndefined();
+    expect(check(ring(8, (_a, b) => [v(b), app("append", v(b), one(lit(1)))]))).toBeUndefined();
+    expect(check(ring(8, (_a, b) => [app("append", v(b), one(lit(1))), v(b)]))).toBeUndefined();
   });
 
   it("LOOP.SIZE.BRANCH: a sum over the items of `each` covers each branch, because each item takes one branch", () => {

@@ -123,6 +123,9 @@ const WRAPS: readonly ((e: Expr, x: Expr) => Expr)[] = [
   (e) => app("append", e, one(lit(1))),
 ];
 
+/** Each step in each form. */
+const FAMILY = DOUBLES.flatMap((double, d) => WRAPS.map((wrap, w) => [d, w, double, wrap] as const));
+
 /** Programs with one name for each class that the check accepts. The modules read them. */
 const ACCEPTED: Readonly<Record<string, Expr>> = {
   copy: fold(axes.all, { xs: app("fill", lit(0), lit(0)) }, { xs: fold(axes.list(app("append", v("xs"), one(ref("n")))), { acc: app("fill", lit(0), lit(0)) }, { acc: app("append", v("acc"), one(v("it"))) }, v("acc"), undefined, ["it"]) }, app("sum", v("xs"))),
@@ -156,15 +159,10 @@ describe("the bound of the values of a loop (LOOP.SIZE)", () => {
     expect(accepted).toBeGreaterThan(20);
   });
 
-  it("LOOP.SIZE: the check refuses each step that doubles a value, and each step of the family doubles a value", () => {
-    fc.assert(
-      fc.property(fc.constantFrom(...DOUBLES), fc.constantFrom(...WRAPS), (double, wrap) => {
-        const step = wrap(double(v("x")), v("x"));
-        expect(sizeError(iterate(STEPS, { x: lit(LISTS) }, { x: step }, v("x")), { domains: DOMAINS })).toContain("(LOOP.SIZE)");
-        expect(peak({ x: LISTS }, { x: step }, 2 ** 14)).toBeGreaterThan(2 ** 14);
-      }),
-      { numRuns: 80 },
-    );
+  it.each(FAMILY)("LOOP.SIZE: the check refuses the step %i in the form %i, and that step doubles a value", (_step, _form, double, wrap) => {
+    const step = wrap(double(v("x")), v("x"));
+    expect(sizeError(iterate(STEPS, { x: lit(LISTS) }, { x: step }, v("x")), { domains: DOMAINS })).toContain("(LOOP.SIZE)");
+    expect(peak({ x: LISTS }, { x: step }, 2 ** 14)).toBeGreaterThan(2 ** 14);
   });
 });
 
@@ -180,8 +178,7 @@ describe("the steps that the check accepts in the tiers (P17)", () => {
     );
   });
 
-  it.each(Object.keys(ACCEPTED))("P17 LOOP.SIZE.COPY LOOP.SIZE.PART: the module of the class %s gives the values of the interpreter", (name) => {
-    const e = ACCEPTED[name];
+  it.each(Object.entries(ACCEPTED))("P17 LOOP.SIZE.COPY LOOP.SIZE.PART: the module of the class %s gives the values of the interpreter", (_name, e) => {
     const options: ModuleOptions = { domains: DOMAINS, schema: { fields: { n: "number" } } };
     expect(sizeError(e, { domains: DOMAINS })).toBeUndefined();
     const emitted = emitModule(e, options);

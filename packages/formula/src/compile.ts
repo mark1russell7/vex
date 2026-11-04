@@ -3,7 +3,7 @@
  * A value column is a field of the row records, so a read of it is a `ref`. A formula column is a column of a
  * sheet, so a read of it is a cell reference. Thus a cycle of formula columns gives `#CYCLE!`.
  */
-import { app, axes, cell, each, fold, index, isFixedAddr, iterate, key, let_, lit, offset, origin, parent, ref, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
+import { app, axes, cell, each, fold, index, iterate, key, let_, lit, offset, origin, parent, ref, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { BUILT_IN_NAMES, OP_NAMES } from "./functions.ts";
 import { ADDRESS, AGGREGATES, axisText, FormulaSyntaxError, parseFormula, type AggAxis, type AggregateName, type Ast, type AxisName, type BinaryOp, type LoopName, type Nav, type Span } from "./syntax.ts";
@@ -128,12 +128,6 @@ const loopVar = (name: string): string => `@${name}`;
 
 /** This function gives the names of the loops of a scope, and the names of one more loop. */
 const withNames = (s: { readonly loops?: ReadonlySet<string> }, names: readonly LoopName[]): ReadonlySet<string> => new Set([...(s.loops ?? []), ...names.map((n) => n.name)]);
-
-/**
- * This function reads a cell of a formula column at an address. A cell reference has only fixed moves. Thus a computed
- * move goes in the address of the window from 0 to 0. The one target of that window is the key of the address.
- */
-const cellAt = (column: string, at: readonly Move[]): Expr => (isFixedAddr(at) ? cell(column, at) : app("first", each(axes.window(0, 0), cell(column), at), STRICT));
 
 /** Where a part of a formula evaluates. `base` comes before each address. `inAggregate` is true in an aggregate. */
 interface Scope {
@@ -293,7 +287,7 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
             const computed = a.nav.find((n) => n.t === "index");
             if (computed !== undefined) throw new FormulaSyntaxError("index(...). after this. is not valid in the axis of another table", computed.span);
             const at = [origin, ...a.nav.slice(1).map((n) => navMove(n, s))];
-            const expr = own.formula ? cellAt(own.name, at) : ref([own.name], at);
+            const expr = own.formula ? cell(own.name, at) : ref([own.name], at);
             const id = JSON.stringify(expr);
             const known = inTable.hoist.get(id);
             if (known !== undefined) return v(known.name);
@@ -304,13 +298,13 @@ export function compileAst(ast: Ast, ctx: FormulaContext): CompileResult {
           // Another name reads a column of that table. row(n). and parent. move in that table.
           const c = columnOf(inTable.name, inTable.cols, a.name, a.span);
           const at = a.nav.map((n) => (n.t === "key" ? key(n.name) : navMove(n, s)));
-          return c.formula ? cellAt(c.name, at) : ref([c.name], at);
+          return c.formula ? cell(c.name, at) : ref([c.name], at);
         }
         if (ctx.grid !== undefined && a.nav.length === 0 && ADDRESS.test(a.name)) return address(ctx.grid, a.name, a.span);
         // The navigation comes before the name in the text, so its errors come first.
         const at = [...s.base, ...a.nav.map((n) => navMove(n, s))];
         const c = column(a.name, a.span);
-        return c.formula ? cellAt(c.name, at) : ref([c.name], at);
+        return c.formula ? cell(c.name, at) : ref([c.name], at);
       }
       case "neg":
         return a.arg.k === "num" ? lit(-a.arg.v) : app("negate", go(a.arg, s));

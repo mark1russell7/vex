@@ -3,7 +3,7 @@
  * the value, or `VEX_ERROR` for an error of Vex. This is also true for each cell on a cycle and with each budget of the
  * stack. The run fills the columns in the order of `SheetRun.fill`.
  */
-import { app, axes, call, cell, dataLimit, each, ext, fn, fold, index, iterate, let_, lit, offset, origin, rec, ref, SheetRun, space, v, type Axis, type CellFormulas, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
+import { app, axes, call, cell, dataLimit, each, ext, fn, fold, index, iterate, let_, lit, offset, origin, rec, ref, SheetRun, space, v, type Addr, type Axis, type CellFormulas, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { arbSheet, sheetCellsOf, sheetColumnsOf } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -240,7 +240,7 @@ describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
 
 /** The formulas of a random sheet over an array space or a tree space: the addresses of its reads, and its axes. */
 interface SheetGrammar {
-  readonly ats: readonly (readonly FixedMove[])[];
+  readonly ats: readonly Addr[];
   readonly axes: readonly Axis[];
 }
 
@@ -283,9 +283,9 @@ const formulaOf = (g: SheetGrammar): fc.Arbitrary<Expr> =>
     ),
   })).num;
 
-const arrayFormula = formulaOf({ ats: [[], [offset(-1)], [offset(1)], [offset(-2)], [index(0)], [PARENT]], axes: [axes.others, axes.all, axes.window(-1, 0), axes.reverse(axes.all)] });
+const arrayFormula = formulaOf({ ats: [[], [offset(-1)], [offset(1)], [offset(-2)], [index(0)], [PARENT], [index(ref("v"))], [index(cell("B")), offset(1)]], axes: [axes.others, axes.all, axes.window(-1, 0), axes.reverse(axes.all)] });
 const treeFormula = formulaOf({
-  ats: [[], [PARENT], [PARENT, PARENT], [offset(-1)], [offset(1)], [index(0)], [PARENT, offset(1)]],
+  ats: [[], [PARENT], [PARENT, PARENT], [offset(-1)], [offset(1)], [index(0)], [PARENT, offset(1)], [index(ref("v"))], [PARENT, index(cell("B"))]],
   axes: [axes.children, axes.descendants, axes.siblings, axes.ancestors, axes.window(-1, 1), axes.reverse(axes.children), axes.others],
 });
 

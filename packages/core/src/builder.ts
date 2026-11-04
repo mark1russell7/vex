@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec, PrimitiveKind } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type DataLimit, type Expr, type FixedMove, type ItemNames, type Move } from "./ir.ts";
+import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Addr, type Axis, type DataLimit, type Expr, type ItemNames, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { ok, toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -507,13 +507,13 @@ export interface Root<Ctx extends ChainContext> {
 /** The root of a column formula: the root of the builder, and references to the cells of the sheet. */
 export interface SheetRoot<Ctx extends ChainContext, Cols> extends Root<Ctx> {
   /**
-   * This method makes a cell reference: the column `column` at the key `at`, or at the address `at` from the focus.
-   * The address has only fixed moves. Without `at`, it reads at the focus. The type is the type of a column before
-   * this one.
+   * This method reads a cell: the column `column` at the key `at`, or at the address `at` from the focus. The address
+   * can have computed moves (SHEET.CELL.COMPUTED). Without `at`, it reads at the focus. The type is the type of a column
+   * before this one.
    */
-  cell<N extends keyof Cols & string>(column: N, at?: Ctx["keys"] | readonly FixedMove[]): Arg<Cols[N]>;
+  cell<N extends keyof Cols & string>(column: N, at?: Ctx["keys"] | Addr): Arg<Cols[N]>;
   /** This method makes a cell reference to any column, also this column or a later one. The caller gives the type. */
-  cell<T>(column: string, at?: Ctx["keys"] | readonly FixedMove[]): Arg<T>;
+  cell<T>(column: string, at?: Ctx["keys"] | Addr): Arg<T>;
 }
 
 /** One row of a sheet: the key and the result of each column. */
@@ -1094,7 +1094,7 @@ class RootImpl {
 }
 
 class SheetRootImpl extends RootImpl {
-  cell(column: string, at?: string | readonly FixedMove[]): Arg<unknown> {
+  cell(column: string, at?: string | Addr): Arg<unknown> {
     return argToken(cellRef(column, typeof at === "string" ? [keyMove(at)] : at));
   }
 }

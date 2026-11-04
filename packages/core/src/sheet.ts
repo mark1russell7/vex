@@ -11,7 +11,7 @@
  */
 import { vexError } from "./errors.ts";
 import { evaluate, explain, nestingOf, type CompileOptions, type EvalOptions, type ExtHandler, type Program } from "./evaluate.ts";
-import { addrExprs, children, ext, isMove, listOf, moveExpr, shapeError, splitLimit, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
+import { addrExprs, app, axes, children, each, ext, isFixedAddr, isMove, listOf, lit, moveExpr, shapeError, splitLimit, type Addr, type Axis, type Expr, type FixedMove, type Move } from "./ir.ts";
 import { fail, type Result } from "./result.ts";
 import { resolveAddr, type Space } from "./space.ts";
 import type { Trace } from "./trace.ts";
@@ -21,15 +21,22 @@ export const CELL_KIND = "vex.cell";
 
 /**
  * The data of a cell reference: the column, and the address from the focus. The data of an extension is not an
- * expression, so the address has only fixed moves.
+ * expression, so the address has only fixed moves. `cell` takes computed moves in another form.
  */
 export interface CellRef {
   readonly column: string;
   readonly at: readonly FixedMove[];
 }
 
-/** This function makes a cell reference: the column `column` at the address `at` from the focus. */
-export const cell = (column: string, at: readonly FixedMove[] = []): Expr => ext(CELL_KIND, { column, at } satisfies CellRef);
+/** This function makes the extension node of a cell reference. */
+const cellRef = (column: string, at: readonly FixedMove[]): Expr => ext(CELL_KIND, { column, at } satisfies CellRef);
+
+/**
+ * This function makes a read of the column `column` at the address `at` from the focus. An address of fixed moves gives
+ * a cell reference. A computed move is an expression, not data (SHEET.CELL.COMPUTED). Thus it goes in the address of the
+ * axis `window(0, 0)`, and the read is the one item of that axis. Each tier and the JSON form have this form.
+ */
+export const cell = (column: string, at: Addr = []): Expr => (isFixedAddr(at) ? cellRef(column, at) : app("first", each(axes.window(0, 0), cellRef(column, []), at), lit({ strict: true })));
 
 const isCellRef = (u: unknown): u is CellRef =>
   typeof u === "object" &&

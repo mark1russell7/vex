@@ -1,4 +1,4 @@
-import { SheetRun } from "@mark1russell7/vex";
+import { app, axes, cell, each, index, lit, offset, ref, SheetRun, space, v as bound, type Expr } from "@mark1russell7/vex";
 import { emitSheetModule } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import { fitNode, MEASURE_COLUMNS, MEASURE_DOMAINS, MEASURE_KINDS, MEASURE_SCHEM
 
 type Columns = Readonly<Record<string, readonly unknown[]>>;
 type Run = (records: unknown, vars: unknown, parents: unknown) => Columns;
+const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
 
 /** This function gives the run of the standalone module of the sheet, as the build of ireko writes it. */
 function moduleOf(): Run {
@@ -103,5 +104,56 @@ describe("the ireko measure pilot", () => {
     // A linked node keeps the offsets, and its extent holds its own box and the subtrees.
     const linked = run(two, { ...base, linked: true });
     expect([linked.bounds, linked.placement]).toEqual([{ x: 0, y: 0, width: 50, height: 10 }, [{ x: 0, y: 0, scale: 1 }, { x: 30, y: 0, scale: 1 }]]);
+  });
+});
+
+/**
+ * The bounds over an array of children, with no node record. Each key keeps the union up to it, and each key reads the
+ * union of the last key at a computed position. `MEASURE_COLUMNS` stays a tree: a node with no children has no key in
+ * an array, and the columns of the node have one value for each node.
+ */
+describe("SHEET.CELL.COMPUTED: the bounds of a fit over an array", () => {
+  const last = op("subtract", op("count", each(axes.all, lit(1))), lit(1));
+  const before = (column: string, start: Expr): Expr => op("ifError", cell(column, [offset(-1)]), start);
+
+  /** This function gives the columns of the union on one axis. */
+  const axis = (name: string, o: string, at: string, size: string, start: string, startSize: string, own: string): readonly (readonly [string, Expr])[] => {
+    const here = op("add", ref(o), ref(at));
+    const lo = before(`lo${name}`, op("if", bound("linked"), lit(0), bound(start)));
+    const len = before(`len${name}`, op("if", bound("linked"), bound(own), bound(startSize)));
+    const low = op("min", lo, here);
+    return [
+      [`lo${name}`, op("if", cell("seen"), low, here)],
+      [`len${name}`, op("if", cell("seen"), op("subtract", op("max", op("add", lo, len), op("add", here, ref(size))), low), ref(size))],
+      [`b${name}`, cell(`lo${name}`, [index(last)])],
+      [`s${name}`, cell(`len${name}`, [index(last)])],
+    ];
+  };
+  const columns = new Map<string, Expr>([
+    // The first key has a union only if the node has a start rectangle. Each later key has a union.
+    ["seen", op("or", op("ifError", op("or", cell("seen", [offset(-1)]), lit(true)), lit(false)), op("or", bound("linked"), bound("content")))],
+    ...axis("x", "ox", "ex", "ew", "cx", "cw", "ownW"),
+    ...axis("y", "oy", "ey", "eh", "cy", "ch", "ownH"),
+  ]);
+  const options = { domains: MEASURE_DOMAINS, schema: MEASURE_SCHEMA, kinds: { seen: "boolean", lox: "number", leny: "number", lenx: "number", loy: "number" }, name: "boundsOf" } as const;
+
+  it("SHEET.CELL.COMPUTED COMPILE.MODULE.SHEET.COMPUTED: a read of the last key gives the bounds of ireko, with the same bits", () => {
+    const m = emitSheetModule(columns, options);
+    if (!m.ok) throw new Error(m.reason);
+    // Each read of a cell reads a finished cell, so the module has no search.
+    expect(m.source).not.toContain("function SH(");
+    // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitSheetModule, as in the build of ireko.
+    const boundsOf = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn boundsOf;`)() as (records: unknown, vars: unknown) => Columns;
+    fc.assert(
+      fc.property(fc.array(child, { minLength: 1, maxLength: 30 }), vars, (children, x) => {
+        const records = measureRecords(children).slice(1);
+        const out = boundsOf(records, x);
+        const end = records.length - 1;
+        expect({ x: out["bx"]?.[end], y: out["by"]?.[end], width: out["sx"]?.[end], height: out["sy"]?.[end] }).toEqual(fitNode(children, x).bounds);
+        const sheet = new SheetRun(columns, { space: space.array(records), domains: MEASURE_DOMAINS, vars: { ...x } });
+        expect(["bx", "by", "sx", "sy"].map((c) => sheet.cell(c, "0"))).toEqual(["bx", "by", "sx", "sy"].map((c) => ({ ok: true, value: out[c]?.[0] })));
+      }),
+      { numRuns: 100 },
+    );
   });
 });

@@ -246,6 +246,32 @@ describe("V-084 COMPILE.MODULE.PAIRS COMPILE.MODULE.SCAN: a scan in the steps of
   });
 });
 
+/** This read gives the value `n` of the origin. */
+const AT_ORIGIN = ref("n", [{ t: "origin" }]);
+/** This function gives a fold over the targets where `key > n`. The printer puts `key` before the loop of the scan. */
+const scanOf = (key: Expr): Expr => fold(axes.where(axes.all, op("gt", key, n)), { s: lit(0) }, { s: op("add", s, lit(1)) }, s);
+/** This function gives a scan with a key that calls a function with the body `body`. */
+const scanOfCall = (body: Expr): Expr => let_({ g: fn(["x"], body) }, scanOf(call("g", lit(1))));
+
+describe("V-085 COMPILE.MODULE.SCAN FN.CALL: a call passes only the names that its function reads", () => {
+  it("V-085: a key of a scan that calls a function of the origin reads no focus of the loop of the scan", () => {
+    expect(expectSame(scanOfCall(op("add", v("x"), AT_ORIGIN)))).toContain("= PF(n,");
+  });
+
+  it("V-085: a function that reads the origin and not the focus has no parameter of the focus", () => {
+    expect(expectSame(scanOfCall(op("add", v("x"), AT_ORIGIN)))).toMatch(/= \(p\d+, o\d+\) =>/);
+  });
+
+  it("V-085 P17 FN.CALL: each mix of reads of the origin and of the focus in a function gives the value of the interpreter", () => {
+    const part = fc.constantFrom(v("x"), AT_ORIGIN, n, lit(2));
+    fc.assert(
+      fc.property(part, part, (a, b) => {
+        expect(expectSame(scanOfCall(op("add", a, b)))).toContain("function run");
+      }),
+    );
+  });
+});
+
 /** This function gives a ring of the radial pilot with the sizes `sizes`. */
 const ringOf = (sizes: readonly number[]): RadialInput => ({
   mode: "nested",

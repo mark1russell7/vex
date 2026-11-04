@@ -1417,6 +1417,23 @@ In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
 
+#### The keys of the records (COMPILE.MODULE.KEYS)
+
+In a module, the key of a record is the text of its position. A host keys its nodes by its own ids. Thus `get(list, id)` found an item only when each id was that text. The interpreter reads the keys from its space, so the option `keys` gives the keys to the run.
+
+- With `keys: true`, the run takes an array of texts as its last argument, after the parents or the edges. Each record has one text, and the texts are different. The helper `KC` checks them and makes a map of each key to its position.
+- A pair of a list holds the key of its record, not its position. `GT`, `WO` and `LO` read a pair as text, so these helpers have no change. A key of a literal and of `fill` stays that key. Thus `fill(1, x)` keeps its key `"0"`, also when the record at the position 0 has another key.
+- The axis `list` over a list of records reads the position of each key from the map. A list with keys of a literal or of `fill` keeps its target, as before.
+- The move `key` reads the map with the helper `KP`. A value that is not a key of the space fails, as NAV.KEY tells.
+- The printer prints each program one time. A print with no read of a key is the module. Thus its text is the text without the option, and the run ignores its last argument. A read of a key is `get`, `without`, a `vex.list` of a result, a field or an argument, and the move `key`. After a read, the printer prints the program again with the keys. The second print adds the argument only when a pair or a move uses the keys.
+- The reference of an array space with keys is a record space, and a record space has no offsets. Thus an offset or the axis `window` in such a print gives a reason. A tree and a graph keep their moves. A program that reads no key keeps its offsets, because its results do not depend on the keys.
+- A formula of a cell has its key at the time of the build, and the keys come at the time of the run. Thus `keys` with `cells` gives a reason.
+- With `lists: "plain"`, a list of the input keeps the text of each position, and the result has no keys. Thus only `get`, `without` and the moves read the keys there.
+
+The order of the keys is the order of the records. `Object.entries` puts a key that is a whole number first. Thus a test with such keys needs a space that keeps its order.
+
+The test `module-keys.test.ts` compares each form with the interpreter over a space with the same keys (P17). It also pins the text of the programs that read no key.
+
 #### The names of the items (COMPILE.MODULE.LIST.ITEM)
 
 The field `as` of `each` and `fold` names the value and the index of each item of the axis `list` (AXIS.LIST.ITEM). Before this change, a module gave the reason "the program has a loop that names its items with "as", and a module does not have these names yet". Tier 1 evaluated the program. Since 2026-10-27, the module has the names.

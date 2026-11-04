@@ -198,6 +198,21 @@ Generated code makes no trace. `explain` always operates in tier 0, so the quest
 
 ### 4.4 Standalone modules
 
+#### The faults of a module (COMPILE.MODULE.FAULT)
+
+A catch of a module holds an exception of a function of a domain, because the interpreter gives an error for it. The same catch also holds a fault of the printed code. Then a defect of the printer is a value, and only a differential test finds it.
+
+The start of an exception tells the two cases, not its class. A `TypeError` of an op is an error of Vex, and a `TypeError` of the printed code is a fault. With `faults` at `throw`, each copy of a function of a domain has the wrapper `FW`. Each other catch calls `FK`, which rethrows each value that is not the error of Vex.
+
+Each test of the compiler and of the pilots that compares values runs with `throw`. The file `packages/compiler/src/module-fault.setup.ts` sets the option. A test of the text of a module sets `value`.
+
+The file `packages/pilots/src/ireko-modules.ts` holds the input of each module of ireko. The script `scripts/ireko-module.ts` and the value tests read the same rows, so a value test prints the module of a build with `throw`. The rows of the five committed modules are `measure`, `place`, `shape`, `grid` and `radial`. The rows `layers` and `tree` have no committed file at this time, and their value tests use the table too.
+
+This check examines the print of the compiler at the same commit. It does not examine the text of a committed file, because that text can be an older print. A fault that an older print holds stays in that file until the next build. The bytes of a print also depend on the program that runs the printer, because a copied function keeps the text that this program gives.
+
+The default stays `value`, because the form with `throw` costs more than the limit of the decision. The limit was 2 % of the minified module. The module of `NODE_SHAPE` grows by 142 bytes after `esbuild --minify` and `gzip -9`, from 2336 to 2478, which is 6.08 %. Without minification, it grows by 92 bytes, from 3629 to 3721. The tree module grows by 182 bytes, which is 5.04 %. The form also adds a call of the wrapper to each call of an op, and it keeps each op as a declaration. This record has no measure of the time of these calls.
+
+
 A module of the build can operate without the interpreter. Then a failed check throws a `VexContractError` that names the check, because no fallback exists.
 
 A host that guarantees the kinds of its input uses standalone modules. ireko gives its strategies only finite numbers and plain rectangles. Thus ireko uses them. A module with the fallback imports the interpreter.
@@ -1544,6 +1559,7 @@ The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its l
 | COMPILE.MODULE.SIZE.ALIAS | `const a = b;` is not printed, and each read reads `b` | The form is `const`. No line of the block writes `b`, or binds a second `b`. A write outside the block stops the rule when a function of the block can run after it. |
 | COMPILE.MODULE.SIZE.ONCE | A lazy cell prints its value at its read | The cell has one `return` and one read `G(c())`. The read is not in a loop or in a function, other than a lazy cell. |
 | COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
+| COMPILE.MODULE.FAULT | With `faults` at `throw`, a fault of the printed code leaves the run | Each copy of a function of a domain has a wrapper that gives the error of Vex for each exception. Each other catch rethrows each value that is not the error of Vex. No op prints at its call. |
 | COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |
 | COMPILE.MODULE.SIZE.DEAD | A helper, an op or a constant of the run that no code reads is not printed | A constant has a form that catches each failure. |
 

@@ -367,19 +367,25 @@ function inlined(decl: string, line: string, kept = ""): { readonly left: boolea
   return { left: decls.has("op_1"), line: lines.join(" ") };
 }
 
+/** This function compares a program with the interpreter, and gives its text in the form that a build prints. */
+function inlineText(e: Expr): string {
+  expectSame(e, SPANS, SPAN_RECORDS);
+  return sourceOf(emitModule(e, { ...SPANS, faults: "value" }));
+}
+
 describe("COMPILE.MODULE.SIZE.INLINE: an op with one call", () => {
   it("COMPILE.MODULE.SIZE.INLINE: a call with names prints the body of the op, and each other call keeps the op", () => {
     const named = let_({ s: ref("iv") }, op("size", v("s")));
-    const source = expectSame(named, SPANS, SPAN_RECORDS);
+    const source = inlineText(named);
     expect(source).not.toContain("op_");
     expect(source).toMatch(/\(\w+\.hi-\w+\.lo\)|\(\w+\.hi - \w+\.lo\)/);
     // A second read of a parameter reads the name.
-    expect(expectSame(let_({ s: ref("iv") }, op("twice", v("s"))), SPANS, SPAN_RECORDS)).not.toContain("op_");
+    expect(inlineText(let_({ s: ref("iv") }, op("twice", v("s"))))).not.toContain("op_");
     // Two calls keep the op, and so does a call with an argument that is not a name.
-    expect(expectSame(let_({ s: ref("iv") }, op("add", op("size", v("s")), op("size", op("grown", v("s"), lit(1))))), SPANS, SPAN_RECORDS)).toContain("op_");
-    expect(expectSame(op("size", op("grown", ref("iv"), n)), SPANS, SPAN_RECORDS)).toContain("op_");
+    expect(inlineText(let_({ s: ref("iv") }, op("add", op("size", v("s")), op("size", op("grown", v("s"), lit(1))))))).toContain("op_");
+    expect(inlineText(op("size", op("grown", ref("iv"), n)))).toContain("op_");
     // An op that fails keeps its check, with the error of the interpreter.
-    expect(expectSame(let_({ s: ref("iv") }, op("ifError", op("fails", v("s")), lit(7))), SPANS, SPAN_RECORDS)).toContain("k_number");
+    expect(inlineText(let_({ s: ref("iv") }, op("ifError", op("fails", v("s")), lit(7))))).toContain("k_number");
   });
 
   it("COMPILE.MODULE.SIZE.INLINE: the pass writes a call as the body, with each parameter as its argument", () => {

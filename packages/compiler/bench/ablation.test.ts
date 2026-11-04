@@ -6,7 +6,7 @@ import { emitModule } from "../src/index.ts";
 import { allEdits, handBoth, handPairs, handSum, itemTries, loadRadial, noChecks, noColumnTry, noItemTry, ringOf } from "./ablation.ts";
 
 const source = (): string => {
-  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
+  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial", faults: "value" });
   if (!m.ok) throw new Error(m.reason);
   return m.source;
 };

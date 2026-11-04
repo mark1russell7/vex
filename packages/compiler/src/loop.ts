@@ -5,7 +5,8 @@ import type { Addr, Axis, ErrorText, PrimitiveKind } from "@mark1russell7/vex";
  * locals, loops over arrays, checks and the functions of the runtime. A back end reads only this IR.
  *
  * A check that fails stops the program with a lazy error, and a materialize step gives the error of the interpreter
- * (§4.1). A check that cannot name its error stops the program with the value `FALLBACK`, and tier 1 evaluates it.
+ * (§4.1). Where the error has a use, a check that cannot name its error stops the program with the value `FALLBACK`, and
+ * tier 1 evaluates it. A check with the failure `STOP` stops the program in each context, because its failure is no error.
  */
 
 /** The fixed locals of each program: the space, the origin, the variables and the tables of the run. */

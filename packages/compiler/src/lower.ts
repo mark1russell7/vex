@@ -5,8 +5,10 @@
  * Each value that the interpreter can give as an error has a check. The block of the check tells what a failure does
  * (`Fail`). A list op skips an error item, and an error in the first argument of `ifError` gives the second argument.
  * These contexts drop the error, so the check has no error site. In each other context, the check has the site of its
- * error, and the program ends with that error or a binding keeps it (`keeps`). A check without a site stops the program
- * with `FALLBACK`. `#DEPTH!` of an extension stops the program too (COMPILE.EXT).
+ * error, and the program ends with that error or a binding keeps it (`keeps`). Where the error has a use, a check without
+ * a site stops the program with `FALLBACK`. `#DEPTH!` of an extension stops the program too (COMPILE.EXT).
+ *
+ * A check for a result that only tier 1 can give is no error, so no context drops it (`#decide`, V-071).
  *
  * After a failure, the interpreter still evaluates the later arguments of a node, and two errors give `#ARGS`. The value
  * path of generated code has no flags for this. A failure jumps to a copy of the later arguments (`#chain`), which only
@@ -14,6 +16,7 @@
  */
 import {
   addrExprs,
+  axisExprs,
   children,
   errorText,
   isFieldName,
@@ -206,9 +209,18 @@ class Lowerer {
    */
   #declared(b: Block, x: LExpr, kind: PrimitiveKind | undefined, reason: string): LExpr {
     if (kind === undefined) return x;
-    b.stmts.push({ t: "check", ok: prim(KIND_CHECKS[kind], x), reason, fail: STOP });
+    this.#decide(b, prim(KIND_CHECKS[kind], x), reason);
     return this.#typed(x, kind);
   }
+
+  /**
+   * This method adds a check whose failure is no error of the program. Tier 1 decides the result, so the check stops the
+   * program in each block. `check` is for an error, and a context that catches an error drops its failure (V-071).
+   */
+  #decide(b: Block, ok: LExpr, reason: string): void {
+    b.stmts.push({ t: "check", ok, reason, fail: STOP });
+  }
+
   readonly constants: unknown[] = [];
   readonly #pool = new Map<unknown, number>();
 
@@ -767,8 +779,9 @@ class Lowerer {
           firstThen(body, v, (later) => this.checked(later, call("step", name as LExpr, local(acc), v), "a step of reduce", this.site(later, s, { t: "step", path }, name as LExpr)));
           count(body);
         });
-        // An empty list can give the identity of the op, so tier 1 gives its result.
-        this.check(plain, prim("!==", local(n), num(0)), "a list that is not empty");
+        // An empty list can give the identity of the op, so tier 1 gives its result. Without one identity, it is an error.
+        if (this.#emptyFails(e)) this.check(plain, prim("!==", local(n), num(0)), "a list that is not empty");
+        else this.#decide(b, prim("!==", local(n), num(0)), "a list that is not empty");
         return local(acc);
       // listReason stops a program with these ops before the lowering, so this case is defensive.
       // Stryker disable StringLiteral,ConditionalExpression: listReason stops these ops before the lowering
@@ -789,6 +802,15 @@ class Lowerer {
         // Stryker disable next-line all: listReason stops these ops before the lowering
         throw new Unsupported(`the list op "${op}"`);
     }
+  }
+
+  /**
+   * This method tells if a `reduce` of an empty list always gives an error (LIST.EMPTY). The name of its op is a literal,
+   * and the domains do not have exactly one identity of the op. An option can name a domain, so a third argument tells nothing.
+   */
+  #emptyFails(e: ExprOf<"app">): boolean {
+    const name = e.args[1] as Expr;
+    return e.args.length === 2 && name.tag === "lit" && this.#facts.identities(name.value as string) !== 1;
   }
 
   /**
@@ -927,7 +949,8 @@ class Lowerer {
     const n = this.typedLocal("number");
     b.stmts.push({ t: "let", n, value: num(0) });
     // The error of a limit that is not valid keeps its cause, so each failure here is the plain failure of the block.
-    const plain: Block = { stmts: b.stmts, fail: plainOf(b.fail) };
+    // COMPILE.EXT: the interpreter evaluates each test, and an extension in a test can give #DEPTH!. Thus a failed test stops the program.
+    const plain: Block = { stmts: b.stmts, fail: axisExprs(axis).some((x) => this.#mayExt(x, s.fns)) ? STOP : plainOf(b.fail) };
     this.#targetLoop(axis, undefined, s, path, firstTest, plain, () => plain.fail, (body) => {
       body.stmts.push({ t: "set", n, value: prim("+", local(n), num(1)) });
     });

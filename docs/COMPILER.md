@@ -140,6 +140,8 @@ The signal stays `FALLBACK`. The generated code puts the lazy error in a slot of
 
 **A context that drops the error.** An item of a list op and the first argument of `ifError` drop the error, so their checks keep nothing. A binding of `let` keeps its error in the local of its value. Only a failure writes there, and a read of the name tests the flag of the binding.
 
+**A request for tier 1.** A failed check tells one of two things. An error of the program is a failure of the block, so a context that drops the error catches it. A request for tier 1 is no error, so no context can catch it. Such a check has the failure `STOP` in each block (`#decide`). V-071 records the defect of the first design: an empty `reduce` was a check of the first kind, so `ifError(reduce(empty, "add"), -1)` gave -1.
+
 **`#ARGS`.** The interpreter evaluates each argument, also after an error (`#all`). Two errors give `#ARGS`. The value path has no flags for this. Each argument has a block for its failure, and the code after this block is a copy of the next argument that can fail. Thus a failure jumps to the copies of the later arguments, and each argument evaluates once. The order of evaluation is the order of the interpreter, and no extension runs twice.
 
 A copy can read flags, because the value path does not read a copy (`#collect`). So a node in a copy adds no other copy. The size of the code grows with the depth of the failing nodes, not with the number of their paths. `MAX_COPIED` limits the nodes of the copies. Past the limit, a node with two arguments that can fail keeps no error, and tier 1 gives its result. `MAX_CHAINED` limits the arguments of a chain in the same way, because each argument that can fail adds a level of blocks.
@@ -151,7 +153,8 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 - `#DEPTH!` of an extension and a full call stack, by the rule above.
 - A list with an error item, and the op `errors` on such an item, because generated code makes no error item.
 - A failed kind check of a schema, because it is no error of the interpreter.
-- `reduce` on an empty list, because the result can be the identity of the op.
+- `reduce` on an empty list, where the result can be the identity of the op. A call cannot give an identity if its op has a literal name, the call has no options, and the identities are not exactly one. For such a call, the check is an error of the program, and a context can drop it.
+- A failed test of a data limit, where a test can use an extension. The interpreter evaluates each test, so `#DEPTH!` of a later test comes first.
 - An op that fails in a list op, where the list can use an extension or the option `strict` is set. The interpreter makes each item first, so an earlier error item or `#DEPTH!` can come first.
 - A failed argument of a list op after its list, because the interpreter evaluates the list first.
 - An exception of a getter of a record.

@@ -20,7 +20,7 @@ npm install @mark1russell7/vex @mark1russell7/vex-domains
 | `NDVectorDomain` | `NDVector`: a vector with named components | `add`, `subtract`, `min`, `max`, `scale`, `dot`, `get` |
 | `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt`, `vec2`, `xy`, `insets`, `date` |
 | `BoolDomain` | booleans | `and`, `or`, `xor`, `not` |
-| `TextDomain` | texts | `concat`, `length`, `upper`, `lower`, `trim`, `contains` |
+| `TextDomain` | texts | `concat`, `length`, `codePoints`, `upper`, `lower`, `trim`, `contains` |
 | `JsonDomain` | JSON data: texts, numbers, booleans, arrays and plain objects. Put it last. | `kind`, `kinds`, `fields`, `field`, `leaves` |
 | `ColorDomain` | `Color`: an RGB color | `mix`, `add`, `multiply`, `luminance`, `relativeLuminance`, `contrast` |
 | `AngleDomain` | `Angle`: an angle | `add`, `normalize`, `sin`, `cos`, `degrees` |

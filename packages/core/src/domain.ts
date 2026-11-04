@@ -9,8 +9,11 @@ export type Law = "commutative" | "associative" | "idempotent";
 /** The kind of a parameter. The interpreter checks the arguments of an op that declares its parameters. */
 export type ParamKind = "domain" | "number" | "boolean" | "string" | "any";
 
-/** The kind of the result of an op: a kind of a parameter, or `domain:Name` for a value of the domain `Name`. */
-export type ReturnKind = ParamKind | `domain:${string}`;
+/**
+ * The kind of the result of an op. It is a kind of a parameter, or `domain:Name` for a value of the domain `Name`. It is
+ * `list:Kind` for a `vex.list` with items of a primitive type.
+ */
+export type ReturnKind = ParamKind | `domain:${string}` | `list:${PrimitiveKind}`;
 
 /**
  * How the size of one argument adds to the size of the result of an op (LOOP.SIZE.OPS). The size of a value counts the
@@ -85,9 +88,10 @@ export interface OpSpec<D = never> {
   /** The kinds of the parameters after the receiver. When set, the interpreter checks the arguments. */
   readonly params?: readonly ParamKind[];
   /**
-   * The kind of the result: `domain` for a value of this domain, and `domain:Name` for a value of the domain `Name`. A
-   * compiler reads it to know the kinds of the values of a program (KIND.RETURNS). The interpreter does not check it,
-   * and the law checker of the test kit does.
+   * The kind of the result. It is `domain` for a value of this domain, or `domain:Name` for a value of the domain `Name`.
+   * It is `list:Kind` for a `vex.list` with items of that primitive type (KIND.RETURNS.LIST). A compiler reads it to know
+   * the kinds of the values of a program (KIND.RETURNS). The interpreter does not check it, and the law checker of the
+   * test kit does.
    */
   readonly returns?: ReturnKind;
   /**
@@ -109,6 +113,9 @@ export type Monotone = "up" | "down";
 
 /** A JavaScript type of primitive values that a domain can accept. */
 export type PrimitiveKind = "number" | "string" | "boolean";
+
+/** This function gives the kind of the items of a result of the kind `list:Kind`, or `undefined` for another kind. */
+export const listItemKind = (r: ReturnKind | undefined): PrimitiveKind | undefined => (r?.startsWith("list:") === true ? (r.slice("list:".length) as PrimitiveKind) : undefined);
 
 /** The type of an op that lifts number arguments. Use it to type the ops of a domain under `isolatedDeclarations`. */
 export type LiftedOp<D> = OpSpec<D> & { readonly liftScalar: true };

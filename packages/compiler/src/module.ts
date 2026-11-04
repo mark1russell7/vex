@@ -1291,9 +1291,11 @@ const LIST_RESULTS: ReadonlySet<string> = new Set(["sortBy", "take", "drop", "ap
 
 /**
  * The scope of `listy`. `name` tells if a name holds a list, and `fn` gives the bound function of a name. `cell` tells
- * if a read of a cell gives a list, and `field` tells if a read of a field gives a list (COMPILE.MODULE.LIST.INPUT).
+ * if a read of a cell gives a list, and `field` tells if a read of a field gives a list (COMPILE.MODULE.LIST.INPUT). `op`
+ * tells if a domain declares a list as the result of an op (COMPILE.MODULE.LIST.OP).
  */
 interface ListScope {
+  readonly op: (name: string) => boolean;
   readonly name: (name: string) => boolean;
   readonly fn: (name: string) => ListFn | undefined;
   readonly cell: (e: ExprOf<"ext">) => boolean;
@@ -1319,7 +1321,7 @@ function listy(e: Expr, scope: ListScope): boolean {
       return isVexList(e.value);
     case "app":
       // A branch of if and ifError can be a list (COMPILE.MODULE.LIST.RESULT).
-      return LIST_RESULTS.has(e.op) || ((e.op === "if" || e.op === "ifError") && e.args.slice(e.op === "if" ? 1 : 0).some((x) => listy(x, scope)));
+      return LIST_RESULTS.has(e.op) || scope.op(e.op) || ((e.op === "if" || e.op === "ifError") && e.args.slice(e.op === "if" ? 1 : 0).some((x) => listy(x, scope)));
     case "var":
       return scope.name(e.name);
     case "let":
@@ -1371,11 +1373,12 @@ function paramsIn(f: ListFn, args: readonly Expr[], scope: ListScope): ListScope
 }
 
 /**
- * This function tells if an expression has a list literal with an item (LIST.LITERAL), or `fill` (LIST.FILL). Then a key
- * of a list of the expression can be a key that is not the position of a record.
+ * This function tells if an expression has a list literal with an item (LIST.LITERAL), `fill` (LIST.FILL) or an op for
+ * which `gives` is true (COMPILE.MODULE.LIST.OP). Then a key of a list of the expression can be a key that is not the
+ * position of a record.
  */
-function hasTextKeys(e: Expr): boolean {
-  return (e.tag === "lit" && isVexList(e.value) && e.value.items.length > 0) || (e.tag === "app" && e.op === "fill") || children(e).some(hasTextKeys);
+function hasTextKeys(e: Expr, gives: (name: string) => boolean): boolean {
+  return (e.tag === "lit" && isVexList(e.value) && e.value.items.length > 0) || (e.tag === "app" && (e.op === "fill" || gives(e.op))) || children(e).some((x) => hasTextKeys(x, gives));
 }
 
 /**
@@ -2433,6 +2436,7 @@ class Printer {
   /** This method gives the scope of `listy` at a node: the names and the bound functions of its context. */
   #scopeOf(ctx: Ctx): ListScope {
     return {
+      op: (name) => this.#facts.givesList(name),
       name: (name) => ctx.env.get(name)?.list !== undefined,
       fn: (name) => {
         const bound = ctx.fns.get(name);
@@ -3129,8 +3133,10 @@ class Printer {
     if (lists.has(0)) throw new NotStandalone(isListOp(op) ? `the list op "${op}"` : `a list as the receiver of the op "${op}"`);
     const site = this.#facts.staticSite(op, given.map((x) => x.v.kind), lists, true);
     if (site?.t !== "fn") throw new NotStandalone(`the kinds of the values of "${op}" do not decide its op`);
-    if (site.bad) return { s: stmtsOf(...given), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
-    if (site.returns === undefined) throw new NotStandalone(`the op "${op}" does not declare the kind of its result`);
+    // LI gives a new array, and its keys are texts (COMPILE.MODULE.LIST.OP).
+    const list: ListInfo | undefined = site.item === undefined ? undefined : { item: site.item, texts: true, fresh: true };
+    if (site.bad) return { s: stmtsOf(...given), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps, list } };
+    if (site.returns === undefined && list === undefined) throw new NotStandalone(`the op "${op}" does not declare the kind of its result`);
     const d = this.#domains[site.domain] as AnyDomain;
     const lifted = site.lifted ?? [];
     const values = given.map((x, i) => (lifted.includes(i - 1) ? this.#lifted(x, site.domain, d) : x));
@@ -3144,22 +3150,29 @@ class Printer {
       const src = copied(fn, each, `the op "${op}" of the domain ${d.name}`);
       // An inline form cannot throw for primitive values only.
       this.#forms.set(name, lists.size === 0 && kinds.every((k) => primitiveOf(k) !== undefined) ? inlineForm(src) : undefined);
-      if (!givesValue(src) && this.#missesNoValue(site.returns)) this.#unproved.add(name);
+      if (site.returns !== undefined && !givesValue(src) && this.#missesNoValue(site.returns)) this.#unproved.add(name);
       this.top.set(name, `const ${name} = ${src};`);
+    }
+    // The result is a `vex.list`. Its array of pairs comes from the helper of a list of the input, so a result that is not
+    // a list of the declared kind is an error (COMPILE.MODULE.LIST.OP).
+    if (list !== undefined) {
+      this.#called.add(name);
+      const read = `${this.use("LI")}(${name}(${values.map((x) => this.#plain(x.v)).join(", ")}), 0, ${this.test(list.item as Kind)})`;
+      return { s: stmtsOf(...values), v: { code: `(${read} ?? ${this.use("F")}())`, kind: undefined, safe: false, deps, list } };
     }
     const form = this.#forms.get(name);
     // An inline form takes each argument once, or a plain argument more often, so each argument evaluates once.
     const inline = form !== undefined && lists.size === 0 && form.params.length === values.length && values.every((x, i) => form.uses[i] === 1 || (x.v.plain === true && x.v.safe && (form.uses[i] as number) > 0));
     if (inline) {
       const text = form.parts.map((x) => (typeof x === "number" ? `(${(values[x] as Code).v.code})` : x)).join("");
-      const checked = this.check(site.returns);
+      const checked = this.check(site.returns as Kind);
       const value = this.#value(name, text);
       const code = checked === undefined ? `(${value})` : `${checked}(${value})`;
       return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: checked === undefined && value === text && values.every((x) => x.v.safe), deps } };
     }
     this.#called.add(name);
     // An exception of the op is an error of Vex: the boundary around the op catches it.
-    const code = this.#checked(site.returns, this.#value(name, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`));
+    const code = this.#checked(site.returns as Kind, this.#value(name, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`));
     return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: false, deps } };
   }
 
@@ -4112,8 +4125,8 @@ class Printer {
     const env = new Map(ctx.env);
     const vars = new Map<string, Name>();
     const deps = new Set<number>();
-    // A step with a list literal or fill can give a name the keys of the literal or of fill (LOOP.LIST).
-    const keyed = Object.values(step).some(hasTextKeys);
+    // A step with a list literal, fill or an op with a list result can give a name keys that are not positions (LOOP.LIST).
+    const keyed = Object.values(step).some((x) => hasTextKeys(x, (name) => this.#facts.givesList(name)));
     const firsts = Object.entries(init).map(([name, x]): [string, Code, string] => {
       // A name of a loop can hold a list (LOOP.LIST). Its first list fixes the kind of the items, if it has one.
       this.#wantList.add(x);

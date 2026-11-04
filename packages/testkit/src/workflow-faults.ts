@@ -4,10 +4,18 @@
  * job. `scripts/workflow-gate.ts` starts this check on each workflow, in all branches. The package does not export it,
  * and npm does not get it.
  *
- * A run by hand can start on a branch with no pull request, and its artifact is a record that a report cites. So each
- * job of such a workflow that uploads an artifact starts the gate itself, as its first step after the runtime. A
- * workflow that keeps its record only in its log is out of this rule.
+ * A run by hand can start on a branch with no pull request, and a report can cite its artifact or its log. So each job
+ * of such a workflow with a runtime or an upload starts the gate itself, as its first step after the runtime. The only
+ * exception is a line of `NO_RECORD`, with its reason. So a new workflow fails by default.
  */
+
+/** The workflows with a run by hand that make no record, each with its reason. An entry with no such workflow is a fault. */
+export const NO_RECORD: Readonly<Record<string, string>> = {
+  "pages.yml": "It publishes the site with a reusable workflow, and no report cites it.",
+  "release.yml": "It publishes the packages with the standard of the release, and no report cites it.",
+  "security.yml": "It starts a reusable scan, and no report cites it.",
+};
+
 
 /** This pattern finds a command that starts tests. */
 const TEST_COMMAND = /\bvitest\b|\bpnpm (?:run )?(?:test|check)\b/u;
@@ -51,14 +59,14 @@ function gateFirst(steps: readonly (readonly string[])[]): boolean {
   return runtime >= 0 && stepHas(steps[runtime + 1], GATE);
 }
 
-/** This function gives the faults of the lines of one job. `outer` tells if the head of the workflow sets `pipefail`, and `byHand` tells if a person can start the workflow. */
+/** This function gives the faults of the lines of one job. `outer` tells if the head of the workflow sets `pipefail`, and `byHand` tells if the rule of a run by hand applies. */
 function jobFaults(job: readonly string[], outer: boolean, byHand: boolean): readonly string[] {
   const name = (job[0] as string).trim().replace(/:$/u, "");
   const { head, parts } = blocks(job, STEP);
   const pipefail = outer || head.some((l) => PIPEFAIL.test(l));
   const faults: string[] = [];
   if (head.some((l) => IGNORED.test(l)) && hasTests(job)) faults.push(`${name}: the job has tests and continue-on-error`);
-  if (byHand && parts.some((s) => stepHas(s, UPLOAD)) && !gateFirst(parts)) faults.push(`${name}: a job that uploads a record in a run by hand needs the gate as its first step after the runtime`);
+  if (byHand && (stepHas(job, UPLOAD) || stepHas(job, RUNTIME)) && !gateFirst(parts)) faults.push(`${name}: a job of a run by hand needs the gate as its first step after the runtime`);
   for (const step of parts) {
     if (step.some((l) => IGNORED.test(l)) && hasTests(step)) faults.push(`${name}: a step has tests and continue-on-error`);
     for (const line of step) {
@@ -70,14 +78,21 @@ function jobFaults(job: readonly string[], outer: boolean, byHand: boolean): rea
   return faults;
 }
 
-/** This function gives a line for each fault of the text of a workflow: a hidden failed test, or a record with no gate. */
-export function workflowFaults(text: string): readonly string[] {
+/** This function gives a line for each fault of a workflow: a hidden failed test, or a run by hand with no gate. `file` is its file name. The rule of a run by hand skips a name of `NO_RECORD`. */
+export function workflowFaults(text: string, file = ""): readonly string[] {
   const lines = code(text.split("\n"));
   const start = lines.findIndex((l) => /^jobs:\s*$/u.test(l));
   if (start < 0) return [];
   const { parts } = blocks(lines.slice(start + 1), JOB);
   const top = lines.slice(0, start);
   const outer = top.some((l) => PIPEFAIL.test(l));
-  const byHand = top.some((l) => DISPATCH.test(l));
-  return parts.flatMap((job) => jobFaults(job, outer, byHand));
+  const byHand = !Object.hasOwn(NO_RECORD, file) && top.some((l) => DISPATCH.test(l));
+  const faults = parts.flatMap((job) => jobFaults(job, outer, byHand));
+  const gated = parts.some((job) => stepHas(job, RUNTIME) || stepHas(job, GATE));
+  return byHand && !gated ? [...faults, "a run by hand needs a job that starts the gate"] : faults;
+}
+
+/** This function gives a line for each entry of `list` with no workflow of a run by hand. `texts` maps each file name to its text. */
+export function listFaults(texts: ReadonlyMap<string, string>, list: Readonly<Record<string, string>> = NO_RECORD): readonly string[] {
+  return Object.keys(list).flatMap((file) => (DISPATCH.test(code((texts.get(file) ?? "").split("\n")).join("\n")) ? [] : [`${file}: an entry of NO_RECORD with no run by hand`]));
 }

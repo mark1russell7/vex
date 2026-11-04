@@ -84,6 +84,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
+      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+        run: node scripts/workflow-gate.ts
       - id: inputs
         if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
         env:
@@ -119,6 +121,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       # A dispatch with the input case measures only these cases of the compiler gate, so the core gate does not run.
       - if: ${{ !inputs.case }}

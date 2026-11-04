@@ -5,7 +5,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { workflowFaults } from "./workflow-faults.ts";
+import { listFaults, NO_RECORD, workflowFaults } from "./workflow-faults.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 
@@ -74,20 +74,23 @@ describe("the check that a workflow does not hide a failed test", () => {
 
   it("finds no fault in the workflows of this repository", () => {
     const dir = resolve(ROOT, ".github/workflows");
-    const faults = readdirSync(dir).flatMap((f) => workflowFaults(readFileSync(resolve(dir, f), "utf8")).map((x) => `${f}: ${x}`));
+    const texts = new Map(readdirSync(dir).map((f) => [f, readFileSync(resolve(dir, f), "utf8")]));
+    const faults = [...texts].flatMap(([f, text]) => workflowFaults(text, f).map((x) => `${f}: ${x}`));
     expect(faults).toStrictEqual([]);
+    expect(listFaults(texts)).toStrictEqual([]);
   });
 });
 
-describe("the check that a record of a run by hand has the gate first", () => {
+describe("the check that a run by hand has the gate first", () => {
   const CHECKOUT = "- uses: actions/checkout@abc # v7";
   const RUNTIME = ["- uses: actions/setup-node@abc # v7", "  with:", "    node-version: 26"];
   const GATE = "- run: node scripts/workflow-gate.ts";
   const UPLOAD = ["- uses: actions/upload-artifact@abc # v7", "  with:", "    name: x"];
   const DISPATCH = ["on:", "  workflow_dispatch:"];
-  const FAULT = "one: a job that uploads a record in a run by hand needs the gate as its first step after the runtime";
+  const FAULT = "one: a job of a run by hand needs the gate as its first step after the runtime";
+  const NO_JOB = "a run by hand needs a job that starts the gate";
 
-  it("finds a job that uploads a record with no gate", () => {
+  it("finds a job with a runtime and an upload with no gate", () => {
     expect(workflowFaults(job([CHECKOUT, ...RUNTIME, "- run: pnpm build", ...UPLOAD], [], DISPATCH))).toStrictEqual([FAULT]);
   });
 
@@ -123,10 +126,51 @@ describe("the check that a record of a run by hand has the gate first", () => {
     expect(workflowFaults(job([CHECKOUT, ...RUNTIME, ...UPLOAD], [], ["on: [push, workflow_dispatch]"]))).toStrictEqual([FAULT]);
   });
 
-  it("accepts a workflow with no run by hand, and a job with no upload", () => {
+  it("accepts a workflow with no run by hand", () => {
     expect(workflowFaults(job([CHECKOUT, ...RUNTIME, ...UPLOAD], [], ["on:", "  push:"]))).toStrictEqual([]);
-    expect(workflowFaults(job([CHECKOUT, ...RUNTIME, "- run: pnpm build"], [], DISPATCH))).toStrictEqual([]);
-    expect(workflowFaults(job([CHECKOUT, ...RUNTIME, "- uses: actions/upload-pages-artifact@abc # v4"], [], DISPATCH))).toStrictEqual([]);
+  });
+
+  it("finds a new workflow that keeps its record in its log, by default", () => {
+    expect(workflowFaults(job([CHECKOUT, ...RUNTIME, "- run: pnpm build"], [], DISPATCH))).toStrictEqual([FAULT]);
+    expect(workflowFaults(job([CHECKOUT, ...RUNTIME, "- uses: actions/upload-pages-artifact@abc # v4"], [], DISPATCH))).toStrictEqual([FAULT]);
+  });
+
+  it("finds a run by hand with no job that starts the gate", () => {
+    expect(workflowFaults(job([CHECKOUT, "- run: echo x"], [], DISPATCH))).toStrictEqual([NO_JOB]);
+    expect(workflowFaults(job([CHECKOUT, ...UPLOAD], [], DISPATCH))).toStrictEqual([FAULT, NO_JOB]);
+  });
+
+  it("accepts a job with no runtime beside a job with the gate", () => {
+    const two = `${job([CHECKOUT, ...RUNTIME, GATE], [], DISPATCH)}\n  two:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo x`;
+    expect(workflowFaults(two)).toStrictEqual([]);
+  });
+
+  it("accepts a step of the gate with a condition", () => {
+    expect(workflowFaults(job([CHECKOUT, "- if: a", "  uses: actions/setup-node@abc # v7", "- if: a", "  run: node scripts/workflow-gate.ts"], [], DISPATCH))).toStrictEqual([]);
+  });
+
+  it("gives no fault of a run by hand for a file of the list, and still finds a hidden test there", () => {
+    expect(workflowFaults(job([CHECKOUT, ...RUNTIME, ...UPLOAD], [], DISPATCH), "release.yml")).toStrictEqual([]);
+    expect(workflowFaults(job(["- run: pnpm test || true"], [], DISPATCH), "pages.yml")).toStrictEqual(["one: || after a test: - run: pnpm test || true"]);
+    expect(workflowFaults(job([CHECKOUT, ...RUNTIME, ...UPLOAD], [], DISPATCH), "other.yml")).toStrictEqual([FAULT]);
+  });
+
+  it("does not read a name of the object prototype as a file of the list", () => {
+    expect(workflowFaults(job([CHECKOUT, ...RUNTIME, ...UPLOAD], [], DISPATCH), "toString")).toStrictEqual([FAULT]);
+  });
+
+  it("gives a reason for each file of the list", () => {
+    expect(Object.values(NO_RECORD).filter((reason) => reason.length === 0)).toStrictEqual([]);
+  });
+
+  it("finds an entry of the list with no file or with no run by hand", () => {
+    const list = { "a.yml": "x", "b.yml": "x", "c.yml": "x", "d.yml": "x" };
+    const texts = new Map([
+      ["a.yml", job([], [], DISPATCH)],
+      ["b.yml", job([], [], ["on:", "  push:"])],
+      ["c.yml", job([], [], ["on:", "  push:", "  # workflow_dispatch:"])],
+    ]);
+    expect(listFaults(texts, list)).toStrictEqual(["b.yml", "c.yml", "d.yml"].map((f) => `${f}: an entry of NO_RECORD with no run by hand`));
   });
 
   it("reads a comment on the trigger as no trigger", () => {

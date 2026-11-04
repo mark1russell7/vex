@@ -185,6 +185,26 @@ test("on a phone, the chart takes the width of the screen, and the page does not
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
 
+test("V-083: a choice of the menu just after a link opens keeps the link of the choice in the address", async ({ page }) => {
+  await open(page);
+  // The observer runs after the new title is on the page and before the effects of that render, as a fast choice can.
+  await page.evaluate(() => {
+    const title = document.querySelector<HTMLInputElement>('input[aria-label="The name of the table"]');
+    const menu = document.querySelector<HTMLSelectElement>('select[aria-label="Open an example"]');
+    if (title === null || menu === null) throw new Error("the app has no title or no menu");
+    const choose = (_: unknown, self: MutationObserver): void => {
+      if (title.value !== "Rabbits and foxes") return;
+      self.disconnect();
+      menu.value = "ball";
+      menu.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    new MutationObserver(choose).observe(title, { attributeFilter: ["value"] });
+    window.location.hash = "#example=prey";
+  });
+  await expect(page.getByRole("textbox", { name: "The name of the table" })).toHaveValue("Thrown ball");
+  await expect(page).toHaveURL(/#example=ball$/);
+});
+
 test("a link opens its example in the same tab, and after an edit a reload keeps the edit", async ({ page }) => {
   await open(page);
   const title = page.getByRole("textbox", { name: "The name of the table" });

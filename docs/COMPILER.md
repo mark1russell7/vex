@@ -231,6 +231,8 @@ The limit comes from a measure of doubling programs on a CI runner, with a heap 
 
 The largest module of `ireko` has 2,138 places, so the limit is 15 times that program.
 
+The workflow `places-gate.yml` holds the rule. It removes the limit and compiles each shape at the depth of the limit and at the next depth, in three fresh processes. It fails if a row of the first depth goes over the line. It also fails if each row of the next depth stays under the line.
+
 #### The faults of a module (COMPILE.MODULE.FAULT)
 
 A catch of a module holds an exception of a function of a domain, because the interpreter gives an error for it. The same catch also holds a fault of the printed code. Then a defect of the printer is a value, and only a differential test finds it.

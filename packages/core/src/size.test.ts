@@ -306,8 +306,8 @@ describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
     expect(check(two({ y: itemOf(v("x")), x: set(v("x"), lit(1)) }))).toBeUndefined();
   });
 
-  it("LOOP.SIZE.SETNTH: the kind of the items joins the kind of the value", () => {
-    // The items of the list are numbers, and the value is a text, so concat at an item has no number bound.
+  it("LOOP.SIZE.SETNTH: a value of another kind is valid", () => {
+    // The items of the list are numbers, and the value is a text. The result kind joins the two kinds.
     const numbers = each(axes.all, ref("n"));
     expect(check(step(numbers, (x) => set(x, lit(1))))).toBeUndefined();
     expect(check(iterate(3, { x: numbers }, { x: set(v("x"), lit("a")) }, app("sum", v("x"))))).toBeUndefined();

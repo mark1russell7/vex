@@ -86,20 +86,21 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     setEditing(undefined);
   };
 
-  // The book of the link in the address. The link stays in the address while the book is the one of the link.
-  const linked = useRef<Book | undefined>(undefined);
+  // The book of the link in the address. The link stays in the address while the book is the one of the link. This is
+  // state and not a ref, because a ref shows a new link to the effect of an old render (V-083).
+  const [linked, setLinked] = useState<Book | undefined>(undefined);
 
   // The browser keeps the document, so a new visit opens it again. After a change, the link in the address names an
   // old document. Thus the app removes the link, and a reload opens the changed document. This effect comes before
   // the effect that reads the link, because React starts the effects in this order.
   useEffect(() => {
     saveLocal(book);
-    if (linked.current === undefined || linked.current === book) return;
+    if (linked === undefined || linked === book) return;
     // A tab of the same book does not change the document.
-    if (linked.current.tables === book.tables) return;
-    linked.current = undefined;
+    if (linked.tables === book.tables) return;
+    setLinked(undefined);
     if (LINK.test(window.location.hash)) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-  }, [book]);
+  }, [book, linked]);
 
   // An example link (`#example=<id>`) or a share link (`#sheet=<data>`) opens its document. The app reads the address
   // when it starts and each time the address changes, for example when a link opens in the same tab.
@@ -107,7 +108,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
     const open = (): void => {
       const example = EXAMPLES.find((x) => x.id === /#example=([\w-]+)/.exec(window.location.hash)?.[1]);
       if (example !== undefined) {
-        linked.current = exampleBook(example);
+        setLinked(exampleBook(example));
         load(exampleBook(example), `Opened the example "${example.title}".`);
         return;
       }
@@ -118,7 +119,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
           setNote("The link has no valid sheet.");
           return;
         }
-        linked.current = d;
+        setLinked(d);
         load(d, `Opened "${activeOf(d).title}" from the link.`);
       });
     };
@@ -259,7 +260,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
   const share = async (): Promise<void> => {
     const url = `${window.location.origin}${window.location.pathname}#sheet=${await encodeShare(book)}`;
     window.history.replaceState(null, "", url);
-    linked.current = book;
+    setLinked(book);
     try {
       await navigator.clipboard.writeText(url);
       setNote("The link is on the clipboard.");
@@ -295,7 +296,7 @@ export function SheetApp(props: SheetAppProps): ReactElement {
               if (ex === undefined) return;
               // The address names the example, so the user can copy a link to it.
               window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#example=${ex.id}`);
-              linked.current = exampleBook(ex);
+              setLinked(exampleBook(ex));
               load(exampleBook(ex), `Opened the example "${ex.title}".`);
             }}
           >

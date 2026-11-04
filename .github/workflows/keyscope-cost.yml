@@ -1,5 +1,5 @@
 # Throwaway measure of a draft pull request: the compile cost of the branch against its base, and the walk alone.
-# Head 4f9bace, tree 808ecd4.
+# Head e93454c, tree 5d0be27.
 name: keyscope cost
 on:
   push:
@@ -25,6 +25,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - name: Both tree hashes
         run: |
           echo "TREE side $(git rev-parse HEAD) $(git rev-parse HEAD:packages/compiler/src)"

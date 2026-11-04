@@ -31,7 +31,8 @@ export interface CellRef {
 /** This function makes a cell reference: the column `column` at the address `at` from the focus. */
 export const cell = (column: string, at: readonly FixedMove[] = []): Expr => ext(CELL_KIND, { column, at } satisfies CellRef);
 
-const isCellRef = (u: unknown): u is CellRef =>
+/** This function tells if the data of an extension is a cell reference: a column, and an address of fixed moves. */
+export const isCellRef = (u: unknown): u is CellRef =>
   typeof u === "object" &&
   u !== null &&
   typeof (u as { column?: unknown }).column === "string" &&
@@ -116,7 +117,7 @@ function setDone(t: Table, column: string, key: string, result: Result<unknown>)
 }
 
 /** A direction of the reads of a column from itself: to an earlier key, to a later key, or down a tree to the children. */
-type Direction = "before" | "after" | "down";
+export type Direction = "before" | "after" | "down";
 
 /** This function adds the direction of one move or one axis of a read of a column from itself. */
 function addDirection(d: Set<Direction>, m: Move | Axis): void {
@@ -153,12 +154,12 @@ function partsOf(axis: Axis): { readonly base: Axis; readonly tests: readonly Ex
  * the formulas of its cells. It also gives the directions of their reads of the column itself. A read in the body or
  * in a test of an axis also has the direction of that axis. It walks each expression with a stack, not with recursion.
  */
-function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string>; readonly directions: ReadonlySet<Direction> } {
-  const columns = new Set<string>();
+export function readsOf(columns: ReadonlyMap<string, Expr>, cells: CellFormulas, self: string): { readonly columns: ReadonlySet<string>; readonly directions: ReadonlySet<Direction> } {
+  const read = new Set<string>();
   const directions = new Set<Direction>();
-  const formula = t.columns.get(self);
+  const formula = columns.get(self);
   // An expression that is not valid reads no column. Its evaluation gives the error (EVAL.SHAPE).
-  const todo: [Expr, Axis | undefined][] = [...(formula === undefined ? [] : [formula]), ...(t.cells.get(self)?.values() ?? [])].filter((e) => shapeError(e) === undefined).map((e) => [e, undefined]);
+  const todo: [Expr, Axis | undefined][] = [...(formula === undefined ? [] : [formula]), ...(cells.get(self)?.values() ?? [])].filter((e) => shapeError(e) === undefined).map((e) => [e, undefined]);
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
     const [e, axis] = item;
     // A test of the axis of a data limit reads at each target, as the test of an `each` does.
@@ -176,22 +177,22 @@ function readsOf(t: Table, self: string): { readonly columns: ReadonlySet<string
       // The data of an extension of another kind can look like a cell reference. It only changes the order of a fill.
       // Stryker disable next-line ConditionalExpression,LogicalOperator: see the comment above
     } else if (e.kind === CELL_KIND && isCellRef(e.data)) {
-      columns.add(e.data.column);
+      read.add(e.data.column);
       // The directions of the reads of another column only change the order of a fill, because that column comes first.
       // Stryker disable next-line ConditionalExpression: see the comment above
       if (e.data.column === self) for (const m of [...(axis === undefined ? [] : [axis]), ...e.data.at]) addDirection(directions, m);
     }
   }
-  return { columns, directions };
+  return { columns: read, directions };
 }
 
 /**
- * This function gives the columns of a table in an order where each column comes after the columns that it reads.
+ * This function gives the columns of a sheet in an order where each column comes after the columns that it reads.
  * The columns of a cycle keep their order. The columns with formulas of cells only come last.
  */
-function columnOrder(t: Table): readonly string[] {
-  const names = new Set([...t.columns.keys(), ...t.cells.keys()]);
-  let left = [...names].map((c) => ({ c, needs: [...readsOf(t, c).columns].filter((x) => x !== c && names.has(x)) }));
+export function columnOrder(columns: ReadonlyMap<string, Expr>, cells: CellFormulas): readonly string[] {
+  const names = new Set([...columns.keys(), ...cells.keys()]);
+  let left = [...names].map((c) => ({ c, needs: [...readsOf(columns, cells, c).columns].filter((x) => x !== c && names.has(x)) }));
   const order: string[] = [];
   const placed = new Set<string>();
   // Each pass places each column whose reads are placed. A pass that places no column leaves a cycle, so it places
@@ -563,8 +564,8 @@ export class SheetRun {
     // A read inside a formula has a cell at the top. A fill there has no effect.
     if (t === undefined || this.#top.index >= 0) return;
     const host = this.#top;
-    for (const column of columnOrder(t)) {
-      for (const key of keyOrder(t.space, readsOf(t, column).directions)) {
+    for (const column of columnOrder(t.columns, t.cells)) {
+      for (const key of keyOrder(t.space, readsOf(t.columns, t.cells, column).directions)) {
         const program = this.#programOf(t, column, key);
         if (program === undefined || doneOf(t, column, key) !== undefined) continue;
         this.#top = this.#filling;

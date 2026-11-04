@@ -137,14 +137,21 @@ describe("COMPILE.MODULE.SHEET.COMPUTED: a computed move in a module of a sheet"
     expect(hasSearch(same(new Map([...columns].slice(0, 2)), { size: "number" }, s, parents))).toBe(false);
   });
 
-  it("COMPILE.MODULE.SHEET.COMPUTED COMPILE.MODULE.SHEET.LIST: a list op over a list at a computed key gives a reason, and the interpreter gives the value", () => {
+  it("COMPILE.MODULE.SHEET.COMPUTED COMPILE.MODULE.SHEET.LIST: a list op reads a list at a computed key, and a key outside the column gives the error of the interpreter", () => {
+    const window = each(axes.window(-1, 0), ref("v"));
     const columns = new Map<string, Expr>([
-      ["l", each(axes.window(-1, 0), ref("v"))],
+      ["l", window],
       ["n", op("sum", cell("l", [index(ref("at"))]))],
+      ["m", op("max", cell("l", [index(op("add", ref("at"), lit(3)))]))],
     ]);
-    const m = emitSheetModule(columns, NUM);
-    expect(m.ok ? "" : m.reason).toBe('the list op "sum"');
+    expect(same(columns)).toContain("function run");
     expect(new SheetRun(columns, { space: space.array(RECORDS), domains: [NumDomain] }).cell("n", "0")).toEqual({ ok: true, value: 5 });
+    // A formula before the column of lists needs the kind of that column.
+    const before = new Map<string, Expr>([
+      ["n", op("sum", cell("l", [index(ref("at"))]))],
+      ["l", window],
+    ]);
+    expect(same(before, { l: { list: "number" } })).toContain("function run");
   });
 
   it("COMPILE.MODULE.SHEET.COMPUTED: a graph has no window, so a module gives a reason, and the interpreter gives the error of the axis", () => {

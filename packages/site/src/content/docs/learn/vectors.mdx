@@ -133,7 +133,7 @@ The sign of 0 is 0, so a gap of 0 on that axis gives no push. If two boxes have 
 
 - The op `xy` of `NumDomain` makes a value of `XYDomain`. Its declaration `returns: "domain:XY"` gives the module the kind of each vector.
 - No op of `XYDomain` lifts a number. Write `max(xy(1, 1))`, not `max(1)`.
-- A module has no `reduce`. A `fold` over the items gives the component-wise maximum.
+- A module has `reduce` with a literal op name. `reduce("max")` gives the component-wise maximum.
 - Put `XYDomain` before `NumRecordDomain`, because a record of numbers accepts the same objects.
 
 ```ts doctest

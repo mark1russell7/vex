@@ -288,6 +288,15 @@ A layout rule often works along a main axis and a cross axis, for example the to
 - **[JSON.LEAVES]** `leaves(o, depth)` gives the leaves of the object `o`, in the order of a walk over its own fields, as `fields` reads them. The walk goes into an object with fields when the path of its field has fewer than `depth` keys. Each leaf is a record `{ path, kind, value }` with the kind of `kinds`, and a `"null"` leaf has no `value`. A path joins the keys with `.`, but after an empty path it is the key alone. A number `depth` that is not a whole number from 1 to 100 gives `#CALC!`. A receiver that is not an object, and a value that is not JSON, give `#CALC!` too.
 - **[JSON.FIELD]** `field(o, k)` gives the value of the own field `k` of the object `o`. A missing key, a field that is `null`, a key that is not a text and a receiver that is not an object give `#CALC!`. Thus an inherited member, for example `constructor`, is not a field.
 
+### 7.3 The sign and the smallest axis
+
+A force separation pushes two boxes apart along the axis of their smallest overlap, with the sign of their gap. For the overlap `o` and the gap `g`, the push is `minAxis(o) * sign(g) * o`. A gap of 0 on that axis gives no push.
+
+- **[NUM.SIGN]** `sign(n)` gives the value of `Math.sign(n)`: 1 for a positive number, -1 for a negative number, 0 for 0 and -0 for -0. An infinite number gives 1 or -1, because an op checks its result and not its receiver. `NaN` gives `#NUM!`.
+- **[VEC2.SIGN]** `sign(v)` of `Vec2Domain` gives the sign of each component, as NUM.SIGN tells. A component `NaN` gives `#NUM!`, as VEC2.FINITE tells. An infinite component gives 1 or -1.
+- **[VEC2.MINAXIS]** `minAxis(v)` gives (1, 0) if `x <= y`, else (0, 1). The comparison uses the signed values, and `minAxis(abs(v))` compares the sizes. A tie gives (1, 0), and 0 and -0 tie. Infinite values compare as numbers. A component `NaN` gives `#NUM!`. For finite components, `along(v, minAxis(v))` gives `minComponent(v)`, and `across(v, minAxis(v))` gives `maxComponent(v)`.
+- **[XY.SIGN]** `sign` and `minAxis` of `XYDomain` give the components of the same ops of `Vec2Domain`. Each one is a function of plain data, so a standalone module can copy it.
+
 ## 8. The builder
 
 - **[BUILD.IMMUTABLE]** A builder call gives a new chain. An earlier chain does not change.
@@ -336,7 +345,7 @@ A sheet has named columns of formulas over a space. A cell is one column at one 
 These requirements apply to `@mark1russell7/vex-compiler`.
 
 - **[COMPILE.TIERED]** `tiered(e, options)` gives a program with the interface of `compile`. For each space, origin, variables and tables, its `run` gives the result of `evaluate`.
-- **[COMPILE.FALLBACK]** Where the generated code of tier 2 cannot give the result, tier 1 gives it. A page that does not permit `new Function` uses tier 1.
+- **[COMPILE.FALLBACK]** Where the generated code of tier 2 cannot give the result, tier 1 gives it. This rule applies in each context, also in the first argument of `ifError` and in an item of a list op. A page that does not permit `new Function` uses tier 1.
 - **[COMPILE.FIX]** Tier 2 and modules do not have `fix` yet. A program with `fix` stays in tier 1 with the same result. `emitModule` refuses it with a reason that names the fixed point.
 - **[COMPILE.ERRORS]** Tier 2 gives the error result of a program. The error has each field of the error of `evaluate`: code, kind, message, op, path, origin, focus, causes and thrown value. The result `#ARGS` is such a result. An argument evaluates once, in the order of `evaluate`. A run that tier 2 ends with an error is no fallback of `TierStats`.
 - **[COMPILE.LIST.VALUE]** Tier 2 gives a list op on a list value, a list literal and `fill`. Each list op on a list value uses the code of the interpreter (LIST.OPS). Thus a list with an error item gives the result of `evaluate`. An error of the op is an error of the program (COMPILE.ERRORS). `ifError` gives its second argument, a list op skips the error item, and a binding of `let` has no value. These send the evaluation to tier 1: `#DEPTH!` and an error of an item that `strict` gives. A list op on an array also goes to tier 1 (LIST.ARRAY).
@@ -363,6 +372,7 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 
   The value of the run and a column of lists give an array of the values of the items, with no keys. An error item is `VEX_ERROR`. A list in a record or in an argument of an op stays a `vex.list`. The run gives the values of the interpreter in this form. Another value of `lists` gives a reason.
 - **[COMPILE.MODULE.LIST.FIELD]** A field of a record can be a list. The record holds the list as a frozen `vex.list`, with the keys of the interpreter as text. An error item has the error `VEX_ERROR`. An op of a domain reads the lists of such a record.
+- **[COMPILE.MODULE.KEYS]** `emitModule` and `emitSheetModule` have the option `keys`, with the default `false`. With `keys: true`, the run takes the keys of its records as its last argument: an array with one different text for each record. The value at each position is the value of the interpreter at the key of that position, over a space with these keys. A `get`, a `without`, a `vex.list` and the move `key` use these keys. A key of a literal and of `fill` stays that key. A program that reads no key of a record prints the same text as without the option, and its run ignores the argument. Keys that are not such an array throw a `VexContractError`. A record space has no offset and no axis `window`. Thus a program that reads a key in an array space and has one of these gives a reason. A sheet with formulas of cells gives a reason.
 - **[COMPILE.MODULE.BAND]** A module copies the ops of a domain of bands, `BandDomain` of the pilots. A program makes bands, reads their fields, and moves, flips, joins and compares them. The run gives the values of the interpreter, and `VEX_ERROR` for an error.
 - **[COMPILE.MODULE.NTH.INDEX]** A module keeps the items with values of a list on its array at the first `nth`, `count` or `first` of the list. Each later `nth`, `count` and `first` of that list does not read the list again. A key of a node of the memo can be a list.
 - **[COMPILE.MODULE.LIST.SHARE]** In a module, a list op does not copy a list without error items to read its items with values. It reads the array of the list. No op changes such an array, so `sortBy` sorts a copy.

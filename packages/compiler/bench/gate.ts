@@ -21,10 +21,14 @@
  * | radial, 12 children, linked | 3.19, 3.00, 3.14, 2.95, 3.16 | 2.75, 2.75, 3.11, 3.03, 3.29 | 3.34 (C) | 3.34 (C) |
  * | radial, 60 children, nested | 3.90, 3.86, 3.81, 3.84, 3.82 | 3.56, 3.55, 3.83, 3.42, 4.06 | 3.29 (C) | 3.29 (C) |
  * | tree, 1000 nodes | 1.00, 1.06, 0.98, 1.05, 0.99 | 1.05, 1.06, 0.99, 0.99, 1.02 | 1.06 | 1.14 |
- * | shapes, 1111 nodes | 1.63, 1.70, 1.58, 1.63, 1.58 | 1.63, 1.68, 1.61, 1.83, 1.59 | 1.68 | 2.08 |
+ * | shapes, 1111 nodes | 1.63, 1.70, 1.58, 1.63, 1.58 | 1.63, 1.68, 1.61, 1.83, 1.59 | 1.68 | 1.74 (D) |
  * | the growth of the share of each value | 2.00, 2.00, 2.01, 2.00, 2.00 | 2.00, 2.00, 2.00, 2.01, 1.99 | 2.03 | 2.03 |
  *
  * (a) Each limit is the worst run median plus the spread of the run medians, rounded up (STRATEGY.md of the fleet).
+ * (D) Run 41773861998 of speed-gate.yml (reps D1 to D5, on main at 62acda4, with the freeze rule of #228) gave the
+ * shapes limit of the other models. The medians are 1.63 (9V45), 1.57 (9V74), 1.52, 1.56 and 1.62 (7763). The worst
+ * median plus the spread is 1.63 + 0.11, so the limit is 1.74. The limit of the 7763 stays 1.68, because three runs do
+ * not make a limit. These runs have no Xeon, and Xeon runners gave 1.83 on two models, so a Xeon keeps the old 2.08.
  * (b) The rate p is the upper Wilson end (95 %) of the rate of processes above the limit in the derivation runs. The
  * largest count L is the smallest count with P(Binomial(11, p) > L) under 1 %. For the 7763, L is 3 or 4, and (b) fails a
  * run with a slow rate of 0.5 in 73 % to 89 % of runs, and 21 % to 43 % at 0.3. For other models, L is 2: 97 % at 0.5, 69 % at 0.3.
@@ -64,7 +68,7 @@ const LIMITS = {
   linked: { "7763": { limit: 3.34, slow: 3.34, maxSlow: 3 }, other: { limit: 3.34, slow: 3.34, maxSlow: 3 } },
   nested: { "7763": { limit: 3.29, slow: 3.29, maxSlow: 3 }, other: { limit: 3.29, slow: 3.29, maxSlow: 3 } },
   tree: { "7763": { limit: 1.06, slow: 1.06, maxSlow: 4 }, other: { limit: 1.14, slow: 1.14, maxSlow: 2 } },
-  shapes: { "7763": { limit: 1.68, slow: 1.68 }, other: { limit: 2.08, slow: 2.08 } },
+  shapes: { "7763": { limit: 1.68, slow: 1.68 }, Xeon: { limit: 2.08, slow: 2.08 }, other: { limit: 1.74, slow: 1.74 } },
   share: { "7763": { limit: 2.03, slow: 2.03 }, other: { limit: 2.03, slow: 2.03 } },
 } as const satisfies Readonly<Record<string, ModelLimits>>;
 const CPU = cpus()[0]?.model ?? "";

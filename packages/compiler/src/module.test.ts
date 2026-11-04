@@ -214,6 +214,14 @@ const copy = (name: string, what: string): string => `the op "probe" of the doma
 /** A list op over the items whose test against the key `k` is true. */
 const where = (test: Expr, body: Expr, o = "count"): Expr => op(o, each(axes.where(axes.all, test), body));
 
+/** This function gives the run of a module with the name of the run. The scope of a function holds the names of a module. */
+function runNamed(e: Expr, name: string): Run {
+  const source = sourceOf(e, { ...OPTIONS, name });
+  const inner = /^export \{ (\S+) as \S+ \};$/m.exec(source)?.[1] ?? name;
+  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
+  return new Function(`${source.replace(/^export \{.*$/m, "").replaceAll(/^export /gm, "")}\nreturn ${inner};`)() as Run;
+}
+
 describe("COMPILE.MODULE: a standalone module", () => {
   it("is an ES module without imports that gives the value of the interpreter at each key", async () => {
     const e = rec({ x: op("add", n, v("a")), y: op("sum", each(axes.others, w)), z: op("upper", ref("s")) });
@@ -404,8 +412,8 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(reasonOf(where(op("lt", op("if", ref("b"), n, ref("s")), K), w))).toBe(undecided("lt"));
   });
 
-  it("V-060 COMPILE.MODULE: the name of the run is not a reserved word, a name that the module declares or a global that a module reads", () => {
-    // V-060: such a name gave a module that did not parse, or a run that read its own function in place of a global.
+  it("V-060 COMPILE.MODULE: the name of the run is not a reserved word or a name that a module exports", () => {
+    // V-060: such a name gave a module that did not parse.
     const e = op("add", n, lit(1));
     expect(sourceOf(e)).toContain("const k_number = ");
     // A node of the memo with two keys declares the helper M and the constant Z. A node that keeps its items declares the
@@ -414,18 +422,15 @@ describe("COMPILE.MODULE: a standalone module", () => {
     expect(sourceOf(memo)).toMatch(/^const Z = \{\};\nconst N = \{\}, W = \{\};\n[\s\S]*^function M\(f\) \{$[\s\S]*^function S\(/m);
     const cases: readonly (readonly [Expr, string, string])[] = [
       ...["class", "function", "await", "let", "yield", "enum", "static", "implements", "eval", "arguments", "true"].map((x) => [e, x, "a reserved word of JavaScript"] as const),
-      ...[...MODULE_GLOBALS].map((x) => [e, x, "a global that a module reads"] as const),
-      ...["F", "C", "E", "VEX_ERROR", "VexContractError", "k_number"].map((x) => [e, x, "a name of the module"] as const),
-      ...["M", "S", "Z", "N", "W"].map((x) => [memo, x, "a name of the module"] as const),
+      ...["VEX_ERROR", "VexContractError"].map((x) => [e, x, "a name of the module"] as const),
     ];
     for (const [program, name, why] of cases) expect(reasonOf(program, { ...OPTIONS, name })).toBe(`the name "${name}" is ${why}`);
-    // Each other name gives a module that parses and gives the values of the interpreter. A global that no module reads,
-    // and a helper that the module does not declare, are good names too.
-    for (const name of ["run", "plusOne", "$", "_", "R", "records", "Run", "Intl", "JSON", "globalThis", "M", "S", "Z", "N", "W"]) {
-      const source = sourceOf(e, { ...OPTIONS, name });
-      // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
-      const run = new Function(`${source.replaceAll(/^export /gm, "")}\nreturn ${name};`)() as Run;
-      expect(run(RECORDS, VARS)).toEqual([2, -1, 4]);
+    // Each other name gives a module that parses and gives the values of the interpreter (COMPILE.MODULE.NAME).
+    const names = ["run", "plusOne", "$", "_", "R", "records", "Run", "Intl", "JSON", "globalThis", "M", "S", "Z", "N", "W", "F", "C", "E", "k_number", ...MODULE_GLOBALS];
+    expect(runNamed(e, "run")(RECORDS, VARS)).toEqual([2, -1, 4]);
+    for (const program of [e, memo]) {
+      const want = runNamed(program, "run")(RECORDS, VARS);
+      for (const name of names) expect(runNamed(program, name)(RECORDS, VARS)).toEqual(want);
     }
   });
 

@@ -1703,7 +1703,7 @@ The reasons for the limits are these:
 - A lazy cell that a key loop reads stays, because each key must read one shared object (COMPILE.MODULE.FUSE.OUT). `G` stays, because the value of the cell can be `E`.
 - A parameter can have two reads. A name as the argument has no effect and cannot fail, so the number of reads and their order stay the same.
 - The pass counts the words of a line with no parser. A word in a text counts too. This count is too large at most, so it can only stop a rule.
-- The names that a module declares come from the printer before the pass. So the option `name` keeps each refusal.
+- The check of the option `name` reads the code after the pass. So a name of a helper that the pass removed keeps the short form of the export.
 
 | Bytes, after minify and gzip level 9 | Before | After |
 |---|---|---|

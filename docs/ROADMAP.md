@@ -21,7 +21,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
 | KEYSCOPE | A shared constant of a module follows the scopes of its names, so two expressions with one text and different bindings keep different values (V-078, V-080). | compiler | P0 | in progress | |
-| CATCHFAULT | A catch of a module does not hide a compiler fault. The measures of the size and the time come first. | compiler | P1 | in progress: #278 | |
+| CATCHFAULT | A print-time refusal of a fault that a catch can hide. The runtime check is dropped, and #278 is closed. | compiler | P1 | later: after 0.18.0 | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 8 merged, the size of the printer is #242 | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |

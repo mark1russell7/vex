@@ -3,7 +3,7 @@
  * the receiver, the op, the arguments and the expected value. The rows check the method of the value and the
  * declaration of the op in the domain (parameters, lifting) together.
  */
-import { app, evaluate, lit, space, type AnyDomain, type Result } from "@mark1russell7/vex";
+import { app, evaluate, lit, space, vexList, type AnyDomain, type Result } from "@mark1russell7/vex";
 import { describe, expect, it } from "vitest";
 import { Angle, AngleDomain } from "./angle.ts";
 import { Color, ColorDomain } from "./color.ts";
@@ -256,6 +256,7 @@ describe("the ops of TextDomain", () => {
     ["concat", [true], "Vextrue"],
     ["concat", [{ a: 1 }], 'Vex{"a":1}'],
     ["length", [], 3],
+    ["codePoints", [], vexList([0x56, 0x65, 0x78].map((code, i) => ({ key: String(i), result: { ok: true as const, value: code } })))],
     ["upper", [], "VEX"],
     ["lower", [], "vex"],
     ["contains", ["ex"], true],

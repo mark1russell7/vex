@@ -3,7 +3,7 @@
  * whose op the interpreter takes first, and the kinds and the lifts of its parameters. The facts come from the op
  * tables, so the same options always give the same facts, and the same source.
  */
-import { isListOp, isOpName, liftsAt, type AnyDomain, type ExtHandler, type FreeFn, type ListOp, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
+import { isListOp, isOpName, liftsAt, listItemKind, type AnyDomain, type ExtHandler, type FreeFn, type ListOp, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
 /**
  * The most bodies of functions that tier 2 puts at the calls of one program. A function that calls another function
@@ -107,12 +107,13 @@ const FREE: SiteFacts = Object.freeze({ t: "free" });
 /**
  * The op of a site whose values have known kinds (KIND.STATIC):
  * - `fn`: the function of the op of the domain `domain`. `bad` is true when an argument has a kind that the op does
- *   not accept, so the interpreter gives an error. `returns` is the kind of the result, if the op declares it. `lifted`
- *   has the positions after the receiver of the numbers that `fromScalar` lifts, if the caller asks for them.
+ *   not accept, so the interpreter gives an error. `returns` is the kind of the result, if the op declares it. `item`
+ *   is the kind of the items of a result that is a list (KIND.RETURNS.LIST). `lifted` has the positions after the
+ *   receiver of the numbers that `fromScalar` lifts, if the caller asks for them.
  * - `free`: no domain that accepts the receiver has the op, and a free function has the name.
  */
 export type StaticSite =
-  | { readonly t: "fn"; readonly domain: number; readonly bad: boolean; readonly returns: Kind | undefined; readonly lifted?: readonly number[] }
+  | { readonly t: "fn"; readonly domain: number; readonly bad: boolean; readonly returns: Kind | undefined; readonly item?: PrimitiveKind; readonly lifted?: readonly number[] }
   | { readonly t: "free" };
 
 const STATIC_FREE: StaticSite = Object.freeze({ t: "free" });
@@ -123,7 +124,7 @@ const NO_LISTS: ReadonlySet<number> = new Set();
 /** This function gives the kind of the result of an op of a domain, if the op declares it. */
 function returnsOf(domain: AnyDomain, kind: ReturnKind | undefined): Kind | undefined {
   if (kind === "domain") return kindOfDomain(domain);
-  return kind === "any" ? undefined : kind;
+  return kind === "any" || listItemKind(kind) !== undefined ? undefined : (kind as Kind | undefined);
 }
 
 /**
@@ -181,6 +182,8 @@ export interface Facts {
    * op for each receiver, for example `fill` (LIST.FILL).
    */
   own(name: string): boolean;
+  /** This function tells if a domain declares a list as the result of the op `name` (KIND.RETURNS.LIST). */
+  givesList(name: string): boolean;
   /** This function gives the number of domains with an identity of the op `name`, as `#reduce` of the interpreter counts them (LIST.EMPTY). */
   identities(name: string): number;
 }
@@ -212,7 +215,8 @@ export function factsOf(options: Options): Facts {
         if (lifted.some((j) => !lift || args[j] === undefined)) return undefined;
         const ok = args.map((a, j) => fits(d, e.spec.params?.[j], lifted.includes(j) ? kindOfDomain(d) : a, lists.has(j + 1)));
         if (ok.includes(undefined)) return undefined;
-        return { t: "fn", domain: i, bad: ok.includes(false), returns: returnsOf(d, e.spec.returns), ...(lifted.length === 0 ? {} : { lifted }) };
+        const item = listItemKind(e.spec.returns);
+        return { t: "fn", domain: i, bad: ok.includes(false), returns: returnsOf(d, e.spec.returns), ...(item === undefined ? {} : { item }), ...(lifted.length === 0 ? {} : { lifted }) };
       }
       return fns !== undefined && Object.hasOwn(fns, name) ? STATIC_FREE : undefined;
     },
@@ -226,6 +230,9 @@ export function factsOf(options: Options): Facts {
     },
     own(name) {
       return domains.every((d) => entryOf(d, name) === undefined) && !(fns !== undefined && Object.hasOwn(fns, name));
+    },
+    givesList(name) {
+      return domains.some((d) => Object.hasOwn(d.ops, name) && listItemKind((d.ops[name] as OpSpec<unknown>).returns) !== undefined);
     },
     identities(name) {
       return domains.filter((d) => Object.hasOwn(d.ops, name) && (d.ops[name] as OpSpec<unknown>).identity !== undefined).length;

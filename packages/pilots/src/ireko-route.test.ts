@@ -685,9 +685,9 @@ describe("the ireko route pilot", () => {
     expect(modules.label(nodeRecords(nodes), {})).toEqual(nodes.map((n) => labelBoxOf(n)));
   });
 
-  it("the host gives a label as code points, and a character outside the plane of 16 bits is one code point", () => {
+  it("the program reads the code points of a label, and a character outside the plane of 16 bits is one code point", () => {
     const nodes: RouteNode[] = [{ ...r(0, 0, 500, 40), scale: 1, label: "a\u{1f600}", mode: "nested", lastChild: -1 }];
-    expect(nodeRecords(nodes)[0]?.["codes"]).toEqual([0x61, 0x1f600]);
+    expect(nodeRecords(nodes)[0]?.["label"]).toBe("a\u{1f600}");
     expect(modules.label(nodeRecords(nodes), {})).toEqual([{ x: 4, y: 2, width: 1.52 * 13 + 8, height: 21 }]);
   });
 

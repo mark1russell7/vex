@@ -6,7 +6,7 @@
  * The result of an op comes from its declaration `returns`. Without it, the catalog uses the op with a sample of each
  * argument, and it gives the kind of the value.
  */
-import { domainOf, type AnyDomain, type OpSpec, type ParamKind } from "@mark1russell7/vex";
+import { domainOf, listItemKind, type AnyDomain, type OpSpec, type ParamKind } from "@mark1russell7/vex";
 import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LiftedNDVectorDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
 /** A domain of the catalog: its import name, the domain, the type of its values, a sample value and a short description. */
@@ -74,6 +74,8 @@ function resultOf(self: Entry, name: string, spec: OpSpec<unknown>): string {
   // A result of another domain has the type of that domain.
   if (spec.returns?.startsWith("domain:") === true) return CATALOG.find((x) => `domain:${x.d.name}` === spec.returns)?.type ?? spec.returns;
   if (spec.returns === "any") return "value";
+  const item = listItemKind(spec.returns);
+  if (item !== undefined) return `list of ${item}`;
   if (spec.returns !== undefined) return spec.returns;
   const params = paramsOf(self, name, spec);
   if (params === undefined) return "not declared";

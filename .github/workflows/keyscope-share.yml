@@ -1,5 +1,5 @@
 # Throwaway measure of a draft pull request: the share of generated programs that reach the bad state of V-077 (on the printer of the branch).
-# Head e93454c, tree 5d0be27.
+# Head f04170b, tree 4e3c1af.
 name: keyscope share
 on:
   push:
@@ -37,9 +37,17 @@ jobs:
           echo "TREE keyscope $(git rev-parse origin/keyscope) $(git rev-parse origin/keyscope:packages/compiler/src)"
           test "$(git rev-parse HEAD:packages/compiler/src)" = "$(git rev-parse origin/keyscope:packages/compiler/src)"
       - run: pnpm install --frozen-lockfile --filter @mark1russell7/vex-compiler...
+      # This step writes a line each 15 seconds: the memory in use and the largest process. A later step prints the file.
+      - name: Record the memory
+        run: |
+          nohup bash -c 'while sleep 15; do echo "MEM $(date -u +%H:%M:%S) used=$(free -m | awk "NR==2{print \$3}") largest=$(ps -eo rss= | sort -n | tail -1 | awk "{print int(\$1/1024)}")"; done' > "$RUNNER_TEMP/mem.log" 2>&1 &
+      # The earlier job of this name ran 49 minutes and left no log, and its siblings took 4 to 11 minutes.
+      # The step timeout and the heap limit stop the job while the runner lives, so a repeat leaves a reading.
       - name: Measure
+        timeout-minutes: 30
         working-directory: packages/compiler
         env:
+          NODE_OPTIONS: --max-old-space-size=8192
           SCRATCH_OUT: ${{ runner.temp }}/share.jsonl
           SCRATCH_N: "500000"
           SCRATCH_SEED: "20261104"
@@ -52,3 +60,8 @@ jobs:
           pnpm exec vitest run src/namegap-scratch.test.ts --maxWorkers=1 -t "$MATRIX_ARB"
           echo "SHARE $(cat "$SCRATCH_OUT")"
           cat "$SCRATCH_OUT.examples" || true
+      - name: The memory of the job
+        if: ${{ always() }}
+        run: |
+          echo "PEAK used=$(sed -E 's/.*used=([0-9]+).*/\1/' "$RUNNER_TEMP/mem.log" | sort -n | tail -1) largest=$(sed -E 's/.*largest=([0-9]+).*/\1/' "$RUNNER_TEMP/mem.log" | sort -n | tail -1) lines=$(wc -l < "$RUNNER_TEMP/mem.log")"
+          tail -8 "$RUNNER_TEMP/mem.log"

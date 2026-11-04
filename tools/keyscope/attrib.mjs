@@ -11,13 +11,13 @@ const IREKO_ROUNDS = 7;
 const PROFILE_ROUNDS = 7;
 const GROWTH_ROUNDS = 7;
 // The names of the frames in the rows: the walk of KEYSCOPE, the key of V-078, the token pass of V-079, and the larger passes.
-const NAMED = ["placesError", "unsharedAll", "#constKey", "keyText", "canonical", "rewritten", "narrowCatches", "keepFaults", "tidy", "inlineOps", "deadConstants", "onceCells", "memoNodes", "printProgram", "emitModule"];
+const NAMED = ["placesError", "unsharedAll", "#constKey", "keyText", "formsOf", "formOf", "meanings", "factsOf", "keysOf", "canonical", "rewritten", "narrowCatches", "keepFaults", "tidy", "inlineOps", "deadConstants", "onceCells", "memoNodes", "printProgram", "emitModule"];
 const GROWTH = [
   ["plain", [10, 11, 12, 13, 14, 15]],
   ["constant", [10, 11, 12, 13, 14, 15]],
   ["loop", [10, 11, 12, 13, 14, 15]],
-  ["chain", [500, 1000, 2000, 4000]],
-  ["loopchain", [100, 200, 400, 800]],
+  ["chain", [62, 124, 249, 499]],
+  ["loopchain", [41, 82, 124, 165]],
 ];
 const LIMIT_MS = 120_000;
 const HEAP = "--max-old-space-size=2048";

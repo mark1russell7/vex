@@ -61,5 +61,14 @@ for (const [mode, options] of Object.entries({ default: {}, "fuse false": { fuse
   if (!same) differs++;
   console.log(`V-086 ${mode}: reads with no declaration ${JSON.stringify(free)}, module ${JSON.stringify(got)} same=${same}`);
 }
+// V-088: a program past the limit of the nesting. This record states the fault of the published version, so it is not in the count.
+for (const levels of [499, 500, 510]) {
+  let deep = n;
+  for (let i = 0; i < levels; i++) deep = op("add", deep, n);
+  const want = sp.keys.map((origin) => evaluate(deep, { space: sp, origin, vars: { a: 2 }, domains })).map((r) => (r.ok ? r.value : "ERROR"));
+  const m = emitModule(deep, { domains, schema });
+  const got = m.ok ? new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn run;`)()(records, { a: 2 }) : `refused ${m.reason}`;
+  console.log(`V-088 levels ${levels}: interpreter ${JSON.stringify(want)}, module ${JSON.stringify(got)}`);
+}
 console.log(`DIFFERS ${differs}`);
 process.exitCode = differs === 0 ? 0 : 1;

@@ -1,0 +1,31 @@
+# Throwaway measure of a draft pull request: the programs of V-084 and V-085 on the package of npm at 0.17.2.
+name: keyscope tarball
+on:
+  push:
+    branches: [keyscope-cost]
+    paths: [.github/workflows/keyscope-tarball.yml]
+permissions: {}
+concurrency:
+  group: keyscope-tarball
+  cancel-in-progress: true
+jobs:
+  tarball:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Measure
+        run: |
+          mkdir "$RUNNER_TEMP/tar"
+          cp tools/keyscope/tarball.mjs "$RUNNER_TEMP/tar/"
+          cd "$RUNNER_TEMP/tar"
+          echo '{"name":"probe","private":true,"type":"module"}' > package.json
+          npm i --no-audit --no-fund --ignore-scripts @mark1russell7/vex-compiler@0.17.2 @mark1russell7/vex@0.17.2 @mark1russell7/vex-domains@0.17.2
+          node tarball.mjs

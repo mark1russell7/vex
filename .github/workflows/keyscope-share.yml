@@ -1,4 +1,5 @@
 # Throwaway measure of a draft pull request: the share of generated programs that reach the bad state of V-077 (on the printer of the branch).
+# Head 4f9bace, tree 808ecd4.
 name: keyscope share
 on:
   push:
@@ -47,6 +48,6 @@ jobs:
         run: |
           cp ../../tools/keyscope/namegap-scratch.test.ts.txt src/namegap-scratch.test.ts
           node ../../tools/keyscope/instrument.mjs src/module.ts src/module-scratch.ts
-          pnpm exec vitest run src/namegap-scratch.test.ts --maxWorkers=1 -t "$MATRIX_ARB" || true
+          pnpm exec vitest run src/namegap-scratch.test.ts --maxWorkers=1 -t "$MATRIX_ARB"
           echo "SHARE $(cat "$SCRATCH_OUT")"
           cat "$SCRATCH_OUT.examples" || true

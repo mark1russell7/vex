@@ -1,4 +1,4 @@
-# Throwaway measure of a draft pull request: the bytes of the sixteen ireko modules on each printer, and the two forms of V-082.
+# Throwaway measure of a draft pull request: the bytes of the sixteen ireko modules on each printer.
 name: keyscope bytes
 on:
   push:
@@ -28,7 +28,6 @@ jobs:
         run: |
           echo "TREE side $(git rev-parse HEAD) $(git rev-parse HEAD:packages/compiler/src)"
           echo "TREE keyscope $(git rev-parse origin/keyscope) $(git rev-parse origin/keyscope:packages/compiler/src)"
-          echo "TREE runname $(git rev-parse origin/runname) $(git rev-parse origin/runname:packages/compiler/src)"
           test "$(git rev-parse HEAD:packages/compiler/src)" = "$(git rev-parse origin/keyscope:packages/compiler/src)"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,15 +42,20 @@ jobs:
         run: |
           cp ../../tools/keyscope/bytes.test.ts.txt src/zz-bytes.test.ts
           cp ../../tools/keyscope/places.test.ts.txt src/zz-places.test.ts
-          measure() { BYTES_LABEL=$1 pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 2>&1 | grep -E "BYTES|FAIL|Tests " || true; }
-          pnpm exec vitest run src/zz-places.test.ts --maxWorkers=1 2>&1 | grep -E "PLACES|FAIL" || true
+          # A label of an older printer can stop at a later module, so only the label branch fails the job.
+          measure() {
+            out="$RUNNER_TEMP/$1.txt"
+            if BYTES_LABEL=$1 pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 > "$out" 2>&1; then state=passed; else state=failed; fi
+            grep -E "BYTES|FAIL|Tests " "$out" || echo "NO LINES $1"
+            echo "LABEL $1 $state"
+            [ "$1" != branch ] || [ "$state" = passed ]
+          }
+          pnpm exec vitest run src/zz-places.test.ts --maxWorkers=1 > "$RUNNER_TEMP/places.txt" 2>&1
+          grep -E "PLACES|FAIL" "$RUNNER_TEMP/places.txt"
           measure branch
           echo "COMMITTED start"
-          node scripts/module-bytes.ts ../../ireko-main 2>&1 | tail -30 && echo "COMMITTED equal" || echo "COMMITTED differ"
-          git checkout origin/runname -- ../compiler/src ../compiler/test
-          measure runname-conditional
-          node ../../tools/keyscope/alias-each.mjs ../compiler/src/module.ts
-          measure runname-alias
+          if node scripts/module-bytes.ts ../../ireko-main > "$RUNNER_TEMP/committed.txt" 2>&1; then echo "COMMITTED equal"; else echo "COMMITTED differ"; fi
+          tail -30 "$RUNNER_TEMP/committed.txt"
           git checkout "$(git merge-base HEAD origin/main)" -- ../compiler/src
           measure base
           git checkout 3a0019f -- ../compiler/src

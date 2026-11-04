@@ -47,7 +47,8 @@ export interface ModuleOptions {
    */
   readonly name?: string;
   /**
-   * The space of the records. In each space, the key of a record is the text of its position. The default `array`
+   * The space of the records. In each space, the key of a record is the text of its position, unless the option
+   * `keys` is true. The default `array`
    * has no parents. A `tree` takes the parents as the third argument of the run (COMPILE.MODULE.TREE). Each entry
    * is the position of the parent of its record, or -1 for a root. A `graph` takes the edges as the third argument
    * (COMPILE.MODULE.GRAPH). Each entry is an array of the positions of the ends of the edges from its record, in order.
@@ -70,6 +71,12 @@ export interface ModuleOptions {
    * an argument of an op stays a `vex.list`.
    */
   readonly lists?: "envelope" | "plain";
+  /**
+   * True when the run takes the keys of the records as its last argument (COMPILE.MODULE.KEYS). The argument is an array
+   * with one text for each record, and each text is different. A program that reads no key ignores it and prints the
+   * same text as without the option. The default is false.
+   */
+  readonly keys?: boolean;
 }
 
 /** The options of a module of a sheet (COMPILE.MODULE.SHEET): the options of a module, and the parts of a sheet. */
@@ -112,6 +119,18 @@ interface Pack {
   /** The count of the calls that the second print puts at their place. A count over `INLINES` stops the print. */
   inlines: number;
 }
+
+/**
+ * The state of the keys of one print (COMPILE.MODULE.KEYS). With `keyed`, the code uses the keys of the argument of the
+ * run. The printer sets `read` when the program can show a key of a record to a part of the code or to the host.
+ */
+interface KeyPrint {
+  readonly keyed: boolean;
+  read: boolean;
+}
+
+/** The helpers that show the key of an item: a compare of keys, and a `vex.list` of a result, an argument or a field. */
+const KEY_READS: ReadonlySet<string> = new Set(["GT", "WO", "WOC", "LO", "LS", "LOC", "LSC", "LV", "LVC", "LC"]);
 
 /** The most calls that the second print of a fast sum puts at their place. Thus a chain of calls stays linear. */
 const INLINES = 64;
@@ -423,7 +442,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | "LS" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | "LS" | "KC" | "KP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
@@ -655,6 +674,22 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  return F();",
     "}",
   ].join("\n"),
+  // The keys of a run (COMPILE.MODULE.KEYS): a map of each key to its position. A key that is not a text, or a second
+  // use of a key, is against the contract, because a space has no such keys.
+  KC: [
+    "function KC(a, n) {",
+    '  if (!Array.isArray(a) || a.length !== n) C("the keys are not an array with one key for each record");',
+    "  const m = new Map();",
+    "  for (let i = 0; i < n; i++) {",
+    "    const k = a[i];",
+    '    if (typeof k !== "string" || m.has(k)) C(`the key ${i} is not a text of its own`);',
+    "    m.set(k, i);",
+    "  }",
+    "  return m;",
+    "}",
+  ].join("\n"),
+  // The position of a key of a move. A value that is not a key of the space is an error of the move (NAV.KEY).
+  KP: "function KP(m, k) { const i = m.get(k); return i === undefined ? F() : i; }",
   // The parents of a tree space: the position of the parent of each record, or -1 for a root. A walk up from each record
   // marks its keys, so a walk that meets a key of the same walk finds a cycle. Each key is in one walk, so the check is linear.
   PT: [
@@ -1180,7 +1215,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
-  SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
+  KC: ["C"], KP: ["F"], SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
   SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
   SBI: ["F"], SKI: ["F"], QA: [],
 };
@@ -1985,7 +2020,10 @@ class Printer {
   readonly treeParts = new Set<TreePart>();
   /** True for a graph space, and true when the program reads the predecessors of a graph (COMPILE.MODULE.GRAPH). */
   readonly #graph: boolean;
+  readonly #keys: KeyPrint;
   into = false;
+  /** True when the code reads the keys of the run (COMPILE.MODULE.KEYS). */
+  runKeys = false;
   /** The columns of a sheet, for a module of a sheet (COMPILE.MODULE.SHEET). */
   readonly #sheet: SheetInfo | undefined;
   readonly #starts: EmptyStarts;
@@ -2063,7 +2101,8 @@ class Printer {
    */
   readonly #outputs = new WeakMap<Code, number>();
 
-  constructor(expr: Expr, options: ModuleOptions, starts: EmptyStarts, sheet?: SheetInfo) {
+  constructor(expr: Expr, options: ModuleOptions, keys: KeyPrint, starts: EmptyStarts, sheet?: SheetInfo) {
+    this.#keys = keys;
     this.#fuse = options.fuse !== false;
     this.#starts = starts;
     this.#domains = options.domains ?? [];
@@ -2102,6 +2141,7 @@ class Printer {
   }
 
   use(name: Helper): string {
+    if (KEY_READS.has(name)) this.#keys.read = true;
     this.helpers.add(name);
     return name;
   }
@@ -2648,7 +2688,30 @@ class Printer {
 
   /** This method gives the code of the index of a computed move, from the code of its value. */
   #computed(m: Move, value: Code): string {
-    return `${this.use(m.t === "key" ? "K" : "I")}(${value.v.code}, n)`;
+    return (m.t === "key" ? this.#keyMove(value.v.code) : undefined) ?? `${this.use(m.t === "key" ? "K" : "I")}(${value.v.code}, n)`;
+  }
+
+  /** This method gives the code of the position of a key of a move in a keyed print, and undefined in each other print. */
+  #keyMove(key: string): string | undefined {
+    this.#keys.read = true;
+    if (!this.#keys.keyed) return undefined;
+    this.runKeys = true;
+    return `${this.use("KP")}(KM, ${key})`;
+  }
+
+  /** This method gives a reason for an offset of an array space with keys. The keys of a record space have no order (NAV.OFFSET). */
+  #noOffset(): void {
+    if (this.#keys.keyed) throw new NotStandalone('an offset or the axis "window" in an array space with the option "keys"');
+  }
+
+  /**
+   * This method gives the key of the pair of an item at the target `j`. A keyed print puts the key of the record in the
+   * pair, because `GT`, `WO` and `LO` read the pair as text (COMPILE.MODULE.KEYS). A target with text keys is that key.
+   */
+  #pairKey(j: string, texts: boolean): string {
+    if (!this.#keys.keyed || texts) return j;
+    this.runKeys = true;
+    return `keys[${j}]`;
   }
 
   #move(m: Move, focus: string | undefined, origin: string | undefined): string {
@@ -2660,8 +2723,8 @@ class Printer {
         if (origin === undefined) throw new NotStandalone("a node of the memo reads its origin");
         return origin;
       case "key":
-        // A key of an array space is the text of its index.
-        return typeof m.key === "string" && /^(0|[1-9]\d*)$/.test(m.key) ? `(${m.key} < n ? ${m.key} : ${F}())` : `${F}()`;
+        // A key of an array space is the text of its index, unless the run has its own keys.
+        return this.#keyMove(JSON.stringify(m.key)) ?? (typeof m.key === "string" && /^(0|[1-9]\d*)$/.test(m.key) ? `(${m.key} < n ? ${m.key} : ${F}())` : `${F}()`);
       case "index":
         return typeof m.i === "number" && Number.isInteger(m.i) && m.i >= 0 ? `(${m.i} < n ? ${m.i} : ${F}())` : `${F}()`;
       case "offset": {
@@ -2673,6 +2736,7 @@ class Printer {
         if (this.#graph || d === undefined || more.length > 0 || !Number.isInteger(d)) return `${F}()`;
         // In a tree space, an offset goes among the siblings (NAV.OFFSET.TREE).
         if (this.#tree) return `${this.use("SO")}(${this.#part("siblings", "GP")}, SI, ${focus}, ${d})`;
+        this.#noOffset();
         return `${this.use("X")}(${focus} + ${d}, n)`;
       }
       case "other":
@@ -3196,7 +3260,9 @@ class Printer {
       const q = this.fresh("q");
       const parts = forParts(q, "0", `${a}.length`, reverse);
       const head = forHead(q, parts);
-      const key = [`const ${j} = ${a}[${q}][0];`];
+      // The pair of a keyed print holds the key of its record, and the loop reads the position of that record.
+      const read = `${a}[${q}][0]`;
+      const key = [`const ${j} = ${this.#pairKey(j, texts) === j ? read : `KM.get(${read})`};`];
       // The loop over a clean list has no test of the sentinel (COMPILE.MODULE.FUSE.CLEAN).
       const clean = this.#clean(list.v.list);
       const check = clean ? [] : [`if (${a}[${q}][1] === E) ${this.use("F")}();`];
@@ -3246,6 +3312,7 @@ class Printer {
     if (this.#graph && base.t === "window") throw new NotStandalone('the axis "window" in a graph space');
     if (base.t === "others") skip = f;
     else if (base.t === "window") {
+      this.#noOffset();
       const h = this.fresh("h");
       lo = `Math.max(0, ${f as string} + Math.max(${base.from}, -n))`;
       s.push(`const ${h} = Math.min(n, ${f as string} + Math.min(${base.to}, n) + 1);`);
@@ -3580,12 +3647,13 @@ class Printer {
     const deps = new Set([...start, ...[body, ...testCodes].flatMap((x) => [...x.v.deps])].filter((d) => d !== inner.level && d !== own));
     const list = this.fresh("L");
     const v = this.fresh("x");
+    const pair = this.#pairKey(j, texts);
     const item = [...check, ...testCodes.flatMap((t) => [...t.s, `if (!${this.#boolean(t.v)}) continue;`]), ...body.s];
     const safeItem = checkSafe && body.v.safe && testCodes.every((t) => this.#safeBoolean(t.v));
     const loop = [
       ...key,
       ...(skip === undefined ? [] : [`if (${j} === ${skip}) continue;`]),
-      ...(safeItem ? [...item, `${list}.push([${j}, ${body.v.code}]);`] : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", `  ${v} = E;`, "}", `${list}.push([${j}, ${v}]);`]),
+      ...(safeItem ? [...item, `${list}.push([${pair}, ${body.v.code}]);`] : [`let ${v};`, "try {", ...ind(item), `  ${v} = ${body.v.code};`, "} catch {", `  ${v} = E;`, "}", `${list}.push([${pair}, ${v}]);`]),
     ];
     // Only the catch of an item puts the sentinel into the list, so a safe item gives a clean list.
     const facts: ListInfo = { item: body.v.kind, inner: heldList(body.v.list), texts, clean: safeItem };
@@ -4490,6 +4558,8 @@ function runOf(options: ModuleOptions): Run | { readonly reason: string } {
   if (typeof fuse !== "boolean") return { reason: `the option "fuse" is ${String(fuse)}, not true or false` };
   const lists: unknown = options.lists ?? "envelope";
   if (lists !== "envelope" && lists !== "plain") return { reason: `the option "lists" is ${String(lists)}, not "envelope" or "plain"` };
+  const keys: unknown = options.keys ?? false;
+  if (typeof keys !== "boolean") return { reason: `the option "keys" is ${String(keys)}, not true or false` };
   return { name, tree: space === "tree", graph: space === "graph", plain: lists === "plain" };
 }
 
@@ -4552,6 +4622,7 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   // A graph checks its edges, and it computes the predecessors if the program reads them.
   if (graph) p.use("GR");
   if (p.into) p.use("GI");
+  if (p.runKeys) p.use("KC");
   [...p.helpers].toSorted().forEach(add);
   // The names that this module declares at its top: the constants, the helpers and the declarations of the printer.
   const declared = new Set<string>(["VexContractError", "VEX_ERROR", "E", ...(p.memos ? ["Z"] : []), ...(helpers.has("S") ? ["N", "W"] : []), ...helpers, ...p.top.keys()]);
@@ -4569,7 +4640,7 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     ...(helpers.has("S") ? ["const N = {}, W = {};"] : []),
     ...[...helpers].map((h) => (h === "S" ? helperS(p.features) : HELPERS[h])),
     ...p.top.values(),
-    `export function ${name}(records, vars${tree ? ", parents" : graph ? ", edges" : ""}) {`,
+    `export function ${name}(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
     "  const n = R.length;",
@@ -4581,6 +4652,7 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     `  if (typeof vars !== "object" || vars === null${varChecks}) C("the variables do not keep the schema");`,
     ...(tree ? ["  const P = PT(parents, n);", ...parts.map((x) => `  ${TREE_PARTS[x][1]}`)] : []),
     ...(graph ? ["  const GO = GR(edges, n);", ...(p.into ? ["  const GN = GI(GO, n);"] : [])] : []),
+    ...(p.runKeys ? ["  const KM = KC(keys, n);"] : []),
     ...[...p.vars].map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
     ...ind(p.run),
     ...ind(body),
@@ -4608,17 +4680,27 @@ function settledPrint(print: (starts: EmptyStarts) => Emitted): Emitted {
 }
 
 /**
+ * This function prints a module. With the option `keys`, it prints again with the keys of the run when the first print
+ * reads a key (COMPILE.MODULE.KEYS). Thus a program that reads no key keeps its text.
+ */
+function keyedPrint(options: ModuleOptions, print: (keys: KeyPrint) => Emitted): Emitted {
+  const keys = { keyed: false, read: false };
+  const first = print(keys);
+  return keys.read && options.keys === true ? print({ keyed: true, read: true }) : first;
+}
+
+/**
  * This function prints a program as a standalone ES module. The module exports `VexContractError`, `VEX_ERROR` and a
  * function that takes the records and the variables and gives the value at each key. A module of a tree space takes
  * the parents too. The function is pure, so a build can use it. The program can be an expression or a document
  * (DOC.ENTRY).
  */
 export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emitted {
-  return settledPrint((starts) => printProgram(source, options, starts));
+  return keyedPrint(options, (keys) => settledPrint((starts) => printProgram(source, options, keys, starts)));
 }
 
-/** This function prints a program with the facts `starts`, for `emitModule`. */
-function printProgram(source: Expr | Envelope, options: ModuleOptions, starts: EmptyStarts): Emitted {
+/** This function prints a program for one state of the keys, with the facts `starts`, for `emitModule`. */
+function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: KeyPrint, starts: EmptyStarts): Emitted {
   const run = runOf(options);
   if ("reason" in run) return { ok: false, reason: run.reason };
   // DOC.ENTRY: a document gives its expression first, or the reason that it is not valid.
@@ -4631,7 +4713,7 @@ function printProgram(source: Expr | Envelope, options: ModuleOptions, starts: E
   // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
   const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
   if (size !== undefined) return { ok: false, reason: size };
-  const p = new Printer(expr, options, starts);
+  const p = new Printer(expr, options, keys, starts);
   let value: Code;
   try {
     value = p.root(expr);
@@ -4689,16 +4771,18 @@ const columnList = (l: ListInfo): ListInfo => ({ item: l.item, inner: l.inner ==
  * cycle of reads gives `VEX_ERROR`.
  */
 export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions): Emitted {
-  return settledPrint((starts) => printSheet(columns, options, starts));
+  return keyedPrint(options, (keys) => settledPrint((starts) => printSheet(columns, options, keys, starts)));
 }
 
-/** This function prints the columns of a sheet with the facts `starts`, for `emitSheetModule`. */
-function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions, starts: EmptyStarts): Emitted {
+/** This function prints the columns of a sheet for one state of the keys, with the facts `starts`, for `emitSheetModule`. */
+function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions, keyPrint: KeyPrint, starts: EmptyStarts): Emitted {
   const run = runOf(options);
   if ("reason" in run) return { ok: false, reason: run.reason };
   const budget = options.budget ?? SHEET_BUDGET;
   if (!Number.isSafeInteger(budget) || budget < 0) return { ok: false, reason: `the budget ${String(budget)} is not a whole number of 0 or more` };
   const cells: CellFormulas = options.cells ?? new Map();
+  // A formula of a cell has a position as its key at the time of the build, and the keys of a run come later.
+  if (options.keys === true && cells.size > 0) return { ok: false, reason: 'the option "keys" with formulas of cells' };
   const names = [...new Set([...columns.keys(), ...cells.keys()])];
   const order = columnOrder(columns, cells);
   // The formulas in the order of the columns. A key of a cell that is not the text of a position is not a key of the
@@ -4726,7 +4810,7 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   // A sheet whose reads all read finished cells needs no search: each cell is the value of its formula
   // (COMPILE.MODULE.SHEET.DIRECT). A sheet with formulas of cells always has the search.
   const direct = formulas.every((f) => f.key === undefined) && order.every((c) => readsFinished(columns, order, c, run.tree));
-  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, starts, { columns: index, kinds, lists, direct });
+  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, keyPrint, starts, { columns: index, kinds, lists, direct });
   const fns: string[] = [];
   const decls: string[] = [];
   // The statements that put the value of each formula into the array of its column at the key `o`, for a direct fill.

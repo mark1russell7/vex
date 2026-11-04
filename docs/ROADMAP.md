@@ -23,16 +23,15 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 8 merged, the size of the printer is #242 | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | LAYERS | The layers and tree strategies of ireko as Vex programs. | ireko | P1 | in progress: layers and tree merged (#247, #251), audit is #254, route is #260 | ENGINE |
-| FIXPOINT | Step B: a fixed-point column. Its steps must move one way, and the checker examines this from the kinds of the ops. `explain` shows the rounds. | core | P1 | in progress: tier 1, tier 2, modules and the syntax merged | STEPS |
 | SHAPESIZE | The ireko layout bundle with the shapes module stays under 17.4 kB. | pilots | P1 | in progress: the cuts are #242, a measure in CI is next | COMPILE-FUSE |
-| VEC2MOD | `Vec2Domain` in standalone modules. | compiler | P2 | in progress: #239 | |
 | MODMOVE | A computed move in `cell()`. | compiler | P2 | in progress: #246 | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
-| LIMITCOST | A data limit in a module costs the walk, not a count of all records. | compiler | P1 | in progress: #256 | |
 | LISTSET | The op `setNth` replaces one item of a list. | core | P2 | in progress: #249 | |
 | MODNESTED | A module reads a list inside a list, and a schema takes list fields. | compiler | P1 | in progress: #253 | |
 | NIGHTLY1103 | The Nightly of 2026-11-03 is green again. | quality | P1 | in progress: #206 | |
 | ROUTEPASS | The route pass of ireko as Vex programs. | ireko | P1 | in progress: #260 | LAYERS |
+| MODBYTES | A committed module equals its print byte for byte. A pull request checks the pin, and a daily run checks the last release. | ireko | P1 | in progress: #267 | |
+| MODREPRINT | Print the five committed modules of ireko again from a pinned commit, with their size and time gates. | ireko | P1 | later | MODBYTES |
 | TEXTCODES | An op reads the code points of a text, so a width estimate is a whole program. | domains | P2 | in progress | |
 | SIZECOPY | The size rule accepts a step that only copies a list. | core | P1 | in progress | LISTSET |
 
@@ -46,10 +45,9 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
 | AVOIDSET | The avoid router changes one item of its costs with `setNth`, and it gets the speed that ireko needs. | ireko | P1 | later | ROUTEPASS, LISTSET |
-| TWODOMAINS | A module takes two domains of plain objects. | compiler | P2 | later | |
 | DFSOP | A kernel op for a depth-first search, with the order of ties in the spec. | domains | P2 | later | |
 | ASTAROP | A kernel op for the A* search, with the order of ties in the spec. | domains | P2 | later | |
-| STEPC | Step C: functions that call themselves, with a budget of steps. Vex builds it only when a real consumer needs it. | core | P3 | later | FIXPOINT |
+| STEPC | Step C: functions that call themselves, with a budget of steps. Vex builds it only when a real consumer needs it. | core | P3 | later | |
 | TIERDEFAULT | A program of `@mark1russell7/vex` gets tier 2 by default, with no new dependency of the core. The pilots get tier 2 for 94 % of their programs, but the programs that sessions write get it for 43 % to 78 %. | compiler | P2 | later | LISTVALUES |
 | COLUMNSCOPE | A column of a sheet can apply to some rows of a tree. At this time, a column runs at each row, and the user pays for cells that nobody reads. | core | P2 | later | |
 | INAPPRECORD | Each night, all cases of the compiler gate run in one process, and the record gives the count of slow processes. | ci | P2 | later | |

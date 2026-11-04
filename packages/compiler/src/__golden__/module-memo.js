@@ -128,6 +128,7 @@ const r_count = (a, c) => c;
 const s_or = (a, c, x) => a || x;
 const r_id = (a) => a;
 const op_2_7 = (a, b) => a.includes(b);
+const k_value = (x) => (x === undefined || x === null || (typeof x === "number" && !Number.isFinite(x)) ? F() : x);
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;
@@ -255,7 +256,7 @@ export function run(records, vars) {
     for (let j64 = 0; j64 < n; j64++) {
       let x67;
       try {
-        if (!op_2_7(R[j64]["s"], G(q61))) continue;
+        if (!k_value(op_2_7(R[j64]["s"], G(q61)))) continue;
         x67 = R[j64]["w"];
       } catch {
         continue;

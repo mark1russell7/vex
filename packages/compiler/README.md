@@ -81,12 +81,15 @@ The source has no name and no literal of the program. It reads each one from a l
 | `space` | `"array"`, `"tree"` or `"graph"`. The default is `"array"`. |
 | `fuse` | `false` prints the code without the fusion of the list ops. The default is `true`. |
 | `lists` | `"envelope"` gives each list of the input and of the result as a `vex.list`. `"plain"` gives plain arrays of the values, with `VEX_ERROR` for an error item. The default is `"envelope"`. |
+| `keys` | `true` makes the run take the keys of its records as its last argument. The default is `false`. |
 
 `emitSheetModule` also takes `cells`, `kinds` and `budget`.
 
 With `fuse`, a value that does not depend on the key is one `vex.list` at each key, and this object is frozen. Each other `vex.list` of a result is not frozen.
 
 With `lists: "plain"`, the key of an item of the input is the text of its position, and the result has no keys. A list in a record or in an argument of an op stays a `vex.list`. The module prints no types, so the host declares `T[]` for a list of `T`.
+
+With `keys: true`, the last argument of the run is an array with one different text for each record. `get`, `without`, each `vex.list` and the move `key` use these texts. A program that reads no key of a record keeps its text, so the option costs no bytes there. In an array space, a program that reads a key has no offset and no axis `window`.
 
 ## Speed
 

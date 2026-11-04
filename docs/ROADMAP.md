@@ -20,7 +20,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 6 merged, the cheap sort is next | |
+| COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 7 merged. Step 8 waits for #228, which removes the cost of step 7. | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | LAYERS | The layers and tree strategies of ireko as Vex programs. | ireko | P1 | blocked | ENGINE |
 
@@ -28,7 +28,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| LISTVALUES | Tier 2 gets lists as values (`get`, `nth`, `append`, `take` and the list axis). This is the largest limit for the programs that sessions write. | compiler | P1 | next | |
+| LISTVALUES | Tier 2 gets lists as values (`get`, `nth`, `append`, `take` and the list axis). This is the largest limit for the programs that sessions write. | compiler | P1 | in progress: #224 and #225 | |
 | GINSETS | A domain for the four sides of an inset. A number lifts to four sides. | domains | P2 | next | |
 | GSMALL | The op `sign`, and an op that gives the unit vector of the smallest axis. | domains | P2 | next | |
 | GNDGET | Tier 2 reads the `get` of `NDVectorDomain` as the `get` of a list. | compiler | P2 | next | |
@@ -37,8 +37,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| DATALIMIT | Step B: the limit of `iterate` can come from the size of the data, for example the count of the records. | core | P1 | later | STEPS |
-| FIXPOINT | Step B: a fixed-point column. Its steps must move one way, and the checker examines this from the kinds of the ops. `explain` shows the rounds. | core | P1 | later | STEPS |
+| FIXPOINT | Step B: a fixed-point column. Its steps must move one way, and the checker examines this from the kinds of the ops. `explain` shows the rounds. | core | P1 | in progress | STEPS |
 | DFSOP | A kernel op for a depth-first search, with the order of ties in the spec. | domains | P2 | later | |
 | ASTAROP | A kernel op for the A* search, with the order of ties in the spec. | domains | P2 | later | |
 | STEPC | Step C: functions that call themselves, with a budget of steps. Vex builds it only when a real consumer needs it. | core | P3 | later | FIXPOINT |

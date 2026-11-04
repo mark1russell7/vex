@@ -83,6 +83,8 @@ export const errorText = {
   /** A check `valid` of a domain that threw. */
   validThrew: (op: string, domain: string): ErrorText => ({ kind: "threw", message: `the "valid" check of "${domain}" threw an exception`, op }),
   /** A list op whose items must have one kind, with an item of another kind. */
+  /** The axis `list` over a value that is not a list (AXIS.LIST). */
+  axisList: (value: unknown): ErrorText => ({ kind: "kind-mismatch", message: `the axis "list" needs a list, not a ${describeType(value)}` }),
   needsItems: (op: string, what: "numbers" | "booleans", item: unknown): ErrorText => ({ kind: "kind-mismatch", message: `"${op}" needs ${what}, but an item is a ${describeType(item)}`, op }),
   /** A list op that has no items to work with. */
   empty: (op: string): ErrorText => ({ kind: "empty", message: `"${op}" has no values to work with`, op }),

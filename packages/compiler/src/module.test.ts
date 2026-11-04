@@ -217,10 +217,9 @@ const where = (test: Expr, body: Expr, o = "count"): Expr => op(o, each(axes.whe
 /** This function gives the run of a module with the name of the run. The scope of a function holds the names of a module. */
 function runNamed(e: Expr, name: string): Run {
   const source = sourceOf(e, { ...OPTIONS, name });
-  const inner = /^export { (S+) as S+ };$/m.exec(source)?.[1] ?? name;
+  const inner = /^export \{ (\S+) as \S+ \};$/m.exec(source)?.[1] ?? name;
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
-  return new Function(`${source.replace(/^export {.*$/m, "").replaceAll(/^export /gm, "")}
-return ${inner};`)() as Run;
+  return new Function(`${source.replace(/^export \{.*$/m, "").replaceAll(/^export /gm, "")}\nreturn ${inner};`)() as Run;
 }
 
 describe("COMPILE.MODULE: a standalone module", () => {

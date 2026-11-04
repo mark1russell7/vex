@@ -8,7 +8,7 @@
  * count that is too high only stops a rule. A rule that writes code reads the tokens of the code (`rewritten`), so it
  * does not change a text.
  */
-import { tokenizer, tokTypes } from "acorn";
+import { type Token, tokenizer, tokTypes } from "acorn";
 
 
 /** The parts of a module for the pass. */
@@ -63,7 +63,7 @@ function rewritten(line: string, find: RegExp, write: (match: RegExpExecArray) =
 /** This function gives the names in code. A word in a comment or in a text is not a name. */
 export function namesOfCode(code: string): ReadonlySet<string> {
   const names = new Set<string>();
-  for (const token of tokenizer(code, { ecmaVersion: "latest", sourceType: "module" })) if (token.type === tokTypes.name) names.add(token.value as string);
+  for (const token of tokenizer(code, { ecmaVersion: "latest", sourceType: "module" })) if (token.type === tokTypes.name) names.add((token as Token & { readonly value: string }).value);
   return names;
 }
 

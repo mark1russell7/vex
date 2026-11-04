@@ -125,7 +125,7 @@ describe("V-070 COMPILE.MODULE.RESULT: a result that is not a value", () => {
     }
   });
 
-  it("V-070 COMPILE.MODULE.RESULT LIST.RESULT: a list of a plain module has the sentinel at an item that is not a value", () => {
+  it("V-070 COMPILE.MODULE.RESULT COMPILE.MODULE.LIST.RESULT: a list of a plain module has the sentinel at an item that is not a value", () => {
     const e = each(axes.all, op("probe", n));
     const domains = domainsOf(`(a) => (a > 0 ? NaN : "x")`, "string");
     const m = emitModule(e, { domains, schema: SCHEMA, lists: "plain" });

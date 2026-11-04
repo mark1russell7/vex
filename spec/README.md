@@ -297,6 +297,17 @@ A force separation pushes two boxes apart along the axis of their smallest overl
 - **[VEC2.MINAXIS]** `minAxis(v)` gives (1, 0) if `x <= y`, else (0, 1). The comparison uses the signed values, and `minAxis(abs(v))` compares the sizes. A tie gives (1, 0), and 0 and -0 tie. Infinite values compare as numbers. A component `NaN` gives `#NUM!`. For finite components, `along(v, minAxis(v))` gives `minComponent(v)`, and `across(v, minAxis(v))` gives `maxComponent(v)`.
 - **[XY.SIGN]** `sign` and `minAxis` of `XYDomain` give the components of the same ops of `Vec2Domain`. Each one is a function of plain data, so a standalone module can copy it.
 
+### 7.4 The domain `InsetsDomain`
+
+`InsetsDomain` of `@mark1russell7/vex-domains` keeps the four sides of an inset as plain data, so a module can copy it. `start` is the pair of the leading sides, and `end` is the pair of the trailing sides.
+
+- **[INSETS.VALUE]** A value is a plain object with exactly the number fields `startX`, `startY`, `endX` and `endY`. `insets(startX, startY, endX, endY)` of `NumDomain` makes a value. Put `InsetsDomain` before `NumRecordDomain`, which accepts the same objects.
+- **[INSETS.LIFT]** A number in the argument of `add` becomes a value with four equal sides. A number as the receiver stays a number. Thus `insets(0, 0, 0, 0).add(pad)` takes a number or a value, with no test of the type.
+- **[INSETS.SIDES]** `startX`, `startY`, `endX` and `endY` give one side. `start` gives the `XY` value (`startX`, `startY`), and `end` gives (`endX`, `endY`). A box inset adds `start` to the corner, and it subtracts `start` and `end` from the size.
+- **[INSETS.VEC2]** `startVec2` and `endVec2` give the same pairs as `Vec2` values, for a program of `Vec2Domain`. A module cannot copy the class `Vec2`, so it refuses these two ops with a reason.
+- **[INSETS.ARITH]** `add` adds each side, and its identity is `insets(0, 0, 0, 0)`. `scale(i, k)` multiplies each side by `k`, so `scale(i, -1)` gives the outset of `i`.
+- **[INSETS.FINITE]** A value with a side that is not finite is not valid, so an op that reads or gives one gives `#NUM!`. An inset with an infinite side has no box, as VEC2.FINITE has no vector.
+
 ## 8. The builder
 
 - **[BUILD.IMMUTABLE]** A builder call gives a new chain. An earlier chain does not change.
@@ -353,6 +364,8 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[COMPILE.GROUP]** A program keeps the value of a node for each space and each value of its keys. A key reads the origin or a name from outside the node, and nothing that the node changes. Thus an aggregate over the group of the origin evaluates once for each group.
 - **[KIND.STATIC]** When the kinds of the values of an op site decide its op, the site uses that op with no guard. A value against the schema, or a result against a primitive kind of `returns`, sends the evaluation to tier 1. A result of the kind of a domain gets the checks of the interpreter.
 - **[KIND.DOMAIN]** A value of a domain without a primitive type has the kind of its domain, `domain:Name`. An op with `returns: "domain"` gives this kind, and a schema can declare it for a field. A module checks such a field with a copy of `is` of the domain. It checks each copy of an op with the `samples` of the domain.
+- **[KIND.FIELDS]** A domain declares `fields` when `is` accepts only plain objects with exactly these names. Two domains with different names have no common value. Thus a module keeps each of them in its own op, in each order of the domains. The law checker tests the declaration.
+- **[KIND.LIFT]** A module gives a number at a lifted position to a copy of `fromScalar` of the domain. This needs the kinds of the receiver and the number before the run. Tier 2 keeps the dispatch of the runtime for this site.
 - **[COMPILE.MODULE]** `emitModule(e, options)` gives an ES module with no import of Vex. For an input that keeps the schema, its run gives the value of the interpreter at each key, or `VEX_ERROR` for an error. An input against the schema throws a `VexContractError`. The option `name` is the name of the run. A reserved word, a name that the module declares or a global that a module reads gives a reason.
 - **[COMPILE.MODULE.RESULT]** In a module, an op result that is `undefined`, `null` or a number that is not finite gives the error of the interpreter (CALL.RESULT). This rule applies to each declaration `returns`. The module prints the check `k_value` around such an op. An op has no check when its kind is `number`, or when the check `valid` of its domain refuses each such result. An op also has no check when its text proves a value. A proof reads the expression body of an arrow function: a comparison, a negation, `&&` or `||` of these, or an object literal.
 - **[COMPILE.MODULE.TREE]** With the option `space: "tree"`, the module is for a tree space. Its run takes the parents after the variables: the position of the parent of each record, or -1 for a root. The key of a record is the text of its position. A parent that is not -1 or a position, or a cycle of parents, throws a `VexContractError`. The move `parent`, the offsets, the window and the axes of a tree and of a graph give the targets of the interpreter.

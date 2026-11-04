@@ -3071,16 +3071,28 @@ class Printer {
     return [vexList([]), vexList(items), vexList([{ key: "0", result: { ok: false, error: { vexError: true } as never } }])];
   }
 
+  /**
+   * This method gives the code of a number that an op lifts: the call of a copy of `fromScalar` of the domain (KIND.LIFT).
+   * The op checks its result, as in the interpreter, so a lift that gives a value that is not valid needs no check here.
+   */
+  #lifted(x: Code, domain: number, d: AnyDomain): Code {
+    const name = `lift_${domain}`;
+    this.top.set(name, `const ${name} = ${copied(d.fromScalar as (...a: never[]) => unknown, [SAMPLES.number], `the lift of the domain ${d.name}`)};`);
+    return { s: x.s, v: { ...x.v, code: `${name}(${x.v.code})`, kind: kindOfDomain(d), safe: false, plain: false } };
+  }
+
   /** This method prints the call of the op of a domain on some values, from the static site of their kinds. */
-  #opCall(op: string, values: readonly Code[], deps: ReadonlySet<number>): Code {
-    const lists = new Set(values.flatMap((x, i) => (x.v.list === undefined ? [] : [i])));
+  #opCall(op: string, given: readonly Code[], deps: ReadonlySet<number>): Code {
+    const lists = new Set(given.flatMap((x, i) => (x.v.list === undefined ? [] : [i])));
     // A list op of the interpreter that a module does not have, and an op of a domain, cannot take a list as the receiver.
     if (lists.has(0)) throw new NotStandalone(isListOp(op) ? `the list op "${op}"` : `a list as the receiver of the op "${op}"`);
-    const site = this.#facts.staticSite(op, values.map((x) => x.v.kind), lists);
+    const site = this.#facts.staticSite(op, given.map((x) => x.v.kind), lists, true);
     if (site?.t !== "fn") throw new NotStandalone(`the kinds of the values of "${op}" do not decide its op`);
-    if (site.bad) return { s: stmtsOf(...values), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
+    if (site.bad) return { s: stmtsOf(...given), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
     if (site.returns === undefined) throw new NotStandalone(`the op "${op}" does not declare the kind of its result`);
     const d = this.#domains[site.domain] as AnyDomain;
+    const lifted = site.lifted ?? [];
+    const values = given.map((x, i) => (lifted.includes(i - 1) ? this.#lifted(x, site.domain, d) : x));
     const name = `op_${site.domain}_${this.#opIndex(op)}`;
     // Stryker disable next-line ConditionalExpression: the form of an op is always the same, so the map only saves time
     if (!this.#forms.has(name)) {

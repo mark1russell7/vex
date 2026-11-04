@@ -5,6 +5,7 @@
  */
 export * from "./vec2.ts";
 export * from "./xy.ts";
+export * from "./insets.ts";
 export * from "./ndvector.ts";
 export * from "./scalars.ts";
 export * from "./text.ts";

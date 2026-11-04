@@ -44,11 +44,14 @@ function agree(e: Expr, options: GenerateOptions = OPTIONS): number {
   return p.stats.fallbacks;
 }
 
-function same(e: Expr, fast: boolean, options: GenerateOptions = OPTIONS): void {
-  const fallbacks = agree(e, options);
-  if (fast) expect(fallbacks).toBe(0);
-  else expect(fallbacks).toBeGreaterThan(0);
+/** This function tells if a program agrees with tier 1 and the kernel, and if the argument `fast` tells its fallbacks. */
+function same(e: Expr, fast: boolean, options: GenerateOptions = OPTIONS): boolean {
+  const none = agree(e, options) === 0;
+  return none === fast;
 }
+
+const isArray = (u: unknown): u is readonly unknown[] => Array.isArray(u);
+const atFirst = (e: Expr, options: GenerateOptions): unknown => tiered(e, options).run({ space: S, origin: "0", vars: VARS });
 
 /** A list op and its arguments after the receiver. */
 type Case = readonly [ListOp, readonly unknown[]];
@@ -94,47 +97,45 @@ const growing = (name: Name): Expr => fold(axes.all, { a: v(name) }, { a: app("a
 describe("COMPILE.LIST.ARRAY: tier 2 gives a list op on an array", () => {
   it.each(CASES)("COMPILE.LIST.ARRAY: %s of %s, %j gives the result of tier 1 with no fallback", (op, name, rest) => {
     const args = rest.map((x) => lit(x));
-    same(app(op, v(name), ...args), true);
+    expect(same(app(op, v(name), ...args), true)).toBe(true);
     // LIST.LENIENT: the option comes after the arguments of the op, and it gives the error of a hole at the call.
-    same(app(op, v(name), ...args, lit(strict)), true);
+    expect(same(app(op, v(name), ...args, lit(strict)), true)).toBe(true);
   });
 
   it.each(HOLES)("COMPILE.LIST.ARRAY: a strict list op over %s gives the error of the hole, at the call", (name) => {
-    for (const e of [app("sum", v(name), lit(strict)), app("take", v(name), lit(1), lit(strict)), app("nth", app("append", lit([1]), v(name), lit(strict)), lit(0)), app("add", lit(1), app("first", v(name), lit(strict)))]) same(e, true);
+    for (const e of [app("sum", v(name), lit(strict)), app("take", v(name), lit(1), lit(strict)), app("nth", app("append", lit([1]), v(name), lit(strict)), lit(0)), app("add", lit(1), app("first", v(name), lit(strict)))]) expect(same(e, true)).toBe(true);
     const r = tiered(app("add", lit(1), app("first", v(name), lit(strict))), OPTIONS).run({ space: S, origin: "0", vars: VARS });
     expect(r).toMatchObject({ ok: false, error: { kind: "missing-field", origin: "0", focus: "0", path: [1] } });
   });
 
   it("COMPILE.LIST.ARRAY: a hole of a second list or of an inner array follows the rule of the first list", () => {
-    for (const e of [app("append", v("nums"), v("holes")), app("append", v("nums"), v("holes"), lit(strict)), app("without", v("nums"), v("nulls"), lit(strict)), app("flat", v("nested")), app("flat", v("nested"), lit(strict)), app("group", v("nums"), v("holes"), lit(strict))]) same(e, true);
+    for (const e of [app("append", v("nums"), v("holes")), app("append", v("nums"), v("holes"), lit(strict)), app("without", v("nums"), v("nulls"), lit(strict)), app("flat", v("nested")), app("flat", v("nested"), lit(strict)), app("group", v("nums"), v("holes"), lit(strict))]) expect(same(e, true)).toBe(true);
   });
 
   it("COMPILE.LIST.ARRAY: an array in a field gives the result at each record, also in the body of a list op", () => {
-    for (const e of [app("sum", ref("fr")), app("sum", ref("fr"), lit(strict)), app("sum", each(axes.all, app("sum", ref("fr")))), app("values", each(axes.all, app("count", ref("fr")))), app("sum", each(axes.all, app("sum", ref("fr"), lit(strict))))]) same(e, true);
+    for (const e of [app("sum", ref("fr")), app("sum", ref("fr"), lit(strict)), app("sum", each(axes.all, app("sum", ref("fr")))), app("values", each(axes.all, app("count", ref("fr")))), app("sum", each(axes.all, app("sum", ref("fr"), lit(strict))))]) expect(same(e, true)).toBe(true);
   });
 
   it("COMPILE.LIST.ARRAY LIST.ARRAY: the op of a domain, a method and a function of the host come before the list op", () => {
-    const isArray = (u: unknown): u is readonly unknown[] => Array.isArray(u);
     const Own = defineDomain({ name: "Own", is: isArray, ops: { count: { fn: (): number => 41 } } });
     const Wide = defineDomain({ name: "Wide", methods: "all", is: isArray, ops: {} });
     const Other = defineDomain({ name: "Other", is: isArray, ops: { other: { fn: (): number => 1 } } });
     const fns: Readonly<Record<string, FreeFn>> = { sum: () => 42, count: () => 43 };
-    same(app("count", v("nums")), true, { domains: [Own] });
-    same(app("sum", v("nums")), true, { domains: [Own], fns });
-    same(app("count", v("nums")), true, { domains: [Own], fns });
-    same(app("sum", v("nums")), true, { ...OPTIONS, fns });
+    expect(same(app("count", v("nums")), true, { domains: [Own] })).toBe(true);
+    expect(same(app("sum", v("nums")), true, { domains: [Own], fns })).toBe(true);
+    expect(same(app("count", v("nums")), true, { domains: [Own], fns })).toBe(true);
+    expect(same(app("sum", v("nums")), true, { ...OPTIONS, fns })).toBe(true);
     // An array has the method `join`, so that method comes first. An array has no method `count`, so the list op gives it.
-    same(app("join", v("nums"), lit("+")), true, { domains: [Wide] });
-    same(app("count", v("nums")), true, { domains: [Wide] });
+    expect(same(app("join", v("nums"), lit("+")), true, { domains: [Wide] })).toBe(true);
+    expect(same(app("count", v("nums")), true, { domains: [Wide] })).toBe(true);
     // A domain that accepts the array but has no such op does not stop the list op.
-    same(app("count", v("nums")), true, { domains: [Other] });
-    const value = (e: Expr, options: GenerateOptions): unknown => tiered(e, options).run({ space: S, origin: "0", vars: VARS });
-    expect(value(app("count", v("nums")), { domains: [Own] })).toStrictEqual({ ok: true, value: 41 });
-    expect(value(app("sum", v("nums")), { ...OPTIONS, fns })).toStrictEqual({ ok: true, value: 42 });
+    expect(same(app("count", v("nums")), true, { domains: [Other] })).toBe(true);
+    expect(atFirst(app("count", v("nums")), { domains: [Own] })).toStrictEqual({ ok: true, value: 41 });
+    expect(atFirst(app("sum", v("nums")), { ...OPTIONS, fns })).toStrictEqual({ ok: true, value: 42 });
   });
 
   it("COMPILE.LIST.ARRAY: a frozen array and frozen items stay as they are, and a value of a list op is frozen", () => {
-    for (const e of [app("values", v("frozen")), app("sortBy", v("frozen")), app("flat", v("frozenItems")), app("first", v("frozenItems"))]) same(e, true);
+    for (const e of [app("values", v("frozen")), app("sortBy", v("frozen")), app("flat", v("frozenItems")), app("first", v("frozenItems"))]) expect(same(e, true)).toBe(true);
     const first = tiered(app("first", v("frozenItems")), OPTIONS).run({ space: S, origin: "0", vars: VARS });
     expect(first.ok ? first.value : undefined).toBe(VARS.frozenItems[0]);
     const values = tiered(app("values", v("nums")), OPTIONS).run({ space: S, origin: "0", vars: VARS });
@@ -151,33 +152,33 @@ describe("COMPILE.LIST.ARRAY: tier 2 gives a list op on an array", () => {
     expect(p.run(run)).toStrictEqual(compile(refused, OPTIONS).run(run));
     expect(p.run(run).ok).toBe(false);
     // A loop with a fixed count has a bound, so both tiers give it.
-    same(iterate(2, { a: v("nums") }, { a: app("drop", v("a"), lit(1)) }, app("count", v("a"))), true);
+    expect(same(iterate(2, { a: v("nums") }, { a: app("drop", v("a"), lit(1)) }, app("count", v("a"))), true)).toBe(true);
   });
 });
 
 describe("COMPILE.LIST.ARRAY: `errors` of an array", () => {
   it.each(NAMES.filter((n) => !HOLES.includes(n)))("COMPILE.LIST.ARRAY: errors of %s, with no hole at its top, stays in tier 2", (name) => {
-    same(app("errors", v(name)), true);
-    same(app("count", each(axes.all, app("errors", v(name)))), true);
+    expect(same(app("errors", v(name)), true)).toBe(true);
+    expect(same(app("count", each(axes.all, app("errors", v(name)))), true)).toBe(true);
   });
 
   it.each(HOLES)("V-064 COMPILE.LIST.ARRAY: tier 1 gives errors of %s, the values have the position of the call, and no item drops", (name) => {
     const errors = app("errors", v(name));
-    same(errors, false);
-    same(app("values", each(axes.all, errors)), false);
+    expect(same(errors, false)).toBe(true);
+    expect(same(app("values", each(axes.all, errors)), false)).toBe(true);
     // With FALLBACK in place of the exception, the loop of count skips each item, and the count is 0.
     const count = app("count", each(axes.all, errors));
-    same(count, false);
+    expect(same(count, false)).toBe(true);
     expect(tiered(count, OPTIONS).run({ space: S, origin: "0", vars: VARS })).toStrictEqual({ ok: true, value: 3 });
     // The other contexts that catch an error: the first argument of ifError, a local and the body of a fold.
-    same(app("ifError", errors, lit(-1)), false);
-    same(let_({ x: errors }, lit(1)), false);
-    same(fold(axes.all, { s: lit(0) }, { s: app("add", v("s"), app("ifError", app("count", errors), lit(100))) }, v("s")), false);
+    expect(same(app("ifError", errors, lit(-1)), false)).toBe(true);
+    expect(same(let_({ x: errors }, lit(1)), false)).toBe(true);
+    expect(same(fold(axes.all, { s: lit(0) }, { s: app("add", v("s"), app("ifError", app("count", errors), lit(100))) }, v("s")), false)).toBe(true);
   });
 
   it("V-064 COMPILE.LIST.ARRAY: a strict errors over a hole is an error of the op, so it stays in tier 2", () => {
-    same(app("errors", v("holes"), lit(strict)), true);
-    same(app("count", each(axes.all, app("errors", v("holes"), lit(strict)))), true);
+    expect(same(app("errors", v("holes"), lit(strict)), true)).toBe(true);
+    expect(same(app("count", each(axes.all, app("errors", v("holes"), lit(strict)))), true)).toBe(true);
   });
 });
 

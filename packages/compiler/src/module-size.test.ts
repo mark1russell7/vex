@@ -188,6 +188,11 @@ describe("COMPILE.MODULE.SIZE.ALIAS: a second name of a value", () => {
     expect(expectSame(chain)).not.toMatch(/const o\d+ = o\d+;/);
   });
 
+  it("V-075 COMPILE.MODULE.SIZE.ALIAS: a block that declares the alias again keeps both aliases", () => {
+    const lines = ["for (let o = 0; o < n; o++) {", "  const f1 = o;", "  const a2 = H[f1];", "  if (a2) {", "    const f1 = o;", "    x(H[f1]);", "  }", "}"];
+    expect(aliases(lines)).toStrictEqual(lines);
+  });
+
   it("COMPILE.MODULE.SIZE.ALIAS: a name that the block writes keeps its alias", () => {
     const reader = fold(axes.all, { xs: EMPTY }, { xs: fold(axes.list(v("xs")), { a: one }, { a: v("a") }, v("a")) }, op("count", v("xs")));
     expect(expectSame(reader)).toMatch(/const A\d+ = l\d+;/);

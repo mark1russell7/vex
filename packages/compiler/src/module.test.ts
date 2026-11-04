@@ -2,7 +2,7 @@
  * Standalone modules (docs/COMPILER.md §4.4). A module gives the value of the interpreter at each key, `VEX_ERROR` for
  * an error of Vex, and a `VexContractError` for an input against the schema (COMPILE.MODULE).
  */
-import { app, axes, call, dataLimit, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
+import { app, axes, call, dataLimit, defineDomain, each, evaluate, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, rec, ref, space, toDocument, v, type AnyDomain, type Axis, type Expr, type Move, type PrimitiveKind, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { createHash } from "node:crypto";
@@ -63,6 +63,8 @@ function make(source: string): Loaded {
 function sourceOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   const m = emitModule(e, options);
   if (!m.ok) throw new Error(m.reason);
+  // A name that reads itself throws at the run, and the catch of the key hides it as an error of Vex (V-075).
+  if (/\bconst (\w+) = \1;/.test(m.source)) throw new Error("the module declares a name from itself");
   return m.source;
 }
 
@@ -1748,9 +1750,11 @@ describe("COMPILE.MODULE: random programs", () => {
 
   it("P17 COMPILE.MODULE.TREE.ALLOC: a module gives the value of the interpreter in a tree of each shape, in each key order", () => {
     // Each fold stops at false or at true. A name with no stop goes on, so the rest of the walk gives its value too.
-    const stops = fc.tuple(fc.constantFrom("and", "or"), treeProgram.bool, treeProgram.num, fc.constantFrom(axes.ancestors, axes.reverse(axes.ancestors))).map(([o, test, x, a]) => {
+    // A step can move to the origin, so the rest of the walk prints an alias of the origin a second time (V-075).
+    const stops = fc.tuple(fc.constantFrom("and", "or"), treeProgram.bool, treeProgram.num, fc.constantFrom(axes.ancestors, axes.reverse(axes.ancestors)), fc.boolean()).map(([o, test, x, a, moved]) => {
       const y = lit(o === "and");
-      return fold(a, { y, s: lit(0) }, { y: op(o, v("y"), test), s: op("subtract", x, v("s")) }, op("if", v("y"), v("s"), lit(-1)));
+      const value = moved ? op("sum", each(axes.children, x, [origin])) : x;
+      return fold(a, { y, s: lit(0) }, { y: op(o, v("y"), test), s: op("subtract", value, v("s")) }, op("if", v("y"), v("s"), lit(-1)));
     });
     fc.assert(
       fc.property(fc.oneof(treeProgram.num, treeProgram.bool, stops), shapedTrees, fc.integer({ min: -3, max: 3 }), (e, [rs, parents], a) => {
@@ -1763,6 +1767,12 @@ describe("COMPILE.MODULE: random programs", () => {
     expect(sample.filter(([, p]) => p.length > 4 && Math.max(...p.map((_x, k) => depth(p, k))) === p.length - 1).length).toBeGreaterThan(20);
     expect(sample.filter(([, p]) => p.length > 4 && p.filter((x) => x < 0).length === 1 && new Set(p).size === 2).length).toBeGreaterThan(20);
     expect(sample.filter(([, p]) => p.some((x, k) => x > k)).length).toBeGreaterThan(100);
+  });
+
+  it("V-075 COMPILE.MODULE.EXIT: a step that moves to the origin gives its value in the rest of a walk", () => {
+    // The stop prints the steps a second time. The alias of the origin in the second print must stay a new name.
+    const e = fold(axes.ancestors, { y: lit(true), s: lit(0) }, { y: op("and", v("y"), ref("b")), s: op("add", v("s"), op("sum", each(axes.children, lit(1), [origin]))) }, op("if", v("y"), v("s"), lit(-1)));
+    expectSameTree(make(sourceOf(e, TREE)), e, RECORDS, [1, 2, -1]);
   });
 
   it("COMPILE.MODULE.TREE.ALLOC: a chain of 5000 keys has no recursion and no limit of depth in the walk and in the order", () => {

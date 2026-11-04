@@ -210,6 +210,8 @@ An op with a value of another kind breaks KIND.RETURNS, and the law checker refu
 
 A standalone module gives each list of its input and of its result as a `vex.list`. With the option `lists: "plain"`, these lists are plain arrays, with `VEX_ERROR` for an error item (COMPILE.MODULE.LIST.PLAIN, §13.3).
 
+A module with `fuse` also has a last pass that removes the code that a run does not need (COMPILE.MODULE.SIZE, §13.3).
+
 ## 5. Safety of generated code
 
 A formula of a user goes into generated code. A name that goes into the code as text can become code. Thus:
@@ -1425,3 +1427,31 @@ The field `as` of `each` and `fold` names the value and the index of each item o
 - The value of an item keeps the facts of its list. Thus an item that is a list is a list in the body. The printer knows these facts only in the loop. So a list op over such an `each` goes over its array when the body can give a list.
 - A name of `as` is not a name of `init` (the check of the document). Thus a step that appends to its own list and reads a name of `as` keeps the append of COMPILE.MODULE.APPEND.OWN.
 - Tier 2 gave a reason for each program with the axis `list` until COMPILE.LIST.AXIS.
+
+#### The smaller form of a module (COMPILE.MODULE.SIZE)
+
+The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its largest modules. Seven rules make their code smaller. Two rules operate in the printer, and the file `module-tidy.ts` holds the others. This file is a last pass over the lines of the module. With `fuse: false`, no rule operates, so that text stays the same (COMPILE.MODULE.FUSE.OFF).
+
+| Rule | The result | The limit of the rule |
+|---|---|---|
+| COMPILE.MODULE.SIZE.FILL | `fill(0, x)` prints `[]`, and a branch with this list prints no block | The count is the literal 0. The code of `x` cannot fail, or tier 1 gives the empty list for a value with only literals and ops. |
+| COMPILE.MODULE.SIZE.KEY | A loop has no `const j = A[q][0];` that no code reads | The line is the first line of the loop, and the head of the loop reads the same array. |
+| COMPILE.MODULE.SIZE.ALIAS | `const a = b;` is not printed, and each read reads `b` | The form is `const`. No line of the block writes `b`, or binds a second `b`. A write outside the block stops the rule when a function of the block can run after it. |
+| COMPILE.MODULE.SIZE.ONCE | A lazy cell prints its value at its read | The cell has one `return` and one read `G(c())`. The read is not in a loop or in a function, other than a lazy cell. |
+| COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
+| COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |
+| COMPILE.MODULE.SIZE.DEAD | A helper, an op or a constant of the run that no code reads is not printed | A constant has a form that catches each failure. |
+
+The reasons for the limits are these:
+
+- A `fill` with a value that fails is an error of the list, also with the count 0. So the rule for a value that can fail must read the result of tier 1. Tier 1 can read only a value with no input, so each other such value keeps `FI`.
+- A read of a key can throw when the array is not the array of the loop. So the rule reads the head of the loop.
+- A lazy cell that a key loop reads stays, because each key must read one shared object (COMPILE.MODULE.FUSE.OUT). `G` stays, because the value of the cell can be `E`.
+- A parameter can have two reads. A name as the argument has no effect and cannot fail, so the number of reads and their order stay the same.
+- The pass counts the words of a line with no parser. A word in a text counts too. This count is too large at most, so it can only stop a rule.
+- The names that a module declares come from the printer before the pass. So the option `name` keeps each refusal.
+
+| Bytes, after minify and gzip level 9 | Before | After |
+|---|---|---|
+| `NODE_SHAPE` | 2611 | 2336 |
+| `SHAPE_COLUMNS` | 3051 | 2841 |

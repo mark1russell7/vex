@@ -110,7 +110,7 @@ describe("COMPILE.MODULE.LIST.RESULT: a list as the value of a program", () => {
     // A list of the run is one array for each key. With fuse, each key gets one vex.list (COMPILE.MODULE.FUSE.OUT).
     const m = emitModule(each(axes.all, ref("v")), NUM);
     // The list is clean, so the run reads it with LSC, the clean form of LS (COMPILE.MODULE.FUSE.CLEAN).
-    expect(m.ok && m.source).toContain("return LSC(c");
+    expect(m.ok && m.source).toMatch(/return LSC\(L\d+, 0\);/);
     const off = emitModule(each(axes.all, ref("v")), { ...NUM, fuse: false });
     expect(off.ok && off.source).toContain("out[o] = LO(c");
     const loaded = make((off as { source: string }).source);

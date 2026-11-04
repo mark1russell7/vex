@@ -354,7 +354,7 @@ const records = fc.array(record, { maxLength: 6 });
 // In the nightly and the weekly runs, the time-out is the budget of a property plus a margin (`fc-timeout.ts`).
 describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: propertyTimeout(60_000) }, () => {
   // The lists: from an axis, with error items and literals, and from the list ops that build a list.
-  const base = fc.constantFrom<Expr>(ns, each(axes.all, w), inv, each(axes.where(axes.all, ref("b")), n), each(axes.window(-1, 1), n), each(axes.reverse(axes.all), w), LIT, BAD, EMPTY);
+  const base = fc.constantFrom<Expr>(ns, each(axes.all, w), inv, each(axes.where(axes.all, ref("b")), n), each(axes.window(-1, 1), n), each(axes.reverse(axes.all), w), LIT, BAD, EMPTY, op("fill", lit(0), lit(1)), op("fill", lit(0), op("divide", lit(1), lit(0))), op("fill", lit(0), n), op("fill", lit(0), op("divide", n, w)));
   const opts = fc.boolean().map((s) => (s ? [strict] : []));
   const built: fc.Arbitrary<Expr> = fc.oneof(
     base,

@@ -804,8 +804,9 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const options: ModuleOptions = { domains: [NumDomain, Odd], schema: { fields: { iv: `domain:${odd}`, n: "number" } } };
     const e = op("span", op("grow", ref("iv"), ref("n")));
     const source = sourceOf(e, options);
-    // The check has the index of the domain in its name.
-    expect(source).toContain("const k_d1 = (x) => (v_1(x) ? x : F());");
+    // The check has the index of the domain in its name. This module reads the check one time, so the check holds its body.
+    expect(source).toContain("const k_d1 = (x) => ((");
+    expect(source).not.toContain("v_1");
     // The second record grows to an interval that is not valid, so its value is an error.
     expectSame(make(source), e, [{ iv: { lo: 0, hi: 2 }, n: 1 }, { iv: { lo: 0, hi: 1 }, n: -2 }], {}, options);
   });
@@ -1290,16 +1291,17 @@ describe("COMPILE.MODULE: the text of a module", () => {
     const positive = domainOf("Positive", "number", {}, "(x) => Number.isFinite(x) && typeof x === 'number' && x > -100");
     const e = rec({ sum: op("ifError", op("sum", each(axes.all, op("multiply", w, lit(40)))), lit(0)), x: op("ifError", op("multiply", n, lit(60)), lit(0)) });
     await expectGolden("valid", e, { domains: [positive, NumDomain, BoolDomain], schema: SCHEMA });
-    for (const finite of ["x=>Number.isFinite(x)", "( x )  =>  Number.isFinite( x )"]) expect(sourceOf(e, { domains: [domainOf("Finite", "number", {}, finite), NumDomain], schema: SCHEMA })).not.toContain("v_0");
+    for (const finite of ["x=>Number.isFinite(x)", "( x )  =>  Number.isFinite( x )"]) expect(sourceOf(e, { domains: [domainOf("Finite", "number", {}, finite), NumDomain], schema: SCHEMA, fuse: false })).not.toContain("v_0");
     for (const other of ["(x) => Number.isFinite(x + 1)", "(x) => Number.isFinite(x) || x > 0", "(x) => Number.isFinite(1)"]) {
       const options: ModuleOptions = { domains: [domainOf("Other", "number", {}, other), NumDomain], schema: SCHEMA };
-      expect(sourceOf(e, options)).toContain("v_0");
+      // The check keeps its name in the text of fuse false. A module with one read of a check holds its body (COMPILE.MODULE.SIZE.INLINE).
+      expect(sourceOf(e, { ...options, fuse: false })).toContain("v_0");
       expectSame(make(sourceOf(e, options)), e, MANY, VARS, options);
     }
     // A text is not a number, so the check of a text keeps the check of its domain.
     const text = rec({ s: op("ifError", op("upper", ref("s")), lit("!")) });
     const textOptions: ModuleOptions = { domains: [domainOf("Finite", "string", {}, "(x) => Number.isFinite(x)"), TextDomain], schema: SCHEMA };
-    expect(sourceOf(text, textOptions)).toContain("v_0");
+    expect(sourceOf(text, { ...textOptions, fuse: false })).toContain("v_0");
     expectSame(make(sourceOf(text, textOptions)), text, MANY, VARS, textOptions);
     // A check of a boolean: a node of the memo with a test checks it, so the node does not keep its items.
     const strictBool = domainOf("True", "boolean", {}, "(x) => x");

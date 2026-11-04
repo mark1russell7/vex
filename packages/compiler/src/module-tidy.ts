@@ -1,0 +1,380 @@
+/**
+ * The last pass of the printer of a module (`COMPILER.md` §4.4, COMPILE.MODULE.SIZE). This pass reads the lines of a
+ * printed run, and it removes code that gives no value. It does not change the value of a run, an error of a run or a
+ * refusal of the printer.
+ *
+ * The printer gives one statement on each line, and each block adds two spaces. A name with digits is a fresh name of
+ * the printer. A text of a program can hold each word, so each count of a word here also counts the words in a text. A
+ * count that is too high only stops a rule. A rule that writes a line skips each text.
+ */
+
+/** The parts of a module for the pass. */
+export interface TidyParts {
+  /** The helpers and the declarations at the top of the module, by name, in their order. */
+  readonly decls: ReadonlyMap<string, string>;
+  /** The statements of the run that this pass can change: the constants of the run and the body. */
+  readonly lines: readonly string[];
+  /** The other text of the module. This pass does not change it, and each name that it reads stays. */
+  readonly kept: string;
+  /** The globals that a function of an op can read at each place of the module. */
+  readonly globals: ReadonlySet<string>;
+}
+
+/** The result of the pass: the declarations that stay, and the statements of the run. */
+export interface Tidied {
+  readonly decls: ReadonlyMap<string, string>;
+  readonly lines: readonly string[];
+}
+
+/** The words of a text. */
+const WORD = /[A-Za-z_$][\w$]*/g;
+
+/** This function gives the words of a text. */
+const wordsOf = (text: string): readonly string[] => text.match(WORD) ?? [];
+
+/** This function gives the count of a word in some lines. */
+const countOf = (lines: readonly string[], name: string): number => lines.reduce((sum, x) => sum + wordsOf(x).filter((w) => w === name).length, 0);
+
+/** This function gives the number of spaces at the start of a line. */
+const indentOf = (line: string): number => line.length - line.trimStart().length;
+
+/** This function gives the first line after `at` that is not in the block of the line `at`. */
+function blockEnd(lines: readonly string[], at: number): number {
+  const indent = indentOf(lines[at] as string);
+  let end = at + 1;
+  while (end < lines.length && indentOf(lines[end] as string) >= indent) end++;
+  return end;
+}
+
+/** This function gives the line that opens the block of the line `at`, or -1 at the top of the run. */
+function openerOf(lines: readonly string[], at: number): number {
+  const indent = indentOf(lines[at] as string);
+  let k = at - 1;
+  while (k >= 0 && indentOf(lines[k] as string) >= indent) k--;
+  return k;
+}
+
+/** The line of a function that a block opens. */
+const FUNCTION_HEAD = /=> \{$|\bfunction\b.*\{$/;
+
+/** This function gives the line that opens the function of the line `at`, or -1 for the function of the run. */
+function functionOf(lines: readonly string[], at: number): number {
+  let k = openerOf(lines, at);
+  while (k >= 0 && !FUNCTION_HEAD.test(lines[k] as string)) k = openerOf(lines, k);
+  return k;
+}
+
+/** The key of an item of a list in a loop. The head of the loop must come just before it (`deadKeys`). */
+const KEY_READ = /^\s*const (j\d+) = ([A-Za-z]+\d*)\[(q\d+)\](\[0\])?;$/;
+
+/**
+ * This function removes each read of a key that no code reads (COMPILE.MODULE.SIZE.KEY). The read must be the first line
+ * of the loop of its position. A read of a pair must also have a loop over the length of its array. An item of a list
+ * is a pair, so the read cannot throw.
+ */
+export function deadKeys(lines: readonly string[]): readonly string[] {
+  return lines.filter((line, i) => {
+    const m = KEY_READ.exec(line);
+    if (m === null) return true;
+    const [, key, array, position, pair] = m as unknown as readonly [string, string, string, string, string | undefined];
+    const head = lines[i - 1] ?? "";
+    const loop = head.trimStart().startsWith(`for (let ${position} = `) && (pair === undefined || new RegExp(`(?<![\\w$.])${array}\\.length`).test(head));
+    return !loop || countOf(lines.slice(i + 1, blockEnd(lines, i)), key) > 0;
+  });
+}
+
+/** The parts of a line of code. The group holds a key of an object. The other names are the last alternative. */
+const PARTS = /\.{3}|\.[A-Za-z_$][\w$]*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`|\d[\w.]*|((?<=[{,]\s*)[A-Za-z_$][\w$]*(?=\s*:))|[A-Za-z_$][\w$]*/g;
+
+/** This function gives a line with each read of the name `from` as a read of the name `to`. */
+const renamed = (line: string, from: string, to: string): string => line.replace(PARTS, (t: string, key: string | undefined) => (key === undefined && t === from ? to : t));
+
+/** The writes to a name. The first group holds the name after `++` or `--`, and the second group the name before an operator. */
+const WRITE = /(?:\+\+|--)\s*([A-Za-z_$][\w$]*)|(?<![\w$.])(?<!\b(?:const|let) )([A-Za-z_$][\w$]*)\s*(?:\+\+|--|(?:[-+*/%&|^]|<<|>>>?|\*\*|&&|\|\||\?\?)?=(?![=>]))/g;
+
+/** This function gives the lines that write to each name, without the line that declares the name. */
+function writesOf(lines: readonly string[]): ReadonlyMap<string, readonly number[]> {
+  const writes = new Map<string, number[]>();
+  for (const [i, line] of lines.entries()) {
+    for (const m of line.matchAll(WRITE)) {
+      const name = (m[1] ?? m[2]) as string;
+      writes.set(name, [...(writes.get(name) ?? []), i]);
+    }
+  }
+  return writes;
+}
+
+/** This function tells if a line declares a name, also as a parameter of a function. */
+function binds(line: string, name: string): boolean {
+  const word = `(?<![\\w$])${name}(?![\\w$])`;
+  return new RegExp(`\\b(?:const|let)\\s+(?:[^;=]*,\\s*|\\[[^\\]]*)?${word}|\\([^()]*${word}[^()]*\\)\\s*=>|${word}\\s*=>|\\bfunction\\b[^(]*\\([^)]*${word}`).test(line);
+}
+
+/** A statement that gives a new name to a fresh name, or to `o`, the key of a run. */
+const ALIAS = /^\s*const ([A-Za-z]+\d+) = ([A-Za-z]+\d+|o);$/;
+
+/**
+ * This function tells if the name `name` keeps its value from the line `at` to the line `end`. A name with no write
+ * keeps its value. Else no line in that part can write to it. That part must also have no function, because a function
+ * can read the name after a later write. Each other write and the declaration must be in the function of the line
+ * `at`, because a call cannot then start them. A write in a line with a function has an unknown place.
+ */
+function keeps(lines: readonly string[], writes: readonly number[], name: string, at: number, end: number): boolean {
+  if (writes.length === 0) return true;
+  if (writes.some((x) => x > at && x < end) || lines.slice(at, end).some((x) => x.includes("=>") || /\bfunction\b/.test(x))) return false;
+  const home = functionOf(lines, at);
+  const declared = lines.flatMap((x, i) => (binds(x, name) ? [i] : []));
+  return declared.length > 0 && [...writes, ...declared].every((x) => !(lines[x] as string).includes("=>") && functionOf(lines, x) === home);
+}
+
+/**
+ * This function removes each alias whose two names hold one value in the whole block of the alias. Each read of the
+ * alias reads the first name (COMPILE.MODULE.SIZE.ALIAS).
+ */
+export function aliases(lines: readonly string[]): readonly string[] {
+  const out = [...lines];
+  const writes = writesOf(lines);
+  const gone = new Set<number>();
+  for (let i = 0; i < out.length; i++) {
+    const m = ALIAS.exec(out[i] as string);
+    if (m === null) continue;
+    const [, alias, name] = m as unknown as readonly [string, string, string];
+    const end = blockEnd(out, i);
+    const block = out.slice(i + 1, end);
+    // Each read of the alias must be in its block, and no line of that block can give the name another meaning.
+    if (countOf(out, alias) !== 1 + countOf(block, alias) || block.some((x) => binds(x, name)) || !keeps(out, writes.get(name) ?? [], name, i, end)) continue;
+    for (let k = i + 1; k < end; k++) out[k] = renamed(out[k] as string, alias, name);
+    gone.add(i);
+  }
+  return out.filter((_, i) => !gone.has(i));
+}
+
+/** The first line of a lazy cell of the run. */
+const CELL = /^ {2}const (c\d+) = L\(\(\) => \{$/;
+
+/** The first line of a lazy cell at each place. */
+const ANY_CELL = /^\s*const \w+ = L\(\(\) => \{$/;
+
+/** The blocks that run each statement at most once, for one run of the block around them. */
+const ONCE_BLOCK = /^\s*(?:try \{|\} catch \{|\} else \{|(?:\} else )?if \(.*\) \{)$/;
+
+/** The statements that can run a part of their line more than once. */
+const LOOP_LINE = /^\s*(?:for|while|do)\b|=>/;
+
+/** This function tells if the statement at the line `at` runs at most once in a run. */
+function runsOnce(lines: readonly string[], at: number): boolean {
+  if (LOOP_LINE.test(lines[at] as string)) return false;
+  for (let k = openerOf(lines, at); k >= 0; k = openerOf(lines, k)) {
+    const line = lines[k] as string;
+    if (ANY_CELL.test(line)) return true;
+    if (!ONCE_BLOCK.test(line)) return false;
+  }
+  return true;
+}
+
+/**
+ * This function prints a lazy cell with one read at that read (COMPILE.MODULE.SIZE.ONCE). The cell must be one
+ * `return`, and the read must be `G(c())`. The read must run at most once, so the value evaluates at most once and at
+ * the same time. `G` stays, because the value can be the sentinel. Each catch of a module takes each exception.
+ */
+export function onceCells(lines: readonly string[]): readonly string[] {
+  let out = lines;
+  for (let i = 0; i + 2 < out.length; i++) {
+    const name = CELL.exec(out[i] as string)?.[1];
+    const value = /^ {4}return (.*);$/.exec(out[i + 1] as string)?.[1];
+    if (name === undefined || value === undefined || out[i + 2] !== "  });" || countOf(out, name) !== 2) continue;
+    const read = new RegExp(`(?<![\\w$.])G\\(${name}\\(\\)\\)`);
+    const site = out.findIndex((x) => read.test(x));
+    if (site < 0 || !runsOnce(out, site)) continue;
+    out = out.flatMap((x, k) => (k === site ? [x.replace(read, () => `G(${value})`)] : k >= i && k <= i + 2 ? [] : [x]));
+    i = -1;
+  }
+  return out;
+}
+
+/** A constant of the run on one line, with its name. */
+const CONSTANT = /^ {2}const (c\d+) = (?:T\(\(\) => .*\)|\[\]);$/;
+
+/** The first line of a constant of the run with a `try`, with its name. */
+const HELD = /^ {2}let (c\d+);$/;
+
+/** This function gives the name of the constant at the line `at` and its last line, or `undefined` for another line. */
+function constantAt(lines: readonly string[], at: number): { readonly name: string; readonly last: number } | undefined {
+  const line = lines[at] as string;
+  const one = CONSTANT.exec(line)?.[1];
+  if (one !== undefined) return { name: one, last: at };
+  const lazy = CELL.exec(line)?.[1];
+  if (lazy !== undefined) return { name: lazy, last: lines.indexOf("  });", at) };
+  const held = HELD.exec(line)?.[1];
+  return held === undefined || lines[at + 1] !== "  try {" ? undefined : { name: held, last: lines.indexOf("  }", at) };
+}
+
+/**
+ * This function removes each constant of the run that no code reads (COMPILE.MODULE.SIZE.DEAD). The code of a constant
+ * has no effect, and the constant holds each failure of that code. A lazy cell with no read does not run.
+ */
+export function deadConstants(lines: readonly string[]): readonly string[] {
+  let out = lines;
+  for (let i = 0; i < out.length; i++) {
+    const c = constantAt(out, i);
+    if (c === undefined) continue;
+    const rest = [...out.slice(0, i), ...out.slice(c.last + 1)];
+    if (countOf(rest, c.name) > 0) continue;
+    out = rest;
+    i = -1;
+  }
+  return out;
+}
+
+/** This function gives the declarations that the text `roots` reads, also through other declarations. */
+export function liveDecls(decls: ReadonlyMap<string, string>, roots: string): ReadonlyMap<string, string> {
+  const live = new Set<string>();
+  const stack = [...wordsOf(roots)];
+  for (let w = stack.pop(); w !== undefined; w = stack.pop()) {
+    const text = decls.get(w);
+    if (text === undefined || live.has(w)) continue;
+    live.add(w);
+    stack.push(...wordsOf(text));
+  }
+  return new Map([...decls].filter(([name]) => live.has(name)));
+}
+
+/** The tokens of the body of a function of an op. A body with another token has no inline form. */
+const BODY_TOKEN = /\s+|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\.{3}|\.\d\w*|\d[\w.]*|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|===|!==|\?\?|&&|\|\||\*\*|<<|>>>|>>|==|!=|<=|>=|\+\+|--|=>|\?\.|[-+*/%<>!?:,&|^~()[\]{}]/y;
+
+/** The tokens that change a value or start a function. */
+const NOT_INLINE: ReadonlySet<string> = new Set(["++", "--", "=>"]);
+
+/** The words that an inline body can read at each place of a module. */
+const PLAIN_WORDS: ReadonlySet<string> = new Set(["true", "false", "null", "NaN", "Infinity", "typeof", "void"]);
+
+/** The words that end no value, so a slash after them starts a regular expression. */
+const NOT_VALUES: ReadonlySet<string> = new Set(["typeof", "void"]);
+
+/** This function gives the tokens of a body, or `undefined` for a body with another token. */
+function tokensOf(body: string): readonly string[] | undefined {
+  const out: string[] = [];
+  BODY_TOKEN.lastIndex = 0;
+  while (BODY_TOKEN.lastIndex < body.length) {
+    const m = BODY_TOKEN.exec(body);
+    if (m === null || NOT_INLINE.has(m[0])) return undefined;
+    out.push(m[0]);
+  }
+  return out;
+}
+
+/** This function tells if a token ends a value, so a slash after it is a division. */
+const endsValue = (t: string): boolean => t === ")" || t === "]" || t === "}" || (/^[\w$."']/.test(t) && t !== "..." && !NOT_VALUES.has(t));
+
+/** This function tells if a token is a name or a word of the language. */
+const isWord = (t: string): boolean => /^[A-Za-z_$]/.test(t);
+
+/** This function tells if a token is a space. */
+const isSpace = (t: string): boolean => /^\s/.test(t);
+
+/** The part of an inline body: a text, or the index of a parameter. */
+type BodyPart = string | number;
+
+/**
+ * This function gives the parts of the body of an arrow function, or `undefined` for a body that a site cannot hold.
+ * The body must be an expression with no assignment and no function. Each of its words must be a parameter, a global or
+ * a key of an object. Thus a local name of the site cannot take the place of a word of the body.
+ */
+function bodyParts(params: readonly string[], body: string, globals: ReadonlySet<string>): readonly BodyPart[] | undefined {
+  const tokens = tokensOf(body.trim());
+  if (tokens === undefined || tokens[0] === "{") return undefined;
+  const parts: BodyPart[] = [];
+  const open: string[] = [];
+  let last = "";
+  for (const [i, t] of tokens.entries()) {
+    if (isSpace(t)) {
+      parts.push(" ");
+      continue;
+    }
+    const next = tokens.slice(i + 1).find((x) => !isSpace(x));
+    if (t === "/" && !endsValue(last)) return undefined;
+    if (t === "(" || t === "[" || t === "{") open.push(t);
+    if (t === ")" || t === "]" || t === "}") open.pop();
+    const at = params.indexOf(t);
+    const key = open.at(-1) === "{" && (last === "{" || last === ",");
+    if (!isWord(t) || (key && next === ":")) parts.push(t);
+    else if (key && next !== "," && next !== "}") return undefined;
+    else if (at >= 0) parts.push(...(key ? [`${t}:`, at] : [at]));
+    else if (PLAIN_WORDS.has(t) || globals.has(t)) parts.push(t);
+    else return undefined;
+    last = t;
+  }
+  return parts;
+}
+
+/** The declaration of a function of an op or of a check of a domain, as an arrow function. */
+const OP_DECL = /^const ((?:op|v)_\w+) = (?:\(([\w$,\s]*)\)|([A-Za-z_$][\w$]*))\s*=>([\s\S]*);$/;
+
+/** The name, the parameters and the parts of an inline form. */
+interface OpForm {
+  readonly name: string;
+  readonly params: readonly string[];
+  readonly parts: readonly BodyPart[];
+}
+
+/** This function gives the form of a declaration, or `undefined` for a declaration without one. */
+function opForm(text: string, globals: ReadonlySet<string>): OpForm | undefined {
+  const m = OP_DECL.exec(text);
+  if (m === null) return undefined;
+  const params = (m[2] ?? m[3] ?? "").split(",").map((x) => x.trim()).filter((x) => x !== "");
+  const parts = bodyParts(params, m[4] as string, globals);
+  return parts === undefined || params.length === 0 ? undefined : { name: m[1] as string, params, parts };
+}
+
+/**
+ * This function gives a text with the call of `f` as its body. It gives `undefined` when the text has no call with a
+ * name for each argument.
+ */
+function withSite(text: string, f: OpForm): string | undefined {
+  const site = new RegExp(`"(?:[^"\\\\]|\\\\.)*"|(?<![\\w$.])${f.name}\\(([A-Za-z_$][\\w$]*(?:, [A-Za-z_$][\\w$]*)*)\\)`, "g");
+  let found = false;
+  const out = text.replace(site, (t: string, list: string | undefined) => {
+    const args = list?.split(", ");
+    if (args?.length !== f.params.length) return t;
+    found = true;
+    return `(${f.parts.map((p) => (typeof p === "number" ? (args[p] as string) : p)).join("")})`;
+  });
+  return found ? out : undefined;
+}
+
+/**
+ * This function prints each function of an op with one call at that call (COMPILE.MODULE.SIZE.INLINE). Each argument
+ * must be a name, so the arguments have no order, and a second read of a parameter reads the same value.
+ */
+export function inlineOps(parts: TidyParts): Tidied {
+  const { kept, globals } = parts;
+  const decls = new Map(parts.decls);
+  const lines = [...parts.lines];
+  const counts = new Map<string, number>();
+  for (const w of wordsOf([kept, ...decls.values(), ...lines].join("\n"))) counts.set(w, (counts.get(w) ?? 0) + 1);
+  for (const [name, text] of parts.decls) {
+    const f = counts.get(name) === 2 ? opForm(text, globals) : undefined;
+    if (f === undefined) continue;
+    const at = lines.findIndex((x) => withSite(x, f) !== undefined);
+    if (at >= 0) {
+      lines[at] = withSite(lines[at] as string, f) as string;
+      decls.delete(name);
+      continue;
+    }
+    // A check of the result of an op calls the check of its domain.
+    const check = [...decls].find(([k, x]) => k.startsWith("k_") && withSite(x, f) !== undefined);
+    if (check !== undefined) {
+      decls.set(check[0], withSite(check[1], f) as string);
+      decls.delete(name);
+    }
+  }
+  return { decls, lines };
+}
+
+/** This function gives the smaller form of a module, with the same behavior (COMPILE.MODULE.SIZE). */
+export function tidy(parts: TidyParts): Tidied {
+  const lines = deadConstants(onceCells(deadConstants(aliases(deadKeys(parts.lines)))));
+  const live = liveDecls(parts.decls, [parts.kept, ...lines].join("\n"));
+  const small = inlineOps({ ...parts, decls: live, lines });
+  return { decls: liveDecls(small.decls, [parts.kept, ...small.lines].join("\n")), lines: small.lines };
+}

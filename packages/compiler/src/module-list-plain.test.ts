@@ -152,11 +152,11 @@ describe("COMPILE.MODULE.LIST.PLAIN: the option lists", () => {
     await expect(plain).toMatchFileSnapshot("./__golden__/module-plain.js");
     // Only the helpers of the lists change: LA reads the input, and LPC gives the result.
     // The envelope is one object for each run (COMPILE.MODULE.FUSE.OUT), and a plain array is one array for each key.
-    const once = "  const c137 = L(() => {\n    return LSC(G(c136()), 1);\n  });\n";
-    const swapped = envelope.replace(helper(envelope, "LI"), helper(plain, "LA")).replace(helper(envelope, "LSC"), helper(plain, "LPC")).replaceAll("LI(r[", "LA(r[").replace(once, "").replace("out[o] = G(c137());", "out[o] = LPC(G(c136()), 1);");
+    const once = "  const c131 = L(() => {\n    return LSC(G(c130()), 1);\n  });\n";
+    const swapped = envelope.replace(helper(envelope, "LI"), helper(plain, "LA")).replace(helper(envelope, "LSC"), helper(plain, "LPC")).replaceAll("LI(r[", "LA(r[").replace(once, "").replace("out[o] = G(c131());", "out[o] = LPC(G(c130()), 1);");
     expect(swapped).toBe(plain);
-    expect(plain).toContain('(LF3[i] = LA(r["rows"], 0, is_3)) === undefined');
-    expect(plain).toContain("out[o] = LPC(G(c136()), 1);");
+    expect(plain).toContain('(LF3[i] = LA(r["rows"], is_3)) === undefined');
+    expect(plain).toContain("out[o] = LPC(G(c130()), 1);");
   });
 });
 

@@ -142,7 +142,7 @@ export function aliases(lines: readonly string[]): readonly string[] {
     const end = blockEnd(out, i);
     const block = out.slice(i + 1, end);
     // Each read of the alias must be in its block, and no line of that block can give either name another meaning. The
-    // printer prints the steps of a stopped walk two times, so a nested block can declare the alias again (V-075).
+    // printer prints the steps of a stopped walk two times, so a nested block can declare the alias again (V-073).
     if (countOf(out, alias) !== 1 + countOf(block, alias) || block.some((x) => binds(x, name) || binds(x, alias)) || !keeps(out, writes.get(name) ?? [], name, i, end)) continue;
     for (let k = i + 1; k < end; k++) out[k] = renamed(out[k] as string, alias, name);
     gone.add(i);

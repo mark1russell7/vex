@@ -63,7 +63,7 @@ function make(source: string): Loaded {
 function sourceOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   const m = emitModule(e, options);
   if (!m.ok) throw new Error(m.reason);
-  // A name that reads itself throws at the run, and the catch of the key hides it as an error of Vex (V-075).
+  // A name that reads itself throws at the run, and the catch of the key hides it as an error of Vex (V-073).
   if (/\bconst (\w+) = \1;/.test(m.source)) throw new Error("the module declares a name from itself");
   return m.source;
 }
@@ -1750,7 +1750,7 @@ describe("COMPILE.MODULE: random programs", () => {
 
   it("P17 COMPILE.MODULE.TREE.ALLOC: a module gives the value of the interpreter in a tree of each shape, in each key order", () => {
     // Each fold stops at false or at true. A name with no stop goes on, so the rest of the walk gives its value too.
-    // A step can move to the origin, so the rest of the walk prints an alias of the origin a second time (V-075).
+    // A step can move to the origin, so the rest of the walk prints an alias of the origin a second time (V-073).
     const stops = fc.tuple(fc.constantFrom("and", "or"), treeProgram.bool, treeProgram.num, fc.constantFrom(axes.ancestors, axes.reverse(axes.ancestors)), fc.boolean()).map(([o, test, x, a, moved]) => {
       const y = lit(o === "and");
       const value = moved ? op("sum", each(axes.children, x, [origin])) : x;
@@ -1769,7 +1769,7 @@ describe("COMPILE.MODULE: random programs", () => {
     expect(sample.filter(([, p]) => p.some((x, k) => x > k)).length).toBeGreaterThan(100);
   });
 
-  it("V-075 COMPILE.MODULE.EXIT: a step that moves to the origin gives its value in the rest of a walk", () => {
+  it("V-073 COMPILE.MODULE.EXIT: a step that moves to the origin gives its value in the rest of a walk", () => {
     // The stop prints the steps a second time. The alias of the origin in the second print must stay a new name.
     const e = fold(axes.ancestors, { y: lit(true), s: lit(0) }, { y: op("and", v("y"), ref("b")), s: op("add", v("s"), op("sum", each(axes.children, lit(1), [origin]))) }, op("if", v("y"), v("s"), lit(-1)));
     expectSameTree(make(sourceOf(e, TREE)), e, RECORDS, [1, 2, -1]);

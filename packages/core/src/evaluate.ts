@@ -163,6 +163,12 @@ export function nestingOf(e: Expr): number {
   return deepest;
 }
 
+/** This function gives the reason of the refusal of an expression that is nested too deep (EVAL.NESTING), or undefined. */
+export function nestingError(e: Expr): string | undefined {
+  const nesting = nestingOf(e);
+  return nesting > MAX_NESTING ? `the expression is nested ${String(nesting)} levels deep, and the limit is ${String(MAX_NESTING)}` : undefined;
+}
+
 /**
  * This function compiles an expression or a document (DOC.ENTRY). The result gives the same results and the same traces
  * as `evaluate`, because `evaluate` uses it too.
@@ -198,8 +204,7 @@ export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Pro
   // EVAL.SHAPE: an expression that is not valid, for example from a newer version of Vex, gives an error before a walk.
   // EVAL.NESTING: a program nested too deep gives an error before the compiler walks it with recursion.
   const shape = read.ok ? shapeError(expr) : read.error.message;
-  const nesting = shape === undefined ? nestingOf(expr) : 0;
-  const deep = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${nesting} levels deep, and the limit is ${MAX_NESTING}` : undefined);
+  const deep = shape ?? nestingError(expr);
   // LOOP.SIZE: a step of a loop that can double the size of a list at each step gives an error before a run.
   // STEP.MAX: a program above the highest step of the host gives an error before a run.
   // FIX.MONOTONE: a step of a fixed point without a proof that it moves one way gives an error before a run.

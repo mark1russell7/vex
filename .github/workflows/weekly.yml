@@ -53,6 +53,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter "${{ matrix.package }}" run test
         env:

@@ -31,12 +31,12 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, evaluate, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, type Move, moveExpr, type Names, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, evaluate, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, monotoneError, type Move, moveExpr, type Names, nestingError, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
 import { deadConstants, keepFaults, namesOfCode, tidy, type Tidied, wordsOf } from "./module-tidy.ts";
-import { canonical, keyText } from "./scope-key.ts";
+import { canonical, type KeyScope, KeyTable, keyText, NotStandalone } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 import { originalOf, placesError, unsharedAll } from "./unshared.ts";
 
@@ -108,8 +108,6 @@ export type { ListKind } from "./facts.ts";
 /** The source of a standalone module, or the reason that the program cannot be one. */
 export type Emitted = { readonly ok: true; readonly source: string } | { readonly ok: false; readonly reason: string };
 
-/** The error of a construct that a standalone module does not have. */
-class NotStandalone extends Error {}
 
 /**
  * The error that stops the second print of a fast sum (`#packed`) or of the steps of a fold (`#packedSteps`). Then the
@@ -2181,6 +2179,7 @@ class Printer {
   readonly #called = new Set<string>();
   /** The key of the expression of each code that is a constant of the run, and the read of each hoisted constant by key. */
   readonly #keyOf = new WeakMap<Code, string>();
+  readonly #keyTable = new KeyTable();
   readonly #constants = new Map<string, Code>();
   /** The columns of the run, by the structure of their expression. */
   readonly #columns = new Map<string, string>();
@@ -4830,7 +4829,29 @@ class Printer {
 
   /** This method gives the key of an expression at the place of `ctx`. Two expressions with one key have one value. */
   #constKey(e: Expr, ctx: Ctx): string {
-    return keyText(e, ctx);
+    const key = keyText(e, ctx, this.#keyTable);
+    keyProbe?.(e, ctx, key, this.#keyTable);
+    return key;
+  }
+}
+
+/** The function that sees each key of a constant or a column. */
+export type KeyProbe = (e: Expr, scope: KeyScope, key: string, table: KeyTable) => void;
+
+/** The function that a test of the keys gives, or undefined when no such test runs. */
+let keyProbe: KeyProbe | undefined;
+
+/** This function gives the result of `emit`, and `probe` sees each key of its printers, after each outer probe. The tests of the keys use it. The probe does not change the printed code. */
+export function withKeyProbe<T>(probe: KeyProbe, emit: () => T): T {
+  const outer = keyProbe;
+  keyProbe = (e, scope, key, table): void => {
+    outer?.(e, scope, key, table);
+    probe(e, scope, key, table);
+  };
+  try {
+    return emit();
+  } finally {
+    keyProbe = outer;
   }
 }
 
@@ -5063,8 +5084,8 @@ function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: Key
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
-  // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
-  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
+  // COMPILE.MODULE.NESTING, LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses.
+  const size = nestingError(expr) ?? sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options);
   if (size !== undefined) return { ok: false, reason: size };
   const plain = copiesOf(expr, [expr], starts)[0] as Expr;
   const p = new Printer(plain, options, keys, starts);
@@ -5152,8 +5173,7 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
     const shape = shapeError(f.expr);
-    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options) ?? monotoneError(f.expr, options));
-    const reason = shape ?? size;
+    const reason = shape ?? nestingError(f.expr) ?? sizeError(f.expr, options) ?? stepError(f.expr, options) ?? monotoneError(f.expr, options);
     if (reason !== undefined) return { ok: false, reason: `${formulaText(f)}: ${reason}` };
   }
   const kinds = new Map<string, Kind | undefined>();

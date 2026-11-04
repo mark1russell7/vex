@@ -7,7 +7,10 @@ import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { fromCore } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { keyText, type KeyScope } from "./scope-key.ts";
+import { keyWatch } from "../test/key-gate.ts";
+import { plainKey } from "../test/plain-key.ts";
+import { emitModule, withKeyProbe } from "./module.ts";
+import { KeyTable, keyText, type KeyScope } from "./scope-key.ts";
 
 const DOMAINS = [NumDomain, BoolDomain, TextDomain];
 /** The names of the programs. Two of them are also codes, so a name of the run can have the text of a variable. */
@@ -97,7 +100,11 @@ const SCOPE: KeyScope = {
   fns: new Map([["h", { id: 1 }]]),
   columns: new Map([["r", { code: "col0" }]]),
 };
-const key = (e: Expr, scope: KeyScope = SCOPE): string => keyText(e, scope);
+const TABLE = new KeyTable();
+const key = (e: Expr, scope: KeyScope = SCOPE): string => keyText(e, scope, TABLE);
+/** This function gives the key of an expression with the table of the test. */
+const key2 = (e: Expr, scope: KeyScope): string => keyText(e, scope, SECOND);
+const SECOND = new KeyTable();
 const X = v("x");
 const Y = v("y");
 const atOne = (body: Expr): Expr => let_({ x: lit(1) }, body);
@@ -108,10 +115,169 @@ describe("V-078 KEY: a key holds the meaning of each read", () => {
       fc.property(shape, fc.array(someName, { minLength: 1, maxLength: 6 }), fc.array(someName, { minLength: 1, maxLength: 6 }), site, site, (s, reads, others, here, there) => {
         const a = filled(s, reads);
         const b = filled(s, others);
-        fc.pre(keyText(a, scopeOf(here)) === keyText(b, scopeOf(there)));
+        fc.pre(key(a, scopeOf(here)) === key(b, scopeOf(there)));
         expect(value(a, here)).toStrictEqual(value(b, there));
       }),
     );
+  });
+
+  it("V-078 KEY: two keys of one table are equal if and only if their plain keys are equal", () => {
+    fc.assert(
+      fc.property(fc.array(fc.tuple(shape, fc.array(someName, { minLength: 1, maxLength: 6 }), site), { minLength: 2, maxLength: 6 }), (cases) => {
+        const table = new KeyTable();
+        const scopes = cases.map(([, , at]) => scopeOf(at));
+        const programs = cases.map(([s, reads]) => filled(s, reads));
+        const keys = programs.map((e, i) => keyText(e, scopes[i] as KeyScope, table));
+        const plain = programs.map((e, i) => plainKey(e, scopes[i] as KeyScope));
+        const pairs = keys.flatMap((a, i) => keys.map((b, j) => [a === b, plain[i] === plain[j]]));
+        expect(pairs.filter(([sameKey, samePlain]) => sameKey !== samePlain)).toStrictEqual([]);
+      }),
+    );
+  });
+
+  it("KEY: a map of names that changes after a read gives the key of its new content", () => {
+    const table = new KeyTable();
+    const env = new Map([["x", { code: "c0" }]]);
+    const scope: KeyScope = { ...NOTHING, env };
+    const watch = keyWatch();
+    const before = keyText(X, scope, table);
+    watch.probe(X, scope, before, table);
+    env.set("x", { code: "v0" });
+    const after = keyText(X, scope, table);
+    watch.probe(X, scope, after, table);
+    expect(after).not.toBe(before);
+    expect(watch.faults).toStrictEqual([]);
+  });
+
+  it("KEY: a change of a map of the memo after a read is a refusal, and the map and the key stay", () => {
+    const table = new KeyTable();
+    const keys = new Map([[NODE, { code: "c0" }]]);
+    const scope: KeyScope = { ...NOTHING, keys };
+    const before = keyText(add(NODE, lit(1)), scope, table);
+    expect(() => keys.set(X, { code: "v0" })).toThrow("a map of the memo changed after a read of its keys");
+    expect(() => keys.delete(NODE)).toThrow("a map of the memo changed after a read of its keys");
+    expect(() => {
+      keys.clear();
+    }).toThrow("a map of the memo changed after a read of its keys");
+    expect([...keys.keys()]).toStrictEqual([NODE]);
+    expect(keyText(add(NODE, lit(1)), scope, table)).toBe(before);
+  });
+
+  it("KEY: a print gives a refusal with a reason for a change of a map of the memo after a read", () => {
+    const options = { domains: DOMAINS, schema: { fields: { n: "number" } } } as const;
+    const change = (_e: Expr, scope: KeyScope): void => {
+      (scope.keys as Map<Expr, { code: string }>).set(X, { code: "v0" });
+    };
+    expect(withKeyProbe(change, () => emitModule(app("sum", each(axes.all, ref("n"))), options))).toStrictEqual({ ok: false, reason: "a map of the memo changed after a read of its keys" });
+  });
+
+  it("KEY: a map of the memo with a read in two tables stays sealed", () => {
+    const keys = new Map([[NODE, { code: "c0" }]]);
+    const scope: KeyScope = { ...NOTHING, keys };
+    keyText(NODE, scope, new KeyTable());
+    keyText(NODE, scope, new KeyTable());
+    expect(() => keys.set(X, { code: "v0" })).toThrow("a map of the memo changed after a read of its keys");
+  });
+
+  it("KEY: the gate finds two keys for one plain key", () => {
+    const table = new KeyTable();
+    const watch = keyWatch();
+    watch.probe(X, SCOPE, "a", table);
+    watch.probe(X, SCOPE, "b", table);
+    expect(watch.faults).toStrictEqual(["one plain key has the keys a and b"]);
+  });
+
+  it("KEY: the gate reads each table apart", () => {
+    const watch = keyWatch();
+    watch.probe(X, SCOPE, "a", new KeyTable());
+    watch.probe(Y, NOTHING, "a", new KeyTable());
+    expect(watch.faults).toStrictEqual([]);
+  });
+
+  it("KEY: a key has a small text at each size of the program", () => {
+    let e: Expr = add(X, Y);
+    for (let i = 0; i < 16; i++) e = add(e, e);
+    const copy = JSON.parse(JSON.stringify(e)) as Expr;
+    const table = new KeyTable();
+    expect(keyText(copy, SCOPE, table).length).toBeLessThan(32);
+    expect(keyText(copy, SCOPE, table)).toBe(keyText(e, SCOPE, table));
+  });
+
+  it("KEY: the walk of the keys of a chain grows with the chain, also with new maps at each level", () => {
+    const walk = (levels: number): number => {
+      let count = 0;
+      const seen = (e: Expr): Expr =>
+        new Proxy(e, {
+          get(target, name, receiver): unknown {
+            if (name === "tag") count++;
+            return Reflect.get(target, name, receiver) as unknown;
+          },
+        });
+      const table = new KeyTable();
+      let e = seen(X);
+      for (let i = 0; i < levels; i++) {
+        e = seen(add(e, X));
+        keyText(e, { keys: new Map(), env: new Map(SCOPE.env), fns: new Map(SCOPE.fns), columns: new Map(SCOPE.columns) }, table);
+      }
+      return count;
+    };
+    expect(walk(800) / walk(400)).toBeLessThan(2.2);
+  });
+
+  it("KEY: a let chain walks each node once, also with a new key at each level", () => {
+    const walk = (levels: number): number => {
+      let count = 0;
+      const seen = (e: Expr): Expr =>
+        new Proxy(e, {
+          get(target, name, receiver): unknown {
+            if (name === "tag") count++;
+            return Reflect.get(target, name, receiver) as unknown;
+          },
+        });
+      const table = new KeyTable();
+      let e = seen(X);
+      for (let i = 0; i < levels; i++) {
+        e = seen(let_({ [`x${String(i)}`]: seen(lit(i)) }, seen(add(e, seen(v(`x${String(i)}`))))));
+        keyText(e, { ...NOTHING, env: new Map([...SCOPE.env, [`x${String(i)}`, { code: `c${String(i)}` }]]) }, table);
+      }
+      return count;
+    };
+    expect(walk(800) / walk(400)).toBeLessThan(2.2);
+  });
+
+  it("KEY: two scopes with the same content give one key", () => {
+    const table = new KeyTable();
+    const twin: KeyScope = { ...SCOPE, env: new Map(SCOPE.env) };
+    expect(keyText(add(X, lit(1)), SCOPE, table)).toBe(keyText(add(X, lit(1)), twin, table));
+  });
+
+  it("KEY: one expression has a key for each set of names around it", () => {
+    const table = new KeyTable();
+    const inner = add(X, lit(1));
+    const bound = keyText(let_({ x: lit(1) }, inner), SCOPE, table);
+    expect(keyText(inner, SCOPE, table)).not.toBe(bound);
+    expect(keyText(let_({ x: lit(1) }, inner), SCOPE, table)).toBe(bound);
+    expect(keyText(let_({ y: lit(1) }, inner), SCOPE, table)).not.toBe(bound);
+  });
+
+  it("KEY: one expression has a key for each set of rounds around it", () => {
+    const table = new KeyTable();
+    const scope: KeyScope = { ...SCOPE, columns: new Map([["r", { code: "col0" }]]) };
+    const inner = add(last("r"), lit(1));
+    expect(keyText(inner, scope, table)).not.toBe(keyText(first("r", inner), scope, table));
+    expect(keyText(first("r", inner), scope, table)).toBe(keyText(first("r", inner), scope, table));
+  });
+
+  it("KEY: a name and a round of one spelling are two places", () => {
+    const table = new KeyTable();
+    const scope: KeyScope = { ...SCOPE, columns: new Map([["x", { code: "col0" }]]) };
+    const reads = add(last("x"), X);
+    const round = first("x", reads);
+    const name = let_({ x: lit(1) }, reads);
+    expect(keyText(round, scope, table)).toBe(key2(round, scope));
+    expect(keyText(name, scope, table)).toBe(key2(name, scope));
+    expect(plainKey(round, scope)).not.toBe(plainKey(name, scope));
+    expect(keyText(round, scope, table)).not.toBe(keyText(name, scope, table));
   });
 
   it("V-078: two reads of one variable have one key", () => {

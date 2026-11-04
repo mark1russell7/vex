@@ -65,6 +65,7 @@ jobs:
             packages/core/bench/**
             packages/compiler/src/**
             packages/compiler/bench/**
+            packages/compiler/test/growth.ts
             packages/domains/src/**
             packages/pilots/src/ireko-*.ts
             .github/workflows/speed-gate.yml
@@ -84,6 +85,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
+      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+        run: node scripts/workflow-gate.ts
       - id: inputs
         if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
         env:
@@ -119,6 +122,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       # A dispatch with the input case measures only these cases of the compiler gate, so the core gate does not run.
       - if: ${{ !inputs.case }}
@@ -133,6 +137,9 @@ jobs:
           GATE_NODE_FLAGS: ${{ inputs.node_flags }}
           GATE_GC: ${{ inputs.gc && '1' || '0' }}
         run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a gates.txt
+      # The gate of the growth reads exponents, so it has no limit for each CPU model (COMPILE.GROWTH).
+      - if: ${{ !cancelled() && !inputs.case }}
+        run: pnpm --filter @mark1russell7/vex-compiler run bench:growth | tee -a gates.txt
       - if: ${{ !cancelled() }}
         run: |
           {

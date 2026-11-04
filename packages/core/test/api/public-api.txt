@@ -217,6 +217,7 @@ matchesKind: build/index.d.ts#matchesKind
 monoids: build/index.d.ts#monoids
 monotoneError: build/index.d.ts#monotoneError
 moveExpr: build/index.d.ts#moveExpr
+nestingError: build/index.d.ts#nestingError
 nestingOf: build/index.d.ts#nestingOf
 noKeyError: build/index.d.ts#noKeyError
 none: build/index.d.ts#none
@@ -1456,6 +1457,9 @@ export declare function monotoneError(e: Expr, opts: MonotoneOptions): string | 
 
 ### build/index.d.ts#moveExpr
 export declare function moveExpr(m: Move): Expr | undefined;
+
+### build/index.d.ts#nestingError
+export declare function nestingError(e: Expr): string | undefined;
 
 ### build/index.d.ts#nestingOf
 export declare function nestingOf(e: Expr): number;

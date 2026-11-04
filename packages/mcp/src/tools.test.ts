@@ -87,7 +87,7 @@ describe("the tools", () => {
     // A program nested deeper than 500 levels has no generated code.
     let deep: unknown = lit(1);
     for (let i = 0; i < 501; i++) deep = app("add", deep, lit(1));
-    expect(check({ program: deep })).toMatchObject({ tier2: "tier 1 only: the expression is nested deeper than 500 levels" });
+    expect(check({ program: deep })).toMatchObject({ tier2: "tier 1 only: the expression is nested 502 levels deep, and the limit is 500" });
   });
 
   it("vex_evaluate gives the value or the error at each key: the cell of a grid as one vector", () => {

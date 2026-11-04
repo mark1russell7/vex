@@ -214,6 +214,16 @@ The parser is a runtime dependency, because the option `domains` takes a domain 
 
 The test `packages/pilots/src/runner-text.test.ts` prints each module of ireko with Node, with `tsx` and in Vitest, and compares the bytes. The test also has the case `(a && b) || c`, because a formatter keeps these parentheses and `tsx` removes them.
 
+#### The growth of a print (COMPILE.GROWTH)
+
+A key of a place holds what each read of an expression means at that place. A table in `scope-key.ts` walks each expression once. It keeps the form of the expression: the number of its structure and a shared list of its reads. A key at a new place reads that list, so its cost is linear in the reads and the binders of the expression.
+
+A form depends on the map `keys` of the nodes of the memo, so the table keeps the forms for each content of that map. The table seals such a map at its first read. A change after that read is a refusal with a reason, and it does not give a wrong key. The other maps of a scope have no copy in the table, because each key reads them as they stand. The tests of `scope-key.test.ts` change a map after a read and show both results.
+
+The gate `bench/growth.ts` runs in the speed gate. It compiles 13 shapes at two legal sizes, each in five fresh processes, as programs from JSON. It reads the exponent of the median time and of the bytes against the places. An exponent does not depend on the CPU model. A ratio at one size does not find a return to a quadratic pass.
+
+The key lists of `origin` are a limit of the output. Each node of the memo prints a list with one entry for each level around it. So the text of the shape `origin` is quadratic in its levels. The largest legal program has 166 levels and 248,611 bytes. A smaller text needs a change of the bytes of each module. The shapes `origin` and `wideorigin` have their own limits of bytes in `test/growth.ts`, at their measured slopes, so a worse text fails.
+
 #### The limit of the places of a program (COMPILE.PLACES)
 
 A place is a node at one position of the tree of a program. A program can use one object at many places, so a small object can have an exponential count of places. The compile takes time at each place, and tier 2 prints code at each place. The count comes first, and its walk visits each object once, so the refusal takes little time at each depth.
@@ -238,6 +248,24 @@ The largest module of `ireko` has 2,138 places, so the limit is 15 times that pr
 The workflow `places-gate.yml` holds the rule. It removes the limit and compiles each row in five fresh processes. It fails if the largest program of a shape under the limit goes over the line. It also fails if each row at 4 times the places stays under the line.
 
 A row at 2 times the places is a record only, because a program there can fall on each side of the line. So the gate does not find a limit that is one doubling too low. That limit refuses more programs, so it is safe. The gate also checks with `placesOf` that each row is the largest program of its shape, so a change of the count fails the gate.
+
+This table gives the lowest and the highest worst sample of three runs, each of five fresh processes, on the commits `758319b`, `46fc20d` and `4f9bace`. The spread of a row is the difference. The margin is the distance from the nearest value to the line of 1,024 MB.
+
+| Row | Part of the gate | Readings | Spread | Margin |
+| --- | --- | --- | --- | --- |
+| plain, depth 14 | under the line | 552 to 562 MB | 10 MB | 462 MB |
+| constant, depth 13 | under the line | 557 to 566 MB | 9 MB | 458 MB |
+| loop, depth 13 | under the line | 486 to 491 MB | 5 MB | 533 MB |
+| plain, depth 16 | over the line | 1,584 to 1,661 MB | 77 MB | 560 MB |
+| constant, depth 15 | over the line | 1,675 to 1,699 MB | 24 MB | 651 MB |
+| loop, depth 15 | over the line | 1,459 to 1,473 MB | 14 MB | 435 MB |
+| plain, depth 15 | record | 893 to 930 MB | 37 MB | 94 MB |
+| constant, depth 14 | record | 920 to 1,065 MB | 145 MB | none |
+| loop, depth 14 | record | 790 to 881 MB | 91 MB | 143 MB |
+
+Each row of the gate keeps a margin of at least 3 times the widest spread of the gate rows. The cause of the spread is not known.
+
+The row of constant depth 14 sits at the line, and the noise of the row is wider than the margin. Its last reading of 1,006 MB is 18 MB under the line, which is 1.8 %. One reading of this row decides nothing. If this row becomes a gate, it needs a median of repeats, not one reading.
 
 #### The faults of a module (COMPILE.MODULE.FAULT)
 

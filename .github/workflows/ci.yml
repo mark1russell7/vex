@@ -48,6 +48,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @vex/site run build
         env:
@@ -77,6 +78,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:packages
 

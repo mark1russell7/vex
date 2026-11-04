@@ -135,6 +135,11 @@ export interface DomainSpec<Name extends string, D, Ops extends Readonly<Record<
    * (KIND.PRIMITIVE). A compiler then finds the op of such a value before a run.
    */
   readonly primitive?: PrimitiveKind;
+  /**
+   * The field names of a value, if `is` accepts only plain objects with exactly these fields (KIND.FIELDS). Two domains
+   * with different names have no common value, so a compiler finds the domain of such a value before a run.
+   */
+  readonly fields?: readonly string[];
   /** The ops of the domain, with their metadata. */
   readonly ops: Ops;
   /**

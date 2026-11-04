@@ -12,6 +12,7 @@ import { heatStep } from "./heat.ts";
 import { INVOICE_FORMULAS } from "./invoice.ts";
 import { ESCAPE_PROGRAM } from "./ireko-audit.ts";
 import { GRID_PROGRAM } from "./ireko-grid.ts";
+import { LAYERS_PROGRAM } from "./ireko-layers.ts";
 import { MEASURE_COLUMNS } from "./ireko-measure.ts";
 import { PLACE_COLUMNS } from "./ireko-place.ts";
 import { RADIAL_PROGRAM } from "./ireko-radial.ts";
@@ -43,6 +44,7 @@ export const PILOTS: readonly [string, Expr][] = [
   ["escape", ESCAPE_PROGRAM],
   ["grid", GRID_PROGRAM],
   ["radial", RADIAL_PROGRAM],
+  ["layers", LAYERS_PROGRAM],
   ["nodeShape", NODE_SHAPE],
   ["schema", SCHEMA_PROGRAM],
   ["force", forceProgram(PILOT_FORCE)],

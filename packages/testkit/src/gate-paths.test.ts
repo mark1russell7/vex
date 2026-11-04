@@ -4,7 +4,22 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { GATE_NPM_PACKAGES, lockInputs, sameInputs } from "./gate-inputs.ts";
 
-const root = fileURLToPath(new URL("../../..", import.meta.url));
+/**
+ * This function gives the root of the repository: the first folder above this file that holds `pnpm-workspace.yaml`.
+ * The mutation lane runs a copy of this file in `tools/mutation/.stryker-tmp`. A fixed number of steps up does not find
+ * the root from that copy.
+ */
+function repoRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  while (!existsSync(join(dir, "pnpm-workspace.yaml"))) {
+    const up = dirname(dir);
+    if (up === dir) throw new Error("The folders above this file do not hold pnpm-workspace.yaml.");
+    dir = up;
+  }
+  return dir;
+}
+
+const root = repoRoot();
 
 /** The entries of the two speed gates: the files that `bench:gate` starts. */
 const ENTRIES = ["packages/core/bench/gate.ts", "packages/compiler/bench/gate.ts", "packages/compiler/bench/gate-processes.ts"];

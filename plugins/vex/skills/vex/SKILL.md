@@ -91,6 +91,8 @@ corner._.x().at("0"); // => { tag: "some", value: 40 }
 
 When the math works along a main axis and a cross axis, as in a stack, write it once. The axis `dir` is (1, 0) or (0, 1). `v._.along(dir)` and `v._.across(dir)` give the two components, and `dir._.compose(main, cross)` makes the vector. A `Vec2` cannot have an infinite bound. For a bound on one component, `mask._.select(a, b)` takes `a` where the mask is not 0. These ops need 0.12.0.
 
+For the four sides of an inset, use `InsetsDomain` and the op `insets`. A number lifts to four sides in `add`. `start` and `end` give `XY` values, and `startVec2` and `endVec2` give `Vec2` values.
+
 For a push along the smallest axis, as in a force separation, use `overlap._.minAxis()._.multiply(gap._.sign())._.multiply(overlap)`. `minAxis` gives (1, 0) or (0, 1), a tie gives (1, 0), and it compares signed values. The sign of 0 is 0, so a gap of 0 gives no push.
 
 For a standalone module, use `XYDomain` and the op `xy` instead: their vectors are plain `{ x, y }` data. Refer to [make a domain](reference/domains.md#a-domain-for-a-standalone-module).

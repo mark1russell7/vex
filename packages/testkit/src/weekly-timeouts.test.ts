@@ -1,10 +1,25 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { PROPERTY_BUDGET_MS, propertyTimeout, SETUP_MARGIN_MS } from "./fc-timeout.ts";
 
-const root = fileURLToPath(new URL("../../..", import.meta.url));
+/**
+ * This function gives the root of the repository: the first folder above this file that holds `pnpm-workspace.yaml`.
+ * The mutation lane runs a copy of this file in `tools/mutation/.stryker-tmp`. A fixed number of steps up does not find
+ * the root from that copy.
+ */
+function repoRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  while (!existsSync(join(dir, "pnpm-workspace.yaml"))) {
+    const up = dirname(dir);
+    if (up === dir) throw new Error("The folders above this file do not hold pnpm-workspace.yaml.");
+    dir = up;
+  }
+  return dir;
+}
+
+const root = repoRoot();
 
 /** The start of a block of Vitest: `describe`, `it` or `test`, with a modifier such as `.each(...)` or `.skip`. */
 const START = /(?<![.\w])(?:describe|it|test)(?:\.\w+(?:\([^)]*\))?)*\(/gu;

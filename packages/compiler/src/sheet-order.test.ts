@@ -2,7 +2,7 @@
  * The static order of the cells of a sheet in a module (COMPILE.MODULE.SHEET). These tests examine the reads of
  * finished cells in `sheet-order.ts` directly.
  */
-import { app, axes, cell, each, ext, fn, fold, call, let_, lit, offset, parent, v, type Expr, fix, index, key, last, ref } from "@mark1russell7/vex";
+import { app, axes, cell, each, ext, fix, fn, fold, call, last, let_, lit, offset, parent, ref, v, type Expr } from "@mark1russell7/vex";
 import { describe, expect, it } from "vitest";
 import { readsFinished } from "./sheet-order.ts";
 

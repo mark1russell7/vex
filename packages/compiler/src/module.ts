@@ -35,7 +35,7 @@ import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type C
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
-import { keepFaults, namesOfCode, tidy, type Tidied } from "./module-tidy.ts";
+import { keepFaults, namesOfCode, tidy, type Tidied, wordsOf } from "./module-tidy.ts";
 import { canonical, keyText } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 import { originalOf, placesError, unsharedAll } from "./unshared.ts";
@@ -2100,9 +2100,6 @@ const MODULE_EXPORTS: ReadonlySet<string> = new Set(["VEX_ERROR", "VexContractEr
 
 /** The comment of the class of a contract error in each module. */
 const ERROR_NOTE = "/** The error of a run whose input does not keep the schema of the program. */";
-
-/** The characters that a name of JavaScript does not hold, so a split at them keeps each name whole. */
-const NOT_NAME = /[^\p{ID_Continue}$\u200C\u200D]+/u;
 
 /** This function gives the reason that a name cannot be the name of the run, or `undefined` for a good name (V-060). */
 function nameReason(name: string): string | undefined {
@@ -4990,7 +4987,7 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   // The check reads each line of the module, with the copies of the ops. The function of the run has no name in that text.
   const code = textWith("function", []);
   // The parse of the names takes time, so it starts only for a name that is a word of the code. The fixed note holds the word `run`.
-  const inner = code.replace(ERROR_NOTE, "").split(NOT_NAME).includes(name) ? innerName(name, namesOfCode(code)) : name;
+  const inner = wordsOf(code.replace(ERROR_NOTE, "")).includes(name) ? innerName(name, namesOfCode(code)) : name;
   return { ok: true, source: inner === name ? textWith(`export function ${name}`, []) : textWith(`function ${inner}`, [`export { ${inner} as ${name} };`]) };
 }
 

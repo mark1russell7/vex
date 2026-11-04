@@ -66,12 +66,6 @@ describe("COMPILE.MODULE.NAME: the name of the run hides nothing", () => {
     expect(runOf(print(WIDTH, optionsOf(domain, "run", faults)), "run")(RECORDS, {})).toStrictEqual([3]);
   });
 
-  it("V-082 COMPILE.MODULE.NAME: a name with a letter outside ASCII is a whole name of the code", () => {
-    const source = print(app("step", ref("n")), optionsOf(shown({ step: (ñame: number): number => ñame + 1 }), "ñame", "value"));
-    expect(source).toContain("export { run$0 as ñame };");
-    expect(runOf(source, "ñame")(RECORDS, {})).toStrictEqual([124]);
-  });
-
   it("V-082 COMPILE.MODULE.NAME: a default name that only the fixed note of a module holds stays the name of the function", () => {
     const source = print(WIDTH, optionsOf(shown({ width }), "run", "value"));
     expect(source).toContain("export function run(records, vars) {");

@@ -71,7 +71,7 @@ export function namesOfCode(code: string): ReadonlySet<string> {
 const WORD = /[A-Za-z_$][\w$]*/g;
 
 /** This function gives the words of a text. */
-const wordsOf = (text: string): readonly string[] => text.match(WORD) ?? [];
+export const wordsOf = (text: string): readonly string[] => text.match(WORD) ?? [];
 
 /** This function gives the count of a word in some lines. */
 const countOf = (lines: readonly string[], name: string): number => lines.reduce((sum, x) => sum + wordsOf(x).filter((w) => w === name).length, 0);

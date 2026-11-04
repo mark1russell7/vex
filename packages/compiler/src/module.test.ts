@@ -65,6 +65,8 @@ function sourceOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   if (!m.ok) throw new Error(m.reason);
   // A name that reads itself throws at the run, and the catch of the key hides it as an error of Vex (V-073).
   if (/\bconst (\w+) = \1;/.test(m.source)) throw new Error("the module declares a name from itself");
+  // A read of a pack with no declaration throws at the run, and the catch of an item hides it as an error of Vex (V-077).
+  for (const [, pack] of m.source.matchAll(/\b(pk\d+)\[/g)) if (!m.source.includes(`const ${pack} = `)) throw new Error(`the module reads ${pack} with no declaration`);
   return m.source;
 }
 
@@ -154,6 +156,22 @@ function domainOf(name: string, primitive: PrimitiveKind, ops: Readonly<Record<s
 const n = ref("n");
 const w = ref("w");
 const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
+
+/** This function gives a test of a record with the work of a column of the run. */
+function hard(limit: Expr): Expr {
+  return op("and", ref("b"), op("gt", limit, op("if", op("eq", ref("s"), v("t")), lit(0), lit(0))));
+}
+
+/**
+ * This function gives a fold whose step reads a column at its item, and has a sum that reads no name of the fold. The
+ * fold inside that sum hides the name s of the step (V-077).
+ */
+function shadowed(first: Expr, test: Expr, seed: Expr): Expr {
+  const inner = fold(axes.all, { s: seed }, { s: op("add", lit(1), v("s")) }, v("s"));
+  const sum = op("sum", each(axes.where(axes.all, test), inner));
+  const start = op("if", first, lit(1), lit(2));
+  return fold(axes.all, { s: lit(0) }, { s: op("subtract", iterate(1, { s: start }, { s: op("add", v("s"), sum) }, v("s")), v("s")) }, v("s"));
+}
 
 /**
  * This function gives true when the module calls the op of a source, and false for an inline form. The module gives the
@@ -1727,6 +1745,29 @@ describe("COMPILE.MODULE: random programs", () => {
       .map(([body, arg, other, o, form]) => let_({ f: fn(["x"], op(o, v("x"), body)), k: other }, let_({ g: fn(["y"], call("f", op("add", v("y"), v("k")))) }, form(arg, other))));
     fc.assert(
       fc.property(withFns, records, fc.integer({ min: -3, max: 3 }), (e, rs, a) => {
+        expectSame(make(sourceOf(e)), e, rs, { a, t: "x" });
+      }),
+    );
+  });
+
+  it("V-077 COMPILE.MODULE: a constant in the step of a fold reads no pack of the fold", () => {
+    // The long run of 2026-11-04 found this program after 116,362 runs with the seed 2144591889.
+    const e = JSON.parse("{\"tag\":\"let\",\"bind\":{\"f\":{\"tag\":\"fn\",\"params\":[\"x\"],\"body\":{\"tag\":\"app\",\"op\":\"add\",\"args\":[{\"tag\":\"var\",\"name\":\"x\"},{\"tag\":\"fold\",\"axis\":{\"t\":\"all\"},\"init\":{\"s\":{\"tag\":\"app\",\"op\":\"if\",\"args\":[{\"tag\":\"app\",\"op\":\"any\",\"args\":[{\"tag\":\"each\",\"axis\":{\"t\":\"all\"},\"body\":{\"tag\":\"app\",\"op\":\"and\",\"args\":[{\"tag\":\"app\",\"op\":\"and\",\"args\":[{\"tag\":\"ref\",\"path\":[\"b\"]},{\"tag\":\"app\",\"op\":\"any\",\"args\":[{\"tag\":\"each\",\"axis\":{\"t\":\"all\"},\"body\":{\"tag\":\"ref\",\"path\":[\"b\"]}}]}]},{\"tag\":\"ref\",\"path\":[\"b\"]}]}}]},{\"tag\":\"lit\",\"value\":0},{\"tag\":\"lit\",\"value\":0}]}},\"step\":{\"s\":{\"tag\":\"app\",\"op\":\"subtract\",\"args\":[{\"tag\":\"iterate\",\"limit\":1,\"init\":{\"s\":{\"tag\":\"app\",\"op\":\"sum\",\"args\":[{\"tag\":\"each\",\"axis\":{\"t\":\"where\",\"axis\":{\"t\":\"all\"},\"test\":{\"tag\":\"app\",\"op\":\"not\",\"args\":[{\"tag\":\"app\",\"op\":\"and\",\"args\":[{\"tag\":\"ref\",\"path\":[\"b\"]},{\"tag\":\"app\",\"op\":\"eq\",\"args\":[{\"tag\":\"ref\",\"path\":[\"s\"]},{\"tag\":\"var\",\"name\":\"t\"}]}]}]}},\"body\":{\"tag\":\"lit\",\"value\":0},\"at\":[{\"t\":\"offset\",\"d\":[1]},{\"t\":\"index\",\"i\":0}]},{\"tag\":\"lit\",\"value\":{\"strict\":true}}]}},\"step\":{\"s\":{\"tag\":\"app\",\"op\":\"add\",\"args\":[{\"tag\":\"var\",\"name\":\"s\"},{\"tag\":\"app\",\"op\":\"sum\",\"args\":[{\"tag\":\"each\",\"axis\":{\"t\":\"where\",\"axis\":{\"t\":\"all\"},\"test\":{\"tag\":\"app\",\"op\":\"and\",\"args\":[{\"tag\":\"ref\",\"path\":[\"b\"]},{\"tag\":\"app\",\"op\":\"gt\",\"args\":[{\"tag\":\"lit\",\"value\":0},{\"tag\":\"app\",\"op\":\"if\",\"args\":[{\"tag\":\"app\",\"op\":\"eq\",\"args\":[{\"tag\":\"ref\",\"path\":[\"s\"]},{\"tag\":\"var\",\"name\":\"t\"}]},{\"tag\":\"lit\",\"value\":0},{\"tag\":\"lit\",\"value\":0}]}]}]}},\"body\":{\"tag\":\"fold\",\"axis\":{\"t\":\"all\"},\"init\":{\"s\":{\"tag\":\"lit\",\"value\":0}},\"step\":{\"s\":{\"tag\":\"app\",\"op\":\"subtract\",\"args\":[{\"tag\":\"lit\",\"value\":0},{\"tag\":\"var\",\"name\":\"s\"}]}},\"result\":{\"tag\":\"var\",\"name\":\"s\"}}}]}]}},\"result\":{\"tag\":\"var\",\"name\":\"s\"}},{\"tag\":\"var\",\"name\":\"s\"}]}},\"result\":{\"tag\":\"var\",\"name\":\"s\"}}]}},\"k\":{\"tag\":\"iterate\",\"limit\":0,\"init\":{\"s\":{\"tag\":\"app\",\"op\":\"sum\",\"args\":[{\"tag\":\"each\",\"axis\":{\"t\":\"all\"},\"body\":{\"tag\":\"app\",\"op\":\"add\",\"args\":[{\"tag\":\"lit\",\"value\":0},{\"tag\":\"app\",\"op\":\"ifError\",\"args\":[{\"tag\":\"lit\",\"value\":0},{\"tag\":\"lit\",\"value\":0}]}]}}]}},\"step\":{\"s\":{\"tag\":\"app\",\"op\":\"add\",\"args\":[{\"tag\":\"var\",\"name\":\"s\"},{\"tag\":\"fold\",\"axis\":{\"t\":\"all\"},\"init\":{\"s\":{\"tag\":\"lit\",\"value\":0}},\"step\":{\"s\":{\"tag\":\"app\",\"op\":\"subtract\",\"args\":[{\"tag\":\"lit\",\"value\":0},{\"tag\":\"var\",\"name\":\"s\"}]}},\"result\":{\"tag\":\"var\",\"name\":\"s\"}}]}},\"result\":{\"tag\":\"var\",\"name\":\"s\"}}},\"body\":{\"tag\":\"let\",\"bind\":{\"g\":{\"tag\":\"fn\",\"params\":[\"y\"],\"body\":{\"tag\":\"call\",\"fn\":\"f\",\"args\":[{\"tag\":\"app\",\"op\":\"add\",\"args\":[{\"tag\":\"var\",\"name\":\"y\"},{\"tag\":\"var\",\"name\":\"k\"}]}]}}},\"body\":{\"tag\":\"call\",\"fn\":\"f\",\"args\":[{\"tag\":\"app\",\"op\":\"length\",\"args\":[{\"tag\":\"ref\",\"path\":[\"s\"]}]}]}}}") as Expr;
+    const blank = { n: 0, w: Number.NaN, s: "", b: false };
+    expect(() => {
+      expectSame(make(sourceOf(e)), e, [blank, blank], { a: 0, t: "x" });
+    }).not.toThrow();
+    // The small form. A module with faults as values skipped each item of the sum and gave 0 at each key, with no error.
+    const rs = [{ n: 1, w: 0, s: "ab", b: true }, { n: 2, w: 0, s: "x", b: false }, { n: 3, w: 0, s: "abc", b: true }];
+    const small = shadowed(hard(lit(1)), hard(lit(2)), lit(5));
+    expectSame(make(sourceOf(small, { ...OPTIONS, faults: "value" })), small, rs, { a: 0, t: "x" });
+  });
+
+  it("P17 COMPILE.MODULE: a loop in the step of a fold gives the value of the interpreter when its name hides the name of the fold", () => {
+    // The sum has no read of the fold, so the printer moves it out of the loop. Its inner fold hides the name s of the step.
+    const hidden = fc.tuple(program.num, program.num, program.num).map(([first, test, seed]) => shadowed(hard(first), hard(test), seed));
+    fc.assert(
+      fc.property(hidden, records, fc.integer({ min: -3, max: 3 }), (e, rs, a) => {
         expectSame(make(sourceOf(e)), e, rs, { a, t: "x" });
       }),
     );

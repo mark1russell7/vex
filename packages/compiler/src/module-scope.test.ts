@@ -123,4 +123,9 @@ describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps t
   it("V-081: a column of a call reads a binding of the focus of the function", () => {
     expectSame(called(let_({ y: n }, steps(count(v("y"))))));
   });
+
+  it("V-081: a call at the focus of a second print has an argument that its function does not read", () => {
+    const unread = (body: Expr): Expr => let_({ h: fn(["x"], lit(1)) }, body);
+    expectSame(unread(called(steps(add(call("h", origin), count(v("u")))))));
+  });
 });

@@ -359,7 +359,7 @@ describe("COMPILE.MODULE.SIZE.DEAD: code that no code reads", () => {
 /** This function gives the result of `inlineOps` for one declaration of `op_1`, one line and the other text `kept`. */
 function inlined(decl: string, line: string, kept = ""): { readonly left: boolean; readonly line: string } {
   const { decls, lines } = inlineOps({ decls: new Map([["op_1", decl]]), lines: [line], kept, globals: new Set(["Math", "Number", "undefined"]) });
-  return { left: decls.has("op_1"), line: String(lines[0]) };
+  return { left: decls.has("op_1"), line: lines.join(" ") };
 }
 
 describe("COMPILE.MODULE.SIZE.INLINE: an op with one call", () => {

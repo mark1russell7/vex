@@ -20,8 +20,11 @@ interface IrekoRow {
   readonly print: (faults: Faults) => Emitted;
 }
 
+/** The name of a module of ireko. */
+export type IrekoModule = "grid" | "radial" | "layers" | "tree" | "shape" | "place" | "measure";
+
 /** The rows of the modules. Each print has the options of a build. */
-const ROWS = {
+const ROWS: Readonly<Record<IrekoModule, IrekoRow>> = {
   grid: { name: "gridOf", print: (faults) => emitModule(GRID_PROGRAM, { domains: GRID_DOMAINS, schema: GRID_SCHEMA, name: "gridOf", faults }) },
   radial: { name: "radialOf", print: (faults) => emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radialOf", faults }) },
   layers: { name: "layersOf", print: (faults) => emitModule(LAYERS_PROGRAM, { domains: LAYERS_DOMAINS, schema: LAYERS_SCHEMA, name: "layersOf", lists: "plain", faults }) },
@@ -29,10 +32,7 @@ const ROWS = {
   shape: { name: "nodeShape", print: (faults) => emitModule(NODE_SHAPE, { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults }) },
   place: { name: "placeOf", print: (faults) => emitSheetModule(PLACE_COLUMNS, { domains: PLACE_DOMAINS, schema: PLACE_SCHEMA, kinds: PLACE_KINDS, space: "tree", name: "placeOf", faults }) },
   measure: { name: "measureOf", print: (faults) => emitSheetModule(MEASURE_COLUMNS, { domains: MEASURE_DOMAINS, schema: MEASURE_SCHEMA, kinds: MEASURE_KINDS, space: "tree", name: "measureOf", faults }) },
-} satisfies Readonly<Record<string, IrekoRow>>;
-
-/** The name of a module of ireko. */
-export type IrekoModule = keyof typeof ROWS;
+};
 
 /** The modules that have a committed file in ireko. */
 export const IREKO_COMMITTED: readonly IrekoModule[] = ["measure", "place", "shape", "grid", "radial"];

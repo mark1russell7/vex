@@ -66,7 +66,7 @@ function sourceOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   // A name that reads itself throws at the run, and the catch of the key hides it as an error of Vex (V-073).
   if (/\bconst (\w+) = \1;/.test(m.source)) throw new Error("the module declares a name from itself");
   // A read of a pack with no declaration throws at the run, and the catch of an item hides it as an error of Vex (V-077).
-  for (const [, pack] of m.source.matchAll(/\b(pk\d+)\[/g)) if (!m.source.includes(`const ${pack as string} = `)) throw new Error(`the module reads ${pack as string} with no declaration`);
+  for (const [, pack] of m.source.matchAll(/\b(pk\d+)\[/g)) if (!m.source.includes(`const ${pack} = `)) throw new Error(`the module reads ${pack} with no declaration`);
   return m.source;
 }
 

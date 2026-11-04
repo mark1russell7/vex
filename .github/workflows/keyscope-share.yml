@@ -1,0 +1,43 @@
+# Throwaway measure of a draft pull request: the share of generated programs that reach the bad state of V-077.
+name: keyscope share
+on:
+  push:
+    branches: [keyscope]
+    paths: [.github/workflows/keyscope-share.yml]
+permissions: {}
+jobs:
+  share:
+    runs-on: ubuntu-latest
+    timeout-minutes: 320
+    strategy:
+      fail-fast: false
+      matrix:
+        arb: ["measure program.num", "measure withFns"]
+        depth: ["4", "6"]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @mark1russell7/vex-compiler...
+      - name: Measure
+        working-directory: packages/compiler
+        env:
+          SCRATCH_OUT: ${{ runner.temp }}/share.jsonl
+          SCRATCH_N: "500000"
+          SCRATCH_SEED: "20261104"
+          SCRATCH_DEPTH: ${{ matrix.depth }}
+          FC_SEED: "20261104"
+          MATRIX_ARB: ${{ matrix.arb }}
+        run: |
+          cp ../../tools/keyscope/namegap-scratch.test.ts.txt src/namegap-scratch.test.ts
+          node ../../tools/keyscope/instrument.mjs src/module.ts src/module-scratch.ts
+          pnpm exec vitest run src/namegap-scratch.test.ts --maxWorkers=1 -t "$MATRIX_ARB" || true
+          echo "SHARE $(cat "$SCRATCH_OUT")"
+          cat "$SCRATCH_OUT.examples" || true

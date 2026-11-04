@@ -1,0 +1,117 @@
+import { app, axes, call, each, evaluate, fn, fold, index, iterate, key, let_, lit, offset, ref, space, v, type Axis, type Expr, type Move } from "@mark1russell7/vex";
+import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
+import * as fc from "fast-check";
+import { appendFileSync } from "node:fs";
+import { it } from "vitest";
+import { emitModule } from "./module-scratch.ts";
+
+const OUT = process.env["SCRATCH_OUT"] as string;
+const N = Number(process.env["SCRATCH_N"] ?? 20000);
+const SEED = Number(process.env["SCRATCH_SEED"] ?? 20261104);
+const DEPTH = Number(process.env["SCRATCH_DEPTH"] ?? 4);
+const AXES = process.env["SCRATCH_AXES"] ?? "base";
+const SCHEMA = { fields: { n: "number", w: "number", s: "string", b: "boolean" }, vars: { a: "number", t: "string" } } as const;
+const OPTIONS = { domains: [NumDomain, BoolDomain, TextDomain], schema: SCHEMA, faults: "throw" } as const;
+const n = ref("n");
+const w = ref("w");
+const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
+interface Grammar { readonly reads: readonly Expr[]; readonly axes: readonly Axis[]; readonly ats: readonly (readonly Move[] | undefined)[]; readonly foldAts: readonly (readonly Move[] | undefined)[]; readonly boolAxes: readonly [Axis, ...Axis[]]; readonly folds?: { readonly num: readonly [string, ...string[]]; readonly bool: readonly [string, ...string[]] } }
+const REDUCE_OPTIONS: readonly (Readonly<Record<string, unknown>> | undefined)[] = [];
+const reduceOf = ([name, a, body, options]: readonly [string, Axis, Expr, Readonly<Record<string, unknown>> | undefined]): Expr => op("reduce", each(a, body), lit(name), ...(options === undefined ? [] : [lit(options)]));
+const programOf = (g: Grammar): { readonly num: fc.Arbitrary<Expr>; readonly bool: fc.Arbitrary<Expr> } =>
+  fc.letrec<{ num: Expr; bool: Expr }>((tie) => ({
+    num: fc.oneof(
+      { maxDepth: DEPTH, depthSize: "small" },
+      fc.integer({ min: -3, max: 3 }).map((x) => lit(x)),
+      fc.constantFrom(...g.reads),
+      tie("num").map((x) => ref("w", [index(x)])),
+      fc.tuple(fc.constantFrom("add", "subtract", "multiply", "divide", "max", "min", "mod"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
+      fc.tuple(tie("bool"), tie("num"), tie("num")).map(([c, a, b]) => op("if", c, a, b)),
+      fc.tuple(tie("num"), tie("num")).map(([a, b]) => op("ifError", a, b)),
+      fc
+        .tuple(fc.constantFrom("sum", "count", "max", "mean"), fc.constantFrom(...g.axes), tie("num"), fc.option(tie("bool"), { nil: undefined }), fc.boolean(), fc.constantFrom(...g.ats))
+        .map(([o, a, body, test, strict, at]) => op(o, each(test === undefined ? a : axes.where(a, test), body, at), ...(strict ? [lit({ strict: true })] : []))),
+      fc.tuple(tie("num"), tie("num")).map(([a, b]) => let_({ x: a }, op("add", v("x"), b))),
+      fc.constant(op("length", ref("s"))),
+      // The loops: a name s with a first value and a step, as an iteration or as a fold over an axis.
+      fc.tuple(fc.integer({ min: 0, max: 3 }), tie("num"), tie("num")).map(([k, init, step]) => iterate(k, { s: init }, { s: op("add", v("s"), step) }, v("s"))),
+      fc
+        .tuple(fc.constantFrom(...g.axes), tie("num"), tie("num"), fc.constantFrom(...g.foldAts))
+        // The step depends on the order of the targets, so a loop in the wrong order gives another value.
+        .map(([a, init, step, at]) => fold(a, { s: init }, { s: op("subtract", step, v("s")) }, v("s"), at)),
+      ...(g.folds === undefined ? [] : [fc.tuple(fc.constantFrom(...g.folds.num), fc.constantFrom(...g.axes), tie("num"), fc.constantFrom(...REDUCE_OPTIONS)).map(reduceOf)]),
+    ),
+    bool: fc.oneof(
+      { maxDepth: DEPTH, depthSize: "small" },
+      fc.constantFrom(ref("b"), lit(true), op("eq", ref("s"), v("t"))),
+      fc.tuple(fc.constantFrom("gt", "lt", "eq"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
+      fc.tuple(fc.constantFrom("and", "or"), tie("bool"), tie("bool")).map(([o, a, b]) => op(o, a, b)),
+      tie("bool").map((x) => op("not", x)),
+      // One axis keeps the programs of the array space as they were before the tree space.
+      g.boolAxes.length === 1
+        ? fc.tuple(fc.constantFrom("any", "all", "none"), tie("bool")).map(([o, body]) => op(o, each(g.boolAxes[0], body)))
+        : fc.tuple(fc.constantFrom("any", "all", "none"), fc.constantFrom(...g.boolAxes), tie("bool")).map(([o, a, body]) => op(o, each(a, body))),
+      ...(g.folds === undefined ? [] : [fc.tuple(fc.constantFrom(...g.folds.bool), fc.constantFrom(...g.boolAxes), tie("bool"), fc.constantFrom(...REDUCE_OPTIONS)).map(reduceOf)]),
+    ),
+  }));
+const program = programOf({
+  reads: [n, w, v("a"), ref("n", [{ t: "origin" }]), ref("w", [offset(-1)]), ref("n", [offset(1)]), ref("w", [index(n)]), ref("n", [index(v("a"))]), ref("w", [offset(1), key("0")]), ref("n", [offset(-1), { t: "origin" }])],
+  axes: AXES === "all" ? [axes.all] : [axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.reverse(axes.window(-1, 0))],
+  ats: AXES === "all" ? [undefined] : [undefined, [offset(1)], [index(1)], [{ t: "origin" as const }], [index(n)], [index(v("a"))], [offset(1), index(0)]],
+  foldAts: AXES === "all" ? [undefined] : [undefined, [offset(1)]],
+  boolAxes: [axes.all],
+});
+const forms: readonly ((arg: Expr, other: Expr) => Expr)[] = [
+  (arg) => call("f", arg),
+  (arg) => op("sum", each(axes.all, call("f", arg))),
+  (arg) => fold(axes.reverse(axes.all), { s: arg }, { s: call("f", v("s")) }, v("s")),
+  (_arg, other) => let_({ a: other }, call("g", v("a"))),
+  (arg, other) => iterate(2, { f: arg }, { f: op("add", v("f"), other) }, v("f")),
+  (arg) => call("g", call("f", arg)),
+];
+const withFns = fc
+  .tuple(program.num, program.num, program.num, fc.constantFrom("add", "subtract", "multiply", "max"), fc.constantFrom(...forms))
+  .map(([body, arg, other, o, form]) => let_({ f: fn(["x"], op(o, v("x"), body)), k: other }, let_({ g: fn(["y"], call("f", op("add", v("y"), v("k")))) }, form(arg, other))));
+const RS = [{ n: 1, w: 4, s: "x", b: true }, { n: -2, w: 0, s: "yz", b: false }, { n: 3, w: 2.5, s: "", b: true }, { n: 0, w: 1, s: "x", b: true }];
+const VARS = { a: 2, t: "x" };
+const childrenOf = (x: unknown): unknown[] => (x !== null && typeof x === "object" ? Object.values(x) : []);
+const depthOf = (x: unknown): number => {
+  const isExpr = x !== null && typeof x === "object" && "tag" in x;
+  return (isExpr ? 1 : 0) + Math.max(0, ...childrenOf(x).map(depthOf));
+};
+function measure(label: string, arb: fc.Arbitrary<Expr>): void {
+  const G = globalThis as any;
+  const t = { draws: 0, refused: 0, foldAll: 0, second: 0, missFold: 0, missSum: 0, badFold: 0, badSum: 0, wrong: 0, threw: 0, depthSum: 0, depthMax: 0, deep8: 0, nodes: 0 };
+  const first: string[] = [];
+  const start = Date.now();
+  fc.assert(
+    fc.property(arb, (e) => {
+      G.__F = { foldAll: 0, second: 0, missFold: 0, missSum: 0, badFold: 0, badSum: 0, keepFix: false };
+      t.draws++;
+      const d = depthOf(e);
+      t.depthSum += d;
+      t.depthMax = Math.max(t.depthMax, d);
+      if (d >= 8) t.deep8++;
+      const m = emitModule(e, OPTIONS as never);
+      if (!m.ok) { t.refused++; return true; }
+      const F = G.__F;
+      for (const k of ["foldAll", "second", "missFold", "missSum", "badFold", "badSum"] as const) if (F[k] > 0) t[k]++;
+      if (F.badFold > 0 || F.badSum > 0) {
+        if (first.length < 3) first.push(JSON.stringify(e));
+        try {
+          const mod = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn { run, VEX_ERROR };`)() as { run: (r: unknown, x: unknown) => unknown[]; VEX_ERROR: unknown };
+          const got = mod.run(structuredClone(RS), VARS);
+          const s = space.array(RS);
+          const exp = s.keys.map((origin) => { const r = evaluate(e, { space: s, origin, vars: VARS, domains: OPTIONS.domains as never }); return r.ok ? r.value : mod.VEX_ERROR; });
+          if (JSON.stringify(got) !== JSON.stringify(exp)) t.wrong++;
+        } catch { t.threw++; }
+      }
+      return true;
+    }),
+    { seed: SEED, numRuns: N, interruptAfterTimeLimit: Number(process.env["SCRATCH_LIMIT_MS"] ?? 17_000_000), markInterruptAsFailure: false },
+  );
+  appendFileSync(OUT, `${JSON.stringify({ label, seed: SEED, depth: DEPTH, axes: AXES, cw: process.env["SCRATCH_CW"] ?? "10", ms: Date.now() - start, ...t, depthMean: t.depthSum / t.draws })}\n`);
+  if (first.length > 0) appendFileSync(`${OUT}.examples`, `${label}\n${first.join("\n")}\n`);
+}
+it("measure program.num", () => { measure("program.num", program.num); }, 20_000_000);
+it("measure withFns", () => { measure("withFns", withFns); }, 20_000_000);

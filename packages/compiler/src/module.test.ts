@@ -1668,6 +1668,75 @@ const keyed: fc.Arbitrary<Expr> = fc
     return op(r.op, each(axis, body), ...(r.strict ? [lit({ strict: true })] : []));
   });
 
+/** The names of the loops, the lets and the parameters of `reusing`. Each depth draws from this set, so an inner name hides an outer name. */
+const NAMES = ["s", "u", "x"] as const;
+const someName = fc.constantFrom(...NAMES);
+const twoNames = fc.shuffledSubarray([...NAMES], { minLength: 2, maxLength: 2 }).map(([x, y]) => [x as string, y as string] as const);
+
+/** This function gives a part of an item with more work than the limit of a column of the run. It reads the part `x`. */
+const costly = (x: Expr): Expr => op("max", op("abs", op("subtract", x, op("divide", n, lit(2)))), op("abs", op("add", x, op("multiply", n, lit(3)))));
+
+/**
+ * This function gives programs over the names of `NAMES`. Each name is valid at each depth, so a read can reach an inner
+ * loop, an outer loop or the root. The list `calls` has the functions that a program can call.
+ */
+const reusing = (calls: readonly string[]): fc.Arbitrary<Expr> =>
+  fc.letrec<{ num: Expr; test: Expr }>((tie) => ({
+    num: fc.oneof(
+      { maxDepth: 5, depthSize: "small" },
+      fc.integer({ min: -2, max: 2 }).map((x) => lit(x)),
+      fc.constantFrom(n, w, v("a"), K),
+      someName.map((x) => v(x)),
+      fc.oneof(someName.map((x) => v(x)), fc.constantFrom(n, w)).map(costly),
+      fc.tuple(fc.constantFrom("add", "subtract", "multiply", "divide", "max"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
+      fc.tuple(tie("test"), tie("num"), tie("num")).map(([c, a, b]) => op("if", c, a, b)),
+      fc.tuple(tie("num"), tie("num")).map(([a, b]) => op("ifError", a, b)),
+      // A let with one name and a let with two names. A value can read another name, so two names can have one variable.
+      fc.tuple(someName, tie("num"), tie("num")).map(([x, value, body]) => let_({ [x]: value }, body)),
+      fc.tuple(twoNames, tie("num"), tie("num"), tie("num")).map(([[x, y], a, b, body]) => let_({ [x]: a, [y]: b }, body)),
+      // The loops. A test of an axis reads the names outside the fold, so it reads another variable than the step.
+      fc.tuple(someName, fc.integer({ min: 0, max: 2 }), tie("num"), tie("num")).map(([x, k, init, step]) => iterate(k, { [x]: init }, { [x]: step }, v(x))),
+      fc.tuple(someName, fc.constantFrom<Axis>(axes.all, axes.all, axes.reverse(axes.all), axes.others, axes.window(-1, 0)), tie("num"), tie("num")).map(([x, a, init, step]) => fold(a, { [x]: init }, { [x]: op("subtract", step, v(x)) }, v(x))),
+      fc.tuple(someName, tie("test"), tie("num"), tie("num")).map(([x, test, init, step]) => fold(axes.where(axes.all, test), { [x]: init }, { [x]: step }, v(x))),
+      fc.tuple(twoNames, tie("num"), tie("num"), tie("num")).map(([[x, y], a, b, step]) => fold(axes.all, { [x]: a, [y]: b }, { [x]: step, [y]: v(x) }, op("subtract", v(x), v(y)))),
+      // A column in the step of a fold over all the records: the printer prints the step a second time.
+      fc.tuple(someName, tie("num"), tie("num")).map(([x, init, step]) => fold(axes.all, { [x]: init }, { [x]: op("subtract", op("add", costly(w), step), v(x)) }, v(x))),
+      // A fast sum with a column in its term, and the list ops. A list op with a test of the origin is a node of the memo.
+      tie("num").map((x) => op("sum", each(axes.all, op("add", costly(w), x)))),
+      fc.tuple(fc.constantFrom("sum", "count", "max"), fc.constantFrom<Axis>(axes.all, axes.others, axes.window(-1, 0)), fc.option(tie("test"), { nil: undefined }), tie("num")).map(([o, a, test, body]) => op(o, each(test === undefined ? a : axes.where(a, test), body))),
+      fc.tuple(someName, tie("num")).map(([x, body]) => op("sum", each(axes.where(axes.all, op("eq", n, op("add", K, v(x)))), body))),
+      // A function at the place of its call, with a body that reads the names of that place.
+      fc.tuple(someName, tie("num"), tie("num")).map(([p, body, arg]) => let_({ h: fn([p], body) }, call("h", arg))),
+      ...(calls.includes("f") ? [tie("num").map((x) => call("f", x))] : []),
+      ...(calls.includes("g") ? [fc.tuple(tie("num"), tie("num")).map(([x, y]) => call("g", x, y))] : []),
+    ),
+    test: fc.oneof(
+      { maxDepth: 3, depthSize: "small" },
+      fc.constantFrom(ref("b"), op("eq", ref("s"), v("t"))),
+      fc.tuple(fc.constantFrom("gt", "lt", "eq"), tie("num"), tie("num")).map(([o, a, b]) => op(o, a, b)),
+      tie("num").map(hard),
+      tie("test").map((x) => op("not", x)),
+      tie("test").map((x) => op("any", each(axes.all, x))),
+    ),
+  })).num;
+
+/** This function gives the body of a function. With `nested`, the body has a column of each call, which reads the parameter `p`. */
+const bodyOf = (body: Expr, p: string, nested: boolean): Expr => (nested ? op("add", body, op("sum", each(axes.all, op("sum", each(axes.all, costly(v(p))))))) : body);
+
+/**
+ * A program with the names of `NAMES` at the root, two functions and three fields. Two names of the root can hold one
+ * value. The fields put constants, columns and calls side by side, so one key can reach two of them.
+ */
+const reused: fc.Arbitrary<Expr> = fc
+  .record({
+    roots: fc.tuple(...NAMES.map(() => fc.constantFrom<Expr>(lit(1), lit(1), op("sum", each(axes.all, n)), v("a")))),
+    f: fc.record({ p: someName, body: reusing([]), nested: fc.boolean() }),
+    g: fc.record({ ps: twoNames, body: reusing(["f"]), nested: fc.boolean() }),
+    p: reusing(["f", "g"]),
+    q: reusing(["f", "g"]),
+  })
+  .map(({ roots: [s, u, x], f, g, p, q }) => let_({ s: s as Expr, u: u as Expr, x: x as Expr }, let_({ f: fn([f.p], bodyOf(f.body, f.p, f.nested)) }, let_({ g: fn(g.ps, bodyOf(g.body, g.ps[0], g.nested)) }, rec({ p, q, r: n })))));
+
 describe("COMPILE.MODULE: the text of the modules of a fixed set of random programs", () => {
   it("each module gives the value of the interpreter, and the golden file has the hash of the text of each module", async () => {
     // A change of the printer changes the text of some of these modules. Thus the file finds a change of a decision that
@@ -1771,6 +1840,25 @@ describe("COMPILE.MODULE: random programs", () => {
         expectSame(make(sourceOf(e)), e, rs, { a, t: "x" });
       }),
     );
+  });
+
+  it("P17 COMPILE.MODULE: a module gives the value of the interpreter when each depth uses the names of the outer depths", () => {
+    fc.assert(
+      fc.property(reused, fc.array(record, { minLength: 1, maxLength: 4 }), fc.integer({ min: -3, max: 3 }), (e, rs, a) => {
+        expectSame(make(sourceOf(e)), e, rs, { a, t: "x" });
+      }),
+    );
+    // A fixed sample holds each form that moves code out of its scope.
+    const sources = fc.sample(reused, { seed: 20261104, numRuns: 200 }).map((e) => sourceOf(e));
+    const count = (form: RegExp): number => sources.filter((x) => form.test(x)).length;
+    // A constant of the run, a column of the run, a node of the memo, a function at the start of the run, and a pack.
+    expect(count(/\bconst c\d+ = /)).toBeGreaterThan(20);
+    expect(count(/\bconst col\d+ = Q\(/)).toBeGreaterThan(20);
+    expect(count(/\bconst m\d+ = M1?\(/)).toBeGreaterThan(5);
+    expect(count(/\bconst fn\d+ = /)).toBeGreaterThan(20);
+    expect(count(/\bconst pk\d+ = /)).toBeGreaterThan(5);
+    // A column of a call is in the function of the call.
+    expect(count(/^ {2,}const col\d+ = Q\(/m)).toBeGreaterThan(5);
   });
 
   it("P17 COMPILE.MODULE.TREE: a module of a tree space gives the value of the interpreter at each key, or VEX_ERROR", () => {

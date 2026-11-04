@@ -39,6 +39,9 @@ function sourceOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   return m.source;
 }
 
+/** The reason for a step of a loop that writes a number into a list of text. */
+const NO_FIT = 'a step of a loop gives the name "p" a list that does not fit its first list';
+
 /** This function gives the reason that a program cannot be a module, or "" for a module. */
 function reasonOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   const m = emitModule(e, options);
@@ -328,6 +331,12 @@ describe("COMPILE.MODULE.SETNTH: setNth in a module", () => {
     expect(both(e, [])).toBe(2);
   });
 
+  it("COMPILE.MODULE.SETNTH LOOP.LIST: setNth of a text on an empty list starts a list of text, so a step that writes a number gives a reason", () => {
+    const start = op("setNth", EMPTY, lit(0), lit("a"));
+    expect(reasonOf(iterate(0, { p: start }, { p: op("setNth", v("p"), lit(0), lit(0)) }, op("count", v("p"))))).toBe(NO_FIT);
+    expect(reasonOf(iterate(0, { p: start }, { p: op("setNth", v("p"), lit(0), lit("b")) }, op("count", v("p"))))).toBe("");
+  });
+
   it("COMPILE.MODULE.SETNTH: the old array does not change, and the first form of each name keeps its own items", () => {
     expect(both(let_({ a: ns }, rec({ old: op("sum", v("a")), now: op("sum", op("setNth", v("a"), lit(0), lit(9))), after: op("sum", v("a")) })))).toBe(2);
     expect(both(iterate(2, { a: LIT, b: LIT }, { a: op("setNth", v("a"), lit(0), lit(9)), b: v("a") }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })))).toBe(2);
@@ -455,7 +464,10 @@ describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: prope
   it("P17 COMPILE.MODULE.LIST LOOP.LIST: a module with the list ops of design E gives the value of the interpreter at each key", () => {
     fc.assert(
       fc.property(programs, records, fc.constantFrom("0", "1", "a", "x"), fc.boolean(), (e, rs, k, fuse) => {
-        expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, rs, { a: 1, k });
+        const options = { ...OPTIONS, fuse };
+        // `setNth` on an empty list can start a list of text. Then the number of the step does not fit, and a module refuses the loop.
+        fc.pre(reasonOf(e, options) !== NO_FIT);
+        expectSame(make(sourceOf(e, options)), e, rs, { a: 1, k });
       }),
     );
   });

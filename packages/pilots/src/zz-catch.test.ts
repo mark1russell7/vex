@@ -85,7 +85,5 @@ for (let i = 0; i < rounds; i++) {
 const med = (a) => a.toSorted((x, y) => x - y)[a.length >> 1];
 log("TIME ms (CI) rounds", rounds, "print of 16: first", pr[0].toFixed(0), "median", med(pr).toFixed(1), "| scan first", sc[0].toFixed(1), "median", med(sc).toFixed(1), "| parse only median", med(pa).toFixed(1));
 
-  throw new Error("
-" + OUT.join("
-"));
+  throw new Error("\n" + OUT.join("\n"));
 }, 300_000);

@@ -120,17 +120,13 @@ export const handBoth = (source: string): string => replaceFunction(replaceFunct
 // name that the module does not declare leaves the run. The edit does not change the catch inside the copy of a function
 // of a domain, as `keepFaults` does not. Such a copy is one line of the module.
 const COPY_LINE = /^const (?:op|v)_/;
-const CATCH_CHECK = "function H(x) { if (x instanceof ReferenceError) throw x; }
-";
+const CATCH_CHECK = "function H(x) { if (x instanceof ReferenceError) throw x; }\n";
 
 /** This edit makes each catch of the printed code rethrow a ReferenceError. */
 export const catchCheck = (source: string): string => {
   if (!source.includes("catch {")) throw new Error("ablation: the module has no catch.");
-  const lines = source.split("
-").map((line) => (COPY_LINE.test(line) ? line : line.replaceAll("catch {", "catch ($) { H($);")));
-  return replaceOnce(lines.join("
-"), "const E = {};
-", `const E = {};
+  const lines = source.split("\n").map((line) => (COPY_LINE.test(line) ? line : line.replaceAll("catch {", "catch ($) { H($);")));
+  return replaceOnce(lines.join("\n"), "const E = {};\n", `const E = {};
 ${CATCH_CHECK}`);
 };
 

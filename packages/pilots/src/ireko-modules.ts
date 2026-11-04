@@ -8,6 +8,20 @@ import { LAYERS_DOMAINS, LAYERS_PROGRAM, LAYERS_SCHEMA } from "./ireko-layers.ts
 import { MEASURE_COLUMNS, MEASURE_DOMAINS, MEASURE_KINDS, MEASURE_SCHEMA } from "./ireko-measure.ts";
 import { PLACE_COLUMNS, PLACE_DOMAINS, PLACE_KINDS, PLACE_SCHEMA } from "./ireko-place.ts";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA } from "./ireko-radial.ts";
+import {
+  AVOID_PROGRAM,
+  AVOID_SCHEMA,
+  EDGE_DIRECTION_PROGRAM,
+  EDGE_DIRECTION_SCHEMA,
+  LABEL_BOX_PROGRAM,
+  LABEL_BOX_SCHEMA,
+  OBSTACLES_PROGRAM,
+  OBSTACLES_SCHEMA,
+  ORTHOGONAL_PROGRAM,
+  ROUTE_DOMAINS,
+  ROUTER_SCHEMA,
+  STRAIGHT_PROGRAM,
+} from "./ireko-route.ts";
 import { NODE_SCHEMA, NODE_SHAPE, SHAPE_DOMAINS } from "./ireko-shapes.ts";
 import { TREE_DOMAINS, TREE_PROGRAM, TREE_SCHEMA } from "./ireko-tree.ts";
 
@@ -21,7 +35,7 @@ interface IrekoRow {
 }
 
 /** The name of a module of ireko. */
-export type IrekoModule = "grid" | "radial" | "layers" | "tree" | "shape" | "place" | "measure";
+export type IrekoModule = "grid" | "radial" | "layers" | "tree" | "shape" | "place" | "measure" | "straight" | "orthogonal" | "avoid" | "direction" | "label" | "obstacles";
 
 /** The rows of the modules. Each print has the options of a build. */
 const ROWS: Readonly<Record<IrekoModule, IrekoRow>> = {
@@ -32,13 +46,19 @@ const ROWS: Readonly<Record<IrekoModule, IrekoRow>> = {
   shape: { name: "nodeShape", print: (faults) => emitModule(NODE_SHAPE, { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults }) },
   place: { name: "placeOf", print: (faults) => emitSheetModule(PLACE_COLUMNS, { domains: PLACE_DOMAINS, schema: PLACE_SCHEMA, kinds: PLACE_KINDS, space: "tree", name: "placeOf", faults }) },
   measure: { name: "measureOf", print: (faults) => emitSheetModule(MEASURE_COLUMNS, { domains: MEASURE_DOMAINS, schema: MEASURE_SCHEMA, kinds: MEASURE_KINDS, space: "tree", name: "measureOf", faults }) },
+  straight: { name: "straightOf", print: (faults) => emitModule(STRAIGHT_PROGRAM, { domains: ROUTE_DOMAINS, schema: ROUTER_SCHEMA, name: "straightOf", lists: "plain", faults }) },
+  orthogonal: { name: "orthogonalOf", print: (faults) => emitModule(ORTHOGONAL_PROGRAM, { domains: ROUTE_DOMAINS, schema: ROUTER_SCHEMA, name: "orthogonalOf", lists: "plain", faults }) },
+  avoid: { name: "avoidOf", print: (faults) => emitModule(AVOID_PROGRAM, { domains: ROUTE_DOMAINS, schema: AVOID_SCHEMA, name: "avoidOf", lists: "plain", faults }) },
+  direction: { name: "directionOf", print: (faults) => emitModule(EDGE_DIRECTION_PROGRAM, { domains: ROUTE_DOMAINS, schema: EDGE_DIRECTION_SCHEMA, name: "directionOf", faults }) },
+  label: { name: "labelBoxOf", print: (faults) => emitModule(LABEL_BOX_PROGRAM, { domains: ROUTE_DOMAINS, schema: LABEL_BOX_SCHEMA, name: "labelBoxOf", lists: "plain", faults }) },
+  obstacles: { name: "obstaclesOf", print: (faults) => emitModule(OBSTACLES_PROGRAM, { domains: ROUTE_DOMAINS, schema: OBSTACLES_SCHEMA, name: "obstaclesOf", lists: "plain", faults }) },
 };
 
 /** The modules that have a committed file in ireko. */
 export const IREKO_COMMITTED: readonly IrekoModule[] = ["measure", "place", "shape", "grid", "radial"];
 
 /** The modules that have a program here and no committed file in ireko at this time. */
-export const IREKO_NOT_COMMITTED: readonly IrekoModule[] = ["layers", "tree"];
+export const IREKO_NOT_COMMITTED: readonly IrekoModule[] = ["layers", "tree", "straight", "orthogonal", "avoid", "direction", "label", "obstacles"];
 
 /** This function tells if a text is the name of a module of ireko. */
 export function isIrekoModule(text: string): text is IrekoModule {

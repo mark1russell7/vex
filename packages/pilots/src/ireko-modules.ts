@@ -54,8 +54,17 @@ const ROWS: Readonly<Record<IrekoModule, IrekoRow>> = {
   obstacles: { name: "obstaclesOf", print: (faults) => emitModule(OBSTACLES_PROGRAM, { domains: ROUTE_DOMAINS, schema: OBSTACLES_SCHEMA, name: "obstaclesOf", lists: "plain", faults }) },
 };
 
+/** The path of each committed file in the repository of ireko. */
+export const IREKO_FILES: Readonly<Partial<Record<IrekoModule, string>>> = {
+  measure: "packages/ireko/src/core/engine/measure.generated.js",
+  place: "packages/ireko/src/core/engine/place.generated.js",
+  shape: "packages/ireko/src/core/engine/shape.generated.js",
+  grid: "packages/ireko/src/core/strategies/grid.generated.js",
+  radial: "packages/ireko/src/core/strategies/radial.generated.js",
+};
+
 /** The modules that have a committed file in ireko. */
-export const IREKO_COMMITTED: readonly IrekoModule[] = ["measure", "place", "shape", "grid", "radial"];
+export const IREKO_COMMITTED: readonly IrekoModule[] = Object.keys(IREKO_FILES).filter(isIrekoModule);
 
 /** The modules that have a program here and no committed file in ireko at this time. */
 export const IREKO_NOT_COMMITTED: readonly IrekoModule[] = ["layers", "tree", "straight", "orthogonal", "avoid", "direction", "label", "obstacles"];
@@ -70,6 +79,25 @@ export function irekoSource(which: IrekoModule, faults: Faults): string {
   const m = ROWS[which].print(faults);
   if (!m.ok) throw new Error(m.reason);
   return m.source;
+}
+
+/**
+ * This function compares a print with the bytes of its committed file. It gives nothing for equal bytes, and otherwise
+ * a message with the first line that differs and the command that prints the file again (COMPILE.MODULE.BYTES).
+ */
+export function moduleDrift(file: string, printed: string, committed: string): string | undefined {
+  if (printed === committed) return undefined;
+  const ours = committed.split("\n");
+  const theirs = printed.split("\n");
+  const line = ours.findIndex((text, i) => text !== theirs[i]);
+  const at = line < 0 ? ours.length : line;
+  return [
+    `${file} differs from its print at line ${String(at + 1)}.`,
+    `  committed: ${(ours[at] ?? "(end of the file)").slice(0, 120)}`,
+    `  printed:   ${(theirs[at] ?? "(end of the file)").slice(0, 120)}`,
+    "Move the pin of vex to the commit that gives this print, and print the file again:",
+    "  node packages/pilots/scripts/module-bytes.ts <path of this repository> --write",
+  ].join("\n");
 }
 
 /** This function gives the name of the function of a module of ireko. */

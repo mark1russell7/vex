@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { childRecord, fitChild, GRID_LINKED, measureVars, NODE_FIXED_KIDS, placeTreeInput, RADIAL_TWO } from "./inputs.ts";
 import { gridRun } from "./ireko-grid.ts";
 import { measureRecords } from "./ireko-measure.ts";
-import { IREKO_COMMITTED, IREKO_NOT_COMMITTED, irekoName, irekoSource, isIrekoModule, loadModule, type IrekoModule } from "./ireko-modules.ts";
+import { IREKO_COMMITTED, IREKO_FILES, IREKO_NOT_COMMITTED, irekoName, irekoSource, isIrekoModule, loadModule, moduleDrift, type IrekoModule } from "./ireko-modules.ts";
 import { radialRun } from "./ireko-radial.ts";
 
 /** One input of a module: the arguments of its function. */
@@ -44,6 +44,32 @@ function withFault(source: string, name: string): string {
   if (at < 0) throw new Error(`The function ${name} has no catch.`);
   return `${source.slice(0, at)}try { printedFault();${source.slice(at + "try {".length)}`;
 }
+
+describe("the bytes of a committed module (COMPILE.MODULE.BYTES)", () => {
+  it("COMPILE.MODULE.BYTES: equal bytes give no message", () => {
+    expect(moduleDrift("a.js", "a\nb\n", "a\nb\n")).toBeUndefined();
+  });
+
+  it("COMPILE.MODULE.BYTES: the message names the first line that differs and the command that prints the file", () => {
+    const message = moduleDrift("a.js", "a\nb\nc\n", "a\nx\nc\n");
+    expect(message).toContain("a.js differs from its print at line 2.");
+    expect(message).toContain("committed: x");
+    expect(message).toContain("printed:   b");
+    expect(message).toContain("module-bytes.ts <path of this repository> --write");
+  });
+
+  it("COMPILE.MODULE.BYTES: a file that ends early, or a print that ends early, is a difference", () => {
+    expect(moduleDrift("a.js", "a\nb", "a")).toContain("at line 2.");
+    expect(moduleDrift("a.js", "a", "a\nb")).toContain("printed:   (end of the file)");
+    expect(moduleDrift("a.js", "a\n", "a")).toContain("committed: (end of the file)");
+  });
+
+  it("COMPILE.MODULE.BYTES: one space is a difference, and each committed module has a path", () => {
+    expect(moduleDrift("a.js", "a b", "a  b")).toContain("at line 1.");
+    expect(IREKO_COMMITTED.map((which) => IREKO_FILES[which])).not.toContain(undefined);
+    expect(IREKO_COMMITTED).toHaveLength(5);
+  });
+});
 
 describe("the standalone modules of ireko (COMPILE.MODULE.FAULT)", () => {
   it("COMPILE.MODULE: each row prints a module with no import, and the list of the committed modules names each row", () => {

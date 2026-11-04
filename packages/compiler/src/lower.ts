@@ -24,8 +24,7 @@ import {
   limitAxis,
   listOf,
   MAX_ITERATIONS,
-  MAX_NESTING,
-  nestingOf,
+  nestingError,
   shapeError,
   type Addr,
   type Axis,
@@ -168,7 +167,8 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   // EVAL.SHAPE and EVAL.NESTING: tier 1 gives the error of a program that is not valid or that is nested too deep.
   const shape = shapeError(expr);
   if (shape !== undefined) throw new Unsupported(shape);
-  if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
+  const deep = nestingError(expr);
+  if (deep !== undefined) throw new Unsupported(deep);
   const l = new Lowerer(memoNodes(expr, isFusedOp), facts, schema);
   const b = block(RETURN);
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)), columns: new Map(), slot: undefined };

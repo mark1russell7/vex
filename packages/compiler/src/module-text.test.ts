@@ -197,7 +197,7 @@ describe("V-079: a text pass does not change a text of the program", () => {
   it("V-079 COMPILE.MODULE.FAULT P17: a text that holds a catch keeps its value, with faults at throw", () => {
     const options = { ...OPTIONS, faults: "throw" } as const;
     expect(resultsOf(lit("catch {"), options).got).toStrictEqual(RECORDS.map(() => "catch {"));
-    expect(resultsOf(rec({ "} catch {": n }), options).got).toStrictEqual(RECORDS.map((r) => ({ "} catch {": r.n })));
+    expect(resultsOf(rec({ "} catch {": n }), options).got).toStrictEqual(RECORDS.map((x) => ({ "} catch {": x.n })));
     expect(resultsOf(op("contains", lit("catch {"), ref("s")), options).got).toStrictEqual([false, true, false]);
     for (const e of [lit("catch {"), rec({ "} catch {": n }), op("length", lit("try { } catch { }"))]) expectSame(e);
   });
@@ -269,7 +269,7 @@ describe("V-079: a text pass does not change a text of the program", () => {
     fc.assert(
       fc.property(fc.constantFrom(...ALL_SHAPES), fc.nat(), fc.constantFrom("", " ", "x"), (shape, i, around) => {
         const texts = textsOf(shape);
-        const e = shape(`${around}${texts[i % texts.length] as string}${around}`);
+        const e = shape(`${around}${texts[i % texts.length]}${around}`);
         fc.pre(emitModule(e, OPTIONS).ok);
         expectSame(e);
       }),

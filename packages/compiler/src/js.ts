@@ -102,6 +102,8 @@ export function printJs(p: LoopProgram, facts: Facts): string {
             return `${a}.keys`;
           case "idxOf":
             return `${a}.idx`;
+          case "valuesOf":
+            return `${a}.values`;
           case "memoGet":
             return `${a}.get(${b}, ${c})`;
           case "memoPut":

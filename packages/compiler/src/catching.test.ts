@@ -155,6 +155,22 @@ const PARTS: readonly Expr[] = [
   app("reduce", failed, lit("add"), lit({ strict: true })),
   app("reduce", each(axes.all, lit("x")), lit("add")),
   ...LIST_OPS.flatMap((op) => [app(op, none()), app(op, failed), app(op, failed, lit({ strict: true })), app(op, each(axes.all, lit("x"))), app(op, each(axes.children, ref("n")))]),
+  // List values: each op takes a list that is empty, that has an error item, or that is not a list.
+  ...["first", "sum", "count"].flatMap((op) => [app(op, app("take", none(), lit(1))), app(op, app("take", failed, lit(1))), app(op, app("append", none(), failed))]),
+  app("reduce", app("take", none(), lit(1)), lit("add")),
+  app("reduce", app("append", none(), none()), lit("add")),
+  app("nth", none(), lit(0)),
+  app("nth", failed, lit(0)),
+  app("nth", each(axes.all, ref("n")), lit(99)),
+  app("get", none(), lit("0")),
+  app("get", failed, ref("n")),
+  app("take", ref("n"), lit(1)),
+  app("append", failed, ref("n")),
+  fold(axes.list(none()), { a: lit(0) }, { a: lit(1) }, v("a")),
+  fold(axes.list(failed), { a: lit(0) }, { a: lit(1) }, v("a")),
+  fold(axes.list(ref("n")), { a: lit(0) }, { a: lit(1) }, v("a")),
+  iterate(dataLimit(axes.list(none())), { a: lit(0) }, { a: lit(1) }, v("a")),
+  iterate(dataLimit(axes.list(failed)), { a: lit(0) }, { a: lit(1) }, v("a")),
   failed,
   ref("missing"),
   ref("n"),
@@ -170,7 +186,17 @@ const PARTS: readonly Expr[] = [
 /** Each context that catches an error, or that holds a part beside another part. */
 const arbCatching: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => {
   const e = tie("e");
-  const items = fc.constantFrom<Axis>(axes.all, axes.others, axes.children);
+  const items = fc.constantFrom<Axis>(
+    axes.all,
+    axes.others,
+    axes.children,
+    axes.list(none()),
+    axes.list(failed),
+    axes.list(ref("n")),
+    axes.list(each(axes.all, ref("n"))),
+    axes.reverse(axes.list(each(axes.all, ref("n")))),
+    axes.where(axes.list(each(axes.all, ref("n"))), lit(false)),
+  );
   const list = fc.tuple(fc.constantFrom(...LIST_OPS), items, e, fc.boolean()).map(([op, axis, x, strict]) => app(op, each(axis, x), ...(strict ? [lit({ strict: true })] : [])));
   return {
     e: fc.oneof(
@@ -194,6 +220,14 @@ const arbCatching: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => {
     ),
   };
 }).e;
+
+describe("the parts of list values in a context that catches an error", () => {
+  it("V-071 COMPILE.LIST.VALUE COMPILE.LIST.AXIS: tier 2 takes each one, so the property reaches the code of list values", () => {
+    const parts = PARTS.filter((p) => JSON.stringify(p).includes('"take"') || JSON.stringify(p).includes('"nth"') || JSON.stringify(p).includes('"get"') || JSON.stringify(p).includes('"append"') || JSON.stringify(p).includes('"list"'));
+    expect(parts.length).toBeGreaterThanOrEqual(19);
+    expect(parts.filter((p) => tiered(app("ifError", p, lit(-1)), ONE).tier !== 2)).toStrictEqual([]);
+  });
+});
 
 describe("P17: each failing part in each context", () => {
   it.each([

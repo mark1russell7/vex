@@ -25,7 +25,7 @@ const STEP = { i: app("add", v("i"), lit(1)) };
 const count = (axis: Axis, until?: Expr): Expr => iterate(dataLimit(axis), LOOP, STEP, v("i"), until);
 const CAP = app("fill", lit(100_000), lit(0));
 
-/** This function compares each key with the interpreter, and it gives the tier of the program. An axis `list` stays in tier 1. */
+/** This function compares each key with the interpreter, and it gives the tier of the program. */
 function agrees(e: Expr, s: Space = S): number {
   const p = tiered(e, OPTIONS);
   for (const origin of s.keys) expect(p.run({ space: s, origin })).toEqual(evaluate(e, { ...OPTIONS, space: s, origin }));
@@ -49,8 +49,8 @@ describe("a data limit in tier 2 (ITERATE.LIMIT.DATA)", () => {
       expect(fallbacks(count(axis))).toBe(0);
     }
     expect(fallbacks(count(axes.children), TREE)).toBe(0);
-    expect(agrees(count(axes.list(each(axes.all, ref("n")))))).toBe(1);
-    expect(agrees(count(axes.list(app("fill", lit(4), lit(0)))))).toBe(1);
+    expect(agrees(count(axes.list(each(axes.all, ref("n")))))).toBe(2);
+    expect(agrees(count(axes.list(app("fill", lit(4), lit(0)))))).toBe(2);
   });
 
   it("ITERATE.LIMIT.DATA ITERATE.UNTIL P17: the test sees the count, and a test with no true value gives #NUM! with the count", () => {
@@ -64,10 +64,10 @@ describe("a data limit in tier 2 (ITERATE.LIMIT.DATA)", () => {
 
   it("ITERATE.LIMIT.DATA P17: the limit reads an outer name, and it evaluates after init", () => {
     const outer = iterate(2, { xs: lit([1, 2]), s: lit(0) }, { s: app("add", v("s"), count(axes.list(v("xs")))) }, v("s"));
-    expect(agrees(outer)).toBe(1);
+    expect(agrees(outer)).toBe(2);
     const first = iterate(dataLimit(axes.list(lit(3))), { i: ref("missing") }, {}, v("i"));
     expect(tiered(first, OPTIONS).run({ space: S, origin: "0" })).toMatchObject({ ok: false, error: { kind: "missing-field" } });
-    expect(agrees(first)).toBe(1);
+    expect(agrees(first)).toBe(2);
   });
 
   it("ITERATE.LIMIT.ERROR P17: each limit that is not valid gives the error of the interpreter", () => {
@@ -101,7 +101,7 @@ describe("a data limit in tier 2 (ITERATE.LIMIT.DATA)", () => {
   it("ITERATE.LIMIT.ERROR EVAL.DEPTH P17: #DEPTH! stays as it is, also after an earlier error of an item", () => {
     const items = axes.list(each(axes.all, app("if", app("gt", ref("n"), lit(1)), ext("deep", null), ext("other", null))));
     for (const e of [count(axes.list(ext("deep", null))), count(items), app("ifError", count(items), lit(0))]) {
-      expect(agrees(e)).toBe(1);
+      expect(agrees(e)).toBe(2);
       expect(tiered(e, OPTIONS).run({ space: S, origin: "0" })).toMatchObject({ ok: false, error: { code: "#DEPTH!" } });
     }
   });

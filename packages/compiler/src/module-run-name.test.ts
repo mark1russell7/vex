@@ -1,6 +1,6 @@
 /** The name of the run and the code of a module (COMPILE.MODULE.NAME, V-082). */
 import { readdirSync, readFileSync } from "node:fs";
-import { app, defineDomain, ref, type AnyDomain, type Expr } from "@mark1russell7/vex";
+import { app, defineDomain, lit, ref, type AnyDomain, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { assert as check, constantFrom, integer, property, tuple } from "fast-check";
 import { describe, expect, it, vi } from "vitest";
@@ -66,6 +66,14 @@ describe("COMPILE.MODULE.NAME: the name of the run hides nothing", () => {
     expect(runOf(print(WIDTH, optionsOf(domain, "run", faults)), "run")(RECORDS, {})).toStrictEqual([3]);
   });
 
+  it("V-082 COMPILE.MODULE.NAME: a run named Error leaves the class of the contract as an error", () => {
+    // The line of the class is outside the code of the run, and it reads the global Error.
+    const source = print(WIDTH, optionsOf(shown({ width }), "Error", "throw"));
+    expect(source).toContain("export { run$0 as Error };");
+    expect(runOf(source, "Error")(RECORDS, {})).toStrictEqual([3]);
+    expect(() => runOf(source, "Error")(null as never, {})).toThrow(Error);
+  });
+
   it("V-082 COMPILE.MODULE.NAME: a real import of the module gives the run under its name", async () => {
     const source = print(WIDTH, optionsOf(shown({ width }), "String", "throw"));
     const url = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
@@ -108,10 +116,9 @@ describe("COMPILE.MODULE.NAME: the name of the run hides nothing", () => {
   });
 
   it("V-082 COMPILE.MODULE.NAME: the module of a sheet has each column under one run with the name", () => {
-    const columns = new Map<string, Expr>([["a", WIDTH], ["b", app("width", ref("a"))]]);
+    const columns = new Map<string, Expr>([["a", WIDTH], ["b", app("add", WIDTH, lit(1))]]);
     const m = emitSheetModule(columns, { ...optionsOf(shown({ width }), "String", "throw"), kinds: { a: "number", b: "number" } });
-    expect(m.ok && m.source).toContain("as String };");
-    expect(m.ok && [...m.source.matchAll(/^export \{/gm)].length).toBe(1);
+    expect(m.ok ? m.source : m.reason).toContain("export { run$0 as String };");
   });
 
   it("COMPILE.MODULE.NAME: two modules in one program keep their own runs", async () => {

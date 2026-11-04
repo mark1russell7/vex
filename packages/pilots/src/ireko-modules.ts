@@ -3,6 +3,7 @@
  * value tests read these rows, so a test prints the module of a build from the same input.
  */
 import { emitModule, emitSheetModule, functionText, type Emitted } from "@mark1russell7/vex-compiler/module";
+import { BETWEEN_DOMAINS, BETWEEN_PROGRAM, BETWEEN_SCHEMA, BOUNDS_DOMAINS, BOUNDS_PROGRAM, BOUNDS_SCHEMA, OVERLAP_DOMAINS, OVERLAP_PROGRAM, OVERLAP_SCHEMA } from "./ireko-audit.ts";
 import { GRID_DOMAINS, GRID_PROGRAM, GRID_SCHEMA } from "./ireko-grid.ts";
 import { LAYERS_DOMAINS, LAYERS_PROGRAM, LAYERS_SCHEMA } from "./ireko-layers.ts";
 import { MEASURE_COLUMNS, MEASURE_DOMAINS, MEASURE_KINDS, MEASURE_SCHEMA } from "./ireko-measure.ts";
@@ -35,7 +36,7 @@ interface IrekoRow {
 }
 
 /** The name of a module of ireko. */
-export type IrekoModule = "grid" | "radial" | "layers" | "tree" | "shape" | "place" | "measure" | "straight" | "orthogonal" | "avoid" | "direction" | "label" | "obstacles";
+export type IrekoModule = "grid" | "radial" | "layers" | "tree" | "shape" | "place" | "measure" | "straight" | "orthogonal" | "avoid" | "direction" | "label" | "obstacles" | "overlap" | "bounds" | "between";
 
 /** The rows of the modules. Each print has the options of a build. */
 const ROWS: Readonly<Record<IrekoModule, IrekoRow>> = {
@@ -52,6 +53,9 @@ const ROWS: Readonly<Record<IrekoModule, IrekoRow>> = {
   direction: { name: "directionOf", print: (faults) => emitModule(EDGE_DIRECTION_PROGRAM, { domains: ROUTE_DOMAINS, schema: EDGE_DIRECTION_SCHEMA, name: "directionOf", faults }) },
   label: { name: "labelBoxOf", print: (faults) => emitModule(LABEL_BOX_PROGRAM, { domains: ROUTE_DOMAINS, schema: LABEL_BOX_SCHEMA, name: "labelBoxOf", lists: "plain", faults }) },
   obstacles: { name: "obstaclesOf", print: (faults) => emitModule(OBSTACLES_PROGRAM, { domains: ROUTE_DOMAINS, schema: OBSTACLES_SCHEMA, name: "obstaclesOf", lists: "plain", faults }) },
+  overlap: { name: "overlapsOf", print: (faults) => emitModule(OVERLAP_PROGRAM, { domains: OVERLAP_DOMAINS, schema: OVERLAP_SCHEMA, name: "overlapsOf", lists: "plain", faults }) },
+  bounds: { name: "boundsOf", print: (faults) => emitModule(BOUNDS_PROGRAM, { domains: BOUNDS_DOMAINS, schema: BOUNDS_SCHEMA, name: "boundsOf", lists: "plain", faults }) },
+  between: { name: "betweenOf", print: (faults) => emitModule(BETWEEN_PROGRAM, { domains: BETWEEN_DOMAINS, schema: BETWEEN_SCHEMA, name: "betweenOf", lists: "plain", faults }) },
 };
 
 /** The path of each committed file in the repository of ireko. */
@@ -67,7 +71,7 @@ export const IREKO_FILES: Readonly<Partial<Record<IrekoModule, string>>> = {
 export const IREKO_COMMITTED: readonly IrekoModule[] = Object.keys(IREKO_FILES).filter(isIrekoModule);
 
 /** The modules that have a program here and no committed file in ireko at this time. */
-export const IREKO_NOT_COMMITTED: readonly IrekoModule[] = ["layers", "tree", "straight", "orthogonal", "avoid", "direction", "label", "obstacles"];
+export const IREKO_NOT_COMMITTED: readonly IrekoModule[] = ["layers", "tree", "straight", "orthogonal", "avoid", "direction", "label", "obstacles", "overlap", "bounds", "between"];
 
 /** This function tells if a text is the name of a module of ireko. */
 export function isIrekoModule(text: string): text is IrekoModule {

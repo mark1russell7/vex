@@ -104,8 +104,8 @@ const OVER: readonly ((l: Expr) => Expr)[] = [
 /** The reads of an item of a list of lists `l`, each at a position that exists at each key of `RECORDS`. */
 const ITEMS: readonly ((l: Expr) => Expr)[] = [(l) => op("nth", l, lit(0)), (l) => op("first", l), (l) => op("get", l, lit("1"))];
 
-describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of lists", () => {
-  it("V-075 COMPILE.MODULE.LIST.NESTED: the interpreter and tier 2 take the program of the pilot, and a module gives their result", () => {
+describe("V-076 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of lists", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: the interpreter and tier 2 take the program of the pilot, and a module gives their result", () => {
     const e = op("count", op("nth", ROWS, lit(0)));
     const s = space.array(RECORDS);
     expect(generate(e, { domains: DOMAINS }).ok).toBe(true);
@@ -120,11 +120,11 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     expectSame(e);
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: each list op takes the item that nth, first and get read", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: each list op takes the item that nth, first and get read", () => {
     for (const read of ITEMS) for (const use of OVER) expectSame(use(read(ROWS)));
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: each form of a list of lists gives its levels", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: each form of a list of lists gives its levels", () => {
     const row = each(axes.all, a);
     const c = op("gt", ref("a"), lit(1));
     const forms: readonly Expr[] = [
@@ -152,7 +152,7 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     for (const form of forms) expectSame(let_({ rows: fn([], ROWS) }, op("count", op("nth", form, lit(0)))));
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: a row in a let, a parameter, a call and a body of an each is a list", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: a row in a let, a parameter, a call and a body of an each is a list", () => {
     const row = op("nth", ROWS, lit(1));
     expectSame(let_({ r: row }, op("sum", v("r"))));
     expectSame(let_({ r: ROWS }, let_({ s: op("nth", v("r"), lit(2)) }, rec({ n: op("count", v("s")), f: op("first", v("s")) }))));
@@ -170,7 +170,7 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     expectSame(let_({ r: ROWS }, each(axes.all, op("sum", op("nth", v("r"), op("subtract", ref("a"), ref("a")))))));
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: a list of three levels takes two reads, and a third read gives a value", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: a list of three levels takes two reads, and a third read gives a value", () => {
     expectSame(op("count", op("nth", op("nth", CUBE, lit(0)), lit(1))));
     expectSame(op("sum", op("first", op("first", CUBE))));
     expectSame(op("nth", op("nth", op("nth", CUBE, lit(0)), lit(1)), lit(2)));
@@ -178,7 +178,7 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     expectSame(let_({ f: fn(["l"], op("first", op("first", v("l")))) }, op("count", call("f", CUBE))));
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: an item that fails, a position after the last item and an error item give the error of the interpreter", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: an item that fails, a position after the last item and an error item give the error of the interpreter", () => {
     expectSame(op("count", op("nth", ROWS, lit(9))));
     expectSame(op("ifError", op("sum", op("nth", ROWS, lit(9))), lit(-1)));
     expectSame(op("ifError", op("count", op("get", ROWS, lit("x"))), lit(-1)));
@@ -188,7 +188,7 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     expectSame(op("count", op("first", empty)));
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED COMPILE.MODULE.LIST.INPUT: a field of a list of lists gives its items as lists, with error items", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED COMPILE.MODULE.LIST.INPUT: a field of a list of lists gives its items as lists, with error items", () => {
     const nest = ref("nest");
     const cube = ref("cube");
     for (const read of ITEMS) {
@@ -202,7 +202,7 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     expectSame(op("ifError", op("count", op("first", ref("nest", [{ t: "index", i: 0 }]))), lit(-2)), VARS, IN_FIELDS, FIELD_RECORDS);
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED COMPILE.MODULE.SHEET.LIST: a cell of a list of lists gives its items as lists", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED COMPILE.MODULE.SHEET.LIST: a cell of a list of lists gives its items as lists", () => {
     const columns = new Map<string, Expr>([
       ["rows", ROWS],
       ["n", op("count", op("nth", cell("rows"), lit(0)))],
@@ -220,7 +220,7 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     }
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: an item of a list of values is not a list, so the reason of before stays", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: an item of a list of values is not a list, so the reason of before stays", () => {
     const NO_LIST = 'the kinds of the values of "count" do not decide its op';
     const row = each(axes.all, a);
     for (const read of [op("nth", row, lit(0)), op("first", row), op("get", row, lit("1"))]) expect(reasonOf(op("count", read))).toBe(NO_LIST);
@@ -236,7 +236,7 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     expect(reasonOf(op("count", op("first", op("sortBy", row))))).toBe(NO_LIST);
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: each form of a list of values has one level, so an item of the form is not a list", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: each form of a list of values has one level, so an item of the form is not a list", () => {
     const NO_LIST = 'the kinds of the values of "count" do not decide its op';
     const row = each(axes.all, a);
     const SCHEMA: ModuleOptions = { domains: DOMAINS, schema: { fields: { a: "number", xs: { list: "number" } }, vars: { ys: { list: "number" } } } };
@@ -260,13 +260,13 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     expect(emitSheetModule(columns, { domains: DOMAINS, schema: { fields: { a: "number" } } })).toMatchObject({ ok: false, reason: NO_LIST });
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: a function reads a list of lists outside its parameters, and a let of a read keeps the place of the read", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: a function reads a list of lists outside its parameters, and a let of a read keeps the place of the read", () => {
     expectSame(let_({ t: ROWS }, let_({ f: fn(["p"], op("first", v("t"))) }, op("count", call("f", lit(1))))));
     expectSame(op("count", op("first", let_({ x: ROWS }, v("x")))));
     expect(reasonOf(op("if", op("first", let_({ x: ROWS }, v("x"))), lit(1), lit(2)))).toBe("a list is a value of the program");
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: an empty list literal takes the levels of the other list of append", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: an empty list literal takes the levels of the other list of append", () => {
     expectSame(op("count", op("first", op("append", lit(vexList([])), ROWS))));
     expectSame(op("count", op("first", op("append", ROWS, lit(vexList([]))))));
     const MIXED = '"append" of a list of lists and a list of values';
@@ -274,7 +274,7 @@ describe("V-075 COMPILE.MODULE.LIST.NESTED: a list op over an item of a list of 
     expect(reasonOf(op("count", op("first", op("append", ROWS, each(axes.all, a)))))).toBe(MIXED);
   });
 
-  it("V-075 COMPILE.MODULE.LIST.NESTED: a key of a node of the memo has the levels of its list", () => {
+  it("V-076 COMPILE.MODULE.LIST.NESTED: a key of a node of the memo has the levels of its list", () => {
     const fromOrigin = op("fill", lit(2), ref("a", [{ t: "origin" }]));
     const memo = (key: Expr): Expr => op("sum", each(axes.where(axes.all, op("lt", op("count", op("nth", key, a)), lit(1))), a));
     expect(reasonOf(memo(fromOrigin))).toBe('the kinds of the values of "count" do not decide its op');
@@ -403,7 +403,7 @@ describe("COMPILE.MODULE.LIST.VAR: a list in a variable of the run", () => {
   });
 });
 
-describe("P17 V-075: random lists of lists", () => {
+describe("P17 V-076: random lists of lists", () => {
   const SCHEMA = { fields: { a: "number", nest: { list: { list: "number" } } }, vars: { z: "number", vnest: { list: { list: "number" } } } } as const;
   const WITH: ModuleOptions = { domains: DOMAINS, schema: SCHEMA };
   const big = op("gt", a, lit(1));
@@ -456,7 +456,7 @@ describe("P17 V-075: random lists of lists", () => {
   );
   const records = fc.array(fc.record({ a: fc.integer({ min: -2, max: 3 }), nest: nested }), { maxLength: 4 });
 
-  it("P17 V-075 COMPILE.MODULE.LIST.NESTED COMPILE.MODULE.LIST.VAR: a module over an item of a list of lists gives the value of the interpreter at each key", () => {
+  it("P17 V-076 COMPILE.MODULE.LIST.NESTED COMPILE.MODULE.LIST.VAR: a module over an item of a list of lists gives the value of the interpreter at each key", () => {
     fc.assert(
       fc.property(table, read, place, fc.constantFrom(...OVER), records, nested, (l, r, at, use, rs, vnest) => {
         expectSame(at(l, r, use), { z: 2, vnest }, WITH, rs);

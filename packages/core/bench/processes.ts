@@ -31,9 +31,13 @@ export interface CaseLimits {
  */
 export type ModelLimits = Readonly<Record<string, Omit<CaseLimits, "model">>> & { readonly other: Omit<CaseLimits, "model"> };
 
-/** This function gives the limits of a case for the CPU model `cpu`: the limits of the model that it contains, or `other`. */
+/**
+ * This function gives the limits of a case for the CPU model `cpu`: the limits of the model that it contains, or `other`.
+ * The comparison ignores the case, because a runner can give the name of one model in capital letters.
+ */
 export function limitsFor(byModel: ModelLimits, cpu: string): CaseLimits {
-  const known = Object.entries(byModel).find(([part]) => part !== "other" && cpu.includes(part));
+  const name = cpu.toLowerCase();
+  const known = Object.entries(byModel).find(([part]) => part !== "other" && name.includes(part.toLowerCase()));
   return known === undefined ? { ...byModel.other, model: "other" } : { ...known[1], model: known[0] };
 }
 

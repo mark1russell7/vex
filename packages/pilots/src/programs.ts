@@ -10,7 +10,7 @@ import { forceProgram, type ForceOptions } from "./force.ts";
 import { GRADE_FORMULAS } from "./grades.ts";
 import { heatStep } from "./heat.ts";
 import { INVOICE_FORMULAS } from "./invoice.ts";
-import { ESCAPE_PROGRAM } from "./ireko-audit.ts";
+import { BETWEEN_PROGRAM, BOUNDS_PROGRAM, ESCAPE_PROGRAM, OVERLAP_PROGRAM } from "./ireko-audit.ts";
 import { GRID_PROGRAM } from "./ireko-grid.ts";
 import { LAYERS_PROGRAM } from "./ireko-layers.ts";
 import { AVOID_PROGRAM, EDGE_DIRECTION_PROGRAM, LABEL_BOX_PROGRAM, OBSTACLES_PROGRAM, ORTHOGONAL_PROGRAM, STRAIGHT_PROGRAM } from "./ireko-route.ts";
@@ -44,6 +44,9 @@ export function formulas(prefix: string, valueColumns: readonly string[], texts:
 /** The programs of the pilots, by name. */
 export const PILOTS: readonly [string, Expr][] = [
   ["escape", ESCAPE_PROGRAM],
+  ["overlap", OVERLAP_PROGRAM],
+  ["bounds", BOUNDS_PROGRAM],
+  ["between", BETWEEN_PROGRAM],
   ["grid", GRID_PROGRAM],
   ["radial", RADIAL_PROGRAM],
   ["layers", LAYERS_PROGRAM],

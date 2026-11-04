@@ -562,7 +562,15 @@ The unit tests are in `packages/compiler/src/module-pairs.test.ts`. They compare
 
 ## 8. Bounded iteration
 
-The fixed point `fix` of step B is not in tier 2 or in modules yet (COMPILE.FIX). The lowering stops at the node, and tier 1 gives the result. Tier 2 first gives each reason of a check of tier 1, so a program that is not valid has one reason in each tier. `emitModule` refuses a program with `fix`, also where a `let` does not use the node. The next step of the work lowers a column to an array of rows and a loop of rounds. P17 then tests it against tier 1.
+The fixed point `fix` of step B is in tier 2 and in modules (COMPILE.FIX, COMPILE.FIX.MODULE). Both lower a column to an array with a value for each key, in the order of the keys, and to a loop of rounds:
+
+- The rows of `init` fill the array. Each round makes the array of the next values. A round without a change ends the loop and keeps the old array, as tier 1 does. Thus a round that moves 0 to -0 changes no row.
+- `last` reads the array at the index of the focus. In a loop over the keys, the index of the loop is that index. At the key of a list, tier 2 looks up the index, and a key outside the space gives the error of FIX.LAST.
+- Tier 2 evaluates each row in a block of its own, as a binding does. A row with an error does not stop the next rows, so each extension of a round evaluates. After the loop, one error is the error of the node. Two or more errors go to `worstRow` of the core, and then to `#ARGS` with their causes (FIX.ERROR). `#DEPTH!` of an extension goes to tier 1, as in each other node.
+- A module has one error sentinel, so the first row that fails stops the column. The exception is a row that reads a cell. A flag holds its failure until the end of the loop, so the search of a sheet sees each read.
+- A read of a row has the level `ROUNDS` in a module. A value with this level is not a constant or a column of the run, because a row changes in each round. A column that reads no key is a lazy constant of the run. It evaluates on its first read, as a branch of the interpreter does.
+
+The rules of the kinds and of the limit come from the core (`fixRounds`, `fixValueError`, `joinKind`, `worstRow`), so each tier has one copy of them. One case stays refused. A module has no record at a key of a literal or of `fill`. Thus a column at such a key gives the reason of the axis `list` (LIST.LITERAL). P17 tests random columns in tier 1, tier 2 and the module (`arbFixProgram`).
 
 Vex has no loop, so each program ends. The language keeps this property, and it gets **bounded** iteration:
 

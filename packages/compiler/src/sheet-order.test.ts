@@ -2,7 +2,7 @@
  * The static order of the cells of a sheet in a module (COMPILE.MODULE.SHEET). These tests examine the reads of
  * finished cells in `sheet-order.ts` directly.
  */
-import { app, axes, cell, each, ext, fn, fold, call, let_, lit, offset, parent, v, type Expr } from "@mark1russell7/vex";
+import { app, axes, cell, each, ext, fix, fn, fold, call, last, let_, lit, offset, parent, ref, v, type Expr } from "@mark1russell7/vex";
 import { describe, expect, it } from "vitest";
 import { readsFinished } from "./sheet-order.ts";
 
@@ -14,6 +14,14 @@ describe("COMPILE.MODULE.SHEET.DIRECT: the reads of finished cells", () => {
   it("COMPILE.MODULE.SHEET.DIRECT: a column that the sheet does not have or that is not valid reads no finished cell", () => {
     expect(readsFinished(new Map(), order, "s", false)).toBe(false);
     expect(finished({ tag: "bogus" } as unknown as Expr, false)).toBe(false);
+  });
+
+  it("COMPILE.MODULE.SHEET.DIRECT COMPILE.FIX.MODULE: the parts of a column evaluate at each row, so a read of the column in them is no finished cell", () => {
+    const earlier = cell("s", [offset(-1)]);
+    expect(finished(app("add", ref("n"), earlier), false)).toBe(true);
+    expect(finished(fix("x", "max", earlier, last("x")), false)).toBe(false);
+    expect(finished(fix("x", "max", lit(0), app("max", last("x"), earlier)), false)).toBe(false);
+    expect(readsFinished(new Map<string, Expr>([["r", ref("n")], ["s", fix("x", "max", cell("r"), last("x"))]]), ["r", "s"], "s", false)).toBe(true);
   });
 
   it("COMPILE.MODULE.SHEET.DIRECT: in a post-order tree, the axis children reads finished cells under where and reverse", () => {

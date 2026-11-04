@@ -7,6 +7,9 @@
  * A run by hand can start on a branch with no pull request, and a report can cite its artifact or its log. So each job
  * of such a workflow with a runtime or an upload starts the gate itself, as its first step after the runtime. The only
  * exception is a line of `NO_RECORD`, with its reason. So a new workflow fails by default.
+ *
+ * The limit of this rule: it reads only the steps of this file. A job that calls a reusable workflow has no steps here,
+ * so the rule does not hold that job. The job `ci` of `ci.yml` is such a job, and it does not start after the gate.
  */
 
 /** The workflows with a run by hand that make no record, each with its reason. An entry with no such workflow is a fault. */

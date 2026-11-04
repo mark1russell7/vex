@@ -1479,11 +1479,11 @@ The result differs from ireko in rare cases:
 The pilot found these gaps:
 
 - A module takes only one domain of objects. The program `add(from(band(0, 1, 0, 1)), x(xy(1, 2)))` gives no module with `BandDomain` and `XYDomain`. Thus the ranges of the boxes are lists of `XY` values.
-- A step of a loop cannot change one item of a list, because LOOP.SIZE refuses `append(take(xs, k), append(fill(1, x), drop(xs, k + 1)))`. The `each` of the workaround costs one pass over all the states for each change of a cost.
+- A step of a loop changes one item of a list with `setNth`. This op copies the array of the list for each change, and the code of ireko writes into its array.
 
-The second gap sets the speed. On 4000 random edges with up to 34 obstacles, the module took approximately 50 times the time of ireko. A closed ring around the target with 34 to 49 boxes took 5 to 34 seconds, and ireko took 10 to 21 milliseconds. These numbers come from one busy computer, so a bench in CI must replace them.
+On 4000 seeded edges with up to 34 obstacles, the module takes 8.6 times the time of ireko. This is the median of 9 processes in CI, with arms in one process, and the worst process gives 9.8. The A/A arm gives 1.002. With an `each` for each change, the module took 103 times the time of ireko. One local profile gives shares only: 16 % of the time for the copy of `setNth` and 7 % for the garbage collector. The other time has no single large part, so an update in place does not bring the module near to ireko. The hand-written router of ireko stays.
 
-The source of the module of `avoid` has approximately 49 kB, with `lists: "plain"`. The modules of `straight` and `orthogonal` have approximately 5 kB and 8 kB. ireko does not use the modules yet. It needs a decision about their size budget and a speed check in CI.
+The source of the module of `avoid` has approximately 44 kB, with `lists: "plain"`. The modules of `straight` and `orthogonal` have approximately 5 kB and 8 kB. ireko does not use the modules yet. It needs a decision about their size budget and a speed check in CI.
 
 #### Lists of calls (COMPILE.MODULE.LIST.CALL)
 

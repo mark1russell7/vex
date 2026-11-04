@@ -1393,7 +1393,7 @@ The pilot found these gaps:
 - A list op cannot take `nth` of a list of lists in a module, as in the layers pilot.
 - The fields of the bands are arrays, and a list op on an array goes to tier 1 (V-064). Thus a run of tier 2 with a shape gives the value of tier 1.
 
-The source of the module has approximately 23 kB, with `lists: "plain"`. The module packs the row once, before the loop over the children. ireko does not use the module yet. It needs a decision about its size budget and a speed check in CI.
+The source of the module has approximately 23 kB, with `lists: "plain"`. The module packs the row one time for all the children. ireko does not use the module yet. It needs a decision about its size budget and a speed check in CI.
 
 #### Lists of calls (COMPILE.MODULE.LIST.CALL)
 

@@ -2,8 +2,9 @@
  * The link between the specification and the tests. Each requirement ID of `spec/README.md` and of the formula
  * language (`spec/formula.md`) must have a test that names it. Each ID that a test names must be in one of them.
  * Each row with the status `test` in `spec/regressions.md` must have a test that names the defect ID.
+ * This file also compares the `private` field of each package of the workspace with the list of published packages.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -47,6 +48,32 @@ const specIds = new Set(["spec/README.md", "spec/formula.md"].flatMap((p) => [..
 const testedIds = new Set(titles.flatMap((t) => t.match(REQ) ?? []));
 const testedDefects = new Set(titles.flatMap((t) => t.match(/\bV-\d{3}\b/g) ?? []));
 
+/** The packages of this workspace that the release publishes. Each other package must be private. */
+const PUBLISHED: ReadonlySet<string> = new Set(["@mark1russell7/vex", "@mark1russell7/vex-domains", "@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@mark1russell7/vex-mcp"]);
+
+/** The fields of a `package.json` file that the publish check reads. */
+interface PackageRecord {
+  readonly name: string;
+  readonly private?: boolean;
+}
+
+/** This function gives one problem for each package whose `private` field does not agree with `PUBLISHED`. */
+function publishProblems(packages: readonly PackageRecord[]): readonly string[] {
+  return packages.flatMap((p) => {
+    const isPrivate = p.private === true;
+    if (PUBLISHED.has(p.name)) return isPrivate ? [`${p.name} is a published package, but it is private`] : [];
+    return isPrivate ? [] : [`${p.name} is not a published package, but it is not private`];
+  });
+}
+
+/** This function gives the records of the `package.json` files of the workspace folder `dir`. */
+function packagesIn(dir: string): readonly PackageRecord[] {
+  return readdirSync(join(repo, dir))
+    .map((name) => join(dir, name, "package.json"))
+    .filter((p) => existsSync(join(repo, p)))
+    .map((p) => JSON.parse(read(p)) as PackageRecord);
+}
+
 describe("the specification is executable", () => {
   it("each requirement ID of the specification has a test", () => {
     expect([...specIds].filter((id) => !testedIds.has(id))).toEqual([]);
@@ -70,5 +97,28 @@ describe("the specification is executable", () => {
     const sources = files(join(repo, "packages", "core", "src"), (f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
     const bad = sources.filter((f) => /from\s+["']@vex\/(domains|legacy|testkit)["']/.test(readFileSync(f, "utf8"))).map((f) => relative(repo, f));
     expect(bad).toEqual([]);
+  });
+});
+
+describe("the private field of each package", () => {
+  it("a package outside the published names without private true is a problem", () => {
+    expect(publishProblems([{ name: "@vex/other" }, { name: "@vex/open", private: false }])).toEqual([
+      "@vex/other is not a published package, but it is not private",
+      "@vex/open is not a published package, but it is not private",
+    ]);
+  });
+
+  it("a published package with private true is a problem", () => {
+    expect(publishProblems([{ name: "@mark1russell7/vex-mcp", private: true }])).toEqual(["@mark1russell7/vex-mcp is a published package, but it is private"]);
+  });
+
+  it("a published package and a private package outside the published names are not problems", () => {
+    expect(publishProblems([{ name: "@mark1russell7/vex" }, { name: "@mark1russell7/vex-compiler", private: false }, { name: "@vex/site", private: true }])).toEqual([]);
+  });
+
+  it("each package of the workspace agrees with the published names", () => {
+    const packages = [...packagesIn("packages"), ...packagesIn("tools")];
+    expect(publishProblems(packages)).toEqual([]);
+    expect(packages.map((p) => p.name)).toEqual(expect.arrayContaining([...PUBLISHED]));
   });
 });

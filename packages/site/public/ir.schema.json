@@ -38,6 +38,12 @@
           "$ref": "#/$defs/iterate"
         },
         {
+          "$ref": "#/$defs/fix"
+        },
+        {
+          "$ref": "#/$defs/last"
+        },
+        {
           "$ref": "#/$defs/ext"
         }
       ]
@@ -355,6 +361,55 @@
         },
         "result": {
           "$ref": "#/$defs/expr"
+        }
+      }
+    },
+    "fix": {
+      "description": "A column: 'step' repeats at each row until no row changes, and the value is the row of the focus. 'init' gives round 0. 'join' declares the direction: 'or' and 'max' move a row up, 'and' and 'min' move a row down. The check proves that the step moves one way.",
+      "type": "object",
+      "required": [
+        "tag",
+        "name",
+        "join",
+        "init",
+        "step"
+      ],
+      "properties": {
+        "tag": {
+          "const": "fix"
+        },
+        "name": {
+          "type": "string"
+        },
+        "join": {
+          "enum": [
+            "or",
+            "and",
+            "max",
+            "min"
+          ]
+        },
+        "init": {
+          "$ref": "#/$defs/expr"
+        },
+        "step": {
+          "$ref": "#/$defs/expr"
+        }
+      }
+    },
+    "last": {
+      "description": "The value of the focus in the last round of the 'fix' with the name.",
+      "type": "object",
+      "required": [
+        "tag",
+        "name"
+      ],
+      "properties": {
+        "tag": {
+          "const": "last"
+        },
+        "name": {
+          "type": "string"
         }
       }
     },

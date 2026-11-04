@@ -122,6 +122,9 @@ export function deps(e: Expr): readonly Dependency[] {
       const around: Around = { t: node.axis.t, at: node.at ?? [] };
       if (head === "body" || head === "step") axes = { item: around, up: axes };
       else if (head === "axis") axis = around;
+    } else if (kind === "fix") {
+      // The start and the step of a column read at each row (FIX.ROWS).
+      axes = { item: { t: "all", at: [] }, up: axes };
     } else if (kind === "size") {
       // The size of the writer is the data limit of its node, so the axis has no address (ITERATE.LIMIT.DATA).
       axis = { t: ((nodes.get(parent.doc) as ExprOf<"iterate">).limit as DataLimit).axis.t, at: [] };

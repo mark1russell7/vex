@@ -22,6 +22,7 @@ export type NumOps = {
   readonly clamp: FnOp<number, NumFn3>;
   readonly abs: FnOp<number, NumFn1>;
   readonly negate: FnOp<number, NumFn1>;
+  readonly sign: FnOp<number, NumFn1>;
   readonly sqrt: FnOp<number, NumFn1>;
   readonly ln: FnOp<number, NumFn1>;
   readonly exp: FnOp<number, NumFn1>;
@@ -54,17 +55,19 @@ export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", numb
   valid: (n: number): boolean => Number.isFinite(n),
   show: (n: number): string => String(n),
   ops: {
-    add: { fn: (a: number, b: number): number => a + b, laws: ["commutative", "associative"], identity: (): number => 0, params: ["number"], returns: "number" },
-    subtract: { fn: (a: number, b: number): number => a - b, params: ["number"], returns: "number" },
+    add: { fn: (a: number, b: number): number => a + b, laws: ["commutative", "associative"], identity: (): number => 0, params: ["number"], returns: "number", monotone: ["up", "up"] },
+    subtract: { fn: (a: number, b: number): number => a - b, params: ["number"], returns: "number", monotone: ["up", "down"] },
     multiply: { fn: (a: number, b: number): number => a * b, laws: ["commutative", "associative"], identity: (): number => 1, params: ["number"], returns: "number" },
     divide: { fn: (a: number, b: number): number => a / b, params: ["number"], returns: "number" },
     mod: { fn: (a: number, b: number): number => a % b, params: ["number"], returns: "number" },
     pow: { fn: (a: number, b: number): number => a ** b, params: ["number"], returns: "number" },
-    min: { fn: (a: number, b: number): number => Math.min(a, b), laws: ["commutative", "associative", "idempotent"], params: ["number"], returns: "number" },
-    max: { fn: (a: number, b: number): number => Math.max(a, b), laws: ["commutative", "associative", "idempotent"], params: ["number"], returns: "number" },
-    clamp: { fn: (a: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, a)), params: ["number", "number"], returns: "number" },
+    min: { fn: (a: number, b: number): number => Math.min(a, b), laws: ["commutative", "associative", "idempotent"], params: ["number"], returns: "number", monotone: ["up", "up"] },
+    max: { fn: (a: number, b: number): number => Math.max(a, b), laws: ["commutative", "associative", "idempotent"], params: ["number"], returns: "number", monotone: ["up", "up"] },
+    clamp: { fn: (a: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, a)), params: ["number", "number"], returns: "number", monotone: ["up", "up", "up"] },
     abs: { fn: (a: number): number => Math.abs(a), returns: "number" },
-    negate: { fn: (a: number): number => -a, returns: "number" },
+    negate: { fn: (a: number): number => -a, returns: "number", monotone: ["down"] },
+    // NUM.SIGN: the check of the result turns NaN into #NUM!, and an infinite number has a sign.
+    sign: { fn: (a: number): number => Math.sign(a), returns: "number", monotone: ["up"] },
     sqrt: { fn: (a: number): number => Math.sqrt(a), returns: "number" },
     ln: { fn: (a: number): number => Math.log(a), returns: "number" },
     exp: { fn: (a: number): number => Math.exp(a), returns: "number" },
@@ -82,9 +85,9 @@ export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", numb
     xy: { fn: (x: number, y: number): XY => ({ x, y }), params: ["number"], returns: "domain:XY" },
     // The leading sides, then the trailing sides: insets(startX, startY, endX, endY). The result is a value of InsetsDomain.
     insets: { fn: (startX: number, startY: number, endX: number, endY: number): Insets => ({ startX, startY, endX, endY }), params: ["number", "number", "number"], returns: "domain:Insets" },
-    floor: { fn: (a: number): number => Math.floor(a), returns: "number" },
-    ceil: { fn: (a: number): number => Math.ceil(a), returns: "number" },
-    round: { fn: (a: number): number => Math.round(a), returns: "number" },
+    floor: { fn: (a: number): number => Math.floor(a), returns: "number", monotone: ["up"] },
+    ceil: { fn: (a: number): number => Math.ceil(a), returns: "number", monotone: ["up"] },
+    round: { fn: (a: number): number => Math.round(a), returns: "number", monotone: ["up"] },
     gt: { fn: (a: number, b: number): boolean => a > b, params: ["number"], returns: "boolean" },
     gte: { fn: (a: number, b: number): boolean => a >= b, params: ["number"], returns: "boolean" },
     lt: { fn: (a: number, b: number): boolean => a < b, params: ["number"], returns: "boolean" },
@@ -114,10 +117,10 @@ export const BoolDomain: Domain<"Bool", boolean, BoolOps> = defineDomain<"Bool",
   primitive: "boolean",
   show: (b: boolean): string => String(b),
   ops: {
-    and: { fn: (a: boolean, b: boolean): boolean => a && b, laws: ["commutative", "associative", "idempotent"], identity: (): boolean => true, params: ["boolean"], returns: "boolean" },
-    or: { fn: (a: boolean, b: boolean): boolean => a || b, laws: ["commutative", "associative", "idempotent"], identity: (): boolean => false, params: ["boolean"], returns: "boolean" },
+    and: { fn: (a: boolean, b: boolean): boolean => a && b, laws: ["commutative", "associative", "idempotent"], identity: (): boolean => true, params: ["boolean"], returns: "boolean", monotone: ["up", "up"] },
+    or: { fn: (a: boolean, b: boolean): boolean => a || b, laws: ["commutative", "associative", "idempotent"], identity: (): boolean => false, params: ["boolean"], returns: "boolean", monotone: ["up", "up"] },
     xor: { fn: (a: boolean, b: boolean): boolean => a !== b, laws: ["commutative", "associative"], identity: (): boolean => false, params: ["boolean"], returns: "boolean" },
-    not: { fn: (a: boolean): boolean => !a, returns: "boolean" },
+    not: { fn: (a: boolean): boolean => !a, returns: "boolean", monotone: ["down"] },
     eq: { fn: (a: boolean, b: boolean): boolean => a === b, laws: ["commutative"], params: ["boolean"], returns: "boolean" },
   },
 });

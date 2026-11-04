@@ -72,6 +72,8 @@ function reads(e: Expr, outer: ReadonlySet<string>, inner: ReadonlySet<string>, 
     // function reads nothing where it is bound, but the memo does not follow them yet (FN.CALL).
     case "fold":
     case "iterate":
+    case "fix":
+    case "last":
     // A let with a function and no call has the value of its body, and a call is opaque, so this case only keeps the
     // memo simple.
     // Stryker disable next-line StringLiteral: see the comment above
@@ -149,6 +151,8 @@ function keysOf(e: Expr, top: boolean, outer: ReadonlySet<string>, pure: Set<Exp
     case "ext":
     case "fold":
     case "iterate":
+    case "fix":
+    case "last":
     case "fn":
     case "call":
       return undefined;
@@ -163,6 +167,7 @@ function loopOutside(e: Expr, keys: ReadonlySet<Expr>): boolean {
     case "each":
     case "fold":
     case "iterate":
+    case "fix":
       return true;
     case "app":
       return e.args.some((x) => loopOutside(x, keys));
@@ -174,6 +179,7 @@ function loopOutside(e: Expr, keys: ReadonlySet<Expr>): boolean {
       return addrExprs(e.at).some((x) => loopOutside(x, keys));
     // A missing case gives undefined, which is false too.
     // Stryker disable StringLiteral,ConditionalExpression: see the comment above
+    case "last":
     case "lit":
     case "var":
     case "ext":

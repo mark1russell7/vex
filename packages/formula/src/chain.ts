@@ -104,10 +104,13 @@ function inline(e: Expr, s: Scope): Expr {
       const inlined = { ...e, limit, init: inlineNames(e.init, s), step: inlineNames(e.step, inside), result: inline(e.result, inside) };
       return e.until === undefined ? inlined : { ...inlined, until: inline(e.until, inside) };
     }
+    case "fix":
+      return { ...e, init: inline(e.init, s), step: inline(e.step, s) };
     case "fn":
     case "lit":
     case "ref":
     case "ext":
+    case "last":
       return e;
   }
 }
@@ -241,6 +244,10 @@ function chain(e: Expr): string {
     case "fold":
     case "iterate":
       return loop(e);
+    // A fixed point has no chain yet (FIX.ROUNDS).
+    case "fix":
+    case "last":
+      return "root.start(null)";
   }
 }
 

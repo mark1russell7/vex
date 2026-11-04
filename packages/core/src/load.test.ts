@@ -7,6 +7,6 @@ import { expect, it } from "vitest";
 
 it("DOC.CHECK: the modules of the core load inside a test, and the world of Vex has its kinds", async () => {
   const core = await import("./index.ts");
-  expect(Object.keys(core.VEX_WORLD.kinds).toSorted()).toEqual(["axes", "call", "each", "ext", "fn", "fold", "iterate", "let", "limit", "lit", "moves", "ops", "record", "ref", "size"]);
+  expect(Object.keys(core.VEX_WORLD.kinds).toSorted()).toEqual(["axes", "call", "each", "ext", "fix", "fn", "fold", "iterate", "last", "let", "limit", "lit", "moves", "ops", "record", "ref", "size"]);
   expect(Object.keys((core.VEX_WORLD.kinds["axes"] as { readonly kinds: object }).kinds)).toHaveLength(16);
 });

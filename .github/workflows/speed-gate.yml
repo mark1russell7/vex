@@ -1,156 +1,28 @@
-# The two speed gates on a pull request that changes the code they measure: Vex against the hand-written loops
-# (packages/core/bench/gate.ts) and the generated code against the same loops (packages/compiler/bench/gate.ts).
-# Timing runs in CI, not on a shared machine. The nightly runs the same gates each day.
+# A run of this branch only: the old and the new hand arm of the schema bench, on one runner.
 name: Speed gate
 
 on:
-  # Each pull request starts this workflow, so its summary check is always there. The job changes skips the
-  # work when the pull request changes no file of the gate (CI.md of the template, "A gate with paths").
-  pull_request:
   workflow_dispatch:
-    inputs:
-      reps:
-        description: The number of runs on separate runners, for the derivation of the limits (at most 3 at one time)
-        type: choice
-        options: ["1", "5"]
-        default: "1"
-      ablate:
-        description: With true, the gate of the compiler also measures the ablation variants of the nested radial case (RADIALGAP)
-        type: boolean
-        default: false
-      limit_walk:
-        description: With true, the gate of the compiler also measures the walk of a data limit against a count at each key (LIMITCOST, the cases 6 and 7 without ablate)
-        type: boolean
-        default: false
-      case:
-        description: The cases of the compiler gate, from 0, separated by commas (5 is shapes). With a case, the core gate does not run. Empty runs all
-        type: string
-        default: ""
-      node_flags:
-        description: More flags of Node.js for each process of the compiler gate, for example --max-semi-space-size=64
-        type: string
-        default: ""
-      gc:
-        description: With true, each process of the compiler gate counts the garbage collections of each arm (GATEGC)
-        type: boolean
-        default: false
 
 permissions: {}
 
-# One run for each branch and settings: a newer run stops the older one. The workflow holds at most 3 runner slots.
-# The settings of a dispatch are in the group, so two dispatches with different settings run one after the other.
-concurrency:
-  group: speed-gate-${{ github.ref }}-${{ inputs.case }}-${{ inputs.node_flags }}-${{ inputs.gc }}
-  cancel-in-progress: true
-
 jobs:
-  changes:
+  arms:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    # The gates start for a change of their code, or for a change of `pnpm-lock.yaml` that changes a package from
-    # npm that they import (`GATE_NPM_PACKAGES` in `packages/testkit/src/gate-inputs.ts`).
-    outputs:
-      match: ${{ steps.changes.outputs.match == 'true' || steps.inputs.outputs.same == 'false' }}
-    steps:
-      - id: changes
-        uses: mark1russell7/template/.github/actions/changes@c8d2f57af6932442af82d2f2223931e47c11beb1 # main
-        with:
-          # The gates measure the source, never a test, so a pull request that changes only tests skips them. The
-          # bench uses `test-support.ts`, so it stays in. The nightly measures main each day.
-          paths: |
-            packages/core/src/**
-            packages/core/bench/**
-            packages/compiler/src/**
-            packages/compiler/bench/**
-            packages/domains/src/**
-            packages/pilots/src/ireko-*.ts
-            .github/workflows/speed-gate.yml
-            !packages/*/src/**/*.test.ts
-            !packages/*/src/__golden__/**
-      - id: lock
-        uses: mark1russell7/template/.github/actions/changes@c8d2f57af6932442af82d2f2223931e47c11beb1 # main
-        with:
-          paths: pnpm-lock.yaml
-      # Only the lock file changed: the gates start only when a package of the gates has a new version or integrity.
-      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 26
-      - id: inputs
-        if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git show "$BASE:pnpm-lock.yaml" > "$RUNNER_TEMP/base-lock.yaml"
-          node scripts/gate-inputs.ts "$RUNNER_TEMP/base-lock.yaml" pnpm-lock.yaml >> "$GITHUB_OUTPUT"
-
-  gates:
-    needs: changes
-    if: needs.changes.outputs.match == 'true'
-    name: Speed gates ${{ matrix.rep }}
-    runs-on: ubuntu-latest
-    # Each limit comes from at least 5 runs: the worst value times 1.1 (the fleet rule of 2026-10-30).
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix:
-        rep: ${{ fromJSON(inputs.reps == '5' && '[1, 2, 3, 4, 5]' || '[1]') }}
     timeout-minutes: 15
     permissions:
       contents: read
-    # The shell bash sets pipefail, so a gate that fails fails its step, also with its output piped into tee.
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      # A dispatch with the input case measures only these cases of the compiler gate, so the core gate does not run.
-      - if: ${{ !inputs.case }}
-        run: pnpm --filter @mark1russell7/vex run bench:gate | tee gates.txt
-      # The gate of the compiler runs also when the first gate fails, and the summary keeps the lines of both.
-      # A pull request has no inputs, so each of these settings is empty or 0, and the gate runs as before.
-      - if: ${{ !cancelled() }}
-        env:
-          GATE_ABLATE: ${{ inputs.ablate && '1' || '0' }}
-          GATE_LIMIT_WALK: ${{ inputs.limit_walk && '1' || '0' }}
-          GATE_CASE: ${{ inputs.case }}
-          GATE_NODE_FLAGS: ${{ inputs.node_flags }}
-          GATE_GC: ${{ inputs.gc && '1' || '0' }}
-        run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a gates.txt
-      - if: ${{ !cancelled() }}
-        run: |
-          {
-            echo "### Speed gates (time ratios: lower is better)"
-            echo
-            echo '```'
-            grep -E "^(runner|flags|ok|FAIL|gc)" gates.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  speed-gate-ok:
-    name: Speed gate OK
-    if: always()
-    needs: [changes, gates]
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions: {}
-    steps:
-      - uses: mark1russell7/template/.github/actions/gate-summary@c8d2f57af6932442af82d2f2223931e47c11beb1 # main
-        with:
-          needs: ${{ toJSON(needs) }}
+      - run: |
+          git show 912d347:packages/pilots/bench/schema-speed.ts \
+            | sed -n '/^interface Row/,/^\/\/ The input of the speed case/p' | sed '$d' \
+            | sed 's/^function schemaReference/export function schemaReference/' > packages/pilots/bench/old-arm.ts
+          grep -c schemaReference packages/pilots/bench/old-arm.ts
+      - run: node packages/pilots/bench/schema-arms.ts

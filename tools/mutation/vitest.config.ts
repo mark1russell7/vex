@@ -17,6 +17,9 @@ export default defineConfig({
       name: "vex-domains",
       enforce: "pre",
       resolveId(source, importer) {
+        // steps.test.ts mocks the constructs of the core by a path of the repository. The compiler in work/ reads
+        // work/core/constructs.ts, so the mock must go to that file.
+        if (source === "../../core/src/constructs.ts") return work("core/constructs.ts");
         if (source !== "@mark1russell7/vex-domains") return null;
         const from = (importer ?? "").replaceAll("\\", "/");
         const plain = /\/work\/compiler\/module(-[a-z]+)*\.test\.ts$/.test(from) || from.startsWith(pilots);
@@ -36,5 +39,7 @@ export default defineConfig({
     // The spec coverage test reads the spec by a path from packages/core, so it does not run here.
     exclude: ["work/core/spec-coverage.test.ts"],
     setupFiles: [work("testkit/fc-setup.ts")],
+    // The counters of Stryker make a property test slower. The P17 tests of 1500 runs passed the limit of 5 s on 11-04.
+    testTimeout: 60_000,
   },
 });

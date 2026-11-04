@@ -74,6 +74,10 @@ checkLaws(IntervalDomain, { arb: intervals }).every((r) => r.ok); // => true
 
 `Vec2Domain` uses a class, so a program with `Vec2` values operates in the interpreter and in `tiered`, but not in a standalone module. `XYDomain` has the same ops for plain `{ x, y }` data, and the op `xy` of `NumDomain` makes its values. Use it for a 2D program in a module.
 
+Two domains of plain objects share a module only if each declares `fields`, the exact field names of its values. The law checker tests this declaration. `XYDomain` and `InsetsDomain` declare it.
+
+A number can lift in a module too. The copy of `fromScalar` lifts it, when the receiver and the number have known kinds. Thus `InsetsDomain` lifts a number in `add`.
+
 An op can give a value of another domain: declare `returns: "domain:Name"`. Then the compiler knows the kind of the result. The law checker checks the result when its option `domains` has that domain.
 
 ## Where the domain goes

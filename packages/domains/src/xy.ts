@@ -48,6 +48,7 @@ export const XYDomain: Domain<"XY", XY, XYOps> = defineDomain<"XY", XY, XYOps>({
   name: "XY",
   // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
   size: "fixed",
+  fields: ["x", "y"],
   // A plain object: its prototype is Object.prototype or null, so an instance of a class such as Vec2 is not an XY.
   is: (u: unknown): u is XY => typeof u === "object" && u !== null && [Object.prototype, null].includes(Object.getPrototypeOf(u) as object | null) && Object.keys(u).length === 2 && typeof (u as XY).x === "number" && typeof (u as XY).y === "number",
   valid: (v: XY): boolean => Number.isFinite(v.x) && Number.isFinite(v.y),

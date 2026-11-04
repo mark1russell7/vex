@@ -1,7 +1,7 @@
 /**
  * These are the rules of a fixed-point column that the closure compiler and the kernel share (FIX.ROUNDS, FIX.JOIN,
  * FIX.LIMIT). They are the limit of the rounds, the kinds of the values of a row and the join of a row. The package
- * index does not export this module.
+ * index exports the rules that the compiler needs too (COMPILE.FIX).
  */
 import { errorText, type ErrorText } from "./error-text.ts";
 import { MAX_ITERATIONS, type FixJoin } from "./ir.ts";

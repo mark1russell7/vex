@@ -60,6 +60,10 @@ export class Vec2 {
   abs(): Vec2 {
     return new Vec2(Math.abs(this.x), Math.abs(this.y));
   }
+  /** The component-wise sign, as `Math.sign` gives it. A component `NaN` stays `NaN`, and the domain check gives `#NUM!`. */
+  sign(): Vec2 {
+    return new Vec2(Math.sign(this.x), Math.sign(this.y));
+  }
   round(): Vec2 {
     return new Vec2(Math.round(this.x), Math.round(this.y));
   }
@@ -99,6 +103,14 @@ export class Vec2 {
   normalize(): Vec2 {
     const len = this.length();
     return len === 0 ? this : this.scale(1 / len);
+  }
+  /**
+   * The unit vector of the smaller component: (1, 0) if `x <= y`, else (0, 1). The comparison uses the signed values, so
+   * `v.abs().minAxis()` compares sizes. A tie gives (1, 0). A component `NaN` gives `NaN` components, thus `#NUM!`.
+   */
+  minAxis(): Vec2 {
+    if (Number.isNaN(this.x) || Number.isNaN(this.y)) return new Vec2(Number.NaN, Number.NaN);
+    return this.x <= this.y ? new Vec2(1, 0) : new Vec2(0, 1);
   }
   /** The linear interpolation from this vector to `o`. */
   lerp(o: Vec2, t: number): Vec2 {
@@ -188,8 +200,8 @@ export class Vec2 {
 }
 
 type Vec2OpNames =
-  | "add" | "subtract" | "multiply" | "divide" | "min" | "max" | "scale" | "negate" | "halve" | "abs" | "round"
-  | "floor" | "ceil" | "clamp" | "swap" | "compose" | "select" | "rotate" | "normalize" | "lerp" | "length"
+  | "add" | "subtract" | "multiply" | "divide" | "min" | "max" | "scale" | "negate" | "halve" | "abs" | "sign" | "round"
+  | "floor" | "ceil" | "clamp" | "swap" | "compose" | "select" | "rotate" | "normalize" | "minAxis" | "lerp" | "length"
   | "lengthSq" | "distance" | "dot" | "along" | "across" | "cross" | "angle" | "area" | "sum" | "minComponent"
   | "maxComponent" | "equals" | "anyNonPositive" | "allPositive" | "anyNegative" | "allNonNegative" | "anyZero"
   | "allZero" | "anyLessThan" | "allLessThan" | "anyGreaterThan" | "allGreaterThan";
@@ -229,6 +241,7 @@ export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Ve
     negate: { params: [], returns: "domain" },
     halve: { params: [], returns: "domain" },
     abs: { params: [], returns: "domain" },
+    sign: { params: [], returns: "domain" },
     round: { params: [], returns: "domain" },
     floor: { params: [], returns: "domain" },
     ceil: { params: [], returns: "domain" },
@@ -238,6 +251,7 @@ export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Ve
     select: { liftScalar: true, params: ["domain", "domain"], returns: "domain" },
     rotate: { params: ["number"], returns: "domain" },
     normalize: { params: [], returns: "domain" },
+    minAxis: { params: [], returns: "domain" },
     lerp: { params: ["domain", "number"], returns: "domain" },
     length: { params: [], returns: "number" },
     lengthSq: { params: [], returns: "number" },

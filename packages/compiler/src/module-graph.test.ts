@@ -160,7 +160,7 @@ describe("COMPILE.MODULE.GRAPH: a module of a graph space", () => {
     expect(sourceOf(order(axes.predecessors))).toContain("  const GO = GR(edges, n);\n  const GN = GI(GO, n);\n");
     expect(sourceOf(n, ARRAY)).not.toContain("GR(");
     const e = rec({ out: order(axes.successors), into: order(axes.predecessors), all: op("sum", each(axes.reachable, op("multiply", n, w))) });
-    await expect(sourceOf(e)).toMatchFileSnapshot("./__golden__/module-graph.js");
+    await expect(sourceOf(e, { ...GRAPH, faults: "value" })).toMatchFileSnapshot("./__golden__/module-graph.js");
     expectSame(e);
   });
 

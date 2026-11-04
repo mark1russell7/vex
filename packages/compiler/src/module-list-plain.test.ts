@@ -108,12 +108,12 @@ describe("COMPILE.MODULE.LIST.PLAIN: the option lists", () => {
 
   it("COMPILE.MODULE.LIST.PLAIN: the default is envelope, and envelope prints the same module", () => {
     for (const e of programs) expect(sourceOf(emitModule(e, { ...OPTIONS, lists: "envelope" }))).toBe(sourceOf(emitModule(e, OPTIONS)));
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
-    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
+    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", faults: "value" };
     expect(sourceOf(emitModule(NODE_SHAPE, { ...node, lists: "envelope" }))).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
     expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, lists: "envelope" }))).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
     // The hash of the module of the sheet of ireko with fuse false, as COMPILE.MODULE.FUSE.OFF pins it.
-    expect(hash(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false, lists: "envelope" })))).toBe("91a25086213c18bd");
+    expect(hash(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false, lists: "envelope" })))).toBe("612da1766666530d");
   });
 
   it("COMPILE.MODULE.LIST.PLAIN: a value of lists that is not envelope or plain gives a reason", () => {
@@ -146,17 +146,17 @@ describe("COMPILE.MODULE.LIST.PLAIN: the option lists", () => {
   });
 
   it("COMPILE.MODULE.LIST.PLAIN: the module of NODE_SHAPE replaces LI and LSC, and its text is in a golden file", async () => {
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
     const plain = sourceOf(emitModule(NODE_SHAPE, { ...node, lists: "plain" }));
     const envelope = sourceOf(emitModule(NODE_SHAPE, node));
     await expect(plain).toMatchFileSnapshot("./__golden__/module-plain.js");
     // Only the helpers of the lists change: LA reads the input, and LPC gives the result.
     // The envelope is one object for each run (COMPILE.MODULE.FUSE.OUT), and a plain array is one array for each key.
-    const once = "  const c137 = L(() => {\n    return LSC(G(c136()), 1);\n  });\n";
-    const swapped = envelope.replace(helper(envelope, "LI"), helper(plain, "LA")).replace(helper(envelope, "LSC"), helper(plain, "LPC")).replaceAll("LI(r[", "LA(r[").replace(once, "").replace("out[o] = G(c137());", "out[o] = LPC(G(c136()), 1);");
+    const once = "  const c131 = L(() => {\n    return LSC(G(c130()), 1);\n  });\n";
+    const swapped = envelope.replace(helper(envelope, "LI"), helper(plain, "LA")).replace(helper(envelope, "LSC"), helper(plain, "LPC")).replaceAll("LI(r[", "LA(r[").replace(once, "").replace("out[o] = G(c131());", "out[o] = LPC(G(c130()), 1);");
     expect(swapped).toBe(plain);
-    expect(plain).toContain('(LF3[i] = LA(r["rows"], 0, is_3)) === undefined');
-    expect(plain).toContain("out[o] = LPC(G(c136()), 1);");
+    expect(plain).toContain('(LF3[i] = LA(r["rows"], is_3)) === undefined');
+    expect(plain).toContain("out[o] = LPC(G(c130()), 1);");
   });
 });
 

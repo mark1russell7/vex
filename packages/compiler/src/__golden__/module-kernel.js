@@ -6,19 +6,12 @@ export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
-const op_1_0 = (i, d) => ({
-						lo: i.lo - d,
-						hi: i.hi + d
-					});
-const v_1 = (i) => i.lo <= i.hi;
-const k_domain_Interval = (x) => (v_1(x) ? x : F());
-const op_1_1 = (i) => i.hi - i.lo;
+const op_1_0 = (i, d) => ({ lo: i.lo - d, hi: i.hi + d });
+const k_domain_Interval = (x) => ((x.lo <= x.hi) ? x : F());
+const op_1_1 = i => i.hi - i.lo;
 const k_number = (x) => (Number.isFinite(x) ? x : F());
-const op_1_2 = (a, b) => ({
-						lo: Math.min(a.lo, b.lo),
-						hi: Math.max(a.hi, b.hi)
-					});
-const is_1 = (u) => typeof u === "object" && u !== null && typeof u.lo === "number" && typeof u.hi === "number";
+const op_1_2 = (a, b) => ({ lo: Math.min(a.lo, b.lo), hi: Math.max(a.hi, b.hi) });
+const is_1 = u => typeof u === "object" && u !== null && typeof u.lo === "number" && typeof u.hi === "number";
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;

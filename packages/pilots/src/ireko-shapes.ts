@@ -16,7 +16,8 @@
  * (COMPILE.MODULE.LIST.INPUT).
  */
 import { app, axes, call, cell, each, fn, fold, iterate, let_, lit, ref, space, v, vexList, type Expr, type ItemNames, type Space } from "@mark1russell7/vex";
-import type { ListKind, Schema, SheetModuleOptions } from "@mark1russell7/vex-compiler";
+import type { Schema } from "@mark1russell7/vex-compiler";
+import type { ListKind, SheetModuleOptions } from "@mark1russell7/vex-compiler/module";
 import { BAND_DOMAINS, type Band } from "./ireko-band.ts";
 
 /** The shape of a subtree, relative to the top-left corner of its root box, as `Shape` of ireko. */
@@ -308,7 +309,7 @@ const pairs = over(
  * The function `merge` of the bands of its parameter `bands`, as `mergeBands` of ireko with the limit of the variable
  * `limit`. Its value is a list (COMPILE.MODULE.LIST.CALL), so the formula of a shape calls it once for each axis.
  */
-const MERGE = fn(
+export const MERGE: Expr = fn(
   ["bands"],
   let_(
     { events },
@@ -379,7 +380,7 @@ export const SHAPE_COLUMNS: ReadonlyMap<string, Expr> = new Map<string, Expr>([
 ]);
 
 /** A list of bands. Its keys come from `fill`, so they are not the keys of nodes. */
-const BANDS: ListKind = { list: "domain:Band", texts: true };
+export const BANDS: ListKind = { list: "domain:Band", texts: true };
 
 /** The kinds of the columns. The column `shape` reads itself at the children, so it needs its kind. */
 export const SHAPE_KINDS: NonNullable<SheetModuleOptions["kinds"]> = { need: "boolean", shape: { list: BANDS, texts: true }, rows: BANDS, cols: BANDS };

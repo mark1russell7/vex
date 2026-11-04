@@ -3,7 +3,7 @@
  * the value, or `VEX_ERROR` for an error of Vex. This is also true for each cell on a cycle and with each budget of the
  * stack. The run fills the columns in the order of `SheetRun.fill`.
  */
-import { app, axes, call, cell, dataLimit, each, ext, fn, fold, index, iterate, let_, lit, offset, origin, rec, ref, SheetRun, space, v, type Axis, type CellFormulas, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
+import { app, axes, call, cell, dataLimit, each, ext, fn, fold, index, iterate, let_, lit, offset, origin, rec, ref, SheetRun, space, v, type Addr, type Axis, type CellFormulas, type Expr, type FixedMove, type Space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { arbSheet, sheetCellsOf, sheetColumnsOf } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -81,13 +81,13 @@ const ENGINE_PARENTS = [-1, 0, 0, 1, 1, -1];
 describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
   it("COMPILE.MODULE.SHEET: the engine of ireko as a module gives the results of SheetRun, and a column without its kind gives a reason", async () => {
     const source = sourceOf(ENGINE, { ...TREE, kinds: { size: "number", x: "number" } });
-    await expect(source).toMatchFileSnapshot("__golden__/module-sheet.js");
+    await expect(sourceOf(ENGINE, { ...TREE, kinds: { size: "number", x: "number" }, faults: "value" })).toMatchFileSnapshot("__golden__/module-sheet.js");
     // Each read of the engine reads a finished cell, so its fill has no search (COMPILE.MODULE.SHEET.DIRECT). A read of
     // the next sibling can read a cell that is not finished, so that sheet keeps the search.
     expect(isDirect(source)).toBe(true);
     const next = new Map([...ENGINE, ["next", app("ifError", cell("next", [offset(1)]), ref("v"))]]);
     const search = sourceOf(next, { ...TREE, kinds: { size: "number", x: "number", next: "number" } });
-    await expect(search).toMatchFileSnapshot("__golden__/module-sheet-search.js");
+    await expect(sourceOf(next, { ...TREE, kinds: { size: "number", x: "number", next: "number" }, faults: "value" })).toMatchFileSnapshot("__golden__/module-sheet-search.js");
     expect(isDirect(search)).toBe(false);
     expectSame(make(search), next, ENGINE_RECORDS, ENGINE_PARENTS);
     const m = make(source);
@@ -240,7 +240,7 @@ describe("COMPILE.MODULE.SHEET: a module of a sheet", () => {
 
 /** The formulas of a random sheet over an array space or a tree space: the addresses of its reads, and its axes. */
 interface SheetGrammar {
-  readonly ats: readonly (readonly FixedMove[])[];
+  readonly ats: readonly Addr[];
   readonly axes: readonly Axis[];
 }
 
@@ -283,9 +283,9 @@ const formulaOf = (g: SheetGrammar): fc.Arbitrary<Expr> =>
     ),
   })).num;
 
-const arrayFormula = formulaOf({ ats: [[], [offset(-1)], [offset(1)], [offset(-2)], [index(0)], [PARENT]], axes: [axes.others, axes.all, axes.window(-1, 0), axes.reverse(axes.all)] });
+const arrayFormula = formulaOf({ ats: [[], [offset(-1)], [offset(1)], [offset(-2)], [index(0)], [PARENT], [index(ref("v"))], [index(cell("B")), offset(1)]], axes: [axes.others, axes.all, axes.window(-1, 0), axes.reverse(axes.all)] });
 const treeFormula = formulaOf({
-  ats: [[], [PARENT], [PARENT, PARENT], [offset(-1)], [offset(1)], [index(0)], [PARENT, offset(1)]],
+  ats: [[], [PARENT], [PARENT, PARENT], [offset(-1)], [offset(1)], [index(0)], [PARENT, offset(1)], [index(ref("v"))], [PARENT, index(cell("B"))]],
   axes: [axes.children, axes.descendants, axes.siblings, axes.ancestors, axes.window(-1, 1), axes.reverse(axes.children), axes.others],
 });
 
@@ -518,5 +518,35 @@ describe("COMPILE.MODULE.SHEET.DIRECT: a fill with no search", () => {
     const two = sourceOf(orders, { ...TREE, kinds: { A: "number", up: "number" } });
     expect(loopsOf(two)).toBe(2);
     expectSame(make(two), orders, ENGINE_RECORDS, ENGINE_PARENTS);
+  });
+});
+
+describe("COMPILE.MODULE.SHEET: the code of a cell and of the run", () => {
+  it("COMPILE.MODULE.SHEET: a formula that cannot throw has no try, in a direct fill and in the search", () => {
+    const kinds = { A: "number", B: "number", C: "number" } as const;
+    const records = [{ v: 2 }, { v: 0 }, { v: 4 }];
+    const plain = new Map<string, Expr>([["A", lit(3)], ["B", app("divide", lit(1), ref("v"))]]);
+    const d = sourceOf(plain, { ...NUM, kinds });
+    expect(isDirect(d)).toBe(true);
+    expect(d).toContain("D[0][o] = 3;");
+    expect(d).not.toMatch(/try \{\n\s*D\[0\]\[o\] = 3;/u);
+    expectSame(make(d), plain, records, undefined);
+    // The column C reads the next key of itself, so the run searches.
+    const search = new Map<string, Expr>([...plain, ["C", app("ifError", cell("C", [offset(1)]), ref("v"))]]);
+    const s = sourceOf(search, { ...NUM, kinds });
+    expect(isDirect(s)).toBe(false);
+    expect(s).toMatch(/const cf\d+ = \(o\) => 3;/u);
+    expectSame(make(s), search, records, undefined);
+  });
+
+  it("COMPILE.MODULE.SHEET: a tree computes the children of each key for the order of its fill, and an array does not", () => {
+    const columns = new Map<string, Expr>([["A", app("add", ref("v"), app("ifError", cell("A", [PARENT]), lit(0)))]]);
+    const tree = sourceOf(columns, { ...TREE, kinds: { A: "number" } });
+    expect(tree).toContain("CH(P, n)");
+    expectSame(make(tree), columns, ENGINE_RECORDS, ENGINE_PARENTS);
+    const before = new Map<string, Expr>([["A", app("add", ref("v"), app("ifError", cell("A", [offset(-1)]), lit(0)))]]);
+    const array = sourceOf(before, { ...NUM, kinds: { A: "number" } });
+    expect(array).not.toContain("CH(");
+    expectSame(make(array), before, ENGINE_RECORDS, undefined);
   });
 });

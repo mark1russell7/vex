@@ -38,6 +38,11 @@ import {
   INVOICE_BAD,
   INVOICE_GOOD,
   invoiceList,
+  layersInput,
+  directedEdge,
+  routeNodes,
+  routerEdge,
+  treeInput,
   LOAN_FOUR,
   LOAN_LONG,
   loanMonth,
@@ -63,8 +68,11 @@ import { ESCAPE_DOMAINS, ESCAPE_PROGRAM, escapeRun } from "./ireko-audit.ts";
 import { GRID_DOMAINS, GRID_PROGRAM, gridRun } from "./ireko-grid.ts";
 import { MEASURE_COLUMNS, MEASURE_DOMAINS, measureRecords, measureSpace } from "./ireko-measure.ts";
 import { PLACE_COLUMNS, PLACE_DOMAINS, placeSpace } from "./ireko-place.ts";
+import { LAYERS_DOMAINS, LAYERS_PROGRAM, layersRun } from "./ireko-layers.ts";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, radialRun } from "./ireko-radial.ts";
 import { MAX_BANDS, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, shapeSpace, type ShapeRecord } from "./ireko-shapes.ts";
+import { AVOID_PROGRAM, avoidRun, directionRecords, EDGE_DIRECTION_PROGRAM, LABEL_BOX_PROGRAM, nodeRecords, OBSTACLES_PROGRAM, obstaclesRun, ORTHOGONAL_PROGRAM, ROUTE_DOMAINS, routerRecords, STRAIGHT_PROGRAM } from "./ireko-route.ts";
+import { TREE_DOMAINS, TREE_PROGRAM, treeRun } from "./ireko-tree.ts";
 import { LOAN_COLUMNS, loanFormula, loanFormulas, type LoanMonth, type LoanTerms } from "./loan.ts";
 import { formulas, PILOTS } from "./programs.ts";
 import { SCHEMA_DOMAINS, SCHEMA_PROGRAM } from "./schema.ts";
@@ -127,6 +135,72 @@ export function pilotCases(o: CaseOptions): ShareCase[] {
           const { space: s, vars } = radialRun(i);
           for (const origin of s.keys) p.run({ space: s, origin, vars });
         }
+      },
+    },
+    {
+      name: "layers",
+      run: (m) => {
+        const p = m.program("layers", LAYERS_PROGRAM, { domains: LAYERS_DOMAINS });
+        for (const i of sample(layersInput(5), 20, o)) {
+          const { space: s, vars } = layersRun(i);
+          for (const origin of s.keys) p.run({ space: s, origin, vars });
+        }
+      },
+    },
+    {
+      name: "tree",
+      run: (m) => {
+        const p = m.program("tree", TREE_PROGRAM, { domains: TREE_DOMAINS });
+        for (const i of sample(treeInput(4, 3), 20, o)) {
+          const { space: s, vars } = treeRun(i);
+          for (const origin of s.keys) p.run({ space: s, origin, vars });
+        }
+      },
+    },
+    {
+      name: "route.direction",
+      run: (m) => {
+        const p = m.program("route.direction", EDGE_DIRECTION_PROGRAM, { domains: ROUTE_DOMAINS });
+        const s = space.array(directionRecords(sample(directedEdge(), 30, o)));
+        for (const origin of s.keys) p.run({ space: s, origin });
+      },
+    },
+    {
+      name: "route.label",
+      run: (m) => {
+        const p = m.program("route.label", LABEL_BOX_PROGRAM, { domains: ROUTE_DOMAINS });
+        const s = space.array(sample(routeNodes(6), 10, o).flatMap((i) => nodeRecords(i.nodes)));
+        for (const origin of s.keys) p.run({ space: s, origin });
+      },
+    },
+    {
+      name: "route.obstacles",
+      run: (m) => {
+        const p = m.program("route.obstacles", OBSTACLES_PROGRAM, { domains: ROUTE_DOMAINS });
+        for (const { nodes, s, t } of sample(routeNodes(8), 20, o)) p.run({ ...obstaclesRun(nodes, s, t), origin: "0" });
+      },
+    },
+    {
+      name: "route.straight",
+      run: (m) => {
+        const p = m.program("route.straight", STRAIGHT_PROGRAM, { domains: ROUTE_DOMAINS });
+        const s = space.array(routerRecords(sample(routerEdge(0), 30, o)));
+        for (const origin of s.keys) p.run({ space: s, origin });
+      },
+    },
+    {
+      name: "route.orthogonal",
+      run: (m) => {
+        const p = m.program("route.orthogonal", ORTHOGONAL_PROGRAM, { domains: ROUTE_DOMAINS });
+        const s = space.array(routerRecords(sample(routerEdge(0), 30, o)));
+        for (const origin of s.keys) p.run({ space: s, origin });
+      },
+    },
+    {
+      name: "route.avoid",
+      run: (m) => {
+        const p = m.program("route.avoid", AVOID_PROGRAM, { domains: ROUTE_DOMAINS });
+        for (const edge of sample(routerEdge(2), 4, o)) p.run({ ...avoidRun(edge), origin: "0" });
       },
     },
     {

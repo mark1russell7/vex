@@ -58,13 +58,13 @@ function expectSame(m: Loaded, e: Expr, records: readonly unknown[] = RECORDS, v
 
 /** This function checks a golden file of a module and its values at each key. */
 async function expectGolden(name: string, e: Expr): Promise<void> {
-  const source = sourceOf(e);
+  const source = sourceOf(e, { ...OPTIONS, faults: "value" });
   await expect(source).toMatchFileSnapshot(`./__golden__/module-${name}.js`);
   // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
-  const off = sourceOf(e, { ...OPTIONS, fuse: false });
+  const off = sourceOf(e, { ...OPTIONS, fuse: false, faults: "value" });
   // A module that fusion does not change has no file of its own for fuse false.
-  await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? "" : ".off"}.js`);
-  for (const m of [make(source), make(off)]) {
+  await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? ".js" : ".off.js.txt"}`);
+  for (const m of [make(sourceOf(e)), make(sourceOf(e, { ...OPTIONS, fuse: false }))]) {
     expectSame(m, e);
     expectSame(m, e, RECORDS.slice(0, 2));
     expectSame(m, e, []);
@@ -202,8 +202,8 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
     expect(reasonOf(iterate(2, { p: nested(), q: ns }, { p: each(axes.all, each(axes.all, ref("b"))) }, op("count", v("p"))))).toBe('a step of a loop gives the name "p" a list that does not fit its first list');
     expect(reasonOf(iterate(2, { p: ns }, { p: lit(1) }, lit(0)))).toBe('a step of a loop changes the kind of the name "p"');
     expect(reasonOf(iterate(2, { p: lit(1) }, { p: ns }, lit(0)))).toBe('a step of a loop changes the kind of the name "p"');
-    // The first list fixes the kind of the items. The empty literal has no kind, so get gives a value of no kind.
-    expect(reasonOf(iterate(2, { p: EMPTY }, { p: op("append", v("p"), ns) }, op("add", op("get", v("p"), lit("0")), lit(1))))).toBe(undecided("add"));
+    // The empty literal has no kind, and this step decides none, so get gives a value of no kind (COMPILE.MODULE.LOOP.EMPTY).
+    expect(reasonOf(iterate(2, { p: EMPTY }, { p: v("p") }, op("add", op("get", v("p"), lit("0")), lit(1))))).toBe(undecided("add"));
     // A domain op with the name of a list op on a value that is not a list is a domain op.
     expect(reasonOf(op("count", op("drop", n, lit(1))))).toBe(undecided("drop"));
     expect(reasonOf(op("get", n, lit(1)))).toBe(undecided("get"));
@@ -354,7 +354,7 @@ const records = fc.array(record, { maxLength: 6 });
 // In the nightly and the weekly runs, the time-out is the budget of a property plus a margin (`fc-timeout.ts`).
 describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: propertyTimeout(60_000) }, () => {
   // The lists: from an axis, with error items and literals, and from the list ops that build a list.
-  const base = fc.constantFrom<Expr>(ns, each(axes.all, w), inv, each(axes.where(axes.all, ref("b")), n), each(axes.window(-1, 1), n), each(axes.reverse(axes.all), w), LIT, BAD, EMPTY);
+  const base = fc.constantFrom<Expr>(ns, each(axes.all, w), inv, each(axes.where(axes.all, ref("b")), n), each(axes.window(-1, 1), n), each(axes.reverse(axes.all), w), LIT, BAD, EMPTY, op("fill", lit(0), lit(1)), op("fill", lit(0), op("divide", lit(1), lit(0))), op("fill", lit(0), n), op("fill", lit(0), op("divide", n, w)));
   const opts = fc.boolean().map((s) => (s ? [strict] : []));
   const built: fc.Arbitrary<Expr> = fc.oneof(
     base,

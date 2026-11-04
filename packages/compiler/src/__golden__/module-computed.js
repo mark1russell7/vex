@@ -5,7 +5,6 @@ export class VexContractError extends Error {}
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
 function I(t, n) { return Number.isInteger(t) && t >= 0 && t < n ? t : F(); }
@@ -31,8 +30,7 @@ export function run(records, vars) {
       } catch {
         t12 = -1;
       }
-      const x15 = t12;
-      a13 += x15;
+      a13 += t12;
     }
     c16 = k_number(a13);
   } catch {
@@ -44,7 +42,6 @@ export function run(records, vars) {
   } catch {
     t3 = -1;
   }
-  const c17 = t3;
   const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
@@ -79,7 +76,7 @@ export function run(records, vars) {
       } catch {
         t10 = -1;
       }
-      out[o] = ({ "position": t0, "key": t1, "origin": t2, "run": c17, "list": t10, "body": G(c16) });
+      out[o] = ({ "position": t0, "key": t1, "origin": t2, "run": t3, "list": t10, "body": G(c16) });
     } catch {
       out[o] = VEX_ERROR;
     }

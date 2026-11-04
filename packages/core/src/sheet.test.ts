@@ -3,7 +3,7 @@ import { vex } from "./builder.ts";
 import { defineDomain } from "./domain.ts";
 import { vexError } from "./errors.ts";
 import { compile, type CompileOptions, type ExtHandler, type Program } from "./evaluate.ts";
-import { app, axes, each, ext, index, let_, lit, offset, other, parent, ref, v, type Expr } from "./ir.ts";
+import { app, axes, each, ext, index, key, let_, lit, offset, other, parent, ref, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { fail, type Result } from "./result.ts";
 import { cell, SheetRun, type CompileFn, type SheetOptions } from "./sheet.ts";
@@ -445,5 +445,149 @@ describe("sheets (SHEET.*)", () => {
     run = new SheetRun(new Map([["probe", ext("probe", null)], ["total", columns.get("total") ?? lit(0)]]), opts);
     run.fill();
     expect(value(run.cell("probe", "1"))).toBe(6);
+  });
+});
+
+describe("a computed move in cell (SHEET.CELL.COMPUTED)", () => {
+  const rows = space.array([
+    { v: 1, at: 2 },
+    { v: 2, at: 0 },
+    { v: 3, at: 1 },
+  ]);
+  const run = (columns: Readonly<Record<string, Expr>>, sp: Space = rows, budget?: number): SheetRun => new SheetRun(new Map(Object.entries(columns)), { space: sp, domains: [Num] }, budget);
+  /** The position of the last key. */
+  const last = plus(app("count", each(axes.all, lit(1))), lit(-1));
+  const all = (r: SheetRun, column: string): readonly unknown[] => rows.keys.map((k) => value(r.cell(column, k)));
+
+  it("SHEET.CELL.COMPUTED: a formula over an array reads the cell of the last key", () => {
+    const r = run({ a: plus(ref("v"), lit(10)), b: cell("a", [index(last)]) });
+    expect(all(r, "b")).toEqual([13, 13, 13]);
+  });
+
+  it("SHEET.CELL.COMPUTED: an address of fixed moves stays a cell reference, and a computed move is the one item of a window", () => {
+    expect(cell("a", [index(2)])).toEqual(ext("vex.cell", { column: "a", at: [index(2)] }));
+    const read = cell("a", [index(ref("at"))]);
+    expect(read).toEqual(app("first", each(axes.window(0, 0), cell("a"), [index(ref("at"))]), lit({ strict: true })));
+    // The form has no new node, so the JSON form keeps it.
+    expect(value(parse(value(serialize(read))))).toEqual(read);
+  });
+
+  it("SHEET.CELL.COMPUTED: the moves apply in order, and each expression evaluates at the position of the read", () => {
+    const r = run({ a: ref("v"), first: cell("a", [index(lit(0)), offset(1)]), named: cell("a", [key(lit("2"))]), moved: orZero(cell("a", [offset(1), index(ref("at"))])) });
+    expect(all(r, "first")).toEqual([2, 2, 2]);
+    expect(all(r, "named")).toEqual([3, 3, 3]);
+    // The expression reads the field at the key of the read, not at the key after the offset. The key 2 has no next key.
+    expect(all(r, "moved")).toEqual([3, 1, 0]);
+  });
+
+  it("SHEET.CELL.COMPUTED: a read gives the error of its cell, of its expression or of its address", () => {
+    const r = run({
+      a: app("nothing"),
+      ofCell: cell("a", [index(lit(0))]),
+      ofExpr: cell("v", [index(cell("gone"))]),
+      text: cell("v", [index(lit("0"))]),
+      number: cell("v", [key(lit(0))]),
+      far: cell("v", [index(lit(3))]),
+      none: cell("gone", [index(lit(0))]),
+      v: ref("v"),
+    });
+    expect(error(r.cell("ofCell", "1")).code).toBe(error(r.cell("a", "0")).code);
+    expect(error(r.cell("ofExpr", "1"))).toMatchObject({ code: "#NAME?", kind: "unbound" });
+    expect(error(r.cell("text", "1"))).toMatchObject({ code: "#VALUE!", kind: "kind-mismatch", message: "the position of a move is a string, not a number" });
+    expect(error(r.cell("number", "1"))).toMatchObject({ code: "#VALUE!", kind: "kind-mismatch", message: "the key of a move is a number, not a text" });
+    expect(error(r.cell("far", "1"))).toMatchObject({ code: "#REF!", kind: "out-of-bounds" });
+    expect(error(r.cell("none", "1"))).toMatchObject({ code: "#NAME?", kind: "unbound" });
+  });
+
+  it("SHEET.CELL.COMPUTED: a tree has the read, and another space gives the error of the axis window", () => {
+    const tree = space.tree({ r: { at: 0 }, a: { at: 0 }, b: { at: 1 } }, { a: "r", b: "r" });
+    const r = run({ size: lit(5), up: cell("size", [parent, index(ref("at"))]) }, tree);
+    expect(value(r.cell("up", "a"))).toBe(5);
+    expect(error(r.cell("up", "r")).code).toBe("#REF!");
+    for (const s of [space.record({ A: { at: 0 } }), space.grid([[{ at: 0 }]]), space.graph({ A: { at: 0 } }, { A: [] })] as const) {
+      const e = error(run({ a: lit(1), b: cell("a", [index(ref("at"))]) }, s).cell("b", s.keys[0] ?? ""));
+      expect(e).toMatchObject({ code: "#REF!", kind: "no-offset" });
+      expect(e.message).toContain('"window" needs an array space or a tree space');
+    }
+  });
+
+  it("SHEET.CELL.COMPUTED: a formula of another table reads a cell of that table at a computed position", () => {
+    const tables = new Map([["t", { space: space.array([{ w: 7 }, { w: 8 }]), columns: new Map<string, Expr>([["c", plus(ref("w"), lit(1))]]) }]]);
+    const main = new Map<string, Expr>([["a", app("sum", each(axes.table("t"), cell("c", [index(lit(1))])))]]);
+    expect(value(new SheetRun(main, { space: rows, domains: [Num], tables }).cell("a", "0"))).toBe(18);
+  });
+
+  it("SHEET.CELL.COMPUTED: the builder takes a computed move, and the read keeps its type", () => {
+    const s = vex(Num)
+      .over(rows)
+      .sheet()
+      .column("a", (r) => r.from("v"))
+      .column("b", (r) => r.start(r.cell("a", [index(r.from("at").program)])));
+    expect(rows.keys.map((k) => value(s.result(k, "b")))).toEqual([3, 1, 2]);
+  });
+
+  /** The cells of `column` after a read in each order of the keys and after a fill, with each budget of the stack. */
+  function cellsOf(columns: Readonly<Record<string, Expr>>, column: string): readonly unknown[] {
+    const seen = new Set<string>();
+    for (const budget of [undefined, 1, 40]) {
+      for (const order of [rows.keys, rows.keys.toReversed()]) {
+        const r = run(columns, rows, budget);
+        for (const k of order) r.cell(column, k);
+        seen.add(JSON.stringify(rows.keys.map((k) => r.cell(column, k))));
+      }
+      const filled = run(columns, rows, budget);
+      filled.fill();
+      seen.add(JSON.stringify(rows.keys.map((k) => filled.cell(column, k))));
+    }
+    expect(seen.size).toBe(1);
+    return (JSON.parse([...seen][0] ?? "[]") as readonly { readonly ok: boolean; readonly value?: unknown; readonly error?: { readonly code: string } }[]).map((x) => (x.ok ? x.value : x.error?.code));
+  }
+
+  it("SHEET.CELL.COMPUTED.ORDER: a cycle that only the values make gives #CYCLE!, in each order and with each budget", () => {
+    // The field `at` makes the cycle 0 -> 2 -> 1 -> 0.
+    expect(cellsOf({ a: cell("a", [index(ref("at"))]) }, "a")).toEqual(["#CYCLE!", "#CYCLE!", "#CYCLE!"]);
+    // The first key reads itself. The other keys read that cycle, and ifError changes only the read of a member.
+    expect(cellsOf({ a: app("ifError", cell("a", [index(lit(0))]), ref("v")) }, "a")).toEqual(["#CYCLE!", 2, 3]);
+    // A cell gives the position, so a value decides which cell the next read finds, and if a cycle exists.
+    expect(cellsOf({ a: orZero(cell("a", [index(cell("b"))])), b: plus(ref("at"), lit(0)) }, "a")).toEqual(["#CYCLE!", "#CYCLE!", "#CYCLE!"]);
+    expect(cellsOf({ a: orZero(cell("a", [index(cell("b"))])), b: plus(ref("at"), lit(-1)) }, "a")).toEqual([0, 0, 0]);
+  });
+
+  it("SHEET.CELL.COMPUTED.ORDER NAV.COMPUTED: a failing move does not stop the read in a later expression", () => {
+    // The expressions evaluate before the first move, so the read finds the cycle before the offset fails at the key 0.
+    expect(cellsOf({ a: orZero(cell("a", [offset(-1), index(cell("a"))])) }, "a")).toEqual(["#CYCLE!", "#CYCLE!", "#CYCLE!"]);
+  });
+
+  it("SHEET.CELL.COMPUTED.ORDER: a recurrence over a computed position gives the same total in a read and in a fill", () => {
+    const steps = space.array(Array.from({ length: 300 }, (_x, i) => ({ i })));
+    const total = new Map<string, Expr>([["t", plus(lit(1), orZero(cell("t", [index(plus(ref("i"), lit(-1)))])))]]);
+    expect(value(new SheetRun(total, { space: steps, domains: [Num] }).cell("t", "299"))).toBe(300);
+    const filled = new SheetRun(total, { space: steps, domains: [Num] }, 40);
+    filled.fill();
+    expect(value(filled.cell("t", "299"))).toBe(300);
+  });
+
+  it("SHEET.CELL.COMPUTED.ORDER: a read in the expression of a move counts in the order of the columns", () => {
+    const calls: string[] = [];
+    const seen = defineDomain({
+      name: "Seen",
+      is: (u: unknown): u is number => typeof u === "number",
+      ops: {
+        saw: {
+          fn: (a: number, c: string): number => {
+            calls.push(c);
+            return a;
+          },
+          params: ["string"],
+        },
+      },
+    });
+    const columns = new Map<string, Expr>([
+      ["c", app("saw", cell("a", [index(cell("b"))]), lit("c"))],
+      ["a", app("saw", lit(1), lit("a"))],
+      ["b", app("saw", lit(0), lit("b"))],
+    ]);
+    new SheetRun(columns, { space: space.array([{}]), domains: [seen] }).fill();
+    expect(calls).toEqual(["a", "b", "c"]);
   });
 });

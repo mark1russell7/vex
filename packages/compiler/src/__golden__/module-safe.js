@@ -5,10 +5,8 @@ export class VexContractError extends Error {}
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
-function U(x) { return typeof x === "number" ? x : F(); }
 function X(t, n) { return t >= 0 && t < n ? t : F(); }
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 export function run(records, vars) {
@@ -41,13 +39,11 @@ export function run(records, vars) {
     try {
       const b0 = (R[o]["b"] && (!(R[o]["b"])));
       const b1 = ((!(R[o]["b"])) || R[o]["b"]);
-      const f4 = o;
       let n6 = 0;
       for (let j3 = 0; j3 < n; j3++) {
         const x7 = R[j3]["b"];
         n6++;
       }
-      const b8 = n6;
       let t14;
       try {
         const f10 = X(o + 1, n);
@@ -60,7 +56,7 @@ export function run(records, vars) {
       } catch {
         t14 = -1;
       }
-      out[o] = ({ "and": (b0 ? R[o]["n"] : R[o]["w"]), "or": (b1 ? R[o]["n"] : R[o]["w"]), "count": n, "origin": k_number((b8) + (R[o]["n"])), "moved": t14, "lax": G(c19) });
+      out[o] = ({ "and": (b0 ? R[o]["n"] : R[o]["w"]), "or": (b1 ? R[o]["n"] : R[o]["w"]), "count": n, "origin": k_number((n6) + (R[o]["n"])), "moved": t14, "lax": G(c19) });
     } catch {
       out[o] = VEX_ERROR;
     }

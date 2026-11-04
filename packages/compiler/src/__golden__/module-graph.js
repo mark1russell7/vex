@@ -5,7 +5,6 @@ export class VexContractError extends Error {}
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function GI(O, n) { const I = []; for (let i = 0; i < n; i++) I.push([]); for (let i = 0; i < n; i++) for (const t of O[i]) I[t].push(i); return I; }
 function GR(e, n) {
@@ -43,23 +42,20 @@ export function run(records, vars, edges) {
   for (let o = 0; o < n; o++) {
     try {
       let l0 = 0;
-      const f2 = o;
-      const A3 = GO[f2];
+      const A3 = GO[o];
       for (let q4 = 0; q4 < A3.length; q4++) {
         const j1 = A3[q4];
         const t5 = k_number((k_number((l0) * (10))) + (k_number((R[j1]["n"]) - (1))));
         l0 = t5;
       }
       let l6 = 0;
-      const f8 = o;
-      const A9 = GN[f8];
+      const A9 = GN[o];
       for (let q10 = 0; q10 < A9.length; q10++) {
         const j7 = A9[q10];
         const t11 = k_number((k_number((l6) * (10))) + (k_number((R[j7]["n"]) - (1))));
         l6 = t11;
       }
-      const f13 = o;
-      const A14 = RB(GO, f13, n);
+      const A14 = RB(GO, o, n);
       let a16 = 0;
       for (let q15 = 1; q15 < A14.length; q15++) {
         const j12 = A14[q15];

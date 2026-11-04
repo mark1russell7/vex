@@ -20,7 +20,7 @@ A table is a tree space. Each row is a record, and a row without a parent is a r
 - **[FORMULA.NAME.VALUE]** A name of a value column reads the field at the focus: `ref(name)`.
 - **[FORMULA.NAME.FORMULA]** A name of a formula column reads the cell at the focus: the cell reference `cell(name)`. Thus a cycle of formula columns gives `#CYCLE!`, and the other cells stay correct.
 - **[FORMULA.NAV]** `this.`, `parent.`, `row(n).` and `row("name").` before a name are moves of the address of the read. They are `origin`, `parent`, `offset(n)` and `key(k)`, and they apply in sequence. In a tree space, `row(-1)` is the previous sibling (spec `NAV.OFFSET.TREE`). `n` must be a whole number.
-- **[FORMULA.NAV.INDEX]** `index(e).` before a name moves to the row at the position that `e` gives, in key order (spec `NAV.COMPUTED`). `e` evaluates at the row of the read. A cell reference has only fixed moves, so a formula column at that row is the one item of the axis `window(0, 0)` from that row. In the axis of another table, `index(e).` after `this.` is an error.
+- **[FORMULA.NAV.INDEX]** `index(e).` before a name moves to the row at the position that `e` gives, in key order (spec `NAV.COMPUTED`). `e` evaluates at the row of the read. A formula column at that row is a read with a computed move (spec `SHEET.CELL.COMPUTED`): the one item of the axis `window(0, 0)` from that row. In the axis of another table, `index(e).` after `this.` is an error.
 - **[FORMULA.NAV.NAME]** `row("name").` moves to the row with the name `name`. The context gives the keys of the rows of each name. A name of no row, or of two or more rows, is an error with its span. Without the names in the context, the name is the key of the row. The sheet app gives each row the text of its first column as its name, when that column is a text column.
 
 ## 4. Operators
@@ -55,6 +55,8 @@ A function name has no difference between capital and small letters.
 - **[FORMULA.AGGREGATE.OP]** Without an axis, `MIN`, `MAX` and `SUM` are ops of the domains, for example `MIN(a, b)` of two numbers. `AVERAGE`, `COUNT`, `ANY` and `ALL` without an axis are errors.
 - **[FORMULA.ITERATE]** `ITERATE(limit, name, first, step, ..., result)` is the loop `iterate` (spec `ITERATE.LIMIT`). Each name has a first value and a step, and in a step or in the result the name reads its value. A last argument `UNTIL test` is the test `until`. `limit` is a whole number from 0 to 100000 in the formula.
 - **[FORMULA.FOLD]** `FOLD(axis WHERE test, name, first, step, ..., result)` is the loop `fold` (spec `FOLD.ORDER`). The axis is an axis of an aggregate of this table. Each step evaluates at a row of the axis, and the test cannot read the names.
+- **[FORMULA.FIX]** `FIX(name, join, first, step)` is the node `fix` (spec `FIX.ROUNDS`). `join` is the word `OR`, `AND`, `MAX` or `MIN`, in capital or small letters. `name` is a word, and it does not hide a column. `first` and `step` evaluate at each row. A step that the check of the core refuses gives `#VALUE!` (spec `FIX.MONOTONE`).
+- **[FORMULA.LAST]** `LAST(name)` is the node `last` (spec `FIX.LAST`). A `LAST` outside a step of a `FIX` of its name is a syntax error. The first value of a `FIX` is outside its step. The check of the core refuses a read of a `FIX` in the step of an inner `FIX`.
 - **[FORMULA.RANK]** `RANK(value)` is 1 plus the number of other rows with a larger value. An error at another row makes the rank an error. `RANK` is not valid inside an aggregate.
 
 ## 7. Grids

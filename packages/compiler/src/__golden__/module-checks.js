@@ -23,14 +23,12 @@ export function run(records, vars) {
   } catch {
     t2 = 99;
   }
-  const c5 = t2;
   let t3;
   try {
     t3 = R[X((0 < n ? 0 : F()) + 1, n)]["n"];
   } catch {
     t3 = 99;
   }
-  const c6 = t3;
   const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
@@ -52,7 +50,7 @@ export function run(records, vars) {
       } catch {
         t4 = 99;
       }
-      out[o] = ({ "offsets": t0, "computed": t1, "origin": c5, "last": c6, "other": t4 });
+      out[o] = ({ "offsets": t0, "computed": t1, "origin": t2, "last": t3, "other": t4 });
     } catch {
       out[o] = VEX_ERROR;
     }

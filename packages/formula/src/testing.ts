@@ -3,7 +3,7 @@
  * syntax trees. The tests of this package and the tests of the Lab reader use them. The package gives this module
  * as `@vex/formula/testing`, so the app does not load fast-check.
  */
-import { space, type Space } from "@mark1russell7/vex";
+import { space, type FixJoin, type Space } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 import { AGGREGATES, AXES, axisText, quoteText, type AggAxis, type AggregateName, type Ast, type BinaryOp, type LoopName, type Nav } from "./syntax.ts";
 
@@ -58,6 +58,23 @@ const arbNameNav: fc.Arbitrary<readonly Nav[]> = fc.oneof(
 const LOOP_X: Ast = { k: "name", nav: [], name: "x", span: NO_SPAN };
 const plus = (left: Ast, right: Ast): Ast => ({ k: "binary", op: "+", left, right, span: NO_SPAN });
 
+const JOINS: readonly FixJoin[] = ["or", "and", "max", "min"];
+/** The read of the last round of the column r. */
+const LAST_R: Ast = { k: "last", fnSpan: NO_SPAN, name: "r", span: NO_SPAN };
+
+/** This function gives a first value of the kind of the join (FIX.KIND). */
+const firstOf = (join: FixJoin): Ast => (join === "or" || join === "and" ? { k: "bool", v: join === "and", span: NO_SPAN } : { k: "num", v: 0, span: NO_SPAN });
+
+/**
+ * This function gives a step that passes the check (FIX.MONOTONE) for each `test` and `other`, because they do not read
+ * the last round. A step that fails the check refuses the program, and the tests of the sheet compare only valid programs.
+ */
+function stepOf(form: 0 | 1 | 2, test: Ast, other: Ast): Ast {
+  if (form === 0) return { k: "call", fn: "IF", fnSpan: NO_SPAN, args: [test, LAST_R, other], span: NO_SPAN };
+  if (form === 1) return { k: "call", fn: "IFERROR", fnSpan: NO_SPAN, args: [LAST_R, other], span: NO_SPAN };
+  return { k: "agg", fn: "ANY", fnSpan: NO_SPAN, nav: [], axis: "children", body: LAST_R, span: NO_SPAN };
+}
+
 /** A random syntax tree that reads the columns `names`. The spans of the nodes are empty. */
 export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
   fc.letrec<{ ast: Ast }>((tie) => ({
@@ -102,6 +119,16 @@ export const arbAst = (names: readonly string[]): fc.Arbitrary<Ast> =>
           result: LOOP_X,
           span: NO_SPAN,
         })),
+      // A column of the name r. Its first value has the kind of the join, or it is any value.
+      fc.tuple(fc.constantFrom(...JOINS), fc.option(tie("ast"), { nil: undefined }), fc.constantFrom<0 | 1 | 2>(0, 1, 2), tie("ast"), tie("ast")).map(([join, first, form, test, other]): Ast => ({
+        k: "fix",
+        fnSpan: NO_SPAN,
+        name: "r",
+        join,
+        first: first ?? firstOf(join),
+        step: stepOf(form, test, other),
+        span: NO_SPAN,
+      })),
       fc.tuple(fc.constantFrom(...BINARY), tie("ast"), tie("ast")).map(([op, left, right]): Ast => ({ k: "binary", op, left, right, span: NO_SPAN })),
       fc
         .constantFrom(...CALLS)
@@ -162,6 +189,10 @@ export function printAst(a: Ast): string {
       return `ITERATE(${a.limit}, ${namesText(a.names)}, ${printAst(a.result)}${a.until === undefined ? "" : `, UNTIL ${printAst(a.until)}`})`;
     case "fold":
       return `FOLD(${navText(a.nav)}${axisText(a.axis)}${a.where === undefined ? "" : ` WHERE ${printAst(a.where)}`}, ${namesText(a.names)}, ${printAst(a.result)})`;
+    case "fix":
+      return `FIX([${a.name}], ${a.join.toUpperCase()}, ${printAst(a.first)}, ${printAst(a.step)})`;
+    case "last":
+      return `LAST([${a.name}])`;
   }
 }
 

@@ -68,6 +68,7 @@ withHalf.from("weight").call("half").at("A"); // : Optional<number>
 | `ifError(fallback)` | Gives `fallback` when the chain gives an error |
 | `if(then, otherwise)` | For a boolean value: gives `then` or `otherwise`. Only the selected branch evaluates. |
 | `iterate(limit, init, step, result, { until })` | A loop of at most `limit` steps. `limit` is a number, `dataLimit(axis)` or a list chain. `step` and `result` get a chain for each name of `init`. |
+| `fix(name, join, init, step)` | A column with a value for each row (BUILD.FIX). `step` gets a chain of the last round at the focus. `join` is `or`, `and`, `max` or `min`, and it gives the kind of the chain. |
 | `call(name, ...args)` | Applies a free function of `withOptions` to the current value. The types accept only the functions whose first parameter accepts the value. |
 | `at(key)`, `value(key)`, `result(key)`, `explain(key)`, `all()` | Evaluates the chain |
 | `program` | The expression of the chain |
@@ -127,6 +128,16 @@ rows.list([["2", 5]]).append(ns).get("2").at("0"); // => some(5)
 rows.list().keys().at("0"); // => some([])
 ```
 
+`fix` repeats its `step` until no row changes, and its value is the row of the focus (FIX.ROUNDS). The chain `lastRound` exists only in the `step`, so the types have no read outside a column. An axis moves the focus of the read. Thus `lastRound` goes inside the body of the axis.
+
+```ts doctest
+const graph = vex(NumDomain, BoolDomain, TextDomain).over(space.graph({ a: { id: "a" }, b: { id: "b" }, c: { id: "c" } }, { a: ["b"], b: ["a"], c: ["a"] }));
+const isSource = graph.from("id")._.eq(graph.start(0).origin().from("id"));
+const reach = graph.start(0).fix("reach", "or", isSource, (lastRound) => graph.start(0).predecessors(() => lastRound).any());
+
+reach.at("a"); // => some(true)
+```
+
 `root.fn(kinds, body)` makes a function, and `functions(fns, body)` of a chain binds it (FN.BIND). Each kind is `"number"`, `"string"`, `"boolean"` or `"any"`, and it gives the type of the chain of a parameter. The body of a function evaluates at the focus of each call.
 
 ```ts doctest
@@ -160,7 +171,7 @@ rows.from("n").functions({ scaled }, (c, call) => call.scaled(c)).at("1"); // =>
 |---|---|
 | `column(name, formula)` | Adds a column. The formula gets a root with `cell`, and gives a chain. |
 | `declare<T>()` | Gives the types of columns before their formulas. A formula can then read the column itself or a later column with its type. |
-| `r.cell(column, at)` | In a formula: an argument whose value is the column at the focus, at the key `at`, or at the address `at` |
+| `r.cell(column, at)` | In a formula: an argument whose value is the column at the focus, at the key `at`, or at the address `at`, which can have computed moves |
 | `result(k, column)`, `at(k, column)`, `explain(k, column)` | Evaluates one cell |
 | `table()` | Evaluates each cell in key order, and gives one row for each key |
 | `columns` | The program of each column, as JSON data |

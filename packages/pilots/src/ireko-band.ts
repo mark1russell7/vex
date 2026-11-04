@@ -33,6 +33,7 @@ export type BandOps = {
   readonly flip: FnOp<Band, (a: Band) => Band>;
   readonly join: FnOp<Band, BandFn2>;
   readonly overlaps: FnOp<Band, BandTest2>;
+  readonly clear: FnOp<Band, (a: Band, b: Band, place: number, gap: number) => number>;
   readonly sized: FnOp<Band, BandTest>;
   readonly end: FnOp<Band, (a: Band) => Band>;
   readonly side: FnOp<Band, BandNum>;
@@ -59,6 +60,8 @@ export type BandOps = {
  * - `flip(b)` mirrors the band on the axis of the row: `min` becomes `-max`, and `max` becomes `-min`.
  * - `join(a, b)` gives the smallest band that covers both bands.
  * - `overlaps(a, b)` tells if the intervals from `from` to `to` of the two bands overlap.
+ * - `clear(a, b, place, gap)` gives the higher value of `place` and the place that puts the band `b` at `gap` after `a`.
+ *   The function `pack` of ireko has this `Math.max`, so a clearance of `-Infinity` gives `place`.
  *
  * The other ops are the steps of the sweep of `mergeBands` of ireko. They compare the ends inside the op, so the
  * program gets no infinite end as a number:
@@ -81,6 +84,8 @@ export const BandDomain: Domain<"Band", Band, BandOps> = defineDomain<"Band", Ba
   name: "Band",
   // LOOP.SIZE.OPS: a band has four numbers, so each op has a size rule.
   size: "fixed",
+  // KIND.FIELDS: another domain with other fields shares a module with this domain.
+  fields: ["from", "to", "min", "max"],
   // A plain object: its prototype is Object.prototype or null, and it has only the four number fields.
   is: (u: unknown): u is Band =>
     typeof u === "object" &&
@@ -116,6 +121,7 @@ export const BandDomain: Domain<"Band", Band, BandOps> = defineDomain<"Band", Ba
       returns: "domain",
     },
     overlaps: { fn: (a: Band, b: Band): boolean => a.from < b.to && b.from < a.to, laws: ["commutative"], params: ["domain"], returns: "boolean" },
+    clear: { fn: (a: Band, b: Band, place: number, gap: number): number => Math.max(place, a.max - b.min + gap), params: ["domain", "number", "number"], returns: "number" },
     sized: { fn: (a: Band): boolean => a.to > a.from && a.max >= a.min, params: [], returns: "boolean" },
     end: { fn: (a: Band): Band => ({ from: a.to, to: a.to, min: 0, max: 0 }), params: [], returns: "domain" },
     side: { fn: (a: Band): number => (a.from === Number.NEGATIVE_INFINITY ? -1 : a.from === Number.POSITIVE_INFINITY ? 1 : 0), params: [], returns: "number" },

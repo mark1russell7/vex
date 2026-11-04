@@ -91,7 +91,7 @@ export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json
       returns: "any",
       size: { size: [1, 0] },
     },
-    // The walk of the schema of Graph as a flat list (JSON.LEAVES). The function reads no name outside itself, so a
+    // The walk of a schema as a flat list (JSON.LEAVES). The function reads no name outside itself, so a
     // module can copy it. A stack of the objects, not recursion, keeps the order of a recursive walk.
     leaves: {
       fn: (o: JsonValue, depth: number): readonly JsonLeaf[] => {

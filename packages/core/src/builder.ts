@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec, PrimitiveKind } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type DataLimit, type Expr, type FixedMove, type ItemNames, type Move } from "./ir.ts";
+import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fix as fixExpr, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, last as lastExpr, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Addr, type Axis, type DataLimit, type Expr, type FixJoin, type ItemNames, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { ok, toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -31,6 +31,12 @@ const argToken = <T>(expr: Expr): Arg<T> => ({ kind: "vex.arg", expr });
 
 
 // ---------------------------------------------------------------- type helpers
+
+/**
+ * The value of a column with the join `J`: a boolean for `or` and `and`, and a number for `max` and `min` (FIX.KIND). A
+ * union of joins has no one kind, so it gives `never`.
+ */
+export type FixValue<J extends FixJoin> = [J] extends ["or" | "and"] ? boolean : [J] extends ["max" | "min"] ? number : never;
 
 /** The keys of any member of a union of record types. */
 type AllKeys<O> = O extends unknown ? keyof O : never;
@@ -229,6 +235,17 @@ export interface ChainBase<Ctx extends ChainContext, T> {
     result: (vars: LoopVars<Ctx, I>) => ArgInput<R, Ctx, false>,
     opts?: { readonly until?: (vars: LoopVars<Ctx, I>) => ArgInput<boolean, Ctx, false> },
   ): ChainOf<Ctx, R>;
+  /**
+   * This method makes a fixed-point column (BUILD.FIX). `init` gives each row its value of round 0. `step` gets a chain
+   * of the last round at the focus, and it gives the next value of the row. `join` keeps each row on one way (FIX.JOIN).
+   * The value of the chain is the row of the focus, and the rounds end when no row changes (FIX.ROUNDS).
+   */
+  fix<J extends FixJoin>(
+    name: string,
+    join: J,
+    init: ArgInput<FixValue<J>, Ctx, false>,
+    step: (last: ChainOf<Ctx, FixValue<J>>) => NoInfer<ArgInput<FixValue<J>, Ctx, false>>,
+  ): ChainOf<Ctx, FixValue<J>>;
   /** This method binds names for the body. The body gets a variable token for each name. */
   with<const B extends Readonly<Record<string, unknown>>, U>(
     binds: B,
@@ -507,13 +524,13 @@ export interface Root<Ctx extends ChainContext> {
 /** The root of a column formula: the root of the builder, and references to the cells of the sheet. */
 export interface SheetRoot<Ctx extends ChainContext, Cols> extends Root<Ctx> {
   /**
-   * This method makes a cell reference: the column `column` at the key `at`, or at the address `at` from the focus.
-   * The address has only fixed moves. Without `at`, it reads at the focus. The type is the type of a column before
-   * this one.
+   * This method reads a cell: the column `column` at the key `at`, or at the address `at` from the focus. The address
+   * can have computed moves (SHEET.CELL.COMPUTED). Without `at`, it reads at the focus. The type is the type of a column
+   * before this one.
    */
-  cell<N extends keyof Cols & string>(column: N, at?: Ctx["keys"] | readonly FixedMove[]): Arg<Cols[N]>;
+  cell<N extends keyof Cols & string>(column: N, at?: Ctx["keys"] | Addr): Arg<Cols[N]>;
   /** This method makes a cell reference to any column, also this column or a later one. The caller gives the type. */
-  cell<T>(column: string, at?: Ctx["keys"] | readonly FixedMove[]): Arg<T>;
+  cell<T>(column: string, at?: Ctx["keys"] | Addr): Arg<T>;
 }
 
 /** One row of a sheet: the key and the result of each column. */
@@ -657,6 +674,22 @@ function inItemLoop<T>(build: () => T): T {
     return build();
   } finally {
     itemDepth -= 1;
+  }
+}
+
+/**
+ * The number of the open steps of `fix`. The name of a column ends with this number. Thus an inner `fix` does not hide
+ * the column around it, also when the chain of the inner `fix` starts at the root (BUILD.FIX).
+ */
+let fixDepth = 0;
+
+/** This function gives the value of `build`, with the next number for the columns inside it. */
+function inFixStep<T>(build: () => T): T {
+  fixDepth += 1;
+  try {
+    return build();
+  } finally {
+    fixDepth -= 1;
   }
 }
 
@@ -844,6 +877,15 @@ class ChainImpl {
     // The list of a limit reads the names outside the iteration, so the chain of the limit comes first (ITERATE.LIMIT.DATA).
     const bound = isChainLike(limit) ? dataLimit({ t: "list", list: toExpr(limit, this.#s.addr) }) : limit;
     return chainOf({ ...this.#s, expr: iterateExpr(bound, first, next, toExpr(r, this.#s.addr), until) }, r);
+  }
+
+  fix(name: string, join: FixJoin, init: unknown, step: (last: ChainImpl) => unknown): ChainImpl {
+    const { addr, depth } = this.#s;
+    const column = `${name}$${String(fixDepth)}`;
+    // The read has no address, and an axis moves the focus of the read (FIX.LAST).
+    const read = new ChainImpl({ ...this.#s, expr: lastExpr(column), addr: [], depth: depth + 1 });
+    const next = inFixStep(() => toExpr(step(read), addr));
+    return new ChainImpl({ ...this.#s, expr: fixExpr(column, join, toExpr(init, addr), next) });
   }
 
   #axis(a: Axis, body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {
@@ -1094,7 +1136,7 @@ class RootImpl {
 }
 
 class SheetRootImpl extends RootImpl {
-  cell(column: string, at?: string | readonly FixedMove[]): Arg<unknown> {
+  cell(column: string, at?: string | Addr): Arg<unknown> {
     return argToken(cellRef(column, typeof at === "string" ? [keyMove(at)] : at));
   }
 }

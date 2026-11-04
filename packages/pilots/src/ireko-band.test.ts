@@ -1,5 +1,6 @@
 import { app, axes, each, evaluate, fold, index, let_, lit, rec, ref, space, v, type Expr } from "@mark1russell7/vex";
-import { emitModule, type ModuleOptions } from "@mark1russell7/vex-compiler";
+import { emitModule, type ModuleOptions } from "@mark1russell7/vex-compiler/module";
+import { XYDomain } from "@mark1russell7/vex-domains";
 import { checkLaws } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -45,7 +46,7 @@ const PROGRAMS: Readonly<Record<string, Expr>> = {
   join: op("join", own, b),
   overlaps: op("overlaps", own, first),
   // The test of the packing of the strategy tree: a band that overlaps the band before it goes past its far side.
-  pack: op("if", op("overlaps", b, first), op("add", op("subtract", op("max", first), op("min", b)), v("gap")), lit(0)),
+  pack: op("if", op("overlaps", b, first), op("clear", first, b, lit(0), v("gap")), lit(0)),
   // A fold joins the bands of all records into one band that covers them.
   all: fold(axes.all, { u: first }, { u: op("join", v("u"), b) }, fields(v("u"))),
   // A list of bands, as the rows of a shape: nth reads a band, and reduce joins them.
@@ -86,8 +87,8 @@ const ROWS: readonly Row[] = [
 const copyOf = (rows: readonly Row[]): Row[] => rows.map((r) => ({ ...r, b: { ...r.b } }));
 
 /** This function gives the run of the standalone module of a program. */
-function moduleOf(e: Expr): Loaded {
-  const m = emitModule(e, OPTIONS);
+function moduleOf(e: Expr, options: ModuleOptions = OPTIONS): Loaded {
+  const m = emitModule(e, options);
   if (!m.ok) throw new Error(m.reason);
   expect(m.source).not.toContain("import");
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
@@ -190,6 +191,12 @@ describe("the band domain of ireko", () => {
     }
   });
 
+  it("KIND.FIELDS: a module takes BandDomain and XYDomain, because each domain declares its fields", () => {
+    const sum = op("add", op("from", op("band", lit(2), lit(3), lit(0), lit(1))), op("x", op("xy", lit(1), lit(5))));
+    const m = moduleOf(sum, { ...OPTIONS, domains: [...BAND_DOMAINS, XYDomain] });
+    expect(m.run(copyOf(ROWS), { gap: 0 })).toStrictEqual(ROWS.map(() => 3));
+  });
+
   it("gives the arithmetic of the shapes code of ireko", () => {
     const a: Band = { from: 0, to: 40, min: 10, max: 120 };
     const c: Band = { from: 30, to: 90, min: -20, max: 60 };
@@ -202,6 +209,8 @@ describe("the band domain of ireko", () => {
     expect(BandDomain.ops.flip.fn(a)).toStrictEqual({ from: 0, to: 40, min: -120, max: -10 });
     // pack of strategies/tree.ts compares two bands with p.from < b.to && b.from < p.to: bands that only touch do not overlap.
     expect([c, { ...c, from: 40 }, { ...c, to: 0 }, { ...c, from: -5, to: 50 }].map((q) => BandDomain.ops.overlaps.fn(a, q))).toStrictEqual([true, false, false, true]);
+    // pack of strategies/tree.ts takes Math.max(place, p.max - b.min + gap), so a clearance of -Infinity leaves the place.
+    expect([BandDomain.ops.clear.fn(a, c, 0, 4), BandDomain.ops.clear.fn(a, c, 200, 4), BandDomain.ops.clear.fn(a, { ...c, min: Number.POSITIVE_INFINITY }, 7, 4)]).toStrictEqual([144, 200, 7]);
     expect([a, c].map((q) => [BandDomain.ops.from.fn(q), BandDomain.ops.to.fn(q), BandDomain.ops.min.fn(q), BandDomain.ops.max.fn(q)])).toStrictEqual([
       [0, 40, 10, 120],
       [30, 90, -20, 60],

@@ -12,6 +12,9 @@ import { heatStep } from "./heat.ts";
 import { INVOICE_FORMULAS } from "./invoice.ts";
 import { ESCAPE_PROGRAM } from "./ireko-audit.ts";
 import { GRID_PROGRAM } from "./ireko-grid.ts";
+import { LAYERS_PROGRAM } from "./ireko-layers.ts";
+import { AVOID_PROGRAM, EDGE_DIRECTION_PROGRAM, LABEL_BOX_PROGRAM, OBSTACLES_PROGRAM, ORTHOGONAL_PROGRAM, STRAIGHT_PROGRAM } from "./ireko-route.ts";
+import { TREE_PROGRAM } from "./ireko-tree.ts";
 import { MEASURE_COLUMNS } from "./ireko-measure.ts";
 import { PLACE_COLUMNS } from "./ireko-place.ts";
 import { RADIAL_PROGRAM } from "./ireko-radial.ts";
@@ -43,6 +46,14 @@ export const PILOTS: readonly [string, Expr][] = [
   ["escape", ESCAPE_PROGRAM],
   ["grid", GRID_PROGRAM],
   ["radial", RADIAL_PROGRAM],
+  ["layers", LAYERS_PROGRAM],
+  ["tree", TREE_PROGRAM],
+  ["route.direction", EDGE_DIRECTION_PROGRAM],
+  ["route.label", LABEL_BOX_PROGRAM],
+  ["route.obstacles", OBSTACLES_PROGRAM],
+  ["route.straight", STRAIGHT_PROGRAM],
+  ["route.orthogonal", ORTHOGONAL_PROGRAM],
+  ["route.avoid", AVOID_PROGRAM],
   ["nodeShape", NODE_SHAPE],
   ["schema", SCHEMA_PROGRAM],
   ["force", forceProgram(PILOT_FORCE)],

@@ -1,11 +1,11 @@
 ---
 title: The grid pilot
-description: A layout strategy of a real application, written again as one Vex program. A property test shows that the two give the same rectangles.
+description: A uniform grid layout as one Vex program. A property test shows that a plain TypeScript implementation gives the same rectangles.
 ---
 
 import GridPilot from "../../../components/GridPilot.tsx";
 
-Vex came from a layout engine, and its plan names a first real user: the layout strategies of the Graph application. The pilot takes one strategy, the grid, and writes it again as one Vex program.
+Vex came from a layout engine. This pilot writes one layout strategy, the grid, as one Vex program.
 
 ## The grid layout
 
@@ -45,7 +45,7 @@ root.start(root.rec({
 
 The corner of an item is its column and its row, as one vector, times the pitch. Only the number of columns uses one dimension: it comes from the width of the bounds. [Vectors](../../learn/vectors/) tells more about this style.
 
-The test of Graph for this strategy has four items of 100 by 100, in bounds of 400 by 400, with a gap of 10:
+One test has four items of 100 by 100, in bounds of 400 by 400, with a gap of 10:
 
 ```ts doctest
 import { gridVex } from "@vex/pilots";
@@ -65,6 +65,4 @@ Change the sliders. The chip compares the rectangles of the Vex program with the
 - **It fits.** The grid layout is two reductions and one formula for each item. The axes and the domains of numbers and vectors express it without new parts. The only addition is the extension `slot`.
 - **It is equal.** A property test gives random items, bounds and configurations to both implementations, and compares the rectangles.
 - **It is slower.** The program evaluates the two reductions again at each item, so its cost grows with the square of the number of items. A sheet with one column for each reduction, or the `compile` step of the plan, removes this cost.
-- **Not each layout fits.** The packed layout of Graph places each item after the items before it. That is an ordered fold with a state, not a formula for each item. Vex does not try to express it.
-
-Graph is a private repository. Thus the pilot compares the program with a new implementation of the same rules, not with a copy of the Graph code.
+- **Not each layout fits.** A packed layout places each item after the items before it. That is an ordered fold with a state, not a formula for each item. Vex does not try to express it.

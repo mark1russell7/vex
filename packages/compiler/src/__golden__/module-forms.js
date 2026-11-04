@@ -11,8 +11,8 @@ function G(x) { return x === E ? F() : x; }
 function T(f) { try { return f(); } catch { return E; } }
 function X(t, n) { return t >= 0 && t < n ? t : F(); }
 const k_number = (x) => (Number.isFinite(x) ? x : F());
-const op_2_2 = (a) => a.length;
-const op_2_3 = (a) => a.toUpperCase();
+const op_2_2 = a => a.length;
+const op_2_3 = a => a.toUpperCase();
 const k_value = (x) => (x === undefined || x === null || (typeof x === "number" && !Number.isFinite(x)) ? F() : x);
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
@@ -204,10 +204,9 @@ export function run(records, vars) {
         b34 = E;
       }
       const b35 = R[o]["n"];
-      const b36 = b34;
       let t37;
       try {
-        t37 = k_number((G(b36)) + (b35));
+        t37 = k_number((G(b34)) + (b35));
       } catch {
         t37 = 0;
       }

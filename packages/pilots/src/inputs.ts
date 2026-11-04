@@ -13,10 +13,13 @@ import type { Field, Invoice } from "./invoice.ts";
 import type { Band } from "./ireko-band.ts";
 import type { PlacedBox } from "./ireko-audit.ts";
 import type { GridInput } from "./ireko-grid.ts";
+import type { LayersEdge, LayersInput } from "./ireko-layers.ts";
 import type { FitChild, MeasureVars } from "./ireko-measure.ts";
 import type { PlaceRecord, PlaceVars } from "./ireko-place.ts";
 import { PAIRWISE_LIMIT, type RadialChild, type RadialInput } from "./ireko-radial.ts";
 import { boxShape, MAX_BANDS, moveShape, type Shape, type ShapeRecord } from "./ireko-shapes.ts";
+import type { DirectedEdge, RouteDirection, RouteNode, RouteRect, RouterEdge } from "./ireko-route.ts";
+import type { TreeChild, TreeInput } from "./ireko-tree.ts";
 import type { LoanMonth, LoanTerms } from "./loan.ts";
 
 // The audit pilot (ireko-audit.test.ts).
@@ -277,7 +280,7 @@ const arbs = fc.letrec<{ json: unknown; array: unknown[]; object: Record<string,
 /** Random samples of up to 5 documents: mostly objects, and sometimes other JSON values. */
 export const schemaDocs: fc.Arbitrary<unknown[]> = fc.array(fc.oneof({ arbitrary: arbs.object, weight: 4 }, { arbitrary: arbs.json, weight: 1 }), { maxLength: 5 });
 
-/** The example of Graph: two documents. */
+/** A small example of the schema pilot: two documents. */
 export const SCHEMA_EXAMPLE: readonly unknown[] = [
   { _id: "a", n: 1, tags: ["x"], o: { p: true } },
   { _id: "b", n: "2", o: {} },
@@ -294,7 +297,7 @@ export const SCHEMA_DEEP: readonly unknown[] = [
 /** Null and array documents, and the keys __proto__, constructor and the empty key. */
 export const SCHEMA_ODD_KEYS: readonly unknown[] = [null, [1, 2], JSON.parse('{"__proto__":{"p":1},"":{"q":[null]},"constructor":"c"}') as unknown, 7];
 
-/** This function gives 20 documents of 30 fields, the size of a sample of Graph. */
+/** This function gives 20 documents of 30 fields, the size of a sample. */
 export const schemaSample = (): Record<string, unknown>[] =>
   Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${f}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
 
@@ -451,3 +454,162 @@ export const LOAN_FOUR: { readonly months: readonly LoanMonth[]; readonly terms:
 
 /** A long loan of 600 months, for the depth of the stack. */
 export const LOAN_LONG: { readonly months: readonly LoanMonth[]; readonly terms: LoanTerms } = { months: Array.from({ length: 600 }, () => ({ payment: 50, extra: 0 })), terms: { principal: 20000, rate: 0.002 } };
+
+// The layers pilot (ireko-layers.test.ts).
+
+const layersCoord = fc.double({ min: -100, max: 100, noNaN: true, noDefaultInfinity: true });
+const layersSize = fc.double({ min: 0, max: 300, noNaN: true, noDefaultInfinity: true });
+
+/**
+ * Random edges between `k` children. A dense list has cycles. ireko ignores some of the edges. These are an edge from
+ * a child to itself, and an edge with an end that is not a child.
+ */
+export const layersEdges = (k: number): fc.Arbitrary<LayersEdge[]> => {
+  const end = fc.integer({ min: 0, max: Math.max(0, k - 1) });
+  const wild = fc.oneof({ arbitrary: end, weight: 19 }, { arbitrary: fc.constantFrom(-1, k), weight: 1 });
+  return fc.array(fc.record({ from: wild, to: wild }), { maxLength: 3 * k });
+};
+
+/** Random inputs of the strategy `layers`, with up to `most` children. */
+export const layersInput = (most: number): fc.Arbitrary<LayersInput> =>
+  fc.integer({ min: 1, max: most }).chain((k) =>
+    fc.record({
+      mode: fc.constantFrom("nested", "linked"),
+      self: fc.record({ width: layersSize, height: layersSize }),
+      extents: fc.array(fc.record({ x: layersCoord, y: layersCoord, width: layersSize, height: layersSize }), { minLength: k, maxLength: k }),
+      gap: fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true }),
+      options: fc.record({
+        side: fc.constantFrom("bottom", "top", "left", "right"),
+        distance: fc.oneof(fc.constant(0), fc.double({ min: 0, max: 60, noNaN: true, noDefaultInfinity: true })),
+        align: fc.constantFrom("center", "start", "end"),
+      }),
+      edges: layersEdges(k),
+    }),
+  );
+
+// The tree pilot (ireko-tree.test.ts).
+
+const treeSize = fc.oneof(fc.integer({ min: 0, max: 40 }), fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true }));
+const treeBand = fc.record({ from: shapeCoord, to: shapeCoord, min: shapeCoord, max: shapeCoord });
+
+/** A child of a node, with `least` to `bands` bands on each axis. Sometimes a child has no shape, and it counts with its extent. */
+export const treeChild = (bands: number, least = 0): fc.Arbitrary<TreeChild> =>
+  fc
+    .record({
+      box: fc.record({ width: treeSize, height: treeSize }),
+      extent: fc.record({ x: shapeCoord, y: shapeCoord, width: treeSize, height: treeSize }),
+      rows: fc.array(treeBand, { minLength: least, maxLength: bands }),
+      columns: fc.array(treeBand, { minLength: least, maxLength: bands }),
+      shaped: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
+    })
+    .map(({ box, extent, rows, columns, shaped }) => (shaped ? { box, extent, shape: { rows, columns } } : { box, extent }));
+
+/** A child of a subtree that overflows. It has an infinite end on a band, or an infinite size of its box or of its extent. */
+export const treeWildChild: fc.Arbitrary<TreeChild> = fc.record({
+  box: fc.record({ width: shapeExtent, height: shapeExtent }),
+  extent: fc.record({ x: shapeCoord, y: shapeCoord, width: shapeExtent, height: shapeExtent }),
+  shape: fc.record({ rows: fc.array(band, { maxLength: 4 }), columns: fc.array(band, { maxLength: 4 }) }),
+});
+
+/** Random inputs of the strategy `tree`: the children `children`, and the other fields of the input. */
+export const treeInputOf = (children: fc.Arbitrary<TreeChild[]>): fc.Arbitrary<TreeInput> =>
+  fc.record({
+    mode: fc.constantFrom("nested", "linked"),
+    self: fc.record({ width: treeSize, height: treeSize }),
+    children,
+    gap: fc.oneof(fc.constant(0), fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true })),
+    options: fc.record({
+      side: fc.constantFrom("bottom", "top", "left", "right"),
+      distance: fc.oneof(fc.constant(0), fc.double({ min: 0, max: 60, noNaN: true, noDefaultInfinity: true })),
+      align: fc.constantFrom("center", "start", "end"),
+    }),
+  });
+
+/** Random inputs of the strategy `tree`, with up to `most` children and up to `bands` bands on each axis of a child. */
+export const treeInput = (most: number, bands: number): fc.Arbitrary<TreeInput> => treeInputOf(fc.array(treeChild(bands), { minLength: 1, maxLength: most }));
+
+/** Random inputs with enough bands for the merge of a long row: 8 to 12 children, each with 40 to 64 bands on each axis. */
+export const treeLong: fc.Arbitrary<TreeInput> = treeInputOf(fc.array(treeChild(64, 40), { minLength: 8, maxLength: 12 }));
+
+/** Random inputs with infinite numbers. */
+export const treeWild: fc.Arbitrary<TreeInput> = treeInputOf(fc.array(treeWildChild, { minLength: 1, maxLength: 5 }));
+
+// The route pilot (ireko-route.test.ts).
+
+/** A place of a box. A tenth of the values share a lattice, so the search meets ties. A seventh gives values near each other. */
+const routeCoord = fc.oneof(fc.integer({ min: -40, max: 40 }).map((i) => i * 10), fc.integer({ min: -2800, max: 2800 }).map((i) => i / 7));
+/** A size of a box. The value 0 is a box without an area. */
+const routeSize = fc.oneof(fc.integer({ min: 0, max: 12 }).map((i) => i * 10), fc.integer({ min: 0, max: 840 }).map((i) => i / 7));
+
+/** A random box. */
+export const routeRect: fc.Arbitrary<RouteRect> = fc.record({ x: routeCoord, y: routeCoord, width: routeSize, height: routeSize });
+
+/** A random box on a coarse lattice. Its sides and its center often meet the sides and the center of another box. */
+export const routeLattice: fc.Arbitrary<RouteRect> = fc.record({
+  x: fc.integer({ min: -5, max: 5 }).map((i) => i * 20),
+  y: fc.integer({ min: -5, max: 5 }).map((i) => i * 20),
+  width: fc.integer({ min: 0, max: 3 }).map((i) => i * 20),
+  height: fc.integer({ min: 0, max: 3 }).map((i) => i * 20),
+});
+
+/** A box inside the box `outer`, so the two boxes are a nested pair. */
+const routeInside = (outer: RouteRect): fc.Arbitrary<RouteRect> =>
+  fc.record({ left: fc.integer({ min: 0, max: 4 }), top: fc.integer({ min: 0, max: 4 }), size: fc.integer({ min: 0, max: 4 }) }).map(({ left, top, size }) => ({
+    x: outer.x + (outer.width * left) / 8,
+    y: outer.y + (outer.height * top) / 8,
+    width: (outer.width * size) / 8,
+    height: (outer.height * size) / 8,
+  }));
+
+const routeDirection: fc.Arbitrary<RouteDirection> = fc.constantFrom("down", "up", "left", "right");
+
+/** Random edges of a router, with up to `most` obstacles. A part of the edges has a nested pair of boxes. */
+export const routerEdge = (most: number, box: fc.Arbitrary<RouteRect> = routeRect): fc.Arbitrary<RouterEdge> =>
+  fc
+    .record({
+      ends: fc.oneof(fc.tuple(box, box), box.chain((outer) => routeInside(outer).map((inner): [RouteRect, RouteRect] => [outer, inner]))),
+      direction: fc.option(routeDirection, { nil: undefined }),
+      obstacles: fc.array(box, { maxLength: most }),
+    })
+    .map(({ ends: [source, target], direction, obstacles }) => ({ source, target, obstacles, ...(direction === undefined ? {} : { direction }) }));
+
+/** Random edges of the route pass, for the program of the direction. */
+export const directedEdge = (box: fc.Arbitrary<RouteRect> = routeRect): fc.Arbitrary<DirectedEdge> =>
+  fc
+    .record({
+      kind: fc.constantFrom<DirectedEdge["kind"]>("tree", "extra"),
+      source: box,
+      target: box,
+      parentDirection: fc.option(routeDirection, { nil: undefined }),
+      flow: fc.option(routeDirection, { nil: undefined }),
+    })
+    .map(({ kind, source, target, parentDirection, flow }) => ({ kind, source, target, ...(parentDirection === undefined ? {} : { parentDirection }), ...(flow === undefined ? {} : { flow }) }));
+
+/** A label: a text with characters of each row of the table of widths, or any text. */
+const routeLabel = fc.oneof(fc.array(fc.constantFrom("a", "Z", "0", " ", "i", "(", "m", "\u00e9", "\u4e2d", "\u{1f600}"), { maxLength: 6 }).map((l) => l.join("")), fc.string({ maxLength: 6 }));
+
+/** A list of nodes in the pre-order of ireko, with up to `most` nodes, and two nodes for an edge. */
+export const routeNodes = (most: number): fc.Arbitrary<{ readonly nodes: RouteNode[]; readonly s: number; readonly t: number }> =>
+  fc.integer({ min: 2, max: most }).chain((n) =>
+    fc
+      .record({
+        parents: fc.array(fc.nat(), { minLength: n - 1, maxLength: n - 1 }),
+        boxes: fc.array(fc.record({ box: routeRect, scale: fc.constantFrom(1, 0.5, 0.75, 1 / 3), label: routeLabel, mode: fc.constantFrom<RouteNode["mode"]>("nested", "linked") }), { minLength: n, maxLength: n }),
+        s: fc.nat(n - 1),
+        t: fc.nat(n - 1),
+      })
+      .map(({ parents, boxes, s, t }) => {
+        // Each new node takes a parent on the chain of the last node, so the list stays in the pre-order.
+        const parent: number[] = [-1];
+        const lastChild = Array.from({ length: n }, () => -1);
+        for (const [i, choice] of parents.entries()) {
+          const chain: number[] = [];
+          for (let at = i; at >= 0; at = parent[at] ?? -1) chain.push(at);
+          const p = chain[choice % chain.length] ?? 0;
+          parent.push(p);
+          lastChild[p] = i + 1;
+        }
+        const nodes = boxes.map(({ box, scale, label, mode }, i) => ({ ...box, scale, label, mode, lastChild: lastChild[i] ?? -1 }));
+        return { nodes, s, t };
+      }),
+  );

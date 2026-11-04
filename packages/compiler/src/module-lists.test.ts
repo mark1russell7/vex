@@ -63,7 +63,7 @@ async function expectGolden(name: string, e: Expr): Promise<void> {
   // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
   const off = sourceOf(e, { ...OPTIONS, fuse: false });
   // A module that fusion does not change has no file of its own for fuse false.
-  await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? "" : ".off"}.js`);
+  await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? ".js" : ".off.js.txt"}`);
   for (const m of [make(source), make(off)]) {
     expectSame(m, e);
     expectSame(m, e, RECORDS.slice(0, 2));

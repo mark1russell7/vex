@@ -459,7 +459,7 @@ async function expectGolden(name: string, e: Expr, options: ModuleOptions = OPTI
   // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
   const off = sourceOf(e, { ...options, fuse: false });
   // A module that fusion does not change has no file of its own for fuse false.
-  await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? "" : ".off"}.js`);
+  await expect(off).toMatchFileSnapshot(`./__golden__/module-${name}${off === source ? ".js" : ".off.js.txt"}`);
   for (const m of [make(source), make(off)]) {
     expectSame(m, e, RECORDS, VARS, options);
     expectSame(m, e, MANY, VARS, options);
@@ -1396,7 +1396,7 @@ describe("COMPILE.MODULE.TREE: a module of a tree space", () => {
     await expect(source).toMatchFileSnapshot("./__golden__/module-tree.js");
     // The module of fuse false keeps the text of the version before the clean form (COMPILE.MODULE.FUSE.OFF).
     const off = sourceOf(e, { ...TREE, fuse: false });
-    await expect(off).toMatchFileSnapshot("./__golden__/module-tree.off.js");
+    await expect(off).toMatchFileSnapshot("./__golden__/module-tree.off.js.txt");
     for (const m of [make(source), make(off)]) {
       expectSameTree(m, e, TREE_RECORDS, PARENTS);
       // A flat tree, a chain, one root with each other key as its child, and an empty tree.

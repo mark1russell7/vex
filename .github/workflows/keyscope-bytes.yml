@@ -27,7 +27,7 @@ jobs:
         run: |
           cp ../../tools/keyscope/bytes.test.ts.txt src/zz-bytes.test.ts
           cp ../../tools/keyscope/places.test.ts.txt src/zz-places.test.ts
-          pnpm exec vitest run src/zz-places.test.ts --maxWorkers=1 --reporter=basic | grep PLACES || true
-          BYTES_LABEL=branch pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 --reporter=basic | grep BYTES || true
+          pnpm exec vitest run src/zz-places.test.ts --maxWorkers=1 | grep PLACES || true
+          BYTES_LABEL=branch pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 | grep BYTES || true
           git checkout 3a0019f -- ../compiler/src
-          BYTES_LABEL=base pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 --reporter=basic | grep BYTES || true
+          BYTES_LABEL=base pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 | grep BYTES || true

@@ -1818,13 +1818,16 @@ function isTokens(t: string): boolean {
   return true;
 }
 
+/** The source of an arrow function with plain parameters: its parameters and its body. */
+const ARROW = /^\(?\s*((?:[A-Za-z_$][\w$]*\s*,\s*)*[A-Za-z_$][\w$]*)\s*\)?\s*=>\s*([\s\S]*)/;
+
 /**
  * This function gives the inline form of the source of an arrow function. The body of the function must be an
  * expression of operators, numbers, its parameters and the functions of `CALLS`. Such a body cannot throw for primitive
  * values (§7.1). The inline form is the text of the function itself, so it has its bits.
  */
 function inlineForm(src: string): InlineForm | undefined {
-  const m = /^\(?\s*((?:[A-Za-z_$][\w$]*\s*,\s*)*[A-Za-z_$][\w$]*)\s*\)?\s*=>\s*([\s\S]*)/.exec(src);
+  const m = ARROW.exec(src);
   if (m === null) return undefined;
   const params = (m[1] as string).split(",").map((x) => x.trim());
   const parts: (string | number)[] = [];
@@ -1852,6 +1855,54 @@ function inlineForm(src: string): InlineForm | undefined {
 
 /** This function gives the text of an inline form without spaces, with `#i` for the parameter `at(i)`. */
 const patternOf = (form: InlineForm, at: (p: number) => number): string => form.parts.map((p) => (typeof p === "number" ? `#${at(p)}` : p.replaceAll(/\s/g, ""))).join("");
+
+/** The results of an op that are not values (CALL.RESULT). */
+const NOT_VALUES: readonly unknown[] = [undefined, null, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+/** This function gives a text without the content of its parentheses, brackets and braces. */
+function outlineOf(t: string): string {
+  let depth = 0;
+  let out = "";
+  for (const c of t) {
+    if (")]}".includes(c)) depth--;
+    if (depth === 0) out += c;
+    if ("([{".includes(c)) depth++;
+  }
+  return out;
+}
+
+/** This function tells if each operator of a part of an expression is a comparison, so the part gives a boolean. */
+function isComparison(part: string): boolean {
+  const operators = part.match(/>>>?=?|<<=?|[=!]==?|[<>]=?|[&|^?,=]+/g);
+  return operators !== null && operators.every((x) => /^([=!]==?|[<>]=?)$/.test(x));
+}
+
+/** This function tells if an expression gives a boolean or an object. An object needs parentheses in an arrow body. */
+function isValueText(t: string, inParentheses: boolean): boolean {
+  const outline = outlineOf(t);
+  if (outline === "{}") return inParentheses;
+  if (outline === "()") return isValueText(t.slice(1, -1).trim(), true);
+  return outline.split(/&&|\|\|/).every((part) => isComparison(part) || /^\s*!+[\w$.()\s]*$/.test(part));
+}
+
+/**
+ * This function tells if the text of an op proves that its result is a value (COMPILE.MODULE.RESULT). The proofs are a
+ * comparison, a negation, an `&&` or an `||` of these, and an object literal. A proof reads only the expression body of
+ * an arrow function. A quote, a regular expression and a comment can hide a bracket, so they stop the proof.
+ */
+function givesValue(src: string): boolean {
+  const body = ARROW.exec(src)?.[2];
+  return body !== undefined && !/["'`/]/.test(body) && isValueText(body.trim(), false);
+}
+
+/** This function tells if a check `valid` refuses a value: it gives false, or it throws. */
+function refuses(valid: (x: never) => boolean, value: unknown): boolean {
+  try {
+    return !valid(value as never);
+  } catch {
+    return true;
+  }
+}
 
 /** The reserved words of the strict code of a module, and the two names that strict code does not bind. */
 const RESERVED: ReadonlySet<string> = new Set(
@@ -1918,6 +1969,8 @@ class Printer {
   readonly #ops = new Map<string, number>();
   /** The inline form of each function of an op, or undefined for a function that the module calls. */
   readonly #forms = new Map<string, InlineForm | undefined>();
+  /** The ops whose text does not prove that the result is a value, so their results get the check of a value. */
+  readonly #unproved = new Set<string>();
   /** The functions of ops that the module calls, not in an inline form. */
   readonly #called = new Set<string>();
   /** The key of the expression of each code that is a constant of the run, and the read of each hoisted constant by key. */
@@ -2048,7 +2101,8 @@ class Printer {
   /**
    * This method gives the check of a result of a kind, or undefined for a result that needs no check. A number must be
    * finite, and the domain of the kind can check the value with valid. The law checker of the test kit checks the
-   * declaration `returns` of each op (KIND.RETURNS), so the module trusts the kind itself.
+   * declaration `returns` of each op (KIND.RETURNS), so the module trusts the kind of each value. A result that is not a
+   * value does not break the declaration, and `#value` gives its check (COMPILE.MODULE.RESULT).
    */
   check(kind: Kind): string | undefined {
     const d = this.#facts.checkOf(kind);
@@ -2073,6 +2127,26 @@ class Printer {
   #checked(kind: Kind, code: string): string {
     const k = this.check(kind);
     return k === undefined ? code : `${k}(${code})`;
+  }
+
+  /**
+   * This method tells if the check of a kind can miss a result that is not a value. The check of a number finds each
+   * such result, and a check `valid` finds them when it refuses each one.
+   */
+  #missesNoValue(kind: Kind): boolean {
+    if (kind === "number") return false;
+    const valid = this.#domains[this.#facts.checkOf(kind) as number]?.valid;
+    return valid === undefined || !NOT_VALUES.every((x) => refuses(valid, x));
+  }
+
+  /**
+   * This method gives the code of the result of the op `name` with the check of a value, if the op needs it. The
+   * interpreter gives an error for `undefined`, `null` and a number that is not finite (CALL.RESULT).
+   */
+  #value(name: string, code: string): string {
+    if (!this.#unproved.has(name)) return code;
+    this.top.set("k_value", `const k_value = (x) => (x === undefined || x === null || (typeof x === "number" && !Number.isFinite(x)) ? ${this.use("F")}() : x);`);
+    return `k_value(${code})`;
   }
 
   #valid(d: number, domain: string, kind: Kind, valid: (x: never) => boolean): string | undefined {
@@ -2915,6 +2989,7 @@ class Printer {
       const src = copied(fn, each, `the op "${op}" of the domain ${d.name}`);
       // An inline form cannot throw for primitive values only.
       this.#forms.set(name, lists.size === 0 && kinds.every((k) => primitiveOf(k) !== undefined) ? inlineForm(src) : undefined);
+      if (!givesValue(src) && this.#missesNoValue(site.returns)) this.#unproved.add(name);
       this.top.set(name, `const ${name} = ${src};`);
     }
     const form = this.#forms.get(name);
@@ -2923,12 +2998,13 @@ class Printer {
     if (inline) {
       const text = form.parts.map((x) => (typeof x === "number" ? `(${(values[x] as Code).v.code})` : x)).join("");
       const checked = this.check(site.returns);
-      const code = checked === undefined ? `(${text})` : `${checked}(${text})`;
-      return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: checked === undefined && values.every((x) => x.v.safe), deps } };
+      const value = this.#value(name, text);
+      const code = checked === undefined ? `(${value})` : `${checked}(${value})`;
+      return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: checked === undefined && value === text && values.every((x) => x.v.safe), deps } };
     }
     this.#called.add(name);
     // An exception of the op is an error of Vex: the boundary around the op catches it.
-    const code = this.#checked(site.returns, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`);
+    const code = this.#checked(site.returns, this.#value(name, `${name}(${values.map((x) => this.#plain(x.v)).join(", ")})`));
     return { s: stmtsOf(...values), v: { code, kind: site.returns, safe: false, deps } };
   }
 
@@ -4225,8 +4301,9 @@ class Printer {
     const site = this.#facts.staticSite(test.op, keyFirst ? [kind, t.v.kind] : [t.v.kind, kind]);
     if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
     // A static site of a domain has the function of the op of that domain.
-    const form = inlineForm(Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn));
-    if (form?.params.length !== 2) return undefined;
+    const src = Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn);
+    const form = inlineForm(src);
+    if (form?.params.length !== 2 || !givesValue(src)) return undefined;
     const before = tests.slice(0, at).map((x) => this.#hoist(this.expr(x, loop)));
     const after = tests.slice(at + 1).map((x) => this.#hoist(this.expr(x, loop)));
     const body = this.#hoist(this.expr(target.body, loop));

@@ -76,7 +76,7 @@ for (let i = 0; i < rounds; i++) {
   const t1 = performance.now();
   const trees = texts.map((t) => scan(t));
   const t2 = performance.now();
-  const { acorn } = await import("./names.mjs");
+  const { acorn } = await import("./zz-names.mjs");
   for (const t of texts) acorn.parse(t, { ecmaVersion: "latest", sourceType: "module" });
   const t3 = performance.now();
   pr.push(t1 - t0); sc.push(t2 - t1); pa.push(t3 - t2);

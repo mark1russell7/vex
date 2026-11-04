@@ -116,8 +116,8 @@ jobs:
       # also when the first gate fails, and the report keeps the lines of both.
       - if: ${{ !cancelled() }}
         run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a reports/bench.txt
-      # The schema pilot of Graph in the interpreter (EXAMPLE.SCHEMA): the target is 5 ms for one sample. The step fails
-      # only when a result is not the result of Graph. The time does not make it fail.
+      # The schema pilot in the interpreter (EXAMPLE.SCHEMA): the target is 5 ms for one sample. The step fails
+      # only when a result is not the result of the reference. The time does not make it fail.
       - if: ${{ !cancelled() }}
         run: COLD=1 BENCH_OUT=reports/schema-speed.json node packages/pilots/bench/schema-speed.ts | tee -a reports/bench.txt
       - if: ${{ !cancelled() }}

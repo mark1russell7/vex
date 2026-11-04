@@ -48,31 +48,16 @@ function SKI(l, f) {
   return l;
 }
 function T(f) { try { return f(); } catch { return E; } }
-const op_2_0 = (from, to, min, max) => ({
-			from,
-			to,
-			min,
-			max
-		});
+const op_2_0 = (from, to, min, max) => ({ from, to, min, max });
 const k_domain_Band = (x) => ((!Number.isNaN(x.from) && !Number.isNaN(x.to) && !Number.isNaN(x.min) && !Number.isNaN(x.max)) ? x : F());
-const op_3_1 = (a, along, across) => ({
-				from: a.from + along,
-				to: a.to + along,
-				min: a.min + across,
-				max: a.max + across
-			});
-const op_3_2 = (a) => a.to > a.from && a.max >= a.min;
-const op_3_4 = (a) => a.from === Number.NEGATIVE_INFINITY ? -1 : a.from === Number.POSITIVE_INFINITY ? 1 : 0;
+const op_3_1 = (a, along, across) => ({ from: a.from + along, to: a.to + along, min: a.min + across, max: a.max + across });
+const op_3_2 = a => a.to > a.from && a.max >= a.min;
+const op_3_4 = a => a.from === Number.NEGATIVE_INFINITY ? -1 : a.from === Number.POSITIVE_INFINITY ? 1 : 0;
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 const op_3_7 = (a, b) => a.from === b.from;
 const op_3_13 = (a, b) => a.to === b.from && a.min === b.min && a.max === b.max;
-const op_3_14 = (a, b) => ({
-				from: a.from,
-				to: b.to,
-				min: a.min,
-				max: a.max
-			});
-const is_3 = (u) => typeof u === "object" && u !== null && [Object.prototype, null].includes(Object.getPrototypeOf(u)) && Object.keys(u).length === 4 && typeof u.from === "number" && typeof u.to === "number" && typeof u.min === "number" && typeof u.max === "number";
+const op_3_14 = (a, b) => ({ from: a.from, to: b.to, min: a.min, max: a.max });
+const is_3 = u => typeof u === "object" && u !== null && [Object.prototype, null].includes(Object.getPrototypeOf(u)) && Object.keys(u).length === 4 && typeof u.from === "number" && typeof u.to === "number" && typeof u.min === "number" && typeof u.max === "number";
 export function nodeShape(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;

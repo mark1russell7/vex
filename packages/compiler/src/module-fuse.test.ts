@@ -84,8 +84,8 @@ describe("COMPILE.MODULE.FUSE.OFF: the option fuse", () => {
     // The hashes of the shapes of ireko in version 0.10 of the compiler, before step 3 of COMPILE-FUSE, with the writes of
     // TREEALLOC to the array of a run. With fuse false, each key has its own list, so the list is not frozen
     // (COMPILE.MODULE.LIST.RESULT).
-    expect(hash(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false })))).toBe("815b43e7abda0916");
-    expect(hash(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false })))).toBe("91a25086213c18bd");
+    expect(hash(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false })))).toBe("9d0cc39eceb23721");
+    expect(hash(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false })))).toBe("612da1766666530d");
     // The clean form changes the text of both modules.
     expect(sourceOf(emitModule(NODE_SHAPE, node))).not.toBe(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false })));
     expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes))).not.toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false })));

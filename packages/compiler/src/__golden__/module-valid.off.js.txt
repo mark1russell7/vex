@@ -8,7 +8,7 @@ function F() { throw E; }
 function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
-const v_0 = (x) => Number.isFinite(x) && typeof x === 'number' && x > -100;
+const v_0 = x => Number.isFinite(x) && typeof x === "number" && x > -100;
 const k_number = (x) => (Number.isFinite(x) && v_0(x) ? x : F());
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");

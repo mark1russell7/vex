@@ -3,7 +3,7 @@
 // variant that counts at each key, as the module did before the fix. The test in `limit-walk.test.ts` checks the edit.
 import { app, axes, dataLimit, index, iterate, let_, lit, rec, ref, v, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain } from "@mark1russell7/vex-domains";
-import { emitModule } from "../src/index.ts";
+import { emitModule } from "../src/module.ts";
 
 /** This type is the run of the module: an edge of a tree gives its ancestor and the two children below it. */
 export type WalkRun = (records: unknown, vars: unknown) => readonly unknown[];

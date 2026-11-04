@@ -71,7 +71,7 @@ The source has no name and no literal of the program. It reads each one from a l
 
 ### The options of a module
 
-`emitModule` and `emitSheetModule` take these options:
+`emitModule` and `emitSheetModule` come from the entry `@mark1russell7/vex-compiler/module`. This entry loads a parser, and the root entry does not. They take these options:
 
 | Option | What it does |
 |---|---|

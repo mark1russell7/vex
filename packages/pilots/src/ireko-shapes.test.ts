@@ -1,5 +1,5 @@
 import { evaluate, isVexList, SheetRun, space } from "@mark1russell7/vex";
-import { emitModule, emitSheetModule } from "@mark1russell7/vex-compiler";
+import { emitModule, emitSheetModule } from "@mark1russell7/vex-compiler/module";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BandDomain, type Band } from "./ireko-band.ts";

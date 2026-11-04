@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, monotoneError, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, joinKind, limitAxis, listOf, lit, monotoneError, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -265,6 +265,12 @@ const withNames = (env: ReadonlyMap<string, Name>, items: ReadonlyMap<string, Na
  */
 const CELLS = -1;
 
+/**
+ * The level of a read of a column in its step (COMPILE.FIX.MODULE). A row changes in each round. Thus a value that reads
+ * a row is not a constant or a column of the run. The `fix` node removes this level.
+ */
+const ROUNDS = -2;
+
 /** The name of the function of a run of a sheet that reads a cell: its column and its position. */
 const READ_CELL = "RC";
 
@@ -307,6 +313,14 @@ interface Ctx {
   readonly keys: ReadonlyMap<Expr, Name>;
   /** The bound functions (FN.BIND), with the context of their binding. */
   readonly fns: ReadonlyMap<string, BoundFn>;
+  /** The columns of the steps around the node (COMPILE.FIX.MODULE): the name of the array of the last round, and its kind. */
+  readonly columns: ReadonlyMap<string, FixColumn>;
+}
+
+/** A column in the step of its `fix`: the name of the array with the value of each row, and the kind of the values. */
+interface FixColumn {
+  readonly code: string;
+  readonly kind: Kind;
 }
 
 /** The code of the step of one name of a loop: the statements of its new value and the statement that sets it. */
@@ -1249,7 +1263,7 @@ function listy(e: Expr, scope: ListScope): boolean {
     case "fold":
     case "iterate":
       return listy(e.result, scopeIn(e.init, scope));
-    // A module has no `fix`, and a column gives a boolean or a number (COMPILE.FIX).
+    // A column gives a boolean or a number (FIX.KIND).
     case "fix":
     case "last":
       return false;
@@ -1413,9 +1427,9 @@ function refsOf(e: Expr, name: string): number {
       return refsIn(Object.values(e.bind), name) + (name in e.bind ? 0 : refsOf(e.body, name));
     case "fn":
       return e.params.includes(name) ? 0 : again(refsOf(e.body, name));
-    // A module has no `fix`. The printer gives the reason (COMPILE.FIX).
+    // The first values and the step evaluate at each row (FIX.ROUNDS).
     case "fix":
-      return refsOf(e.init, name) + again(refsOf(e.step, name));
+      return again(refsOf(e.init, name) + refsOf(e.step, name));
     case "last":
       return 0;
     case "each": {
@@ -1489,6 +1503,9 @@ function readCounts(root: Expr): ReadonlyMap<Expr, number> {
         });
         return;
       }
+      case "fix":
+        all(children(e), Infinity);
+        return;
       case "fold":
       case "iterate": {
         const names = new Set([...Object.values(e.init), ...Object.values(e.step)]);
@@ -1498,7 +1515,6 @@ function readCounts(root: Expr): ReadonlyMap<Expr, number> {
       case "each":
       // Stryker disable next-line StringLiteral: an extension has no children.
       case "ext":
-      case "fix":
       case "last":
       case "fn":
       // Stryker disable next-line StringLiteral: a literal has no children.
@@ -1643,7 +1659,7 @@ function nestsLoops(e: Expr, inLoop = false): boolean {
 function hasLoop(e: Expr): boolean {
   let found = LOOPS.get(e);
   if (found === undefined) {
-    found = e.tag === "fold" || e.tag === "iterate" || children(e).some(hasLoop);
+    found = e.tag === "fold" || e.tag === "iterate" || e.tag === "fix" || children(e).some(hasLoop);
     LOOPS.set(e, found);
   }
   return found;
@@ -2293,8 +2309,8 @@ class Printer {
    */
   #columnar(e: Expr, c: Code, ctx: Ctx): boolean {
     // A node of the memo has the level 1, so a column has a focus. The results of the cells change in a run, so a part
-    // that reads a cell is not a column.
-    if (ctx.level < 2 || c.v.deps.has(CELLS) || !c.v.deps.has(ctx.level) || this.#work(e, ctx.fns) < COLUMN_WORK) return false;
+    // that reads a cell is not a column. The rows of a column change in each round, so a part that reads one is not either.
+    if (ctx.level < 2 || c.v.deps.has(CELLS) || c.v.deps.has(ROUNDS) || !c.v.deps.has(ctx.level) || this.#work(e, ctx.fns) < COLUMN_WORK) return false;
     const scope = this.#callScope(c, ctx);
     if (c.v.deps.size !== 1 && scope === undefined) return false;
     // A node of the memo with keys keeps its costly part for each value of its keys already.
@@ -2445,9 +2461,12 @@ class Printer {
       case "iterate":
         return this.#iterate(e, ctx);
       case "fix":
-      case "last":
-        // COMPILE.FIX: a module refuses a fixed point with a reason. Tier 1 and the kernel run it.
-        throw new NotStandalone('a fixed point ("fix"), which a module does not have yet');
+        return this.#fix(e, ctx);
+      case "last": {
+        // The check of the program comes before the printer, so each read has its column (FIX.MONOTONE).
+        const { code, kind } = ctx.columns.get(e.name) as FixColumn;
+        return bare({ code: `${code}[${ctx.focus as string}]`, kind, safe: true, deps: new Set([ctx.level, ROUNDS]) });
+      }
       case "ext":
         return this.#cell(e, ctx);
     }
@@ -2802,7 +2821,7 @@ class Printer {
     // The value of a call can be a list, as the value of a let can (COMPILE.MODULE.LIST.CALL). The call is at a place
     // that takes a list, or it gives the reason.
     this.#wantList.add(bound.fn.body);
-    const body = this.expr(bound.fn.body, { origin: o, focus: k, level: focus, originLevel: origin, env, fns: bound.ctx.fns, keys: new Map() });
+    const body = this.expr(bound.fn.body, { origin: o, focus: k, level: focus, originLevel: origin, env, fns: bound.ctx.fns, keys: new Map(), columns: new Map() });
     this.#scopes.pop();
     const markers = new Set([origin, focus, param]);
     const global = [...body.v.deps].every((d) => markers.has(d));
@@ -3030,6 +3049,60 @@ class Printer {
    * A list op over an axis: one `for` loop with a running value. An item with an error is skipped, and with `strict` it
    * is an error of the list op. A value of the wrong kind is an error of the list op, as in the interpreter.
    */
+  /**
+   * This method prints a fixed point (COMPILE.FIX.MODULE). The column is an array with the value of each position. The
+   * rows of `init` give its first values, and each round makes the array of the next values. A round without a change
+   * ends the loop with the old array (FIX.ROUNDS). The last round that still changes a row throws (FIX.LIMIT). Each
+   * error of a module is one sentinel, so the first row that fails can stop the column. A column that reads no key is
+   * a constant of the run. It evaluates on its first read, as a branch of the interpreter does.
+   */
+  #fix(e: ExprOf<"fix">, ctx: Ctx): Code {
+    const kind = joinKind(e.join);
+    const old = this.fresh("fx");
+    const next = this.fresh("fx");
+    const changed = this.fresh("ch");
+    const round = this.fresh("k");
+    const first = this.#rows(e, e.init, ctx, (x, j) => [`${old}[${j}] = ${x};`]);
+    const step = this.#rows(e, e.step, { ...ctx, columns: new Map([...ctx.columns, [e.name, { code: old, kind }]]) }, (x, j) => {
+      const y = this.fresh("y");
+      const read = `${old}[${j}]`;
+      const joined = e.join === "or" ? `${read} || ${x}` : e.join === "and" ? `${read} && ${x}` : `Math.${e.join}(${read}, ${x})`;
+      return [`const ${y} = ${joined};`, `if (${y} !== ${read}) ${changed} = true;`, `${next}[${j}] = ${y};`];
+    });
+    const s = [
+      `let ${old} = [];`,
+      ...first.s,
+      `for (let ${round} = 0; ; ${round}++) {`,
+      `  if (${round} === Math.min(n + 1, ${MAX_ITERATIONS})) ${this.use("F")}();`,
+      `  const ${next} = [];`,
+      `  let ${changed} = false;`,
+      ...ind(step.s),
+      `  if (!${changed}) break;`,
+      `  ${old} = ${next};`,
+      "}",
+    ];
+    const held = this.#hoist({ s, v: { code: old, kind: undefined, safe: false, deps: new Set([...first.deps, ...step.deps]) } }, true);
+    return { s: held.s, v: { code: `${held.v.code}[${ctx.focus as string}]`, kind, safe: false, deps: new Set([...held.v.deps, ctx.level]) } };
+  }
+
+  /**
+   * This method prints the loop over the rows of a column: the evaluation of `x` and the check of its kind (FIX.KIND).
+   * `store` gives the statements of a good value. A search of a sheet must see each read of a cell, so a row that reads
+   * a cell does not stop the loop (FIX.ERROR). A flag holds the failure until the end of the loop.
+   */
+  #rows(e: ExprOf<"fix">, x: Expr, ctx: Ctx, store: (value: string, row: string) => readonly string[]): { readonly s: readonly string[]; readonly deps: ReadonlySet<number> } {
+    const { j, head, inner } = this.#targetLoop({ t: "all" }, [], ctx);
+    const c = this.#hoist(this.expr(x, inner), hasLoop(x));
+    const v = this.fresh("x");
+    const F = this.use("F");
+    const boolean = joinKind(e.join) === "boolean";
+    const row = [...c.s, `const ${v} = ${boolean ? this.#boolean(c.v) : c.v.code};`, ...(boolean ? [] : [`if (!Number.isFinite(${v})) ${F}();`]), ...store(v, j)];
+    const deps = new Set([...c.v.deps].filter((d) => d !== inner.level && d !== ROUNDS));
+    if (!c.v.deps.has(CELLS)) return { s: [head, ...ind(row), "}"], deps };
+    const failed = this.fresh("f");
+    return { s: [`let ${failed} = false;`, head, ...ind(["try {", ...ind(row), "} catch {", `  ${failed} = true;`, "}"]), "}", `if (${failed}) ${F}();`], deps };
+  }
+
   /**
    * This method gives the loop over the targets of an axis: the statements before it, its bounds and the key that it
    * skips. `start` has the levels of the address, and `inner` is the position at a target. The axes all, others,
@@ -3338,7 +3411,7 @@ class Printer {
    */
   #packable(e: Expr, fns: ReadonlyMap<string, BoundFn>, seen: Set<number>): boolean {
     if (this.#columned.has(e)) return true;
-    if (e.tag === "each" || e.tag === "fold" || e.tag === "iterate" || e.tag === "ext" || this.#memo.has(e)) return false;
+    if (e.tag === "each" || e.tag === "fold" || e.tag === "iterate" || e.tag === "fix" || e.tag === "ext" || this.#memo.has(e)) return false;
     if (e.tag === "let" && Object.values(e.bind).some((x) => x.tag === "fn")) return false;
     if (e.tag === "call") {
       const bound = fns.get(e.fn);
@@ -4168,7 +4241,7 @@ class Printer {
     );
     const outer = this.#inside;
     this.#inside = e;
-    const bodyCtx: Ctx = { origin: undefined, focus: undefined, level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: names };
+    const bodyCtx: Ctx = { origin: undefined, focus: undefined, level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: names, columns: new Map() };
     if (varying.length === 0) {
       const body = this.#hoist(this.expr(e, bodyCtx));
       this.#inside = outer;
@@ -4296,7 +4369,7 @@ class Printer {
   root(expr: Expr): Code {
     // The value of a program and of a cell can be a list (COMPILE.MODULE.LIST.RESULT).
     this.#wantList.add(expr);
-    return this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: new Map() }));
+    return this.#hoist(this.expr(expr, { origin: "o", focus: "o", level: 1, originLevel: 1, env: new Map(), fns: new Map(), keys: new Map(), columns: new Map() }));
   }
 
   /** This method removes the declarations that no code reads, after the last program. */

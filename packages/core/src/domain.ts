@@ -26,15 +26,18 @@ export type ReturnKind = ParamKind | `domain:${string}`;
  * - `"each"`: the size adds one time for each item of the first argument.
  * - `"number"`: the argument is a number that sets a count. A literal number gives that count, and another number
  *   gives a fixed bound.
+ * - `"limit"`: the size adds one time for each item that the literal number at the position `limit` keeps, and each item
+ *   adds a key with a fixed bound. Without a literal number, this use is the same as `"many"`.
  */
-export type SizeUse = 0 | 1 | "scaled" | "many" | "unbounded" | "text" | "copies" | "each" | "number";
+export type SizeUse = 0 | 1 | "scaled" | "many" | "unbounded" | "text" | "copies" | "each" | "number" | "limit";
 
 /**
  * A measure of a value for the check of sizes (LOOP.SIZE.OPS). `size` is the size of the value, and `count` is the
  * number of its items. `inner` is the sum of the counts of the values of its items. `item` is the size of its largest
- * item.
+ * item. The items of a record are its fields, and a text is its own item. `part` is the largest `item` of its items. It is
+ * not larger than `item`.
  */
-export type SizeMeasure = "size" | "count" | "inner" | "item";
+export type SizeMeasure = "size" | "count" | "inner" | "item" | "part";
 
 /** One term of a size rule: a use of the same measure of the argument, or a use of the measure that the pair names. */
 export type SizeTerm = SizeUse | readonly [use: SizeUse, of: SizeMeasure];
@@ -46,28 +49,36 @@ export type SizeTerm = SizeUse | readonly [use: SizeUse, of: SizeMeasure];
  * - `"scalar"`: the result is a number or a boolean.
  * - `"fixed"`: the result has a size with a fixed bound, for example a 2D vector.
  * - `"reduce"`: the rule of the list op `reduce`. The op that its second argument names gives the size.
- * - A record: `size`, `count`, `inner` and `item` have one term for each argument. `rest` is the use of the arguments
- *   after them, and its default is `"many"`. Without `count`, `inner` or `item`, that measure of the result is its size.
- *   The terms of `item` give the largest bound of the arguments, because the largest item comes from one argument. A literal
- *   number at the position `limit` sets the count. With `keys: "position"`, the items get their positions as new keys.
- *   With `constant: true`, the result can also hold a part with a fixed size. With `union: true`, the result holds
- *   each key of its arguments one time, so the bound of the result is the largest bound of the arguments.
+ * - A record: `SizeTerms`.
  */
-export type SizeRule =
-  | "scalar"
-  | "fixed"
-  | "reduce"
-  | {
-      readonly size: readonly SizeTerm[];
-      readonly count?: readonly SizeTerm[];
-      readonly inner?: readonly SizeTerm[];
-      readonly item?: readonly SizeTerm[];
-      readonly rest?: SizeUse;
-      readonly limit?: number;
-      readonly keys?: "position";
-      readonly constant?: true;
-      readonly union?: true;
-    };
+export type SizeRule = "scalar" | "fixed" | "reduce" | SizeTerms;
+
+/**
+ * The size rule of an op as data (LOOP.SIZE.OPS). `size`, `count`, `inner`, `item` and `part` have one term for each
+ * argument. `rest` is the use of the arguments after them, and its default is `"many"`. Without `count`, `inner` or `item`,
+ * that measure of the result is its size. Without `part`, the largest part of the result is its largest item. The terms of
+ * `item` and `part` give the largest bound of the arguments, because the largest item comes from one argument. A literal
+ * number at the position `limit` sets the count. With `keys: "position"`, the items get their positions as new keys. With
+ * `constant: true`, the result can also hold a part with a fixed size. With `union: true`, the result holds each key of
+ * its arguments one time, so the bound of the result is the largest bound of the arguments.
+ *
+ * `byParts` is a second rule for a result that is a part of an argument, or that holds a fixed number of its items. The
+ * second reading of the check uses this rule (LOOP.SIZE.READINGS). A rule with `limit` keeps the first rule when the limit
+ * is not a literal number or when a key can be long.
+ */
+export interface SizeTerms {
+  readonly size: readonly SizeTerm[];
+  readonly count?: readonly SizeTerm[];
+  readonly inner?: readonly SizeTerm[];
+  readonly item?: readonly SizeTerm[];
+  readonly part?: readonly SizeTerm[];
+  readonly rest?: SizeUse;
+  readonly limit?: number;
+  readonly keys?: "position";
+  readonly constant?: true;
+  readonly union?: true;
+  readonly byParts?: SizeTerms;
+}
 
 /** The description of one op of a domain. */
 export interface OpSpec<D = never> {

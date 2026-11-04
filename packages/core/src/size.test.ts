@@ -87,6 +87,8 @@ const one = (x: Expr): Expr => app("fill", lit(1), x);
 const step = (init: Expr, next: (x: Expr) => Expr, limit = 12): Expr => iterate(limit, { x: init }, { x: next(v("x")) }, app("count", v("x")));
 const folded = (init: Expr, next: (x: Expr) => Expr): Expr => fold(axes.all, { x: init }, { x: next(v("x")) }, v("x"));
 
+const isList = (u: unknown): u is { readonly items: readonly unknown[] } => typeof u === "object" && u !== null && (u as { readonly kind?: unknown }).kind === "vex.list";
+
 const TWELVE = space.array(Array.from({ length: 12 }, (_x, i) => ({ n: i })));
 
 describe("the size check of the loops (LOOP.SIZE)", () => {
@@ -126,11 +128,12 @@ describe("the size check of the loops (LOOP.SIZE)", () => {
     expect(check(copies)).toBe(refusal("x", TWICE, 'a node "each"'));
     // The item of each is one use. In the step of an inner fold, the item of an outer list counts as many uses.
     expect(check(folded(NONE, (x) => each(axes.list(x), app("add", v("it"), lit(1)), undefined, ["it"])))).toBeUndefined();
-    // A body that reads two measures of the item can hold more than one copy of the item.
-    const two = folded(one(one(lit(1))), (x) => each(axes.list(x), app("append", v("it"), one(app("first", v("it")))), undefined, ["it"]));
+    // A body with two copies of the item doubles each item.
+    const two = folded(one(one(lit(1))), (x) => each(axes.list(x), app("append", v("it"), v("it")), undefined, ["it"]));
     expect(check(two)).toBe(refusal("x", TWICE, 'a node "each"'));
-    const inner = folded(NONE, (x) => fold(axes.list(x), { s: NONE }, { s: app("append", v("s"), one(v("it"))) }, v("s"), undefined, ["it", "i"]));
-    expect(check(inner)).toBe(refusal("x", "a value that uses the lists of the loop more than one time in its largest item", 'the name "s"'));
+    // A body that holds the name of the outer loop adds a copy of the list for each item.
+    const inner = folded(NONE, (x) => fold(axes.list(x), { s: NONE }, { s: app("append", v("s"), x) }, v("s"), undefined, ["it", "i"]));
+    expect(check(inner)).toBe(refusal("x", TWICE, 'the name "s"'));
   });
 
   it("LOOP.SIZE: a chain of two names that doubles is not valid", () => {
@@ -197,7 +200,7 @@ describe("the size check of the loops (LOOP.SIZE)", () => {
     valid((x) => app("fill", lit(1), app("nth", x, lit(0))));
     valid((x) => app("fill", lit(1), app("first", x)));
     valid((x) => app("keys", x));
-    expect(check(step(one(lit(1)), (x) => app("take", app("append", x, app("keys", x)), lit(1))))).toBe(refusal("x", TWICE, 'the op "append"', "iterate"));
+    expect(check(step(one(lit(1)), (x) => app("drop", app("append", x, app("keys", x)), lit(1))))).toBe(refusal("x", TWICE, 'the op "append"', "iterate"));
     expect(check(step(one(lit(1)), (x) => app("group", x, lit("k"))))).toBeUndefined();
     expect(check(step(one(lit(1)), (x) => app("errors", x)))).toBe(refusal("x", TWICE, 'the op "errors"', "iterate"));
   });
@@ -282,7 +285,7 @@ describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
 
   it("LOOP.SIZE.SETNTH: a value that holds the list counts the list two times, so the check refuses it", () => {
     expect(check(folded(NONE, (x) => set(x, x)))).toBe(refusal("x", TWICE, 'the op "setNth"'));
-    expect(check(folded(NONE, (x) => set(x, app("take", x, lit(1)))))).toBe(refusal("x", TWICE, 'the op "setNth"'));
+    expect(check(folded(NONE, (x) => set(x, app("drop", x, lit(1)))))).toBe(refusal("x", TWICE, 'the op "setNth"'));
     expect(check(folded(NONE, (x) => set(x, app("flat", x))))).toBe(refusal("x", TWICE, 'the op "setNth"'));
     expect(check(folded(NONE, (x) => set(x, app("values", x))))).toBe(refusal("x", TWICE, 'the op "setNth"'));
     // An each with a fixed body has one small item for each item, so the bound stays linear.
@@ -293,7 +296,7 @@ describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
   it("LOOP.SIZE.SETNTH: a value that holds two old items doubles the largest item, so the check refuses it", () => {
     expect(check(folded(LISTS, (x) => set(x, app("append", itemOf(x), itemOf(x)))))).toBe(refusal("x", ITEM, 'the op "setNth"'));
     expect(check(folded(LISTS, (x) => set(x, app("append", itemOf(x), itemOf(x, 1)))))).toBe(refusal("x", ITEM, 'the op "setNth"'));
-    expect(check(folded(NONE, (x) => set(x, rec({ a: itemOf(x), b: itemOf(x, 1) }))))).toBe(refusal("x", ITEM, 'a node "rec"'));
+    expect(check(folded(NONE, (x) => set(x, rec({ a: itemOf(x), b: itemOf(x, 1) }))))).toBe(refusal("x", ITEM, 'the op "setNth"'));
     expect(check(folded(NONE, (x) => set(x, app("fill", lit(2), itemOf(x)))))).toBe(refusal("x", "a largest item that can grow by a factor at each step", 'the op "setNth"'));
     expect(check(folded(LISTS, (x) => set(x, app("flat", app("fill", ref("n"), itemOf(x))))))).toBeDefined();
   });
@@ -312,6 +315,189 @@ describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
     expect(check(step(numbers, (x) => set(x, lit(1))))).toBeUndefined();
     expect(check(iterate(3, { x: numbers }, { x: set(v("x"), lit("a")) }, app("sum", v("x"))))).toBeUndefined();
     expect(check(step(numbers, (x) => app("append", set(x, lit(1)), lit(vexList([])))))).toBeUndefined();
+  });
+});
+
+describe("the bound of a step: the largest value of some sums (LOOP.SIZE.BRANCH)", () => {
+  const big = app("gt", ref("n"), lit(3));
+  const when = (yes: Expr, no: Expr): Expr => app("if", big, yes, no);
+  const pair = (a: Expr, b: Expr): Expr => iterate(12, { a: NONE, b: NONE }, { a, b }, v("a"));
+  /** The names `a1` to `a<n>`. Each name gets the old value of the next names, in a chain of `if`. */
+  const ring = (n: number, also: (names: readonly string[]) => readonly Expr[] = () => []): Expr => {
+    const names = Array.from({ length: n }, (_x, i) => `a${String(i + 1)}`);
+    const next = names.map((_x, i) => {
+      const order = [...names.slice(i + 1), ...names.slice(0, i + 1)].map((name) => v(name));
+      const [head, ...rest] = [...also(names), ...order].toReversed();
+      return [names[i] as string, rest.reduce((acc, x) => when(x, acc), head as Expr)];
+    });
+    return iterate(12, Object.fromEntries(names.map((name) => [name, NONE])), Object.fromEntries(next) as Readonly<Record<string, Expr>>, v("a1"));
+  };
+
+  it("LOOP.SIZE.BRANCH: an `if` gives the larger value of its branches, not their sum", () => {
+    expect(check(pair(when(v("b"), v("a")), when(v("a"), v("b"))))).toBeUndefined();
+    expect(check(pair(when(v("b"), app("append", v("a"), one(lit(1)))), when(v("a"), v("b"))))).toBeUndefined();
+    // A step that holds the two names in one branch is a sum of the two names.
+    expect(check(pair(when(app("append", v("a"), v("b")), v("a")), when(v("a"), v("b"))))).toBe(refusal("a", TWICE, 'the op "append"', "iterate"));
+    expect(check(pair(app("append", when(v("a"), v("b")), when(v("b"), v("a"))), v("a")))).toBe(refusal("a", TWICE, 'the op "append"', "iterate"));
+    expect(check(pair(app("fill", lit(2), when(v("a"), v("b"))), when(v("a"), v("b"))))).toBeDefined();
+  });
+
+  it("LOOP.SIZE.BRANCH: a branch without a name of the cycle sets the value again, so it does not add at each step", () => {
+    const start = (x: Expr): Expr => when(one(x), app("append", v("y"), one(x)));
+    const inner = (x: Expr): Expr => fold(axes.list(x), { y: NONE }, { y: when(x, v("y")) }, v("y"), undefined, ["it"]);
+    expect(check(folded(NONE, (x) => app("take", inner(x), lit(1))))).toBeUndefined();
+    expect(check(folded(NONE, inner))).toBeUndefined();
+    expect(check(folded(NONE, (x) => fold(axes.list(x), { y: NONE }, { y: start(lit(1)) }, v("y"), undefined, ["it"])))).toBeUndefined();
+    // A branch that adds the name of the outer loop to the name of the inner loop adds at each step.
+    expect(check(folded(NONE, (x) => fold(axes.list(x), { y: NONE }, { y: when(app("append", v("y"), x), v("y")) }, v("y"), undefined, ["it"])))).toBeDefined();
+    // Without a step, the value keeps its first value, and the sets of a loop with no steps are the first step.
+    expect(check(folded(NONE, (x) => fold(axes.list(NONE), { y: NONE }, { y: x }, v("y"))))).toBeUndefined();
+  });
+
+  it("LOOP.SIZE.BRANCH: a bound has at most eight sums, and a sum that another sum covers does not count", () => {
+    expect(check(ring(8))).toBeUndefined();
+    expect(check(ring(9))).toBe(refusal("a1", TWICE, 'the op "if"', "iterate"));
+    // The same name again in a branch, and a branch with one more item than another branch, add no sum.
+    expect(check(ring(8, (names) => [v(names[0] as string), v(names[1] as string)]))).toBeUndefined();
+    expect(check(ring(8, (names) => [v(names[1] as string), app("append", v(names[1] as string), one(lit(1)))]))).toBeUndefined();
+    expect(check(ring(8, (names) => [app("append", v(names[1] as string), one(lit(1))), v(names[1] as string)]))).toBeUndefined();
+  });
+
+  it("LOOP.SIZE.BRANCH: a sum over the items of `each` covers each branch, because each item takes one branch", () => {
+    const body = (x: Expr): Expr => each(axes.list(x), when(v("it"), app("first", v("it"))), undefined, ["it"]);
+    expect(check(folded(one(one(lit(1))), body))).toBeUndefined();
+    const more = (x: Expr): Expr => each(axes.list(x), when(app("append", v("it"), v("it")), app("first", v("it"))), undefined, ["it"]);
+    expect(check(folded(one(one(lit(1))), more))).toBe(refusal("x", TWICE, 'a node "each"'));
+  });
+});
+
+describe("a step that copies a list (LOOP.SIZE.COPY)", () => {
+  const copy = (list: Expr, start: Expr = NONE): Expr => fold(axes.list(list), { acc: start }, { acc: app("append", v("acc"), one(v("it"))) }, v("acc"), undefined, ["it"]);
+  const ZERO = app("fill", lit(0), lit(0));
+  const grown = (x: Expr): Expr => app("append", x, one(ref("n")));
+
+  it("LOOP.SIZE.COPY: a fold that copies a list of the loop item by item has the bound of the list", () => {
+    expect(check(folded(NONE, (x) => copy(grown(x))))).toBeUndefined();
+    expect(check(folded(ZERO, (x) => copy(grown(x), ZERO)))).toBeUndefined();
+    expect(check(folded(NONE, (x) => iterate(axes.list(x), { acc: NONE }, { acc: app("append", v("acc"), one(lit(1))) }, v("acc"))))).toBeUndefined();
+    const run = evaluate(folded(NONE, (x) => copy(grown(x))), { space: TWELVE, origin: "0" });
+    expect(run.ok && isList(run.value) ? run.value.items.length : -1).toBe(12);
+  });
+
+  it("LOOP.SIZE.COPY: a copy with more than one copy of each item doubles, so the check refuses it", () => {
+    const twice = (list: Expr): Expr => fold(axes.list(list), { acc: NONE }, { acc: app("append", app("append", v("acc"), one(v("it"))), one(v("it"))) }, v("acc"), undefined, ["it"]);
+    expect(check(folded(NONE, twice))).toBe(refusal("x", "a number of items that can grow by a factor at each step", 'the name "acc"'));
+    expect(check(folded(NONE, (x) => app("append", x, copy(x))))).toBe(refusal("x", "a value that uses the lists of the loop more than one time in its number of items", 'the op "append"'));
+    const outer = (x: Expr): Expr => fold(axes.list(x), { acc: NONE }, { acc: app("append", v("acc"), x) }, v("acc"), undefined, ["it"]);
+    expect(check(folded(NONE, outer))).toBe(refusal("x", TWICE, 'the name "acc"'));
+  });
+});
+
+describe("the largest part of an item (LOOP.SIZE.PART, LOOP.SIZE.READINGS)", () => {
+  /** A domain with the op `at`: the rule of `field` of the domain of JSON values. */
+  const Rows = defineDomain({
+    name: "Rows",
+    is: (u: unknown): u is object => typeof u === "object" && u !== null && !isList(u),
+    ops: {
+      at: {
+        fn: (o: object, k: string): unknown => (o as Readonly<Record<string, unknown>>)[k],
+        size: { size: [1, 0], byParts: { size: [[1, "item"], 0], count: [[1, "item"], 0], inner: [[1, "item"], 0], item: [[1, "part"], 0], part: [[1, "part"], 0] } },
+      },
+    },
+  });
+  const opts: SizeOptions = { domains: [Rows], fns: FNS };
+  const row = (a: unknown, b: unknown): Expr => lit(vexList([{ key: "0", result: ok({ a, b }) }, { key: "1", result: ok({ a, b }) }]));
+  const ROWS = row(vexList([]), 1);
+  const at = (o: Expr, k: string): Expr => app("at", o, lit(k));
+  const first = (x: Expr): Expr => app("nth", x, lit(0));
+  const set = (x: Expr, value: Expr): Expr => app("setNth", x, lit(0), value);
+  const fields = (o: Expr): Expr => rec({ a: at(o, "a"), b: at(o, "b") });
+  const same = (o: Expr): Expr => rec({ a: at(o, "a"), b: at(o, "a") });
+  const ITEM = "a value that uses the lists of the loop more than one time in its largest item";
+  const LISTS = lit(vexList([{ key: "0", result: ok(vexList([{ key: "a", result: ok(1) }])) }, { key: "1", result: ok(vexList([{ key: "b", result: ok(2) }])) }]));
+  const each_ = (x: Expr, body: Expr): Expr => each(axes.list(x), body, undefined, ["it"]);
+
+  it("LOOP.SIZE.PART: a record from the fields of one item has the bound of the largest field", () => {
+    expect(check(folded(ROWS, (x) => set(x, fields(first(x)))), opts)).toBeUndefined();
+    expect(check(folded(ROWS, (x) => set(x, same(first(x)))), opts)).toBeUndefined();
+    expect(check(folded(ROWS, (x) => app("append", x, one(fields(first(x))))), opts)).toBeUndefined();
+    expect(check(folded(ROWS, (x) => set(x, fields(app("first", x)))), opts)).toBeUndefined();
+    expect(check(folded(ROWS, (x) => set(x, fields(app("get", x, lit("0"))))), opts)).toBeUndefined();
+    expect(check(step(rec({ a: lit("x"), b: lit("y") }), (x) => same(x)), opts)).toBeUndefined();
+  });
+
+  it("LOOP.SIZE.PART: each op that keeps the items of a list keeps the largest part", () => {
+    const again = (list: (x: Expr) => Expr): Expr => folded(ROWS, (x) => set(x, fields(first(list(x)))));
+    for (const op of ["sortBy", "take", "drop", "without", "append"]) expect(check(again((x) => app(op, x, op === "append" ? ROWS : op === "without" ? NONE : lit(1))), opts)).toBeUndefined();
+    expect(check(again((x) => app("distinct", x)), opts)).toBeUndefined();
+    expect(check(again((x) => app("values", x)), opts)).toBeUndefined();
+    expect(check(again((x) => set(x, first(x))), opts)).toBeUndefined();
+    expect(check(again((x) => fold(axes.list(x), { acc: NONE }, { acc: app("append", v("acc"), one(v("it"))) }, v("acc"), undefined, ["it"])), opts)).toBeUndefined();
+    expect(check(folded(ROWS, (x) => app("append", x, app("fill", lit(1), fields(first(x))))), opts)).toBeUndefined();
+    expect(check(folded(ROWS, (x) => each_(x, fields(v("it")))), opts)).toBeUndefined();
+    expect(check(folded(ROWS, (x) => fold(axes.list(x), { acc: NONE }, { acc: app("append", v("acc"), one(fields(v("it")))) }, v("acc"), undefined, ["it"])), opts)).toBeUndefined();
+    expect(check(folded(LISTS, (x) => set(x, rec({ a: app("first", app("flat", x)), b: app("first", app("flat", x)) }))), opts)).toBeUndefined();
+    // Each row of a fixed `each` holds one item at most, so the bound does not grow.
+    expect(check(folded(ROWS, (x) => app("append", app("take", x, lit(1)), each(axes.all, fields(first(x))))), opts)).toBeUndefined();
+  });
+
+  it("LOOP.SIZE.PART: a read of a field does not give a whole item, and a value that holds a part two times doubles the part", () => {
+    expect(check(folded(ROWS, (x) => set(x, rec({ a: first(x), b: first(x) }))), opts)).toBe(refusal("x", ITEM, 'the op "setNth"'));
+    expect(check(folded(ROWS, (x) => set(x, rec({ a: app("append", at(first(x), "a"), at(first(x), "a")), b: lit(1) }))), opts)).toBe(refusal("x", ITEM, 'a node "rec"'));
+    expect(check(folded(ROWS, (x) => set(x, rec({ a: rec({ c: at(first(x), "a"), d: at(first(x), "a") }), b: lit(1) }))), opts)).toBe(refusal("x", ITEM, 'a node "rec"'));
+    expect(check(folded(ROWS, (x) => app("append", x, x)), opts)).toBe(refusal("x", TWICE, 'the op "append"'));
+    expect(check(folded(ROWS, (x) => set(x, each_(x, at(v("it"), "a")))), opts)).toBeDefined();
+  });
+
+  it("LOOP.SIZE.PART: a fixed number of items of a list has the bound of the largest item", () => {
+    const take = (x: Expr, k: number): Expr => app("take", x, lit(k));
+    expect(check(folded(LISTS, (x) => app("append", take(x, 2), take(x, 3))), opts)).toBeUndefined();
+    expect(check(folded(LISTS, (x) => app("append", x, take(x, 1))), opts)).toBeUndefined();
+    expect(check(folded(LISTS, (x) => set(x, take(x, 1))), opts)).toBeUndefined();
+    expect(check(folded(NONE, (x) => app("append", take(x, 0), take(x, 0))), opts)).toBeUndefined();
+    // Two items in the new value of one item double the largest item.
+    expect(check(folded(LISTS, (x) => set(x, take(x, 2))), opts)).toBeDefined();
+    expect(check(folded(LISTS, (x) => app("append", x, x)), opts)).toBeDefined();
+  });
+
+  it("LOOP.SIZE.PART: a limit that is not a literal number, or a long key, keeps the bound of the whole list", () => {
+    const n = (x: Expr): Expr => app("take", x, ref("n"));
+    expect(check(folded(LISTS, (x) => app("append", n(x), n(x))), opts)).toBe(refusal("x", TWICE, 'the op "append"'));
+    const grouped = (x: Expr): Expr => app("take", app("group", x, lit("k")), lit(1));
+    expect(check(folded(LISTS, (x) => app("append", grouped(x), grouped(x))), opts)).toBeDefined();
+    // The keys of a group are long, also when the kinds of the names of the loop have no fixed point.
+    const keys = iterate(12, { x: LISTS, y: NONE }, { x: app("append", app("take", v("y"), lit(1)), app("take", v("y"), lit(1))), y: app("group", v("x"), lit("k")) }, v("x"));
+    expect(check(keys, opts)).toBeDefined();
+  });
+
+  it("LOOP.SIZE.PART: more than one use of each item of `each` has the bound of the count times the largest item", () => {
+    expect(check(folded(LISTS, (x) => each_(x, app("append", app("take", v("it"), lit(1)), app("take", v("it"), lit(1))))), opts)).toBeUndefined();
+    expect(check(folded(LISTS, (x) => each_(x, app("append", v("it"), one(app("first", v("it")))))), opts)).toBeUndefined();
+    expect(check(folded(ROWS, (x) => each_(x, same(v("it")))), opts)).toBeUndefined();
+    // A body with two copies of the item doubles the largest item, and a body without a bound has no bound.
+    expect(check(folded(LISTS, (x) => each_(x, app("append", v("it"), v("it")))), opts)).toBeDefined();
+    expect(check(folded(LISTS, (x) => each_(x, app("wild", rec({ a: v("it"), b: v("it") })))), opts)).toContain('The op "wild" has no size rule');
+    // A key of a group is long, so the sum over the items keeps the keys of the whole list.
+    expect(check(folded(LISTS, (x) => each_(app("group", x, lit("k")), rec({ a: at(v("it"), "a"), b: at(v("it"), "a") }))), opts)).toBeDefined();
+  });
+
+  it("LOOP.SIZE.PART: the use `limit` without a literal number at the position `limit` is the same as `many`", () => {
+    const fns = { ...FNS, cut: sized((a: unknown) => a, { size: ["limit"] }) };
+    expect(check(folded(NONE, (x) => app("cut", x)), { fns })).toBe(refusal("x", TWICE, 'the op "cut"'));
+  });
+
+  it("LOOP.SIZE.PART: a text is its own item, and the literal of a text has its length as each measure", () => {
+    expect(check(folded(one(lit("ab")), (x) => set(x, lit("c"))), opts)).toBeUndefined();
+    expect(check(folded(lit(vexList([{ key: "0", result: ok({ a: "ab", b: "c" }) }])), (x) => set(x, rec({ a: lit("ab"), b: at(first(x), "b") }))), opts)).toBeUndefined();
+  });
+
+  it("LOOP.SIZE.READINGS: one reading that accepts a step makes the step valid, and the first reading tells the reason of a refusal", () => {
+    // The first reading counts `take` as the whole list, and the second reading counts each item that it keeps.
+    expect(check(step(LISTS, (x) => app("fill", lit(1), app("take", x, lit(3)))), opts)).toBeUndefined();
+    expect(check(folded(LISTS, (x) => app("append", app("take", x, lit(2)), app("take", x, lit(3)))), opts)).toBeUndefined();
+    // Two steps that each need one reading stay refused, because a reading holds for all the program.
+    const both = step(LISTS, (x) => app("fill", lit(1), app("append", app("take", x, lit(2)), app("take", x, lit(3)))));
+    expect(check(both, opts)).toBe(refusal("x", TWICE, 'the op "append"', "iterate"));
   });
 });
 

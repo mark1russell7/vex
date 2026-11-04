@@ -89,7 +89,11 @@ export const JsonDomain: Domain<"Json", JsonValue, JsonOps> = defineDomain<"Json
       },
       params: ["any"],
       returns: "any",
-      size: { size: [1, 0] },
+      // LOOP.SIZE.PART: a field of an object is an item of the object, and the op takes no other value.
+      size: {
+        size: [1, 0],
+        byParts: { size: [[1, "item"], 0], count: [[1, "item"], 0], inner: [[1, "item"], 0], item: [[1, "part"], 0], part: [[1, "part"], 0] },
+      },
     },
     // The walk of the schema of Graph as a flat list (JSON.LEAVES). The function reads no name outside itself, so a
     // module can copy it. A stack of the objects, not recursion, keeps the order of a recursive walk.

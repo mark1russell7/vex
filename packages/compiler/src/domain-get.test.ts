@@ -89,9 +89,9 @@ describe.each(SETS)("COMPILE.LIST.VALUE COMPILE.TIERED: the op get of a domain i
     expect(() => same(app("get", ref("mixed"), lit("x")), true, options)).not.toThrow();
   });
 
-  it("LIST.ARRAY: an array at the same site goes to tier 1", () => {
+  it("LIST.ARRAY COMPILE.LIST.ARRAY: an array at the same site stays in tier 2", () => {
     const sp = space.array([{ m: new NDVector({ x: 1 }) }, { m: [8] }]);
-    expect(() => same(app("get", ref("m"), lit("0")), false, options, sp)).not.toThrow();
+    expect(() => same(app("get", ref("m"), lit("0")), true, options, sp)).not.toThrow();
   });
 
   it("a random vector, also with NaN and infinite parts, gives the result of tier 1", () => {

@@ -111,6 +111,27 @@ export interface OpSpec<D = never> {
 /** A direction of an op: the result follows the argument (`up`) or moves against it (`down`). */
 export type Monotone = "up" | "down";
 
+/**
+ * The form of a domain in a standalone module (COMPILE.MODULE.FORM). A module has no import, so it cannot hold a value of
+ * a class. Each part replaces the part of the domain with the same name, only in a module. A compiler copies the text of
+ * each function, so a function reads only its parameters.
+ */
+export interface ModuleForm {
+  /** The test of a value in a module. */
+  readonly is?: (u: unknown) => boolean;
+  /** The scalar lift in a module. */
+  readonly fromScalar?: (n: number) => unknown;
+  /** Some values of the module form. A compiler checks each copy with them. */
+  readonly samples?: () => readonly unknown[];
+  /**
+   * The plain data of a literal of the program, or `undefined` for a value of another domain. This function runs in the
+   * compiler, not in a module, so it can read a class.
+   */
+  readonly literal?: (value: unknown) => Readonly<Record<string, unknown>> | undefined;
+  /** The parts of each op in a module. */
+  readonly ops?: Readonly<Record<string, { readonly fn?: (self: never, ...args: never[]) => unknown; readonly identity?: () => unknown; readonly returns?: ReturnKind }>>;
+}
+
 /** A JavaScript type of primitive values that a domain can accept. */
 export type PrimitiveKind = "number" | "string" | "boolean";
 
@@ -171,6 +192,8 @@ export interface DomainSpec<Name extends string, D, Ops extends Readonly<Record<
    * results (KIND.DOMAIN).
    */
   readonly samples?: () => readonly D[];
+  /** The form of the domain in a standalone module, for a domain with values of a class (COMPILE.MODULE.FORM). */
+  readonly moduleForm?: ModuleForm;
 }
 
 /** A domain. Make one with `defineDomain`. */

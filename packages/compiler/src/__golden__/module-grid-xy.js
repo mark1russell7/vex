@@ -8,27 +8,14 @@ function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
 function G(x) { return x === E ? F() : x; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
-const op_0_0 = (x, y) => ({
-				x,
-				y
-			});
-const v_1 = (v) => Number.isFinite(v.x) && Number.isFinite(v.y);
-const k_domain_XY = (x) => (v_1(x) ? x : F());
-const op_1_1 = (a, b) => ({
-				x: Math.max(a.x, b.x),
-				y: Math.max(a.y, b.y)
-			});
-const op_1_2 = (a, b) => ({
-				x: a.x + b.x,
-				y: a.y + b.y
-			});
+const op_0_0 = (x, y) => ({ x, y });
+const k_domain_XY = (x) => ((Number.isFinite(x.x) && Number.isFinite(x.y)) ? x : F());
+const op_1_1 = (a, b) => ({ x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) });
+const op_1_2 = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
 const k_number = (x) => (Number.isFinite(x) ? x : F());
-const op_1_6 = (a, b) => ({
-				x: a.x * b.x,
-				y: a.y * b.y
-			});
-const op_1_7 = (a) => a.x;
-const op_1_8 = (a) => a.y;
+const op_1_6 = (a, b) => ({ x: a.x * b.x, y: a.y * b.y });
+const op_1_7 = a => a.x;
+const op_1_8 = a => a.y;
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;

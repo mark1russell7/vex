@@ -1,6 +1,6 @@
 # Vex — Architecture & Codebase Documentation
 
-> **Update (2026-10-08).** [REVIEW.md](../../REVIEW.md) adds the history (v0 did not run; `peers()` was removed in `b95eddb`), the lineage (Jqy → Vex → render/Graph), five new defects (V-038 to V-042) and the target architecture.
+> **Update (2026-10-08).** [REVIEW.md](../../REVIEW.md) adds the history (v0 did not run; `peers()` was removed in `b95eddb`), the lineage (Jqy → Vex → render), five new defects (V-038 to V-042) and the target architecture.
 
 *Audit date: 2026-07-11 · Baseline: `main` @ `f54ee88` · All 20 existing tests pass, `tsc --noEmit` clean.*
 

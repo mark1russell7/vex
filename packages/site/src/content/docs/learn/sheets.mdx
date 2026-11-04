@@ -9,7 +9,7 @@ A chain is one formula. A **sheet** is a set of named columns, and the formula o
 
 ## Columns that read columns
 
-`root.sheet()` starts a sheet. `column(name, formula)` adds a column, and gives a new sheet. The formula gets a root with one more method: `cell(column, at)` reads a column at the focus, at a key, or at an address.
+`root.sheet()` starts a sheet. `column(name, formula)` adds a column, and gives a new sheet. The formula gets a root with one more method: `cell(column, at)` reads a column at the focus, at a key, or at an address. A move of the address can be an expression, so `cell("total", [index(e)])` reads the row at the position that `e` gives.
 
 ```ts doctest
 const s = root

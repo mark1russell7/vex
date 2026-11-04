@@ -53,10 +53,9 @@ for (const [mode, options] of Object.entries({ default: {}, "fuse false": { fuse
     console.log(`V-086 ${mode}: refused ${m.reason}`);
     continue;
   }
-  const declared = new Set([...m.source.matchAll(/(([^()]*)) =>/g)].flatMap((x) => x[1].split(/, */)));
-  const free = [...new Set(m.source.match(/od+/g) ?? [])].filter((x) => !declared.has(x));
-  const made = new Function(`${m.source.replaceAll(/^export /gm, "")}
-return { run, VEX_ERROR };`)();
+  const declared = new Set([...m.source.matchAll(/\(([^()]*)\) =>/g)].flatMap((x) => x[1].split(/, */)));
+  const free = [...new Set(m.source.match(/\bo\d+\b/g) ?? [])].filter((x) => !declared.has(x));
+  const made = new Function(`${m.source.replaceAll(/^export /gm, "")}\nreturn { run, VEX_ERROR };`)();
   const got = made.run(records, { a: 2 }).map((x) => (x === made.VEX_ERROR ? "ERROR" : x));
   const same = JSON.stringify(got) === JSON.stringify(wanted);
   if (!same) differs++;

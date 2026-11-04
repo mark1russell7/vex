@@ -23,7 +23,7 @@
  *   value between its names, so each phase changes few names.
  * - A list holds the cost and the previous state of each state as one `XY` value. A cost of -1 is the `Infinity` of
  *   ireko, because a value `Infinity` gives `#NUM!`.
- * - Each change of an item makes a new list with `each` (the function `setAt`). No op changes one item of a list.
+ * - Each change of an item makes a new list with `setNth`. The code of ireko writes into its array.
  * - The grids of free points and open steps are maps over the grid. ireko writes the cells of each box into arrays.
  *
  * The result differs from ireko in rare cases. The tests pin each one, but not the limit of the phases:
@@ -135,18 +135,12 @@ const over = (list: Expr, as: ItemNames, init: Readonly<Record<string, Expr>>, s
 /** The position of the record of the evaluation. */
 const ME = ref("i");
 
-/**
- * The value of a pair after a read from a list. The op `xy` gives LOOP.SIZE a value of a fixed size. A read of an item
- * of a loop list has no such fact, so a loop refuses a step that keeps it (gap 1 of the tree pilot).
- */
-const fresh = (e: Expr): Expr => let_({ $pair: e }, xy(xOf(v("$pair")), yOf(v("$pair"))));
-
 /** The list `list` with the pair `value` at the position `at`. A step of a loop uses the list one time. */
-const setAt = (list: Expr, at: Expr, value: Expr): Expr => let_({ $new: fresh(value) }, loop(list, ["$item", "$at"], when(eq(v("$at"), at), v("$new"), v("$item"))));
+const setAt = (list: Expr, at: Expr, value: Expr): Expr => op("setNth", list, at, value);
 
 /** The list `list` with the items at the positions `a` and `b` swapped. */
 const swap = (list: Expr, a: Expr, b: Expr): Expr =>
-  let_({ $a: fresh(nth(list, a)), $b: fresh(nth(list, b)) }, loop(list, ["$item", "$at"], when(eq(v("$at"), a), v("$b"), when(eq(v("$at"), b), v("$a"), v("$item")))));
+  let_({ $a: nth(list, a), $b: nth(list, b) }, setAt(setAt(list, a, v("$b")), b, v("$a")));
 
 /** The names of an edge: the two boxes and the direction, from the fields of one record. */
 const EDGE_NAMES = {
@@ -614,7 +608,7 @@ const POP_HEAP = fn(
   ["start"],
   let_(
     { $size: subtract(count(v("start")), lit(1)) },
-    call("siftDown", setAt(op("take", v("start"), v("$size")), lit(0), nth(v("start"), v("$size")))),
+    call("siftDown", when(eq(v("$size"), lit(0)), op("take", v("start"), lit(0)), setAt(op("take", v("start"), v("$size")), lit(0), nth(v("start"), v("$size"))))),
   ),
 );
 

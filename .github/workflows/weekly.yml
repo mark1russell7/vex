@@ -61,6 +61,12 @@ jobs:
           FC_MIN_RUNS_FILE: ${{ github.workspace }}/spec/weekly-runs.json
           FC_RECORD_FILE: ${{ runner.temp }}/runs-rep${{ matrix.rep }}.jsonl
           FC_RECORD_ONLY: ${{ inputs.record_only && '1' || '' }}
+      # The summary keeps the failed properties apart from the properties with no minimum yet.
+      - if: ${{ !cancelled() }}
+        run: pnpm exec tsx scripts/weekly-summary.ts "$FC_RECORD_FILE" spec/weekly-runs.json >> "$GITHUB_STEP_SUMMARY"
+        env:
+          FC_RECORD_FILE: ${{ runner.temp }}/runs-rep${{ matrix.rep }}.jsonl
+          FC_RECORD_ONLY: ${{ inputs.record_only && '1' || '' }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:

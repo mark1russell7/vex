@@ -17,7 +17,6 @@ import {
   children,
   errorText,
   isFieldName,
-  isListOp,
   limitAxis,
   MAX_ITERATIONS,
   MAX_NESTING,
@@ -28,11 +27,10 @@ import {
   type ErrorText,
   type Expr,
   type ExprOf,
-  type ListOp,
   type Names,
   type PrimitiveKind,
 } from "@mark1russell7/vex";
-import { factsOf, listReason, MAX_CALLS, primitiveOf, type Facts, type Schema } from "./facts.ts";
+import { factsOf, isFusedOp, listReason, MAX_CALLS, primitiveOf, type Facts, type FusedOp, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
   array,
@@ -148,7 +146,7 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
   const lists = listReason(expr);
   if (lists !== undefined) throw new Unsupported(lists);
-  const l = new Lowerer(memoNodes(expr), facts, schema);
+  const l = new Lowerer(memoNodes(expr, isFusedOp), facts, schema);
   const b = block(RETURN);
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space", l.site(b, top, { t: "key" }));
@@ -580,7 +578,7 @@ class Lowerer {
       case "ifError":
         return this.#ifError(args, s, path, b);
     }
-    if (isListOp(op)) {
+    if (isFusedOp(op)) {
       const target = eachUnderLets(args[0]);
       if (target !== undefined) return this.#fused(op, e, target, s, path, b);
     }
@@ -666,7 +664,7 @@ class Lowerer {
    * in the list, the interpreter evaluates each item before the op. In both cases, a check of the op keeps no error.
    * The later arguments evaluate before the loop, and the interpreter evaluates them after the list, so they keep no error.
    */
-  #fused(op: ListOp, e: ExprOf<"app">, target: ExprOf<"each">, s: Scope, path: readonly number[], b: Block): LExpr {
+  #fused(op: FusedOp, e: ExprOf<"app">, target: ExprOf<"each">, s: Scope, path: readonly number[], b: Block): LExpr {
     // The `let` expressions above the `each`, from the outside in.
     let inner = s;
     let at = [...path, 0];
@@ -770,24 +768,6 @@ class Lowerer {
         // An empty list can give the identity of the op, so tier 1 gives its result.
         this.check(plain, prim("!==", local(n), num(0)), "a list that is not empty");
         return local(acc);
-      // listReason stops a program with these ops before the lowering, so this case is defensive.
-      // Stryker disable StringLiteral,ConditionalExpression: listReason stops these ops before the lowering
-      case "sortBy":
-      case "take":
-      case "nth":
-      case "drop":
-      case "append":
-      case "flat":
-      case "without":
-      case "get":
-      case "indexOf":
-      case "distinct":
-      case "group":
-      case "join":
-        // Stryker restore StringLiteral,ConditionalExpression
-        /* v8 ignore next -- @preserve */
-        // Stryker disable next-line all: listReason stops these ops before the lowering
-        throw new Unsupported(`the list op "${op}"`);
     }
   }
 

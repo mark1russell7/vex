@@ -1,7 +1,8 @@
 /**
  * The runtime of generated code. Each function follows the rule of the interpreter of the core. Where the interpreter
  * gives an error value, the function gives `FALLBACK`, and it records the detail of the failure in two variables. On the
- * value path, the runtime makes no error values and no `Result` objects (docs/COMPILER.md §4.1).
+ * value path, the runtime makes no error values and no `Result` objects (docs/COMPILER.md §4.1). A list op on a list
+ * value is the exception: it runs the code of the interpreter (COMPILE.LIST.VALUE).
  *
  * The failure path of generated code keeps a lazy error: the site, the position and the operands. When the program ends
  * with it, `take` gives the error of the interpreter. It uses the error texts of the core (`materialize`).
@@ -21,6 +22,7 @@ import {
   isStackOverflow,
   isVexList,
   liftsAt,
+  listOps,
   matchesKind,
   fixAddr,
   noKeyError,
@@ -36,6 +38,7 @@ import {
   type FreeFn,
   type ParamKind,
   type Position,
+  type Result,
   type Space,
   type VexError,
 } from "@mark1russell7/vex";
@@ -108,8 +111,9 @@ const kept = (keys: readonly unknown[]): boolean => keys.every((k) => (typeof k 
  * - `no-step`: no domain gives a step of `reduce`, and `a` is the accumulator.
  * - `no-handler`: an extension has no handler.
  * - `foreign`: a handler gave an error, and `a` is the error.
+ * - `list`: a list op or `fill` gave an error of its own, and `a` is the error.
  */
-type Detail = "threw" | "lift" | "valid" | "bad" | "param" | "no-op" | "no-step" | "no-handler" | "foreign";
+type Detail = "threw" | "lift" | "valid" | "bad" | "param" | "no-op" | "no-step" | "no-handler" | "foreign" | "list";
 
 /** An argument of an op that does not have the kind of its parameter. */
 interface ParamFailure {
@@ -176,6 +180,10 @@ export interface Runtime {
   var(vars: Readonly<Record<string, unknown>> | undefined, name: string): unknown;
 }
 
+/** The path and the position of a call of a list op. An error with this path is an error of the op, not of an item. */
+const HERE: readonly number[] = [];
+const NOWHERE: Position = { origin: "", focus: "" };
+
 /** The interpreter reads the own enumerable properties of the variables, with `Object.entries`. */
 const hasVar = (vars: Readonly<Record<string, unknown>> | undefined, name: string): vars is Readonly<Record<string, unknown>> => vars !== undefined && Object.prototype.propertyIsEnumerable.call(vars, name);
 
@@ -185,6 +193,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const fns = options.fns;
   const extensions = options.extensions ?? {};
   const F: Fallback = FALLBACK;
+  const lists = listOps(options);
 
   // The record of the last failure. Each failure writes it before `err` reads it, and a failure makes no object here.
   let detail: Detail = "threw";
@@ -267,6 +276,15 @@ export function createRuntime(options: RuntimeOptions): Runtime {
 
   const entriesOf = (name: string): readonly (Entry | undefined)[] => domains.map((d) => entryOf(d, name));
 
+  // The result of a list op: the code of the interpreter, for each list (COMPILE.LIST.VALUE). An error of the op is an
+  // error of the site. #DEPTH! and the error of an item stop the program, so tier 1 gives the result (V-064, V-066).
+  const listResult = (r: Result<unknown>): unknown => {
+    if (r.ok) return r.value;
+    // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
+    if (r.error.path !== HERE || isDepthError(r.error)) throw new Error("tier 1 gives the error of a list op");
+    return record("list", r.error);
+  };
+
   // The entries of the op names of reduce. A program can compute such a name, so the runtime keeps them by name.
   const stepEntries = new Map<string, readonly (Entry | undefined)[]>();
 
@@ -286,8 +304,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   };
 
   // This function gives the error of a failure of the op `op`, from the record of the failure.
-  const opError = (e: LazyError, op: string, at: (text: ErrorText, extra?: ErrorExtra) => VexError): VexError => {
+  const opError = (e: LazyError, op: string, path: readonly number[], at: (text: ErrorText, extra?: ErrorExtra) => VexError): VexError => {
     switch (e.detail) {
+      case "list":
+        return { ...(e.a as VexError), path, origin: e.origin, focus: e.focus };
       case "threw":
         return at(errorText.threw(op), { thrown: e.a });
       case "lift":
@@ -346,9 +366,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       case "test":
         return at(errorText.whereKind(first));
       case "op":
-        return opError(e, site.op, at);
+        return opError(e, site.op, path, at);
       case "step":
-        return opError(e, first as string, at);
+        return opError(e, first as string, path, at);
       case "ext":
         return extError(e, site.kind, pos, path, at);
       case "addr": {
@@ -422,9 +442,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       const listOp = isListOp(name);
       const fn = fns !== undefined && Object.hasOwn(fns, name) ? fns[name] : undefined;
       const generic = (values: readonly unknown[]): unknown => {
-        // A list op on a list value is not an error, but tier 2 does not have it. The exception stops the program.
-        // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
-        if (listOp && isVexList(values[0])) throw new Error("tier 1 gives a list op on a list value");
+        if (listOp && isVexList(values[0])) return listResult(lists.list(name, values[0], values.slice(1), NOWHERE, HERE));
         if (values.length > 0) {
           const r = dispatch(entries, name, values, (m) => {
             site.m = m;
@@ -435,6 +453,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         // FALLBACK is an error, and a list op skips an error item, so an exception must stop the program (V-064).
         // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
         if (listOp && fn === undefined && Array.isArray(values[0])) throw new Error("tier 1 gives a list op on an array");
+        if (name === "fill" && fn === undefined) return listResult(lists.fill(values, NOWHERE, HERE));
         try {
           if (fn === undefined) return record("no-op", values.length > 0, values[0]);
           return checked(fn(...values));

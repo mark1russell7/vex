@@ -1,23 +1,11 @@
 [
   {
-    "file": "packages/compiler/src/facts.ts",
-    "comment": "// Stryker disable next-line ConditionalExpression: a node that is not an app has no field op, so the set does not have it"
-  },
-  {
     "file": "packages/compiler/src/lower.ts",
     "comment": "// Stryker disable next-line UnaryOperator: with +0 as the special key, 0 and -0 still get different constants"
   },
   {
     "file": "packages/compiler/src/lower.ts",
     "comment": "// Stryker disable next-line all: see the comment above"
-  },
-  {
-    "file": "packages/compiler/src/lower.ts",
-    "comment": "// Stryker disable StringLiteral,ConditionalExpression: listReason stops these ops before the lowering"
-  },
-  {
-    "file": "packages/compiler/src/lower.ts",
-    "comment": "// Stryker disable next-line all: listReason stops these ops before the lowering"
   },
   {
     "file": "packages/compiler/src/lower.ts",
@@ -157,6 +145,10 @@
   },
   {
     "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line ConditionalExpression: see the comment above"
   },
   {
@@ -166,10 +158,6 @@
   {
     "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line ConditionalExpression: fixAddr gives the same fixed moves, so the test only saves an array"
-  },
-  {
-    "file": "packages/compiler/src/runtime.ts",
-    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
   },
   {
     "file": "packages/compiler/src/runtime.ts",

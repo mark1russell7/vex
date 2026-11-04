@@ -165,6 +165,27 @@ export function nestingOf(e: Expr): number {
  * This function compiles an expression or a document (DOC.ENTRY). The result gives the same results and the same traces
  * as `evaluate`, because `evaluate` uses it too.
  */
+/**
+ * The list ops of `compile` for the values of a host (LIST.OPS). A result has the rules of the interpreter. An error of
+ * the op has the position and the path of the call, and an error of an item keeps its own.
+ */
+export interface ListOps {
+  /** This function gives the result of a list op on a list. The list is the receiver, and `rest` has the other arguments. */
+  readonly list: (op: ListOp, list: VexList, rest: readonly unknown[], position: Position, path: readonly number[]) => Result<unknown>;
+  /** This function gives the result of `fill` (LIST.FILL). */
+  readonly fill: (values: readonly unknown[], position: Position, path: readonly number[]) => Result<VexList>;
+}
+
+/** This function gives the list ops of `compile` for the options. It keeps the index of each list that `get` read. */
+export function listOps(opts: CompileOptions = {}): ListOps {
+  const compiler = new Compiler(opts);
+  const names = new Map<string, Result<unknown>>();
+  return {
+    list: (op, list, rest, pos, path) => compiler.listOp(op, list, rest, { pos, env: names }, path),
+    fill: (values, pos, path) => compiler.fill(values, { pos, env: names }, path),
+  };
+}
+
 export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Program {
   // DOC.ENTRY: a document gives its expression first. A document that is not valid gives the error of fromDocument.
   const read = isDocument(source) ? fromDocument(source, opts.domains) : ok(source);
@@ -329,7 +350,7 @@ class Compiler {
   }
 
   /** This method gives the list of `fill(n, value)` (LIST.FILL). A count that is not a whole number from 0 to 100000 gives `#VALUE!`. */
-  #fill(values: readonly unknown[], f: Frame, path: readonly number[]): Result<VexList> {
+  fill(values: readonly unknown[], f: Frame, path: readonly number[]): Result<VexList> {
     const [n, value] = values;
     if (!isFillCount(n)) return this.#err("kind-mismatch", `"fill" needs a whole number from 0 to 100000, not ${describeType(n)}`, f, path, { op: "fill" });
     if (value === undefined) return this.#err("bad-expression", '"fill" needs argument 2', f, path, { op: "fill" });
@@ -785,7 +806,7 @@ class Compiler {
       if (!all.ok) return this.#emit(c, info, f, all);
       const values = all.value;
       const self = values[0];
-      if (listOp !== undefined && isVexList(self)) return this.#emit(c, info, f, this.#listOp(listOp, self, values.slice(1), f, path));
+      if (listOp !== undefined && isVexList(self)) return this.#emit(c, info, f, this.listOp(listOp, self, values.slice(1), f, path));
       let accepted: AnyDomain | undefined;
       // Without arguments, the receiver is undefined, and no domain of a test accepts it.
       // Stryker disable next-line ConditionalExpression,EqualityOperator: the loop finds no domain for undefined
@@ -803,8 +824,8 @@ class Compiler {
       }
       if (fn !== undefined) return this.#emit(c, info, f, this.#checkResult(this.#invoke(() => fn(...values), op, f, path), f, path, op));
       // LIST.ARRAY and LIST.FILL come after the domains and the functions of the host, so each of their results stays.
-      if (listOp !== undefined && Array.isArray(self)) return this.#emit(c, info, f, this.#listOp(listOp, listOfArray(self, this.#missing(f, path)), values.slice(1), f, path));
-      if (op === "fill") return this.#emit(c, info, f, this.#fill(values, f, path));
+      if (listOp !== undefined && Array.isArray(self)) return this.#emit(c, info, f, this.listOp(listOp, listOfArray(self, this.#missing(f, path)), values.slice(1), f, path));
+      if (op === "fill") return this.#emit(c, info, f, this.fill(values, f, path));
       if (accepted !== undefined) return this.#emit(c, info, f, this.#at(errorText.domainNoOp(accepted.name, op), f, path));
       if (values.length === 0) return this.#emit(c, info, f, this.#at(errorText.noOp(op), f, path));
       return this.#emit(c, info, f, this.#at(errorText.noDomain(op, self), f, path));
@@ -920,7 +941,7 @@ class Compiler {
     return r;
   }
 
-  #listOp(op: ListOp, list: VexList, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
+  listOp(op: ListOp, list: VexList, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
     // The options come after the second argument of an op with one, for example the count of take.
     const optsArg = WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
     const strict = (optsArg as ListOptions | null | undefined)?.strict === true;

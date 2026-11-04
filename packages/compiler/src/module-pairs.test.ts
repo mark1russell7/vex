@@ -6,6 +6,7 @@
  */
 import { app, axes, call, each, evaluate, fn, fold, let_, lit, rec, ref, space, v, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain } from "@mark1russell7/vex-domains";
+import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, radialRun, type RadialInput } from "../../pilots/src/ireko-radial.ts";
 import { emitModule, type ModuleOptions } from "./module.ts";
@@ -214,6 +215,34 @@ describe("COMPILE.MODULE.PAIRS: a fold over all the records reads the packs of i
     expect(expectSame(where)).not.toContain("QA(n,");
     const list = let_({ need: fn([], NEED) }, let_({ f: fn(["r"], fold(axes.all, { xs: op("fill", lit(0), lit(0)) }, { xs: op("fill", lit(1), op("add", r, call("need"))) }, op("count", v("xs")))) }, call("f", n)));
     expect(expectSame(list)).not.toContain("QA(n,");
+  });
+});
+
+/** This part has a column of the run in the two folds of `scanIn`. */
+const COST = op("max", op("abs", op("subtract", n, op("divide", n, lit(2)))), op("abs", op("add", n, op("multiply", n, lit(3)))));
+/** This function gives a fold over all the records with a scan in its step. The test of the scan reads `value` at each target. */
+const scanIn = (step: Expr, value: Expr): Expr => fold(axes.all, { s: lit(0) }, { s: op("add", step, fold(axes.where(axes.all, op("gt", s, value)), { y: lit(0) }, { y: lit(1) }, v("y"))) }, s);
+
+describe("V-084 COMPILE.MODULE.PAIRS COMPILE.MODULE.SCAN: a scan in the steps of a fold reads no pack of the loop of the fold", () => {
+  it("V-084: a value of a scan that is a column keeps the first print of the fold", () => {
+    const source = expectSame(scanIn(COST, op("add", lit(1), COST)));
+    expect(source).toContain("= PF(n,");
+    expect(source).not.toMatch(/\bpk\d+/);
+  });
+
+  it("V-084: a scan that reads no column leaves the second print of the fold", () => {
+    const source = expectSame(scanIn(COST, n));
+    expect(source).toContain("= PF(n,");
+    expect(source).toMatch(/\bpk\d+\[j\d+\]/);
+  });
+
+  it("V-084 P17 COMPILE.MODULE.SCAN: each mix of columns in a step and in a scan gives the value of the interpreter", () => {
+    const part = fc.tuple(fc.constantFrom("add", "subtract", "multiply"), fc.constantFrom(n, COST, lit(1)), fc.constantFrom(n, COST, lit(2))).map(([name, a, b]) => op(name, a, b));
+    fc.assert(
+      fc.property(part, part, (step, value) => {
+        expect(expectSame(scanIn(step, value))).toContain("function run");
+      }),
+    );
   });
 });
 

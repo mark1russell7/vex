@@ -89,7 +89,7 @@ export function run(records, vars) {
     c62 = E;
   }
   const c80 = T(() => TKC(G(c3), 2));
-  const fn90 = (k88, o89) => R[o89]["n"];
+  const fn90 = (o89) => R[o89]["n"];
   const L100 = [];
   for (let q99 = 0; q99 < L11.length; q99++) {
     const j97 = L11[q99][0];
@@ -291,7 +291,7 @@ export function run(records, vars) {
       for (let j87 = 0; j87 < n; j87++) {
         let x92;
         try {
-          x92 = k_number((R[j87]["n"]) + (fn90(j87, o)));
+          x92 = k_number((R[j87]["n"]) + (fn90(o)));
         } catch {
           x92 = E;
         }

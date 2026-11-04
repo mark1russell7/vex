@@ -6,7 +6,9 @@
 import { app, axes, type Axis, call, each, evaluate, fn, fold, iterate, let_, lit, rec, ref, space, v, vexList, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { fromCore } from "@mark1russell7/vex-testkit";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { nameFaults } from "../test/names.ts";
 import { emitModule, type ModuleOptions } from "./module.ts";
 import { tiered } from "./tiers.ts";
 
@@ -38,6 +40,12 @@ const near = (x: Expr, u: Expr): Axis => axes.where(axes.all, app("eq", n, add(x
 const steps = (term: Expr): Expr => fold(axes.all, { s: lit(0) }, { s: add(n, term) }, v("s"));
 const called = (body: Expr): Expr => let_({ g: fn(["u"], body) }, call("g", lit(0)));
 const unread = (body: Expr): Expr => let_({ h: fn(["x"], lit(1)) }, body);
+
+/** The program of the name run that found V-086. It is a fixed case, so the test does not depend on the seed. */
+const DRAW_9133 = JSON.parse(readFileSync(new URL("../test/draw-9133.json", import.meta.url), "utf8")) as Expr;
+const DRAW_SCHEMA = { fields: { n: "number", w: "number", s: "string", b: "boolean" }, vars: { a: "number", t: "string" } } as const;
+/** Each combination of the modes of a module. */
+const MODES: readonly Partial<ModuleOptions>[] = (["value", "throw"] as const).flatMap((faults) => [true, false].flatMap((fuse) => [true, false].map((keys) => ({ faults, fuse, keys }))));
 
 /** This function makes the module of a source with `new Function`. */
 function make(source: string): Loaded {
@@ -160,5 +168,15 @@ describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps t
 
   it("V-081: a safe value drops the print of a column of a call that reads the origin", () => {
     expectSame(called(app("ifError", lit(0), steps(count(origin)))));
+  });
+
+  it("V-086 COMPILE.MODULE.FUSE.OFF: with fuse false, a dropped print leaves no read of a name without a declaration", () => {
+    // The setup of the tests fails this call on a read of a name without a declaration.
+    expect(emitModule(called(app("ifError", lit(0), steps(count(origin)))), { ...OPTIONS, fuse: false }).ok).toBe(true);
+  });
+
+  it.each(MODES)("V-086: draw 9133 of seed 1084396609 has no read of a name without a declaration, with the options %j", (mode) => {
+    const m = emitModule(DRAW_9133, { domains: DOMAINS, schema: DRAW_SCHEMA, ...mode });
+    expect(m.ok ? nameFaults(m.source) : [m.reason]).toStrictEqual([]);
   });
 });

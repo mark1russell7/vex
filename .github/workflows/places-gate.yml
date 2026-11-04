@@ -58,6 +58,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       # The gate checks the rows against the limit, so it reads the limit before the next step removes it.
       - id: limit

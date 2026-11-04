@@ -1,0 +1,38 @@
+# The gate that a workflow does not hide a failed test: `|| true`, a pipe with no pipefail, or continue-on-error.
+# A push of each branch starts it, so a measure on a side branch with no pull request has the gate too.
+name: Workflow gate
+
+on:
+  push:
+    paths:
+      - .github/workflows/**
+      - scripts/workflow-gate.ts
+      - packages/testkit/src/workflow-faults.ts
+  pull_request:
+    paths:
+      - .github/workflows/**
+      - scripts/workflow-gate.ts
+      - packages/testkit/src/workflow-faults.ts
+
+permissions: {}
+
+# One run for each branch: a newer run stops the older one.
+concurrency:
+  group: workflow-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflows:
+    name: No hidden failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - run: node scripts/workflow-gate.ts

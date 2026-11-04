@@ -1398,6 +1398,47 @@ The pilot found these gaps:
 
 The source of the module has approximately 23 kB, with `lists: "plain"`. The module packs the row one time for all the children. ireko does not use the module yet. It needs a decision about its size budget and a speed check in CI.
 
+#### The route pilot (the engine)
+
+The route pass of ireko makes the edges of a layout and asks a router for the points of each edge. `@vex/pilots` has its calculations as programs in `ireko-route.ts`:
+
+- `STRAIGHT_PROGRAM` and `ORTHOGONAL_PROGRAM` evaluate at each edge. They are the routers without a search.
+- `EDGE_DIRECTION_PROGRAM` gives the direction of an edge, with the function `forward` of ireko.
+- `LABEL_BOX_PROGRAM` gives the box of the label of a container.
+- `OBSTACLES_PROGRAM` evaluates at the nodes in the pre-order, and it gives the obstacles of one edge.
+- `AVOID_PROGRAM` evaluates at the boxes of one edge, and it gives the route of the router `avoid`.
+
+The rest of the pass is control, and it stays in the host. This part is the loop over the edges, the unique names and the issues. It is also the use of a router of the user, the catch of its throw and the check of its points. The use of `straight` after a failure is control too.
+
+The router `avoid` is an A* search over a sparse grid. The program is one `iterate` with a phase. The phase 4 takes the first state of the heap. The phases 0 to 3 are the steps from that state that make a cost lower. Other steps have no phase, so the limit of 100000 phases holds the search of each input that the tests have. The heap is the binary heap of ireko, because its order of ties decides the route. Thus a fixed point of the costs does not give the route of ireko, and the program does not use `fix`.
+
+The test `ireko-route.test.ts` holds a copy of each function of ireko. Properties compare the copies with the modules, with tier 2 and with the interpreter on random inputs. Some inputs are on a coarse lattice with many ties. Fixed cases hold the points that the functions of ireko gave.
+
+On 2026-11-04 a one-time run compared the modules with the real route pass of ireko on 9747 edges. A second run compared the module of `avoid` with the real router on 4000 more edges. The bits were the same for each router, each direction and each list of obstacles. A run of the interpreter and of tier 2 on 120 edges gave the same bits.
+
+The program differs from ireko in these ways, and these ways keep the result:
+
+- A list holds the cost and the previous state of each state as one `XY` value. A cost of -1 is the `Infinity` of ireko.
+- Each change of an item makes a new list with `each`.
+- The grids of free points and open steps are maps over the grid. ireko writes the cells of each box into arrays.
+- A second start at one state has no test of its cost. Two starts share a state only for a size below 0.
+
+The result differs from ireko in rare cases:
+
+- A value that is not finite gives an error. Thus a ratio of `borderPoint` that overflows gives an error, where ireko keeps the other ratio.
+- A search of more than 100000 phases gives an error. A grid of more than 50000 points also gives an error (LIST.FILL). ireko has no limit.
+- A text has no op that reads its characters. Thus the host gives each label as a list of code points in the field `codes`.
+
+The pilot found these gaps:
+
+- A module takes only one domain of objects. The program `add(from(band(0, 1, 0, 1)), x(xy(1, 2)))` gives no module with `BandDomain` and `XYDomain`. Thus the ranges of the boxes are lists of `XY` values.
+- No op reads the characters or the code points of a text. Thus `estimateWidth` cannot be a whole program.
+- A step of a loop cannot change one item of a list, because LOOP.SIZE refuses `append(take(xs, k), append(fill(1, x), drop(xs, k + 1)))`. The `each` of the workaround costs one pass over all the states for each change of a cost.
+
+The third gap sets the speed. On 4000 random edges with up to 34 obstacles, the module took approximately 50 times the time of ireko. A closed ring around the target with 34 to 49 boxes took 5 to 34 seconds, and ireko took 10 to 21 milliseconds. These numbers come from one busy computer, so a bench in CI must replace them.
+
+The source of the module of `avoid` has approximately 49 kB, with `lists: "plain"`. The modules of `straight` and `orthogonal` have approximately 5 kB and 8 kB. ireko does not use the modules yet. It needs a decision about their size budget and a speed check in CI.
+
 #### Lists of calls (COMPILE.MODULE.LIST.CALL)
 
 The shapes pilot found that the value of a call cannot be a list in a module. Before, a module gave the reason "a list is a value of the program" for such a call. Thus the sheet had the merge of the bands two times, once for each axis. The interpreter has calls whose value is a list, so the module has them too.

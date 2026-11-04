@@ -2,3 +2,4 @@ work/
 pilots/
 .stryker-tmp/
 stryker-setup-*.js
+testkit/

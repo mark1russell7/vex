@@ -292,11 +292,12 @@ const same = (e: Expr, records: readonly unknown[] = POINTS): void => {
   expect(got).toStrictEqual(expected);
 };
 
+const both = (e: Expr, records: readonly unknown[] = RECORDS): void => {
+  for (const fuse of [true, false]) expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, records);
+};
+const steps = (list: Expr): Expr => iterate(3, { a: list, i: lit(0) }, { a: op("setNth", v("a"), v("i"), op("add", op("nth", v("a"), v("i")), lit(1))), i: op("add", v("i"), lit(1)) }, v("a"));
+
 describe("COMPILE.MODULE.SETNTH: setNth in a module", () => {
-  const both = (e: Expr, records: readonly unknown[] = RECORDS): void => {
-    for (const fuse of [true, false]) expectSame(make(sourceOf(e, { ...OPTIONS, fuse })), e, records);
-  };
-  const steps = (list: Expr): Expr => iterate(3, { a: list, i: lit(0) }, { a: op("setNth", v("a"), v("i"), op("add", op("nth", v("a"), v("i")), lit(1))), i: op("add", v("i"), lit(1)) }, v("a"));
 
   it("COMPILE.MODULE.SETNTH LIST.SETNTH: a module gives the values, the keys and the errors of the interpreter", () => {
     const e = rec({

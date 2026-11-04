@@ -8,7 +8,7 @@
  *
  * All edges are in one flat list. Each record gives the node its range of that list, so a module knows each kind.
  */
-import { app, axes, each, iterate, isVexList, let_, lit, rec, ref, v, type Expr } from "@mark1russell7/vex";
+import { app, axes, each, iterate, isVexList, let_, lit, rec, ref, v, type AnyDomain, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain } from "@mark1russell7/vex-domains";
 
 /** The result of a search. */
@@ -75,11 +75,11 @@ export function searchProgram(put: Put): Expr {
 }
 
 /** The program with `setNth`. */
-export const SEARCH_ITEM = searchProgram(putItem);
+export const SEARCH_ITEM: Expr = searchProgram(putItem);
 /** The program with an `each` for each change. */
-export const SEARCH_EACH = searchProgram(putEach);
+export const SEARCH_EACH: Expr = searchProgram(putEach);
 
-export const SEARCH_DOMAINS = [NumDomain, BoolDomain];
+export const SEARCH_DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain];
 export const SEARCH_SCHEMA = { fields: { next: { list: "number" }, at: "number", stop: "number" } } as const;
 
 /** This record is one node of a graph. It has the ends of its edges, and their range in the flat list of all edges. */

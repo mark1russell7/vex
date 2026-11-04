@@ -37,7 +37,7 @@ The document follows the family writing rules (ASD-STE100, checked with `ste-lin
   - `self()` without a key does nothing (V-040).
   - Expressions are "thenables" that hang `await` (V-041).
 - Vex comes from `Jqy`, a layout engine. `brand.ts` is byte-identical, and `Vector` differs only in import paths.
-- No code in `~/git` uses Vex. `render` names Vex as an ancestor but rebuilt its own kernel. `Graph`, the live product, has its own expression language. Graph still does its peer-relative layout math in 636 lines of imperative TypeScript.
+- No code in `~/git` uses Vex. `render` names Vex as an ancestor but rebuilt its own kernel. Peer-relative layout math in other code is still imperative TypeScript.
 
 **The plan in six phases** (§11):
 
@@ -48,9 +48,9 @@ The document follows the family writing rules (ASD-STE100, checked with `ste-lin
 | P2 | Typed builder, all axes, domains ported, old code deleted | 2 weeks |
 | P3 | Assurance: conformance suite, property tests, type tests, mutation tests | parallel to P1–P2 |
 | P4 | The site "Vex Lab": tour, step debugger, spreadsheet view, living spec, playground | 3–6 weeks, parallel |
-| P5 | Interop and product: `deps()`, `sheet()`, a Graph layout pilot, npm release | 2–3 weeks |
+| P5 | Interop and product: `deps()`, `sheet()`, a layout pilot, npm release | 2–3 weeks |
 
-**Decisions for the owner** are in §12. The most important one is D1: give Vex a real consumer. The best candidate is the Graph layout strategies.
+**Decisions for the owner** are in §12. The most important one is D1: give Vex a real consumer. Layout strategies are the best candidate.
 
 ---
 
@@ -60,7 +60,7 @@ This review examined:
 
 - each line of the Vex source, tests, spec and git history, and the July audit files
 - `~/git/template`, `new-repo.ps1`, `lag`, `mark1russell7.github.io`, `ste-lint` and `cue`
-- the related repos `Jqy`, `render`, `Graph`, `Graph2`, `MetroGraph`, `tiller` and `splay`
+- the related repos `Jqy`, `render`, `tiller` and `splay`
 - the web: approximately 70 primary sources on theory and prior art, and live npm and GitHub data for versions.
 
 Each new defect in §3 was reproduced with a temporary test that was deleted after the run. The v0 code was extracted from commit `47e15ce` and run separately. Two design prototypes were type-checked with TypeScript 7.0.2: [`docs/spikes/typed-chain.ts`](./spikes/typed-chain.ts) and [`docs/spikes/store-laws.ts`](./spikes/store-laws.ts). This review changed no source code. The five research reports are in [`docs/research/`](./research/README.md), without changes.
@@ -85,20 +85,17 @@ Vex is one step in a line of projects about expressions over structured objects:
 
 | Dates | Repo | What it built |
 |---|---|---|
-| 2024-01 to 2026-10 | `Graph` | The live product (712 commits). The first `NotFound` and `isFound`, relative dimensions, the `roll/ball/lense` fluent chain (removed 2026-07-06), and since 2026-06 the JSON `agg-expr` language |
-| 2024-06 | `Graph2` | Design notes: the "seat value graph", `FillMany`, handlers ordered by dependency |
-| 2025-04 | `MetroGraph` | Design only: `$path` bindings, descendant bindings, a unified dependency graph |
 | 2025-05 | `Funk` | `Optional<T> = Either<NotFound, T>`, used only by Vex |
 | 2025-08 | `Jqy` | The layout engine that Vex came from |
 | 2025-08/09 | `Vex` | Spec v0.9, the step IR, adapters, axes, then locals and optics. "Biblo" first appears here. |
 | 2025-10 | `tiller` | Reactive paths |
 | 2026-02 to 07 | `render` | A new kernel: `Lit \| Ref \| App` IR, its own Optional, the `biblo` class registry, a reactive engine |
 
-The `render` architecture document names its sources: "Synthesized from Graph (lenses + relative dimensions), Graph2 (seat value graph …), MetroGraph (…), **Vex (analyzable IR + scoped evaluation)**, Splay (…), Tiller (…)".
+The `render` architecture document names **Vex (analyzable IR + scoped evaluation)**, Splay and Tiller among its sources.
 
 ### 2.3 What only Vex has
 
-`render` and Graph solved other problems: reactivity, composition and storage. Neither has these Vex ideas:
+`render` solved other problems: reactivity, composition and storage. It does not have these Vex ideas:
 
 - the collection axes (`traverse`, `peers`, `other`) and the matrix scope
 - typed domain values through adapters, and declared algebraic laws
@@ -107,7 +104,7 @@ The `render` architecture document names its sources: "Synthesized from Graph (l
 - monoid reductions in a lenient and a strict form
 - a normative spec with laws and a conformance checklist.
 
-Graph does the math that Vex was made for (force-directed, packed and grid layouts) as imperative TypeScript (`layout-registry/layouts.ts`, 636 lines). **That is the gap that Vex can fill.**
+Layout code does the math that Vex was made for (force-directed, packed and grid layouts) as imperative TypeScript. **That is the gap that Vex can fill.**
 
 ---
 
@@ -155,9 +152,9 @@ V-042 is the most important result. **The mutable-focus model cannot express the
 ### 3.4 Position in the ecosystem
 
 - No repo in `~/git` imports Vex or Funk.
-- There are four Optional encodings that do not agree: Funk (`Left/Right`), `@render/optional` (`none/some`), Graph (an untagged `NotFound` symbol) and `client-collections` (`_tag`). None of them is published.
-- The vector code exists three times: Jqy/Vex `Vector`, `render` `pack/vector.ts` and Graph `rectangle-packing/vector.ts`.
-- Graph removed its own fluent chain in July 2026. The commit says: "expressions are THE state-access story". This is a warning for Vex: a fluent API must produce data that a host can keep. It must not be the semantics itself.
+- There are four Optional encodings that do not agree: Funk (`Left/Right`), `@render/optional` (`none/some`), an untagged sentinel and `client-collections` (`_tag`). None of them is published.
+- The vector code exists three times: Jqy/Vex `Vector`, `render` `pack/vector.ts` and one other copy.
+- The family removed an earlier fluent chain. This is a warning for Vex: a fluent API must produce data that a host can keep. It must not be the semantics itself.
 
 ---
 
@@ -400,7 +397,7 @@ The IR is an open union: each extension adds an `ext` kind and a handler. The co
 |---|---|---|
 | `evaluate` | `Result<T>` | the public API |
 | `explain` | a trace | tests, site, error pages |
-| `deps` | the set of (address, path) reads | memoization, `render` seats, Graph `computed()` |
+| `deps` | the set of (address, path) reads | memoization, `render` seats, computed values |
 | `serialize` / `parse` | JSON | storage, workers, share links on the site |
 | `pretty` | builder code from an IR | the site, error messages |
 | `compile` | a closure, for speed | the hot path (checked against `evaluate` by property tests) |
@@ -438,13 +435,13 @@ packages/
 spec/                      — the v1.0 spec with requirement IDs, the cases and their ledger
 ```
 
-### 6.12 Relation to render and Graph
+### 6.12 Relation to render
 
-The tree IR keeps the door open in both directions:
+The tree IR keeps the door open:
 
 - **render** can evaluate Vex expressions with its own engine, because `lit`, `ref` and `app` are the same. Vex adds the domain op pack, the axes and the laws. `deps()` feeds render's seats.
-- **Graph** stores its expressions as JSON in its database. A Vex expression is also JSON. The pilot in P5 replaces one Graph layout strategy (the grid or the packed layout) with a Vex program, and compares the output and the speed.
-- **One Optional for the family.** Use the `render` form (`{ tag: "none" } | { tag: "some", value }`, with one shared `none`). Give a converter to Graph's `NotFound` form.
+- **Storage.** A Vex expression is JSON, so a host can store it. The pilot in P5 replaces one layout strategy (the grid or the packed layout) with a Vex program, and compares the output and the speed.
+- **One Optional for the family.** Use the `render` form (`{ tag: "none" } | { tag: "some", value }`, with one shared `none`). Give a converter to a sentinel form.
 
 ---
 
@@ -722,7 +719,7 @@ The lag site shows live data from the real library. The Vex site goes one step m
 | **Lab** | The full playground: editor, result, trace, IR as JSON, IR as a graph, types |
 | **Spec** | The living spec: each requirement with its status, a "Run" button and the golden trace |
 | **Reference** | The API (TypeDoc), the ops of each domain, "Vexle" search by signature and by law |
-| **Gallery** | Layout separation, Game of Life on a grid, color mixing, the Graph layout pilot |
+| **Gallery** | Layout separation, Game of Life on a grid, color mixing, the grid layout pilot |
 | **Ideas** | The theory, as interactive essays: "Vex is a spreadsheet", "Axes are relations", "Why the laws matter" |
 
 ### 10.3 The signature pieces
@@ -783,7 +780,7 @@ This section gives the phases and their reasons. The list of the open items, wit
 | **P2 Surface** | The typed builder, `all`, `others`, `other`, `pairs`, `neighbors`, `fork`, `let`, `rec`, `ifError`. `@vex/domains` with Vec2, NDVector and NDV, Color and Angle. The old tests ported. `legacy` deleted. | All 42 regression tests pass. Spec examples §18.1 to §18.3 pass. The type tests pass. `legacy` is gone. | 2 weeks |
 | **P3 Assurance** | Conformance cases for each requirement ID, doc tests, the full property suite, TSTyche, golden traces, the Stryker lane, benchmarks | Each requirement has a test. Mutation score of 90 or more on the core. | parallel to P1–P2 |
 | **P4 Site** | D1, D2 and D3 from §10.6 | Each page passes the smoke test and ste-lint. The Lab runs each spec example. | 3–6 weeks, parallel |
-| **P5 Interop** | `sheet()` with `#CYCLE!`, `compile`, the Graph layout pilot, a shared Optional package, tsdown build, Changesets, npm release as `@mark1russell7/vex` | The pilot gives the same layout as the Graph code. The package passes publint and attw. | 2–3 weeks |
+| **P5 Interop** | `sheet()` with `#CYCLE!`, `compile`, the grid layout pilot, a shared Optional package, tsdown build, Changesets, npm release as `@mark1russell7/vex` | The pilot gives the same layout as a reference in plain TypeScript. The package passes publint and attw. | 2–3 weeks |
 | **COMPILE-FUSE** (priority 1, planned) | The fusion of list ops in standalone modules: one loop for a chain, lists without error items with no scan of `V`, one envelope for each run. The design is in [`COMPILER.md`](./COMPILER.md) §7.6. | P17 passes with the fusion on and off. The bench of the shapes module of ireko gives the module call at 1.4 times the hand code or less. | 1–2 weeks |
 
 **The first two weeks, in order:**
@@ -799,11 +796,11 @@ This section gives the phases and their reasons. The list of the open items, wit
 
 | # | Decision | Recommendation |
 |---|---|---|
-| D1 | **The role of Vex.** A standalone library, or a part of `render`, or an archive? | A standalone library that interoperates with render and Graph through the shared tree IR. Give it a real consumer: a Graph layout strategy (P5 pilot). If Graph does not want peer-relative math as data, decide again after P2. |
+| D1 | **The role of Vex.** A standalone library, or a part of `render`, or an archive? | A standalone library that interoperates with render through the shared tree IR. Give it a real consumer: a layout strategy (P5 pilot). If no host wants peer-relative math as data, decide again after P2. |
 | D2 | The IR shape | The tree IR of §6.4, a superset of render's `Lit \| Ref \| App` |
 | D3 | The main surface | The typed `._` chain with `let`. `applyUsing` stays only as sugar that binds arguments by name. |
 | D4 | `fork()` | Keep it. With a tree IR it is a typed tuple of expressions and costs little. |
-| D5 | Optional encoding | The render form for Vex 1.0. Later, one shared package for Vex, render and Graph. Retire the Funk submodule in P0. |
+| D5 | Optional encoding | The render form for Vex 1.0. Later, one shared package for the family. Retire the Funk submodule in P0. |
 | D6 | Docs stack | Option A, Astro + Starlight with the lag tokens (§10.4) |
 | D7 | Code lint | Oxlint with type-aware rules. Offer it to the template after Vex proves it. |
 | D8 | Package name | `@vex/*` inside the workspace, published as `@mark1russell7/vex` in P5. The unscoped `vex` name is taken on npm. |
@@ -846,12 +843,12 @@ Decision D13 of coeval says that the languages evaluate through the kernel. The 
 
 - **Node.** The local Node 25.2.1 reached end of life on 2026-06-01. Vitest 5, tsdown 0.23 and Changesets 3 do not support it. Change to Node 24 at this time, and to 26 after 2026-10-28.
 - **An unpushed branch in render.** The as-built state of `render` (its whole roadmap run) is on the local branch `roadmap`, which is not on GitHub. Push it, or a disk failure loses it.
-- **One vector library.** The same vector code exists three times (Jqy/Vex, render, Graph). `@vex/domains` can become its single home.
+- **One vector library.** The same vector code exists three times (Jqy/Vex, render, one other copy). `@vex/domains` can become its single home.
 - **One Optional.** Four Optional encodings exist in the family. A tiny shared package removes the converters.
 - **Jqy.** Its `dump:src` script points to a folder that does not exist, and its `concat-src` submodule is not initialized.
 - **lag** tracks `.claude/settings.local.json`, but the template ignores the `.claude/` folder. This is a small difference to clean up.
 - **AI readers.** Publish an `llms.txt` and the JSON schema of the IR on the site. A model can then write Vex programs as data, and `explain()` can check them.
-- **Later ideas.** A tree space with `parent`, `children` and `ancestors` axes (Graph's `$ancestor`). A solver hand-off for linear constraints (Cassowary or kiwi). Law-based rewrites of the IR, for example constant folding for associative ops.
+- **Later ideas.** A tree space with `parent`, `children` and `ancestors` axes. A solver hand-off for linear constraints (Cassowary or kiwi). Law-based rewrites of the IR, for example constant folding for associative ops.
 
 ---
 
@@ -894,16 +891,16 @@ Decision D13 of coeval says that the languages evaluate through the kernel. The 
 
 - P5 done: the tsdown build, the package check (publint, attw and a program against the tarballs), Changesets, and a release workflow that the owner starts by hand. Since 2026-10-19, a version commit on `main` starts the release (§9.1).
 - P5 done: `sheet()` with `#CYCLE!` (spec §9). A cell reference is an `ext` node, so the IR has no new kind. The run uses the algorithm of Tarjan, so each cell on a cycle gives `#CYCLE!` in any order of evaluation (property P9).
-- P5 done: the grid pilot in `@vex/pilots`. One Vex program gives the same rectangles as the grid layout of Graph on random items. Graph is a private repository, so the pilot compares with a new implementation of the same behavior, not with a copy of the Graph code. The owner can do the direct comparison in a local copy.
+- P5 done: the grid pilot in `@vex/pilots`. One Vex program gives the same rectangles as a reference in plain TypeScript on random items.
 - P5 done: `compile`. The interpreter is a closure compiler, so `evaluate` and `compile` have one semantics (spec rule EVAL.COMPILE, property P10).
 - §13 done: the site publishes `llms.txt` and the JSON Schema of the IR. A property test keeps the schema equal to `isExpr`.
 - §9.2 done: each workflow uses actions by commit SHA. `.github/renovate.json` keeps the pins current. Since 2026-10-19, it extends the shared preset of the template (`renovate/default`) and keeps only the rules of Vex.
-- The packed layout of Graph is an ordered fold. It is not a good fit for Vex formulas.
+- A packed layout is an ordered fold. It is not a good fit for Vex formulas.
 - §13 done: the tree space, with the move `parent` and the axes `children`, `ancestors`, `descendants` and `siblings` (spec SPACE.TREE, NAV.PARENT, AXIS.TREE and EXAMPLE.TREE, property P11). The site has a tree explorer.
 - Not done, on purpose: a cache of methods for each prototype. A prototype can change after the first lookup, and then a cache gives an old method. The gain was 11 % of the time of a call.
-- Not done: one vector library for the family. render and Graph keep their own vector code until `@mark1russell7/vex-domains` is on npm. A change of Graph is a decision of its owner.
-- 2026-10-18: the owner of Graph accepted a plan that moves the packer classes `Vector` and `Rect` of Graph to `render-pack`, not to `vex-domains`. They are the same code as the packer of `render-pack`. Thus the family keeps two copies: the mutable geometry of the packer in `render-pack`, and `Vec2` in `vex-domains`. When 0.7.0 is on npm, Graph removes its own `vec`, `vec.x` and `vec.y`.
-- D5 done: the shared Optional is the new repository [`optional`](https://github.com/mark1russell7/optional). render gives its exports from `@render/optional`, and the type `Optional` of Vex is its type. Graph keeps its sentinel form, and the package has converters for it.
+- Not done: one vector library for the family. render keeps its own vector code until `@mark1russell7/vex-domains` is on npm.
+- 2026-10-18: a plan moves the packer classes to `render-pack`, not to `vex-domains`. Thus the family keeps two copies: the mutable geometry of the packer in `render-pack`, and `Vec2` in `vex-domains`.
+- D5 done: the shared Optional is the new repository [`optional`](https://github.com/mark1russell7/optional). render gives its exports from `@render/optional`, and the type `Optional` of Vex is its type. The package has converters for a sentinel form.
 - D8 done: the published names are `@mark1russell7/vex`, `@mark1russell7/vex-domains` and `@mark1russell7/vex-testkit`, and the packages are not private. Version 0.2.0 is on npm. Each package trusts the release workflow (trusted publishing), so the workflow has no token.
 - D11 done: cue (`9c99ad6`) sets `types` in the node preset and removes `diagnostics`. The template (`aac1840`) makes source packages with a `tsconfig.test.json`, and anchors the Python block of `.gitignore`.
 - D12 done: the workspace `CLAUDE.md` tells which scaffolding rule applies in `client` and which in a template monorepo.

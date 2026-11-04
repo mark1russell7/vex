@@ -154,7 +154,7 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 - An `each` with an error item, because generated code makes no error item.
 - The axis `list` over a list with an error item, or over an array with a hole (the paragraph "The axis list").
 - An error of an item that a list op on a list value gives with `strict`, and `#DEPTH!` of such an op (the next paragraph).
-- A list op on an array (V-064).
+- `errors` of an array with a hole, because its values have the position of the call (COMPILE.LIST.ARRAY).
 - A failed kind check of a schema, because it is no error of the interpreter.
 - `reduce` on an empty list, where the result can be the identity of the op. A call cannot give an identity if its op has a literal name, the call has no options, and the identities are not exactly one. For such a call, the check is an error of the program, and a context can drop it.
 - A failed test of a data limit, where a test can use an extension. The interpreter evaluates each test, so `#DEPTH!` of a later test comes first.
@@ -164,11 +164,12 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 - A node with two failed arguments past `MAX_COPIED`.
 - A data limit that is not valid, because its error keeps its cause (ITERATE.LIMIT.ERROR).
 
-**Lists as values.** A list op on an `each` is one loop (`count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first`, `values`, `keys`, `errors` and `reduce`). Each other list op, and each list op on another list, is a call of the site of the op. There, `generic` of the runtime calls `listOps` of the core, which is the code of the interpreter (LIST.OPS, COMPILE.LIST.VALUE). No second copy of the list ops exists. Thus the value of a list op is the value of the interpreter, for each list.
+**Lists as values.** A list op on an `each` is one loop (`count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first`, `values`, `keys`, `errors` and `reduce`). Each other list op, and each list op on another list or on an array, is a call of the site of the op. There, `generic` of the runtime calls `listOps` of the core, which is the code of the interpreter (LIST.OPS, COMPILE.LIST.VALUE, COMPILE.LIST.ARRAY). No second copy of the list ops exists. Thus the value of a list op is the value of the interpreter, for each list.
 
 The rules of a failure:
 
 - An error of the op has the marker path of the runtime. The runtime keeps the error in the record of the failure, and `materialize` gives it the path and the position of the site. So `ifError`, a binding, `#ARGS` and a list op around the site take it as the error of an op.
+- A hole of an array is an error item with the marker path, so `strict` gives an error of the op at the site. Only `errors` makes such an item a value, and a site has no position for that value. So `errors` of an array with a hole throws, and tier 1 gives the result.
 - `#DEPTH!` throws, and tier 1 gives the result. So the V-066 and V-067 rule holds: the program cannot catch it, and it wins over each other error, in each order of the arguments. The order in the interpreter is in `goodItems`, which the runtime shares.
 - An error of an item has another path. It comes from a list of the input with `strict`. It throws too, and tier 1 gives the result.
 
@@ -197,6 +198,37 @@ Generated code makes no trace. `explain` always operates in tier 0, so the quest
 
 ### 4.4 Standalone modules
 
+#### The bytes of a committed module (COMPILE.MODULE.BYTES)
+
+A repository can commit a printed module. The committed file then equals its print byte for byte, or the file is not the program that the repository names. The reusable workflow `.github/workflows/module-bytes.yml` takes a commit of vex, prints each module from that commit and compares the bytes with `packages/pilots/scripts/module-bytes.ts`. The commit is the pin: to print a module again, change the commit and start the script with `--write`. A change of the compiler thus reaches a committed file only by a change of the pin. The gate runs on each runner, because the print does not depend on the runner (COMPILE.MODULE.TEXT).
+
+A pin that stays in one place proves only that the files match an old compiler. A repository with committed modules has no dependency on the compiler, so a release does not move the pin. Thus a repository uses the workflow two times. The check of a pull request takes the pin, and its result depends only on that pull request. A daily run takes the word `latest` and prints from the last release. That run fails only when a release changes the output of a module, so a release with the same output gives no alarm. The repository then moves the pin and prints the files again.
+
+#### The text of a copied function (COMPILE.MODULE.TEXT)
+
+A module copies the functions of its domains. JavaScript gives the text of a function, and that text depends on the program that loaded the function. A runner that only removes types keeps the spaces of the types and the parentheses of the source. A runner that compiles can drop parentheses, change a quote and add a call that names a function. Without a rule, two runners print two programs.
+
+The function `functionText` parses the text with `acorn` and prints the tree with `astring`. Each string has double quotes, each number has its decimal form, and the call `__name` of `tsx` goes. Equal trees give equal bytes. A text that is not one expression stays as it is, and the module refuses that copy.
+
+The parser is a runtime dependency, because the option `domains` takes a domain of the caller, and that function exists only at run time. The printer has its own entry, `@mark1russell7/vex-compiler/module`. The root entry does not load the parser, so a program that only runs tiers has no cost.
+
+The test `packages/pilots/src/runner-text.test.ts` prints each module of ireko with Node, with `tsx` and in Vitest, and compares the bytes. The test also has the case `(a && b) || c`, because a formatter keeps these parentheses and `tsx` removes them.
+
+#### The faults of a module (COMPILE.MODULE.FAULT)
+
+A catch of a module holds an exception of a function of a domain, because the interpreter gives an error for it. The same catch also holds a fault of the printed code. Then a defect of the printer is a value, and only a differential test finds it.
+
+The start of an exception tells the two cases, not its class. A `TypeError` of an op is an error of Vex, and a `TypeError` of the printed code is a fault. With `faults` at `throw`, each copy of a function of a domain has the wrapper `FW`. Each other catch calls `FK`, which rethrows each value that is not the error of Vex.
+
+Each test of the compiler and of the pilots that compares values runs with `throw`. The file `packages/compiler/src/module-fault.setup.ts` sets the option. A test of the text of a module sets `value`.
+
+The file `packages/pilots/src/ireko-modules.ts` holds the input of each module of ireko. The script `scripts/ireko-module.ts` and the value tests read the same rows, so a value test prints the module of a build with `throw`. The rows of the five committed modules are `measure`, `place`, `shape`, `grid` and `radial`. The rows `layers` and `tree` have no committed file at this time, and their value tests use the table too.
+
+This check examines the print of the compiler at the same commit. It does not examine the text of a committed file, because that text can be an older print. A fault that an older print holds stays in that file until the next build.
+
+The default stays `value`, because the form with `throw` costs more than the limit of the decision. The limit was 2 % of the minified module. The module of `NODE_SHAPE` grows by 142 bytes after `esbuild --minify` and `gzip -9`, from 2336 to 2478, which is 6.08 %. Without minification, it grows by 92 bytes, from 3629 to 3721. The tree module grows by 182 bytes, which is 5.04 %. The form also adds a call of the wrapper to each call of an op, and it keeps each op as a declaration. This record has no measure of the time of these calls.
+
+
 A module of the build can operate without the interpreter. Then a failed check throws a `VexContractError` that names the check, because no fallback exists.
 
 A host that guarantees the kinds of its input uses standalone modules. ireko gives its strategies only finite numbers and plain rectangles. Thus ireko uses them. A module with the fallback imports the interpreter.
@@ -212,6 +244,8 @@ The ops of a band are such proofs, so the shapes module of ireko has no new chec
 An op with a value of another kind breaks KIND.RETURNS, and the law checker refuses it. A module has no tier 1, so it does not find such a value.
 
 A standalone module gives each list of its input and of its result as a `vex.list`. With the option `lists: "plain"`, these lists are plain arrays, with `VEX_ERROR` for an error item (COMPILE.MODULE.LIST.PLAIN, §13.3).
+
+A module with `fuse` also has a last pass that removes the code that a run does not need (COMPILE.MODULE.SIZE, §13.3).
 
 ## 5. Safety of generated code
 
@@ -253,7 +287,7 @@ The first form of this is done (§13.2). `SheetRun.fill` evaluates the cells in 
 
 ### 7.5 Recalculation
 
-A run knows which cell reads which cell. After a change of one record, only the cells that depend on it change. This is for the live editor of ireko and for the drag of a box in Graph.
+A run knows which cell reads which cell. After a change of one record, only the cells that depend on it change. This is for the live editor of ireko and for the drag of a box.
 
 ### 7.6 Fusion of list ops
 
@@ -497,7 +531,7 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | Step | Golden files of `packages/compiler/src/__golden__` |
 |---|---|
 | 1, 2 | None |
-| 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-tree.js`, and a new file `.off.js` with the text of `fuse` false for each one |
+| 3 | `module-list-build.js`, `module-list-loops.js`, `module-list-values.js`, `module-tree.js`, and a new file `.off.js.txt` with the text of `fuse` false for each one |
 | 4 | `module-list-build.js`, and a new `module-fuse.js` with the chains of `NODE_SHAPE` |
 | 5 | `module-fuse.js`. The programs of the other files have no chain of `append` with a part that pushes. |
 | 6 | `module-fuse.js`, also for the direct push. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
@@ -562,7 +596,15 @@ The unit tests are in `packages/compiler/src/module-pairs.test.ts`. They compare
 
 ## 8. Bounded iteration
 
-The fixed point `fix` of step B is not in tier 2 or in modules yet (COMPILE.FIX). The lowering stops at the node, and tier 1 gives the result. Tier 2 first gives each reason of a check of tier 1, so a program that is not valid has one reason in each tier. `emitModule` refuses a program with `fix`, also where a `let` does not use the node. The next step of the work lowers a column to an array of rows and a loop of rounds. P17 then tests it against tier 1.
+The fixed point `fix` of step B is in tier 2 and in modules (COMPILE.FIX, COMPILE.FIX.MODULE). Both lower a column to an array with a value for each key, in the order of the keys, and to a loop of rounds:
+
+- The rows of `init` fill the array. Each round makes the array of the next values. A round without a change ends the loop and keeps the old array, as tier 1 does. Thus a round that moves 0 to -0 changes no row.
+- `last` reads the array at the index of the focus. In a loop over the keys, the index of the loop is that index. At the key of a list, tier 2 looks up the index, and a key outside the space gives the error of FIX.LAST.
+- Tier 2 evaluates each row in a block of its own, as a binding does. A row with an error does not stop the next rows, so each extension of a round evaluates. After the loop, one error is the error of the node. Two or more errors go to `worstRow` of the core, and then to `#ARGS` with their causes (FIX.ERROR). `#DEPTH!` of an extension goes to tier 1, as in each other node.
+- A module has one error sentinel, so the first row that fails stops the column. The exception is a row that reads a cell. A flag holds its failure until the end of the loop, so the search of a sheet sees each read.
+- A read of a row has the level `ROUNDS` in a module. A value with this level is not a constant or a column of the run, because a row changes in each round. A column that reads no key is a lazy constant of the run. It evaluates on its first read, as a branch of the interpreter does.
+
+The rules of the kinds and of the limit come from the core (`fixRounds`, `fixValueError`, `joinKind`, `worstRow`), so each tier has one copy of them. One case stays refused. A module has no record at a key of a literal or of `fill`. Thus a column at such a key gives the reason of the axis `list` (LIST.LITERAL). P17 tests random columns in tier 1, tier 2 and the module (`arbFixProgram`).
 
 Vex has no loop, so each program ends. The language keeps this property, and it gets **bounded** iteration:
 
@@ -606,7 +648,7 @@ A data limit (ITERATE.LIMIT.DATA) names an axis, and the limit is the number of 
 
 The cap of 100000 stays. A loop can make heavy steps, so a large input must fail with a defined error and not take a long time. A count above the cap gives `#NUM!` of the kind `limit` (ITERATE.LIMIT.ERROR). The same error wraps each failure of the axis, so a host reads one error for each cause.
 
-Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
+Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. A count that reads no key is a constant of the run, so a module counts one time for each run (COMPILE.MODULE.LIMIT.ONCE). A walk over a list of the nodes then costs its steps at each key, and tier 2 still counts at each key. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
 
 Without `until`, the iteration makes `limit` steps. With `until`, the test evaluates before each step and after the last one. A true test stops the iteration, and with no true test the value is `#NUM!`. The first error of a value, of the test or of `result` is the value of the iteration.
 
@@ -651,17 +693,17 @@ The status on 2026-10-17:
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
 - Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 has them too (COMPILE.LIST.VALUE, §4.1), but not the axis `list` yet. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
 - The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 gives them with the code of the interpreter (COMPILE.LIST.VALUE).
-- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
+- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). Tier 2 gives a list op on an array with the code of the interpreter (COMPILE.LIST.ARRAY), so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
 - Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 has them (COMPILE.LIST.VALUE).
-- Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus the force layouts of Graph and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
-- Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops come from `XYDomain`, because a module cannot copy the methods of `Vec2Domain`.
+- Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus force layouts and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
+- Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops came from `XYDomain`, because a module could not copy the methods of `Vec2Domain` at that time (COMPILE.MODULE.FORM changed this).
 
 The decisions of the third block:
 
 - A key of a module list is a number for the position of a record, or a text for a key of a literal. `get` and `without` compare the text of each key. Thus a read of the focus stays fast.
 - `get` keeps an index of the keys on the array of the list. The array does not change after the op that makes it. Thus a step that reads each key of a list of `n` items costs O(n), as in the interpreter.
 - A list op over a `let` with literal options is the list op over the body of the `let`. A builder sheet prints `sum(let($0 = 0, each(…)))`. Thus the `each` stays one loop with a running value.
-- The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus an op on a `get` of a name whose first list is empty gives a reason.
+- The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus the step of the name decides that kind (COMPILE.MODULE.LOOP.EMPTY). When no step decides it, an op on a `get` of the name gives a reason.
 - The focus of the axis `list` is the position of a record. A key of a literal is not such a position. Since COMPILE.MODULE.FILL, the axis `list` over such keys gives a reason only when it reads a record at a target.
 - Since 2026-10-27, a loop over the axis `list` can name its items with `as` (COMPILE.MODULE.LIST.ITEM, §13.3, "The names of the items").
 - Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list gives a reason. Since 2026-10-26, the value of a program and the branches of `if` and `ifError` can be lists ("Lists in cells" below). Since 2026-10-26, a module has graph spaces and `reduce`, so the force pilot is a module ("Graph spaces and reduce" below).
@@ -1158,7 +1200,9 @@ A module also has `reduce` with the op of a domain (COMPILE.MODULE.REDUCE). The 
 - No items give the identity of the op in the one domain that has one, or in the domain of the option `domain`. The module copies the identity. Another case gives the error of Vex, as in the interpreter.
 - An error item is skipped (LIST.LENIENT), and the option `strict` gives the error. A name of the op that is not a literal text gives a reason.
 
-The ops of `Vec2Domain` are methods of a class, so a module cannot copy them. Thus `forceProgram` of the pilot uses `XYDomain`, the plain data with the same arithmetic. It uses `dot(gap, gap)` in place of `lengthSq`, which gives the same bits. A list was not a value of a module, so the program gives the last position of each node with `get(…, id)`. The list of the loop is a constant of the run, so the run computes it once.
+Two domains of plain objects share a module when each declares `fields` (KIND.FIELDS). Without this declaration, the compiler cannot prove that one domain refuses the values of the other. The law checker tests each declaration, so a false claim fails a test. A number at a lifted position goes through a copy of `fromScalar` (KIND.LIFT). `InsetsDomain` uses both. Tier 2 keeps the dispatch of the runtime for this site, because its kinds are primitive.
+
+`forceProgram` of the pilot uses `XYDomain`, the plain data with the arithmetic of `Vec2`. It uses `dot(gap, gap)` in place of `lengthSq`, which gives the same bits. A list was not a value of a module, so the program gives the last position of each node with `get(…, id)`. The list of the loop is a constant of the run, so the run computes it once.
 
 A property compares random programs over random graphs with the interpreter (P17). The graphs have cycles, edges to their own record and two edges to one record. The programs read each axis of a graph, also in the reverse order and from an address, and `reduce` with each option. The force pilot compares the module with `layoutReference` on random graphs, with the same bits. The text of a module of a graph is in the golden file `__golden__/module-graph.js`.
 
@@ -1334,7 +1378,7 @@ The measure pass of ireko gives a shape to each subtree that a tidy strategy rea
 
 The merge is a chain of folds over lists. It gives the ends of the valid bands, sorts them and removes the repeated cuts. Then it gives one band for each cut with an active band, and it joins neighbor bands with the same interval. Last, it halves the list until the limit holds. The comparisons keep the first of two equal values, as the comparisons of ireko do. Thus a negative zero has the bits of ireko.
 
-A name of a loop whose first value is the empty literal has no kind of items. Then `sortBy` gives the reason "the kinds of the items of "sortBy" do not decide the op "from" of the option by". The program starts each such name with `fill(0, value)`, an empty list whose items have the kind of the value. `fill(1, value)` makes the list of one value (COMPILE.MODULE.FILL). Before, the axis `window(0, 0)` made it.
+The printer takes the kind of the items of a name that starts with the empty literal from the step of the name (COMPILE.MODULE.LOOP.EMPTY). The program keeps `fill(0, value)` as its first list, because this first list is fresh, so the steps of the name push in place (COMPILE.MODULE.FUSE.ADOPT). With the empty literal, six appends of `NODE_SHAPE` copy their lists in each step, and the module of the sheet gets more bytes after gzip. `fill(0, value)` is an empty list whose items have the kind of the value. `fill(1, value)` makes the list of one value (COMPILE.MODULE.FILL). Before, the axis `window(0, 0)` made it.
 
 The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`. Before COMPILE.MODULE.APPEND.OWN, each step copied the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
 
@@ -1397,6 +1441,47 @@ The pilot found these gaps:
 - The fields of the bands are arrays, and a list op on an array goes to tier 1 (V-064). Thus a run of tier 2 with a shape gives the value of tier 1.
 
 The source of the module has approximately 23 kB, with `lists: "plain"`. The module packs the row one time for all the children. ireko does not use the module yet. It needs a decision about its size budget and a speed check in CI.
+
+#### The route pilot (the engine)
+
+The route pass of ireko makes the edges of a layout and asks a router for the points of each edge. `@vex/pilots` has its calculations as programs in `ireko-route.ts`:
+
+- `STRAIGHT_PROGRAM` and `ORTHOGONAL_PROGRAM` evaluate at each edge. They are the routers without a search.
+- `EDGE_DIRECTION_PROGRAM` gives the direction of an edge, with the function `forward` of ireko.
+- `LABEL_BOX_PROGRAM` gives the box of the label of a container.
+- `OBSTACLES_PROGRAM` evaluates at the nodes in the pre-order, and it gives the obstacles of one edge.
+- `AVOID_PROGRAM` evaluates at the boxes of one edge, and it gives the route of the router `avoid`.
+
+The rest of the pass is control, and it stays in the host. This part is the loop over the edges, the unique names and the issues. It is also the use of a router of the user, the catch of its throw and the check of its points. The use of `straight` after a failure is control too.
+
+The router `avoid` is an A* search over a sparse grid. The program is one `iterate` with a phase. The phase 4 takes the first state of the heap. The phases 0 to 3 are the steps from that state that make a cost lower. Other steps have no phase, so the limit of 100000 phases holds the search of each input that the tests have. The heap is the binary heap of ireko, because its order of ties decides the route. Thus a fixed point of the costs does not give the route of ireko, and the program does not use `fix`.
+
+The test `ireko-route.test.ts` holds a copy of each function of ireko. Properties compare the copies with the modules, with tier 2 and with the interpreter on random inputs. Some inputs are on a coarse lattice with many ties. Fixed cases hold the points that the functions of ireko gave.
+
+On 2026-11-04 a one-time run compared the modules with the real route pass of ireko on 9747 edges. A second run compared the module of `avoid` with the real router on 4000 more edges. The bits were the same for each router, each direction and each list of obstacles. A run of the interpreter and of tier 2 on 120 edges gave the same bits.
+
+The program differs from ireko in these ways, and these ways keep the result:
+
+- A list holds the cost and the previous state of each state as one `XY` value. A cost of -1 is the `Infinity` of ireko.
+- Each change of an item makes a new list with `each`.
+- The grids of free points and open steps are maps over the grid. ireko writes the cells of each box into arrays.
+- A second start at one state has no test of its cost. Two starts share a state only for a size below 0.
+
+The result differs from ireko in rare cases:
+
+- A value that is not finite gives an error. Thus a ratio of `borderPoint` that overflows gives an error, where ireko keeps the other ratio.
+- A search of more than 100000 phases gives an error. A grid of more than 50000 points also gives an error (LIST.FILL). ireko has no limit.
+- A text has no op that reads its characters. Thus the host gives each label as a list of code points in the field `codes`.
+
+The pilot found these gaps:
+
+- A module takes only one domain of objects. The program `add(from(band(0, 1, 0, 1)), x(xy(1, 2)))` gives no module with `BandDomain` and `XYDomain`. Thus the ranges of the boxes are lists of `XY` values.
+- No op reads the characters or the code points of a text. Thus `estimateWidth` cannot be a whole program.
+- A step of a loop cannot change one item of a list, because LOOP.SIZE refuses `append(take(xs, k), append(fill(1, x), drop(xs, k + 1)))`. The `each` of the workaround costs one pass over all the states for each change of a cost.
+
+The third gap sets the speed. On 4000 random edges with up to 34 obstacles, the module took approximately 50 times the time of ireko. A closed ring around the target with 34 to 49 boxes took 5 to 34 seconds, and ireko took 10 to 21 milliseconds. These numbers come from one busy computer, so a bench in CI must replace them.
+
+The source of the module of `avoid` has approximately 49 kB, with `lists: "plain"`. The modules of `straight` and `orthogonal` have approximately 5 kB and 8 kB. ireko does not use the modules yet. It needs a decision about their size budget and a speed check in CI.
 
 #### Lists of calls (COMPILE.MODULE.LIST.CALL)
 
@@ -1476,6 +1561,20 @@ In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
 
+#### Names that start empty (COMPILE.MODULE.LOOP.EMPTY)
+
+The printer prints the first value of a name before its step, and the empty literal has no kind of items. A program with `sortBy` and the option `by` over such a name needs that kind. Thus the printer can print a program more than one time.
+
+1. The first print uses the facts of the first lists. A program that it can print keeps this text, so its size and its speed do not change.
+2. After a reason, searches start. In a search, a name that starts empty counts as an empty list, because an empty list fits each list. Thus the list of the step shows the kind of the items. The search keeps this kind, by the expression of the step.
+3. A later search uses the kinds that it has, so a step can take the kind of another such name. The searches stop when one finds no new kind.
+4. In a search, a part that the printer cannot print gives an empty list. For example, a filter of the name reads the items, and an `append` adds items of the kind. The search keeps no text.
+5. The last print gives each such name its kind. The check `fits` of each step proves the kind by induction: the first list has no items, and each step gives items of the kind. A step with another kind gives the reason that the list does not fit.
+
+A program that no step decides gets the reason of its first print. A name that holds its first list in each step gives no kind, and two kinds in one step give no kind. A read of the items in a search does not decide a kind, so a step that only reads its own items stays refused.
+
+The test `module-empty-start.test.ts` compares these modules with the interpreter, with and without fusion (P17). It also pins each case that stays refused.
+
 #### The keys of the records (COMPILE.MODULE.KEYS)
 
 In a module, the key of a record is the text of its position. A host keys its nodes by its own ids. Thus `get(list, id)` found an item only when each id was that text. The interpreter reads the keys from its space, so the option `keys` gives the keys to the run.
@@ -1505,3 +1604,34 @@ The field `as` of `each` and `fold` names the value and the index of each item o
 - The value of an item keeps the facts of its list. Thus an item that is a list is a list in the body. The printer knows these facts only in the loop. So a list op over such an `each` goes over its array when the body can give a list.
 - A name of `as` is not a name of `init` (the check of the document). Thus a step that appends to its own list and reads a name of `as` keeps the append of COMPILE.MODULE.APPEND.OWN.
 - Tier 2 gave a reason for each program with the axis `list` until COMPILE.LIST.AXIS.
+
+#### The smaller form of a module (COMPILE.MODULE.SIZE)
+
+The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its largest modules. Seven rules make their code smaller. Two rules operate in the printer, and the file `module-tidy.ts` holds the others. This file is a last pass over the lines of the module. With `fuse: false`, no rule operates, so that text stays the same (COMPILE.MODULE.FUSE.OFF).
+
+| Rule | The result | The limit of the rule |
+|---|---|---|
+| COMPILE.MODULE.SIZE.FILL | `fill(0, x)` prints `[]`, and a branch with this list prints no block | The count is the literal 0. The code of `x` cannot fail, or tier 1 gives the empty list for a value with only literals and ops. |
+| COMPILE.MODULE.SIZE.KEY | A loop has no `const j = A[q][0];` that no code reads | The line is the first line of the loop, and the head of the loop reads the same array. |
+| COMPILE.MODULE.SIZE.ALIAS | `const a = b;` is not printed, and each read reads `b` | The form is `const`. No line of the block writes `b`, or binds a second `b`. A write outside the block stops the rule when a function of the block can run after it. |
+| COMPILE.MODULE.SIZE.ONCE | A lazy cell prints its value at its read | The cell has one `return` and one read `G(c())`. The read is not in a loop or in a function, other than a lazy cell. |
+| COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
+| COMPILE.MODULE.FAULT | With `faults` at `throw`, a fault of the printed code leaves the run | Each copy of a function of a domain has a wrapper that gives the error of Vex for each exception. Each other catch rethrows each value that is not the error of Vex. No op prints at its call. |
+| COMPILE.MODULE.BYTES | A committed module equals its print | The workflow `module-bytes.yml` prints each module from a pinned commit and compares the bytes. |
+| COMPILE.MODULE.TEXT | The text of a copied function does not depend on the runner | The compiler parses the text and prints the tree. A text that is not one expression stays as it is. |
+| COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |
+| COMPILE.MODULE.SIZE.DEAD | A helper, an op or a constant of the run that no code reads is not printed | A constant has a form that catches each failure. |
+
+The reasons for the limits are these:
+
+- A `fill` with a value that fails is an error of the list, also with the count 0. So the rule for a value that can fail must read the result of tier 1. Tier 1 can read only a value with no input, so each other such value keeps `FI`.
+- A read of a key can throw when the array is not the array of the loop. So the rule reads the head of the loop.
+- A lazy cell that a key loop reads stays, because each key must read one shared object (COMPILE.MODULE.FUSE.OUT). `G` stays, because the value of the cell can be `E`.
+- A parameter can have two reads. A name as the argument has no effect and cannot fail, so the number of reads and their order stay the same.
+- The pass counts the words of a line with no parser. A word in a text counts too. This count is too large at most, so it can only stop a rule.
+- The names that a module declares come from the printer before the pass. So the option `name` keeps each refusal.
+
+| Bytes, after minify and gzip level 9 | Before | After |
+|---|---|---|
+| `NODE_SHAPE` | 2611 | 2336 |
+| `SHAPE_COLUMNS` | 3051 | 2841 |

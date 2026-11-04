@@ -1,6 +1,6 @@
 /**
  * The schema program (EXAMPLE.SCHEMA). It reads a list of JSON documents. For each field path, it gives the distinct
- * kinds of the values and the number of documents with the path. The app Graph shows this schema for a sample of a collection.
+ * kinds of the values and the number of documents with the path.
  *
  * The walk `leaves(d, 3)` goes into an object that is not empty at a depth under 3. It records an empty object, or an
  * object at the depth 3, with the kind `object`. It does not go into an array. The kind of an array is `array<k1|k2>`,

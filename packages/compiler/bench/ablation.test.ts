@@ -2,11 +2,11 @@
 // variant must give the result of the module on the input of the gate.
 import { describe, expect, it } from "vitest";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, radialRun } from "../../pilots/src/ireko-radial.ts";
-import { emitModule } from "../src/index.ts";
+import { emitModule } from "../src/module.ts";
 import { allEdits, handBoth, handPairs, handSum, itemTries, loadRadial, noChecks, noColumnTry, noItemTry, ringOf } from "./ablation.ts";
 
 const source = (): string => {
-  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
+  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial", faults: "value" });
   if (!m.ok) throw new Error(m.reason);
   return m.source;
 };

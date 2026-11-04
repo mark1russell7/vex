@@ -1,5 +1,6 @@
 import { defineDomain, type Domain, type FnOp } from "@mark1russell7/vex";
 import { LocalDate } from "./date.ts";
+import type { Insets } from "./insets.ts";
 import { Vec2 } from "./vec2.ts";
 import type { XY } from "./xy.ts";
 
@@ -33,6 +34,7 @@ export type NumOps = {
   readonly date: FnOp<number, (year: number, month: number, day: number) => LocalDate>;
   readonly vec2: FnOp<number, (x: number, y: number) => Vec2>;
   readonly xy: FnOp<number, (x: number, y: number) => XY>;
+  readonly insets: FnOp<number, (startX: number, startY: number, endX: number, endY: number) => Insets>;
   readonly floor: FnOp<number, NumFn1>;
   readonly ceil: FnOp<number, NumFn1>;
   readonly round: FnOp<number, NumFn1>;
@@ -45,6 +47,8 @@ export type NumOps = {
 
 /** The domain of numbers. A result that is not a finite number is the error `#NUM!`. */
 export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", number, NumOps>({
+  // COMPILE.MODULE.FORM: a vector in a module is plain data, so `vec2` needs no class there.
+  moduleForm: { ops: { vec2: { fn: (x: number, y: number): { readonly x: number; readonly y: number } => ({ x, y }), returns: "domain:Vec2" } } },
   name: "Num",
   // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
   size: "fixed",
@@ -81,6 +85,8 @@ export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", numb
     vec2: { fn: (x: number, y: number): Vec2 => new Vec2(x, y), params: ["number"] },
     // The same as plain data, for a standalone module: xy(x, y). The result is a value of XYDomain.
     xy: { fn: (x: number, y: number): XY => ({ x, y }), params: ["number"], returns: "domain:XY" },
+    // The leading sides, then the trailing sides: insets(startX, startY, endX, endY). The result is a value of InsetsDomain.
+    insets: { fn: (startX: number, startY: number, endX: number, endY: number): Insets => ({ startX, startY, endX, endY }), params: ["number", "number", "number"], returns: "domain:Insets" },
     floor: { fn: (a: number): number => Math.floor(a), returns: "number", monotone: ["up"] },
     ceil: { fn: (a: number): number => Math.ceil(a), returns: "number", monotone: ["up"] },
     round: { fn: (a: number): number => Math.round(a), returns: "number", monotone: ["up"] },

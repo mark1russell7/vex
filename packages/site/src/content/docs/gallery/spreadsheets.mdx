@@ -49,6 +49,27 @@ cells("bike", "rolled"); // => { ok: true, value: 181 }
 cells("spoke", "need"); // => { ok: true, value: 64 }
 ```
 
+## A column that repeats its rounds
+
+`FIX(name, join, first, step)` makes a column that repeats its step until no row changes, and `LAST(name)` reads the row in the last round. The join `OR` moves a row from `FALSE` to `TRUE` only, so the rounds stop. A cycle of rows is not an error here. The axes of a formula are the axes of a tree, so this column follows the ancestors of a row.
+
+```ts doctest
+import { runFormulas } from "@vex/pilots";
+
+const teams = space.tree(
+  { north: { audited: true }, east: { audited: false }, shop: { audited: false }, west: { audited: false } },
+  { east: "north", shop: "east" },
+);
+const cells = runFormulas(teams, ["audited"], {
+  covered: "= FIX(covered, OR, audited, ANY(ancestors, LAST(covered)))",
+});
+
+cells("shop", "covered"); // => { ok: true, value: true }
+cells("west", "covered"); // => { ok: true, value: false }
+```
+
+A step must not fall when the last round rises. Thus `NOT(LAST(x))` gives `#VALUE!`. The builder has the same column, with [the method `fix`](../../reference/api/).
+
 ## A grade book
 
 A class is a root, and its students are its children. `parent.children` is the class of a student. In a `WHERE` test, `score` reads at each sibling, and `this.score` reads at the student of the formula.

@@ -5,7 +5,6 @@ export class VexContractError extends Error {}
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
 function T(f) { try { return f(); } catch { return E; } }

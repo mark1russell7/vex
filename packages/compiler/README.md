@@ -46,7 +46,7 @@ Property P17 compares `tiered` with `evaluate` on random programs, random spaces
 These cases operate in tier 1:
 
 - An `each` with an error item, because generated code makes no error values.
-- A list op on an array, and the axis `list` over an error item. A list op on a list value and the axis `list` are in tier 2.
+- `errors` of an array with a hole, and the axis `list` over an error item. A list op on a list value or an array and the axis `list` are in tier 2.
 - An error of an extension, and each exception that is not an error of an op.
 
 A program keeps the value of each node that depends only on the space, for each space (COMPILE.MEMO). Thus a run at each key of a space computes such a node once, for example a total of a column. A node that reads the origin only through a few values, its keys, has an entry for each value of its keys (COMPILE.GROUP). Thus "the largest width in the column of the origin" evaluates once for each column. A space does not change, so the values stay correct.
@@ -71,7 +71,7 @@ The source has no name and no literal of the program. It reads each one from a l
 
 ### The options of a module
 
-`emitModule` and `emitSheetModule` take these options:
+`emitModule` and `emitSheetModule` come from the entry `@mark1russell7/vex-compiler/module`. This entry loads a parser, and the root entry does not. They take these options:
 
 | Option | What it does |
 |---|---|
@@ -80,6 +80,7 @@ The source has no name and no literal of the program. It reads each one from a l
 | `name` | The name of the function of the module. The default is `run`. |
 | `space` | `"array"`, `"tree"` or `"graph"`. The default is `"array"`. |
 | `fuse` | `false` prints the code without the fusion of the list ops. The default is `true`. |
+| `faults` | `throw` lets a fault of the printed code leave the run. An exception of a function of a domain stays an error of Vex. The default is `value`, which gives an error of Vex for each exception. |
 | `lists` | `"envelope"` gives each list of the input and of the result as a `vex.list`. `"plain"` gives plain arrays of the values, with `VEX_ERROR` for an error item. The default is `"envelope"`. |
 | `keys` | `true` makes the run take the keys of its records as its last argument. The default is `false`. |
 

@@ -1,6 +1,6 @@
 /**
- * The cold time of the schema pilot (EXAMPLE.SCHEMA), for the speed job of the nightly workflow. Graph pays this time
- * when a process evaluates the pilot for the first time.
+ * The cold time of the schema pilot (EXAMPLE.SCHEMA), for the speed job of the nightly workflow. A process pays this time
+ * when it evaluates the pilot for the first time.
  *
  * Start it from the repo root with `node packages/pilots/bench/schema-cold.ts`. It starts `COLD_N` new processes
  * (default 10), one after the other. Each process measures four parts of its first sample:

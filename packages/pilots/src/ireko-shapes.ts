@@ -16,7 +16,8 @@
  * (COMPILE.MODULE.LIST.INPUT).
  */
 import { app, axes, call, cell, each, fn, fold, iterate, let_, lit, ref, space, v, vexList, type Expr, type ItemNames, type Space } from "@mark1russell7/vex";
-import type { ListKind, Schema, SheetModuleOptions } from "@mark1russell7/vex-compiler";
+import type { Schema } from "@mark1russell7/vex-compiler";
+import type { ListKind, SheetModuleOptions } from "@mark1russell7/vex-compiler/module";
 import { BAND_DOMAINS, type Band } from "./ireko-band.ts";
 
 /** The shape of a subtree, relative to the top-left corner of its root box, as `Shape` of ireko. */

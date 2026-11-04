@@ -29,9 +29,12 @@ describe("the probe of the sites of the fallbacks (FALLBACKOPS)", () => {
   });
 
   it("names an exception of the runtime", () => {
-    // Tier 2 gives FALLBACK for a list op on an array (V-064), with an exception.
-    const probe = siteProbe(app("count", each(axes.all, app("keys", ref("fr")))), options);
-    expect(probe?.site({ space: s, origin: "A" }).site).toBe("an exception: tier 1 gives a list op on an array");
+    // The error item of a hole has the position of the call, so tier 1 gives `errors` of the array (COMPILE.LIST.ARRAY).
+    const probe = siteProbe(app("count", each(axes.all, app("errors", ref("fr")))), options);
+    const holes = space.record({ A: { fr: [1, null] } });
+    expect(probe?.site({ space: holes, origin: "A" }).site).toBe("an exception: tier 1 gives the errors of an array");
+    // An array without a hole has no error items, so tier 2 gives the value. The record C has no field.
+    expect(probe?.run({ space: s, origin: "A" })).toStrictEqual({ value: 2 });
   });
 
   it("names the error of an extension, and ifError catches it in tier 2 (COMPILE.EXT)", () => {

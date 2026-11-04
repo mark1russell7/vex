@@ -4,7 +4,7 @@ import { propertyTimeout } from "../testkit/src/fc-timeout.ts";
 export default defineConfig({
   test: {
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    setupFiles: ["../testkit/src/fc-setup.ts"],
+    setupFiles: ["../testkit/src/fc-setup.ts", "../compiler/src/module-fault.setup.ts"],
     // Each package has tests, so a run that finds none is an error (a broken pattern), not a pass.
     passWithNoTests: false,
     // The nightly run sets FC_NUM_RUNS to 10000, so a property test takes longer than the default limit. The pilots

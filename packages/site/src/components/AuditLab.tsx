@@ -7,7 +7,7 @@
  * panel shows the result of each check at the selected box, and the steps of one check.
  */
 import { Vec2 } from "@mark1russell7/vex-domains";
-import { checkResults, explainCheck, placedVex, type AuditCode, type AuditOptions, type LayoutBox } from "@vex/pilots";
+import { checkResults, explainCheck, placedVex, type AuditCode, type AuditOptions, type LayoutBox } from "@vex/pilots/src/layout-audit.ts";
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { show } from "../lib/format.ts";
 import { Code } from "./Code.tsx";

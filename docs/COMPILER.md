@@ -617,7 +617,7 @@ A data limit (ITERATE.LIMIT.DATA) names an axis, and the limit is the number of 
 
 The cap of 100000 stays. A loop can make heavy steps, so a large input must fail with a defined error and not take a long time. A count above the cap gives `#NUM!` of the kind `limit` (ITERATE.LIMIT.ERROR). The same error wraps each failure of the axis, so a host reads one error for each cause.
 
-Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
+Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. A count that reads no key is a constant of the run, so a module counts one time for each run (COMPILE.MODULE.LIMIT.ONCE). A walk over a list of the nodes then costs its steps at each key, and tier 2 still counts at each key. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
 
 Without `until`, the iteration makes `limit` steps. With `until`, the test evaluates before each step and after the last one. A true test stops the iteration, and with no true test the value is `#NUM!`. The first error of a value, of the test or of `result` is the value of the iteration.
 

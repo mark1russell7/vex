@@ -1843,7 +1843,7 @@ describe("a data limit in a module (ITERATE.LIMIT.DATA)", () => {
 
   it("P17 ITERATE.LIMIT.DATA COMPILE.MODULE: a module of a random program with a data limit gives the value of the interpreter", () => {
     const limited = fc
-      .tuple(fc.constantFrom<Axis>(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.where(axes.all, ref("b"))), program.num, program.num)
+      .tuple(fc.constantFrom<Axis>(axes.all, axes.others, axes.window(-1, 0), axes.reverse(axes.all), axes.where(axes.all, ref("b")), axes.list(each(axes.all, n)), axes.list(each(axes.all, op("divide", lit(1), n)))), program.num, program.num)
       .map(([a, init, step]) => iterate(dataLimit(a), { s: init }, { s: op("add", v("s"), step) }, v("s")));
     fc.assert(
       fc.property(limited, records, fc.integer({ min: -3, max: 3 }), fc.constantFrom("x", "y"), (e, rs, a, t) => {

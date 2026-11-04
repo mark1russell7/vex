@@ -1,18 +1,11 @@
 # The gate that a workflow does not hide a failed test: `|| true`, a pipe with no pipefail, or continue-on-error.
-# A push of each branch starts it, so a measure on a side branch with no pull request has the gate too.
+# A branch with no pull request starts it by workflow_dispatch.
 name: Workflow gate
 
 on:
-  push:
-    paths:
-      - .github/workflows/**
-      - scripts/workflow-gate.ts
-      - packages/testkit/src/workflow-faults.ts
+  # Each pull request starts this workflow. The job changes skips the work when no workflow changes.
   pull_request:
-    paths:
-      - .github/workflows/**
-      - scripts/workflow-gate.ts
-      - packages/testkit/src/workflow-faults.ts
+  workflow_dispatch:
 
 permissions: {}
 
@@ -22,7 +15,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      match: ${{ steps.changes.outputs.match }}
+    steps:
+      - id: changes
+        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
+        with:
+          paths: |
+            .github/workflows/**
+            scripts/workflow-gate.ts
+            packages/testkit/src/workflow-faults.ts
+
   workflows:
+    needs: changes
+    if: needs.changes.outputs.match == 'true' || github.event_name == 'workflow_dispatch'
     name: No hidden failure
     runs-on: ubuntu-latest
     timeout-minutes: 5

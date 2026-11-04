@@ -161,4 +161,9 @@ describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps t
   it("V-081: a safe value drops the print of a column of a call that reads the origin", () => {
     expectSame(called(app("ifError", lit(0), steps(count(origin)))));
   });
+
+  it("V-086 COMPILE.MODULE.FUSE.OFF: with fuse false, a dropped print leaves no read of a name without a declaration", () => {
+    // The setup of the tests fails this call on a read of a name without a declaration.
+    expect(emitModule(called(app("ifError", lit(0), steps(count(origin)))), { ...OPTIONS, fuse: false }).ok).toBe(true);
+  });
 });

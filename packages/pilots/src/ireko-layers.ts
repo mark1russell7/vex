@@ -215,7 +215,7 @@ const top = (list: Expr): Expr => nth(list, lastOf(list));
 const put = (list: Expr, i: Expr, x: Expr): Expr => each(axes.list(list), when(eq(v("$j"), i), x, v("$old")), undefined, ["$old", "$j"]);
 
 /** The items of a list of a list of lists, for a list op of a module (gap: `listy` does not know that `nth` gives a list). */
-const items = (list: Expr): Expr => each(axes.list(list), v("$item"), undefined, ["$item"]);
+export const items = (list: Expr): Expr => each(axes.list(list), v("$item"), undefined, ["$item"]);
 
 /** The child at the position of the call. */
 const ME = ref("i");
@@ -415,7 +415,7 @@ const SHIFT = {
 };
 
 /** This function binds the sets of names in order, around `body`: each set sees the sets before it. */
-const bindAll = (sets: readonly Readonly<Record<string, Expr>>[], body: Expr): Expr => sets.reduceRight((inner, set) => let_(set, inner), body);
+export const bindAll = (sets: readonly Readonly<Record<string, Expr>>[], body: Expr): Expr => sets.reduceRight((inner, set) => let_(set, inner), body);
 
 /**
  * The program of the strategy `layers`. It evaluates at each child, and it gives the offset of the child. The variables

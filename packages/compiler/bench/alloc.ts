@@ -174,7 +174,7 @@ const FLAGS: Readonly<Record<AllocRegime, readonly string[]>> = {
 };
 
 /** This function starts `gate.ts` for one arm in one regime. It gives the record, or `undefined` if the case has no such arm. */
-function startArm(gate: string, which: string, arm: AllocArm, regime: AllocRegime, flags: readonly string[]): AllocRecord | undefined {
+export function startArm(gate: string, which: string, arm: AllocArm, regime: AllocRegime, flags: readonly string[]): AllocRecord | undefined {
   const out = spawnSync(process.execPath, [...FLAGS[regime], ...flags, gate], { encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, GATE_CASE: which, GATE_ALLOC: arm, GATE_ALLOC_REGIME: regime } });
   const line = out.stdout.split("\n").find((l) => l.startsWith("alloc "));
   if (out.status !== 0 || line === undefined) throw new Error(`alloc: the process of ${arm} ${regime} ended with ${String(out.status ?? out.signal)}: ${out.stderr.trim().split("\n").slice(-3).join(" | ")}`);

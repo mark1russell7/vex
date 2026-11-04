@@ -42,7 +42,7 @@ describe("the contracts of Vex (DOC.CHECK)", () => {
     const evaluators = Object.keys(checker.evaluators ?? {});
     // Each kind of the world has its evaluator in the machine, so a document that the check accepts has its code.
     expect(evaluators.filter((name) => !Object.hasOwn(machine.evaluators ?? {}, name))).toEqual([]);
-    expect(evaluators.toSorted()).toEqual(["formula.ext", "formula.let", "formula.op", "formula.record", "formula.ref", "formula.step", "vex.axis", "vex.call", "vex.each", "vex.fn", "vex.fold", "vex.iterate", "vex.lit"]);
+    expect(evaluators.toSorted()).toEqual(["formula.ext", "formula.let", "formula.op", "formula.record", "formula.ref", "formula.step", "vex.axis", "vex.call", "vex.each", "vex.fn", "vex.fold", "vex.iterate", "vex.limit", "vex.lit", "vex.size"]);
     expect(Object.keys(checker.walkers ?? {}).toSorted()).toEqual(Object.keys(machine.walkers ?? {}).toSorted());
     expect([checker.world, checker.plain, checker.roots, checker.maxDepth]).toEqual([machine.world, machine.plain, machine.roots, machine.maxDepth]);
     // The check uses only the names: the code of the checks evaluates nothing.
@@ -169,7 +169,7 @@ describe("the reference interpreter of the kernel and agree (EVAL.REFERENCE, EVA
     // uses their code.
     expect(Object.keys(vexDefinitions().evaluators ?? {})).toContain("formula.op");
     const own = Object.entries(vexMachine().evaluators ?? {}).filter(([name]) => name.startsWith("vex."));
-    expect(own.map(([name, evaluator]) => [name, typeof evaluator])).toEqual(["vex.lit", "vex.host", "vex.each", "vex.fold", "vex.iterate", "vex.fn", "vex.call", "vex.axis"].map((name) => [name, "function"]));
+    expect(own.map(([name, evaluator]) => [name, typeof evaluator])).toEqual(["vex.lit", "vex.host", "vex.each", "vex.fold", "vex.limit", "vex.size", "vex.iterate", "vex.fn", "vex.call", "vex.axis"].map((name) => [name, "function"]));
   });
 
   it("EVAL.AGREE: agree compares the plan, the reference, the traced evaluation, a second evaluation and a tier", () => {

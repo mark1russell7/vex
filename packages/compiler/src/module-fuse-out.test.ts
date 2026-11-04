@@ -122,7 +122,7 @@ describe("COMPILE.MODULE.FUSE.OUT: one vex.list for each run", () => {
   it("COMPILE.MODULE.FUSE.OUT: the module prints one envelope before the loop over the keys, and no property on the array", () => {
     const source = sourceOf(emitModule(COLUMN, OPTIONS));
     expect(source).toMatch(/const c\d+ = L\(\(\) => \{\n\s+return LOC\(/);
-    expect(source).toMatch(/out\.push\(G\(c\d+\(\)\)\);/);
+    expect(source).toMatch(/out\[o\] = G\(c\d+\(\)\);/);
     expect(source).not.toContain(".vl");
   });
 
@@ -143,13 +143,13 @@ describe("COMPILE.MODULE.FUSE.OUT: one vex.list for each run", () => {
   it("COMPILE.MODULE.FUSE.OUT: a value that reads the key keeps one object for each key", () => {
     const values = valuesOf(KEYED);
     expect(distinct(values)).toBe(RECORDS.length);
-    expect(sourceOf(emitModule(KEYED, OPTIONS))).toMatch(/out\.push\(LOC\(/);
+    expect(sourceOf(emitModule(KEYED, OPTIONS))).toMatch(/out\[o\] = LOC\(/);
   });
 
   it("COMPILE.MODULE.FUSE.OUT COMPILE.MODULE.FUSE.OFF: with fuse false, each key makes its own envelope", () => {
     const off = { ...OPTIONS, fuse: false };
     expect(distinct(valuesOf(COLUMN, off))).toBe(RECORDS.length);
-    expect(sourceOf(emitModule(COLUMN, off))).toMatch(/out\.push\(LO\(/);
+    expect(sourceOf(emitModule(COLUMN, off))).toMatch(/out\[o\] = LO\(/);
   });
 
   it("COMPILE.MODULE.FUSE.OUT COMPILE.MODULE.LIST.PLAIN: a plain array stays one new array for each key, and it is not frozen", () => {

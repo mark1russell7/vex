@@ -142,9 +142,9 @@ function agree(e: Expr, s: Space, k: string, t: Readonly<Record<string, Space>>,
  * This function gives the share of the values that tier 2 gave, on a fixed sample of runs. The share is the same in each
  * test run, so a change of the generators that lowers it fails at once, on the change that causes it.
  */
-function shareOfTier2(runs: ReturnType<typeof runOf<Expr>>): number {
+function shareOfTier2(runs: ReturnType<typeof runOf<Expr>>, numRuns = 200): number {
   const count = { values: 0, fast: 0 };
-  for (const [s, e, k, t, v] of fc.sample(runs, { seed: 20261024, numRuns: 200 })) agree(e, s, k, t, v, count);
+  for (const [s, e, k, t, v] of fc.sample(runs, { seed: 20261024, numRuns })) agree(e, s, k, t, v, count);
   return count.fast / count.values;
 }
 
@@ -558,6 +558,8 @@ describe("the tiers", () => {
   it("P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter", () => {
     const runs = runOf(arbListProgram);
     fc.assert(fc.property(runs, ([s, e, k, t, v]) => agree(e, s, k, t, v, { values: 0, fast: 0 })));
-    expect(shareOfTier2(runs)).toBeGreaterThan(0.5);
+    // Most list programs give no value. 200 runs give about 30 values, so one new arm of a generator moved the share by 0.13.
+    // 2000 runs give about 300 values. The share is about 0.61, and the limit is about 4 standard errors under it.
+    expect(shareOfTier2(runs, 2000)).toBeGreaterThan(0.5);
   });
 });

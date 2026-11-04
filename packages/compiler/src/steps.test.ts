@@ -1,6 +1,6 @@
 /**
- * The steps in the tiers and the modules (STEP.MAX, STEP.VALUE). Each construct of Vex is of step A today, so this file
- * declares `iterate` as a construct of step B and `call` as a construct of step C, in a mock of the table of the core.
+ * The steps in the tiers and the modules (STEP.MAX, STEP.VALUE). So that each path has a program, this file declares
+ * `iterate` as a construct of step B and `call` as a construct of step C, in a mock of the table of the core.
  * Tier 2, `emitModule` and `emitSheetModule` refuse the programs that the interpreter refuses, with the same reason.
  */
 import { app, evaluate, iterate, lit, MAX_NESTING, nestingOf, programStep, shapeError, sizeError, space, v, type Expr, type Result, type VexStep } from "@mark1russell7/vex";

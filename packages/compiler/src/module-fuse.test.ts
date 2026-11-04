@@ -79,8 +79,9 @@ describe("COMPILE.MODULE.FUSE.OFF: the option fuse", () => {
     expect(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: true }))).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
     expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: true }))).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
     // The hashes of the shapes of ireko in version 0.10 of the compiler, before step 3 of COMPILE-FUSE, with the frozen `LO`
-    // of step 7. A frozen list is the contract of a result (COMPILE.MODULE.LIST.RESULT), so fuse false has it too.
-    expect(hash(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false })))).toBe("f72b953fb3453227");
+    // of step 7 and the writes of TREEALLOC to the array of a run. A frozen list is the contract of a result
+    // (COMPILE.MODULE.LIST.RESULT), so fuse false has it too.
+    expect(hash(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false })))).toBe("f202d6895d60f9ca");
     expect(hash(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false })))).toBe("c251d3912bca45eb");
     // The clean form changes the text of both modules.
     expect(sourceOf(emitModule(NODE_SHAPE, node))).not.toBe(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false })));

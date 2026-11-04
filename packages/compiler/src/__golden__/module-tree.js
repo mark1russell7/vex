@@ -17,19 +17,33 @@ function CH(P, n) {
 }
 function G(x) { return x === E ? F() : x; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
-function PR(h, r, n) {
-  const o = [], at = new Int32Array(n), z = new Int32Array(n), st = [];
-  for (let q = r.length - 1; q >= 0; q--) st.push(r[q]);
-  while (st.length > 0) {
-    const k = st.pop();
-    at[k] = o.length;
-    o.push(k);
-    for (let q = h[k].length - 1; q >= 0; q--) st.push(h[k][q]);
+function PR(P, n) {
+  const f = new Int32Array(n).fill(-1), x = new Int32Array(n), o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n);
+  let r = -1;
+  for (let i = n - 1; i >= 0; i--) {
+    const p = P[i];
+    if (p < 0) {
+      x[i] = r;
+      r = i;
+    } else {
+      x[i] = f[p];
+      f[p] = i;
+    }
+  }
+  let m = 0;
+  for (let k = r; k >= 0; ) {
+    at[k] = m;
+    o[m++] = k;
+    if (f[k] >= 0) k = f[k];
+    else {
+      while (k >= 0 && x[k] < 0) k = P[k];
+      if (k >= 0) k = x[k];
+    }
   }
   for (let q = n - 1; q >= 0; q--) {
-    const k = o[q];
-    z[k] = 1;
-    for (const c of h[k]) z[k] += z[c];
+    const k = o[q], p = P[k];
+    z[k]++;
+    if (p >= 0) z[p] += z[k];
   }
   return [o, at, z];
 }
@@ -73,7 +87,7 @@ export function run(records, vars, parents) {
   const P = PT(parents, n);
   const [H, RT] = CH(P, n);
   const [GP, SI] = SG(P, H, RT, n);
-  const [PO, PI, SZ] = PR(H, RT, n);
+  const [PO, PI, SZ] = PR(P, n);
   let t8;
   try {
     t8 = R[UP(P, (4 < n ? 4 : F()))]["n"];
@@ -88,40 +102,40 @@ export function run(records, vars, parents) {
     t9 = -99;
   }
   const c11 = t9;
-  const c98 = L(() => {
-    let t92;
+  const c96 = L(() => {
+    let t90;
     try {
-      let l89 = 0;
-      for (let j90 = 0; j90 < n; j90++) {
-        const t91 = k_number((k_number((l89) * (3))) - (R[j90]["n"]));
-        l89 = t91;
+      let l87 = 0;
+      for (let j88 = 0; j88 < n; j88++) {
+        const t89 = k_number((k_number((l87) * (3))) - (R[j88]["n"]));
+        l87 = t89;
       }
-      t92 = l89;
+      t90 = l87;
     } catch {
-      t92 = -99;
+      t90 = -99;
     }
-    return t92;
+    return t90;
   });
-  let c196;
+  let c192;
   try {
-    let a193 = 0;
-    for (let j185 = 0; j185 < n; j185++) {
-      const f187 = j185;
-      const A188 = H[f187];
-      let n191 = 0;
-      for (let q189 = 0; q189 < A188.length; q189++) {
-        const j186 = A188[q189];
-        const x192 = R[j186]["n"];
-        n191++;
+    let a189 = 0;
+    for (let j181 = 0; j181 < n; j181++) {
+      const f183 = j181;
+      const A184 = H[f183];
+      let n187 = 0;
+      for (let q185 = 0; q185 < A184.length; q185++) {
+        const j182 = A184[q185];
+        const x188 = R[j182]["n"];
+        n187++;
       }
-      const x195 = n191;
-      a193 += x195;
+      const x191 = n187;
+      a189 += x191;
     }
-    c196 = k_number(a193);
+    c192 = k_number(a189);
   } catch {
-    c196 = E;
+    c192 = E;
   }
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t0;
@@ -186,292 +200,288 @@ export function run(records, vars, parents) {
       } catch {
         t18 = -99;
       }
-      let t25;
+      let t23;
       try {
         let l19 = 0;
         const f21 = o;
-        const A22 = AN(P, f21);
-        for (let q23 = 0; q23 < A22.length; q23++) {
-          const j20 = A22[q23];
-          const t24 = k_number((k_number((l19) * (3))) - (R[j20]["n"]));
-          l19 = t24;
+        for (let j20 = P[f21]; j20 >= 0; j20 = P[j20]) {
+          const t22 = k_number((k_number((l19) * (3))) - (R[j20]["n"]));
+          l19 = t22;
         }
-        t25 = l19;
+        t23 = l19;
       } catch {
-        t25 = -99;
+        t23 = -99;
       }
-      let t33;
+      let t31;
       try {
-        let l26 = 0;
-        const f28 = o;
-        const A29 = PI[f28] + 1;
-        const h30 = A29 + SZ[f28] - 1;
-        for (let q31 = A29; q31 < h30; q31++) {
-          const j27 = PO[q31];
-          const t32 = k_number((k_number((l26) * (3))) - (R[j27]["n"]));
-          l26 = t32;
+        let l24 = 0;
+        const f26 = o;
+        const A27 = PI[f26] + 1;
+        const h28 = A27 + SZ[f26] - 1;
+        for (let q29 = A27; q29 < h28; q29++) {
+          const j25 = PO[q29];
+          const t30 = k_number((k_number((l24) * (3))) - (R[j25]["n"]));
+          l24 = t30;
         }
-        t33 = l26;
+        t31 = l24;
       } catch {
-        t33 = -99;
+        t31 = -99;
       }
-      let t40;
+      let t38;
       try {
-        let l34 = 0;
-        const f36 = o;
-        const A37 = GP[f36];
-        for (let q38 = 0; q38 < A37.length; q38++) {
-          const j35 = A37[q38];
-          if (j35 === f36) continue;
-          const t39 = k_number((k_number((l34) * (3))) - (R[j35]["n"]));
-          l34 = t39;
+        let l32 = 0;
+        const f34 = o;
+        const A35 = GP[f34];
+        for (let q36 = 0; q36 < A35.length; q36++) {
+          const j33 = A35[q36];
+          if (j33 === f34) continue;
+          const t37 = k_number((k_number((l32) * (3))) - (R[j33]["n"]));
+          l32 = t37;
         }
-        t40 = l34;
+        t38 = l32;
       } catch {
-        t40 = -99;
+        t38 = -99;
       }
-      let t49;
+      let t47;
       try {
-        let l41 = 0;
-        const f43 = o;
-        const A44 = GP[f43];
-        const h45 = Math.max(0, SI[f43] + -1);
-        const h46 = Math.min(A44.length, SI[f43] + 1 + 1);
-        for (let q47 = h45; q47 < h46; q47++) {
-          const j42 = A44[q47];
-          const t48 = k_number((k_number((l41) * (3))) - (R[j42]["n"]));
-          l41 = t48;
+        let l39 = 0;
+        const f41 = o;
+        const A42 = GP[f41];
+        const h43 = Math.max(0, SI[f41] + -1);
+        const h44 = Math.min(A42.length, SI[f41] + 1 + 1);
+        for (let q45 = h43; q45 < h44; q45++) {
+          const j40 = A42[q45];
+          const t46 = k_number((k_number((l39) * (3))) - (R[j40]["n"]));
+          l39 = t46;
         }
-        t49 = l41;
+        t47 = l39;
       } catch {
-        t49 = -99;
+        t47 = -99;
       }
-      let t58;
+      let t56;
       try {
-        let l50 = 0;
-        const f52 = o;
-        const A53 = GP[f52];
-        const h54 = Math.max(0, SI[f52] + -20);
-        const h55 = Math.min(A53.length, SI[f52] + 20 + 1);
-        for (let q56 = h54; q56 < h55; q56++) {
-          const j51 = A53[q56];
-          const t57 = k_number((k_number((l50) * (3))) - (R[j51]["n"]));
-          l50 = t57;
+        let l48 = 0;
+        const f50 = o;
+        const A51 = GP[f50];
+        const h52 = Math.max(0, SI[f50] + -20);
+        const h53 = Math.min(A51.length, SI[f50] + 20 + 1);
+        for (let q54 = h52; q54 < h53; q54++) {
+          const j49 = A51[q54];
+          const t55 = k_number((k_number((l48) * (3))) - (R[j49]["n"]));
+          l48 = t55;
         }
-        t58 = l50;
+        t56 = l48;
       } catch {
-        t58 = -99;
+        t56 = -99;
       }
-      let t67;
+      let t65;
       try {
-        let l59 = 0;
-        const f61 = o;
-        const A62 = GP[f61];
-        const h63 = Math.max(0, SI[f61] + 2);
-        const h64 = Math.min(A62.length, SI[f61] + 1 + 1);
-        for (let q65 = h63; q65 < h64; q65++) {
-          const j60 = A62[q65];
-          const t66 = k_number((k_number((l59) * (3))) - (R[j60]["n"]));
-          l59 = t66;
+        let l57 = 0;
+        const f59 = o;
+        const A60 = GP[f59];
+        const h61 = Math.max(0, SI[f59] + 2);
+        const h62 = Math.min(A60.length, SI[f59] + 1 + 1);
+        for (let q63 = h61; q63 < h62; q63++) {
+          const j58 = A60[q63];
+          const t64 = k_number((k_number((l57) * (3))) - (R[j58]["n"]));
+          l57 = t64;
         }
-        t67 = l59;
+        t65 = l57;
       } catch {
-        t67 = -99;
+        t65 = -99;
       }
-      let t74;
+      let t72;
       try {
-        let l68 = 0;
-        const f70 = o;
-        const A71 = H[f70];
-        for (let q72 = 0; q72 < A71.length; q72++) {
-          const j69 = A71[q72];
-          const t73 = k_number((k_number((l68) * (3))) - (R[j69]["n"]));
-          l68 = t73;
+        let l66 = 0;
+        const f68 = o;
+        const A69 = H[f68];
+        for (let q70 = 0; q70 < A69.length; q70++) {
+          const j67 = A69[q70];
+          const t71 = k_number((k_number((l66) * (3))) - (R[j67]["n"]));
+          l66 = t71;
         }
-        t74 = l68;
+        t72 = l66;
       } catch {
-        t74 = -99;
+        t72 = -99;
       }
-      let t81;
+      let t79;
       try {
-        let l75 = 0;
-        const f77 = o;
-        const A78 = (P[f77] < 0 ? [] : [P[f77]]);
-        for (let q79 = 0; q79 < A78.length; q79++) {
-          const j76 = A78[q79];
-          const t80 = k_number((k_number((l75) * (3))) - (R[j76]["n"]));
-          l75 = t80;
+        let l73 = 0;
+        const f75 = o;
+        const A76 = (P[f75] < 0 ? [] : [P[f75]]);
+        for (let q77 = 0; q77 < A76.length; q77++) {
+          const j74 = A76[q77];
+          const t78 = k_number((k_number((l73) * (3))) - (R[j74]["n"]));
+          l73 = t78;
         }
-        t81 = l75;
+        t79 = l73;
       } catch {
-        t81 = -99;
+        t79 = -99;
       }
-      let t88;
+      let t86;
       try {
-        let l82 = 0;
-        const f84 = o;
-        const A85 = BF(H, f84);
-        for (let q86 = 1; q86 < A85.length; q86++) {
-          const j83 = A85[q86];
-          const t87 = k_number((k_number((l82) * (3))) - (R[j83]["n"]));
-          l82 = t87;
+        let l80 = 0;
+        const f82 = o;
+        const A83 = BF(H, f82);
+        for (let q84 = 1; q84 < A83.length; q84++) {
+          const j81 = A83[q84];
+          const t85 = k_number((k_number((l80) * (3))) - (R[j81]["n"]));
+          l80 = t85;
         }
-        t88 = l82;
+        t86 = l80;
       } catch {
-        t88 = -99;
+        t86 = -99;
       }
-      const f94 = o;
-      let a95 = 0;
-      for (let j93 = 0; j93 < n; j93++) {
-        if (j93 === f94) continue;
-        const x97 = R[j93]["n"];
-        a95 += x97;
+      const f92 = o;
+      let a93 = 0;
+      for (let j91 = 0; j91 < n; j91++) {
+        if (j91 === f92) continue;
+        const x95 = R[j91]["n"];
+        a93 += x95;
       }
-      let t105;
+      let t103;
       try {
-        let l99 = 0;
-        const f101 = o;
-        const A102 = H[f101];
-        for (let q103 = A102.length - 1; q103 >= 0; q103--) {
-          const j100 = A102[q103];
-          const t104 = k_number((k_number((l99) * (3))) - (R[j100]["n"]));
-          l99 = t104;
+        let l97 = 0;
+        const f99 = o;
+        const A100 = H[f99];
+        for (let q101 = A100.length - 1; q101 >= 0; q101--) {
+          const j98 = A100[q101];
+          const t102 = k_number((k_number((l97) * (3))) - (R[j98]["n"]));
+          l97 = t102;
         }
-        t105 = l99;
+        t103 = l97;
       } catch {
-        t105 = -99;
+        t103 = -99;
       }
-      let t113;
+      let t111;
       try {
-        let l106 = 0;
-        const f108 = o;
-        const A109 = PI[f108] + 1;
-        const h110 = A109 + SZ[f108] - 1;
-        for (let q111 = h110 - 1; q111 >= A109; q111--) {
-          const j107 = PO[q111];
-          const t112 = k_number((k_number((l106) * (3))) - (R[j107]["n"]));
-          l106 = t112;
+        let l104 = 0;
+        const f106 = o;
+        const A107 = PI[f106] + 1;
+        const h108 = A107 + SZ[f106] - 1;
+        for (let q109 = h108 - 1; q109 >= A107; q109--) {
+          const j105 = PO[q109];
+          const t110 = k_number((k_number((l104) * (3))) - (R[j105]["n"]));
+          l104 = t110;
         }
-        t113 = l106;
+        t111 = l104;
       } catch {
-        t113 = -99;
+        t111 = -99;
       }
-      let t120;
+      let t118;
       try {
-        let l114 = 0;
-        const f116 = o;
-        const A117 = AN(P, f116);
-        for (let q118 = A117.length - 1; q118 >= 0; q118--) {
-          const j115 = A117[q118];
-          const t119 = k_number((k_number((l114) * (3))) - (R[j115]["n"]));
-          l114 = t119;
+        let l112 = 0;
+        const f114 = o;
+        const A115 = AN(P, f114);
+        for (let q116 = A115.length - 1; q116 >= 0; q116--) {
+          const j113 = A115[q116];
+          const t117 = k_number((k_number((l112) * (3))) - (R[j113]["n"]));
+          l112 = t117;
         }
-        t120 = l114;
+        t118 = l112;
       } catch {
-        t120 = -99;
+        t118 = -99;
       }
-      let t129;
+      let t127;
       try {
-        let l121 = 0;
-        const f123 = o;
-        const A124 = GP[f123];
-        const h125 = Math.max(0, SI[f123] + -1);
-        const h126 = Math.min(A124.length, SI[f123] + 1 + 1);
-        for (let q127 = h126 - 1; q127 >= h125; q127--) {
-          const j122 = A124[q127];
-          const t128 = k_number((k_number((l121) * (3))) - (R[j122]["n"]));
-          l121 = t128;
+        let l119 = 0;
+        const f121 = o;
+        const A122 = GP[f121];
+        const h123 = Math.max(0, SI[f121] + -1);
+        const h124 = Math.min(A122.length, SI[f121] + 1 + 1);
+        for (let q125 = h124 - 1; q125 >= h123; q125--) {
+          const j120 = A122[q125];
+          const t126 = k_number((k_number((l119) * (3))) - (R[j120]["n"]));
+          l119 = t126;
         }
-        t129 = l121;
+        t127 = l119;
       } catch {
-        t129 = -99;
+        t127 = -99;
       }
-      let t136;
+      let t134;
       try {
-        let l130 = 0;
-        const f132 = UP(P, o);
-        const A133 = H[f132];
-        for (let q134 = 0; q134 < A133.length; q134++) {
-          const j131 = A133[q134];
-          const t135 = k_number((k_number((l130) * (3))) - (R[j131]["n"]));
-          l130 = t135;
+        let l128 = 0;
+        const f130 = UP(P, o);
+        const A131 = H[f130];
+        for (let q132 = 0; q132 < A131.length; q132++) {
+          const j129 = A131[q132];
+          const t133 = k_number((k_number((l128) * (3))) - (R[j129]["n"]));
+          l128 = t133;
         }
-        t136 = l130;
+        t134 = l128;
       } catch {
-        t136 = -99;
+        t134 = -99;
       }
-      let t144;
+      let t142;
       try {
-        let l137 = 0;
-        const f139 = UP(P, UP(P, o));
-        const A140 = PI[f139] + 1;
-        const h141 = A140 + SZ[f139] - 1;
-        for (let q142 = A140; q142 < h141; q142++) {
-          const j138 = PO[q142];
-          const t143 = k_number((k_number((l137) * (3))) - (R[j138]["n"]));
-          l137 = t143;
+        let l135 = 0;
+        const f137 = UP(P, UP(P, o));
+        const A138 = PI[f137] + 1;
+        const h139 = A138 + SZ[f137] - 1;
+        for (let q140 = A138; q140 < h139; q140++) {
+          const j136 = PO[q140];
+          const t141 = k_number((k_number((l135) * (3))) - (R[j136]["n"]));
+          l135 = t141;
         }
-        t144 = l137;
+        t142 = l135;
       } catch {
-        t144 = -99;
+        t142 = -99;
       }
-      let t151;
+      let t149;
       try {
-        let l145 = 0;
-        const f147 = SO(GP, SI, o, 1);
-        const A148 = GP[f147];
-        for (let q149 = 0; q149 < A148.length; q149++) {
-          const j146 = A148[q149];
-          if (j146 === f147) continue;
-          const t150 = k_number((k_number((l145) * (3))) - (R[j146]["n"]));
-          l145 = t150;
+        let l143 = 0;
+        const f145 = SO(GP, SI, o, 1);
+        const A146 = GP[f145];
+        for (let q147 = 0; q147 < A146.length; q147++) {
+          const j144 = A146[q147];
+          if (j144 === f145) continue;
+          const t148 = k_number((k_number((l143) * (3))) - (R[j144]["n"]));
+          l143 = t148;
         }
-        t151 = l145;
+        t149 = l143;
       } catch {
-        t151 = -99;
+        t149 = -99;
       }
-      const f153 = o;
-      const A154 = PI[f153] + 1;
-      const h155 = A154 + SZ[f153] - 1;
-      let a157 = 0;
-      for (let q156 = A154; q156 < h155; q156++) {
-        const j152 = PO[q156];
-        const x159 = R[j152]["w"];
-        a157 += x159;
+      const f151 = o;
+      const A152 = PI[f151] + 1;
+      const h153 = A152 + SZ[f151] - 1;
+      let a155 = 0;
+      for (let q154 = A152; q154 < h153; q154++) {
+        const j150 = PO[q154];
+        const x157 = R[j150]["w"];
+        a155 += x157;
       }
-      const f161 = o;
-      const A162 = AN(P, f161);
-      let n165 = 0;
-      for (let q163 = 0; q163 < A162.length; q163++) {
-        const j160 = A162[q163];
-        const x166 = R[j160]["n"];
-        n165++;
+      const f159 = o;
+      let n161 = 0;
+      for (let j158 = P[f159]; j158 >= 0; j158 = P[j158]) {
+        const x162 = R[j158]["n"];
+        n161++;
       }
-      const f168 = o;
-      const A169 = PI[f168] + 1;
-      const h170 = A169 + SZ[f168] - 1;
-      let n173 = 0;
-      for (let q171 = A169; q171 < h170; q171++) {
-        const j167 = PO[q171];
-        if (!R[j167]["b"]) continue;
-        const x174 = R[j167]["n"];
-        n173++;
+      const f164 = o;
+      const A165 = PI[f164] + 1;
+      const h166 = A165 + SZ[f164] - 1;
+      let n169 = 0;
+      for (let q167 = A165; q167 < h166; q167++) {
+        const j163 = PO[q167];
+        if (!R[j163]["b"]) continue;
+        const x170 = R[j163]["n"];
+        n169++;
       }
-      const f176 = o;
-      const A177 = H[f176];
-      const L179 = [];
-      for (let q178 = 0; q178 < A177.length; q178++) {
-        const j175 = A177[q178];
-        L179.push([j175, R[j175]["n"]]);
+      const f172 = o;
+      const A173 = H[f172];
+      const L175 = [];
+      for (let q174 = 0; q174 < A173.length; q174++) {
+        const j171 = A173[q174];
+        L175.push([j171, R[j171]["n"]]);
       }
-      const b181 = L179;
-      let a182 = 0;
-      for (const [, x184] of b181) {
-        a182 += x184;
+      const b177 = L175;
+      let a178 = 0;
+      for (const [, x180] of b177) {
+        a178 += x180;
       }
-      out.push(({ "moves": ({ "parent": t0, "grand": t1, "next": t2, "prev": t3, "uncle": t4, "far": t5, "zero": R[SO(GP, SI, o, 0)]["n"], "two": t6, "half": t7, "fixed": c10, "root": c11 }), "axes": ({ "children": t18, "ancestors": t25, "descendants": t33, "siblings": t40, "window": t49, "wide": t58, "none": t67, "successors": t74, "predecessors": t81, "reachable": t88, "all": G(c98()), "others": k_number(a95) }), "reversed": ({ "children": t105, "descendants": t113, "ancestors": t120, "window": t129 }), "at": ({ "parent": t136, "cousins": t144, "next": t151 }), "team": k_number((R[o]["w"]) + (k_number(a157))), "depth": n165, "tested": n173, "list": k_number(a182), "memo": G(c196) }));
+      out[o] = ({ "moves": ({ "parent": t0, "grand": t1, "next": t2, "prev": t3, "uncle": t4, "far": t5, "zero": R[SO(GP, SI, o, 0)]["n"], "two": t6, "half": t7, "fixed": c10, "root": c11 }), "axes": ({ "children": t18, "ancestors": t23, "descendants": t31, "siblings": t38, "window": t47, "wide": t56, "none": t65, "successors": t72, "predecessors": t79, "reachable": t86, "all": G(c96()), "others": k_number(a93) }), "reversed": ({ "children": t103, "descendants": t111, "ancestors": t118, "window": t127 }), "at": ({ "parent": t134, "cousins": t142, "next": t149 }), "team": k_number((R[o]["w"]) + (k_number(a155))), "depth": n161, "tested": n169, "list": k_number(a178), "memo": G(c192) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

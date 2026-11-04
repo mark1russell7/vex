@@ -47,7 +47,7 @@ export function run(records, vars) {
     }
     return n5;
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t7;
@@ -56,9 +56,9 @@ export function run(records, vars) {
       } catch {
         t7 = true;
       }
-      out.push(({ "count": m1(R[o]["n"]), "not": t7 }));
+      out[o] = ({ "count": m1(R[o]["n"]), "not": t7 });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

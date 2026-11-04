@@ -6,8 +6,8 @@
  * raise its own step. The ladder is the ladder of steps of coeval (D116 of coeval), with the table of `constructs.ts`.
  */
 import { checkStep, isStep, stepLadder, stepOf, stepRank, type StepLadder, type StepReason, type StepWalk } from "@mark1russell7/coeval";
-import { CONSTRUCT_STEPS, type VexStep } from "./constructs.ts";
-import { children, type Expr } from "./ir.ts";
+import { CONSTRUCT_STEPS, ITERATE_SIZE, type VexStep } from "./constructs.ts";
+import { children, limitAxis, type Expr } from "./ir.ts";
 
 export { CONSTRUCT_STEPS, type VexStep } from "./constructs.ts";
 
@@ -37,9 +37,12 @@ export interface ProgramStep {
   readonly path?: readonly number[];
 }
 
-/** The walk of an expression: the construct of a node is its tag, and the key of a child is its child index. */
+/**
+ * The walk of an expression: the construct of a node is its tag, and the key of a child is its child index. An
+ * `iterate` with a limit from the data is its own construct (ITERATE.LIMIT.DATA).
+ */
 const WALK: StepWalk<Expr> = {
-  construct: (e) => e.tag,
+  construct: (e) => (e.tag === "iterate" && limitAxis(e) !== undefined ? ITERATE_SIZE : e.tag),
   children: (e) => children(e).map((child, i) => [i, child] as const),
 };
 

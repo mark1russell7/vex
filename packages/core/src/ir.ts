@@ -52,7 +52,7 @@ export type Expr =
   | { readonly tag: "rec"; readonly fields: Readonly<Record<string, Expr>> }
   | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr; readonly at?: Addr; readonly as?: ItemNames }
   | { readonly tag: "fold"; readonly axis: Axis; readonly init: Names; readonly step: Names; readonly result: Expr; readonly at?: Addr; readonly as?: ItemNames }
-  | { readonly tag: "iterate"; readonly limit: number; readonly init: Names; readonly step: Names; readonly until?: Expr; readonly result: Expr }
+  | { readonly tag: "iterate"; readonly limit: number | DataLimit; readonly init: Names; readonly step: Names; readonly until?: Expr; readonly result: Expr }
   | { readonly tag: "fn"; readonly params: readonly string[]; readonly body: Expr }
   | { readonly tag: "call"; readonly fn: string; readonly args: readonly Expr[] }
   | { readonly tag: "ext"; readonly kind: string; readonly data: unknown };
@@ -68,6 +68,14 @@ export type ItemNames = readonly [item: string] | readonly [item: string, index:
 
 /** The largest number of steps of `iterate` (ITERATE.LIMIT). */
 export const MAX_ITERATIONS = 100_000;
+
+/**
+ * The limit of `iterate` from the size of the data (ITERATE.LIMIT.DATA): the number of targets of an axis. This is the
+ * number of steps that a `fold` over the axis makes. The axis `list` gives the count of a list. This limit needs step B.
+ */
+export interface DataLimit {
+  readonly axis: Axis;
+}
 
 /** The tag of an expression kind. */
 export type ExprTag = Expr["tag"];
@@ -127,8 +135,23 @@ export function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Ad
  * This function makes an iteration: up to `limit` steps. `init` gives the names and their first values, and `step`
  * gives the next values. A true `until` stops it, and `result` gives the value (ITERATE.LIMIT, ITERATE.UNTIL).
  */
-export function iterate(limit: number, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate"> {
+export function iterate(limit: number | DataLimit, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate"> {
   return until === undefined ? { tag: "iterate", limit, init, step, result } : { tag: "iterate", limit, init, step, until, result };
+}
+
+/** This function makes the limit of `iterate` from the size of the data: the number of targets of an axis (ITERATE.LIMIT.DATA). */
+export const dataLimit = (axis: Axis): DataLimit => ({ axis });
+
+/** This function gives the axis of the data limit of an iteration, or `undefined` for a limit that is a number. */
+export const limitAxis = (e: ExprOf<"iterate">): Axis | undefined => (typeof e.limit === "number" ? undefined : e.limit.axis);
+
+/**
+ * This function gives the parts of an iteration with a data limit, for a walk that tells the axes apart. The parts are
+ * an `each` over the axis, and the iteration without its axis. An iteration with a number has `undefined`.
+ */
+export function splitLimit(e: ExprOf<"iterate">): readonly [ExprOf<"each">, ExprOf<"iterate">] | undefined {
+  const axis = limitAxis(e);
+  return axis === undefined ? undefined : [each(axis, lit(0)), { ...e, limit: 0 }];
 }
 
 /**
@@ -406,7 +429,9 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
       case "iterate": {
         const limit = u["limit"];
         const names = loopParts(u);
-        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 0 || limit > MAX_ITERATIONS || names === undefined) return item;
+        if (names === undefined) return item;
+        if (isObject(limit)) push(true, [limit["axis"]]);
+        else if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 0 || limit > MAX_ITERATIONS) return item;
         push(false, [...names, ...(u["until"] === undefined ? [] : [u["until"]])]);
         break;
       }
@@ -439,8 +464,10 @@ export function children(e: Expr): readonly Expr[] {
       return [e.body, ...axisExprs(e.axis), ...addrExprs(e.at)];
     case "fold":
       return [...Object.values(e.init), ...Object.values(e.step), ...axisExprs(e.axis), ...addrExprs(e.at), e.result];
-    case "iterate":
-      return [...Object.values(e.init), ...Object.values(e.step), ...(e.until === undefined ? [] : [e.until]), e.result];
+    case "iterate": {
+      const axis = limitAxis(e);
+      return [...Object.values(e.init), ...Object.values(e.step), ...(axis === undefined ? [] : axisExprs(axis)), ...(e.until === undefined ? [] : [e.until]), e.result];
+    }
     case "ref":
       return addrExprs(e.at);
     case "lit":

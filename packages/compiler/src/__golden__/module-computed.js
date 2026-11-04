@@ -45,7 +45,7 @@ export function run(records, vars) {
     t3 = -1;
   }
   const c17 = t3;
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t0;
@@ -79,9 +79,9 @@ export function run(records, vars) {
       } catch {
         t10 = -1;
       }
-      out.push(({ "position": t0, "key": t1, "origin": t2, "run": c17, "list": t10, "body": G(c16) }));
+      out[o] = ({ "position": t0, "key": t1, "origin": t2, "run": c17, "list": t10, "body": G(c16) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

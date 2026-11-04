@@ -92,7 +92,7 @@ export function run(records, vars) {
     }
     return l0;
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t16;
@@ -113,9 +113,9 @@ export function run(records, vars) {
       } catch {
         t16 = 0;
       }
-      out.push(({ "loop": G(c29()), "again": t16, "light": G(c21), "origin": m23(R[o]["n"]) }));
+      out[o] = ({ "loop": G(c29()), "again": t16, "light": G(c21), "origin": m23(R[o]["n"]) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

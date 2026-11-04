@@ -159,6 +159,7 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 - A failed argument of a list op after its list, because the interpreter evaluates the list first.
 - An exception of a getter of a record.
 - A node with two failed arguments past `MAX_COPIED`.
+- A data limit that is not valid, because its error keeps its cause (ITERATE.LIMIT.ERROR).
 
 **Lists as values.** A list op on an `each` is one loop (`count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first`, `values`, `keys`, `errors` and `reduce`). Each other list op, and each list op on another list, is a call of the site of the op. There, `generic` of the runtime calls `listOps` of the core, which is the code of the interpreter (LIST.OPS, COMPILE.LIST.VALUE). No second copy of the list ops exists. Thus the value of a list op is the value of the interpreter, for each list.
 
@@ -168,7 +169,7 @@ The rules of a failure:
 - `#DEPTH!` throws, and tier 1 gives the result. So the V-066 and V-067 rule holds: the program cannot catch it, and it wins over each other error, in each order of the arguments. The order in the interpreter is in `goodItems`, which the runtime shares.
 - An error of an item has another path. It comes from a list of the input with `strict`. It throws too, and tier 1 gives the result.
 
-**The axis list.** Each loop over the axis `list` has the statements of each other loop, with these changes (COMPILE.LIST.AXIS):
+**The axis list.** Each loop over the axis `list` has the statements of each other loop, with these changes (COMPILE.LIST.AXIS). A data limit is such a loop too, and it counts the targets. Its failures are plain, so tier 1 gives the error of the limit.
 
 - The address evaluates first. Then the list evaluates at the key of the address.
 - The runtime function `items` gives the keys, the values and the positions of the items. A value that is not a list gives `FALLBACK`, and the site `listAxis` gives the error, so `ifError` takes it.
@@ -575,7 +576,18 @@ A value of a loop is a value of a name, not a field of a record. Thus a bisectio
 
 A fold evaluates `init` at the node. Then it evaluates `step` at each target of the axis, in the order of the axis. The focus of a step is the target. A target that a test of `where` removes has no step. The first error of a value, of a test or of `result` is the value of the fold.
 
-An iteration evaluates `init` at the node, and then `step` up to `limit` times, at the same position. `limit` is a whole number from 0 to 100000 in the expression, not a value of a run. Thus each program ends.
+An iteration evaluates `init` at the node, and then `step` up to `limit` times, at the same position. `limit` is a whole number from 0 to 100000 in the expression, or a data limit. Thus each program ends.
+
+A data limit (ITERATE.LIMIT.DATA) names an axis, and the limit is the number of targets of that axis. It is the first construct of step B. The limit is not a free expression, for these reasons:
+
+- A count is a whole number from 0, so a data limit has no negative or fractional case to check at run time.
+- A count is finite in each run, because the space and each list are finite. So the language stays total.
+- `iterate` over a data limit makes the steps of a `fold` over the same axis. So LOOP.SIZE needs no new rule, and a limit that reads a list of an outer loop counts as a use of it.
+- The axis `list` gives the count of a list. A number that is not a count needs a free expression, and that stays out of step B at this time.
+
+The cap of 100000 stays. A loop can make heavy steps, so a large input must fail with a defined error and not take a long time. A count above the cap gives `#NUM!` of the kind `limit` (ITERATE.LIMIT.ERROR). The same error wraps each failure of the axis, so a host reads one error for each cause.
+
+Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
 
 Without `until`, the iteration makes `limit` steps. With `until`, the test evaluates before each step and after the last one. A true test stops the iteration, and with no true test the value is `#NUM!`. The first error of a value, of the test or of `result` is the value of the iteration.
 
@@ -1064,13 +1076,14 @@ Before the loop over the keys, the run makes only the parts of the tree that the
 | Part | Helper | For |
 |---|---|---|
 | The parent of each record, in an `Int32Array` | `PT` | Each tree |
-| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the two parts below |
+| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the part below |
 | The siblings of each record with the record itself, and its position among them | `SG` | `siblings`, `window` and the offsets |
-| The keys depth first, and the position and the size of the subtree of each key | `PR` | `descendants` |
+| The keys depth first, and the position and the size of the subtree of each key, in `Int32Array` | `PR` | `descendants`. It reads only the parents, so a program with only this axis has no `CH` |
 
 Thus the targets of each axis are a range of an array, and the loop over them is a `for` loop over that range. The reverse order is the same loop from the end.
 
 - `children` and `successors` are the children of the focus. `siblings` are the siblings of the focus, and the loop skips the focus.
+- `ancestors` in the forward order are a walk up the parents, with no array (COMPILE.MODULE.TREE.ALLOC). The reverse order reads the array of `AN`. A walk reads each parent once, and the array read each parent and then its own slot. Thus a deep tree costs no more time than before. A chain of `n` keys still has `n` times `n` reads over all the keys.
 - `descendants` are the keys after the focus in the order depth first, as many as the subtree of the focus has under it.
 - `window(from, to)` is the range of the siblings from the position of the focus plus `from` to its position plus `to`.
 - `ancestors` and `reachable` make an array for each loop. `predecessors` is the parent, or no target for a root.
@@ -1382,7 +1395,7 @@ The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 %
 - The helper `LP` gives the result, and `LPC` is its clean form (COMPILE.MODULE.FUSE.CLEAN). The helper `LCP` gives a column of lists of a sheet.
 - The module prints no types. The host declares them: `T[]` for a list of `T`, and `T | typeof VEX_ERROR` for an item that can be an error.
 
-In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out.push(LPC(G(c136()), 1))` replaces the read `out.push(G(c137()))` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12857 bytes, and the default module has 13463 bytes. The golden file `module-plain.js` keeps its text.
+In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out[o] = LPC(G(c136()), 1)` replaces the read `out[o] = G(c137())` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12520 bytes, and the default module has 13209 bytes. The golden file `module-plain.js` keeps its text.
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
 

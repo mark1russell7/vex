@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { vex } from "./builder.ts";
 import { evaluate, explain } from "./evaluate.ts";
-import { app, axes, each, ext, index, isExpr, key, let_, lit, offset, origin, other, parent, rec, v, type Expr } from "./ir.ts";
+import { app, axes, dataLimit, each, ext, index, isExpr, iterate, key, let_, lit, offset, origin, other, parent, rec, v, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { SheetRun } from "./sheet.ts";
 import { applyMove, space, type Space } from "./space.ts";
@@ -9,6 +9,8 @@ import { error, Pt, PtDomain, value } from "./test-support.ts";
 
 /** Each position of a literal in the tree of an expression. */
 const POSITIONS: readonly (readonly [string, (x: Expr) => Expr])[] = [
+  ["a list of a data limit", (x) => iterate(dataLimit(axes.list(x)), {}, {}, lit(1))],
+  ["a test of a data limit", (x) => iterate(dataLimit(axes.where(axes.all, x)), {}, {}, lit(1))],
   ["an argument", (x) => app("add", x, lit(1))],
   ["a binding", (x) => let_({ a: x }, v("a"))],
   ["the body of let", (x) => let_({ a: lit(1) }, x)],

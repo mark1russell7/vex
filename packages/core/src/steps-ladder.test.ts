@@ -1,18 +1,17 @@
 /**
- * The tests of a refusal of the steps. Each construct of Vex is of step A today, so this file declares `iterate` as a
+ * The tests of a refusal of the steps. This file declares the plain `iterate` as a
  * construct of step B and `call` as a construct of step C, in a mock of the table of `constructs.ts`.
  */
 import { describe, expect, it, vi } from "vitest";
 import { evaluate } from "./evaluate.ts";
-import type { VexStep } from "./constructs.ts";
-import { app, call, fn, iterate, let_, lit, rec, v, type Expr, type ExprTag } from "./ir.ts";
+import { app, call, fn, iterate, let_, lit, rec, v, type Expr } from "./ir.ts";
 import { space } from "./space.ts";
 import { programStep, stepError, VEX_STEPS } from "./steps.ts";
 import { error, value } from "./test-support.ts";
 
 vi.mock(import("./constructs.ts"), async (load) => {
   const real = await load();
-  const steps: Readonly<Record<ExprTag, VexStep>> = { ...real.CONSTRUCT_STEPS, iterate: "B", call: "C" };
+  const steps: typeof real.CONSTRUCT_STEPS = { ...real.CONSTRUCT_STEPS, iterate: "B", call: "C" };
   return { ...real, CONSTRUCT_STEPS: steps };
 });
 

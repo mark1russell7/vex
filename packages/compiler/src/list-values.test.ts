@@ -211,6 +211,8 @@ const sumOf = (list: Expr): Expr => fold(axes.list(list), { s: lit(0) }, { s: ap
 /** A list with a key outside the space. */
 const outside = lit(vexList([good("z", 4), good("1", 5)]));
 const fieldOr0 = app("ifError", ref("n"), lit(0));
+/** An iteration with a data limit over an axis. */
+const overList = (axis: Axis): Expr => iterate({ axis }, { s: lit(0) }, { s: app("add", v("s"), lit(2)) }, v("s"));
 const toKey1: Addr = [{ t: "key", key: "1" }];
 
 describe("COMPILE.LIST.AXIS: the axis list in tier 2", () => {
@@ -323,6 +325,26 @@ describe("COMPILE.LIST.AXIS: the axis list in tier 2", () => {
     ["a key outside, then an extension", app("add", app("count", named(axes.list(outside), ref("n"))), deepExt), false],
   ];
   it.each(depth)("#DEPTH! wins: %s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
+
+  const limits: readonly Case[] = [
+    ["ITERATE.LIMIT.DATA: the count of a list", overList(axes.list(ns)), true],
+    ["ITERATE.LIMIT.DATA: an empty list makes no step", overList(axes.list(empty)), true],
+    ["ITERATE.LIMIT.DATA: reverse", overList(axes.reverse(axes.list(ns))), true],
+    ["ITERATE.LIMIT.DATA: where reads the record", overList(axes.where(axes.list(ns), app("gt", ref("n"), lit(1)))), true],
+    ["ITERATE.LIMIT.DATA: the limit reads a name of the node", let_({ l: ns }, overList(axes.list(v("l")))), true],
+    ["ITERATE.LIMIT.DATA: an array", overList(axes.list(v("array"))), true],
+    ["ITERATE.LIMIT.DATA: the path of until after the list", iterate({ axis: axes.list(ns) }, { s: lit(0) }, { s: app("add", v("s"), lit(1)) }, v("s"), ref("zz")), true],
+    ["ITERATE.LIMIT.DATA: the path of until after a test", iterate({ axis: axes.where(axes.list(ns), lit(true)) }, { s: lit(0) }, { s: app("add", v("s"), lit(1)) }, v("s"), lit(1)), true],
+    ["ITERATE.LIMIT.DATA: until stops the steps", iterate({ axis: axes.list(ns) }, { s: lit(0) }, { s: app("add", v("s"), lit(1)) }, v("s"), app("gt", v("s"), lit(1))), true],
+    ["ITERATE.LIMIT.ERROR: a value that is not a list", overList(axes.list(lit(3))), false],
+    ["ITERATE.LIMIT.ERROR: an error of the list", overList(axes.list(app("nth", ns, lit(9)))), false],
+    ["ITERATE.LIMIT.ERROR: an error item", overList(axes.list(hurtItems)), false],
+    ["ITERATE.LIMIT.ERROR: a hole", overList(axes.list(v("holes"))), false],
+    ["ITERATE.LIMIT.ERROR: a test that fails", overList(axes.where(axes.list(ns), ref("zz"))), false],
+    ["ITERATE.LIMIT.ERROR: ifError takes the error", app("ifError", overList(axes.list(lit(3))), lit(-1)), true],
+    ["#DEPTH! wins over the error of a limit", app("add", overList(axes.list(lit(3))), deepExt), false],
+  ];
+  it.each(limits)("a data limit: %s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
 
   it("COMPILE.LIST.AXIS AXIS.LIST: the kind error has the path of the node, the origin of the node and the focus of the address", () => {
     const e = each(axes.list(lit(3)), lit(1), toKey1);

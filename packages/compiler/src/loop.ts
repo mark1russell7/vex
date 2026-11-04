@@ -109,6 +109,8 @@ export type ErrorSite =
   | { readonly t: "items"; readonly op: string; readonly what: "numbers" | "booleans"; readonly path: readonly number[] }
   /** The test `until` of `iterate`, without a boolean. Its operand is the value. */
   | { readonly t: "until"; readonly path: readonly number[] }
+  /** The limit of `iterate`, with no true value of the test. Its operand is the number of steps. */
+  | { readonly t: "limit"; readonly path: readonly number[] }
   /** The test of `where`, without a boolean. Its operand is the value. */
   | { readonly t: "test"; readonly path: readonly number[] }
   /** The axis `list` over a value that is not a list. Its operand is the value. */

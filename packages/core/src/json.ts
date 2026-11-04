@@ -97,8 +97,15 @@ function mapValues(u: unknown, f: (value: unknown) => Result<unknown>): Result<u
       out["axis"] = a.value;
       return each("init") ?? each("step") ?? child("result") ?? address() ?? ok(out);
     }
-    case "iterate":
+    case "iterate": {
+      const limit = u["limit"];
+      if (isRecord(limit)) {
+        const a = axis(limit["axis"]);
+        if (!a.ok) return a;
+        out["limit"] = { ...limit, axis: a.value };
+      }
       return each("init") ?? each("step") ?? (u["until"] === undefined ? undefined : child("until")) ?? child("result") ?? ok(out);
+    }
     case "fn":
       return child("body") ?? ok(out);
     case "call":

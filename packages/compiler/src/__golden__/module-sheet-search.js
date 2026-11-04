@@ -147,8 +147,8 @@ function SH(n, cols, own, budget) {
     else D[c][k] = x;
   };
   const o = (c) => {
-    const d = D[c], out = [];
-    for (let k = 0; k < n; k++) out.push(d[k] === E ? VEX_ERROR : d[k]);
+    const d = D[c], out = new Array(n);
+    for (let k = 0; k < n; k++) out[k] = d[k] === E ? VEX_ERROR : d[k];
     return out;
   };
   return { r, f, o };

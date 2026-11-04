@@ -1,6 +1,6 @@
 // This script runs the programs of V-084 and V-085 on the published 0.17.2 of vex-compiler, and it records the results.
 import { readFileSync } from "node:fs";
-import { app, axes, call, evaluate, fn, fold, let_, lit, ref, space, v } from "@mark1russell7/vex";
+import { app, axes, call, each, evaluate, fn, fold, let_, lit, ref, space, v } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain } from "@mark1russell7/vex-domains";
 import { emitModule } from "@mark1russell7/vex-compiler";
 
@@ -41,6 +41,26 @@ for (const [id, e] of Object.entries(PROGRAMS)) {
     differs++;
     console.log(`${id} threw ${String(x)} scan=${scan} pack=${pack}`);
   }
+}
+// V-086: the text at fuse false, for a print that a safe value drops. A read of a parameter of the origin needs its declaration.
+const at = ref("n", [{ t: "origin" }]);
+const near = op("sum", each(axes.where(axes.all, op("eq", n, op("add", at, v("u")))), lit(1)));
+const dropped = let_({ g: fn(["u"], op("ifError", lit(0), fold(axes.all, { s: lit(0) }, { s: op("add", n, near) }, s))) }, call("g", lit(0)));
+const wanted = sp.keys.map((origin) => evaluate(dropped, { space: sp, origin, vars: { a: 2 }, domains })).map((r) => (r.ok ? r.value : "ERROR"));
+for (const [mode, options] of Object.entries({ default: {}, "fuse false": { fuse: false }, throw: { faults: "throw" } })) {
+  const m = emitModule(dropped, { domains, schema, ...options });
+  if (!m.ok) {
+    console.log(`V-086 ${mode}: refused ${m.reason}`);
+    continue;
+  }
+  const declared = new Set([...m.source.matchAll(/(([^()]*)) =>/g)].flatMap((x) => x[1].split(/, */)));
+  const free = [...new Set(m.source.match(/od+/g) ?? [])].filter((x) => !declared.has(x));
+  const made = new Function(`${m.source.replaceAll(/^export /gm, "")}
+return { run, VEX_ERROR };`)();
+  const got = made.run(records, { a: 2 }).map((x) => (x === made.VEX_ERROR ? "ERROR" : x));
+  const same = JSON.stringify(got) === JSON.stringify(wanted);
+  if (!same) differs++;
+  console.log(`V-086 ${mode}: reads with no declaration ${JSON.stringify(free)}, module ${JSON.stringify(got)} same=${same}`);
 }
 console.log(`DIFFERS ${differs}`);
 process.exitCode = differs === 0 ? 0 : 1;

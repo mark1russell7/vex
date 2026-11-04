@@ -693,7 +693,7 @@ The status on 2026-10-17:
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
 - Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 has them too (COMPILE.LIST.VALUE, §4.1), but not the axis `list` yet. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
 - The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 gives them with the code of the interpreter (COMPILE.LIST.VALUE).
-- `setNth` is done in the interpreter, tier 2 and a module (LIST.SETNTH, LOOP.SIZE.SETNTH, COMPILE.MODULE.SETNTH). A step replaces one item of a list without an `each`. The size rule counts the list and the value one time each, and no other rule changed. A `rec` with two reads of one old record stays refused, because the rule of `rec` adds its fields.
+- `setNth` is done in the interpreter, tier 2 and a module (LIST.SETNTH, LOOP.SIZE.SETNTH, COMPILE.MODULE.SETNTH). A step replaces one item of a list without an `each`. The size rule counts the list and the value one time each. A `rec` of the fields of one old record is valid (LOOP.SIZE.PART). A `rec` of two whole old records stays refused.
 - Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). Tier 2 gives a list op on an array with the code of the interpreter (COMPILE.LIST.ARRAY), so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
 - Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 has them (COMPILE.LIST.VALUE).
 - Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus force layouts and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
@@ -1370,7 +1370,6 @@ These parts are not in a module yet:
 - Vex has no op that reads a field of a record. Only an op of a domain reads the lists of a record, and a record is not the receiver of an op in a module.
 - A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
 - The strategies `grid`, `radial`, `layers` and `tree` of ireko are four separate programs. No sheet holds the whole measure pass yet.
-- A variable of the schema cannot be a list. Only a field of the schema can be a list (COMPILE.MODULE.LIST.INPUT).
 - A field of a list kind takes only a `vex.list`. A plain array in such a field is against the schema, although the interpreter takes a plain array as a list (LIST.ARRAY).
 
 #### The shapes pilot (the engine)
@@ -1480,11 +1479,11 @@ The result differs from ireko in rare cases:
 The pilot found these gaps:
 
 - A module takes only one domain of objects. The program `add(from(band(0, 1, 0, 1)), x(xy(1, 2)))` gives no module with `BandDomain` and `XYDomain`. Thus the ranges of the boxes are lists of `XY` values.
-- A step of a loop cannot change one item of a list, because LOOP.SIZE refuses `append(take(xs, k), append(fill(1, x), drop(xs, k + 1)))`. The `each` of the workaround costs one pass over all the states for each change of a cost.
+- A step of a loop changes one item of a list with `setNth`. This op copies the array of the list for each change, and the code of ireko writes into its array.
 
-The second gap sets the speed. On 4000 random edges with up to 34 obstacles, the module took approximately 50 times the time of ireko. A closed ring around the target with 34 to 49 boxes took 5 to 34 seconds, and ireko took 10 to 21 milliseconds. These numbers come from one busy computer, so a bench in CI must replace them.
+On 4000 seeded edges with up to 34 obstacles, the module takes 8.6 times the time of ireko. This is the median of 9 processes in CI, with arms in one process, and the worst process gives 9.8. The A/A arm gives 1.002. With an `each` for each change, the module took 103 times the time of ireko. One local profile gives shares only: 16 % of the time for the copy of `setNth` and 7 % for the garbage collector. The other time has no single large part, so an update in place does not bring the module near to ireko. The hand-written router of ireko stays.
 
-The source of the module of `avoid` has approximately 49 kB, with `lists: "plain"`. The modules of `straight` and `orthogonal` have approximately 5 kB and 8 kB. ireko does not use the modules yet. It needs a decision about their size budget and a speed check in CI.
+The source of the module of `avoid` has approximately 44 kB, with `lists: "plain"`. The modules of `straight` and `orthogonal` have approximately 5 kB and 8 kB. ireko does not use the modules yet. It needs a decision about their size budget and a speed check in CI.
 
 #### Lists of calls (COMPILE.MODULE.LIST.CALL)
 
@@ -1552,6 +1551,33 @@ The measure loop of ireko measures one node at a time. A module for one node nee
 `NODE_SHAPE` of `@vex/pilots` is the shapes pass for one linked node with children. Each record is a child, with its offset and the two lists of bands of its shape. The variables are the box of the node and the limit. A property compares the module with `joinShapes` of ireko, with the same bits. The module has 13481 bytes and 3666 bytes after gzip with the default level, before a minifier (2026-10-27).
 
 The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shape of ireko has no end -0, so the property gives no such end.
+
+
+#### Lists of lists (COMPILE.MODULE.LIST.NESTED)
+
+A pilot found that a module refused `count(nth(each(all, each(all, a)), 0))`, and that the interpreter and tier 2 took it. The printer has two sources for a list. The facts of a printed value tell its levels, and the static test `listy` tells where a list flows before the printer prints it. The facts knew that `nth` gives the inner list, but `listy` did not. Thus the op `count` took its generic path, and a list as its receiver gave the reason `the list op "count"`. A `let` of the item worked, because a name keeps the facts.
+
+- `listy` takes the count of the levels: 1 for a list, and 2 for a list of lists. `nth`, `first` and `get` ask their list for one level more.
+- `fill` asks its value for one level less, and `flat` asks its list for one level more. The other list ops keep the levels of their list.
+- A list literal has one level, because a module has no literal with lists as items. An empty literal in `append` takes the levels of the other list.
+- A name, a parameter and a name `as` of an item find their levels from the expression that they hold.
+- An item of a list of values stays a value. The reason of such a program does not change.
+
+A fold that starts from an empty literal and appends lists gives the reason `"append" of a list of lists and a list of values`. The name of the fold holds a list of values at its start. Start such a fold from `fill(0, row)`.
+
+#### Lists in the variables (COMPILE.MODULE.LIST.VAR)
+
+A pilot needed a list for all records of a run, and a variable of the schema took no list. Thus it put the list in a field of the first record. A variable of the schema takes the `ListKind` of a field, and a variable of a value stays the same:
+
+```ts
+emitModule(program, { domains, schema: { fields: { x: "number" }, vars: { froms: { list: "number" } } } });
+```
+
+- The run reads the list with the helper of a list field (`LI`, or `LA` with `lists: "plain"`). The check of the variables reads it once and keeps its array, so the program reads no `vex.list` at each key.
+- A list against its kind fails the check of the variables, also for a list that the program does not read.
+- A list of the variables has the keys of the input as text. A field of a record has no such key, so the axis `list` over it gives a reason without names `as`.
+- Tier 2 takes such a schema too. It has no check for a variable of a list.
+- The tool `vex_module` takes only names of kinds in its schema, so it does not take a `ListKind`.
 
 #### Lists of ops (COMPILE.MODULE.LIST.OP)
 

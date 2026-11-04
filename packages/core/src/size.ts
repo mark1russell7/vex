@@ -4,10 +4,15 @@
  * For example, a fold over 12 records with the step `append(xs, xs)` makes a list of 4096 items. The check finds such
  * steps before a run, from the size rules of the ops (LOOP.SIZE.OPS).
  *
- * The check is an abstract interpretation. It gives each value four measures: its size, its count, its inner count (the
- * sum of the counts of the values of its items) and the size of its largest item. Each measure is a bound: a constant, and a sum of the measures of
- * the old values of the loops, each with a coefficient. A coefficient tells one use, a fixed number of uses, more uses,
- * or no bound. The check also keeps the kinds of each value, because the kind of the receiver selects the op.
+ * The check is an abstract interpretation. It gives each value five measures: its size, its count, its inner count (the
+ * sum of the counts of the values of its items), the size of its largest item, and its largest part (the largest item of
+ * an item). Each measure is a bound: the largest value of some sums. A sum is a constant, and the measures of the old
+ * values of the loops, each with a coefficient. A coefficient tells one use, a fixed number of uses, more uses, or no
+ * bound. The check also keeps the kinds of each value, because the kind of the receiver selects the op.
+ *
+ * The check reads a program in two ways (LOOP.SIZE.READINGS). The first reading counts a read of a part of a value as a
+ * use of the whole value. The second reading uses the bound of the part. Each reading gives a sound bound, so one
+ * reading that accepts a program makes the program valid.
  */
 import { isOpName, listItemKind, type AnyDomain, type OpSpec, type ReturnKind, type SizeMeasure, type SizeRule, type SizeTerm, type SizeUse } from "./domain.ts";
 import { addrExprs, children, limitAxis, listOf, type Axis, type Expr, type ExprOf, type ItemNames } from "./ir.ts";
@@ -24,11 +29,14 @@ export interface SizeOptions {
 /** A coefficient: 1 for one use, 2 for a fixed number of uses, 3 for more uses, and 4 for no bound. */
 type Coef = 1 | 2 | 3 | 4;
 
-/** A bound: a constant (`Infinity` for a constant without a known value) and a coefficient for each variable. */
-interface Form {
+/** A sum: a constant (`Infinity` for a constant without a known value) and a coefficient for each variable. */
+interface Sum {
   readonly base: number;
   readonly terms: ReadonlyMap<string, Coef>;
 }
+
+/** A bound: the largest value of some sums (LOOP.SIZE.BRANCH). A bound has at least one sum, and no sum covers another. */
+type Form = readonly Sum[];
 
 /** The kinds of a value: a set of tags, or `undefined` for each kind. `item` is the kind of the items of a list. */
 interface Kind {
@@ -45,15 +53,18 @@ interface Shape {
   readonly count: Form;
   readonly inner: Form;
   readonly item: Form;
+  readonly part: Form;
   readonly kind: Kind;
   readonly long: boolean;
 }
 
 const NO_TERMS: ReadonlyMap<string, Coef> = new Map();
-const NONE: Form = { base: 0, terms: NO_TERMS };
-const constant = (base: number): Form => (base === 0 ? NONE : { base, terms: NO_TERMS });
+const NONE: Form = [{ base: 0, terms: NO_TERMS }];
+const constant = (base: number): Form => (base === 0 ? NONE : [{ base, terms: NO_TERMS }]);
 const SOME = constant(Infinity);
-const MEASURES: readonly SizeMeasure[] = ["size", "count", "inner", "item"];
+const MEASURES: readonly SizeMeasure[] = ["size", "count", "inner", "item", "part"];
+/** The most sums of a bound. A bound with more sums becomes one sum, so the work of the check has a limit. */
+const MOST_SUMS = 8;
 
 const ANY: Kind = { tags: undefined };
 const NO_KIND: Kind = { tags: new Set() };
@@ -77,6 +88,7 @@ const zero = (kind: Kind): Shape => ({
   count: NONE,
   inner: NONE,
   item: NONE,
+  part: NONE,
   kind,
   long: false,
 });
@@ -85,20 +97,39 @@ const fixed = (kind: Kind): Shape => ({
   count: SOME,
   inner: SOME,
   item: SOME,
+  part: SOME,
   kind,
   long: false,
 });
 
-const isNone = (f: Form): boolean => f.base === 0 && f.terms.size === 0;
-const term = (v: string, c: Coef): Form => ({
-  base: 0,
-  terms: new Map([[v, c]]),
-});
+const isZero = (s: Sum): boolean => s.base === 0 && s.terms.size === 0;
+const isNone = (f: Form): boolean => f.every(isZero);
+const term = (v: string, c: Coef): Form => [{ base: 0, terms: new Map([[v, c]]) }];
 
-/** This function gives the bound of a sum: the coefficients of a variable in both bounds give more uses. */
-function plus(a: Form, b: Form): Form {
-  if (isNone(a)) return b;
-  if (isNone(b)) return a;
+/** This function tells if the sum `a` is at least the sum `b` for each value of the variables. */
+const covers = (a: Sum, b: Sum): boolean => a.base >= b.base && [...b.terms].every(([v, c]) => (a.terms.get(v) ?? 0) >= c);
+
+/** This function gives one sum that is at least each sum of a bound: the largest constant and the largest coefficients. */
+function cover(f: Form): Sum {
+  const terms = new Map<string, Coef>();
+  let base = 0;
+  for (const s of f) {
+    base = Math.max(base, s.base);
+    for (const [v, c] of s.terms) terms.set(v, Math.max(terms.get(v) ?? 0, c) as Coef);
+  }
+  return { base, terms };
+}
+
+/** This function gives the bound of some sums, without a sum that another sum covers, and with at most `MOST_SUMS` sums. */
+function bound(sums: readonly Sum[]): Form {
+  let out: readonly Sum[] = [];
+  for (const s of sums) if (!out.some((o) => covers(o, s))) out = [...out.filter((o) => !covers(s, o)), s];
+  if (out.length > MOST_SUMS) return [cover(out)];
+  return out.length === 0 ? NONE : out;
+}
+
+/** This function gives the sum of two sums: the coefficients of a variable in both sums give more uses. */
+function add(a: Sum, b: Sum): Sum {
   const terms = new Map(a.terms);
   for (const [v, c] of b.terms) {
     const o = terms.get(v);
@@ -107,51 +138,63 @@ function plus(a: Form, b: Form): Form {
   return { base: a.base + b.base, terms };
 }
 
-/** This function gives a bound of two bounds: the larger coefficient of each variable. */
-function join(a: Form, b: Form): Form {
+/** This function gives the bound of a sum of two values. */
+function plus(a: Form, b: Form): Form {
   if (isNone(a)) return b;
   if (isNone(b)) return a;
-  const terms = new Map(a.terms);
-  for (const [v, c] of b.terms) terms.set(v, Math.max(terms.get(v) ?? 0, c) as Coef);
-  return { base: Math.max(a.base, b.base), terms };
+  return bound(a.flatMap((x) => b.map((y) => add(x, y))));
 }
+
+/** This function gives the bound of the larger of two values. */
+const join = (a: Form, b: Form): Form => bound([...a, ...b]);
+
+/** This function gives the bound of a union of two values: each variable with its largest coefficient, and the sum of the constants. */
+const union = (a: Form, b: Form): Form => {
+  const all = cover([...a, ...b]);
+  return [{ base: cover(a).base + cover(b).base, terms: all.terms }];
+};
 
 /** This function gives the bound of `k` uses of a bound. */
 function scale(f: Form, k: 0 | Coef): Form {
   if (k === 0) return NONE;
   if (k === 1) return f;
-  const terms = new Map<string, Coef>();
-  for (const [v, c] of f.terms) terms.set(v, Math.max(c, k) as Coef);
-  return { base: f.base === 0 ? 0 : Infinity, terms };
+  return bound(f.map((s) => ({ base: s.base === 0 ? 0 : Infinity, terms: new Map([...s.terms].map(([v, c]) => [v, Math.max(c, k) as Coef])) })));
 }
 
-/** This function gives a bound of a product. A product of two variables gives more uses of both. */
-function times(a: Form, b: Form): Form {
-  if (isNone(a) || isNone(b)) return NONE;
-  if (a.terms.size === 0) return a.base <= 1 ? b : scale(b, 2);
-  if (b.terms.size === 0) return b.base <= 1 ? a : scale(a, 2);
-  return scale(plus(a, b), 3);
+/** This function gives a bound of a product of two sums. A product of two variables gives more uses of both. */
+function multiply(a: Sum, b: Sum): Form {
+  if (isZero(a) || isZero(b)) return NONE;
+  if (a.terms.size === 0) return a.base <= 1 ? [b] : scale([b], 2);
+  if (b.terms.size === 0) return b.base <= 1 ? [a] : scale([a], 2);
+  return scale([add(a, b)], 3);
 }
+
+/** This function gives a bound of a product of two values. */
+const times = (a: Form, b: Form): Form => bound(a.flatMap((x) => b.flatMap((y) => multiply(x, y))));
 
 /** This function puts a bound in the place of each variable that `sigma` knows. */
 function subst(f: Form, sigma: (v: string) => Form | undefined): Form {
-  let out = constant(f.base);
-  for (const [v, c] of f.terms) {
-    const s = sigma(v);
-    out = plus(out, s === undefined ? term(v, c) : scale(s, c));
-  }
-  return out;
+  const one = (s: Sum): Form => {
+    let out = constant(s.base);
+    for (const [v, c] of s.terms) {
+      const u = sigma(v);
+      out = plus(out, u === undefined ? term(v, c) : scale(u, c));
+    }
+    return out;
+  };
+  return bound(f.flatMap(one));
 }
 
-/** This function gives the bound without the variables that `drop` names, and the coefficients of these variables. */
-function split(f: Form, drop: (v: string) => boolean): { readonly rest: Form; readonly dropped: ReadonlyMap<string, Coef> } {
+/** This function gives the sum without the variables that `drop` names, and the coefficients of these variables. */
+function split(s: Sum, drop: (v: string) => boolean): { readonly rest: Sum; readonly dropped: ReadonlyMap<string, Coef> } {
   const terms = new Map<string, Coef>();
   const dropped = new Map<string, Coef>();
-  for (const [v, c] of f.terms) (drop(v) ? dropped : terms).set(v, c);
-  return { rest: { base: f.base, terms }, dropped };
+  for (const [v, c] of s.terms) (drop(v) ? dropped : terms).set(v, c);
+  return { rest: { base: s.base, terms }, dropped };
 }
 
-const sameForm = (a: Form, b: Form): boolean => a.base === b.base && a.terms.size === b.terms.size && [...a.terms].every(([v, c]) => b.terms.get(v) === c);
+const sameSum = (a: Sum, b: Sum): boolean => a.base === b.base && a.terms.size === b.terms.size && [...a.terms].every(([v, c]) => b.terms.get(v) === c);
+const sameForm = (a: Form, b: Form): boolean => a.length === b.length && a.every((x) => b.some((y) => sameSum(x, y)));
 
 /** This function tells if a kind can be a list or an array. */
 const listy = (k: Kind): boolean => k.tags === undefined || k.tags.has("list") || k.tags.has("array");
@@ -181,8 +224,19 @@ const joinShape = (a: Shape, b: Shape): Shape => ({
   count: join(a.count, b.count),
   inner: join(a.inner, b.inner),
   item: join(a.item, b.item),
+  part: join(a.part, b.part),
   kind: joinKind(a.kind, b.kind),
   long: a.long || b.long,
+});
+
+/** This function puts a bound in the place of each variable that `sigma` knows, in each measure of a shape. */
+const substShape = (s: Shape, sigma: (v: string) => Form | undefined): Shape => ({
+  ...s,
+  size: subst(s.size, sigma),
+  count: subst(s.count, sigma),
+  inner: subst(s.inner, sigma),
+  item: subst(s.item, sigma),
+  part: subst(s.part, sigma),
 });
 
 /** This function gives the coefficient of a use. */
@@ -199,6 +253,7 @@ function coefOf(use: SizeUse): 0 | Coef {
       return 2;
     case "many":
     case "each":
+    case "limit":
       return 3;
     case "unbounded":
       return 4;
@@ -206,7 +261,7 @@ function coefOf(use: SizeUse): 0 | Coef {
 }
 
 /** The letters of the variables of the measures. */
-const LETTERS: Readonly<Record<SizeMeasure, string>> = { size: "s", count: "c", inner: "n", item: "t" };
+const LETTERS: Readonly<Record<SizeMeasure, string>> = { size: "s", count: "c", inner: "n", item: "t", part: "p" };
 /** The name of the variable of a measure of a value with the number `id`, for example `s1` for its size. */
 const variable = (m: SizeMeasure, id: number): string => `${LETTERS[m]}${String(id)}`;
 /** The shape of a value with a variable for each measure. A number, a boolean and null have no size. */
@@ -218,6 +273,7 @@ const shapeOfVar = (id: number, kind: Kind, long: boolean): Shape =>
         count: term(variable("count", id), 1),
         inner: term(variable("inner", id), 1),
         item: term(variable("item", id), 1),
+        part: term(variable("part", id), 1),
         kind,
         long,
       };
@@ -264,17 +320,22 @@ class Checker {
   readonly #fns: Readonly<Record<string, unknown>> | undefined;
   readonly #shapes = new Map<Expr, Shape>();
   readonly #open = new Map<Expr, boolean>();
+  /** With `true`, the check keeps the largest part as a measure and reads the rules `byParts` (LOOP.SIZE.READINGS). */
+  readonly #parts: boolean;
   #next = 0;
   #visits = 0;
 
-  constructor(opts: SizeOptions) {
+  constructor(opts: SizeOptions, parts: boolean) {
     this.#domains = opts.domains ?? [];
     this.#fns = opts.fns;
+    this.#parts = parts;
   }
 
   shape(e: Expr, env: Env): Shape {
     this.#visits++;
-    const s = this.#shape(e, env);
+    const found = this.#shape(e, env);
+    // The first reading has no measure under the largest item, so the largest part of a value is its largest item.
+    const s = this.#parts ? found : { ...found, part: found.item };
     this.#shapes.set(e, s);
     return s;
   }
@@ -300,7 +361,10 @@ class Checker {
       case "rec": {
         const fields = Object.values(e.fields).map((x) => this.shape(x, env));
         const size = fields.reduce((acc, x) => plus(acc, x.size), SOME);
-        return { ...fixed(kindOf("object")), size, item: size, long: fields.some((x) => x.long) };
+        // LOOP.SIZE.PART: the items of a record are its fields, so one field gives the largest item.
+        const item = fields.reduce((acc, x) => join(acc, x.size), NONE);
+        const part = fields.reduce((acc, x) => join(acc, x.item), NONE);
+        return { ...fixed(kindOf("object")), size, item, part, long: fields.some((x) => x.long) };
       }
       case "let":
         return this.#let(e, env);
@@ -330,7 +394,10 @@ class Checker {
     if (typeof value === "number") return zero(NUMBER);
     if (typeof value === "boolean") return zero(BOOLEAN);
     if (value === null || value === undefined) return zero(kindOf("null"));
-    if (typeof value === "string") return { ...zero(STRING), size: constant(value.length), item: constant(value.length) };
+    if (typeof value === "string") {
+      const length = constant(value.length);
+      return { ...zero(STRING), size: length, item: length, part: length };
+    }
     if (isVexList(value)) {
       const item = value.items.reduce((k, it) => (it.result.ok ? joinKind(k, this.#literal(it.result.value).kind) : k), NO_KIND);
       return { ...fixed(listKind(item)), count: constant(value.items.length) };
@@ -376,20 +443,12 @@ class Checker {
     const entry = env.get(e.fn);
     // FN.ARGS: a call of a value, of a missing name or with another number of arguments gives an error.
     if (entry?.t !== "fn" || entry.params.length !== args.length) return zero(NO_KIND);
-    const bound = new Map<string, Form>();
+    const bindings = new Map<string, Form>();
     entry.params.forEach((id, i) => {
-      for (const m of MEASURES) bound.set(variable(m, id), (args[i] as Shape)[m]);
+      for (const m of MEASURES) bindings.set(variable(m, id), (args[i] as Shape)[m]);
     });
-    const sigma = (v: string): Form | undefined => bound.get(v);
-    const r = entry.result;
-    return {
-      size: subst(r.size, sigma),
-      count: subst(r.count, sigma),
-      inner: subst(r.inner, sigma),
-      item: subst(r.item, sigma),
-      kind: r.kind,
-      long: r.long || args.some((a) => a.long),
-    };
+    const sigma = (v: string): Form | undefined => bindings.get(v);
+    return { ...substShape(entry.result, sigma), long: entry.result.long || args.some((a) => a.long) };
   }
 
   #app(e: ExprOf<"app">, env: Env): Shape {
@@ -482,28 +541,31 @@ class Checker {
     if (rule === "scalar") return zero(kind.tags === undefined ? SCALAR : kind);
     if (rule === "fixed") return fixed(kind);
     if (rule === "reduce") return { ...this.#reduce(args, exprs), kind };
+    const limit = rule.limit === undefined ? undefined : literalNumber(exprs[rule.limit]);
+    // LOOP.SIZE.PART: a rule with a limit gives a bound for each item, so it needs a literal limit and short keys.
+    const open = rule.limit !== undefined && (limit === undefined || args.some((a) => a.long));
+    const r = this.#parts && !open ? (rule.byParts ?? rule) : rule;
     const sum = (terms: readonly SizeTerm[], own: SizeMeasure): Form =>
       args.reduce((acc, a, i) => {
-        const t = terms[i] ?? rule.rest ?? "many";
+        const t = terms[i] ?? r.rest ?? "many";
         const [use, of] = typeof t === "object" ? t : [t, own];
-        const f = useForm(use, i, a[of], args, exprs);
+        const f = useForm(use, i, a[of], args, exprs, limit);
         // The largest item of the result is an item of one argument, so the arguments give the largest bound.
-        if (own === "item") return join(acc, f);
-        // A union holds each key one time, so the arguments give the largest bound, and their constants add.
-        return rule.union === true ? plus(join(acc, { base: 0, terms: f.terms }), constant(f.base)) : plus(acc, f);
+        if (own === "item" || own === "part") return join(acc, f);
+        return r.union === true ? union(acc, f) : plus(acc, f);
       }, NONE);
-    let size = sum(rule.size, "size");
-    let count = rule.count === undefined ? size : sum(rule.count, "count");
-    const inner = rule.inner === undefined ? size : sum(rule.inner, "inner");
-    const limit = rule.limit === undefined ? undefined : literalNumber(exprs[rule.limit]);
+    let size = sum(r.size, "size");
+    let count = r.count === undefined ? size : sum(r.count, "count");
+    const inner = r.inner === undefined ? size : sum(r.inner, "inner");
     if (limit !== undefined) count = constant(limit);
-    if (rule.constant === true) {
+    if (r.constant === true) {
       size = plus(size, SOME);
       count = plus(count, SOME);
     }
-    if (rule.keys === "position") size = plus(size, times(count, SOME));
-    const item = rule.item === undefined ? size : sum(rule.item, "item");
-    return { size, count, inner, item, kind, long: args.some((a) => a.long) };
+    if (r.keys === "position") size = plus(size, times(count, SOME));
+    const item = r.item === undefined ? size : sum(r.item, "item");
+    const part = r.part === undefined ? item : sum(r.part, "part");
+    return { size, count, inner, item, part, kind, long: args.some((a) => a.long) };
   }
 
   /** The rule of `reduce`: the op that the second argument names folds the values of the list (LIST.REDUCE). */
@@ -536,6 +598,7 @@ class Checker {
         count: size,
         inner: size,
         item: size,
+        part: size,
         kind: ANY,
         long: list.long,
       });
@@ -553,6 +616,7 @@ class Checker {
         count: SOME,
         inner: times(body.count, SOME),
         item: body.size,
+        part: body.item,
         kind: listKind(body.kind),
         long: body.long,
       };
@@ -562,28 +626,32 @@ class Checker {
     const vars = new Map(MEASURES.map((m) => [variable(m, id), m]));
     // The sum over the items of a bound of the body: a use of the item adds the measures of the list.
     const over = (f: Form, keys: boolean): Form => {
-      const { rest, dropped } = split(f, (v) => vars.has(v));
+      // Each item can take another sum of the bound, so the sum over the items uses one sum that covers each sum.
+      const { rest, dropped } = split(cover(f), (v) => vars.has(v));
       const c = (m: SizeMeasure): 0 | Coef => dropped.get(variable(m, id)) ?? 0;
-      // The inner count and the largest item of an item are not larger than its size.
-      const uses = [c("size"), c("inner"), c("item")].filter((x) => x > 0);
+      // The inner count, the largest item and the largest part of an item are not larger than its size.
+      const uses = [c("size"), c("inner"), c("item"), c("part")].filter((x) => x > 0);
       const sizes = uses.length === 0 ? 0 : uses.length === 1 ? (uses[0] as Coef) : 3;
       // The items keep the keys of the list. A key with a fixed bound adds a constant for each item, and a long key is a
       // part of the size of the list.
-      const values = scale(list.size, keys && list.long ? (Math.max(1, sizes) as Coef) : sizes);
+      const whole = scale(list.size, keys && list.long ? (Math.max(1, sizes) as Coef) : sizes);
+      // LOOP.SIZE.PART: more than one use of each item has the bound of the count of the items times the largest item.
+      const values = this.#parts && sizes > 1 && !(keys && list.long) ? scale(times(c("size") > 0 || c("inner") > 0 ? list.item : list.part, list.count), sizes) : whole;
       const short = keys && !list.long ? times(list.count, SOME) : NONE;
-      return plus(plus(plus(values, short), scale(list.inner, c("count"))), times(rest, list.count));
+      return plus(plus(plus(values, short), scale(list.inner, c("count"))), times([rest], list.count));
     };
     // The largest item of the result is the value of the body for one item of the list.
-    const one: Readonly<Record<SizeMeasure, Form>> = { size: list.item, count: list.item, inner: list.item, item: list.item };
-    const item = subst(body.size, (v) => {
+    const one = itemMeasures(list);
+    const sigma = (v: string): Form | undefined => {
       const m = vars.get(v);
       return m === undefined ? undefined : one[m];
-    });
+    };
     return {
       size: over(body.size, true),
       count: list.count,
       inner: over(body.count, false),
-      item,
+      item: subst(body.size, sigma),
+      part: subst(body.item, sigma),
       kind: listKind(body.kind),
       long: list.long || body.long,
     };
@@ -612,14 +680,7 @@ class Checker {
     const item: Shape =
       list === undefined
         ? fixed(ANY)
-        : {
-            size: list.item,
-            count: list.item,
-            inner: list.item,
-            item: list.item,
-            kind: itemOf(list.kind),
-            long: list.long,
-          };
+        : { ...itemMeasures(list), kind: itemOf(list.kind), long: list.long };
     // The kinds of the names. The first step reads the values of init. The other steps read the values of the steps: the
     // kinds of the first step, then also the kinds of the next steps, then each kind. A large program uses each kind
     // at once, for each step.
@@ -665,11 +726,16 @@ class Checker {
         return within(b.kind, a.kind) && (a.long || !b.long);
       });
       if (stable) break;
-      assumed = pass === 0 && this.#visits < BUDGET ? next : always();
+      // The second reading keeps the keys that the steps can give: `take` needs them (LOOP.SIZE.PART). Each pass after the
+      // first pass only changes the keys from short to long, so the loop ends.
+      assumed = pass === 0 && this.#visits < BUDGET ? next : this.#parts ? new Map(names.map((n): [string, Assumed] => {
+        const b = next.get(n) as Assumed;
+        return [n, stepped.includes(n) ? { kind: ANY, long: b.long } : b];
+      })) : always();
     }
     if (e.tag === "iterate" && e.until !== undefined) this.shape(e.until, senv);
     const loop = new Loop(e, names, ids, steps);
-    // LOOP.SIZE: the rule applies to the steps after the first step. One step can grow the values by a factor one time.
+    // LOOP.SIZE: the rule applies to the steps after the first step. One step can multiply the values one time.
     loop.check(this.#shapes, this.#open);
     // The values after the first step: the first step reads the values of init.
     const sigma = (v: string): Form | undefined => {
@@ -685,15 +751,7 @@ class Checker {
         const a = start(n);
         const s = first?.get(n);
         if (s === undefined) return [n, a];
-        const b: Shape = {
-          size: subst(s.size, sigma),
-          count: subst(s.count, sigma),
-          inner: subst(s.inner, sigma),
-          item: subst(s.item, sigma),
-          kind: s.kind,
-          long: s.long,
-        };
-        return [n, joinShape(a, b)];
+        return [n, joinShape(a, substShape(s, sigma))];
       }),
     );
     const last = loop.last(starts, list?.count ?? sized?.count ?? (e.tag === "iterate" && typeof e.limit === "number" ? constant(e.limit) : SOME));
@@ -782,11 +840,14 @@ function unbounded(args: readonly Shape[]): Shape {
     args.reduce((acc, a) => plus(acc, a.size), SOME),
     4,
   );
-  return { size: f, count: f, inner: f, item: f, kind: ANY, long: true };
+  return { size: f, count: f, inner: f, item: f, part: f, kind: ANY, long: true };
 }
 
+/** The measures of one item of a list. The largest item of the list bounds its size, and the largest part bounds the rest. */
+const itemMeasures = (list: Shape): Readonly<Record<SizeMeasure, Form>> => ({ size: list.item, count: list.item, inner: list.item, item: list.part, part: list.part });
+
 /** This function gives the bound of one use of an argument. */
-function useForm(use: SizeUse, i: number, form: Form, args: readonly Shape[], exprs: readonly Expr[]): Form {
+function useForm(use: SizeUse, i: number, form: Form, args: readonly Shape[], exprs: readonly Expr[], limit: number | undefined): Form {
   switch (use) {
     case "text":
       return isText(args[i]?.kind) ? form : scale(form, 2);
@@ -799,6 +860,9 @@ function useForm(use: SizeUse, i: number, form: Form, args: readonly Shape[], ex
     case "number":
       // LIST.FILL: a count has the bound 100000.
       return constant(Math.min(100_000, literalNumber(exprs[i]) ?? Infinity));
+    case "limit":
+      // LOOP.SIZE.PART: each item that the limit keeps has a key with a fixed bound and a value.
+      return limit === undefined ? scale(form, 3) : times(plus(form, SOME), constant(limit));
     case 0:
     case 1:
     case "scaled":
@@ -830,6 +894,16 @@ export function ruleOf(d: AnyDomain, spec: OpSpec<unknown>, domains: readonly An
   return undefined;
 }
 
+/** The terms of a sum that read a variable of a cycle. */
+const inside = (s: Sum, cycle: ReadonlySet<string>): readonly (readonly [string, Coef])[] => [...s.terms].filter(([u]) => cycle.has(u));
+
+/** This function tells if a sum of a bound reads its cycle more than one time, or with a coefficient other than 1. */
+const loose = (f: Form, cycle: ReadonlySet<string>): boolean =>
+  f.some((s) => {
+    const terms = inside(s, cycle);
+    return terms.length > 1 || terms.some(([, c]) => c !== 1);
+  });
+
 /** The variable of a measure of a name of a loop. */
 interface Owner {
   readonly name: string;
@@ -842,6 +916,7 @@ const WORDS: Readonly<Record<SizeMeasure, string>> = {
   count: "number of items",
   inner: "number of inner items",
   item: "largest item",
+  part: "largest part",
 };
 
 /** This function gives the label of the node of a refusal: an op, a function, a name or a node. */
@@ -892,18 +967,17 @@ class Loop {
   }
 
   /**
-   * This method applies the rule of LOOP.SIZE to the steps, and it throws a refusal. A measure of a new value reads its
-   * cycle at most one time, with the coefficient 1. A name without a step keeps its value.
+   * This method applies the rule of LOOP.SIZE to the steps, and it throws a refusal. Each sum of a measure of a new value
+   * reads its cycle at most one time, with the coefficient 1. A name without a step keeps its value.
    */
   check(shapes: ReadonlyMap<Expr, Shape>, open: ReadonlyMap<Expr, boolean>): void {
     // The graph of the measures: an edge from each variable of a bound of a step to the measure of its name.
-    const into = new Map<string, (readonly [string, Coef])[]>();
+    const into = new Map<string, Form>();
     const out = new Map<string, string[]>();
     for (const [v, o] of this.#owners) {
-      const step = this.steps.get(o.name);
-      const edges = step === undefined ? [[v, 1] as const] : [...step[o.measure].terms].filter(([u]) => this.#owners.has(u));
-      into.set(v, edges);
-      for (const [u] of edges) out.set(u, [...(out.get(u) ?? []), v]);
+      const form = this.steps.get(o.name)?.[o.measure] ?? term(v, 1);
+      into.set(v, form);
+      for (const u of new Set(form.flatMap((s) => [...s.terms.keys()]))) if (this.#owners.has(u)) out.set(u, [...(out.get(u) ?? []), v]);
     }
     const reach = (from: string): ReadonlySet<string> => {
       const seen = new Set<string>();
@@ -918,21 +992,19 @@ class Loop {
       return seen;
     };
     const reached = new Map([...this.#owners.keys()].map((v): [string, ReadonlySet<string>] => [v, reach(v)]));
-    for (const [v, edges] of into) {
+    for (const [v, form] of into) {
       const cycle = new Set([...(reached.get(v) as ReadonlySet<string>)].filter((u) => (reached.get(u) as ReadonlySet<string>).has(v)));
       this.#cycles.set(v, cycle);
-      const inside = edges.filter(([u]) => cycle.has(u));
-      if (inside.length < 2 && inside.every(([, c]) => c === 1)) continue;
+      if (!loose(form, cycle)) continue;
       const o = this.#owners.get(v) as Owner;
-      const twice = inside.length > 1 || inside.some(([, c]) => c > 2);
-      const bad = (s: Shape): boolean => {
-        const terms = [...s[o.measure].terms].filter(([u]) => cycle.has(u));
-        return terms.length > 1 || terms.some(([, c]) => c !== 1);
-      };
+      const twice = form.some((s) => {
+        const terms = inside(s, cycle);
+        return terms.length > 1 || terms.some(([, c]) => c > 2);
+      });
       const what = twice
         ? `a value that uses the lists of the loop more than one time in its ${WORDS[o.measure]}`
         : `a ${WORDS[o.measure]} that can grow by a factor at each step`;
-      this.#refuse(o.name, bad, what, shapes, open);
+      this.#refuse(o.name, (s) => loose(s[o.measure], cycle), what, shapes, open);
     }
   }
 
@@ -952,9 +1024,11 @@ class Loop {
 
   /**
    * This method gives a bound of the last value of each name, from the values of `init` and the steps. The number of the
-   * steps is `steps`. A measure in a cycle gets at most one measure of its cycle at each step. Thus its last value is the
-   * largest first value of the cycle, with the other parts of the steps one time for each step. A measure outside a
-   * cycle has its first value or the value of its step.
+   * steps is `steps`. Each sum of a measure in a cycle gets at most one measure of its cycle at each step. A sum with a
+   * measure of the cycle adds its other parts one time for each step. A sum without such a measure sets the value again,
+   * so it adds to the bound one time (LOOP.SIZE.BRANCH). The last value starts from the largest first value of the cycle
+   * or of these sums. It adds the parts of the other sums one time for each step. A measure outside a cycle has its first
+   * value or the value of its step.
    */
   last(init: ReadonlyMap<string, Shape>, steps: Form): ReadonlyMap<string, Shape> {
     const first = (v: string): Form => {
@@ -964,11 +1038,8 @@ class Loop {
     const bounds = new Map([...this.#owners.keys()].map((v) => [v, first(v)]));
     const sigma = (v: string): Form | undefined => bounds.get(v);
     // Each pass makes the bounds larger, and the bounds have a finite number of values, so the loop ends. A constant
-    // that changes becomes a constant without a known value.
-    const widen = (old: Form, add: Form): Form => {
-      const j = join(old, add);
-      return j.base === old.base ? j : { base: Infinity, terms: j.terms };
-    };
+    // that is new in a bound becomes a constant without a known value.
+    const widen = (old: Form, more: Form): Form => bound(join(old, more).map((s) => (s.base === 0 || old.some((o) => o.base === s.base) ? s : { base: Infinity, terms: s.terms })));
     const stepOf = (v: string): Form | undefined => {
       const o = this.#owners.get(v) as Owner;
       return this.steps.get(o.name)?.[o.measure];
@@ -983,8 +1054,10 @@ class Loop {
         if (cycle.has(v)) {
           const members = [...cycle];
           const start = members.reduce((acc, u) => join(acc, first(u)), NONE);
-          const rest = members.reduce((acc, u) => join(acc, subst(split(stepOf(u) as Form, (x) => cycle.has(x)).rest, sigma)), NONE);
-          next = plus(start, times(rest, steps));
+          const sums = members.flatMap((u) => (stepOf(u) as Form).map((x) => split(x, (y) => cycle.has(y))));
+          const sets = subst(bound(sums.filter((x) => x.dropped.size === 0).map((x) => x.rest)), sigma);
+          const adds = subst(bound(sums.filter((x) => x.dropped.size > 0).map((x) => x.rest)), sigma);
+          next = plus(join(start, sets), times(adds, steps));
         } else next = join(first(v), subst(step, sigma));
         const wide = widen(old, next);
         if (sameForm(old, wide)) continue;
@@ -1008,16 +1081,24 @@ function findOpen(at: Expr, open: ReadonlyMap<Expr, boolean>): ExprOf<"app"> | u
   return undefined;
 }
 
-/**
- * This function checks the sizes of the loops of an expression (LOOP.SIZE). It gives the reason of a refusal, or
- * `undefined`. The expression must pass `shapeError` and the limit of the nesting first.
- */
-export function sizeError(e: Expr, opts: SizeOptions = {}): string | undefined {
+/** This function reads an expression one time, and it gives the reason of a refusal or `undefined`. */
+function refusalOf(e: Expr, opts: SizeOptions, parts: boolean): string | undefined {
   try {
-    new Checker(opts).shape(e, new Map());
+    new Checker(opts, parts).shape(e, new Map());
     return undefined;
   } catch (thrown) {
     if (thrown instanceof Refusal) return thrown.message;
     throw thrown;
   }
+}
+
+/**
+ * This function checks the sizes of the loops of an expression (LOOP.SIZE). It gives the reason of a refusal, or
+ * `undefined`. The expression must pass `shapeError` and the limit of the nesting first. Each reading gives a sound
+ * bound, so one reading that accepts the expression makes it valid. A refusal tells the reason of the first reading
+ * (LOOP.SIZE.READINGS).
+ */
+export function sizeError(e: Expr, opts: SizeOptions = {}): string | undefined {
+  const reason = refusalOf(e, opts, false);
+  return reason === undefined || refusalOf(e, opts, true) === undefined ? undefined : reason;
 }

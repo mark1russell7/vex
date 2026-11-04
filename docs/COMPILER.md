@@ -231,7 +231,9 @@ The limit comes from a measure of doubling programs on a CI runner, with a heap 
 
 The largest module of `ireko` has 2,138 places, so the limit is 15 times that program.
 
-The workflow `places-gate.yml` holds the rule. It removes the limit and compiles each shape at the depth of the limit and at the next depth, in three fresh processes. It fails if a row of the first depth goes over the line. It also fails if each row of the next depth stays under the line.
+The workflow `places-gate.yml` holds the rule. It removes the limit and compiles each row in five fresh processes. It fails if the largest program of a shape under the limit goes over the line. It also fails if each row at 4 times the places stays under the line.
+
+A row at 2 times the places is a record only, because a program there can fall on each side of the line. So the gate does not find a limit that is one doubling too low. That limit refuses more programs, so it is safe. The gate also checks with `placesOf` that each row is the largest program of its shape, so a change of the count fails the gate.
 
 #### The faults of a module (COMPILE.MODULE.FAULT)
 

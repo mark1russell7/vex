@@ -202,8 +202,8 @@ describe("COMPILE.MODULE.LIST: the list ops of design E in a module", () => {
     expect(reasonOf(iterate(2, { p: nested(), q: ns }, { p: each(axes.all, each(axes.all, ref("b"))) }, op("count", v("p"))))).toBe('a step of a loop gives the name "p" a list that does not fit its first list');
     expect(reasonOf(iterate(2, { p: ns }, { p: lit(1) }, lit(0)))).toBe('a step of a loop changes the kind of the name "p"');
     expect(reasonOf(iterate(2, { p: lit(1) }, { p: ns }, lit(0)))).toBe('a step of a loop changes the kind of the name "p"');
-    // The first list fixes the kind of the items. The empty literal has no kind, so get gives a value of no kind.
-    expect(reasonOf(iterate(2, { p: EMPTY }, { p: op("append", v("p"), ns) }, op("add", op("get", v("p"), lit("0")), lit(1))))).toBe(undecided("add"));
+    // The empty literal has no kind, and this step decides none, so get gives a value of no kind (COMPILE.MODULE.LOOP.EMPTY).
+    expect(reasonOf(iterate(2, { p: EMPTY }, { p: v("p") }, op("add", op("get", v("p"), lit("0")), lit(1))))).toBe(undecided("add"));
     // A domain op with the name of a list op on a value that is not a list is a domain op.
     expect(reasonOf(op("count", op("drop", n, lit(1))))).toBe(undecided("drop"));
     expect(reasonOf(op("get", n, lit(1)))).toBe(undecided("get"));

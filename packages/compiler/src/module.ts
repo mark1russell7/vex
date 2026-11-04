@@ -4408,6 +4408,7 @@ class Printer {
     const [x] = t.tests;
     const { base } = testsOf(e.axis);
     if (base.t !== "all" || (e.at ?? []).length > 0 || e.as !== undefined || t.tests.length !== 1 || x?.tag !== "app" || x.args.length !== 2 || test === undefined) return undefined;
+    // Stryker disable next-line all: for the axis all with no address, #targetLoop gives no statements, key, check or skip, so this test is always false
     if (t.s.length > 0 || t.key.length > 0 || t.check.length > 0 || t.skip !== undefined) return undefined;
     // The test reads the target and a key of the origin. The rest reads only the target, the names of the fold and the
     // constants of the run, so it can evaluate once for each run.

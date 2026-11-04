@@ -123,6 +123,8 @@ const without = (s: Scope, names: readonly string[]): Scope => ({
 
 /** The text of each name of the loops around a part of the view, for example "v0.x". */
 let loopText: ReadonlyMap<string, string> = new Map();
+/** The text of the last round of each `fix` around a part of the view, for example "v0". */
+let fixText: ReadonlyMap<string, string> = new Map();
 /** The number of loops around a part of the view. The parameter of a loop is "v" and this number. */
 let loopDepth = 0;
 
@@ -160,6 +162,20 @@ function loop(e: Extract<Expr, { tag: "fold" | "iterate" }>): string {
   return inLoop(fields, (p) => {
     const until = e.tag === "iterate" && e.until !== undefined ? `, { until: (${p}) => ${arg(e.until)} }` : "";
     return `${head}${first}, (${p}) => (${namesText(fields, e.step)}), (${p}) => ${arg(e.result)}${until})`;
+  });
+}
+
+/** The text of a column. The start has the text outside the column, because it cannot read the last round of the column. */
+function column(e: Extract<Expr, { tag: "fix" }>): string {
+  const head = `root.start(0).fix(${quote(e.name)}, ${quote(e.join)}, ${arg(e.init)}, `;
+  return inLoop(new Map(), (p) => {
+    const outer = fixText;
+    fixText = new Map([...outer, [e.name, p]]);
+    try {
+      return `${head}(${p}) => ${arg(e.step)})`;
+    } finally {
+      fixText = outer;
+    }
   });
 }
 
@@ -244,10 +260,11 @@ function chain(e: Expr): string {
     case "fold":
     case "iterate":
       return loop(e);
-    // A fixed point has no chain yet (FIX.ROUNDS).
     case "fix":
+      return column(e);
+    // A read outside a column of its name is not valid (FIX.LAST), so it has no chain.
     case "last":
-      return "root.start(null)";
+      return fixText.get(e.name) ?? "root.start(null)";
   }
 }
 

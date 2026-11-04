@@ -6,15 +6,9 @@ export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
-function FI(n, v) {
-  if (!(Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined)) F();
-  const o = [];
-  for (let i = 0; i < n; i++) o.push([i, v]);
-  return o;
-}
 function G(x) { return x === E ? F() : x; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
-function LI(x, h, t) {
+function LI(x, t) {
   if (typeof x !== "object" || x === null || x.kind !== "vex.list" || !Array.isArray(x.items)) return undefined;
   const o = [];
   for (let i = 0; i < x.items.length; i++) {
@@ -22,7 +16,7 @@ function LI(x, h, t) {
     const r = typeof it === "object" && it !== null ? it.result : undefined;
     if (typeof r !== "object" || r === null || typeof it.key !== "string") return undefined;
     if (r.ok === true) {
-      const v = h > 0 ? LI(r.value, h - 1, t) : r.value !== undefined && t(r.value) ? r.value : undefined;
+      const v = r.value !== undefined && t(r.value) ? r.value : undefined;
       if (v === undefined) return undefined;
       o.push([it.key, v]);
     } else {
@@ -60,8 +54,7 @@ const op_2_0 = (from, to, min, max) => ({
 			min,
 			max
 		});
-const v_3 = (b) => !Number.isNaN(b.from) && !Number.isNaN(b.to) && !Number.isNaN(b.min) && !Number.isNaN(b.max);
-const k_domain_Band = (x) => (v_3(x) ? x : F());
+const k_domain_Band = (x) => ((!Number.isNaN(x.from) && !Number.isNaN(x.to) && !Number.isNaN(x.min) && !Number.isNaN(x.max)) ? x : F());
 const op_3_1 = (a, along, across) => ({
 				from: a.from + along,
 				to: a.to + along,
@@ -69,29 +62,9 @@ const op_3_1 = (a, along, across) => ({
 				max: a.max + across
 			});
 const op_3_2 = (a) => a.to > a.from && a.max >= a.min;
-const op_3_3 = (a) => ({
-				from: a.to,
-				to: a.to,
-				min: 0,
-				max: 0
-			});
 const op_3_4 = (a) => a.from === Number.NEGATIVE_INFINITY ? -1 : a.from === Number.POSITIVE_INFINITY ? 1 : 0;
 const k_number = (x) => (Number.isFinite(x) ? x : F());
-const op_3_6 = (a) => a.from;
 const op_3_7 = (a, b) => a.from === b.from;
-const op_3_9 = (a, b) => a.to > b.from;
-const op_3_11 = (a, b) => ({
-				from: a.from,
-				to: a.to,
-				min: b.min < a.min ? b.min : a.min,
-				max: b.max > a.max ? b.max : a.max
-			});
-const op_3_12 = (c, a, b) => ({
-				from: a.from,
-				to: b.from,
-				min: c.min,
-				max: c.max
-			});
 const op_3_13 = (a, b) => a.to === b.from && a.min === b.min && a.max === b.max;
 const op_3_14 = (a, b) => ({
 				from: a.from,
@@ -99,22 +72,16 @@ const op_3_14 = (a, b) => ({
 				min: a.min,
 				max: a.max
 			});
-const op_3_16 = (a, b) => ({
-				from: Math.min(a.from, b.from),
-				to: Math.max(a.to, b.to),
-				min: Math.min(a.min, b.min),
-				max: Math.max(a.max, b.max)
-			});
 const is_3 = (u) => typeof u === "object" && u !== null && [Object.prototype, null].includes(Object.getPrototypeOf(u)) && Object.keys(u).length === 4 && typeof u.from === "number" && typeof u.to === "number" && typeof u.min === "number" && typeof u.max === "number";
 export function nodeShape(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;
   const n = R.length;
   const LF3 = [];
-  const LF120 = [];
+  const LF114 = [];
   for (let i = 0; i < n; i++) {
     const r = R[i];
-    if (typeof r !== "object" || r === null || typeof r["ox"] !== "number" || typeof r["oy"] !== "number" || (LF3[i] = LI(r["rows"], 0, is_3)) === undefined || (LF120[i] = LI(r["cols"], 0, is_3)) === undefined) C(`the record ${i} does not keep the schema`);
+    if (typeof r !== "object" || r === null || typeof r["ox"] !== "number" || typeof r["oy"] !== "number" || (LF3[i] = LI(r["rows"], is_3)) === undefined || (LF114[i] = LI(r["cols"], is_3)) === undefined) C(`the record ${i} does not keep the schema`);
   }
   if (typeof vars !== "object" || vars === null || typeof vars["w"] !== "number" || typeof vars["h"] !== "number" || typeof vars["limit"] !== "number") C("the variables do not keep the schema");
   const v0 = vars["h"];
@@ -124,14 +91,13 @@ export function nodeShape(records, vars) {
     const b4 = LF3[j1];
     const b5 = R[j1]["oy"];
     const b6 = R[j1]["ox"];
-    const A8 = b4;
     const L11 = [];
-    for (let q9 = 0; q9 < A8.length; q9++) {
-      const j7 = A8[q9][0];
+    for (let q9 = 0; q9 < b4.length; q9++) {
+      const j7 = b4[q9][0];
       let x12;
       try {
-        if (A8[q9][1] === E) F();
-        const y10 = A8[q9][1];
+        if (b4[q9][1] === E) F();
+        const y10 = b4[q9][1];
         x12 = k_domain_Band(op_3_1(y10, b5, b6));
       } catch {
         x12 = E;
@@ -144,288 +110,253 @@ export function nodeShape(records, vars) {
   try {
     const o0 = [];
     o0.push([0, k_domain_Band(op_2_0(0, v0, 0, v1))]);
-    const o2 = o0;
     for (let j1 = 0; j1 < n; j1++) {
-      const m15 = o2.length;
+      const m15 = o0.length;
       try {
         const z14 = G(col13(j1));
-        for (let i = 0; i < z14.length; i++) if (z14[i][1] !== E) o2.push(z14[i]);
+        for (let i = 0; i < z14.length; i++) if (z14[i][1] !== E) o0.push(z14[i]);
       } catch {
-        o2.length = m15;
+        o0.length = m15;
       }
     }
     c16 = o0;
   } catch {
     c16 = E;
   }
-  const c25 = T(() => FI(0, k_domain_Band(op_2_0(0, 0, 0, 0))));
-  const c90 = T(() => k_domain_Band(op_2_0(0, 0, 0, 0)));
-  const fn115 = (p17) => {
-    let b53;
+  const c84 = T(() => k_domain_Band(op_2_0(0, 0, 0, 0)));
+  const fn109 = (p17) => {
+    let b48;
     try {
-      let b28;
+      let b26;
       try {
         const A21 = G(p17);
         const o24 = [];
         for (let q22 = 0; q22 < A21.length; q22++) {
           const y23 = A21[q22][1];
-          const m27 = o24.length;
+          const m25 = o24.length;
           try {
             if (op_3_2(y23)) {
               o24.push([0, y23]);
-              o24.push([0, k_domain_Band(op_3_3(y23))]);
-            } else {
-              const z26 = G(c25);
-              for (let i = 0; i < z26.length; i++) o24.push(z26[i]);
+              o24.push([0, k_domain_Band((({ from: y23.to, to: y23.to, min: 0, max: 0 })))]);
             }
           } catch {
-            o24.length = m27;
+            o24.length = m25;
           }
         }
-        b28 = o24;
+        b26 = o24;
       } catch {
-        b28 = E;
+        b26 = E;
       }
-      const o29 = [];
-      const A31 = G(b28);
-      const o34 = o29;
-      for (let q32 = 0; q32 < A31.length; q32++) {
-        const y33 = A31[q32][1];
-        const m36 = o34.length;
+      const o27 = [];
+      const A29 = G(b26);
+      for (let q30 = 0; q30 < A29.length; q30++) {
+        const y31 = A29[q30][1];
+        const m33 = o27.length;
         try {
-          if (((k_number(op_3_4(y33))) === (-1))) {
-            o34.push([0, y33]);
-          } else {
-            const z35 = G(c25);
-            for (let i = 0; i < z35.length; i++) o34.push(z35[i]);
+          if (((k_number(op_3_4(y31))) === (-1))) {
+            o27.push([0, y31]);
           }
         } catch {
-          o34.length = m36;
+          o27.length = m33;
         }
       }
-      const A38 = G(b28);
-      const o41 = [];
-      for (let q39 = 0; q39 < A38.length; q39++) {
-        const y40 = A38[q39][1];
-        const m43 = o41.length;
+      const A35 = G(b26);
+      const o38 = [];
+      for (let q36 = 0; q36 < A35.length; q36++) {
+        const y37 = A35[q36][1];
+        const m39 = o38.length;
         try {
-          if (((k_number(op_3_4(y40))) === (0))) {
-            o41.push([0, y40]);
-          } else {
-            const z42 = G(c25);
-            for (let i = 0; i < z42.length; i++) o41.push(z42[i]);
+          if (((k_number(op_3_4(y37))) === (0))) {
+            o38.push([0, y37]);
           }
         } catch {
-          o41.length = m43;
+          o38.length = m39;
         }
       }
-      const z52 = SKI(o41, ((x44) => k_number(op_3_6(x44))));
-      for (let i = 0; i < z52.length; i++) o29.push(z52[i]);
-      const A46 = G(b28);
-      const o49 = o29;
-      for (let q47 = 0; q47 < A46.length; q47++) {
-        const y48 = A46[q47][1];
-        const m51 = o49.length;
+      const z47 = SKI(o38, ((x40) => k_number((x40.from))));
+      for (let i = 0; i < z47.length; i++) o27.push(z47[i]);
+      const A42 = G(b26);
+      for (let q43 = 0; q43 < A42.length; q43++) {
+        const y44 = A42[q43][1];
+        const m46 = o27.length;
         try {
-          if (((k_number(op_3_4(y48))) === (1))) {
-            o49.push([0, y48]);
-          } else {
-            const z50 = G(c25);
-            for (let i = 0; i < z50.length; i++) o49.push(z50[i]);
+          if (((k_number(op_3_4(y44))) === (1))) {
+            o27.push([0, y44]);
           }
         } catch {
-          o49.length = m51;
+          o27.length = m46;
         }
       }
-      b53 = o29;
+      b48 = o27;
     } catch {
-      b53 = E;
+      b48 = E;
     }
-    let b100;
+    let b94;
     try {
+      let l49 = false;
+      let l50 = k_domain_Band(op_2_0(0, 0, 0, 0));
+      let l51 = [];
+      let l52 = false;
+      let l53 = k_domain_Band(op_2_0(0, 0, 0, 0));
       let l54 = false;
       let l55 = k_domain_Band(op_2_0(0, 0, 0, 0));
-      let l56 = FI(0, k_domain_Band(op_2_0(0, 0, 0, 0)));
-      let l57 = false;
-      let l58 = k_domain_Band(op_2_0(0, 0, 0, 0));
-      let l59 = false;
-      let l60 = k_domain_Band(op_2_0(0, 0, 0, 0));
-      let l61 = FI(0, k_domain_Band(op_2_0(0, 0, 0, 0)));
-      let w95 = l61;
-      const A63 = G(b53);
-      for (let q64 = 0; q64 < A63.length; q64++) {
-        const j62 = A63[q64][0];
-        const y65 = A63[q64][1];
-        const t66 = true;
-        const t67 = ((l54 && (!((l54 && (!(op_3_7(y65, l55))))))) ? l55 : y65);
-        let b76;
+      let l56 = [];
+      let w89 = l56;
+      const A58 = G(b48);
+      for (let q59 = 0; q59 < A58.length; q59++) {
+        const y60 = A58[q59][1];
+        const t61 = true;
+        const t62 = ((l49 && (!((l49 && (!(op_3_7(y60, l50))))))) ? l50 : y60);
+        let b70;
         try {
-          let t75;
-          if ((l54 && (!(op_3_7(y65, l55))))) {
-            const A69 = l56;
-            const o72 = [];
-            for (let q70 = 0; q70 < A69.length; q70++) {
-              const y71 = A69[q70][1];
-              const m74 = o72.length;
+          let t69;
+          if ((l49 && (!(op_3_7(y60, l50))))) {
+            const o67 = [];
+            for (let q65 = 0; q65 < l51.length; q65++) {
+              const y66 = l51[q65][1];
+              const m68 = o67.length;
               try {
-                if (op_3_9(y71, y65)) {
-                  o72.push([0, y71]);
-                } else {
-                  const z73 = G(c25);
-                  for (let i = 0; i < z73.length; i++) o72.push(z73[i]);
+                if ((y66.to > y60.from)) {
+                  o67.push([0, y66]);
                 }
               } catch {
-                o72.length = m74;
+                o67.length = m68;
               }
             }
-            t75 = o72;
+            t69 = o67;
           } else {
-            t75 = l56;
+            t69 = l51;
           }
-          b76 = t75;
+          b70 = t69;
         } catch {
-          b76 = E;
+          b70 = E;
         }
-        let t79;
-        if (op_3_2(y65)) {
-          const o77 = [];
-          const z78 = G(b76);
-          for (let i = 0; i < z78.length; i++) o77.push(z78[i]);
-          o77.push([0, y65]);
-          t79 = o77;
+        let t73;
+        if (op_3_2(y60)) {
+          const o71 = [];
+          const z72 = G(b70);
+          for (let i = 0; i < z72.length; i++) o71.push(z72[i]);
+          o71.push([0, y60]);
+          t73 = o71;
         } else {
-          t79 = G(b76);
+          t73 = G(b70);
         }
-        const t80 = t79;
-        const t81 = ((l54 && (!(op_3_7(y65, l55)))) && ((l56.length) > (0)));
-        let t91;
-        if (((l54 && (!(op_3_7(y65, l55)))) && ((l56.length) > (0)))) {
-          let l82 = false;
-          let l83 = k_domain_Band(op_2_0(0, 0, 0, 0));
-          const A85 = l56;
-          for (let q86 = 0; q86 < A85.length; q86++) {
-            const j84 = A85[q86][0];
-            const y87 = A85[q86][1];
-            const t88 = true;
-            const t89 = (l82 ? k_domain_Band(op_3_11(l83, y87)) : y87);
-            l82 = t88;
-            l83 = t89;
+        const t75 = ((l49 && (!(op_3_7(y60, l50)))) && ((l51.length) > (0)));
+        let t85;
+        if (((l49 && (!(op_3_7(y60, l50)))) && ((l51.length) > (0)))) {
+          let l76 = false;
+          let l77 = k_domain_Band(op_2_0(0, 0, 0, 0));
+          for (let q80 = 0; q80 < l51.length; q80++) {
+            const y81 = l51[q80][1];
+            const t82 = true;
+            const t83 = (l76 ? k_domain_Band((({ from: l77.from, to: l77.to, min: y81.min < l77.min ? y81.min : l77.min, max: y81.max > l77.max ? y81.max : l77.max }))) : y81);
+            l76 = t82;
+            l77 = t83;
           }
-          t91 = k_domain_Band(op_3_12(l83, l55, y65));
+          t85 = k_domain_Band((({ from: l50.from, to: y60.from, min: l77.min, max: l77.max })));
         } else {
-          t91 = G(c90);
+          t85 = G(c84);
         }
-        const t92 = t91;
-        const t93 = (l59 || l57);
-        const t94 = (l57 ? ((l59 && op_3_13(l60, l58)) ? k_domain_Band(op_3_14(l60, l58)) : l58) : l60);
-        const t96 = ((l57 && (l59 && (!((l59 && op_3_13(l60, l58)))))) ? (l61.push([0, l60]), w95) : l61);
-        l54 = t66;
-        l55 = t67;
-        l56 = t80;
-        l57 = t81;
-        l58 = t92;
-        l59 = t93;
-        l60 = t94;
-        l61 = t96;
+        const t87 = (l54 || l52);
+        const t88 = (l52 ? ((l54 && op_3_13(l55, l53)) ? k_domain_Band(op_3_14(l55, l53)) : l53) : l55);
+        const t90 = ((l52 && (l54 && (!((l54 && op_3_13(l55, l53)))))) ? (l56.push([0, l55]), w89) : l56);
+        l49 = t61;
+        l50 = t62;
+        l51 = t73;
+        l52 = t75;
+        l53 = t85;
+        l54 = t87;
+        l55 = t88;
+        l56 = t90;
       }
-      const b97 = (l59 || l57);
-      let b98;
+      const b91 = (l54 || l52);
+      let b92;
       try {
-        b98 = (l57 ? ((l59 && op_3_13(l60, l58)) ? k_domain_Band(op_3_14(l60, l58)) : l58) : l60);
+        b92 = (l52 ? ((l54 && op_3_13(l55, l53)) ? k_domain_Band(op_3_14(l55, l53)) : l53) : l55);
       } catch {
-        b98 = E;
+        b92 = E;
       }
-      let b99;
+      let b93;
       try {
-        b99 = ((l57 && (l59 && (!((l59 && op_3_13(l60, l58)))))) ? (l61.push([0, l60]), w95) : l61);
+        b93 = ((l52 && (l54 && (!((l54 && op_3_13(l55, l53)))))) ? (l56.push([0, l55]), w89) : l56);
       } catch {
-        b99 = E;
+        b93 = E;
       }
-      b100 = (b97 ? (G(b99).push([0, G(b98)]), w95) : G(b99));
+      b94 = (b91 ? (G(b93).push([0, G(b92)]), w89) : G(b93));
     } catch {
-      b100 = E;
+      b94 = E;
     }
-    let l101 = G(b100);
-    for (let k114 = 0; ; k114++) {
-      if (((l101.length) <= (v2))) break;
-      if (k114 === 64) F();
-      let l102 = false;
-      let l103 = k_domain_Band(op_2_0(0, 0, 0, 0));
-      let l104 = FI(0, k_domain_Band(op_2_0(0, 0, 0, 0)));
-      let w111 = l104;
-      const A106 = l101;
-      for (let q107 = 0; q107 < A106.length; q107++) {
-        const j105 = A106[q107][0];
-        const y108 = A106[q107][1];
-        const t109 = (!(l102));
-        const t110 = y108;
-        const t112 = (l102 ? (l104.push([0, k_domain_Band(op_3_16(l103, y108))]), w111) : l104);
-        l102 = t109;
-        l103 = t110;
-        l104 = t112;
+    let l95 = G(b94);
+    for (let k108 = 0; ; k108++) {
+      if (((l95.length) <= (v2))) break;
+      if (k108 === 64) F();
+      let l96 = false;
+      let l97 = k_domain_Band(op_2_0(0, 0, 0, 0));
+      let l98 = [];
+      let w105 = l98;
+      const A100 = l95;
+      for (let q101 = 0; q101 < A100.length; q101++) {
+        const y102 = A100[q101][1];
+        const t103 = (!(l96));
+        const t106 = (l96 ? (l98.push([0, k_domain_Band((({ from: Math.min(l97.from, y102.from), to: Math.max(l97.to, y102.to), min: Math.min(l97.min, y102.min), max: Math.max(l97.max, y102.max) })))]), w105) : l98);
+        l96 = t103;
+        l97 = y102;
+        l98 = t106;
       }
-      const t113 = (l102 ? (l104.push([0, l103]), w111) : l104);
-      l101 = t113;
+      const t107 = (l96 ? (l98.push([0, l97]), w105) : l98);
+      l95 = t107;
     }
-    return l101;
+    return l95;
   };
-  const c116 = L(() => {
-    return fn115(c16);
-  });
-  const col130 = Q((j118) => {
-    const b121 = LF120[j118];
-    const b122 = R[j118]["ox"];
-    const b123 = R[j118]["oy"];
-    const A125 = b121;
-    const L128 = [];
-    for (let q126 = 0; q126 < A125.length; q126++) {
-      const j124 = A125[q126][0];
-      let x129;
+  const col124 = Q((j112) => {
+    const b115 = LF114[j112];
+    const b116 = R[j112]["ox"];
+    const b117 = R[j112]["oy"];
+    const L122 = [];
+    for (let q120 = 0; q120 < b115.length; q120++) {
+      const j118 = b115[q120][0];
+      let x123;
       try {
-        if (A125[q126][1] === E) F();
-        const y127 = A125[q126][1];
-        x129 = k_domain_Band(op_3_1(y127, b122, b123));
+        if (b115[q120][1] === E) F();
+        const y121 = b115[q120][1];
+        x123 = k_domain_Band(op_3_1(y121, b116, b117));
       } catch {
-        x129 = E;
+        x123 = E;
       }
-      L128.push([j124, x129]);
+      L122.push([j118, x123]);
     }
-    return L128;
+    return L122;
   });
-  let c133;
+  let c127;
   try {
-    const o117 = [];
-    o117.push([0, k_domain_Band(op_2_0(0, v1, 0, v0))]);
-    const o119 = o117;
-    for (let j118 = 0; j118 < n; j118++) {
-      const m132 = o119.length;
+    const o111 = [];
+    o111.push([0, k_domain_Band(op_2_0(0, v1, 0, v0))]);
+    for (let j112 = 0; j112 < n; j112++) {
+      const m126 = o111.length;
       try {
-        const z131 = G(col130(j118));
-        for (let i = 0; i < z131.length; i++) if (z131[i][1] !== E) o119.push(z131[i]);
+        const z125 = G(col124(j112));
+        for (let i = 0; i < z125.length; i++) if (z125[i][1] !== E) o111.push(z125[i]);
       } catch {
-        o119.length = m132;
+        o111.length = m126;
       }
     }
-    c133 = o117;
+    c127 = o111;
   } catch {
-    c133 = E;
+    c127 = E;
   }
-  const c134 = L(() => {
-    return fn115(c133);
+  const c130 = L(() => {
+    const o129 = [];
+    o129.push([0, G(fn109(c16))]);
+    o129.push([0, G(fn109(c127))]);
+    return o129;
   });
-  const c136 = L(() => {
-    const o135 = [];
-    o135.push([0, G(c116())]);
-    o135.push([0, G(c134())]);
-    return o135;
-  });
-  const c137 = L(() => {
-    return LSC(G(c136()), 1);
+  const c131 = L(() => {
+    return LSC(G(c130()), 1);
   });
   const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
-      out[o] = G(c137());
+      out[o] = G(c131());
     } catch {
       out[o] = VEX_ERROR;
     }

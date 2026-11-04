@@ -73,9 +73,8 @@ export function run(records, vars) {
       }
       let l9 = 0;
       let l10 = R[o]["n"];
-      const f12 = o;
       for (let j11 = 0; j11 < n; j11++) {
-        if (j11 === f12) continue;
+        if (j11 === o) continue;
         if (!R[j11]["b"]) continue;
         const t13 = k_number((l9) + (k_number((R[j11]["n"]) * (l10))));
         l9 = t13;

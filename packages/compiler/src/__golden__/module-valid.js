@@ -5,11 +5,9 @@ export class VexContractError extends Error {}
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
-const v_0 = (x) => Number.isFinite(x) && typeof x === 'number' && x > -100;
-const k_number = (x) => (Number.isFinite(x) && v_0(x) ? x : F());
+const k_number = (x) => (Number.isFinite(x) && (Number.isFinite(x) && typeof x === 'number' && x > -100) ? x : F());
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;
@@ -41,7 +39,6 @@ export function run(records, vars) {
   } catch {
     t5 = 0;
   }
-  const c7 = t5;
   const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
@@ -51,7 +48,7 @@ export function run(records, vars) {
       } catch {
         t6 = 0;
       }
-      out[o] = ({ "sum": c7, "x": t6 });
+      out[o] = ({ "sum": t5, "x": t6 });
     } catch {
       out[o] = VEX_ERROR;
     }

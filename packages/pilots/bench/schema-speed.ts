@@ -18,6 +18,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { app, axes, call, compile, each, evaluate, fn, fold, let_, lit, rec, space, v, vexList, type Expr, type ItemNames, type Result } from "@mark1russell7/vex";
+import { schemaReference } from "../src/schema-reference.ts";
 import { SCHEMA_DOMAINS, SCHEMA_PROGRAM } from "../src/schema.ts";
 import { context, env, envLine } from "../../core/bench/measure.ts";
 
@@ -25,49 +26,6 @@ const RUNS = Number(process.env["RUNS"] ?? 40);
 const WARM = Number(process.env["WARM"] ?? 10);
 
 /** One record of the schema: a path, its kinds and the count of its documents. */
-interface Row {
-  readonly path: string;
-  readonly kinds: readonly string[];
-  readonly count: number;
-}
-
-// The reference, as in schema.test.ts.
-const isRec = (u: unknown): u is Readonly<Record<string, unknown>> => typeof u === "object" && u !== null && !Array.isArray(u);
-
-function kindOf(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (Array.isArray(value)) {
-    const items = [...new Set((value as readonly unknown[]).map((x) => (Array.isArray(x) ? "array" : kindOf(x))))];
-    return items.length > 0 ? `array<${items.join("|")}>` : "array";
-  }
-  const t = typeof value;
-  return t === "string" || t === "number" || t === "boolean" ? t : t === "object" ? "object" : "string";
-}
-
-function schemaReference(input: readonly unknown[]): readonly Row[] {
-  const fields = new Map<string, { kinds: Set<string>; docs: Set<number> }>();
-  const addNote = (p: string, k: string, d: number): void => {
-    let f = fields.get(p);
-    if (f === undefined) {
-      f = { kinds: new Set(), docs: new Set() };
-      fields.set(p, f);
-    }
-    f.kinds.add(k);
-    f.docs.add(d);
-  };
-  const walk = (val: Readonly<Record<string, unknown>>, prefix: string, depth: number, doc: number): void => {
-    for (const [key, x] of Object.entries(val)) {
-      const p = prefix === "" ? key : `${prefix}.${key}`;
-      if (isRec(x) && Object.keys(x).length > 0 && depth < 3) walk(x, p, depth + 1, doc);
-      else addNote(p, kindOf(x), doc);
-    }
-  };
-  input.forEach((d, i) => {
-    if (isRec(d)) walk(d, "", 1, i);
-  });
-  return [...fields].map(([path, f]) => ({ path, kinds: [...f.kinds], count: f.docs.size }));
-}
-
 // The input of the speed case of schema.test.ts: 20 documents of 30 fields.
 const docs = Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${String(f)}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
 

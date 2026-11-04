@@ -2,7 +2,7 @@
  * A fixed-point column in tier 2 (COMPILE.FIX). Tier 2 gives each result of tier 1, with the errors of the rows and the
  * failure at the round limit. `module-fix.test.ts` has the tests of the modules.
  */
-import { app, axes, each, evaluate, ext, fail, fix, fn, call, index, last, let_, lit, kernelPlan, monotoneError, origin, programStep, ref, space, toVexResult, vexError, vexList, type Expr, type Space } from "@mark1russell7/vex";
+import { app, axes, each, evaluate, ext, fail, fix, fn, call, index, last, let_, lit, kernelPlan, monotoneError, origin, programStep, ref, space, toVexResult, vex, vexError, vexList, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { arbFixExpr, arbFixGraph, type FixGraph } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -42,6 +42,15 @@ describe("a fixed-point column in the tiers (COMPILE.FIX)", () => {
   it("COMPILE.FIX: tier 2 lowers a fix, with the result of tier 1 and no fallback", () => {
     expect(generate(REACH, OPTIONS).ok).toBe(true);
     for (const e of [REACH, inLet, inFn, inEach, app("not", REACH)]) expect(agrees(e)).toEqual([2, 0]);
+  });
+
+  it("BUILD.FIX COMPILE.FIX: tier 2 lowers a column of the builder, with the result of tier 1 and no fallback", () => {
+    const r = vex(NumDomain, BoolDomain, TextDomain).over(S);
+    const isStart = r.from("id")._.eq(r.start(0).origin().from("id"));
+    const reach = r.start(0).fix("reach", "or", isStart, (lastRound) => r.start(0).predecessors(() => lastRound).any());
+    const hops = r.start(0).fix("hops", "min", isStart.if(0, 1000), (lastRound) => r.start(0).predecessors(() => lastRound._.add(1)).min().ifError(1000));
+    expect(agrees(reach.program)).toEqual([2, 0]);
+    expect(agrees(hops.program)).toEqual([2, 0]);
   });
 
   it("COMPILE.FIX: a read outside a column gives the reason of the check, in each tier", () => {

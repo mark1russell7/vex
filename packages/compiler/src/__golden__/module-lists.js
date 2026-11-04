@@ -130,8 +130,7 @@ export function run(records, vars) {
   try {
     let a84 = 0;
     for (let j83 = 0; j83 < n; j83++) {
-      const x86 = v0;
-      a84 += x86;
+      a84 += v0;
     }
     c87 = k_number(a84);
   } catch {
@@ -159,37 +158,32 @@ export function run(records, vars) {
   } catch {
     t22 = 0;
   }
-  const c94 = t22;
   let t40;
   try {
     t40 = G(c39);
   } catch {
     t40 = 0;
   }
-  const c95 = t40;
   let t56;
   try {
     t56 = G(c55);
   } catch {
     t56 = false;
   }
-  const c96 = t56;
   let t93;
   try {
     t93 = G(c92);
   } catch {
     t93 = 0;
   }
-  const c97 = t93;
   const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t28;
       try {
-        const f24 = o;
         let a25 = 0, n26 = 0;
         for (let j23 = 0; j23 < n; j23++) {
-          if (j23 === f24) continue;
+          if (j23 === o) continue;
           if (!((R[j23]["w"]) > (0))) continue;
           const x27 = R[j23]["n"];
           a25 += x27; n26++;
@@ -198,19 +192,17 @@ export function run(records, vars) {
       } catch {
         t28 = 0;
       }
-      const f30 = o;
-      const h31 = Math.min(n, f30 + Math.min(1, n) + 1);
+      const h31 = Math.min(n, o + Math.min(1, n) + 1);
       let a32, n33 = 0;
-      for (let j29 = Math.max(0, f30 + Math.max(-1, -n)); j29 < h31; j29++) {
+      for (let j29 = Math.max(0, o + Math.max(-1, -n)); j29 < h31; j29++) {
         const x34 = R[j29]["n"];
         a32 = n33++ === 0 ? x34 : Math.min(a32, x34);
       }
       let t63;
       try {
-        const f58 = o;
-        const h59 = Math.min(n, f58 + Math.min(2, n) + 1);
+        const h59 = Math.min(n, o + Math.min(2, n) + 1);
         let a60, n61 = 0;
-        for (let j57 = Math.max(0, f58 + Math.max(1, -n)); j57 < h59; j57++) {
+        for (let j57 = Math.max(0, o + Math.max(1, -n)); j57 < h59; j57++) {
           const x62 = R[j57]["s"];
           if (n61++ === 0) a60 = x62;
         }
@@ -231,14 +223,13 @@ export function run(records, vars) {
       } catch {
         t69 = 0;
       }
-      const f71 = o;
       let a72 = 0;
       for (let j70 = 0; j70 < n; j70++) {
-        if (j70 === f71) continue;
+        if (j70 === o) continue;
         const x74 = R[j70]["n"];
         a72 += x74;
       }
-      out[o] = ({ "count": n, "countStrict": n, "countTest": c6, "countUnsafe": c11, "sum": G(c16), "sumStrict": c94, "mean": t28, "min": (n33 === 0 ? F() : a32), "max": c95, "any": c45, "all": c50, "none": c96, "first": t63, "from": t69, "fromOrigin": k_number(a72), "nested": n, "outer": m78(R[o]["w"]), "constant": G(c87), "big": c97 });
+      out[o] = ({ "count": n, "countStrict": n, "countTest": c6, "countUnsafe": c11, "sum": G(c16), "sumStrict": t22, "mean": t28, "min": (n33 === 0 ? F() : a32), "max": t40, "any": c45, "all": c50, "none": t56, "first": t63, "from": t69, "fromOrigin": k_number(a72), "nested": n, "outer": m78(R[o]["w"]), "constant": G(c87), "big": t93 });
     } catch {
       out[o] = VEX_ERROR;
     }

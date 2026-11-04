@@ -2,54 +2,8 @@ import * as fc from "fast-check";
 import { JsonDomain, type JsonValue } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { SCHEMA_DEEP, SCHEMA_EXAMPLE, SCHEMA_ODD_KEYS, schemaDocs as docsArb, schemaSample } from "./inputs.ts";
+import { isJsonObject, jsonKind, jsonLeaves, schemaReference } from "./schema-reference.ts";
 import { schemaOf, type JsonFieldSchema } from "./schema.ts";
-
-// The reference in plain TypeScript. The pilot must keep this behavior, so do not
-// change these functions to fit the program.
-const isRec = (u: unknown): u is Readonly<Record<string, unknown>> => !!u && typeof u === "object" && !Array.isArray(u);
-function kindOf(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (Array.isArray(value)) {
-    const items = [...new Set(value.map((x: unknown) => (Array.isArray(x) ? "array" : kindOf(x))))];
-    return items.length > 0 ? `array<${items.join("|")}>` : "array";
-  }
-  const t = typeof value;
-  return t === "string" || t === "number" || t === "boolean" ? t : t === "object" ? "object" : "string";
-}
-function schemaReference(docs: readonly unknown[]): JsonFieldSchema[] {
-  const fields = new Map<string, { kinds: Set<string>; docs: Set<number> }>();
-  const note = (p: string, k: string, d: number): void => {
-    let f = fields.get(p);
-    if (!f) fields.set(p, (f = { kinds: new Set(), docs: new Set() }));
-    f.kinds.add(k);
-    f.docs.add(d);
-  };
-  const walk = (val: Readonly<Record<string, unknown>>, prefix: string, depth: number, doc: number): void => {
-    for (const [key, v] of Object.entries(val)) {
-      const p = prefix ? `${prefix}.${key}` : key;
-      if (isRec(v) && Object.keys(v).length && depth < 3) walk(v, p, depth + 1, doc);
-      else note(p, kindOf(v), doc);
-    }
-  };
-  docs.forEach((d, i) => {
-    if (isRec(d)) walk(d, "", 1, i);
-  });
-  return [...fields].map(([path, f]) => ({ path, kinds: [...f.kinds], count: f.docs.size }));
-}
-
-/** The notes of the walk of `schemaReference` for one document: the path and the kind of each leaf, in the order of the walk. */
-function graphNotes(doc: Readonly<Record<string, unknown>>): readonly (readonly [string, string, unknown])[] {
-  const out: (readonly [string, string, unknown])[] = [];
-  const walk = (val: Readonly<Record<string, unknown>>, prefix: string, depth: number): void => {
-    for (const [key, v] of Object.entries(val)) {
-      const p = prefix ? `${prefix}.${key}` : key;
-      if (isRec(v) && Object.keys(v).length && depth < 3) walk(v, p, depth + 1);
-      else out.push([p, kindOf(v), v ?? undefined]);
-    }
-  };
-  walk(doc, "", 1);
-  return out;
-}
 
 // The pilots have no types of Node, so the test reads the clock and the log through globalThis.
 const { performance: clock, console: log } = globalThis as unknown as { readonly performance: { now(): number }; readonly console: { info(message: string): void } };
@@ -104,9 +58,9 @@ describe("the schema pilot", () => {
   it("JSON.LEAVES: leaves(d, 3) of JsonDomain gives the walk of schemaReference for random JSON documents", () => {
     fc.assert(
       fc.property(docsArb, (docs) => {
-        for (const d of docs.filter(isRec)) {
-          const notes = JsonDomain.ops.leaves.fn(d as JsonValue, 3).map((l) => [l.path, l.kind === "array" ? kindOf(l.value) : l.kind, l.value] as const);
-          expect(notes).toEqual(graphNotes(d));
+        for (const d of docs.filter(isJsonObject)) {
+          const notes = JsonDomain.ops.leaves.fn(d as JsonValue, 3).map((l) => [l.path, l.kind === "array" ? jsonKind(l.value) : l.kind, l.value] as const);
+          expect(notes).toEqual(jsonLeaves(d).map((l) => [l.path, l.kind, l.value ?? undefined]));
         }
       }),
       { numRuns: 200 },

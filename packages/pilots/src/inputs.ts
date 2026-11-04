@@ -18,6 +18,7 @@ import type { FitChild, MeasureVars } from "./ireko-measure.ts";
 import type { PlaceRecord, PlaceVars } from "./ireko-place.ts";
 import { PAIRWISE_LIMIT, type RadialChild, type RadialInput } from "./ireko-radial.ts";
 import { boxShape, MAX_BANDS, moveShape, type Shape, type ShapeRecord } from "./ireko-shapes.ts";
+import type { TreeChild, TreeInput } from "./ireko-tree.ts";
 import type { LoanMonth, LoanTerms } from "./loan.ts";
 
 // The audit pilot (ireko-audit.test.ts).
@@ -484,3 +485,50 @@ export const layersInput = (most: number): fc.Arbitrary<LayersInput> =>
       edges: layersEdges(k),
     }),
   );
+
+// The tree pilot (ireko-tree.test.ts).
+
+const treeSize = fc.oneof(fc.integer({ min: 0, max: 40 }), fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true }));
+const treeBand = fc.record({ from: shapeCoord, to: shapeCoord, min: shapeCoord, max: shapeCoord });
+
+/** A child of a node, with `least` to `bands` bands on each axis. Sometimes a child has no shape, and it counts with its extent. */
+export const treeChild = (bands: number, least = 0): fc.Arbitrary<TreeChild> =>
+  fc
+    .record({
+      box: fc.record({ width: treeSize, height: treeSize }),
+      extent: fc.record({ x: shapeCoord, y: shapeCoord, width: treeSize, height: treeSize }),
+      rows: fc.array(treeBand, { minLength: least, maxLength: bands }),
+      columns: fc.array(treeBand, { minLength: least, maxLength: bands }),
+      shaped: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
+    })
+    .map(({ box, extent, rows, columns, shaped }) => (shaped ? { box, extent, shape: { rows, columns } } : { box, extent }));
+
+/** A child of a subtree that overflows. It has an infinite end on a band, or an infinite size of its box or of its extent. */
+export const treeWildChild: fc.Arbitrary<TreeChild> = fc.record({
+  box: fc.record({ width: shapeExtent, height: shapeExtent }),
+  extent: fc.record({ x: shapeCoord, y: shapeCoord, width: shapeExtent, height: shapeExtent }),
+  shape: fc.record({ rows: fc.array(band, { maxLength: 4 }), columns: fc.array(band, { maxLength: 4 }) }),
+});
+
+/** Random inputs of the strategy `tree`: the children `children`, and the other fields of the input. */
+export const treeInputOf = (children: fc.Arbitrary<TreeChild[]>): fc.Arbitrary<TreeInput> =>
+  fc.record({
+    mode: fc.constantFrom("nested", "linked"),
+    self: fc.record({ width: treeSize, height: treeSize }),
+    children,
+    gap: fc.oneof(fc.constant(0), fc.double({ min: 0, max: 40, noNaN: true, noDefaultInfinity: true })),
+    options: fc.record({
+      side: fc.constantFrom("bottom", "top", "left", "right"),
+      distance: fc.oneof(fc.constant(0), fc.double({ min: 0, max: 60, noNaN: true, noDefaultInfinity: true })),
+      align: fc.constantFrom("center", "start", "end"),
+    }),
+  });
+
+/** Random inputs of the strategy `tree`, with up to `most` children and up to `bands` bands on each axis of a child. */
+export const treeInput = (most: number, bands: number): fc.Arbitrary<TreeInput> => treeInputOf(fc.array(treeChild(bands), { minLength: 1, maxLength: most }));
+
+/** Random inputs with enough bands for the merge of a long row: 8 to 12 children, each with 40 to 64 bands on each axis. */
+export const treeLong: fc.Arbitrary<TreeInput> = treeInputOf(fc.array(treeChild(64, 40), { minLength: 8, maxLength: 12 }));
+
+/** Random inputs with infinite numbers. */
+export const treeWild: fc.Arbitrary<TreeInput> = treeInputOf(fc.array(treeWildChild, { minLength: 1, maxLength: 5 }));

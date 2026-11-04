@@ -44,6 +44,9 @@
  * A PR that makes a ratio better sets its limit lower in the same PR.
  * With `GATE_GC=1`, each case also prints the garbage collections of each arm in its timed runs (gc.ts, GATEGC).
  * With `GATE_ALLOC`, the process gives the allocations of one arm and no time (alloc.ts, TREEALLOC).
+ * With `GATE_LIMIT_WALK=1`, the walk of a data limit gives two more cases (limit-walk.ts, LIMITCOST). Their second arm is
+ * the module with a count at each key, not hand-written loops. Their limit is 1: the fix must not cost time. Check (b)
+ * is a record only. No pull request starts these cases.
  * Start: node packages/compiler/bench/gate.ts
  */
 import type { Space } from "@mark1russell7/vex";
@@ -51,6 +54,7 @@ import { LIFE, NEAREST } from "../../core/bench/programs.ts";
 import { PtDomain } from "../../core/src/test-support.ts";
 import { radialArrange, radialRun } from "../../pilots/src/ireko-radial.ts";
 import { handBoth, handPairs, handSum, loadRadial, ringOf } from "./ablation.ts";
+import { countAtEachKey, loadWalk, walkRecords } from "./limit-walk.ts";
 import { MAX_BANDS, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA, shapesTree, type ShapeRecord } from "../../pilots/src/ireko-shapes.ts";
 import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
@@ -70,6 +74,7 @@ const LIMITS = {
   tree: { "7763": { limit: 1.06, slow: 1.06, maxSlow: 4 }, other: { limit: 1.14, slow: 1.14, maxSlow: 2 } },
   shapes: { "7763": { limit: 1.68, slow: 1.68 }, Xeon: { limit: 2.08, slow: 2.08 }, other: { limit: 1.74, slow: 1.74 } },
   share: { "7763": { limit: 2.03, slow: 2.03 }, other: { limit: 2.03, slow: 2.03 } },
+  walk: { "7763": { limit: 1, slow: 1 }, other: { limit: 1, slow: 1 } },
 } as const satisfies Readonly<Record<string, ModelLimits>>;
 const CPU = cpus()[0]?.model ?? "";
 /** This function gives the limits of a case for the CPU model of this runner. */
@@ -197,6 +202,16 @@ const ablationCase = (name: string, edit: (source: string) => string): ReturnTyp
   return { title: `the radial module of ireko, a full ring of 60 children, nested, ablation ${name}`, compiled: { run: () => variant(s.records, vars), tier: 2, fallbacks: () => 0 }, hand: () => radialArrange(input), limits: limitsOf("nested") };
 };
 
+// The walk of a between program with a data limit (LIMITCOST). The tree has one edge for each node, so a count at each key
+// costs the square of the nodes. The variant must give the result of the module on the case input, or the gate stops.
+const walkCase = (branch: number, depth: number): Case => {
+  const records = walkRecords(branch, depth);
+  const after = loadWalk((source) => source);
+  const before = loadWalk(countAtEachKey);
+  if (JSON.stringify(before(records, {})) !== JSON.stringify(after(records, {}))) throw new Error("gate: the variant of the walk gives another result.");
+  return { title: `the walk of a data limit, a tree of ${String(records.length)} nodes, against a count at each key`, compiled: { run: () => after(records, {}), tier: 2, fallbacks: () => 0 }, hand: () => before(records, {}), limits: limitsOf("walk") };
+};
+
 // Each case is a function that makes the case, so a process makes only its own case (MODELLIMITS). When each process made
 // all cases, the three ablation variants ran in the process of the shapes case too. Its ratio on the 7763 went from 1.58
 // to 1.66 (7 runs) to 1.67 to 1.77 (6 runs with GATE_ABLATE=1).
@@ -218,7 +233,9 @@ const CASES_BASE: readonly (() => Case)[] = [
   () => treeCase(1000),
   () => shapesCase(10, 3),
 ];
-const CASES: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1" ? [...CASES_BASE, () => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : CASES_BASE;
+const CASES_ABLATE: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1" ? [() => ablationCase("hand sum", handSum), () => ablationCase("hand pairs", handPairs), () => ablationCase("hand both", handBoth)] : [];
+const CASES_WALK: readonly (() => Case)[] = process.env["GATE_LIMIT_WALK"] === "1" ? [() => walkCase(10, 3), () => walkCase(10, 4)] : [];
+const CASES: readonly (() => Case)[] = [...CASES_BASE, ...CASES_ABLATE, ...CASES_WALK];
 
 // With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
 // changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run

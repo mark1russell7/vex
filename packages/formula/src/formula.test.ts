@@ -1,4 +1,4 @@
-import { app, axes, cell, dataLimit, each, fold, index, iterate, key, lit, offset, origin, parent, ref, SheetRun, space, v, type Expr, type Result } from "@mark1russell7/vex";
+import { app, axes, cell, dataLimit, each, fix, fold, index, iterate, key, last, lit, offset, origin, parent, ref, SheetRun, space, v, type Expr, type Result } from "@mark1russell7/vex";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { BUILT_IN_NAMES, compileFormula, FORMULA_DOMAINS, FUNCTIONS, highlightFormula, MAX_LENGTH, OP_NAMES, toVexChain, type FormulaContext, type GridCellKind, type GridContext } from "./index.ts";
@@ -201,6 +201,50 @@ describe("names and navigation", () => {
     expect(error("ITERATE(3, x, 1, 2, x, 1, 2, 3)").message).toBe('the name "x" is already a name of this ITERATE');
     expect(error("ITERATE(3, x, 1, x, x UNTIL x > 2)").message).toMatch(/necessary here/);
     expect(highlightFormula("ITERATE(2, x, 1, x, x, UNTIL x > 1)").find((p) => p.text === "UNTIL")?.kind).toBe("keyword");
+  });
+
+  it("FORMULA.FIX: FIX makes a column of rounds, and LAST reads the row in the last round", () => {
+    const reach = "FIX(r, OR, active, ANY(ancestors, LAST(r)))";
+    expect(column(reach, ["fruit", "apple", "pear", "tools", "saw", "extra"])).toEqual([true, true, true, true, true, false]);
+    const hops = "FIX(d, MIN, IF(active, 0, 1000), IFERROR(MIN(ancestors, LAST(d) + 1), 1000))";
+    expect(column(hops, ["fruit", "pear", "extra"])).toEqual([0, 1, 1000]);
+    expect(value("FIX(x, MAX, 1, MIN(LAST(x) + 1, 4))")).toBe(4);
+    expect(compile("fix(x, max, 1, last(x))")).toEqual(fix("x", "max", lit(1), last("x")));
+    expect(compile("FIX(x, Or, FALSE, LAST(x))")).toEqual(fix("x", "or", lit(false), last("x")));
+    expect(compile("FIX(x, and, TRUE, LAST(x))")).toEqual(fix("x", "and", lit(true), last("x")));
+    expect(compile("FIX(x, MIN, 1, LAST(x))")).toEqual(fix("x", "min", lit(1), last("x")));
+    // A name of a column is not a name of the sheet, so the first value reads the column and LAST reads the rounds.
+    expect(compile("FIX(cost, MAX, cost, MAX(LAST(cost), cost))")).toEqual(fix("cost", "max", ref(["cost"]), app("max", last("cost"), ref(["cost"]))));
+    expect(compile("FIX(x, OR, FALSE, FIX(y, OR, FALSE, LAST(y)))")).toEqual(fix("x", "or", lit(false), fix("y", "or", lit(false), last("y"))));
+    expect(highlightFormula("FIX(x, OR, 1, LAST(x))")[0]?.kind).toBe("function");
+  });
+
+  it("FORMULA.FIX: a name is a word, a join is one of four words, and each argument has its place", () => {
+    expect(error("FIX(1, OR, FALSE, FALSE)").message).toBe("a name of FIX must be a word, for example x");
+    expect(error("FIX(parent.x, OR, FALSE, FALSE)").message).toBe("a name of FIX must be a word, for example x");
+    expect(error("LAST([x y])").message).toBe("a name of LAST must be a word, for example x");
+    expect(error("FIX(x, XOR, 1, 2)")).toEqual({ message: "the join of FIX must be OR, AND, MAX or MIN", span: { start: 7, end: 10 } });
+    expect(error("FIX(x, 1, 1, 2)").message).toBe("the join of FIX must be OR, AND, MAX or MIN");
+    expect(error("FIX(x OR)").message).toBe('"," after the name of FIX is necessary here');
+    expect(error("FIX(x, OR 1)").message).toBe('"," after the join of FIX is necessary here');
+    expect(error("FIX(x, OR, 1)").message).toBe('"," after the first value of FIX is necessary here');
+    expect(error("FIX(x, OR, 1, 2, 3)").message).toBe('")" after the step of FIX is necessary here');
+    expect(error("LAST(x, y)").message).toBe('")" after the name of LAST is necessary here');
+  });
+
+  it("FORMULA.LAST: a LAST outside a step of a FIX of its name is an error at its span", () => {
+    expect(error("1 + LAST(x)")).toEqual({ message: "LAST(x) needs a step of a FIX with the name x", span: { start: 4, end: 11 } });
+    expect(error("FIX(x, OR, FALSE, LAST(y))").message).toBe("LAST(y) needs a step of a FIX with the name y");
+    // The first value is outside the step, and the step ends with its FIX.
+    expect(error("FIX(x, OR, LAST(x), FALSE)").message).toBe("LAST(x) needs a step of a FIX with the name x");
+    expect(error("IF(FIX(x, OR, FALSE, LAST(x)), LAST(x), 1)").message).toBe("LAST(x) needs a step of a FIX with the name x");
+  });
+
+  it("FORMULA.LAST: a read in the step of an inner FIX is valid syntax, and the check of the core gives #VALUE!", () => {
+    expect(compile("FIX(x, OR, FALSE, FIX(y, OR, FALSE, LAST(x)))")).toEqual(fix("x", "or", lit(false), fix("y", "or", lit(false), last("x"))));
+    expect(value("FIX(x, OR, FALSE, FIX(y, OR, FALSE, LAST(x)))")).toBe("#VALUE!");
+    expect(value("FIX(x, OR, FALSE, NOT(LAST(x)))")).toBe("#VALUE!");
+    expect(column("FIX(x, OR, 1, LAST(x))", ["extra"])).toEqual(["#ARGS"]);
   });
 
   it("FORMULA.FOLD: FOLD steps at each row of an axis, in order, with names, and a result at the row of the formula", () => {

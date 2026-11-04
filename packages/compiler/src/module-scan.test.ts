@@ -2,7 +2,7 @@
  * Scans in standalone modules (COMPILE.MODULE.SCAN). A fold over the targets before the origin evaluates the value of
  * each target once and each step once for each run. The module gives the values and the errors of the interpreter.
  */
-import { app, axes, cell, evaluate, fold, lit, ref, SheetRun, space, v, type Expr } from "@mark1russell7/vex";
+import { app, axes, cell, defineDomain, evaluate, fold, let_, lit, offset, ref, SheetRun, space, v, type AnyDomain, type Expr, type PrimitiveKind } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { emitModule, emitSheetModule, type ModuleOptions } from "./module.ts";
@@ -27,12 +27,12 @@ function make(source: string): Loaded {
 }
 
 /** This function compares the values of a module with the interpreter at each key (P17), and gives the source. */
-function expectSame(e: Expr, records: readonly unknown[]): string {
-  const m = emitModule(e, OPTIONS);
+function expectSame(e: Expr, records: readonly unknown[], options: ModuleOptions = OPTIONS): string {
+  const m = emitModule(e, options);
   if (!m.ok) throw new Error(m.reason);
   const s = space.array(records);
-  const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: { a: 2 }, domains: [NumDomain] }));
-  const off = emitModule(e, { ...OPTIONS, fuse: false });
+  const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: { a: 2 }, domains: options.domains ?? [] }));
+  const off = emitModule(e, { ...options, fuse: false });
   for (const source of [m.source, off.ok ? off.source : ""]) {
     const loaded = make(source);
     expect(loaded.run(structuredClone(records), { a: 2 })).toStrictEqual(results.map((r) => (r.ok ? r.value : loaded.VEX_ERROR)));
@@ -102,5 +102,98 @@ describe("COMPILE.MODULE.SCAN: a fold over the targets before the origin", () =>
       })]));
       expect(loaded.run(structuredClone(records), {})).toStrictEqual(expected);
     }
+  });
+});
+
+/** The records of the tests with a text `s` and a boolean `b`, and the options for them. */
+const MIXED = MANY.map((r, i) => ({ ...r, s: String.fromCodePoint(97 + ((i * 5) % 9)), b: i % 3 === 0 }));
+const MIXED_SCHEMA = { fields: { n: "number", w: "number", s: "string", b: "boolean" }, vars: { a: "number" } } as const;
+
+/** This function makes a function from its source, so the test decides the text that the printer reads. */
+// oxlint-disable-next-line typescript/no-implied-eval -- the test decides the source of each function.
+const fnOf = (src: string): unknown => new Function(`return (${src});`)();
+
+/** This function gives the list of one value (LIST.FILL). */
+const one = (x: Expr): Expr => app("fill", lit(1), x);
+
+/** This function makes a domain of one primitive kind, with ops from their sources and the kinds of their results. */
+function domainOf(name: string, primitive: PrimitiveKind, ops: Readonly<Record<string, readonly [string, PrimitiveKind]>>, valid?: string): AnyDomain {
+  return defineDomain({
+    name,
+    is: (u: unknown): u is unknown => typeof u === primitive,
+    primitive,
+    ops: Object.fromEntries(Object.entries(ops).map(([op, [src, returns]]) => [op, { fn: fnOf(src) as (self: unknown, ...args: never[]) => unknown, returns }])),
+    ...(valid === undefined ? {} : { valid: fnOf(valid) as (x: unknown) => boolean }),
+  }) as AnyDomain;
+}
+
+/** A domain of texts with the test `before`, and a domain of booleans with the same test. */
+const TEXTS = domainOf("Texts", "string", { before: ["(a, b) => a < b", "boolean"] });
+const FLAGS = domainOf("Flags", "boolean", { before: ["(a, b) => a < b", "boolean"] });
+
+describe("COMPILE.MODULE.SCAN: the conditions of a scan", () => {
+  it("[COMPILE.MODULE.SCAN] keeps the loop for a fold with two tests, an address or a test that is not an op", () => {
+    const cases = [
+      fold(axes.where(axes.where(axes.all, before), app("gt", ref("w"), lit(1))), { s: lit(0) }, { s: app("add", v("s"), ref("w")) }, v("s")),
+      fold(axes.where(axes.all, before), { s: lit(0) }, { s: app("add", v("s"), ref("w")) }, v("s"), [offset(1)]),
+      sumOf(let_({ k: ref("n", O) }, app("lt", ref("n"), v("k")))),
+    ];
+    for (const e of cases) for (const records of [MANY, SORTED]) expect(expectSame(e, records)).not.toContain("PF(n,");
+  });
+
+  it("[COMPILE.MODULE.SCAN] keeps the loop for a test that does not read the target, or whose sides both read the target", () => {
+    const cases = [sumOf(app("lt", lit(3), ref("n", O))), sumOf(app("lt", app("add", ref("n"), ref("n", O)), lit(6))), sumOf(app("lt", ref("n"), app("add", ref("n"), ref("n", O))))];
+    for (const e of cases) for (const records of [MANY, SORTED]) expect(expectSame(e, records)).not.toContain("PF(n,");
+  });
+
+  it("[COMPILE.MODULE.SCAN] keeps the loop when a value reads the origin, or when the first state reads the origin", () => {
+    const cases = [
+      sumOf(app("lt", app("add", ref("n"), ref("w", O)), ref("n", O))),
+      fold(axes.where(axes.all, before), { s: ref("w", O) }, { s: app("add", v("s"), ref("w")) }, v("s")),
+    ];
+    for (const e of cases) for (const records of [MANY, SORTED]) expect(expectSame(e, records)).not.toContain("PF(n,");
+  });
+
+  it("[COMPILE.MODULE.SCAN] keeps the loop for a list in a name or in the result", () => {
+    // A name that appends to its own list has an owner. A name that takes a new list at each step has none.
+    for (const s of [app("append", v("s"), one(ref("w"))), one(ref("w"))]) {
+      const listName = fold(axes.where(axes.all, before), { s: one(lit(0)), c: lit(0) }, { s, c: app("add", v("c"), ref("w")) }, v("c"));
+      for (const records of [MANY, SORTED]) expect(expectSame(listName, records)).not.toContain("PF(n,");
+    }
+    const listResult = emitModule(fold(axes.where(axes.all, before), { s: lit(0) }, { s: app("add", v("s"), ref("w")) }, one(v("s"))), OPTIONS);
+    expect(listResult.ok && listResult.source).not.toContain("PF(n,");
+    expect(listResult.ok).toBe(true);
+  });
+
+  it("[COMPILE.MODULE.SCAN] scans a test of two texts, and keeps the loop for a test of two booleans", () => {
+    const options: ModuleOptions = { domains: [NumDomain, TEXTS, FLAGS], schema: MIXED_SCHEMA };
+    expect(expectSame(sumOf(app("before", ref("s"), ref("s", O))), MIXED, options)).toContain("PF(n,");
+    expect(expectSame(sumOf(app("before", ref("b"), ref("b", O))), MIXED, options)).not.toContain("PF(n,");
+  });
+
+  it("[COMPILE.MODULE.SCAN] keeps the loop for an op that no domain has, an op with a result that is not a boolean, and a boolean with a check", () => {
+    const numbers = domainOf("Numbers", "number", { below: ["(a, b) => a < b", "number"], inside: ["(a, b) => { return a < b; }", "boolean"] });
+    const strictFlags = domainOf("True", "boolean", {}, "(x) => typeof x === 'boolean'");
+    const cases: readonly (readonly [Expr, ModuleOptions])[] = [
+      [sumOf(app("or", ref("n"), ref("n", O))), OPTIONS],
+      [sumOf(app("inside", ref("n"), ref("n", O))), { ...OPTIONS, domains: [numbers, NumDomain] }],
+      [sumOf(before), { ...OPTIONS, domains: [NumDomain, strictFlags] }],
+    ];
+    for (const [e, options] of cases) expect(expectSame(e, MANY, options)).not.toContain("PF(n,");
+    // The domain says that `below` gives a number, so the module checks each result as a number, and only the text tells.
+    const below = emitModule(sumOf(app("below", ref("n"), ref("n", O))), { ...OPTIONS, domains: [numbers, NumDomain] });
+    expect(below.ok && below.source).not.toContain("PF(n,");
+    expect(below.ok).toBe(true);
+  });
+
+  it("[COMPILE.MODULE.SCAN] prints the functions of the scan as arrows, with a comma after each function but the last", () => {
+    const source = expectSame(sumOf(before), MANY);
+    expect(source).toMatch(/\n {4}\(j\d+\) => R\[j\d+\]\["n"\],\n {4}\(t, q\) => \(t\) < \(q\),\n/u);
+    expect(source).toMatch(/\n {4}\}\n {2}\);\n/u);
+  });
+
+  it("[COMPILE.MODULE.SCAN] can fail, so ifError gives its second value for an error of a step", () => {
+    const e = app("ifError", sumOf(before, app("add", v("s"), inverse(ref("w")))), lit(-1));
+    for (const records of [MANY, SORTED]) expect(expectSame(e, records)).toContain("PF(n,");
   });
 });

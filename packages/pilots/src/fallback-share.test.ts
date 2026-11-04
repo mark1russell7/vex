@@ -41,14 +41,14 @@ describe("the share of tier 2 on real programs", () => {
   });
 
   it("counts a fallback with the result of tier 1, and puts a case that throws in the skipped programs", () => {
-    // Tier 2 gives FALLBACK for a list op on an array (V-064), and tier 1 gives the value.
-    const s = space.record({ A: { fr: [1, 2] }, B: { fr: [] }, C: { fr: [3] } });
-    const keys = app("count", each(axes.all, app("keys", ref("fr"))));
+    // The error item of a hole has the position of the call, so tier 1 gives `errors` of the array (COMPILE.LIST.ARRAY).
+    const s = space.record({ A: { fr: [1, null] }, B: { fr: [null] }, C: { fr: [null, 3] } });
+    const errors = app("count", each(axes.all, app("errors", ref("fr"))));
     const report = measureShare([
       {
-        name: "keys",
+        name: "errors",
         run: (m) => {
-          const p = m.program("keys", keys, { domains: [NumDomain] });
+          const p = m.program("errors", errors, { domains: [NumDomain] });
           for (const origin of s.keys) p.run({ space: s, origin });
         },
       },

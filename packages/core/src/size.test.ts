@@ -259,12 +259,15 @@ describe("the size check of the loops (LOOP.SIZE)", () => {
   });
 });
 
+const set = (x: Expr, value: Expr): Expr => app("setNth", x, lit(0), value);
+const itemOf = (x: Expr, i = 0): Expr => app("nth", x, lit(i));
+const stepOfTwo = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: NONE, y: NONE }, next, v("x"));
+
 describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
   const ITEM = "a value that uses the lists of the loop more than one time in its largest item";
-  const set = (x: Expr, value: Expr): Expr => app("setNth", x, lit(0), value);
-  const itemOf = (x: Expr, i = 0): Expr => app("nth", x, lit(i));
   // A list of lists: from an empty list, the kinds of the items are not known, so these tests start here.
   const LISTS = lit(vexList([{ key: "0", result: ok(vexList([{ key: "a", result: ok(1) }])) }, { key: "1", result: ok(vexList([{ key: "b", result: ok(2) }])) }]));
+  const lists = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: LISTS, y: NONE }, next, v("x"));
 
   it("LOOP.SIZE.SETNTH: a step takes a value that does not grow, also a value from an old item", () => {
     expect(check(folded(NONE, (x) => set(x, lit(1))))).toBeUndefined();
@@ -299,11 +302,9 @@ describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
   });
 
   it("LOOP.SIZE.SETNTH: the old list of a second name counts as the list", () => {
-    const two = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: NONE, y: NONE }, next, v("x"));
-    expect(check(two({ y: v("x"), x: set(v("x"), v("y")) }))).toBeDefined();
-    const lists = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: LISTS, y: NONE }, next, v("x"));
+    expect(check(stepOfTwo({ y: v("x"), x: set(v("x"), v("y")) }))).toBeDefined();
     expect(check(lists({ y: app("append", itemOf(v("x")), itemOf(v("x"))), x: set(v("x"), v("y")) }))).toBeDefined();
-    expect(check(two({ y: itemOf(v("x")), x: set(v("x"), lit(1)) }))).toBeUndefined();
+    expect(check(stepOfTwo({ y: itemOf(v("x")), x: set(v("x"), lit(1)) }))).toBeUndefined();
   });
 
   it("LOOP.SIZE.SETNTH: a value of another kind is valid", () => {

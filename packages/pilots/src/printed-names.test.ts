@@ -16,14 +16,26 @@ import { IREKO_COMMITTED, IREKO_NOT_COMMITTED, irekoSource, type Faults } from "
 const MODULES = [...IREKO_COMMITTED, ...IREKO_NOT_COMMITTED];
 
 /** This function gives the kinds of the scalar fields of a record of the corpus. */
-function kindsOf(record: unknown): NonNullable<Schema["fields"]> {
-  const entries = typeof record === "object" && record !== null ? Object.entries(record) : [];
-  return Object.fromEntries(entries.flatMap(([k, x]) => (typeof x === "number" ? [[k, "number"]] : typeof x === "string" ? [[k, "string"]] : typeof x === "boolean" ? [[k, "boolean"]] : [])));
+function kindsOf(record: unknown): Record<string, "number" | "string" | "boolean"> {
+  const kinds: Record<string, "number" | "string" | "boolean"> = {};
+  for (const [k, x] of typeof record === "object" && record !== null ? Object.entries(record) : []) {
+    if (typeof x === "number") kinds[k] = "number";
+    else if (typeof x === "string") kinds[k] = "string";
+    else if (typeof x === "boolean") kinds[k] = "boolean";
+  }
+  return kinds;
 }
 
 /** This function gives the schema of a program of the corpus from its first record and its variables. */
 function schemaOf(c: CorpusProgram): Schema {
-  return { fields: kindsOf(c.space?.records?.[0]), vars: kindsOf(c.vars) };
+  const records = c.space?.records;
+  return { fields: kindsOf(Array.isArray(records) ? (records as readonly unknown[])[0] : undefined), vars: kindsOf(c.vars) };
+}
+
+/** This function gives the option of the space of a program of the corpus. A module has no record or grid space. */
+function spaceOf(c: CorpusProgram): { readonly space?: "array" | "tree" | "graph" } {
+  const space = c.space?.kind;
+  return space === "array" || space === "tree" || space === "graph" ? { space } : {};
 }
 
 /** This function gives a domain with an op that reads a name outside itself. No sample of the check of a copy reaches the read. */
@@ -46,7 +58,7 @@ describe("V-081 COMPILE.MODULE: the names of the printed modules", () => {
     const printed = readCorpora().flatMap((corpus) =>
       corpus.programs.flatMap((c) => {
         const domains = domainsOf(c.domains);
-        const m = emitModule(programOf(c.program, domains), { domains, schema: schemaOf(c), ...(c.space?.kind === undefined ? {} : { space: c.space.kind }) });
+        const m = emitModule(programOf(c.program, domains), { domains, schema: schemaOf(c), ...spaceOf(c) });
         return m.ok ? [nameFaults(m.source).map((x) => `${c.name}: ${x}`)] : [];
       }),
     );

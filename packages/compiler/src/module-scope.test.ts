@@ -113,7 +113,7 @@ describe("V-080 COMPILE.MODULE: an object that a program uses at two places has 
 /** This function gives the count of the functions of the memo in a module. */
 function memos(e: Expr): number {
   const m = emitModule(e, OPTIONS);
-  return m.ok ? [...m.source.matchAll(/\bconst m\d+ = M1?\(/g)].length : Number.NaN;
+  return m.ok ? [...m.source.matchAll(/\bconst m\d+ = /g)].length : Number.NaN;
 }
 
 describe("V-080 COMPILE.MODULE: a shared list and the memo", () => {
@@ -121,9 +121,12 @@ describe("V-080 COMPILE.MODULE: a shared list and the memo", () => {
   const shared = each(axes.where(axes.all, app("eq", n, originOf)), ref("n"));
 
   it("V-080 COMPILE.MODULE: one shared list at several places of one scope has one memo", () => {
-    const e = rec({ a: app("take", shared, lit(1)), b: app("take", shared, lit(2)), c: app("sum", shared) });
-    expect(memos(e)).toBe(1);
-    expectSame(e);
+    const take = app("take", shared, lit(1));
+    const sum = app("sum", shared);
+    const uses = [rec({ a: take, b: app("take", shared, lit(1)) }), rec({ a: sum, b: app("sum", shared), c: add(app("sum", shared), lit(1)) })];
+    expect(uses.map((e) => memos(e))).toStrictEqual([1, 1]);
+    expect(uses.map((e) => emitModule(e, OPTIONS))).toStrictEqual(uses.map((e) => emitModule(JSON.parse(JSON.stringify(e)) as Expr, OPTIONS)));
+    for (const e of uses) expectSame(e);
   });
 
   it("V-080 COMPILE.MODULE: a shared list with a key from a name has a value for each scope", () => {

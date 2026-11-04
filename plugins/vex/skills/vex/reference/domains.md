@@ -75,6 +75,10 @@ checkLaws(IntervalDomain, { arb: intervals }).every((r) => r.ok); // => true
 
 A domain with a class gives a `moduleForm`. It holds plain functions for the methods, `is` for plain data, `samples`, and `literal` for the values of a program. `Vec2Domain` has one, so a program with `Vec2` values operates in a module too. The module gives plain `{ x, y }` data, the `toJSON` of a `Vec2`. It takes plain data or `Vec2` values. A module keeps two limits. Put `NumDomain` before `Vec2Domain`. A number that an op lifts, as in `add(p, 1)`, stops the module.
 
+Two domains of plain objects share a module only if each declares `fields`, the exact field names of its values. The law checker tests this declaration. `XYDomain` and `InsetsDomain` declare it.
+
+A number can lift in a module too. The copy of `fromScalar` lifts it, when the receiver and the number have known kinds. Thus `InsetsDomain` lifts a number in `add`.
+
 An op can give a value of another domain: declare `returns: "domain:Name"`. Then the compiler knows the kind of the result. The law checker checks the result when its option `domains` has that domain.
 
 ## Where the domain goes

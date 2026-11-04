@@ -31,10 +31,10 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, monotoneError, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, type Move, moveExpr, type Names, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
-import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
+import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {
@@ -178,6 +178,14 @@ interface ListInfo {
 }
 
 /** This function gives the facts of a list without the facts of fusion. A signature and a key of the memo use them. */
+/** The facts of the prints of one program about the names of loops that start with the empty list (COMPILE.MODULE.LOOP.EMPTY). */
+interface EmptyStarts {
+  /** The kinds of the items that the steps give, by the expression of the step of each name. */
+  readonly found: Map<Expr, Pick<ListInfo, "item" | "inner">>;
+  /** True for a print that only looks for these kinds. There, each name without a kind counts as an empty list. */
+  readonly seek: boolean;
+}
+
 function plainList(l: ListInfo | undefined): ListInfo | undefined {
   if (l === undefined) return undefined;
   const { clean: _clean, fresh: _fresh, ...rest } = l;
@@ -2028,6 +2036,7 @@ class Printer {
   runKeys = false;
   /** The columns of a sheet, for a module of a sheet (COMPILE.MODULE.SHEET). */
   readonly #sheet: SheetInfo | undefined;
+  readonly #starts: EmptyStarts;
   #names = 0;
   /** The number of the next bound function, and of the next printed function. */
   #fnIds = 0;
@@ -2102,9 +2111,10 @@ class Printer {
    */
   readonly #outputs = new WeakMap<Code, number>();
 
-  constructor(expr: Expr, options: ModuleOptions, keys: KeyPrint, sheet?: SheetInfo) {
+  constructor(expr: Expr, options: ModuleOptions, keys: KeyPrint, starts: EmptyStarts, sheet?: SheetInfo) {
     this.#keys = keys;
     this.#fuse = options.fuse !== false;
+    this.#starts = starts;
     this.#domains = (options.domains ?? []).map(formOf);
     this.#facts = factsOf({ domains: this.#domains });
     this.#schema = options.schema;
@@ -2353,6 +2363,18 @@ class Printer {
   }
 
   expr(e: Expr, ctx: Ctx): Code {
+    if (!this.#starts.seek) return this.#exprCode(e, ctx);
+    // A part of a step can read the items of its own name, so a search cannot print it yet. The rest of the step can
+    // decide the kind, and the last print proves it (COMPILE.MODULE.LOOP.EMPTY). The search keeps no text, and the last
+    // print gives each error again.
+    try {
+      return this.#exprCode(e, ctx);
+    } catch {
+      return bare({ code: "E", kind: undefined, safe: true, deps: NO_DEPS, list: { item: undefined, empty: true } });
+    }
+  }
+
+  #exprCode(e: Expr, ctx: Ctx): Code {
     const key = ctx.keys.get(e);
     if (key !== undefined) return bare(this.#read(key));
     const keys = this.#memo.get(e);
@@ -3093,16 +3115,28 @@ class Printer {
     return [vexList([]), vexList(items), vexList([{ key: "0", result: { ok: false, error: { vexError: true } as never } }])];
   }
 
+  /**
+   * This method gives the code of a number that an op lifts: the call of a copy of `fromScalar` of the domain (KIND.LIFT).
+   * The op checks its result, as in the interpreter, so a lift that gives a value that is not valid needs no check here.
+   */
+  #lifted(x: Code, domain: number, d: AnyDomain): Code {
+    const name = `lift_${domain}`;
+    this.top.set(name, `const ${name} = ${copied(d.fromScalar as (...a: never[]) => unknown, [SAMPLES.number], `the lift of the domain ${d.name}`)};`);
+    return { s: x.s, v: { ...x.v, code: `${name}(${x.v.code})`, kind: kindOfDomain(d), safe: false, plain: false } };
+  }
+
   /** This method prints the call of the op of a domain on some values, from the static site of their kinds. */
-  #opCall(op: string, values: readonly Code[], deps: ReadonlySet<number>): Code {
-    const lists = new Set(values.flatMap((x, i) => (x.v.list === undefined ? [] : [i])));
+  #opCall(op: string, given: readonly Code[], deps: ReadonlySet<number>): Code {
+    const lists = new Set(given.flatMap((x, i) => (x.v.list === undefined ? [] : [i])));
     // A list op of the interpreter that a module does not have, and an op of a domain, cannot take a list as the receiver.
     if (lists.has(0)) throw new NotStandalone(isListOp(op) ? `the list op "${op}"` : `a list as the receiver of the op "${op}"`);
-    const site = this.#facts.staticSite(op, values.map((x) => x.v.kind), lists);
+    const site = this.#facts.staticSite(op, given.map((x) => x.v.kind), lists, true);
     if (site?.t !== "fn") throw new NotStandalone(`the kinds of the values of "${op}" do not decide its op`);
-    if (site.bad) return { s: stmtsOf(...values), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
+    if (site.bad) return { s: stmtsOf(...given), v: { code: `${this.use("F")}()`, kind: site.returns, safe: false, deps } };
     if (site.returns === undefined) throw new NotStandalone(`the op "${op}" does not declare the kind of its result`);
     const d = this.#domains[site.domain] as AnyDomain;
+    const lifted = site.lifted ?? [];
+    const values = given.map((x, i) => (lifted.includes(i - 1) ? this.#lifted(x, site.domain, d) : x));
     const name = `op_${site.domain}_${this.#opIndex(op)}`;
     // Stryker disable next-line ConditionalExpression: the form of an op is always the same, so the map only saves time
     if (!this.#forms.has(name)) {
@@ -3329,6 +3363,8 @@ class Printer {
    * level of their own. Thus a part that reads them stays in the loop, and a key of a literal can still be a target.
    */
   #itemNames(as: ItemNames, info: ListInfo, value: string, a: string, reverse: boolean): { readonly s: readonly string[]; readonly check: readonly string[]; readonly items: ReadonlyMap<string, Name>; readonly level: number } {
+    // A search cannot know the items of a name that starts empty. The part gives an empty list (COMPILE.MODULE.LOOP.EMPTY).
+    if (this.#starts.seek && info.empty === true) throw new NotStandalone("a search reads the items of an empty list");
     // Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code
     const level = this.#loops++;
     const deps = new Set([level]);
@@ -4039,7 +4075,7 @@ class Printer {
     for (const [name, c, v] of firsts) {
       const facts = c.v.list;
       // A step can give the items of a list a new value, so the facts of fusion of the items do not stay.
-      const list = facts === undefined ? undefined : { item: facts.item, inner: plainList(facts.inner), texts: facts.texts === true || keyed, clean: clean.has(name) };
+      const list = facts === undefined ? undefined : { ...this.#startItems(facts, step[name] as Expr), texts: facts.texts === true || keyed, clean: clean.has(name) };
       const read: Name = { code: v, kind: c.v.kind, lazy: false, deps: new Set([loop]), list };
       env.set(name, read);
       vars.set(name, read);
@@ -4048,6 +4084,16 @@ class Printer {
     // (COMPILE.MODULE.FUSE.ADOPT).
     const adopt = new Set(this.#fuse ? firsts.flatMap(([name, c]) => (adoptable(c.v.list) ? [name] : [])) : []);
     return { s, env, vars, deps, adopt };
+  }
+
+  /**
+   * This method gives the facts of the items of a name of a loop with the first list `facts` and the step `x`. The step
+   * can decide the items of an empty first list (COMPILE.MODULE.LOOP.EMPTY).
+   */
+  #startItems(facts: ListInfo, x: Expr): Pick<ListInfo, "item" | "inner" | "empty"> {
+    const start = facts.empty === true;
+    const { item, inner } = (start ? this.#starts.found.get(x) : undefined) ?? facts;
+    return { item, inner: plainList(inner), empty: start && this.#starts.seek };
   }
 
   /**
@@ -4130,6 +4176,7 @@ class Printer {
       const c = this.#hoist(this.expr(x, inner), hasLoop(x));
       const v = vars.get(name) as Name;
       if (c.v.kind !== v.kind || (c.v.list === undefined) !== (v.list === undefined)) throw new NotStandalone(`a step of a loop changes the kind of the name "${name}"`);
+      if (v.list?.empty === true) this.#noteStart(x, c.v.list as ListInfo);
       if (v.list !== undefined && !fits(v.list, c.v.list as ListInfo)) throw new NotStandalone(`a step of a loop gives the name "${name}" a list that does not fit its first list`);
       const t = this.fresh("t");
       const value = [...c.s, `const ${t} = ${c.v.code};`];
@@ -4139,6 +4186,11 @@ class Printer {
       for (const d of c.v.deps) deps.add(d);
     }
     return { s: [...s, ...sets], deps, parts };
+  }
+
+  /** This method keeps the items of the list that the step `x` gives to a name that starts empty (COMPILE.MODULE.LOOP.EMPTY). */
+  #noteStart(x: Expr, list: ListInfo): void {
+    if (list.item !== undefined || list.inner !== undefined) this.#starts.found.set(x, { item: list.item, inner: list.inner });
   }
 
   /**
@@ -4645,6 +4697,23 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
 }
 
 /**
+ * This function gives the module of a print (COMPILE.MODULE.LOOP.EMPTY). The first print keeps the text of each program
+ * that it can print. After a reason, more prints look for the kinds that the steps give to the names that start empty.
+ * Each print can find more kinds, because a step can read another such name. The last print uses the kinds, so its
+ * checks of the steps prove them. A program without such a kind gets the reason of the first print.
+ */
+function settledPrint(print: (starts: EmptyStarts) => Emitted): Emitted {
+  const found: EmptyStarts["found"] = new Map();
+  const first = print({ found, seek: false });
+  if (first.ok) return first;
+  for (let size = -1; size !== found.size; ) {
+    size = found.size;
+    print({ found, seek: true });
+  }
+  return print({ found, seek: false });
+}
+
+/**
  * This function prints a module. With the option `keys`, it prints again with the keys of the run when the first print
  * reads a key (COMPILE.MODULE.KEYS). Thus a program that reads no key keeps its text.
  */
@@ -4661,11 +4730,11 @@ function keyedPrint(options: ModuleOptions, print: (keys: KeyPrint) => Emitted):
  * (DOC.ENTRY).
  */
 export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emitted {
-  return keyedPrint(options, (keys) => printProgram(source, options, keys));
+  return keyedPrint(options, (keys) => settledPrint((starts) => printProgram(source, options, keys, starts)));
 }
 
-/** This function gives the module of a program for one state of the keys. */
-function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: KeyPrint): Emitted {
+/** This function prints a program for one state of the keys, with the facts `starts`, for `emitModule`. */
+function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: KeyPrint, starts: EmptyStarts): Emitted {
   const run = runOf(options);
   if ("reason" in run) return { ok: false, reason: run.reason };
   // DOC.ENTRY: a document gives its expression first, or the reason that it is not valid.
@@ -4678,7 +4747,7 @@ function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: Key
   // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
   const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
   if (size !== undefined) return { ok: false, reason: size };
-  const p = new Printer(expr, options, keys);
+  const p = new Printer(expr, options, keys, starts);
   let value: Code;
   try {
     value = p.root(expr);
@@ -4736,11 +4805,11 @@ const columnList = (l: ListInfo): ListInfo => ({ item: l.item, inner: l.inner ==
  * cycle of reads gives `VEX_ERROR`.
  */
 export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions): Emitted {
-  return keyedPrint(options, (keys) => printSheet(columns, options, keys));
+  return keyedPrint(options, (keys) => settledPrint((starts) => printSheet(columns, options, keys, starts)));
 }
 
-/** This function gives the module of a sheet for one state of the keys. */
-function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions, keyPrint: KeyPrint): Emitted {
+/** This function prints the columns of a sheet for one state of the keys, with the facts `starts`, for `emitSheetModule`. */
+function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOptions, keyPrint: KeyPrint, starts: EmptyStarts): Emitted {
   const run = runOf(options);
   if ("reason" in run) return { ok: false, reason: run.reason };
   const budget = options.budget ?? SHEET_BUDGET;
@@ -4775,7 +4844,7 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   // A sheet whose reads all read finished cells needs no search: each cell is the value of its formula
   // (COMPILE.MODULE.SHEET.DIRECT). A sheet with formulas of cells always has the search.
   const direct = formulas.every((f) => f.key === undefined) && order.every((c) => readsFinished(columns, order, c, run.tree));
-  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, keyPrint, { columns: index, kinds, lists, direct });
+  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, keyPrint, starts, { columns: index, kinds, lists, direct });
   const fns: string[] = [];
   const decls: string[] = [];
   // The statements that put the value of each formula into the array of its column at the key `o`, for a direct fill.

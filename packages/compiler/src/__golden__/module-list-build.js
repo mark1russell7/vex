@@ -7,7 +7,6 @@ const E = {};
 function F() { throw E; }
 function V(l, s) { if (!l.some((x) => x[1] === E)) return l; if (s) F(); return l.filter((x) => x[1] !== E); }
 function AP(l, o, s) { return V(l, s).concat(V(o, s)); }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }
 function DRC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(n) : F(); }
@@ -71,7 +70,6 @@ export function run(records, vars) {
   for (let j0 = 0; j0 < n; j0++) {
     L1.push([j0, R[j0]["n"]]);
   }
-  const c3 = L1;
   const L17 = [];
   for (let j16 = 0; j16 < n; j16++) {
     let x18;
@@ -82,45 +80,35 @@ export function run(records, vars) {
     }
     L17.push([j16, x18]);
   }
-  const c19 = L17;
   const o94 = [];
   for (let j93 = 0; j93 < n; j93++) {
-    const f96 = j93;
-    const h97 = Math.min(n, f96 + Math.min(0, n) + 1);
+    const h97 = Math.min(n, j93 + Math.min(0, n) + 1);
     const L98 = [];
-    for (let j95 = Math.max(0, f96 + Math.max(-1, -n)); j95 < h97; j95++) {
+    for (let j95 = Math.max(0, j93 + Math.max(-1, -n)); j95 < h97; j95++) {
       L98.push([j95, R[j95]["n"]]);
     }
-    const z100 = L98;
-    for (let i = 0; i < z100.length; i++) o94.push(z100[i]);
+    for (let i = 0; i < L98.length; i++) o94.push(L98[i]);
   }
-  const c101 = o94;
   const o106 = [];
   for (let j105 = 0; j105 < n; j105++) {
-    const f108 = j105;
-    const h109 = Math.min(n, f108 + Math.min(1, n) + 1);
+    const h109 = Math.min(n, j105 + Math.min(1, n) + 1);
     const L110 = [];
-    for (let j107 = Math.max(0, f108 + Math.max(0, -n)); j107 < h109; j107++) {
+    for (let j107 = Math.max(0, j105 + Math.max(0, -n)); j107 < h109; j107++) {
       L110.push([j107, R[j107]["n"]]);
     }
-    const z112 = L110;
-    for (let i = 0; i < z112.length; i++) o106.push(z112[i]);
+    for (let i = 0; i < L110.length; i++) o106.push(L110[i]);
   }
-  const c113 = o106;
   const o116 = [];
   for (let j115 = 0; j115 < n; j115++) {
-    const z120 = c19;
-    for (let i = 0; i < z120.length; i++) if (z120[i][1] !== E) o116.push(z120[i]);
+    for (let i = 0; i < L17.length; i++) if (L17[i][1] !== E) o116.push(L17[i]);
   }
-  const c121 = o116;
   let c160;
   try {
     const L158 = [];
     for (let j152 = 0; j152 < n; j152++) {
-      const f154 = j152;
-      const h155 = Math.min(n, f154 + Math.min(1, n) + 1);
+      const h155 = Math.min(n, j152 + Math.min(1, n) + 1);
       const L156 = [];
-      for (let j153 = Math.max(0, f154 + Math.max(0, -n)); j153 < h155; j153++) {
+      for (let j153 = Math.max(0, j152 + Math.max(0, -n)); j153 < h155; j153++) {
         L156.push([j153, R[j153]["n"]]);
       }
       L158.push([j152, L156]);
@@ -131,10 +119,9 @@ export function run(records, vars) {
   }
   const L170 = [];
   for (let j164 = 0; j164 < n; j164++) {
-    const f166 = j164;
-    const h167 = Math.min(n, f166 + Math.min(1, n) + 1);
+    const h167 = Math.min(n, j164 + Math.min(1, n) + 1);
     const L168 = [];
-    for (let j165 = Math.max(0, f166 + Math.max(0, -n)); j165 < h167; j165++) {
+    for (let j165 = Math.max(0, j164 + Math.max(0, -n)); j165 < h167; j165++) {
       L168.push([j165, R[j165]["n"]]);
     }
     L170.push([j164, L168]);
@@ -144,10 +131,9 @@ export function run(records, vars) {
   try {
     const L179 = [];
     for (let j173 = 0; j173 < n; j173++) {
-      const f175 = j173;
-      const h176 = Math.min(n, f175 + Math.min(1, n) + 1);
+      const h176 = Math.min(n, j173 + Math.min(1, n) + 1);
       const L177 = [];
-      for (let j174 = Math.max(0, f175 + Math.max(0, -n)); j174 < h176; j174++) {
+      for (let j174 = Math.max(0, j173 + Math.max(0, -n)); j174 < h176; j174++) {
         L177.push([j174, R[j174]["n"]]);
       }
       L179.push([j173, L177]);
@@ -158,15 +144,13 @@ export function run(records, vars) {
   }
   const L188 = [];
   for (let j182 = 0; j182 < n; j182++) {
-    const f184 = j182;
-    const h185 = Math.min(n, f184 + Math.min(0, n) + 1);
+    const h185 = Math.min(n, j182 + Math.min(0, n) + 1);
     const L186 = [];
-    for (let j183 = Math.max(0, f184 + Math.max(-1, -n)); j183 < h185; j183++) {
+    for (let j183 = Math.max(0, j182 + Math.max(-1, -n)); j183 < h185; j183++) {
       L186.push([j183, R[j183]["w"]]);
     }
     L188.push([j182, L186]);
   }
-  const c190 = L188;
   let c200;
   try {
     let a197 = 0;
@@ -222,7 +206,6 @@ export function run(records, vars) {
     }
     L217.push([j216, x218]);
   }
-  const c219 = L217;
   const c221 = T(() => GT([["a", 1], ["b", 2], ["a", 3]], "a", false));
   let t5;
   try {
@@ -233,7 +216,7 @@ export function run(records, vars) {
   const c222 = t5;
   let t9;
   try {
-    t9 = GT(c3, 1, false);
+    t9 = GT(L1, 1, false);
   } catch {
     t9 = -1;
   }
@@ -255,14 +238,14 @@ export function run(records, vars) {
   const c226 = t11;
   let t15;
   try {
-    t15 = GT(c3, null, false);
+    t15 = GT(L1, null, false);
   } catch {
     t15 = -1;
   }
   const c227 = t15;
   let t20;
   try {
-    t20 = GT(c19, v0, false);
+    t20 = GT(L17, v0, false);
   } catch {
     t20 = -1;
   }
@@ -270,38 +253,38 @@ export function run(records, vars) {
   let c229;
   try {
     let a24 = 0;
-    for (const [, x26] of DRC(c3, 1)) {
+    for (const [, x26] of DRC(L1, 1)) {
       a24 += x26;
     }
     c229 = k_number(a24);
   } catch {
     c229 = E;
   }
-  const c230 = T(() => DRC(c3, 10).length);
+  const c230 = T(() => DRC(L1, 10).length);
   let t33;
   try {
-    t33 = DRC(c3, -1).length;
+    t33 = DRC(L1, -1).length;
   } catch {
     t33 = -1;
   }
   const c231 = t33;
   let t37;
   try {
-    t37 = DRC(c3, null).length;
+    t37 = DRC(L1, null).length;
   } catch {
     t37 = -1;
   }
   const c232 = t37;
   let t41;
   try {
-    t41 = DR(c19, 0, true).length;
+    t41 = DR(L17, 0, true).length;
   } catch {
     t41 = -1;
   }
   const c233 = t41;
   let t45;
   try {
-    t45 = GT(DRC(c3, 1), "0", false);
+    t45 = GT(DRC(L1, 1), "0", false);
   } catch {
     t45 = -1;
   }
@@ -309,38 +292,38 @@ export function run(records, vars) {
   let c235;
   try {
     let a49 = 0;
-    for (const [, x51] of c3.concat([["a", 1], ["b", 2], ["a", 3]])) {
+    for (const [, x51] of L1.concat([["a", 1], ["b", 2], ["a", 3]])) {
       a49 += x51;
     }
     c235 = k_number(a49);
   } catch {
     c235 = E;
   }
-  const c236 = T(() => GT([["a", 1], ["b", 2], ["a", 3]].concat(c3), "1", false));
+  const c236 = T(() => GT([["a", 1], ["b", 2], ["a", 3]].concat(L1), "1", false));
   let t61;
   try {
-    t61 = AP(c3, c19, true).length;
+    t61 = AP(L1, L17, true).length;
   } catch {
     t61 = -1;
   }
   const c237 = t61;
-  const c238 = T(() => AP(c19, [["a", 1], ["b", E], ["c", 4]], false).length);
-  const c239 = T(() => [].concat(c3.concat([])).length);
+  const c238 = T(() => AP(L17, [["a", 1], ["b", E], ["c", 4]], false).length);
+  const c239 = T(() => [].concat(L1.concat([])).length);
   let c240;
   try {
     let a74 = 0;
-    for (const [, x76] of WOC(c3, TKC(c3, 2))) {
+    for (const [, x76] of WOC(L1, TKC(L1, 2))) {
       a74 += x76;
     }
     c240 = k_number(a74);
   } catch {
     c240 = E;
   }
-  const c241 = T(() => WOC([["a", 1], ["b", 2], ["a", 3]].concat(c3), [["a", 1], ["b", 2], ["a", 3]]).length);
-  const c242 = T(() => WO(c3, c19, false).length);
+  const c241 = T(() => WOC([["a", 1], ["b", 2], ["a", 3]].concat(L1), [["a", 1], ["b", 2], ["a", 3]]).length);
+  const c242 = T(() => WO(L1, L17, false).length);
   let t92;
   try {
-    t92 = WO(c3, c19, true).length;
+    t92 = WO(L1, L17, true).length;
   } catch {
     t92 = -1;
   }
@@ -348,7 +331,7 @@ export function run(records, vars) {
   let c244;
   try {
     let a102 = 0;
-    for (const [, x104] of c101) {
+    for (const [, x104] of o94) {
       a102 += x104;
     }
     c244 = k_number(a102);
@@ -357,46 +340,46 @@ export function run(records, vars) {
   }
   let t114;
   try {
-    t114 = GT(c113, "2", false);
+    t114 = GT(o106, "2", false);
   } catch {
     t114 = -1;
   }
   const c245 = t114;
-  const c246 = c121.length;
-  const c247 = c121.length;
+  const c246 = o116.length;
+  const c247 = o116.length;
   const c248 = T(() => FLC([]).length);
   const c249 = T(() => IXC([["a", 1], ["b", 2], ["a", 3]], 2));
   let t135;
   try {
-    t135 = IXC(c3, 99);
+    t135 = IXC(L1, 99);
   } catch {
     t135 = -1;
   }
   const c250 = t135;
   let t139;
   try {
-    t139 = IXC(c3, null);
+    t139 = IXC(L1, null);
   } catch {
     t139 = -1;
   }
   const c251 = t139;
   let t143;
   try {
-    t143 = IXC(c3, null);
+    t143 = IXC(L1, null);
   } catch {
     t143 = -1;
   }
   const c252 = t143;
   let t147;
   try {
-    t147 = IX(c19, 1, true);
+    t147 = IX(L17, 1, true);
   } catch {
     t147 = -1;
   }
   const c253 = t147;
   let t151;
   try {
-    t151 = IX(c19, 1, false);
+    t151 = IX(L17, 1, false);
   } catch {
     t151 = -1;
   }
@@ -420,19 +403,19 @@ export function run(records, vars) {
     t206 = -1;
   }
   const c258 = t206;
-  const c259 = T(() => NTC(SBC(c3), 0));
+  const c259 = T(() => NTC(SBC(L1), 0));
   const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t4;
       try {
-        t4 = GT(c3, R[o]["id"], false);
+        t4 = GT(L1, R[o]["id"], false);
       } catch {
         t4 = -1;
       }
       let t131;
       try {
-        t131 = IXC(c3, R[o]["n"]);
+        t131 = IXC(L1, R[o]["n"]);
       } catch {
         t131 = -1;
       }
@@ -440,7 +423,7 @@ export function run(records, vars) {
       try {
         let b191;
         try {
-          b191 = GT(c190, R[o]["id"], false);
+          b191 = GT(L188, R[o]["id"], false);
         } catch {
           b191 = E;
         }
@@ -454,7 +437,7 @@ export function run(records, vars) {
       }
       let t220;
       try {
-        t220 = GT(c219, R[o]["id"], false);
+        t220 = GT(L217, R[o]["id"], false);
       } catch {
         t220 = -1;
       }

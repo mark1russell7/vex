@@ -204,10 +204,9 @@ export function run(records, vars) {
         b34 = E;
       }
       const b35 = R[o]["n"];
-      const b36 = b34;
       let t37;
       try {
-        t37 = k_number((G(b36)) + (b35));
+        t37 = k_number((G(b34)) + (b35));
       } catch {
         t37 = 0;
       }

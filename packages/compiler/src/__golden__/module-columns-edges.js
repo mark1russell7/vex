@@ -7,7 +7,6 @@ const E = {};
 const Z = {};
 const N = {}, W = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
 function M1(f) {

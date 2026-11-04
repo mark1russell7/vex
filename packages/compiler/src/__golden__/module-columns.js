@@ -6,7 +6,6 @@ export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 const Z = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function G(x) { return x === E ? F() : x; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
@@ -97,10 +96,9 @@ export function run(records, vars) {
     try {
       let t16;
       try {
-        const f12 = o;
         let a13, n14 = 0;
         for (let j11 = 0; j11 < n; j11++) {
-          if (j11 === f12) continue;
+          if (j11 === o) continue;
           let x15;
           try {
             x15 = G(col2(j11));

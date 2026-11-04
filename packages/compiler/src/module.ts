@@ -31,9 +31,10 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, type Move, moveExpr, type Names, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, evaluate, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, type Move, moveExpr, type Names, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
+import { tidy, type Tidied } from "./module-tidy.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 
 /** The options of a standalone module. */
@@ -259,6 +260,12 @@ const readsCells = (e: Expr): boolean => e.tag === "ext" || e.tag === "call" || 
 /** This function tells if an expression is the literal 1. */
 // Stryker disable next-line OptionalChaining: each caller gives an argument.
 const isOne = (e: Expr | undefined): boolean => e?.tag === "lit" && e.value === 1;
+
+/** This function tells if an expression reads nothing of a run: it has only literals and ops. */
+const isClosed = (e: Expr): boolean => e.tag === "lit" || (e.tag === "app" && e.args.every((x) => isClosed(x)));
+
+/** The space of the evaluation of an expression that reads nothing of a run. */
+const ONE_RECORD = spaces.array([{}]);
 
 /** A name of the program in the code: its variable, its kind, true when it can hold the error sentinel, and its levels. */
 interface Name {
@@ -1232,6 +1239,15 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   KC: ["C"], KP: ["F"], SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
   SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
   SBI: ["F"], SKI: ["F"], QA: [],
+};
+
+/**
+ * The forms of the helpers of the list fields, for a module where each list field has the depth 0. The test of the
+ * value takes the place of the recursion, and the helper has no argument `h` (COMPILE.MODULE.SIZE.FLAT).
+ */
+const FLAT_LIST_HELPERS: Readonly<Record<"LI" | "LA", string>> = {
+  LI: HELPERS.LI.replace("LI(x, h, t)", "LI(x, t)").replace("h > 0 ? LI(r.value, h - 1, t) : ", ""),
+  LA: HELPERS.LA.replace("LA(x, h, t)", "LA(x, t)").replace("h > 0 ? LA(y, h - 1, t) : ", ""),
 };
 
 /** The clean form of each helper that gives a list of the code to the outside (COMPILE.MODULE.FUSE.CLEAN). */
@@ -3088,12 +3104,31 @@ class Printer {
     const value = values[1]?.v;
     // FI gives a new array of checked values, so the list is clean and fresh.
     const list: ListInfo = { item: value?.kind, inner: heldList(value?.list), texts: true, clean: true, fresh: true };
+    if (this.#fillsNothing(e, values[1])) {
+      // The helper stays in the names of the module, so the option `name` has the same refusal. The last pass removes it.
+      this.use("FI");
+      return { s: [], v: { code: "[]", kind: undefined, safe: true, deps, list } };
+    }
     // The one item of an append of an owner has the key 0, as FI gives it (COMPILE.MODULE.FUSE.ADOPT). The append uses FI
     // only when it does not push the item.
     const one = this.#ones.has(e) && values.length === 2 && isOne(e.args[0]);
     const v: Value = { code: `${one ? "FI" : this.use("FI")}(${values.map((x) => x.v.code).join(", ")})`, kind: undefined, safe: false, deps, list };
     if (one) this.#ones.set(e, { v, item: `[0, ${(value as Value).code}]` });
     return { s: stmtsOf(...values), v };
+  }
+
+  /**
+   * This method tells if `fill` gives no items and cannot fail, so `[]` is its code (COMPILE.MODULE.SIZE.FILL). The count
+   * must be the literal 0. The code of the value cannot throw, or the value reads nothing of a run and the interpreter
+   * gives the empty list. A value that fails keeps FI, so the list keeps its error. The option `fuse` must be true.
+   */
+  #fillsNothing(e: ExprOf<"app">, value: Code | undefined): boolean {
+    const [count, x] = e.args;
+    if (!this.#fuse || value === undefined || x === undefined || e.args.length !== 2 || count?.tag !== "lit" || count.value !== 0) return false;
+    if (value.s.length === 0 && value.v.safe) return true;
+    if (!isClosed(x)) return false;
+    const r = evaluate(e, { space: ONE_RECORD, origin: "0", domains: this.#domains });
+    return r.ok && isVexList(r.value) && r.value.items.length === 0;
   }
 
   /**
@@ -3952,6 +3987,8 @@ class Printer {
       return { s: () => [], deps: NO_DEPS, safe: true, list: empty.v.list };
     }
     const raw = this.#listOf(e, ctx);
+    // A `fill` that gives no items pushes nothing (COMPILE.MODULE.SIZE.FILL).
+    if (raw.v.code === "[]") return { s: () => [], deps: raw.v.deps, safe: true, list: raw.v.list };
     const clean = this.#clean(raw.v.list);
     const s = (settle: boolean): readonly string[] => {
       const c = settle ? this.#hoist(raw, hasLoop(e)) : raw;
@@ -4668,12 +4705,14 @@ function reasonOf(thrown: unknown): Emitted {
 /**
  * This function gives the code of the check of a field of a record `r` at the position `i`. The check of a list keeps
  * the array of the list when the program reads the field (COMPILE.MODULE.LIST.INPUT). With `plain`, the field holds a
- * plain list (COMPILE.MODULE.LIST.PLAIN). The code is true for a field against the schema.
+ * plain list (COMPILE.MODULE.LIST.PLAIN). With `flat`, the helper has no argument for the depth. The code is true for a
+ * field against the schema.
  */
-function fieldCheck(p: Printer, field: string, kind: Kind | ListKind, plain: boolean): string {
+function fieldCheck(p: Printer, field: string, kind: Kind | ListKind, plain: boolean, flat: boolean): string {
   const input = `r[${JSON.stringify(field)}]`;
   if (typeof kind !== "object") return p.against(kind, input);
-  const read = `${p.use(plain ? "LA" : "LI")}(${input}, ${String(depthOf(listOfKind(kind)))}, ${p.test(leafOf(kind))})`;
+  const depth = flat ? "" : `${String(depthOf(listOfKind(kind)))}, `;
+  const read = `${p.use(plain ? "LA" : "LI")}(${input}, ${depth}${p.test(leafOf(kind))})`;
   const keep = p.inputs.get(field);
   return `${keep === undefined ? read : `(${keep}[i] = ${read})`} === undefined`;
 }
@@ -4692,10 +4731,12 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   };
   const fields = Object.entries(options.schema.fields ?? {});
   const vars = Object.entries(options.schema.vars ?? {});
+  // With no other depth, the list helpers have no argument for the depth (COMPILE.MODULE.SIZE.FLAT).
+  const flat = options.fuse !== false && fields.every(([, k]) => typeof k !== "object" || depthOf(listOfKind(k)) === 0);
   let fieldChecks: string;
   let varChecks: string;
   try {
-    fieldChecks = fields.map(([f, k]) => ` || ${fieldCheck(p, f, k, run.plain)}`).join("");
+    fieldChecks = fields.map(([f, k]) => ` || ${fieldCheck(p, f, k, run.plain, flat)}`).join("");
     varChecks = vars.map(([v, k]) => ` || ${p.against(k, `vars[${JSON.stringify(v)}]`)}`).join("");
   } catch (thrown) {
     return reasonOf(thrown);
@@ -4716,18 +4757,8 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   const declared = new Set<string>(["VexContractError", "VEX_ERROR", "E", ...(p.memos ? ["Z"] : []), ...(helpers.has("S") ? ["N", "W"] : []), ...helpers, ...p.top.keys()]);
   const bad = nameReason(name, declared);
   if (bad !== undefined) return { ok: false, reason: bad };
-  const lines = [
-    "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
-    "/** The error of a run whose input does not keep the schema of the program. */",
-    "export class VexContractError extends Error {}",
-    "/** The value of a key where the program gives an error of Vex. */",
-    "export const VEX_ERROR = Object.freeze({ vexError: true });",
-    "const E = {};",
-    ...(p.memos ? ["const Z = {};"] : []),
-    // The values of an item of a node that keeps its items: excluded by a later test, and of the wrong kind.
-    ...(helpers.has("S") ? ["const N = {}, W = {};"] : []),
-    ...[...helpers].map((h) => (h === "S" ? helperS(p.features) : HELPERS[h])),
-    ...p.top.values(),
+  const textOf = (h: Helper): string => (h === "S" ? helperS(p.features) : flat && (h === "LI" || h === "LA") ? FLAT_LIST_HELPERS[h] : HELPERS[h]);
+  const start = [
     `export function ${name}(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
@@ -4742,8 +4773,23 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     ...(graph ? ["  const GO = GR(edges, n);", ...(p.into ? ["  const GN = GI(GO, n);"] : [])] : []),
     ...(p.runKeys ? ["  const KM = KC(keys, n);"] : []),
     ...[...p.vars].map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
-    ...ind(p.run),
-    ...ind(body),
+  ];
+  const all: Tidied = { decls: new Map<string, string>([...[...helpers].map((h) => [h as string, textOf(h)] as const), ...p.top]), lines: [...ind(p.run), ...ind(body)] };
+  // The text with fuse false stays the form of the version before this pass (COMPILE.MODULE.FUSE.OFF).
+  const { decls, lines: statements } = options.fuse === false ? all : tidy({ ...all, kept: start.join("\n"), globals: MODULE_GLOBALS });
+  const lines = [
+    "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
+    "/** The error of a run whose input does not keep the schema of the program. */",
+    "export class VexContractError extends Error {}",
+    "/** The value of a key where the program gives an error of Vex. */",
+    "export const VEX_ERROR = Object.freeze({ vexError: true });",
+    "const E = {};",
+    ...(p.memos ? ["const Z = {};"] : []),
+    // The values of an item of a node that keeps its items: excluded by a later test, and of the wrong kind.
+    ...(decls.has("S") ? ["const N = {}, W = {};"] : []),
+    ...decls.values(),
+    ...start,
+    ...statements,
     "}",
     "",
   ];

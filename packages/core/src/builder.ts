@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec, PrimitiveKind } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { addrExprs, app, axisExprs, call as callExpr, children, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type Expr, type FixedMove, type ItemNames, type Move } from "./ir.ts";
+import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type DataLimit, type Expr, type FixedMove, type ItemNames, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { ok, toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";
@@ -210,19 +210,20 @@ export interface ChainBase<Ctx extends ChainContext, T> {
   /** This method evaluates each branch with the current value, and gives a record of the results. */
   fork<const B extends Readonly<Record<string, (c: ChainOf<Ctx, T>) => ChainBase<Ctx, unknown>>>>(branches: B): ChainOf<Ctx, { readonly [N in keyof B]: ValueOf<ReturnType<B[N]>> }>;
   /**
-   * This method makes up to `limit` steps (ITERATE.LIMIT). `init` gives the names and their first values, and `step`
-   * gives the next values. A true `until` stops the steps (ITERATE.UNTIL). `result` gives the value of the chain. A
-   * name with a list chain as its first value is a list chain (BUILD.LIST.LOOP), and a list result gives a list chain.
+   * This method makes up to `limit` steps (ITERATE.LIMIT). A list chain or a `DataLimit` gives a limit from the data
+   * (ITERATE.LIMIT.DATA). `init` gives the names and their first values, and `step` gives the next values. A true
+   * `until` stops the steps (ITERATE.UNTIL). `result` gives the value of the chain. A name with a list chain as its
+   * first value is a list chain (BUILD.LIST.LOOP), and a list result gives a list chain.
    */
   iterate<const I extends Readonly<Record<string, unknown>>, U>(
-    limit: number,
+    limit: number | DataLimit | ListChain<Ctx, unknown>,
     init: I,
     step: (vars: LoopVars<Ctx, I>) => NoInfer<LoopStep<Ctx, I>>,
     result: (vars: LoopVars<Ctx, I>) => ListChain<Ctx, U>,
     opts?: { readonly until?: (vars: LoopVars<Ctx, I>) => ArgInput<boolean, Ctx, false> },
   ): ListChain<Ctx, U>;
   iterate<const I extends Readonly<Record<string, unknown>>, R>(
-    limit: number,
+    limit: number | DataLimit | ListChain<Ctx, unknown>,
     init: I,
     step: (vars: LoopVars<Ctx, I>) => NoInfer<LoopStep<Ctx, I>>,
     result: (vars: LoopVars<Ctx, I>) => ArgInput<R, Ctx, false>,
@@ -830,7 +831,7 @@ class ChainImpl {
   }
 
   iterate(
-    limit: number,
+    limit: number | DataLimit | ListChainImpl,
     init: Readonly<Record<string, unknown>>,
     step: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>) => Readonly<Record<string, unknown>>,
     result: (vars: Readonly<Record<string, ChainImpl | ListChainImpl>>) => unknown,
@@ -840,7 +841,9 @@ class ChainImpl {
     const next = stepExprs(step(vars), unique, this.#s.addr);
     const until = opts?.until === undefined ? undefined : toExpr(opts.until(vars), this.#s.addr);
     const r = result(vars);
-    return chainOf({ ...this.#s, expr: iterateExpr(limit, first, next, toExpr(r, this.#s.addr), until) }, r);
+    // The list of a limit reads the names outside the iteration, so the chain of the limit comes first (ITERATE.LIMIT.DATA).
+    const bound = isChainLike(limit) ? dataLimit({ t: "list", list: toExpr(limit, this.#s.addr) }) : limit;
+    return chainOf({ ...this.#s, expr: iterateExpr(bound, first, next, toExpr(r, this.#s.addr), until) }, r);
   }
 
   #axis(a: Axis, body: (c: ChainImpl) => { readonly program: Expr }, opts?: AxisOptsImpl): ListChainImpl {

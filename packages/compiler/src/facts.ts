@@ -3,7 +3,7 @@
  * whose op the interpreter takes first, and the kinds and the lifts of its parameters. The facts come from the op
  * tables, so the same options always give the same facts, and the same source.
  */
-import { children, isListOp, isOpName, liftsAt, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type ListOp, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
+import { children, isListOp, isOpName, liftsAt, limitAxis, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type ListOp, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
 /**
  * The most bodies of functions that tier 2 puts at the calls of one program. A function that calls another function
@@ -23,7 +23,8 @@ export const isFusedOp = (op: string): op is FusedOp => FUSED_OPS.has(op);
 export function listReason(expr: Expr): string | undefined {
   const todo: Expr[] = [expr];
   for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
-    if ((x.tag === "each" || x.tag === "fold") && listOf(x.axis) !== undefined) return 'the program has the axis "list", and tier 2 does not have that axis yet';
+    const axis = x.tag === "each" || x.tag === "fold" ? x.axis : x.tag === "iterate" ? limitAxis(x) : undefined;
+    if (axis !== undefined && listOf(axis) !== undefined) return 'the program has the axis "list", and tier 2 does not have that axis yet';
     todo.push(...children(x));
   }
   return undefined;

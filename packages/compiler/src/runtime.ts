@@ -361,6 +361,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         return at(errorText.needsItems(site.op, site.what, first));
       case "until":
         return at(errorText.untilKind(first));
+      case "limit":
+        return at(errorText.limit(first as number));
       case "test":
         return at(errorText.whereKind(first));
       case "op":

@@ -413,12 +413,12 @@ export function nodeShape(records, vars) {
   const c137 = L(() => {
     return LOC(G(c136()), 1);
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
-      out.push(G(c137()));
+      out[o] = G(c137());
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

@@ -172,7 +172,7 @@ export function run(records, vars) {
     }
     return n37;
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let b7;
@@ -189,9 +189,9 @@ export function run(records, vars) {
         const x18 = R[j14]["n"];
         n17++;
       }
-      out.push(({ "two": k_number((m2(R[o]["n"], R[o]["w"])) + (1)), "failing": m9(b7), "sum": m12(R[o]["n"]), "others": n17, "body": m21(R[o]["n"], R[o]["n"]), "second": m28(R[o]["n"], R[o]["n"]), "single": m34(R[o]["n"]) }));
+      out[o] = ({ "two": k_number((m2(R[o]["n"], R[o]["w"])) + (1)), "failing": m9(b7), "sum": m12(R[o]["n"]), "others": n17, "body": m21(R[o]["n"], R[o]["n"]), "second": m28(R[o]["n"], R[o]["n"]), "single": m34(R[o]["n"]) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

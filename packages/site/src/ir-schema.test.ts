@@ -26,6 +26,12 @@ describe("the JSON Schema of the IR (IR.JSON)", () => {
     );
   });
 
+  it("V-069 ITERATE.LIMIT.DATA: the schema takes a data limit, as isExpr does", () => {
+    const loop = { tag: "iterate", limit: { axis: { t: "all" } }, init: { x: { tag: "lit", value: 1 } }, step: { x: { tag: "lit", value: 2 } }, result: { tag: "lit", value: 3 } };
+    expect([validate(loop), isExpr(loop)]).toEqual([true, true]);
+    for (const limit of [{ axis: { t: "nope" } }, {}, "all", -1, 1.5]) expect([validate({ ...loop, limit }), isExpr({ ...loop, limit })]).toEqual([false, false]);
+  });
+
   it("LOOP.NAMES: the schema cannot tell that a name of step is not a name of init, but isExpr can", () => {
     const loop = { tag: "iterate", limit: 1, init: { x: { tag: "lit", value: 1 } }, step: { y: { tag: "lit", value: 2 } }, result: { tag: "lit", value: 0 } };
     expect([validate(loop), isExpr(loop)]).toEqual([true, false]);

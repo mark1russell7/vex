@@ -112,7 +112,7 @@ describe("COMPILE.MODULE.LIST.RESULT: a list as the value of a program", () => {
     // The list is clean, so the run reads it with LOC, the clean form of LO (COMPILE.MODULE.FUSE.CLEAN).
     expect(m.ok && m.source).toContain("return LOC(c");
     const off = emitModule(each(axes.all, ref("v")), { ...NUM, fuse: false });
-    expect(off.ok && off.source).toContain("out.push(LO(c");
+    expect(off.ok && off.source).toContain("out[o] = LO(c");
     const loaded = make((off as { source: string }).source);
     const [first, second] = loaded.run([{ v: 1 }, { v: 0 }], {}) as unknown as unknown[];
     expect(first).toStrictEqual({ kind: "vex.list", items: [{ key: "0", result: { ok: true, value: 1 } }, { key: "1", result: { ok: true, value: 0 } }] });

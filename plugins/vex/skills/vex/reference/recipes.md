@@ -83,6 +83,20 @@ const power = sizes.start(0).iterate(64, { p: 1 }, (x) => ({ p: x.p._.multiply(2
 power.all().values(); // => [8, 64]
 ```
 
+## A loop with a limit from the data
+
+The limit of `iterate` can be `dataLimit(axis)`, the number of targets of an axis, or a list chain, the count of that list. A count above 100000 gives `#NUM!`. Such a program is of step B, so a host with `maxStep: "A"` refuses it.
+
+```ts doctest
+import { axes, dataLimit, space, vex } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+
+const sizes = vex(NumDomain).over(space.array([{ n: 5 }, { n: 64 }]));
+const steps = sizes.start(0).iterate(dataLimit(axes.all), { i: 0 }, (x) => ({ i: x.i._.add(3) }), (x) => x.i);
+
+steps.all().values(); // => [6, 6]
+```
+
 ## A fast program
 
 `tiered` of `@mark1russell7/vex-compiler` gives a program with generated JavaScript. Its results are the results of the interpreter.

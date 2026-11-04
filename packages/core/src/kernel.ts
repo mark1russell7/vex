@@ -38,6 +38,7 @@ import { asList, fillList, isFillCount, isIndexValue, listOfArray } from "./arra
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { vexError, type ErrorCode, type ErrorDetails, type ErrorKind, type VexError } from "./errors.ts";
+import { limitError, overLimitMessage, worstError } from "./limit-error.ts";
 import type { CompileOptions } from "./evaluate.ts";
 import { MAX_ITERATIONS, type Axis, type FixedMove } from "./ir.ts";
 import { isVexList, LIST_OPS, vexList, type ListItem } from "./list.ts";
@@ -58,6 +59,8 @@ const AXIS: PartShape = { shape: "term", kinds: [["axes"]] };
 /** The address of `each` and `fold`: a reference that gives a key of the space, not a value (DOC.ADDRESS). */
 const ADDRESS: PartShape = { shape: "term", kinds: [["ref"]], address: true };
 const NO_VALUE: PartShape = { shape: "one", values: [null] };
+/** The limit of `iterate`: a bare whole number, or the size of an axis (ITERATE.LIMIT.DATA). */
+const LIMIT: PartShape = { shape: "term", of: "limit", kinds: [["limit"], ["size"]] };
 
 /** This function gives the shape of a record with these fields and no other fields (DOC.CONSTRUCT). */
 const closed = (fields: Readonly<Record<string, PartShape>>, required: readonly string[]): PartShape => ({ shape: "record", fields, required, closed: true });
@@ -119,9 +122,19 @@ function worldOfVex(): World {
       },
       iterate: {
         verbs: { eval: "vex.iterate" },
-        parts: closed({ limit: { shape: "number", whole: true, min: 0, max: MAX_ITERATIONS }, init: NAMES, step: NAMES, until: TERM, result: TERM }, ["limit", "init", "step", "result"]),
+        parts: closed({ limit: LIMIT, init: NAMES, step: NAMES, until: TERM, result: TERM }, ["limit", "init", "step", "result"]),
         scope: LOOP_SCOPE,
         summary: "Up to limit steps, until a test is true, and a result.",
+      },
+      limit: {
+        verbs: { eval: "vex.limit" },
+        parts: { shape: "number", whole: true, min: 0, max: MAX_ITERATIONS },
+        summary: "The limit of iterate as a whole number: the bare number of step A.",
+      },
+      size: {
+        verbs: { eval: "vex.size" },
+        parts: closed({ axis: AXIS }, ["axis"]),
+        summary: "The limit of iterate from the data: the number of targets of an axis (step B).",
       },
       ops: { kinds: {}, fallback: { verbs: { eval: "formula.op" }, parts: TERMS, summary: "An op, applied to the values of its arguments." } },
       ext: { kinds: {}, fallback: { verbs: { eval: "formula.ext" }, summary: "An extension: its handler gives the value of its data." } },
@@ -530,12 +543,27 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
     return partAt(value, "result").evaluate({ ...context, names });
   },
 
+  "vex.limit": ({ value }) => ok(value),
+
+  // ITERATE.LIMIT.ERROR: each failure of the size of an axis is one error. Only an error of the run stays as it is.
+  "vex.size": ({ value, context }) => {
+    const found = targetsOf(value, context);
+    if (!found.ok) return { ok: false, error: toKernelError(limitError(toVexError(found.error))) };
+    const { targets } = found.value;
+    const cause = worstError(targets.flatMap((t) => t.error ?? []));
+    if (cause !== undefined) return { ok: false, error: toKernelError(limitError(cause)) };
+    return targets.length > MAX_ITERATIONS ? failed("limit", overLimitMessage(targets.length)) : ok(targets.length);
+  },
+
   "vex.iterate": ({ value, context }) => {
-    const { init, step, until } = partsOf(value);
-    const limit = (value as { readonly limit: number }).limit;
+    const { init, limit: bound, step, until } = partsOf(value);
     const first = bindAll(init, context, context.names);
     if (!first.ok) return first;
     let names = first.value;
+    // The limit evaluates at the node, after the first values and before the steps (ITERATE.LIMIT.DATA).
+    const counted = (bound as Part).evaluate(context);
+    if (!counted.ok) return counted;
+    const limit = counted.value as number;
     for (let k = 0; ; k++) {
       const here: Context = { ...context, names };
       if (until !== undefined) {

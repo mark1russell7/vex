@@ -156,7 +156,7 @@ describe("COMPILE.MODULE.GRAPH: a module of a graph space", () => {
     expect(parts(order(axes.successors))).toBe("GR(");
     expect(parts(order(axes.predecessors))).toBe("GR( GI(");
     expect(parts(order(axes.reachable))).toBe("GR( RB(");
-    expect(sourceOf(n)).toContain("  const GO = GR(edges, n);\n  const out = [];");
+    expect(sourceOf(n)).toContain("  const GO = GR(edges, n);\n  const out = new Array(n);");
     expect(sourceOf(order(axes.predecessors))).toContain("  const GO = GR(edges, n);\n  const GN = GI(GO, n);\n");
     expect(sourceOf(n, ARRAY)).not.toContain("GR(");
     const e = rec({ out: order(axes.successors), into: order(axes.predecessors), all: op("sum", each(axes.reachable, op("multiply", n, w))) });

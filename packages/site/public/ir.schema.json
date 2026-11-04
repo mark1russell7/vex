@@ -317,9 +317,26 @@
           "const": "iterate"
         },
         "limit": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 100000
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            {
+              "type": "object",
+              "description": "A data limit: the number of targets of the axis.",
+              "required": [
+                "axis"
+              ],
+              "properties": {
+                "axis": {
+                  "$ref": "#/$defs/axis"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "init": {
           "type": "object",

@@ -3,7 +3,7 @@
  * `packages/core/src/sheet.ts` (SHEET.FILL). Each column comes after the columns that it reads. The keys of a column
  * follow its reads from itself. The order changes only the speed, not a result (SHEET.ORDER).
  */
-import { addrExprs, CELL_KIND, children, isMove, listOf, moveExpr, shapeError, type Axis, type CellFormulas, type CellRef, type Expr, type Move } from "@mark1russell7/vex";
+import { addrExprs, CELL_KIND, children, isMove, listOf, moveExpr, shapeError, splitLimit, type Axis, type CellFormulas, type CellRef, type Expr, type Move } from "@mark1russell7/vex";
 
 /** A direction of the reads of a column from itself: to an earlier key, to a later key, or down a tree to the children. */
 export type Direction = "before" | "after" | "down";
@@ -59,7 +59,10 @@ export function readsOf(columns: ReadonlyMap<string, Expr>, cells: CellFormulas,
   const todo: [Expr, Axis | undefined][] = [...(formula === undefined ? [] : [formula]), ...(cells.get(self)?.values() ?? [])].filter((e) => shapeError(e) === undefined).map((e) => [e, undefined]);
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
     const [e, axis] = item;
-    if (e.tag === "each" || e.tag === "fold") {
+    // A test of the axis of a data limit reads at each target, as the test of an `each` does.
+    const split = e.tag === "iterate" ? splitLimit(e) : undefined;
+    if (split !== undefined) for (const x of split) todo.push([x, axis]);
+    else if (e.tag === "each" || e.tag === "fold") {
       const { base, tests } = partsOf(e.axis);
       for (const x of [...(e.tag === "each" ? [e.body] : Object.values(e.step)), ...tests]) todo.push([x, base]);
       // The values of init, the result of a fold, the list of the axis list and the expressions of the address evaluate
@@ -158,7 +161,10 @@ export function readsFinished(columns: ReadonlyMap<string, Expr>, order: readonl
   const todo: [Expr, ReadPlace][] = [[formula, "key"]];
   for (let item = todo.pop(); item !== undefined; item = todo.pop()) {
     const [e, place] = item;
-    if (e.tag === "each" || e.tag === "fold") {
+    // A test of the axis of a data limit reads at each target, as the test of an `each` does.
+    const split = e.tag === "iterate" ? splitLimit(e) : undefined;
+    if (split !== undefined) for (const x of split) todo.push([x, place]);
+    else if (e.tag === "each" || e.tag === "fold") {
       const inner: ReadPlace = place === "key" && (e.at === undefined || e.at.length === 0) && baseOf(e.axis).t === "children" ? "children" : "unknown";
       const { tests } = partsOf(e.axis);
       for (const x of [...(e.tag === "each" ? [e.body] : Object.values(e.step)), ...tests]) todo.push([x, inner]);

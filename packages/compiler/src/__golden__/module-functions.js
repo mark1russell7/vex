@@ -24,7 +24,7 @@ export function run(records, vars) {
   const fn15 = (p12, k13, o14) => k_number((fn4(p12, k13)) + (k_number((3) + (R[o14]["n"]))));
   const fn22 = (p19) => G(p19);
   const c28 = T(() => fn10(2, 5));
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       const b0 = R[o]["w"];
@@ -51,9 +51,9 @@ export function run(records, vars) {
       } catch {
         b23 = E;
       }
-      out.push(({ "a": k_number((fn4(1, o)) + (fn4(R[o]["n"], o))), "b": fn4(b5, o), "c": G(c28), "d": k_number(a16), "e": fn27(b23) }));
+      out[o] = ({ "a": k_number((fn4(1, o)) + (fn4(R[o]["n"], o))), "b": fn4(b5, o), "c": G(c28), "d": k_number(a16), "e": fn27(b23) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

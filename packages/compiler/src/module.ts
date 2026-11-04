@@ -2456,6 +2456,8 @@ class Printer {
     const key = this.#keyOf.get(c);
     const hit = key === undefined ? undefined : this.#constants.get(key);
     if (hit !== undefined) return hit;
+    // A pack is a local of the loop of a second print, so a constant of the run cannot read it (V-077).
+    if (this.#readsPack(c)) throw new NoPack();
     const name = this.fresh("c");
     const deferred = lazy || this.#defers(c);
     if (deferred) {
@@ -2656,6 +2658,12 @@ class Printer {
       this.#fnWork.set(bound.id, work);
     }
     return work;
+  }
+
+  /** This method tells if a code reads a pack of the second print that the printer prints. */
+  #readsPack(c: Code): boolean {
+    const text = [c.v.code, ...c.s].join("\n");
+    return [...(this.#pack?.cols.values() ?? [])].some((local) => text.includes(`${local}[`));
   }
 
   /** This method tells if a second print (`#packed`, `#packedSteps`) reads the packs of the columns at the focus of `ctx`. */

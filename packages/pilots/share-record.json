@@ -5,30 +5,13 @@
     {
       "source": "pilots",
       "programs": 55,
-      "tier2": 49,
-      "programShare": 0.8909090909090909,
+      "tier2": 55,
+      "programShare": 1,
       "runs": 39125,
       "valueRuns": 33955,
-      "tier2ValueRuns": 33440,
-      "valueShare": 0.9848328670298925,
-      "tier1Reasons": [
-        {
-          "reason": "the program has the list op \"append\", and tier 2 does not have lists as values yet",
-          "count": 2
-        },
-        {
-          "reason": "the program has the list op \"nth\", and tier 2 does not have lists as values yet",
-          "count": 2
-        },
-        {
-          "reason": "the program has the axis \"list\", and tier 2 does not have lists as values yet",
-          "count": 1
-        },
-        {
-          "reason": "the program has the list op \"get\", and tier 2 does not have lists as values yet",
-          "count": 1
-        }
-      ]
+      "tier2ValueRuns": 33766,
+      "valueShare": 0.9944338094536888,
+      "tier1Reasons": []
     },
     {
       "source": "example sheets",
@@ -44,26 +27,13 @@
     {
       "source": "vex sessions",
       "programs": 12,
-      "tier2": 5,
-      "programShare": 0.4166666666666667,
+      "tier2": 12,
+      "programShare": 1,
       "runs": 25,
       "valueRuns": 23,
-      "tier2ValueRuns": 10,
-      "valueShare": 0.43478260869565216,
-      "tier1Reasons": [
-        {
-          "reason": "the program has the list op \"get\", and tier 2 does not have lists as values yet",
-          "count": 4
-        },
-        {
-          "reason": "the program has the list op \"append\", and tier 2 does not have lists as values yet",
-          "count": 2
-        },
-        {
-          "reason": "the program has the list op \"take\", and tier 2 does not have lists as values yet",
-          "count": 1
-        }
-      ]
+      "tier2ValueRuns": 23,
+      "valueShare": 1,
+      "tier1Reasons": []
     },
     {
       "source": "a private app",

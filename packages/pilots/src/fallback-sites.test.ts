@@ -13,7 +13,7 @@ const sum = (list: readonly { readonly count: number }[] | undefined): number =>
 
 describe("the probe of the sites of the fallbacks (FALLBACKOPS)", () => {
   it("gives no probe for a program of tier 1", () => {
-    expect(siteProbe(app("sum", each(axes.list(each(axes.all, ref("x"))), ref("x"))), options)).toBeUndefined();
+    expect(siteProbe(app("sum", each(axes.all, ref("x"), undefined, ["y"])), options)).toBeUndefined();
   });
 
   it("gives the value of tier 2 when no check fails", () => {

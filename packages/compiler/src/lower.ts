@@ -17,6 +17,7 @@ import {
   children,
   errorText,
   isFieldName,
+  listOf,
   MAX_NESTING,
   nestingOf,
   shapeError,
@@ -28,7 +29,7 @@ import {
   type Names,
   type PrimitiveKind,
 } from "@mark1russell7/vex";
-import { factsOf, isFusedOp, listReason, MAX_CALLS, primitiveOf, type Facts, type FusedOp, type Schema } from "./facts.ts";
+import { factsOf, isFusedOp, MAX_CALLS, primitiveOf, type Facts, type FusedOp, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
   array,
@@ -142,8 +143,6 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   const shape = shapeError(expr);
   if (shape !== undefined) throw new Unsupported(shape);
   if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
-  const lists = listReason(expr);
-  if (lists !== undefined) throw new Unsupported(lists);
   const l = new Lowerer(memoNodes(expr, isFusedOp), facts, schema);
   const b = block(RETURN);
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
@@ -784,33 +783,45 @@ class Lowerer {
   }
 
   #loop(e: ExprOf<"each">, s: Scope, path: readonly number[], b: Block, items: (label: number) => Fail, onItem: (body: Block, key: LExpr, value: LExpr) => void): void {
-    this.#targetLoop(e.axis, e.at, s, path, 1, b, items, (body, key, at) => {
-      onItem(body, key, this.expr(e.body, at, [...path, 0], body));
+    this.#targetLoop(e, s, path, 1, b, items, (body, key, at, names) => {
+      onItem(body, key, this.expr(e.body, { ...at, env: new Map([...at.env, ...names]) }, [...path, 0], body));
     });
   }
 
   /**
-   * This method lowers the loop over the targets of an axis with the address `addr`. The tests of `where` have the child
-   * indexes from `firstTest`, and the expressions of the address come after them. `each` adds the statements of a target.
+   * This method lowers the loop over the targets of an axis with an address. The list of the axis `list` has the child
+   * index `firstTest`. The tests of `where` come next, and the expressions of the address come after them. `each` adds
+   * the statements of a target. The map `names` has the names `as` of the item. Only the body or the step reads them.
    */
   #targetLoop(
-    axis: Axis,
-    addr: Addr | undefined,
+    e: ExprOf<"each"> | ExprOf<"fold">,
     s: Scope,
     path: readonly number[],
     firstTest: number,
     b: Block,
     items: (label: number) => Fail,
-    each: (body: Block, key: LExpr, at: Scope) => void,
+    each: (body: Block, key: LExpr, at: Scope, names: ReadonlyMap<string, Bound>) => void,
   ): void {
-    const from = addr === undefined || addr.length === 0 ? s.focus : this.#address(addr, s, path, firstTest + whereTests(axis).length, b);
+    const { axis, at: addr, as } = e;
+    const list = listOf(axis);
+    const tests = list === undefined ? firstTest : firstTest + 1;
+    const from = addr === undefined || addr.length === 0 ? s.focus : this.#address(addr, s, path, tests + whereTests(axis).length, b);
     const base = baseAxis(axis);
     let space = s.space;
     let over: LExpr;
     let skip: LExpr | undefined;
     // The index of the record of each target: the index of the loop, or else the index that the axis gives.
     let idx: LExpr | undefined;
-    if (base.t === "table") {
+    // The value and the position of each item of the axis list.
+    let item: { readonly values: LExpr; readonly nth: LExpr } | undefined;
+    if (list !== undefined) {
+      // The list evaluates at the key of the address (AXIS.LIST).
+      const moved: Scope = from === s.focus ? s : { ...s, focus: from, rec: prim("get", s.space, from) };
+      const value = this.value(b, this.expr(list, moved, [...path, firstTest], b));
+      const targets = this.checked(b, call("items", value, bool(base.t === "reverse")), "a list of the axis list", this.site(b, moved, { t: "listAxis", path }, value));
+      over = prim("keysOf", targets);
+      item = { values: prim("valuesOf", targets), nth: prim("idxOf", targets) };
+    } else if (base.t === "table") {
       // The axis table moves the evaluation to the space of its table, and there the origin is the target.
       space = this.checked(b, call("table", local(TABLES), this.constant(base.name)), "a table", this.#text(b, s, path, errorText.noTable(base.name)));
       over = call("keys", space);
@@ -822,23 +833,29 @@ class Lowerer {
       over = prim("keysOf", targets);
       idx = this.value(b, prim("idxOf", targets));
     }
-    const records = this.value(b, prim("records", space));
+    // A key of a list can be outside the space, and it has no index of the space, so the record comes from the key.
+    const records = list === undefined ? this.value(b, prim("records", space)) : undefined;
     const label = this.labels++;
     const array_ = this.locals++;
     const index = this.locals++;
-    const item = this.locals++;
-    const key = local(item);
+    const target = this.locals++;
+    const key = local(target);
     const body = block(items(label));
     if (skip !== undefined) body.stmts.push({ t: "if", cond: prim("===", key, skip), yes: [{ t: "next" }], no: [] });
     const slot = idx === undefined ? local(index) : prim("member", idx, local(index));
-    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec: prim("recordAt", records, slot, space, key) };
+    const rec = records === undefined ? prim("get", space, key) : prim("recordAt", records, slot, space, key);
+    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec };
     whereTests(axis).forEach((test, i) => {
-      const testPath = [...path, firstTest + i];
+      const testPath = [...path, tests + i];
       const ok = this.#boolean(this.expr(test, at, testPath, body), body, at, { t: "test", path: testPath });
       body.stmts.push({ t: "if", cond: prim("!", ok), yes: [{ t: "next" }], no: [] });
     });
-    each(body, key, at);
-    b.stmts.push({ t: "loop", label, item, index, array: array_, over, body: body.stmts });
+    const names = new Map<string, Bound>();
+    const [name, position] = as ?? [];
+    if (name !== undefined && item !== undefined) names.set(name, { value: this.value(body, prim("member", item.values, local(index))) });
+    if (position !== undefined && item !== undefined) names.set(position, { value: this.#typed(this.value(body, prim("member", item.nth, local(index))), "number") });
+    each(body, key, at, names);
+    b.stmts.push({ t: "loop", label, item: target, index, array: array_, over, body: body.stmts });
   }
 
   /** This method gives a local for each name of a loop, with its first value at the node (LOOP.NAMES). */
@@ -899,10 +916,10 @@ class Lowerer {
     const tests = first + Object.keys(e.step).length;
     const { env, locals } = this.#loopNames(e.init, s, path, b);
     // An error of a test or of a step is the error of the fold.
-    this.#targetLoop(e.axis, e.at, s, path, tests, b, () => b.fail, (body, _key, at) => {
-      this.#loopStep(e.step, { ...at, env }, path, first, body, locals);
+    this.#targetLoop(e, s, path, tests, b, () => b.fail, (body, _key, at, names) => {
+      this.#loopStep(e.step, { ...at, env: new Map([...env, ...names]) }, path, first, body, locals);
     });
-    return this.expr(e.result, { ...s, env }, [...path, tests + whereTests(e.axis).length + addrExprs(e.at).length], b);
+    return this.expr(e.result, { ...s, env }, [...path, tests + (listOf(e.axis) === undefined ? 0 : 1) + whereTests(e.axis).length + addrExprs(e.at).length], b);
   }
 }
 

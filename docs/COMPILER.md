@@ -150,6 +150,7 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 
 - `#DEPTH!` of an extension and a full call stack, by the rule above.
 - An `each` with an error item, because generated code makes no error item.
+- The axis `list` over a list with an error item, or over an array with a hole (the paragraph "The axis list").
 - An error of an item that a list op on a list value gives with `strict`, and `#DEPTH!` of such an op (the next paragraph).
 - A list op on an array (V-064).
 - A failed kind check of a schema, because it is no error of the interpreter.
@@ -166,6 +167,15 @@ The rules of a failure:
 - An error of the op has the marker path of the runtime. The runtime keeps the error in the record of the failure, and `materialize` gives it the path and the position of the site. So `ifError`, a binding, `#ARGS` and a list op around the site take it as the error of an op.
 - `#DEPTH!` throws, and tier 1 gives the result. So the V-066 and V-067 rule holds: the program cannot catch it, and it wins over each other error, in each order of the arguments. The order in the interpreter is in `goodItems`, which the runtime shares.
 - An error of an item has another path. It comes from a list of the input with `strict`. It throws too, and tier 1 gives the result.
+
+**The axis list.** Each loop over the axis `list` has the statements of each other loop, with these changes (COMPILE.LIST.AXIS):
+
+- The address evaluates first. Then the list evaluates at the key of the address.
+- The runtime function `items` gives the keys, the values and the positions of the items. A value that is not a list gives `FALLBACK`, and the site `listAxis` gives the error, so `ifError` takes it.
+- An error item throws, and tier 1 gives the result. The error item can also be under a false test or after the first item, and tier 2 gives no second copy of these rules.
+- A key of a list has no index in the space, and it can be outside the space. So the record of a target comes from `get`, not from the array of the records.
+- The names `as` are in the scope of the body or the step only. A test of `where` does not see them.
+- An array is a list, so the positions are its keys. A hole of an array is an error item.
 
 **A list with an error item.** Generated code makes no error item, because `each` stops the program at one. A list with an error item can only come from the input: a variable, a field or a literal. Tier 2 does not read its items. It gives the list to a list op, and the code of the interpreter skips the error items. Thus such a list stays on the value path, and the shared code is the proof that the result is the same. The differential test `list-values.test.ts` checks it, also with `#DEPTH!` items.
 
@@ -769,7 +779,7 @@ Two caches of the runtime give most of the speed:
 
 The rest of the time goes into the reads of the space and into the checks that the semantics need, for example `valid`. Phase C2 removes this time with the kinds and the inline forms.
 
-These cases operate in tier 1: an `each` with an error item, and the axis `list`. Each exception that is not an error of an op also operates in tier 1. Since COMPILE.EXT, an error of an extension operates in tier 1 only where it is the result (§4.1).
+These cases operate in tier 1: an `each` with an error item, and the axis `list` over an error item. Each exception that is not an error of an op also operates in tier 1. Since COMPILE.EXT, an error of an extension operates in tier 1 only where it is the result (§4.1).
 
 An item for the owner: npm trusted publishing needs the package on npm. Before the next release, the owner publishes `@mark1russell7/vex-compiler` once, or adds its trust, as for the other packages.
 
@@ -1387,4 +1397,4 @@ The field `as` of `each` and `fold` names the value and the index of each item o
 - The names have a level of their own. Thus a part that reads them stays in the loop. A read of a name is not a read of the target. Thus a loop over the keys of a literal or of `fill` can read the names.
 - The value of an item keeps the facts of its list. Thus an item that is a list is a list in the body. The printer knows these facts only in the loop. So a list op over such an `each` goes over its array when the body can give a list.
 - A name of `as` is not a name of `init` (the check of the document). Thus a step that appends to its own list and reads a name of `as` keeps the append of COMPILE.MODULE.APPEND.OWN.
-- Tier 2 still gives a reason for each program with the axis `list`.
+- Tier 2 gave a reason for each program with the axis `list` until COMPILE.LIST.AXIS.

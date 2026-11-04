@@ -1410,7 +1410,7 @@ The pilot found these gaps:
 
 - A list op cannot take `nth` of a list of lists in a module. The reason is `the list op "count"`. The program puts `each` over the axis `list` around the value.
 - A variable of the schema cannot be a list. Thus the first record holds the edges in the fields `froms` and `tos`.
-- No op changes one item of a list. Thus each change of a state copies the list, and the search costs O(k(k + E)) where ireko costs O(k + E).
+- The program changes one item of a list with `setNth`. Each change of a state copies the list, so the search costs O(k(k + E)) where ireko costs O(k + E).
 - The node `fix` has no module until the change of tier 2 and modules merges. Thus the longest path uses `iterate`.
 - The fields of the edges are arrays, and a list op on an array goes to tier 1 (V-064). Thus a run of tier 2 with an edge gives the value of tier 1.
 

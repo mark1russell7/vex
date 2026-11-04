@@ -47,7 +47,7 @@ class Refusal {
 const STEADY: Flow = { dir: 0, tag: undefined };
 
 /**
- * The rules of the list ops. The items of a list come from an axis that does not read the last round, so the set of
+ * The rules of the list ops. The items of a list come from an axis that does not read the last round. Thus the set of
  * the items stays the same in each round. Each of these ops ignores the order of the items. `sum` has no rule. The
  * rounding of a sum of floats depends on the order of the items (FIX.ORDER).
  */

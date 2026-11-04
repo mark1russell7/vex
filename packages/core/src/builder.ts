@@ -5,7 +5,7 @@
 import type { AnyDomain, Domain, OpSpec, PrimitiveKind } from "./domain.ts";
 import type { VexError } from "./errors.ts";
 import { evaluate, explain, type EvalOptions, type ExtHandler, type FreeFn } from "./evaluate.ts";
-import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fix as fixExpr, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, last as lastExpr, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Axis, type DataLimit, type Expr, type FixJoin, type ItemNames, type Move } from "./ir.ts";
+import { addrExprs, app, axisExprs, call as callExpr, children, dataLimit, each, ext, fix as fixExpr, fn as fnExpr, fold as foldExpr, index as indexMove, iterate as iterateExpr, key as keyMove, last as lastExpr, let_, lit, listOf, offset as offsetMove, other as otherMove, origin as originMove, parent as parentMove, rec, ref, toPath, v, type Addr, type Axis, type DataLimit, type Expr, type FixJoin, type ItemNames, type Move } from "./ir.ts";
 import { cell as cellRef, SheetRun, type CellFormulas } from "./sheet.ts";
 import { ok, toOptional, type Optional, type Result } from "./result.ts";
 import type { Space } from "./space.ts";

@@ -95,6 +95,9 @@ const argsOf = (name: string): readonly Expr[] => (Vec2Domain.ops[name as keyof 
 
 const OPS = Object.keys(Vec2Domain.ops);
 
+/** This function gives the reason of a site that the kinds do not decide. */
+const undecided = (name: string): string => `the kinds of the values of "${name}" do not decide its op`;
+
 describe("each op of Vec2Domain in tier 1, tier 2 and a module (P17 COMPILE.MODULE.FORM)", () => {
   it("COMPILE.MODULE.FORM: the table has each op of the domain", () => {
     expect(OPS).toHaveLength(45);
@@ -274,8 +277,6 @@ describe("the form of a value in a module (COMPILE.MODULE.FORM)", () => {
 });
 
 describe("the limits of a module of vectors (COMPILE.MODULE.FORM)", () => {
-  const undecided = (name: string): string => `the kinds of the values of "${name}" do not decide its op`;
-
   it("COMPILE.MODULE.FORM: a number that the op lifts keeps the dispatch of the runtime, so a module gives a reason", () => {
     expect(reasonOf(op("add", p, lit(1)))).toBe(undecided("add"));
     expect(reasonOf(op("add", p, n))).toBe(undecided("add"));

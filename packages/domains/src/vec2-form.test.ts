@@ -80,7 +80,8 @@ describe("the form of Vec2Domain in a module (COMPILE.MODULE.FORM)", () => {
 
   it("COMPILE.MODULE.FORM: `vec2` of NumDomain in a module gives plain data, of the kind of Vec2Domain", () => {
     const vec2 = NumDomain.moduleForm?.ops?.["vec2"];
-    expect((vec2?.fn as unknown as Fn)(1, -0)).toStrictEqual({ x: 1, y: -0 });
+    const fn = vec2?.fn as unknown as Fn;
+    expect(fn(1, -0)).toStrictEqual({ x: 1, y: -0 });
     expect(vec2?.returns).toBe("domain:Vec2");
     expect(NumDomain.ops.vec2.fn(1, 2)).toBeInstanceOf(Vec2);
   });

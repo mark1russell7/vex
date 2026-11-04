@@ -1,4 +1,5 @@
 import { defineDomain, type Domain, type FnOp, type OpTable } from "@mark1russell7/vex";
+import { VEC2_FORM } from "./vec2-form.ts";
 
 /**
  * An immutable 2D vector. The methods live on the prototype, so a vector costs two numbers. Division is real
@@ -215,6 +216,8 @@ export const Vec2Domain: Domain<"Vec2", Vec2, Vec2Ops> = defineDomain<"Vec2", Ve
     const [x, y] = Array.isArray(u) ? (u as readonly unknown[]) : [];
     return new Vec2(typeof x === "number" ? x : Number.NaN, typeof y === "number" ? y : Number.NaN);
   },
+  // COMPILE.MODULE.FORM: a module cannot hold this class, so a vector in a module is plain data.
+  moduleForm: { ...VEC2_FORM, literal: (u: unknown): { readonly x: number; readonly y: number } | undefined => (u instanceof Vec2 ? u.toJSON() : undefined) },
   ops: {
     // The components are fields of a vector, not methods, so these two ops are functions.
     x: { fn: (v: Vec2): number => v.x, params: [], returns: "number" },

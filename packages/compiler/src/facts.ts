@@ -192,8 +192,8 @@ export function factsOf(options: Options): Facts {
           continue;
         }
         // A lifted number goes through fromScalar: the site keeps the dispatch of the runtime.
-        // A list is not a number, so the interpreter does not lift it.
-        if (d.fromScalar !== undefined && args.some((a, j) => a !== "string" && a !== "boolean" && !lists.has(j + 1) && liftsAt(e.spec.liftScalar, j))) return undefined;
+        // A list is not a number, and neither is a value of another kind, so the interpreter does not lift them.
+        if (d.fromScalar !== undefined && args.some((a, j) => (a === undefined || a === "number") && !lists.has(j + 1) && liftsAt(e.spec.liftScalar, j))) return undefined;
         const ok = args.map((a, j) => fits(d, e.spec.params?.[j], a, lists.has(j + 1)));
         if (ok.includes(undefined)) return undefined;
         return { t: "fn", domain: i, bad: ok.includes(false), returns: returnsOf(d, e.spec.returns) };

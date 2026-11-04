@@ -44,6 +44,8 @@ export type NumOps = {
 
 /** The domain of numbers. A result that is not a finite number is the error `#NUM!`. */
 export const NumDomain: Domain<"Num", number, NumOps> = defineDomain<"Num", number, NumOps>({
+  // COMPILE.MODULE.FORM: a vector in a module is plain data, so `vec2` needs no class there.
+  moduleForm: { ops: { vec2: { fn: (x: number, y: number): { readonly x: number; readonly y: number } => ({ x, y }), returns: "domain:Vec2" } } },
   name: "Num",
   // LOOP.SIZE.OPS: each value has a fixed size, so each op has a size rule.
   size: "fixed",

@@ -1,7 +1,7 @@
 /**
  * `sign` and `minAxis` in each tier (NUM.SIGN, VEC2.SIGN, VEC2.MINAXIS, XY.SIGN). Tier 2 and a standalone module give
- * the result of the interpreter, on values and on errors (P17). `Vec2Domain` is a class, so its vectors stay out of a
- * module, and the plain data of `XYDomain` is the form for a module.
+ * the result of the interpreter, on values and on errors (P17). A module holds a vector of `Vec2Domain` as plain data
+ * (COMPILE.MODULE.FORM), and the plain data of `XYDomain` is the same in each tier.
  */
 import { app, evaluate, lit, ref, space, type AnyDomain, type Expr, type Space } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
@@ -128,15 +128,22 @@ describe("a standalone module", () => {
     );
   });
 
-  it("VEC2.SIGN VEC2.MINAXIS: the class Vec2 stays out of a module, with a reason", () => {
-    const options: ModuleOptions = { domains: [NumDomain, Vec2Domain, BoolDomain], schema: { fields: { p: "domain:Vec2" } } };
-    const m = (e: Expr): string => {
-      const r = emitModule(e, options);
-      return r.ok ? "" : r.reason;
-    };
-    expect(m(app("sign", P))).toBe('the kinds of the values of "sign" do not decide its op');
-    expect(m(app("minAxis", P))).toBe('the kinds of the values of "minAxis" do not decide its op');
-    // An op of the class with a function stops too, because a module cannot check a copy without the samples of the domain.
-    expect(m(app("x", P))).toBe("the domain Vec2 gives no samples, so a module cannot check a copy of its op");
+  it("P17 VEC2.SIGN VEC2.MINAXIS COMPILE.MODULE.FORM: a module of `Vec2` values gives the values and the errors of the interpreter", () => {
+    const domains: readonly AnyDomain[] = [NumDomain, Vec2Domain, BoolDomain];
+    const records = classOf(PAIRS);
+    const s = space.array(records);
+    for (const e of onVector(P, app("vec2", lit(2), lit(3)))) {
+      const m = emitModule(e, { domains, schema: { fields: { p: "domain:Vec2" } } });
+      if (!m.ok) throw new Error(m.reason);
+      // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in a build.
+      const made = new Function(`${m.source.replaceAll(/^export /gm, "")}
+return { run, VEX_ERROR };`)() as { readonly run: (r: unknown, v: unknown) => readonly unknown[]; readonly VEX_ERROR: unknown };
+      const expected = s.keys.map((origin) => {
+        const r = evaluate(e, { domains, space: s, origin });
+        if (!r.ok) return made.VEX_ERROR;
+        return r.value instanceof Vec2 ? r.value.toJSON() : r.value;
+      });
+      expect(made.run(records, {})).toStrictEqual(expected);
+    }
   });
 });

@@ -1796,6 +1796,16 @@ const plainValue = (code: string, kind: Kind | undefined): Value => ({ code, kin
 /** This function gives the code of a value with no statements. */
 const bare = (v: Value): Code => ({ s: [], v });
 
+/**
+ * This function gives a domain in the form of a module (COMPILE.MODULE.FORM). Each part of the form replaces the part of
+ * the domain, so the printer reads one domain of plain data. A domain without a form stays the same object.
+ */
+function formOf(d: AnyDomain): AnyDomain {
+  const form = d.moduleForm;
+  if (form === undefined) return d;
+  return { ...d, ...form, ops: Object.fromEntries(Object.entries(d.ops).map(([name, spec]) => [name, { ...spec, ...form.ops?.[name] }])) } as AnyDomain;
+}
+
 /** This function gives the code of a literal. A value that is not a finite number, a text, a boolean or null has no code. */
 function literal(value: unknown): Value {
   if (typeof value === "number") {
@@ -2137,7 +2147,7 @@ class Printer {
     this.#keys = keys;
     this.#fuse = options.fuse !== false;
     this.#starts = starts;
-    this.#domains = options.domains ?? [];
+    this.#domains = (options.domains ?? []).map(formOf);
     this.#facts = factsOf({ domains: this.#domains });
     this.#schema = options.schema;
     this.#memo = memoOf(expr);
@@ -2464,9 +2474,21 @@ class Printer {
     return e.kind === CELL_KIND && isCellRef(e.data) ? this.#sheet?.lists.get(e.data.column) : undefined;
   }
 
+  /**
+   * This method gives the code of a literal. A value of a domain with a module form is an object of plain data, with the
+   * kind of its domain (COMPILE.MODULE.FORM). Such a value is a constant of the run, so it gets a variable.
+   */
+  #literal(value: unknown): Value {
+    for (const d of this.#domains) {
+      const data = d.moduleForm?.literal?.(value);
+      if (data !== undefined) return { code: `({ ${Object.entries(data).map(([k, x]) => `${k}: ${literal(x).code}`).join(", ")} })`, kind: kindOfDomain(d), safe: true, deps: NO_DEPS };
+    }
+    return literal(value);
+  }
+
   /** This method prints a list literal (LIST.LITERAL) as an array of pairs of a key and a value. An error item holds the sentinel. */
   #listLiteral(l: VexList): Code {
-    const values = l.items.map((it) => (it.result.ok ? literal(it.result.value) : undefined));
+    const values = l.items.map((it) => (it.result.ok ? this.#literal(it.result.value) : undefined));
     const kinds = values.flatMap((x) => (x === undefined ? [] : [x.kind]));
     const code = `[${l.items.map((it, i) => `[${JSON.stringify(it.key)}, ${values[i]?.code ?? "E"}]`).join(", ")}]`;
     const has = l.items.length > 0;
@@ -2599,7 +2621,7 @@ class Printer {
   #node(e: Expr, ctx: Ctx): Code {
     switch (e.tag) {
       case "lit":
-        return isVexList(e.value) ? this.#listLiteral(e.value) : bare(literal(e.value));
+        return isVexList(e.value) ? this.#listLiteral(e.value) : bare(this.#literal(e.value));
       case "ref":
         return this.#ref(e, ctx);
       case "var":

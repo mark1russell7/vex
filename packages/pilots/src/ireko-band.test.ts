@@ -1,5 +1,6 @@
 import { app, axes, each, evaluate, fold, index, let_, lit, rec, ref, space, v, type Expr } from "@mark1russell7/vex";
 import { emitModule, type ModuleOptions } from "@mark1russell7/vex-compiler/module";
+import { XYDomain } from "@mark1russell7/vex-domains";
 import { checkLaws } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -86,8 +87,8 @@ const ROWS: readonly Row[] = [
 const copyOf = (rows: readonly Row[]): Row[] => rows.map((r) => ({ ...r, b: { ...r.b } }));
 
 /** This function gives the run of the standalone module of a program. */
-function moduleOf(e: Expr): Loaded {
-  const m = emitModule(e, OPTIONS);
+function moduleOf(e: Expr, options: ModuleOptions = OPTIONS): Loaded {
+  const m = emitModule(e, options);
   if (!m.ok) throw new Error(m.reason);
   expect(m.source).not.toContain("import");
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
@@ -188,6 +189,12 @@ describe("the band domain of ireko", () => {
     for (const bad of [{ from: 0, to: 1, min: 0 }, { from: 0, to: 1, min: 0, max: "1" }, { from: 0, to: 1, min: 0, max: 1, extra: 2 }, [0, 1, 0, 1], null]) {
       expect(() => m.run([{ ...ROWS[0], b: bad }], { gap: 0 })).toThrow(m.VexContractError);
     }
+  });
+
+  it("KIND.FIELDS: a module takes BandDomain and XYDomain, because each domain declares its fields", () => {
+    const sum = op("add", op("from", op("band", lit(2), lit(3), lit(0), lit(1))), op("x", op("xy", lit(1), lit(5))));
+    const m = moduleOf(sum, { ...OPTIONS, domains: [...BAND_DOMAINS, XYDomain] });
+    expect(m.run(copyOf(ROWS), { gap: 0 })).toStrictEqual(ROWS.map(() => 3));
   });
 
   it("gives the arithmetic of the shapes code of ireko", () => {

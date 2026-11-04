@@ -250,12 +250,12 @@ describe("indexOf and fill", () => {
 });
 
 describe("the stack of a layout", () => {
-  // The study of Graph: bounds (300, 220), the gap 10 and the fractions 0.2, 0.3 and 0.5, on the vertical axis.
+  // A stack of three slots: bounds (300, 220), the gap 10 and the fractions 0.2, 0.3 and 0.5, on the vertical axis.
   const stack = space.array([{ key: "head" }, { key: "body" }, { key: "foot" }, { key: "side" }]);
   const vars = { fr: FR, keys: ["head", "body", "foot"], height: 220, gap: 10 };
   // The length of the axis without the gaps: 220 - 10 * (3 - 1) = 200.
   const total = app("subtract", v("height"), app("multiply", v("gap"), app("max", lit(0), app("subtract", app("count", fr), lit(1)))));
-  // The cursor of the stack: for each fraction before the slot, max(0, f) * total + gap, in the order of the code of Graph.
+  // The cursor of the stack: for each fraction before the slot, max(0, f) * total + gap, in the order of the slots.
   const offset = fold(axes.list(app("take", fr, v("s"))), { i: lit(0), at: lit(0) }, { i: app("add", v("i"), lit(1)), at: app("add", v("at"), app("add", app("multiply", app("max", lit(0), app("nth", fr, v("i"))), v("total")), v("gap"))) }, v("at"));
   const span = app("multiply", app("max", lit(0), app("nth", fr, v("s"))), v("total"));
   const slot = app("indexOf", v("keys"), ref("key"));

@@ -140,6 +140,8 @@ The signal stays `FALLBACK`. The generated code puts the lazy error in a slot of
 
 **A context that drops the error.** An item of a list op and the first argument of `ifError` drop the error, so their checks keep nothing. A binding of `let` keeps its error in the local of its value. Only a failure writes there, and a read of the name tests the flag of the binding.
 
+**A request for tier 1.** A failed check tells one of two things. An error of the program is a failure of the block, so a context that drops the error catches it. A request for tier 1 is no error, so no context can catch it. Such a check has the failure `STOP` in each block (`#decide`). V-071 records the defect of the first design: an empty `reduce` was a check of the first kind, so `ifError(reduce(empty, "add"), -1)` gave -1.
+
 **`#ARGS`.** The interpreter evaluates each argument, also after an error (`#all`). Two errors give `#ARGS`. The value path has no flags for this. Each argument has a block for its failure, and the code after this block is a copy of the next argument that can fail. Thus a failure jumps to the copies of the later arguments, and each argument evaluates once. The order of evaluation is the order of the interpreter, and no extension runs twice.
 
 A copy can read flags, because the value path does not read a copy (`#collect`). So a node in a copy adds no other copy. The size of the code grows with the depth of the failing nodes, not with the number of their paths. `MAX_COPIED` limits the nodes of the copies. Past the limit, a node with two arguments that can fail keeps no error, and tier 1 gives its result. `MAX_CHAINED` limits the arguments of a chain in the same way, because each argument that can fail adds a level of blocks.
@@ -154,7 +156,8 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 - An error of an item that a list op on a list value gives with `strict`, and `#DEPTH!` of such an op (the next paragraph).
 - A list op on an array (V-064).
 - A failed kind check of a schema, because it is no error of the interpreter.
-- `reduce` on an empty list, because the result can be the identity of the op.
+- `reduce` on an empty list, where the result can be the identity of the op. A call cannot give an identity if its op has a literal name, the call has no options, and the identities are not exactly one. For such a call, the check is an error of the program, and a context can drop it.
+- A failed test of a data limit, where a test can use an extension. The interpreter evaluates each test, so `#DEPTH!` of a later test comes first.
 - An op that fails in a list op, where the list can use an extension or the option `strict` is set. The interpreter makes each item first, so an earlier error item or `#DEPTH!` can come first.
 - A failed argument of a list op after its list, because the interpreter evaluates the list first.
 - An exception of a getter of a record.
@@ -197,6 +200,16 @@ Generated code makes no trace. `explain` always operates in tier 0, so the quest
 A module of the build can operate without the interpreter. Then a failed check throws a `VexContractError` that names the check, because no fallback exists.
 
 A host that guarantees the kinds of its input uses standalone modules. ireko gives its strategies only finite numbers and plain rectangles. Thus ireko uses them. A module with the fallback imports the interpreter.
+
+A declaration `returns` tells the kind of each value of an op. An op with a declaration can also give `undefined`, `null` or a number that is not finite. The interpreter gives an error for each of these results (CALL.RESULT), and the law checker takes them. Thus a kind does not replace this check (COMPILE.MODULE.RESULT, V-070). The module prints `k_value` around such an op, with these exceptions:
+
+- The check of a number finds each such result.
+- A check `valid` that refuses each such result needs no other check. The printer starts the check on these five values at the time of the build.
+- The text of an op can prove a value. The proof reads the expression body of an arrow function. A comparison, a negation, `&&` and `||` of these and an object literal are proofs. A quote, a regular expression and a comment stop the proof, because they can hide a bracket.
+
+The ops of a band are such proofs, so the shapes module of ireko has no new check. An inline form with the check is not safe, so a loop over it keeps its `try`. A search (COMPILE.MODULE.SCAN) reads a test of a key with no check, so a test without a proof does not use the search.
+
+An op with a value of another kind breaks KIND.RETURNS, and the law checker refuses it. A module has no tier 1, so it does not find such a value.
 
 A standalone module gives each list of its input and of its result as a `vex.list`. With the option `lists: "plain"`, these lists are plain arrays, with `VEX_ERROR` for an error item (COMPILE.MODULE.LIST.PLAIN, §13.3).
 
@@ -244,7 +257,7 @@ A run knows which cell reads which cell. After a change of one record, only the 
 
 ### 7.6 Fusion of list ops
 
-This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 7 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT). The seventh step gives one frozen `vex.list` for each run (COMPILE.MODULE.FUSE.OUT).
+This section is the design of the roadmap item COMPILE-FUSE (`REVIEW.md` §11). Steps 1 to 8 are done. They are the option `fuse` (COMPILE.MODULE.FUSE.OFF), the facts of the lists (COMPILE.MODULE.FUSE.FACTS) and the clean form (COMPILE.MODULE.FUSE.CLEAN). The fourth step fuses `flat` over `each` (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). The fifth step fuses the chains of `append`, and `sortBy` sorts a fresh array in place (COMPILE.MODULE.FUSE). The sixth step lets `AO` take a fresh first list (COMPILE.MODULE.FUSE.ADOPT). The seventh step gives one frozen `vex.list` for each run (COMPILE.MODULE.FUSE.OUT). The eighth step gives a small sort in place an insertion sort (COMPILE.MODULE.FUSE.SORT).
 
 The test `spec-coverage.test.ts` fails for each ID of `spec/README.md` without a test. Thus an ID stayed in this section until its test existed. Then it moved to the spec.
 
@@ -361,10 +374,11 @@ The clean form does not move a part of the code. Thus each part evaluates in the
 - One loop for each source, and one output array for each sink. A fused chain uses no `FI`, `AP`, `FL` or `V`.
 - `fill(1, v)` in a stage prints one push of `[0, v]`. `fill(n, v)` with a computed count prints the check of `FI` and a loop.
 - An append of several parts pushes each part into one output, in order. A part that is a source prints a loop that pushes its items.
-- `sortBy` with `by` collects the pairs of the item and its sort value in the loop of the stage before it. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
+- `sortBy` with `by` collects the items in the loop of the stage before it. `SKI` keeps the sort values in an array of their own, so it makes no pair for an item. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
 - `LO` of a fused chain makes the items of the `vex.list` in the loop.
 - **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it. An append of `fill(1, x)` into that array pushes the item directly. The rules of the adoption follow this list.
 - **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LS` for each run. Each key gets that object. The printer tests the levels of the value: a value with no levels reads no key. The `L` of the envelope evaluates on the first read, so a run with no keys makes no envelope. An error stays the error of each key. `LS` and `LSC` give a frozen list, because the keys share the object. They keep no object on the array. `LO` and `LOC` give a list of one key, and they print no freeze. Thus a module with no shared list has no freeze of a list.
+- **The cheap sort (COMPILE.MODULE.FUSE.SORT).** `SBI` and `SKI` use an insertion sort for a list of 64 items or fewer, and they call no comparator function. The test `>` moves an item only past a larger value, so equal values keep their order. A longer list uses the stable sort of the engine. `SKI` sorts an array of indices by the sort values, and then reads the items from a copy. The check of the kinds of the sort values comes before each of the two sorts. The limit counts the items at the sort, because a fresh list has no error items. Only the sort in place changes. `SB`, `SK`, `SBC` and `SKC` keep the sort of the engine.
 - The fused code uses no new global, so the test of `MODULE_GLOBALS` (V-060) does not change. It makes no own property on an array.
 
 #### The rules of the adoption
@@ -452,7 +466,7 @@ With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_dom
 
 #### Requirement IDs
 
-`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6, and `COMPILE.MODULE.FUSE.OUT` moved with step 7. Step 7 added the frozen form of a shared list to `COMPILE.MODULE.LIST.RESULT`.
+`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6, and `COMPILE.MODULE.FUSE.OUT` moved with step 7. Step 7 added the frozen form of a shared list to `COMPILE.MODULE.LIST.RESULT`. `COMPILE.MODULE.FUSE.SORT` moved with step 8.
 
 #### Measure before a release
 
@@ -475,7 +489,8 @@ Each step is one pull request. P17 and the golden files check each step, and the
 5. Fuse the chains of `append`, and make `sortBy` a sink. Done. A chain fuses only when a part pushes its items, because a copy loop costs more than `concat`. In a sheet with a search, a chain that reads a cell keeps its arrays. The interpreter reads each cell of an append also after an error, and the fused chain stops at the first error.
 6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT). Done. A literal is not fresh, so a loop that starts with the empty literal keeps its first copy. That copy has no items, so its cost is small. Then an append of `fill(1, x)` into the array pushes its item directly, with no `FI` and no `AOC`.
 7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions). Done. Only a list that one object serves to more than one key is frozen, with its array of items and its nested lists. The helpers `LS` and `LSC` print this form. Each other list of a result is not frozen, as in version 0.17.2. These lists are a value that reads a key, a column of lists of a sheet and each list of a module of `fuse` false. Thus the option `fuse` changes the frozen state of a list that reads no key, and it changes no value. With `fuse` false, each key keeps its own envelope, so a bench can compare the two forms. A plain array stays one array for each key, and it is not frozen. The decision covers only the `vex.list`, and a host can change an array. A column of a sheet keeps one list for each cell, so no two keys share a list, and the list is not frozen. A list in an argument or in a field stays frozen (`LV`, `LVC`), as in version 0.17.2 (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). The array keeps that object, so more than one key can read it.
-8. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
+8. Make the sort in place cheap for small lists (COMPILE.MODULE.FUSE.SORT). Done. A list of 64 items or fewer gets an insertion sort, with the results of the interpreter. This step has no bench result, so it claims no speed gain.
+9. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
 
 These golden files change. The files in `packages/core/src/__golden__` do not change, because they are the IR and the traces of tier 1:
 
@@ -487,6 +502,7 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
 | 5 | `module-fuse.js`. The programs of the other files have no chain of `append` with a part that pushes. |
 | 6 | `module-fuse.js`, also for the direct push. The loops of the other files start with a literal, a name or a list of the input, so they do not take their first lists. |
 | 7 | `module-fuse.js`, the one golden file of a module whose value is a list. The two hashes of the modules of `fuse` false in the tests change only by the text of `LO`. |
+| 8 | `module-fuse.js` and `module-plain.js`, only by the text of `SKI`. No other golden file prints `SBI` or `SKI`. The two hashes of the modules of `fuse` false do not change. |
 
 #### Open questions
 
@@ -653,7 +669,7 @@ The decisions of the third block:
 - A key of a module list is a number for the position of a record, or a text for a key of a literal. `get` and `without` compare the text of each key. Thus a read of the focus stays fast.
 - `get` keeps an index of the keys on the array of the list. The array does not change after the op that makes it. Thus a step that reads each key of a list of `n` items costs O(n), as in the interpreter.
 - A list op over a `let` with literal options is the list op over the body of the `let`. A builder sheet prints `sum(let($0 = 0, each(…)))`. Thus the `each` stays one loop with a running value.
-- The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus an op on a `get` of a name whose first list is empty gives a reason.
+- The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus the step of the name decides that kind (COMPILE.MODULE.LOOP.EMPTY). When no step decides it, an op on a `get` of the name gives a reason.
 - The focus of the axis `list` is the position of a record. A key of a literal is not such a position. Since COMPILE.MODULE.FILL, the axis `list` over such keys gives a reason only when it reads a record at a target.
 - Since 2026-10-27, a loop over the axis `list` can name its items with `as` (COMPILE.MODULE.LIST.ITEM, §13.3, "The names of the items").
 - Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list gives a reason. Since 2026-10-26, the value of a program and the branches of `if` and `ifError` can be lists ("Lists in cells" below). Since 2026-10-26, a module has graph spaces and `reduce`, so the force pilot is a module ("Graph spaces and reduce" below).
@@ -1150,6 +1166,8 @@ A module also has `reduce` with the op of a domain (COMPILE.MODULE.REDUCE). The 
 - No items give the identity of the op in the one domain that has one, or in the domain of the option `domain`. The module copies the identity. Another case gives the error of Vex, as in the interpreter.
 - An error item is skipped (LIST.LENIENT), and the option `strict` gives the error. A name of the op that is not a literal text gives a reason.
 
+Two domains of plain objects share a module when each declares `fields` (KIND.FIELDS). Without this declaration, the compiler cannot prove that one domain refuses the values of the other. The law checker tests each declaration, so a false claim fails a test. A number at a lifted position goes through a copy of `fromScalar` (KIND.LIFT). `InsetsDomain` uses both. Tier 2 keeps the dispatch of the runtime for this site, because its kinds are primitive.
+
 The ops of `Vec2Domain` are methods of a class, so a module cannot copy them. Thus `forceProgram` of the pilot uses `XYDomain`, the plain data with the same arithmetic. It uses `dot(gap, gap)` in place of `lengthSq`, which gives the same bits. A list was not a value of a module, so the program gives the last position of each node with `get(…, id)`. The list of the loop is a constant of the run, so the run computes it once.
 
 A property compares random programs over random graphs with the interpreter (P17). The graphs have cycles, edges to their own record and two edges to one record. The programs read each axis of a graph, also in the reverse order and from an address, and `reduce` with each option. The force pilot compares the module with `layoutReference` on random graphs, with the same bits. The text of a module of a graph is in the golden file `__golden__/module-graph.js`.
@@ -1326,7 +1344,7 @@ The measure pass of ireko gives a shape to each subtree that a tidy strategy rea
 
 The merge is a chain of folds over lists. It gives the ends of the valid bands, sorts them and removes the repeated cuts. Then it gives one band for each cut with an active band, and it joins neighbor bands with the same interval. Last, it halves the list until the limit holds. The comparisons keep the first of two equal values, as the comparisons of ireko do. Thus a negative zero has the bits of ireko.
 
-A name of a loop whose first value is the empty literal has no kind of items. Then `sortBy` gives the reason "the kinds of the items of "sortBy" do not decide the op "from" of the option by". The program starts each such name with `fill(0, value)`, an empty list whose items have the kind of the value. `fill(1, value)` makes the list of one value (COMPILE.MODULE.FILL). Before, the axis `window(0, 0)` made it.
+The printer takes the kind of the items of a name that starts with the empty literal from the step of the name (COMPILE.MODULE.LOOP.EMPTY). The program keeps `fill(0, value)` as its first list, because this first list is fresh, so the steps of the name push in place (COMPILE.MODULE.FUSE.ADOPT). With the empty literal, six appends of `NODE_SHAPE` copy their lists in each step, and the module of the sheet gets more bytes after gzip. `fill(0, value)` is an empty list whose items have the kind of the value. `fill(1, value)` makes the list of one value (COMPILE.MODULE.FILL). Before, the axis `window(0, 0)` made it.
 
 The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`. Before COMPILE.MODULE.APPEND.OWN, each step copied the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
 
@@ -1409,6 +1427,37 @@ The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 %
 In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out[o] = LPC(G(c136()), 1)` replaces the read `out[o] = G(c137())` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12520 bytes, and the default module has 13209 bytes. The golden file `module-plain.js` keeps its text.
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
+
+#### Names that start empty (COMPILE.MODULE.LOOP.EMPTY)
+
+The printer prints the first value of a name before its step, and the empty literal has no kind of items. A program with `sortBy` and the option `by` over such a name needs that kind. Thus the printer can print a program more than one time.
+
+1. The first print uses the facts of the first lists. A program that it can print keeps this text, so its size and its speed do not change.
+2. After a reason, searches start. In a search, a name that starts empty counts as an empty list, because an empty list fits each list. Thus the list of the step shows the kind of the items. The search keeps this kind, by the expression of the step.
+3. A later search uses the kinds that it has, so a step can take the kind of another such name. The searches stop when one finds no new kind.
+4. In a search, a part that the printer cannot print gives an empty list. For example, a filter of the name reads the items, and an `append` adds items of the kind. The search keeps no text.
+5. The last print gives each such name its kind. The check `fits` of each step proves the kind by induction: the first list has no items, and each step gives items of the kind. A step with another kind gives the reason that the list does not fit.
+
+A program that no step decides gets the reason of its first print. A name that holds its first list in each step gives no kind, and two kinds in one step give no kind. A read of the items in a search does not decide a kind, so a step that only reads its own items stays refused.
+
+The test `module-empty-start.test.ts` compares these modules with the interpreter, with and without fusion (P17). It also pins each case that stays refused.
+
+#### The keys of the records (COMPILE.MODULE.KEYS)
+
+In a module, the key of a record is the text of its position. A host keys its nodes by its own ids. Thus `get(list, id)` found an item only when each id was that text. The interpreter reads the keys from its space, so the option `keys` gives the keys to the run.
+
+- With `keys: true`, the run takes an array of texts as its last argument, after the parents or the edges. Each record has one text, and the texts are different. The helper `KC` checks them and makes a map of each key to its position.
+- A pair of a list holds the key of its record, not its position. `GT`, `WO` and `LO` read a pair as text, so these helpers have no change. A key of a literal and of `fill` stays that key. Thus `fill(1, x)` keeps its key `"0"`, also when the record at the position 0 has another key.
+- The axis `list` over a list of records reads the position of each key from the map. A list with keys of a literal or of `fill` keeps its target, as before.
+- The move `key` reads the map with the helper `KP`. A value that is not a key of the space fails, as NAV.KEY tells.
+- The printer prints each program one time. A print with no read of a key is the module. Thus its text is the text without the option, and the run ignores its last argument. A read of a key is `get`, `without`, a `vex.list` of a result, a field or an argument, and the move `key`. After a read, the printer prints the program again with the keys. The second print adds the argument only when a pair or a move uses the keys.
+- The reference of an array space with keys is a record space, and a record space has no offsets. Thus an offset or the axis `window` in such a print gives a reason. A tree and a graph keep their moves. A program that reads no key keeps its offsets, because its results do not depend on the keys.
+- A formula of a cell has its key at the time of the build, and the keys come at the time of the run. Thus `keys` with `cells` gives a reason.
+- With `lists: "plain"`, a list of the input keeps the text of each position, and the result has no keys. Thus only `get`, `without` and the moves read the keys there.
+
+The order of the keys is the order of the records. `Object.entries` puts a key that is a whole number first. Thus a test with such keys needs a space that keeps its order.
+
+The test `module-keys.test.ts` compares each form with the interpreter over a space with the same keys (P17). It also pins the text of the programs that read no key.
 
 #### The names of the items (COMPILE.MODULE.LIST.ITEM)
 

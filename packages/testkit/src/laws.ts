@@ -2,7 +2,7 @@
  * The law checker. A domain declares laws for its ops (`commutative`, `associative`, `idempotent`, and an
  * `identity`). The law checker turns each claim into a fast-check property. A false claim gives a
  * counterexample. It also checks the kinds that a domain declares for a compiler. These are the primitive type of its
- * values (KIND.PRIMITIVE) and the kind of the result of each op (KIND.RETURNS).
+ * values (KIND.PRIMITIVE), its field names (KIND.FIELDS) and the kind of the result of each op (KIND.RETURNS).
  */
 import { resolveOp, type AnyDomain, type Law, type OpSpec, type ParamKind, type ReturnKind } from "@mark1russell7/vex";
 import * as fc from "fast-check";
@@ -136,6 +136,14 @@ function returnsProperty<D>(domain: AnyDomain, name: string, spec: OpSpec<unknow
   );
 }
 
+/** This function tells if a value is a plain object with exactly the field names `fields`. */
+function hasFields(u: unknown, fields: readonly string[]): boolean {
+  if (typeof u !== "object" || u === null) return false;
+  const proto: unknown = Object.getPrototypeOf(u);
+  const keys = Object.keys(u);
+  return (proto === Object.prototype || proto === null) && keys.length === fields.length && fields.every((name) => keys.includes(name));
+}
+
 /** This function gives one property for each law that the ops of `domain` declare. */
 export function lawProperties<D>(domain: AnyDomain, opts: LawOptions<D>): readonly LawProperty[] {
   const eq = opts.eq ?? structuralEqual;
@@ -145,6 +153,14 @@ export function lawProperties<D>(domain: AnyDomain, opts: LawOptions<D>): readon
     // The domain accepts each value of its type, and no other value: also the values of the domain arbitrary.
     const values = fc.oneof(fc.anything(), opts.arb, fc.double(), fc.string({ maxLength: 4 }), fc.boolean());
     out.push(lawProperty(`${domain.name} primitive ${primitive}`, fc.property(values, (u) => domain.is(u) === (typeof u === primitive))));
+  }
+  const fields = domain.fields;
+  if (fields !== undefined) {
+    // The domain accepts its values, and each value that it accepts has the fields. The extra forms are near misses.
+    const extra = opts.arb.map((a) => ({ ...a, more: 1 }));
+    const inherited = opts.arb.map((a) => Object.assign(Object.create({ inherited: 1 }) as object, a));
+    const values = fc.oneof(fc.anything(), opts.arb, extra, inherited);
+    out.push(lawProperty(`${domain.name} fields ${fields.join(" ")}`, fc.property(values, (u) => !domain.is(u) || hasFields(u, fields))));
   }
   for (const name of Object.keys(domain.ops)) {
     // An entry of the op table can be undefined. It declares nothing.

@@ -13,6 +13,7 @@ function X(t, n) { return t >= 0 && t < n ? t : F(); }
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 const op_2_2 = (a) => a.length;
 const op_2_3 = (a) => a.toUpperCase();
+const k_value = (x) => (x === undefined || x === null || (typeof x === "number" && !Number.isFinite(x)) ? F() : x);
 export function run(records, vars) {
   if (!Array.isArray(records)) C("the records are not an array");
   const R = records;
@@ -216,7 +217,7 @@ export function run(records, vars) {
       } catch {
         b38 = E;
       }
-      out[o] = ({ "lit": c39, "refs": ({ "origin": R[o]["n"], "prev": t0, "k1": c11, "k12": c12, "k01": c13, "i0": c14, "neg": c15, "frac": c16, "half": t7, "two": t8, "other": t9, "parent": c17 }), "ops": ({ "inline": t18, "cmp": ((R[o]["n"]) > (v0)), "called": k_number(op_2_2(R[o]["s"])), "upper": op_2_3(R[o]["s"]), "bad": t19, "badEq": t20, "clamp": t21, "neg": k_number(-(R[o]["n"])) }), "consts": G(c40), "ifs": ({ "plain": (R[o]["b"] ? R[o]["n"] : R[o]["w"]), "stmts": t25, "unknown": (R[o]["b"] ? 1 : 2), "nb": t26 }), "andOr": ({ "and": (R[o]["b"] && ((R[o]["n"]) > (0))), "or": t28, "and3": t30, "nb": t31 }), "ifError": ({ "safe": R[o]["n"], "unsafe": t32 }), "lets": ({ "k": G(c33), "z": t37 }), "unused": 1 });
+      out[o] = ({ "lit": c39, "refs": ({ "origin": R[o]["n"], "prev": t0, "k1": c11, "k12": c12, "k01": c13, "i0": c14, "neg": c15, "frac": c16, "half": t7, "two": t8, "other": t9, "parent": c17 }), "ops": ({ "inline": t18, "cmp": ((R[o]["n"]) > (v0)), "called": k_number(op_2_2(R[o]["s"])), "upper": k_value(op_2_3(R[o]["s"])), "bad": t19, "badEq": t20, "clamp": t21, "neg": k_number(-(R[o]["n"])) }), "consts": G(c40), "ifs": ({ "plain": (R[o]["b"] ? R[o]["n"] : R[o]["w"]), "stmts": t25, "unknown": (R[o]["b"] ? 1 : 2), "nb": t26 }), "andOr": ({ "and": (R[o]["b"] && ((R[o]["n"]) > (0))), "or": t28, "and3": t30, "nb": t31 }), "ifError": ({ "safe": R[o]["n"], "unsafe": t32 }), "lets": ({ "k": G(c33), "z": t37 }), "unused": 1 });
     } catch {
       out[o] = VEX_ERROR;
     }

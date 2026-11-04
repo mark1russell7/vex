@@ -48,6 +48,9 @@ The four packages `vex`, `vex-domains`, `vex-testkit` and `vex-compiler` have on
 | The schema program of JSON documents in `vex-domains`: `SCHEMA_PROGRAM`, `SCHEMA_DOMAINS`, `schemaOf(docs)` and the type `JsonFieldSchema` | 0.17.0 |
 | A standalone module does not copy a list without error items before a list op reads it (a list op costs less, the values do not change). 0.17.1 was slower, so use 0.17.2 or later | 0.17.2 |
 | The limit of `iterate` from the size of the data (step B): `dataLimit(axis)`, or a list chain as the limit in the builder | the next release |
+| `InsetsDomain` and `insets`: the four sides of an inset as plain data. A number lifts to four sides, also in a module | the next release |
+| The declaration `fields` of a domain, so two domains of plain objects can share a module | the next release |
+| `sign` of `NumDomain`, and `sign` and `minAxis` of `Vec2Domain` and `XYDomain`, for a push along the smallest axis | the next release |
 | The fixed-point column (step B): `fix(name, join, init, step)` and `last(name)`, the check `monotoneError`, and `monotone` on an op or a function of the host. It is in the interpreter and the reference tier | the next release |
 | The builder method `fix(name, join, init, step)`, with the kind of the chain from the join and the type `FixValue`. The step gets a chain of the last round | the next release |
 

@@ -16,6 +16,8 @@
  * | `each` | `{ "type": "each", "value": { "axis", "as"?, "body", "at"? } }` |
  * | `fold` | `{ "type": "fold", "value": { "axis", "as"?, "init", "step", "result", "at"? } }` |
  * | `iterate` | `{ "type": "iterate", "value": { "limit", "init", "step", "until"?, "result" } }`. A data limit is `{ "type": "size", "value": { "axis" } }`. |
+ * | `fix` | `{ "type": "fix", "value": { "name", "join", "init", "step" } }` |
+ * | `last` | `{ "type": "last", "value": name }` |
  * | `ext` | `{ "type": ["ext", ...keys], "value": data }` |
  * | a move | `{ "type": ["moves", kind], "value": v }` |
  * | an axis | `{ "type": ["axes", name], "value": { ...parameters } }` |
@@ -32,7 +34,7 @@ import { check, isEnvelope, typeName, typePath, type Envelope, type Issue, type 
 import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { isStackOverflow, vexError, type VexError } from "./errors.ts";
-import { app, call, dataLimit, each, ext, fn, fold, index, iterate, key, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Addr, type Axis, type DataLimit, type Expr, type ItemNames, type Move, type Names } from "./ir.ts";
+import { app, call, dataLimit, each, ext, fix, fn, fold, index, iterate, key, last, let_, lit, offset, origin, other, parent, rec, ref, shapeError, v, type Addr, type Axis, type DataLimit, type Expr, type FixJoin, type ItemNames, type Move, type Names } from "./ir.ts";
 import { MAX_DOCUMENT_DEPTH, TERM_KINDS, vexChecker } from "./kernel.ts";
 import { fail, ok, type Result } from "./result.ts";
 import { itemNamesError } from "./item-names.ts";
@@ -183,6 +185,11 @@ class Reader {
         const as = this.#items(f, axis, at);
         return fold(axis, init, step, this.term(f["result"], into(at, "result")), this.#address(f["at"], into(at, "at")), as);
       }
+      case "fix":
+        // The contract gives the name and one of the joins (DOC.CONSTRUCT).
+        return fix(f["name"] as string, f["join"] as FixJoin, this.term(f["init"], into(at, "init")), this.term(f["step"], into(at, "step")));
+      case "last":
+        return last(u.value as string);
       default: {
         // iterate: the contract gives a whole number from 0 to MAX_ITERATIONS, or an envelope of a limit (ITERATE.LIMIT).
         const [init, step] = this.#loop(f, at);

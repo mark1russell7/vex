@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, monotoneError, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -799,22 +799,43 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   // The sort in place (COMPILE.MODULE.FUSE): a clean list that is fresh is its own sort buffer, so the sort makes no
   // copy. No other part holds the array, so a failure leaves no changed list that a part reads. The sort is stable.
+  // A list of 64 items or fewer gets an insertion sort (COMPILE.MODULE.FUSE.SORT), which calls no comparator function.
+  // Its test ">" moves an item only past a larger value, so equal values keep their order. A longer list gets the
+  // stable sort of the engine. The kinds of the sort values go through the same check before each of the two sorts.
   SBI: [
     "function SBI(l) {",
-    "  const t = l.length > 0 ? typeof l[0][1] : \"number\";",
-    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  return l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "  const n = l.length, t = n > 0 ? typeof l[0][1] : \"number\";",
+    "  for (let i = 0; i < n; i++) { const v = l[i][1]; if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F(); }",
+    "  if (n > 64) l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+    "  else for (let i = 1; i < n; i++) {",
+    "    const x = l[i], v = x[1];",
+    "    let j = i - 1;",
+    "    for (; j >= 0 && l[j][1] > v; j--) l[j + 1] = l[j];",
+    "    l[j + 1] = x;",
+    "  }",
+    "  return l;",
     "}",
   ].join("\n"),
-  // The option by: each slot of the array holds the pair of its item and its sort value, in order, during the sort.
+  // The option by: the array k holds the sort value of each item, so the sort makes no pair for an item. f runs once
+  // for each item, in order, and the array l does not change before the check of the sort values. A long list sorts an
+  // array of indices by k, and then reads the items from a copy of l.
   SKI: [
     "function SKI(l, f) {",
-    "  const n = l.length;",
-    "  for (let i = 0; i < n; i++) l[i] = [l[i], f(l[i][1])];",
-    "  const t = n > 0 ? typeof l[0][1] : \"number\";",
-    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
-    "  for (let i = 0; i < n; i++) l[i] = l[i][0];",
+    "  const n = l.length, k = new Array(n);",
+    "  for (let i = 0; i < n; i++) k[i] = f(l[i][1]);",
+    "  const t = n > 0 ? typeof k[0] : \"number\";",
+    "  for (const v of k) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+    "  if (n > 64) {",
+    "    const o = new Array(n), c = l.slice();",
+    "    for (let i = 0; i < n; i++) o[i] = i;",
+    "    o.sort((a, b) => (k[a] < k[b] ? -1 : k[a] > k[b] ? 1 : 0));",
+    "    for (let i = 0; i < n; i++) l[i] = c[o[i]];",
+    "  } else for (let i = 1; i < n; i++) {",
+    "    const v = k[i], x = l[i];",
+    "    let j = i - 1;",
+    "    for (; j >= 0 && k[j] > v; j--) { k[j + 1] = k[j]; l[j + 1] = l[j]; }",
+    "    k[j + 1] = v; l[j + 1] = x;",
+    "  }",
     "  return l;",
     "}",
   ].join("\n"),
@@ -1249,6 +1270,10 @@ function listy(e: Expr, scope: ListScope): boolean {
     case "fold":
     case "iterate":
       return listy(e.result, scopeIn(e.init, scope));
+    // A module has no `fix`, and a column gives a boolean or a number (COMPILE.FIX).
+    case "fix":
+    case "last":
+      return false;
     case "ext":
       return scope.cell(e);
     case "ref":
@@ -1380,7 +1405,9 @@ function cleanForm(e: Expr, fact: (name: string) => boolean): boolean {
     case "call":
     case "each":
     case "ext":
+    case "fix":
     case "fn":
+    case "last":
     case "rec":
     case "ref":
     // Stryker restore StringLiteral,ConditionalExpression
@@ -1407,6 +1434,11 @@ function refsOf(e: Expr, name: string): number {
       return refsIn(Object.values(e.bind), name) + (name in e.bind ? 0 : refsOf(e.body, name));
     case "fn":
       return e.params.includes(name) ? 0 : again(refsOf(e.body, name));
+    // A module has no `fix`. The printer gives the reason (COMPILE.FIX).
+    case "fix":
+      return refsOf(e.init, name) + again(refsOf(e.step, name));
+    case "last":
+      return 0;
     case "each": {
       // Only the body sees the names of the items (AXIS.LIST.SCOPE). The tests of the axis evaluate for each item.
       const list = listOf(e.axis);
@@ -1487,6 +1519,8 @@ function readCounts(root: Expr): ReadonlyMap<Expr, number> {
       case "each":
       // Stryker disable next-line StringLiteral: an extension has no children.
       case "ext":
+      case "fix":
+      case "last":
       case "fn":
       // Stryker disable next-line StringLiteral: a literal has no children.
       case "lit":
@@ -2505,6 +2539,10 @@ class Printer {
         return this.#fold(e, ctx);
       case "iterate":
         return this.#iterate(e, ctx);
+      case "fix":
+      case "last":
+        // COMPILE.FIX: a module refuses a fixed point with a reason. Tier 1 and the kernel run it.
+        throw new NotStandalone('a fixed point ("fix"), which a module does not have yet');
       case "ext":
         return this.#cell(e, ctx);
     }
@@ -4529,7 +4567,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
   // LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses. A program nested too deep fails in the printer.
-  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options));
+  const size = nestingOf(expr) > MAX_NESTING ? undefined : (sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options));
   if (size !== undefined) return { ok: false, reason: size };
   const p = new Printer(expr, options);
   let value: Code;
@@ -4606,7 +4644,7 @@ export function emitSheetModule(columns: ReadonlyMap<string, Expr>, options: She
   for (const f of formulas) {
     // EVAL.SHAPE: the printer gives the reason for an expression that is not valid.
     const shape = shapeError(f.expr);
-    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options));
+    const size = shape !== undefined || nestingOf(f.expr) > MAX_NESTING ? undefined : (sizeError(f.expr, options) ?? stepError(f.expr, options) ?? monotoneError(f.expr, options));
     const reason = shape ?? size;
     if (reason !== undefined) return { ok: false, reason: `${formulaText(f)}: ${reason}` };
   }

@@ -28,6 +28,7 @@ function opLine(d: AnyDomain, name: string, spec: OpSpec<unknown>): string {
   parts.push(spec.liftScalar === undefined ? "no lift" : `lift ${JSON.stringify(spec.liftScalar)}`);
   parts.push(spec.laws === undefined ? "no laws" : `laws [${spec.laws.join(", ")}]`);
   parts.push(spec.identity === undefined ? "no identity" : `identity ${shown(d, spec.identity())}`);
+  if (spec.monotone !== undefined) parts.push(`moves [${spec.monotone.join(", ")}]`);
   parts.push(spec.fn === undefined ? "method" : "fn");
   return parts.join(" | ");
 }

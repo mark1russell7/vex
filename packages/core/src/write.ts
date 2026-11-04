@@ -194,6 +194,13 @@ class Writer {
           },
         };
       }
+      case "fix":
+        return {
+          jobs: [term(e.init), term(e.step)],
+          make: (docs) => typed("fix", { name: e.name, join: e.join, init: docs[0] as Json, step: docs[1] as Json }),
+        };
+      case "last":
+        return { jobs: NONE, make: () => typed("last", e.name) };
       case "ext":
         return { jobs: NONE, make: () => typed(["ext", ...e.kind.split(".")], e.data as Json) };
     }

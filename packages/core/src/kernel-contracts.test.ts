@@ -302,7 +302,7 @@ describe("the rare paths of the machine (EVAL.REFERENCE)", () => {
 describe("the world of Vex (DOC.CHECK)", () => {
   it("DOC.CHECK: each kind of the world has a summary of one or more sentences", () => {
     const kinds = kindsOf(VEX_WORLD.kinds, "");
-    expect(kinds.length).toBe(35);
+    expect(kinds.length).toBe(37);
     for (const [name, kind] of kinds) expect([name, /^[A-Z].*\.$/.test(kind.summary ?? "")]).toEqual([name, true]);
   });
 

@@ -54,6 +54,14 @@ export const errorText = {
   untilKind: (value: unknown): ErrorText => ({ kind: "kind-mismatch", message: `the test "until" of "iterate" gave a ${typeof value}, not a boolean` }),
   /** The limit of `iterate` with a test that is not true. */
   limit: (limit: number): ErrorText => ({ kind: "limit", message: `"iterate" made its ${String(limit)} steps, and its test "until" is not true` }),
+  /** A value of a row of `fix` of the wrong kind for its join. */
+  fixKind: (name: string, join: string, kind: string, value: unknown): ErrorText => ({ kind: "kind-mismatch", message: `the "fix" "${name}" with the join "${join}" needs a ${kind}, not a ${describeType(value)}` }),
+  /** A value of a row of `fix` that is not a finite number. */
+  fixNumber: (name: string, value: unknown): ErrorText => ({ kind: "not-finite", message: `the "fix" "${name}" gave the value ${String(value)}, not a finite number` }),
+  /** The limit of the rounds of `fix`. */
+  fixLimit: (name: string, rounds: number): ErrorText => ({ kind: "limit", message: `the "fix" "${name}" made its ${String(rounds)} rounds, and its values still change` }),
+  /** A read of `last` at a key that is not a row. */
+  lastKey: (name: string, key: string): ErrorText => ({ kind: "unknown-key", message: `the "fix" "${name}" has no row "${key}"` }),
   /** The test of `where`, with a value that is not a boolean. */
   whereKind: (value: unknown): ErrorText => ({ kind: "kind-mismatch", message: `the test of "where" gave a ${typeof value}, not a boolean` }),
   /** A domain that accepts the receiver of an op and has no such op. */

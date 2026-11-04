@@ -57,6 +57,8 @@ An expression is plain JSON data. It has one of these kinds.
 | `each` | `axis`, `body`, `at`, `as` | a list: the body at each target of the axis, from the key of the address |
 | `fold` | `axis`, `init`, `step`, `result`, `at`, `as` | the result, after a step at each target of the axis |
 | `iterate` | `limit`, `init`, `step`, `until`, `result` | the result, after the steps |
+| `fix` | `name`, `join`, `init`, `step` | the row of the focus, after the rounds of a column (FIX.ROUNDS) |
+| `last` | `name` | the row of the focus, in the last round of the `fix` with the name (FIX.LAST) |
 | `ext` | `kind`, `data` | the value of an extension handler |
 
 - **[IR.JSON]** An expression gives the same expression after `serialize` and `parse`, if each literal is JSON data or a value of a domain. A domain value needs `encode` and `decode` in its domain. A domain value can be in a list or a record of a literal. A key `__proto__` of a record of a literal, of a `let` or of a `rec` is a key too.
@@ -82,6 +84,8 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 | `each` | `{ "type": "each", "value": { "axis", "as", "body", "at" } }` |
 | `fold` | `{ "type": "fold", "value": { "axis", "as", "init", "step", "result", "at" } }` |
 | `iterate` | `{ "type": "iterate", "value": { "limit", "init", "step", "until", "result" } }` |
+| `fix` | `{ "type": "fix", "value": { "name", "join", "init", "step" } }` |
+| `last` | `{ "type": "last", "value": name }` |
 | `ext` | `{ "type": ["ext", ...keys], "value": data }` |
 | a move | `{ "type": ["moves", kind], "value": v }` |
 | an axis | `{ "type": ["axes", name], "value": { ...parameters } }` |
@@ -93,7 +97,7 @@ Since decision D13 of coeval, the kernel is the core of Vex. It checks and analy
 - **[DOC.REF]** A reference is a path from a root. A reference from `self` has the moves of its address and then the segments of its path. A reference from `names` has one step: a name of a `let`, a function, a loop or the caller. Vex reads from no other root.
 - **[DOC.MOVE]** The value of the move `key` or `index` is a term. A text key and a number position are fixed. Another term is a computed key or position, for example a term in an envelope. A literal of another kind gives `#VALUE!` at run time (NAV.COMPUTED). The value of `offset` is the list of its numbers. The value of `other`, `origin` and `parent` is `null`.
 - **[DOC.ADDRESS]** The field `at` of `each` and `fold` is a reference from `self` with moves only. An empty address and no address are the same expression, and the document has no field `at` for them.
-- **[DOC.CONSTRUCT]** The constructs `let`, `fn`, `record`, `each`, `fold` and `iterate` have the fields of the table, and no other fields. Only `at`, `as` and `until` are optional. `as` is a list of one or two names. It needs the axis `list`, also inside `reverse` and `where`. Its two names are not the same, and a name of `init` is not a name of `as`. `limit` and `params` are data, not terms (DOC.LIMIT).
+- **[DOC.CONSTRUCT]** The constructs `let`, `fn`, `record`, `each`, `fold`, `iterate` and `fix` have the fields of the table, and no other fields. Only `at`, `as` and `until` are optional. `as` is a list of one or two names. It needs the axis `list`, also inside `reverse` and `where`. Its two names are not the same, and a name of `init` is not a name of `as`. `limit`, `params`, `name` and `join` are data, not terms (DOC.LIMIT). The value of `last` is the name of its `fix`.
 - **[DOC.LIMIT]** The field `limit` of `iterate` is a whole number, an envelope of the kind `limit` with a whole number, or an envelope `{ "type": "size", "value": { "axis" } }`. A data limit has the form `size`, and its axis has the form of DOC.AXIS. A number gives the bare number when it is written.
 - **[DOC.CALL]** The field `fn` of `call` is a reference to a name: `{ "type": "ref", "value": ["names", name] }`. Thus a call applies a function that a `let` binds.
 - **[DOC.AXIS]** The value of an axis is a record of its parameters, with the same names as the fields of the axis. An axis without parameters has the value `{}`. `list` and `test` are terms, and `axis` is an axis.
@@ -234,6 +238,22 @@ A step is a level of the power of the language. A host sets the highest step tha
 - **[STEP.CYCLE]** A cycle of cells without an explicit fixed point gives `#CYCLE!` at each step.
 - **[STEP.TOOLS]** `vex_check` gives the step of the program and the reason. `vex_explain` gives the step at the root, on the first line of the trace.
 
+### 5.9 Fixed points
+
+The node `fix` makes a column: one value for each row of the space. It repeats a step until no row changes. Each step moves each row one way, so the rounds stop, and the result does not depend on the order of the rows. The construct is of step B.
+
+- **[FIX.ROUNDS]** `init` evaluates at each row, and it gives round 0. Round `r` evaluates `step` at each row, and each read sees only round `r - 1`. The first round with no changed row ends the rounds. The value of the node is the row of the focus.
+- **[FIX.ROWS]** The rows are the keys of the space where the node evaluates. In a body of the axis `table`, they are the keys of that table. The focus of `init` and of `step` is the row. The origin stays the origin of the node, so a read of the origin gives one source for all the rows. `deps` gives the axis `all` around the reads of `init` and of `step`.
+- **[FIX.JOIN]** `join` is `or`, `and`, `max` or `min`. The next value of a row is the join of its old value and the value of `step`. The joins `or` and `max` move a row up. The joins `and` and `min` move a row down. Thus `join` declares the direction of the column.
+- **[FIX.KIND]** The values of `or` and `and` are booleans. The values of `max` and `min` are finite numbers. A value of another kind gives `#VALUE!`. A number that is not finite gives `#NUM!`.
+- **[FIX.LAST]** The node `last` gives the value of the focus in the last round of the `fix` with the name. The inner `fix` of a name hides an outer one. A `last` belongs in the `step` of a `fix` with its name. Each other `last` is not valid. The names of `fix` are not names of `let`, so `var` does not read a column. An axis moves the focus of a read. A focus that is not a row gives `#REF!`.
+- **[FIX.MONOTONE]** A program is valid only if the check proves that each `step` does not fall when the last round rises, for each join. A proof comes only from FIX.OPS and from these rules. The start `init` does not read the last round. `if` has a test that does not read the last round. A branch of `if`, an argument of `and`, `or` and `ifError`, a binding of `let` and a body of `each` can read it. The axis, the address and the tests of `each` do not read it, and the body of the axis `table` does not read it. Each other node with a part that reads the last round has no proof. These nodes are a record, a move of a reference, `fold`, `iterate`, a call, and a `fix` that reads an outer `fix`. `compile`, tier 2, `emitModule`, the kernel and `vex_check` refuse a program without a proof, and the reason names the part.
+- **[FIX.OPS]** An op has a direction for each argument as data, in the property `monotone` of its spec: `up` or `down`. A function of the host states it in the same property. The list ops `any`, `all`, `min` and `max` have `up` for the list, and `none` has `down`. The first argument of an op that reads the last round has a known kind, because the kind selects the op. An op without a rule cannot take a value that reads the last round. The direction of an op is a law. The op does not fall when an `up` argument rises. It does not rise when a `down` argument rises.
+- **[FIX.LIMIT]** A column of `n` rows makes `n + 1` rounds at most, and 100000 at most. A boolean column stops in this limit. A number column stops in it when its steps follow paths, because a path has fewer rows than the column. A column that still changes in the last round gives `#NUM!` of the kind `limit`, and no value of a row. A host option does not change the limit (STEP.VALUE). A step can set a cap with `min` or `max`.
+- **[FIX.ERROR]** Each row evaluates in each round, also after an error of another row. One failed row gives its error, and two or more give `#ARGS` with each error as a cause. `#DEPTH!` wins over each other error (EVAL.DEPTH), and `#CYCLE!` wins next (SHEET.CYCLE). An error of a row fails the column, so `last` does not read an error. A row catches its own error with `ifError`.
+- **[FIX.ORDER]** The rounds do not read the order of the rows. Each round reads only the last round, and an op that reads the order of the items has no rule. `sum` has no rule too, because the rounding of floats depends on that order. A part that does not read the last round can read the order, as in each program.
+- **[FIX.TRACE]** `explain` records an event for each round after the event of its reads. The field `round` holds its count from 0 and the keys of the rows that it changed. The result of the event is the column as a list. The node then records its usual event.
+
 ## 6. Folds
 
 - **[TRACE.EVENTS]** `explain` records one event for each node evaluation, in the order that the nodes finish. A reference event records its reads.
@@ -267,6 +287,15 @@ A layout rule often works along a main axis and a cross axis, for example the to
 - **[JSON.FIELDS]** `fields(o)` gives the keys of the object `o`, in the order of `Object.keys`. An array or another receiver that is not an object gives `#CALC!`.
 - **[JSON.LEAVES]** `leaves(o, depth)` gives the leaves of the object `o`, in the order of a walk over its own fields, as `fields` reads them. The walk goes into an object with fields when the path of its field has fewer than `depth` keys. Each leaf is a record `{ path, kind, value }` with the kind of `kinds`, and a `"null"` leaf has no `value`. A path joins the keys with `.`, but after an empty path it is the key alone. A number `depth` that is not a whole number from 1 to 100 gives `#CALC!`. A receiver that is not an object, and a value that is not JSON, give `#CALC!` too.
 - **[JSON.FIELD]** `field(o, k)` gives the value of the own field `k` of the object `o`. A missing key, a field that is `null`, a key that is not a text and a receiver that is not an object give `#CALC!`. Thus an inherited member, for example `constructor`, is not a field.
+
+### 7.3 The sign and the smallest axis
+
+A force separation pushes two boxes apart along the axis of their smallest overlap, with the sign of their gap. For the overlap `o` and the gap `g`, the push is `minAxis(o) * sign(g) * o`. A gap of 0 on that axis gives no push.
+
+- **[NUM.SIGN]** `sign(n)` gives the value of `Math.sign(n)`: 1 for a positive number, -1 for a negative number, 0 for 0 and -0 for -0. An infinite number gives 1 or -1, because an op checks its result and not its receiver. `NaN` gives `#NUM!`.
+- **[VEC2.SIGN]** `sign(v)` of `Vec2Domain` gives the sign of each component, as NUM.SIGN tells. A component `NaN` gives `#NUM!`, as VEC2.FINITE tells. An infinite component gives 1 or -1.
+- **[VEC2.MINAXIS]** `minAxis(v)` gives (1, 0) if `x <= y`, else (0, 1). The comparison uses the signed values, and `minAxis(abs(v))` compares the sizes. A tie gives (1, 0), and 0 and -0 tie. Infinite values compare as numbers. A component `NaN` gives `#NUM!`. For finite components, `along(v, minAxis(v))` gives `minComponent(v)`, and `across(v, minAxis(v))` gives `maxComponent(v)`.
+- **[XY.SIGN]** `sign` and `minAxis` of `XYDomain` give the components of the same ops of `Vec2Domain`. Each one is a function of plain data, so a standalone module can copy it.
 
 ## 8. The builder
 
@@ -313,7 +342,8 @@ A sheet has named columns of formulas over a space. A cell is one column at one 
 These requirements apply to `@mark1russell7/vex-compiler`.
 
 - **[COMPILE.TIERED]** `tiered(e, options)` gives a program with the interface of `compile`. For each space, origin, variables and tables, its `run` gives the result of `evaluate`.
-- **[COMPILE.FALLBACK]** Where the generated code of tier 2 cannot give the result, tier 1 gives it. A page that does not permit `new Function` uses tier 1.
+- **[COMPILE.FALLBACK]** Where the generated code of tier 2 cannot give the result, tier 1 gives it. This rule applies in each context, also in the first argument of `ifError` and in an item of a list op. A page that does not permit `new Function` uses tier 1.
+- **[COMPILE.FIX]** Tier 2 and modules do not have `fix` yet. A program with `fix` stays in tier 1 with the same result. `emitModule` refuses it with a reason that names the fixed point.
 - **[COMPILE.ERRORS]** Tier 2 gives the error result of a program. The error has each field of the error of `evaluate`: code, kind, message, op, path, origin, focus, causes and thrown value. The result `#ARGS` is such a result. An argument evaluates once, in the order of `evaluate`. A run that tier 2 ends with an error is no fallback of `TierStats`.
 - **[COMPILE.LIST.VALUE]** Tier 2 gives a list op on a list value, a list literal and `fill`. Each list op on a list value uses the code of the interpreter (LIST.OPS). Thus a list with an error item gives the result of `evaluate`. An error of the op is an error of the program (COMPILE.ERRORS). `ifError` gives its second argument, a list op skips the error item, and a binding of `let` has no value. These send the evaluation to tier 1: `#DEPTH!` and an error of an item that `strict` gives. A list op on an array also goes to tier 1 (LIST.ARRAY).
 - **[COMPILE.LIST.AXIS]** Tier 2 gives `each`, `fold` and a data limit (ITERATE.LIMIT.DATA) over the axis `list`, also with `reverse`, `where`, an address and `as`. The results are the results of AXIS.LIST, AXIS.LIST.ITEM, AXIS.LIST.INDEX and AXIS.LIST.SCOPE. A value that is not a list is an error of the program (COMPILE.ERRORS). An array is a list (LIST.ARRAY). A list with an error item, or an array with a hole, sends the evaluation to tier 1.
@@ -339,6 +369,7 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 
   The value of the run and a column of lists give an array of the values of the items, with no keys. An error item is `VEX_ERROR`. A list in a record or in an argument of an op stays a `vex.list`. The run gives the values of the interpreter in this form. Another value of `lists` gives a reason.
 - **[COMPILE.MODULE.LIST.FIELD]** A field of a record can be a list. The record holds the list as a frozen `vex.list`, with the keys of the interpreter as text. An error item has the error `VEX_ERROR`. An op of a domain reads the lists of such a record.
+- **[COMPILE.MODULE.KEYS]** `emitModule` and `emitSheetModule` have the option `keys`, with the default `false`. With `keys: true`, the run takes the keys of its records as its last argument: an array with one different text for each record. The value at each position is the value of the interpreter at the key of that position, over a space with these keys. A `get`, a `without`, a `vex.list` and the move `key` use these keys. A key of a literal and of `fill` stays that key. A program that reads no key of a record prints the same text as without the option, and its run ignores the argument. Keys that are not such an array throw a `VexContractError`. A record space has no offset and no axis `window`. Thus a program that reads a key in an array space and has one of these gives a reason. A sheet with formulas of cells gives a reason.
 - **[COMPILE.MODULE.BAND]** A module copies the ops of a domain of bands, `BandDomain` of the pilots. A program makes bands, reads their fields, and moves, flips, joins and compares them. The run gives the values of the interpreter, and `VEX_ERROR` for an error.
 - **[COMPILE.MODULE.NTH.INDEX]** A module keeps the items with values of a list on its array at the first `nth`, `count` or `first` of the list. Each later `nth`, `count` and `first` of that list does not read the list again. A key of a node of the memo can be a list.
 - **[COMPILE.MODULE.LIST.SHARE]** In a module, a list op does not copy a list without error items to read its items with values. It reads the array of the list. No op changes such an array, so `sortBy` sorts a copy.

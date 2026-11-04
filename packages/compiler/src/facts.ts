@@ -168,6 +168,8 @@ export interface Facts {
    * op for each receiver, for example `fill` (LIST.FILL).
    */
   own(name: string): boolean;
+  /** This function gives the number of domains with an identity of the op `name`, as `#reduce` of the interpreter counts them (LIST.EMPTY). */
+  identities(name: string): number;
 }
 
 /** This function gives the facts of a set of options. */
@@ -210,6 +212,9 @@ export function factsOf(options: Options): Facts {
     },
     own(name) {
       return domains.every((d) => entryOf(d, name) === undefined) && !(fns !== undefined && Object.hasOwn(fns, name));
+    },
+    identities(name) {
+      return domains.filter((d) => Object.hasOwn(d.ops, name) && (d.ops[name] as OpSpec<unknown>).identity !== undefined).length;
     },
     site(name, arity) {
       // Without values, the interpreter takes no op of a domain. A list op can have a list as its receiver.

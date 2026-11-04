@@ -97,6 +97,32 @@ const steps = sizes.start(0).iterate(dataLimit(axes.all), { i: 0 }, (x) => ({ i:
 steps.all().values(); // => [6, 6]
 ```
 
+## A calculation over a graph with cycles
+
+A column of `fix` gives a true answer on a graph with cycles. Each round reads only the last round, and the rounds end when no row changes. The function `each` over the axis `predecessors` reads the rows that have an edge to the focus. A read of the origin gives one source for all the rows.
+
+```ts doctest
+import { app, axes, each, evaluate, fix, last, lit, origin, ref, space } from "@mark1russell7/vex";
+import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
+
+const graph = space.graph({ a: { id: "a" }, b: { id: "b" }, c: { id: "c" }, d: { id: "d" } }, { a: ["b"], b: ["a", "c"], c: [], d: ["a"] });
+const options = { space: graph, origin: "a", domains: [NumDomain, BoolDomain, TextDomain] };
+const isSource = app("eq", ref("id"), ref("id", [origin]));
+
+const reach = fix("reach", "or", isSource, app("any", each(axes.predecessors, last("reach"))));
+const reached = evaluate(app("join", each(axes.where(axes.all, reach), ref("id")), lit(",")), options);
+reached.ok && reached.value; // => "a,b,c"
+
+const far = 1000000;
+const hops = fix("d", "min", app("if", isSource, lit(0), lit(far)), app("ifError", app("min", each(axes.predecessors, app("add", last("d"), lit(1)))), lit(far)));
+const toC = evaluate(app("nth", each(axes.all, hops), lit(2)), options);
+toC.ok && toC.value; // => 2
+```
+
+The start `far` means "no path", because a value of a `min` column is a finite number. The function `ifError` catches a row with no predecessor, because `min` of an empty list gives `#N/A`.
+
+Each step must not fall when the last round rises. The check refuses `not`, `multiply`, `sum` and `count` over a value that reads `last`. A step can add a number, but a row must stop: add a cap with `min`, or follow paths. A count of rounds above `n + 1` gives `#NUM!`.
+
 ## A fast program
 
 `tiered` of `@mark1russell7/vex-compiler` gives a program with generated JavaScript. Its results are the results of the interpreter.

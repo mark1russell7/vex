@@ -176,6 +176,16 @@ A module of the build can operate without the interpreter. Then a failed check t
 
 A host that guarantees the kinds of its input uses standalone modules. ireko gives its strategies only finite numbers and plain rectangles. Thus ireko uses them. A module with the fallback imports the interpreter.
 
+A declaration `returns` tells the kind of each value of an op. An op with a declaration can also give `undefined`, `null` or a number that is not finite. The interpreter gives an error for each of these results (CALL.RESULT), and the law checker takes them. Thus a kind does not replace this check (COMPILE.MODULE.RESULT, V-070). The module prints `k_value` around such an op, with these exceptions:
+
+- The check of a number finds each such result.
+- A check `valid` that refuses each such result needs no other check. The printer starts the check on these five values at the time of the build.
+- The text of an op can prove a value. The proof reads the expression body of an arrow function. A comparison, a negation, `&&` and `||` of these and an object literal are proofs. A quote, a regular expression and a comment stop the proof, because they can hide a bracket.
+
+The ops of a band are such proofs, so the shapes module of ireko has no new check. An inline form with the check is not safe, so a loop over it keeps its `try`. A search (COMPILE.MODULE.SCAN) reads a test of a key with no check, so a test without a proof does not use the search.
+
+An op with a value of another kind breaks KIND.RETURNS, and the law checker refuses it. A module has no tier 1, so it does not find such a value.
+
 A standalone module gives each list of its input and of its result as a `vex.list`. With the option `lists: "plain"`, these lists are plain arrays, with `VEX_ERROR` for an error item (COMPILE.MODULE.LIST.PLAIN, §13.3).
 
 ## 5. Safety of generated code

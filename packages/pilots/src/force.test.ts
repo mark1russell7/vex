@@ -1,5 +1,5 @@
 import { evaluate, space } from "@mark1russell7/vex";
-import { emitModule } from "@mark1russell7/vex-compiler";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { Vec2 } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";

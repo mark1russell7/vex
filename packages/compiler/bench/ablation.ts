@@ -2,7 +2,7 @@
 // emitted source. Each edit fails when its text is not in the source, so a change of the emitter stops the gate and does
 // not measure a variant that is the same as the module. The test in `ablation.test.ts` checks each edit on each push.
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, type RadialInput } from "../../pilots/src/ireko-radial.ts";
-import { emitModule } from "../src/index.ts";
+import { emitModule } from "../src/module.ts";
 
 /** This type is the run of the radial module: the records and the variables of a ring give its result. */
 export type RadialRun = (records: unknown, vars: unknown) => unknown;

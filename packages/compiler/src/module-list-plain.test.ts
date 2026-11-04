@@ -113,7 +113,7 @@ describe("COMPILE.MODULE.LIST.PLAIN: the option lists", () => {
     expect(sourceOf(emitModule(NODE_SHAPE, { ...node, lists: "envelope" }))).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
     expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, lists: "envelope" }))).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
     // The hash of the module of the sheet of ireko with fuse false, as COMPILE.MODULE.FUSE.OFF pins it.
-    expect(hash(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false, lists: "envelope" })))).toBe("91a25086213c18bd");
+    expect(hash(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: false, lists: "envelope" })))).toBe("612da1766666530d");
   });
 
   it("COMPILE.MODULE.LIST.PLAIN: a value of lists that is not envelope or plain gives a reason", () => {

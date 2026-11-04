@@ -27,6 +27,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./module": "./src/module-entry.ts",
     "./package.json": "./package.json"
   },
   "files": [
@@ -43,6 +44,10 @@
       ".": {
         "types": "./build/index.d.ts",
         "default": "./build/index.js"
+      },
+      "./module": {
+        "types": "./build/module-entry.d.ts",
+        "default": "./build/module-entry.js"
       },
       "./package.json": "./package.json"
     }
@@ -65,6 +70,8 @@
     "vitest": "^5.0.3"
   },
   "dependencies": {
-    "@mark1russell7/vex": "workspace:*"
+    "@mark1russell7/vex": "workspace:*",
+    "acorn": "^8.19.0",
+    "astring": "^1.9.0"
   }
 }

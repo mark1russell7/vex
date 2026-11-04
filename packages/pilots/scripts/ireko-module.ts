@@ -2,7 +2,7 @@
  * This script writes a standalone module of ireko (docs/COMPILER.md §13.3). Start it with
  * `npx tsx scripts/ireko-module.ts <grid|radial|layers|tree|shape|place|measure> <file>`. The strategies `grid`, `radial`, `layers` and `tree` are programs.
  * The place pass of the engine is a sheet over the tree of the nodes. The fit of the measure pass is a sheet over one
- * node and its children. The module `shape` gives the shape of one node. Node itself leaves spaces where the types of the copied functions were.
+ * node and its children. The module `shape` gives the shape of one node. Each runner gives the same bytes (COMPILE.MODULE.TEXT).
  */
 import { writeFileSync } from "node:fs";
 import { irekoSource, isIrekoModule } from "../src/ireko-modules.ts";

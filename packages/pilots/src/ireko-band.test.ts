@@ -1,5 +1,5 @@
 import { app, axes, each, evaluate, fold, index, let_, lit, rec, ref, space, v, type Expr } from "@mark1russell7/vex";
-import { emitModule, type ModuleOptions } from "@mark1russell7/vex-compiler";
+import { emitModule, type ModuleOptions } from "@mark1russell7/vex-compiler/module";
 import { checkLaws } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";

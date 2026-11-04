@@ -374,16 +374,14 @@ describe("the tiers", () => {
     expect(fromCore(p.run({ space: s, origin: "0" }))).toStrictEqual({ ok: true, value: 2 ** 14 });
   });
 
-  it("AXIS.LIST: a program with the axis list goes to tier 1, and a module keeps each list as an array", () => {
+  it("AXIS.LIST COMPILE.LIST.AXIS: a program with the axis list is in tier 2, and a module keeps each list as an array", () => {
     const s = space.array([{ n: 3 }, { n: 1 }, { n: 2 }]);
     const sorted = app("sortBy", each(axes.all, ref("n")));
-    const reason = 'the program has the axis "list", and tier 2 does not have that axis yet';
     const cases: readonly Expr[] = [app("sum", each(axes.list(sorted), ref("n"))), fold(axes.reverse(axes.list(sorted)), { a: lit(0) }, { a: ref("n") }, variable("a"))];
     for (const e of cases) {
-      expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason });
       expect(emitModule(e, { domains: [NumDomain], schema: { fields: { n: "number" } } }).ok).toBe(true);
       const p = tiered(e, { domains: [NumDomain] });
-      expect(p.tier).toBe(1);
+      expect(p.tier).toBe(2);
       for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));
     }
   });
@@ -397,7 +395,7 @@ describe("the tiers", () => {
     }
   });
 
-  it("AXIS.LIST.ITEM AXIS.LIST.INDEX COMPILE.FALLBACK: a loop with the names as goes to tier 1", () => {
+  it("AXIS.LIST.ITEM AXIS.LIST.INDEX COMPILE.LIST.AXIS: a loop with the names as is in tier 2", () => {
     const s = space.array([{ n: 3 }, { n: 1 }, { n: 2 }]);
     const sorted = app("sortBy", each(axes.all, ref("n")));
     const cases: readonly Expr[] = [
@@ -406,9 +404,9 @@ describe("the tiers", () => {
       let_({ y: app("sum", each(axes.where(axes.list(sorted), lit(true)), variable("x"), undefined, ["x"])) }, variable("y")),
     ];
     for (const e of cases) {
-      expect(generate(e, { domains: [NumDomain] })).toEqual({ ok: false, reason: 'the program has the axis "list", and tier 2 does not have that axis yet' });
+      expect(generate(e, { domains: [NumDomain] }).ok).toBe(true);
       const p = tiered(e, { domains: [NumDomain] });
-      expect(p.tier).toBe(1);
+      expect(p.tier).toBe(2);
       for (const k of s.keys) expect(fromCore(p.run({ space: s, origin: k }))).toStrictEqual(fromCore(evaluate(e, { domains: [NumDomain], space: s, origin: k })));
     }
   });

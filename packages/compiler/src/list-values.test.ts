@@ -1,4 +1,4 @@
-import { app, axes, defineDomain, each, evaluate, ext, fn, fold, iterate, lit, let_, ok, call, ref, space, v, vexError, vexList, fail, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
+import { app, axes, defineDomain, each, evaluate, ext, fn, fold, iterate, lit, let_, ok, call, ref, space, v, vexError, vexList, fail, type Addr, type Axis, type Expr, type ExtHandler, type FreeFn, type Space } from "@mark1russell7/vex";
 import { NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { fromCore, fromReference, referenceEvaluate } from "@mark1russell7/vex-testkit";
 import * as fc from "fast-check";
@@ -52,8 +52,11 @@ const VARS = {
   deep: vexList([good("0", 5), deepItem("1")]),
   big: vexList([good("0", 2000), good("1", 3000)]),
   flat: vexList([good("0", vexList([good("a", 1)])), hurt("1")]),
+  array: [4, 5],
+  holes: [4, undefined],
 };
 const hurtItems = lit(VARS.hurt);
+const take1 = app("take", ns, lit(1));
 const deepExt = ext("deep", null);
 
 /** A case: its title, its program and the answer to the question "does tier 2 give the result". */
@@ -200,6 +203,168 @@ describe("COMPILE.LIST.VALUE: a list as a value in tier 2", () => {
   });
 });
 
+/** The names of the value and of the position of an item. */
+const AS = ["item", "i"] as const;
+/** A loop over an axis list that names its items. */
+const named = (axis: Axis, body: Expr, at?: Addr): Expr => each(axis, body, at, AS);
+const sumOf = (list: Expr): Expr => fold(axes.list(list), { s: lit(0) }, { s: app("add", v("s"), v("item")) }, v("s"), undefined, AS);
+/** A list with a key outside the space. */
+const outside = lit(vexList([good("z", 4), good("1", 5)]));
+const fieldOr0 = app("ifError", ref("n"), lit(0));
+/** An iteration with a data limit over an axis. */
+const overList = (axis: Axis): Expr => iterate({ axis }, { s: lit(0) }, { s: app("add", v("s"), lit(2)) }, v("s"));
+const toKey1: Addr = [{ t: "key", key: "1" }];
+
+describe("COMPILE.LIST.AXIS: the axis list in tier 2", () => {
+  const values: readonly Case[] = [
+    ["the value and the position", named(axes.list(ns), app("add", v("item"), v("i"))), true],
+    ["one name reads the value", each(axes.list(ns), v("x"), undefined, ["x"]), true],
+    ["no names: the record at the key", each(axes.list(ns), ref("n")), true],
+    ["the keys of the items", app("keys", each(axes.list(app("sortBy", ns)), ref("t"))), true],
+    ["reverse", named(axes.reverse(axes.list(ns)), app("add", v("item"), lit(1))), true],
+    ["AXIS.LIST.INDEX: reverse keeps the position of the item", named(axes.reverse(axes.list(ns)), app("nth", ns, v("i"))), true],
+    ["where reads the record", named(axes.where(axes.list(ns), app("gt", ref("n"), lit(1))), app("add", v("item"), v("i"))), true],
+    ["where over reverse", named(axes.where(axes.reverse(axes.list(ns)), app("gt", ref("n"), lit(1))), v("i")), true],
+    ["an empty list", named(axes.list(empty), v("item")), true],
+    ["the first item of the empty list", app("ifError", app("first", named(axes.list(empty), v("item"))), lit(-1)), true],
+    ["a loop stops at the first item", app("first", named(axes.list(ns), app("add", v("item"), lit(1)))), true],
+    ["sum, values and reduce", rec2(app("sum", named(axes.list(ns), v("item"))), app("reduce", named(axes.list(ns), v("item")), lit("add"))), true],
+    ["an item that is a list", named(axes.list(lit(vexList([good("0", vexList([good("a", 1), good("b", 2)]))]))), app("count", v("item"))), true],
+    ["a loop in a loop", named(axes.list(ns), app("sum", each(axes.list(ns), app("add", v("item"), v("x")), undefined, ["x"]))), true],
+    ["a memo of a part reads the item", named(axes.list(ns), app("sum", each(axes.all, app("add", ref("n"), v("item"))))), true],
+    ["the origin is the node", named(axes.list(ns), ref("n", [{ t: "origin" }])), true],
+    ["fold", sumOf(ns), true],
+    ["fold with the position", fold(axes.reverse(axes.list(ns)), { s: lit(0) }, { s: app("add", v("s"), v("i")) }, v("s"), undefined, AS), true],
+    ["fold over an empty list", sumOf(empty), true],
+    ["fold with where", fold(axes.where(axes.list(ns), app("gt", ref("n"), lit(1))), { s: lit(0) }, { s: app("add", v("s"), v("item")) }, v("s"), undefined, AS), true],
+    ["a list that a loop grows", iterate(3, { l: take1 }, { l: app("append", v("l"), sumOf(v("l"))) }, app("sum", v("l"))), true],
+    ["a stack of a depth-first walk", iterate(4, { stack: take1, seen: lit(0) }, { stack: app("drop", v("stack"), lit(1)), seen: app("add", v("seen"), sumOf(app("take", v("stack"), lit(1)))) }, v("seen")), true],
+    ["an array of a name", named(axes.list(v("array")), app("add", v("item"), v("i"))), true],
+    ["an array of a literal", sumOf(lit([1, 2])), true],
+    ["the array of a list op", named(axes.list(app("values", ns)), v("item")), true],
+    ["AXIS.LIST: the address moves the list", each(axes.list(app("take", ns, ref("n"))), v("item"), toKey1, AS), true],
+    ["AXIS.LIST: a fold moves the list", fold(axes.list(app("take", ns, ref("n"))), { s: lit(0) }, { s: app("add", v("s"), v("item")) }, v("s"), toKey1, AS), true],
+    ["AXIS.LIST: a computed move", each(axes.list(app("take", ns, ref("n"))), v("item"), [{ t: "key", key: lit("2") }], AS), true],
+    ["AXIS.LIST: a test after a move", each(axes.where(axes.list(ns), app("gt", ref("n"), lit(1))), v("item"), toKey1, AS), true],
+  ];
+  it.each(values)("%s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
+
+  const scopes: readonly Case[] = [
+    ["AXIS.LIST.SCOPE: a test reads the outer name", let_({ item: lit(2) }, named(axes.where(axes.list(ns), app("gt", ref("n"), v("item"))), v("item"))), true],
+    ["AXIS.LIST.SCOPE: the list reads the outer name", let_({ item: ns }, named(axes.list(v("item")), v("item"))), true],
+    ["AXIS.LIST.SCOPE: a test does not see the name", app("ifError", app("count", named(axes.where(axes.list(ns), app("gt", v("item"), lit(1))), lit(1))), lit(-1)), true],
+    ["AXIS.LIST.SCOPE: a name hides an outer name in the body", let_({ item: lit(2) }, named(axes.list(ns), v("item"))), true],
+    ["AXIS.LIST.SCOPE: a step sees the names of the fold", fold(axes.list(ns), { s: lit(0), t: lit(0) }, { s: app("add", v("t"), v("item")), t: app("add", v("s"), v("i")) }, rec2(v("s"), v("t")), undefined, AS), true],
+    ["AXIS.LIST.SCOPE: result does not see the name", app("ifError", fold(axes.list(ns), { s: lit(0) }, { s: lit(1) }, v("item"), undefined, AS), lit(-1)), true],
+    ["FN.CALL: a name hides a function", let_({ f: fn([], lit(1)) }, app("ifError", app("count", each(axes.list(ns), call("f"), undefined, ["f"])), lit(-1))), true],
+    ["FN.CALL: a body calls a function with the item", let_({ f: fn(["x"], app("add", v("x"), lit(1))) }, named(axes.list(ns), call("f", v("item")))), true],
+  ];
+  it.each(scopes)("%s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
+
+  const errors: readonly Case[] = [
+    ["a number is not a list", named(axes.list(lit(3)), v("item")), true],
+    ["ifError takes a wrong kind", app("ifError", app("count", named(axes.list(lit(3)), v("item"))), lit(-1)), true],
+    ["a text is not a list", app("ifError", sumOf(lit("abc")), lit(-1)), true],
+    ["a record is not a list", app("ifError", sumOf(lit({ a: 1 })), lit(-1)), true],
+    ["the kind error of a fold", sumOf(lit(3)), true],
+    ["a wrong kind stops a let only where a body reads it", let_({ x: sumOf(lit(3)) }, lit(1)), true],
+    ["the error of the list", named(axes.list(app("nth", ns, lit(9))), v("item")), true],
+    ["ifError takes the error of the list", app("ifError", sumOf(app("nth", ns, lit(9))), lit(-1)), true],
+    ["the error of a body in a value each", named(axes.list(ns), app("nth", ns, lit(9))), false],
+    ["a lenient op skips the error of a body", app("count", named(axes.list(ns), app("nth", ns, v("item")))), true],
+    ["the error of a step", fold(axes.list(ns), { s: lit(0) }, { s: app("nth", ns, lit(9)) }, v("s"), undefined, AS), true],
+    ["the path of result", fold(axes.list(ns), { s: lit(0) }, { s: lit(1) }, ref("zz"), undefined, AS), true],
+    ["a test without a boolean", app("ifError", app("count", named(axes.where(axes.list(ns), lit(1)), v("item"))), lit(-1)), true],
+    ["the path of a test", named(axes.where(axes.list(ns), ref("zz")), v("item")), false],
+    ["the path of an address after a test", each(axes.where(axes.list(ns), lit(true)), lit(1), [{ t: "key", key: app("nth", ns, lit(9)) }], AS), true],
+    ["an address that fails comes before the list", each(axes.list(app("nth", ns, lit(9))), lit(1), [{ t: "key", key: "zz" }], AS), true],
+    ["the origin stays with a moved list", each(axes.list(lit(3)), lit(1), toKey1, AS), true],
+    ["the record of a moved list", each(axes.list(ref("zz")), lit(1), toKey1, AS), true],
+  ];
+  it.each(errors)("an error: %s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
+
+  const outsiders: readonly Case[] = [
+    ["AXIS.LIST: a key outside the space has no record", named(axes.list(outside), ref("n")), false],
+    ["the value of the item stays", named(axes.list(outside), app("add", v("item"), v("i"))), true],
+    ["ifError takes the missing record", named(axes.list(outside), fieldOr0), true],
+    ["a test reads no record", app("count", named(axes.where(axes.list(outside), app("ifError", app("gt", ref("n"), lit(0)), lit(true))), v("item"))), true],
+    ["all from a key outside", named(axes.list(outside), app("count", each(axes.all, ref("n")))), true],
+    ["others from a key outside", named(axes.list(outside), app("count", each(axes.others, ref("n")))), true],
+    ["next from a key outside", named(axes.list(outside), app("ifError", app("count", each(axes.successors, ref("n"))), lit(-1))), true],
+    ["a move from a key outside", named(axes.list(outside), app("ifError", ref("n", [{ t: "key", key: "2" }]), lit(-1))), true],
+    ["fold over a key outside", fold(axes.list(outside), { s: lit(0) }, { s: app("add", v("s"), fieldOr0) }, v("s"), undefined, AS), true],
+  ];
+  it.each(outsiders)("a key outside the space: %s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
+
+  const items: readonly Case[] = [
+    ["each", named(axes.list(hurtItems), v("item")), false],
+    ["each with no names", each(axes.list(hurtItems), lit(1)), false],
+    ["count skips it", app("count", named(axes.list(hurtItems), v("item"))), false],
+    ["first", app("first", named(axes.list(hurtItems), v("item"))), false],
+    ["errors finds it", app("errors", named(axes.list(hurtItems), v("item"))), false],
+    ["a position skips it", app("values", named(axes.list(hurtItems), v("i"))), false],
+    ["reverse", app("values", named(axes.reverse(axes.list(hurtItems)), v("i"))), false],
+    ["where keeps it", app("count", named(axes.where(axes.list(hurtItems), lit(false)), v("item"))), false],
+    ["fold stops at it", sumOf(hurtItems), false],
+    ["ifError takes it from a fold", app("ifError", sumOf(hurtItems), lit(-1)), false],
+    ["an array with a hole", named(axes.list(v("holes")), v("item")), false],
+    ["fold over a hole", app("ifError", sumOf(v("holes")), lit(-1)), false],
+    ["a list of a run", sumOf(v("hurt")), false],
+  ];
+  it.each(items)("an error item stays with tier 1: %s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
+
+  const depth: readonly Case[] = [
+    ["an item, then an op error", app("add", app("count", named(axes.list(v("deep")), v("item"))), app("nth", ns, lit(9))), false],
+    ["an op error, then an item", app("add", app("nth", ns, lit(9)), app("count", named(axes.list(v("deep")), v("item")))), false],
+    ["a wrong kind, then an extension", app("add", sumOf(lit(3)), deepExt), false],
+    ["an extension, then a wrong kind", app("add", deepExt, sumOf(lit(3))), false],
+    ["a body", app("ifError", app("count", named(axes.list(ns), deepExt)), lit(-1)), false],
+    ["a step", app("ifError", fold(axes.list(ns), { s: lit(0) }, { s: deepExt }, v("s"), undefined, AS), lit(-1)), false],
+    ["the list", app("ifError", app("count", named(axes.list(app("append", deepExt, ns)), v("item"))), lit(-1)), false],
+    ["a test", app("ifError", app("count", named(axes.where(axes.list(ns), deepExt), v("item"))), lit(-1)), false],
+    ["a key outside, then an extension", app("add", app("count", named(axes.list(outside), ref("n"))), deepExt), false],
+  ];
+  it.each(depth)("#DEPTH! wins: %s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
+
+  const limits: readonly Case[] = [
+    ["ITERATE.LIMIT.DATA: the count of a list", overList(axes.list(ns)), true],
+    ["ITERATE.LIMIT.DATA: an empty list makes no step", overList(axes.list(empty)), true],
+    ["ITERATE.LIMIT.DATA: reverse", overList(axes.reverse(axes.list(ns))), true],
+    ["ITERATE.LIMIT.DATA: where reads the record", overList(axes.where(axes.list(ns), app("gt", ref("n"), lit(1)))), true],
+    ["ITERATE.LIMIT.DATA: the limit reads a name of the node", let_({ l: ns }, overList(axes.list(v("l")))), true],
+    ["ITERATE.LIMIT.DATA: an array", overList(axes.list(v("array"))), true],
+    ["ITERATE.LIMIT.DATA: the path of until after the list", iterate({ axis: axes.list(ns) }, { s: lit(0) }, { s: app("add", v("s"), lit(1)) }, v("s"), ref("zz")), true],
+    ["ITERATE.LIMIT.DATA: the path of until after a test", iterate({ axis: axes.where(axes.list(ns), lit(true)) }, { s: lit(0) }, { s: app("add", v("s"), lit(1)) }, v("s"), lit(1)), true],
+    ["ITERATE.LIMIT.DATA: until stops the steps", iterate({ axis: axes.list(ns) }, { s: lit(0) }, { s: app("add", v("s"), lit(1)) }, v("s"), app("gt", v("s"), lit(1))), true],
+    ["ITERATE.LIMIT.ERROR: a value that is not a list", overList(axes.list(lit(3))), false],
+    ["ITERATE.LIMIT.ERROR: an error of the list", overList(axes.list(app("nth", ns, lit(9)))), false],
+    ["ITERATE.LIMIT.ERROR: an error item", overList(axes.list(hurtItems)), false],
+    ["ITERATE.LIMIT.ERROR: a hole", overList(axes.list(v("holes"))), false],
+    ["ITERATE.LIMIT.ERROR: a test that fails", overList(axes.where(axes.list(ns), ref("zz"))), false],
+    ["ITERATE.LIMIT.ERROR: ifError takes the error", app("ifError", overList(axes.list(lit(3))), lit(-1)), true],
+    ["#DEPTH! wins over the error of a limit", app("add", overList(axes.list(lit(3))), deepExt), false],
+  ];
+  it.each(limits)("a data limit: %s", (_title, e, fast) => expect(() => same(e, fast)).not.toThrow());
+
+  it("COMPILE.LIST.AXIS AXIS.LIST: the kind error has the path of the node, the origin of the node and the focus of the address", () => {
+    const e = each(axes.list(lit(3)), lit(1), toKey1);
+    const run = { space: S, origin: "2", vars: VARS };
+    const r = tiered(e, OPTIONS).run(run);
+    expect(r).toStrictEqual(evaluate(e, { ...OPTIONS, ...run }));
+    expect(r).toMatchObject({ ok: false, error: { kind: "kind-mismatch", origin: "2", focus: "1", path: [] } });
+  });
+
+  it("COMPILE.LIST.AXIS: a program over an axis list has no fallback for a run with new lists, and each run reads its own list", () => {
+    const e = sumOf(v("a"));
+    const p = tiered(e, OPTIONS);
+    expect(p.tier).toBe(2);
+    const first = vexList([good("1", 10), good("2", 20)]);
+    const second = [1, 2, 3];
+    for (const a of [first, second, first]) expect(p.run({ space: S, origin: "0", vars: { a } })).toStrictEqual(evaluate(e, { ...OPTIONS, space: S, origin: "0", vars: { a } }));
+    expect(p.stats.fallbacks).toBe(0);
+  });
+});
+
 /** A record of two values. */
 function rec2(a: Expr, b: Expr): Expr {
   return { tag: "rec", fields: { a, b } };
@@ -212,7 +377,7 @@ const KEYS = fc.constantFrom<Expr>(lit("0"), lit("1"), lit("z"), lit(1), ref("id
 const arbList: fc.Arbitrary<Expr> = fc.letrec<{ l: Expr }>((tie) => ({
   l: fc.oneof(
     { maxDepth: 3, depthSize: "small", withCrossShrink: true },
-    fc.constantFrom<Expr>(ns, ts, empty, v("hurt"), v("flat"), v("big"), each(axes.others, ref("n")), each(axes.all, app("nth", ns, ref("n"))), each(axes.where(axes.all, app("gt", ref("n"), lit(1))), ref("n"))),
+    fc.constantFrom<Expr>(ns, ts, empty, outside, v("array"), v("holes"), v("hurt"), v("flat"), v("big"), each(axes.others, ref("n")), each(axes.all, app("nth", ns, ref("n"))), each(axes.where(axes.all, app("gt", ref("n"), lit(1))), ref("n"))),
     fc.tuple(fc.constantFrom("take", "drop"), tie("l"), COUNTS).map(([op, a, n]): Expr => app(op, a, n)),
     fc.tuple(fc.constantFrom("append", "without"), tie("l"), tie("l")).map(([op, a, b]): Expr => app(op, a, b)),
     fc.tuple(fc.constantFrom("sortBy", "distinct", "flat"), tie("l")).map(([op, a]): Expr => app(op, a)),
@@ -223,6 +388,8 @@ const arbList: fc.Arbitrary<Expr> = fc.letrec<{ l: Expr }>((tie) => ({
     fc.tuple(tie("l"), tie("l")).map(([a, b]): Expr => let_({ x: a }, app("append", v("x"), b))),
   ),
 })).l;
+// The body of a loop over the axis list reads the item, its position or the record at its key.
+const ITEMS: fc.Arbitrary<Expr> = fc.constantFrom<Expr>(v("item"), v("i"), ref("n"), app("add", v("item"), v("i")), app("add", v("item"), ref("n")));
 const arbValue: fc.Arbitrary<Expr> = fc.oneof(
   arbList,
   fc.tuple(fc.constantFrom("count", "first", "sum", "mean", "min", "max", "values", "keys", "errors"), arbList).map(([op, a]): Expr => app(op, a)),
@@ -234,6 +401,10 @@ const arbValue: fc.Arbitrary<Expr> = fc.oneof(
   fc.tuple(arbList, KEYS).map(([a, k]): Expr => app("count", each(axes.all, app("get", a, k)))),
   fc.tuple(arbList, arbList).map(([a, b]): Expr => app("add", app("first", a), app("nth", b, lit(9)))),
   fc.tuple(arbList).map(([a]): Expr => app("add", app("first", a), deepExt)),
+  fc.tuple(arbList, ITEMS).map(([a, x]): Expr => app("values", named(axes.list(a), x))),
+  fc.tuple(arbList, ITEMS).map(([a, x]): Expr => app("first", named(axes.reverse(axes.list(a)), x))),
+  fc.tuple(arbList, ITEMS).map(([a, x]): Expr => app("count", named(axes.where(axes.list(a), app("gt", ref("n"), lit(1))), x))),
+  fc.tuple(arbList, ITEMS).map(([a, x]): Expr => fold(axes.list(a), { s: lit(0) }, { s: app("add", v("s"), app("ifError", x, lit(0))) }, v("s"), undefined, AS)),
 );
 
 function agree(e: Expr, s: Space, k: string, tally: { values: number; fast: number }): void {
@@ -255,6 +426,7 @@ describe("P17 COMPILE.LIST.VALUE: on programs with lists as values, a tiered pro
       }),
       { numRuns: 400 },
     );
-    expect(tally.fast / tally.values).toBeGreaterThan(0.5);
+    // The generator has error items, holes and keys outside the space. The share of tier 2 is about 0.55, with a low of 0.50 in 12 runs.
+    expect(tally.fast / tally.values).toBeGreaterThan(0.4);
   });
 });

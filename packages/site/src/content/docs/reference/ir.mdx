@@ -116,7 +116,7 @@ evaluate(byX, { space: boxes, origin: "0", domains: [NumDomain] }); // => { ok: 
 | `flat(list)` | a list of the items of the lists that are the values of the items of `list`, in order |
 | `get(list, key)` | the value of the first item with the key `key`. A key that no item has gives `#N/A`. |
 
-These ops skip error items, as each list op does. The option `{ strict: true }` gives the first error. The axis `reverse(list(expr))` gives the reverse order, and an error item of the list gives an error item for its target. A standalone module keeps each list as an array. Tier 2 gives a list op on a list with the code of the interpreter. Tier 1 evaluates a program with the axis `list`.
+These ops skip error items, as each list op does. The option `{ strict: true }` gives the first error. The axis `reverse(list(expr))` gives the reverse order, and an error item of the list gives an error item for its target. A standalone module keeps each list as an array. Tier 2 gives a list op on a list with the code of the interpreter. It also gives the axis `list`, and tier 1 evaluates that axis over an error item.
 
 The ops `drop`, `append`, `without` and `flat` build new lists, and each item keeps its key and its value. Thus a list can be a stack: `append` puts items on the top, `take(stack, 1)` is the top, and `drop(stack, 1)` removes it. `without(list, seen)` removes the keys that a search saw. A body of an axis can give a list, and `flat` joins these lists. A standalone module does not have these four ops yet, so it gives a reason.
 

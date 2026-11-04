@@ -185,6 +185,14 @@
   },
   {
     "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line ArrowFunction,StringLiteral: an error item throws below, so no one reads this error"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
+    "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
+  },
+  {
+    "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
   },
   {

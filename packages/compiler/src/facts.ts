@@ -3,7 +3,7 @@
  * whose op the interpreter takes first, and the kinds and the lifts of its parameters. The facts come from the op
  * tables, so the same options always give the same facts, and the same source.
  */
-import { children, isListOp, isOpName, liftsAt, limitAxis, listOf, type AnyDomain, type Expr, type ExtHandler, type FreeFn, type ListOp, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
+import { isListOp, isOpName, liftsAt, type AnyDomain, type ExtHandler, type FreeFn, type ListOp, type OpSpec, type ParamKind, type PrimitiveKind, type ReturnKind } from "@mark1russell7/vex";
 
 /**
  * The most bodies of functions that tier 2 puts at the calls of one program. A function that calls another function
@@ -18,17 +18,6 @@ const FUSED_OPS: ReadonlySet<string> = new Set<FusedOp>(["count", "sum", "min", 
 
 /** This function tells if a list op over an `each` is one loop in tier 2. The lowering gives the same answer to the memo. */
 export const isFusedOp = (op: string): op is FusedOp => FUSED_OPS.has(op);
-
-/** This function gives the reason that tier 2 cannot take a program: the axis `list`. It uses a stack, not recursion. */
-export function listReason(expr: Expr): string | undefined {
-  const todo: Expr[] = [expr];
-  for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
-    const axis = x.tag === "each" || x.tag === "fold" ? x.axis : x.tag === "iterate" ? limitAxis(x) : undefined;
-    if (axis !== undefined && listOf(axis) !== undefined) return 'the program has the axis "list", and tier 2 does not have that axis yet';
-    todo.push(...children(x));
-  }
-  return undefined;
-}
 
 /** The function of an op of a domain, or a method. */
 export type Method = (...args: unknown[]) => unknown;

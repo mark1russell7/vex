@@ -787,7 +787,7 @@ class Compiler {
       if (!r.ok) return r;
       // LIST.ARRAY: an array is a list with the positions as keys.
       const listed = asList(r.value, this.#missing(f, path));
-      if (listed === undefined) return this.#err("kind-mismatch", `the axis "list" needs a list, not a ${describeType(r.value)}`, f, path);
+      if (listed === undefined) return this.#at(errorText.axisList(r.value), f, path);
       // The index counts the items with a value, as nth does: nth skips the error items (LIST.LENIENT).
       let index = 0;
       const items = listed.items.map(({ key, result }): Target => (result.ok ? { key, value: result.value, index: index++ } : { key, test: result }));

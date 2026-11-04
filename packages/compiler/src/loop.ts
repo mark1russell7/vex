@@ -27,6 +27,7 @@ export type RuntimeFn =
   | "opts" // opts(value): the read of the option strict of a list op
   | "rec" // rec(names, values): a frozen record
   | "list" // list(keys, values): a list of an axis
+  | "items" // items(value, reverse): the targets of the axis list, or FALLBACK for a value that is not a list
   | "frozen" // frozen(array): a frozen copy
   | "ext" // ext(kind, data, space, origin, focus, path): an extension
   | "var" // var(vars, name): a variable of the run
@@ -59,6 +60,7 @@ export type PrimOp =
   | "recordAt" // recordAt(records, index, space, key): the record at an index, or else the record of the key
   | "keysOf" // keysOf(targets): the keys of the targets of an axis
   | "idxOf" // idxOf(targets): the index of each target in the keys of the space
+  | "valuesOf" // valuesOf(targets): the value of each target of the axis list
   | "memoGet" // memoGet(memo, space, keys): the entry of a space and the values of its keys, or undefined
   | "memoPut" // memoPut(memo, space, keys, value, ok): the new entry of a space and the values of its keys
   | "entryValue" // entryValue(entry): the value of an entry of a memo
@@ -111,6 +113,8 @@ export type ErrorSite =
   | { readonly t: "limit"; readonly path: readonly number[] }
   /** The test of `where`, without a boolean. Its operand is the value. */
   | { readonly t: "test"; readonly path: readonly number[] }
+  /** The axis `list` over a value that is not a list. Its operand is the value. */
+  | { readonly t: "listAxis"; readonly path: readonly number[] }
   /** A failure of an op. The runtime recorded the detail of the failure. */
   | { readonly t: "op"; readonly op: string; readonly path: readonly number[] }
   /** A failure of a step of `reduce`. Its operand is the name of the op. */

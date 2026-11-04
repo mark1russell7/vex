@@ -20,6 +20,7 @@ import {
   isDepthError,
   isListOp,
   isStackOverflow,
+  asList,
   isVexList,
   liftsAt,
   listOps,
@@ -28,6 +29,7 @@ import {
   noKeyError,
   resolveAddr,
   safeIs,
+  vexError,
   vexList,
   type Addr,
   type AnyDomain,
@@ -71,6 +73,11 @@ export type BaseAxis = Exclude<Axis, { readonly t: "where" }>;
 export interface Targets {
   readonly keys: readonly string[];
   readonly idx: readonly (number | undefined)[];
+}
+
+/** The targets of the axis `list`: the key, the value and the position of each item, in the order of the loop. */
+export interface ListTargets extends Targets {
+  readonly values: readonly unknown[];
 }
 
 /** An entry of a memo: the value of a node for one space, or no value after an error. */
@@ -175,6 +182,12 @@ export interface Runtime {
   opts(value: unknown): unknown;
   rec(names: readonly string[], values: readonly unknown[]): unknown;
   list(keys: readonly string[], values: readonly unknown[]): unknown;
+  /**
+   * This function gives the targets of the axis `list` (AXIS.LIST): the keys, the values and the positions of the items.
+   * A value that is not a list gives `FALLBACK`, and the site gives the error. Generated code makes no error item, so an
+   * error item throws, and tier 1 gives the result.
+   */
+  items(value: unknown, reverse: boolean): ListTargets | Fallback;
   frozen(values: readonly unknown[]): unknown;
   ext(kind: string, data: unknown, s: Space, origin: string, focus: string, path: readonly number[]): unknown;
   var(vars: Readonly<Record<string, unknown>> | undefined, name: string): unknown;
@@ -365,6 +378,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         return at(errorText.limit(first as number));
       case "test":
         return at(errorText.whereKind(first));
+      case "listAxis":
+        return at(errorText.axisList(first));
       case "op":
         return opError(e, site.op, path, at);
       case "step":
@@ -544,6 +559,22 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     // Object.fromEntries gives an own field for each name, also for "__proto__" (V-062).
     rec: (names, values) => Object.freeze(Object.fromEntries(names.map((n, i) => [n, values[i]]))),
     list: (keys, values) => vexList(keys.map((key, i) => ({ key, result: { ok: true, value: values[i] } }))),
+    items(value, reverse) {
+      // Stryker disable next-line ArrowFunction,StringLiteral: an error item throws below, so no one reads this error
+      const listed = asList(value, (message) => vexError("kind-mismatch", message, NOWHERE));
+      if (listed === undefined) return F;
+      const keys: string[] = [];
+      const values: unknown[] = [];
+      const idx: number[] = [];
+      for (const { key, result } of listed.items) {
+        // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
+        if (!result.ok) throw new Error("tier 1 gives the axis list over an error item");
+        keys.push(key);
+        values.push(result.value);
+        idx.push(idx.length);
+      }
+      return reverse ? { keys: keys.toReversed(), values: values.toReversed(), idx: idx.toReversed() } : { keys, values, idx };
+    },
     frozen: (values) => Object.freeze([...values]),
     ext(kind, data, s, origin, focus, path) {
       const handler = Object.hasOwn(extensions, kind) ? extensions[kind] : undefined;

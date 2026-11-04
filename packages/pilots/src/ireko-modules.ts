@@ -2,7 +2,7 @@
  * The input of each standalone module of ireko (docs/COMPILER.md §13.3). The script `scripts/ireko-module.ts` and the
  * value tests read these rows, so a test prints the module of a build from the same input.
  */
-import { emitModule, emitSheetModule, type Emitted } from "@mark1russell7/vex-compiler";
+import { emitModule, emitSheetModule, functionText, type Emitted } from "@mark1russell7/vex-compiler/module";
 import { GRID_DOMAINS, GRID_PROGRAM, GRID_SCHEMA } from "./ireko-grid.ts";
 import { LAYERS_DOMAINS, LAYERS_PROGRAM, LAYERS_SCHEMA } from "./ireko-layers.ts";
 import { MEASURE_COLUMNS, MEASURE_DOMAINS, MEASURE_KINDS, MEASURE_SCHEMA } from "./ireko-measure.ts";
@@ -67,4 +67,20 @@ return ${name};`)();
 /** This function gives the function of a module of ireko, in the form where a fault of the printed code leaves the run. */
 export function irekoRun(which: IrekoModule): unknown {
   return loadModule(irekoSource(which, "throw"), irekoName(which));
+}
+
+/** The functions whose text differs between the runners before the print. Each has the form that a formatter keeps. */
+export const TEXT_CASES: readonly ((...a: never[]) => unknown)[] = [
+  (a: boolean, b: boolean, c: boolean): boolean => (a && b) || c,
+  (a: number): number => (a > 0 ? 0.5 : 1000),
+  (a: { readonly x: number } | string): number => (a as { readonly x: number }).x,
+  (a: number): number => {
+    const twice: number = a * 2;
+    return twice;
+  },
+];
+
+/** This function gives the text of each function of a list, as a module copies it. */
+export function textOfCases(cases: readonly ((...a: never[]) => unknown)[]): readonly string[] {
+  return cases.map((f) => functionText(f));
 }

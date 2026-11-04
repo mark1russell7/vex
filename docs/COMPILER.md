@@ -198,6 +198,16 @@ Generated code makes no trace. `explain` always operates in tier 0, so the quest
 
 ### 4.4 Standalone modules
 
+#### The text of a copied function (COMPILE.MODULE.TEXT)
+
+A module copies the functions of its domains. JavaScript gives the text of a function, and that text depends on the program that loaded the function. A runner that only removes types keeps the spaces of the types and the parentheses of the source. A runner that compiles can drop parentheses, change a quote and add a call that names a function. Without a rule, two runners print two programs.
+
+The function `functionText` parses the text with `acorn` and prints the tree with `astring`. Each string has double quotes, each number has its decimal form, and the call `__name` of `tsx` goes. Equal trees give equal bytes. A text that is not one expression stays as it is, and the module refuses that copy.
+
+The parser is a runtime dependency, because the option `domains` takes a domain of the caller, and that function exists only at run time. The printer has its own entry, `@mark1russell7/vex-compiler/module`. The root entry does not load the parser, so a program that only runs tiers has no cost.
+
+The test `packages/pilots/src/runner-text.test.ts` prints each module of ireko with Node, with `tsx` and in Vitest, and compares the bytes. The test also has the case `(a && b) || c`, because a formatter keeps these parentheses and `tsx` removes them.
+
 #### The faults of a module (COMPILE.MODULE.FAULT)
 
 A catch of a module holds an exception of a function of a domain, because the interpreter gives an error for it. The same catch also holds a fault of the printed code. Then a defect of the printer is a value, and only a differential test finds it.
@@ -208,7 +218,7 @@ Each test of the compiler and of the pilots that compares values runs with `thro
 
 The file `packages/pilots/src/ireko-modules.ts` holds the input of each module of ireko. The script `scripts/ireko-module.ts` and the value tests read the same rows, so a value test prints the module of a build with `throw`. The rows of the five committed modules are `measure`, `place`, `shape`, `grid` and `radial`. The rows `layers` and `tree` have no committed file at this time, and their value tests use the table too.
 
-This check examines the print of the compiler at the same commit. It does not examine the text of a committed file, because that text can be an older print. A fault that an older print holds stays in that file until the next build. The bytes of a print also depend on the program that runs the printer, because a copied function keeps the text that this program gives.
+This check examines the print of the compiler at the same commit. It does not examine the text of a committed file, because that text can be an older print. A fault that an older print holds stays in that file until the next build.
 
 The default stays `value`, because the form with `throw` costs more than the limit of the decision. The limit was 2 % of the minified module. The module of `NODE_SHAPE` grows by 142 bytes after `esbuild --minify` and `gzip -9`, from 2336 to 2478, which is 6.08 %. Without minification, it grows by 92 bytes, from 3629 to 3721. The tree module grows by 182 bytes, which is 5.04 %. The form also adds a call of the wrapper to each call of an op, and it keeps each op as a declaration. This record has no measure of the time of these calls.
 
@@ -1560,6 +1570,7 @@ The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its l
 | COMPILE.MODULE.SIZE.ONCE | A lazy cell prints its value at its read | The cell has one `return` and one read `G(c())`. The read is not in a loop or in a function, other than a lazy cell. |
 | COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
 | COMPILE.MODULE.FAULT | With `faults` at `throw`, a fault of the printed code leaves the run | Each copy of a function of a domain has a wrapper that gives the error of Vex for each exception. Each other catch rethrows each value that is not the error of Vex. No op prints at its call. |
+| COMPILE.MODULE.TEXT | The text of a copied function does not depend on the runner | The compiler parses the text and prints the tree. A text that is not one expression stays as it is. |
 | COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |
 | COMPILE.MODULE.SIZE.DEAD | A helper, an op or a constant of the run that no code reads is not printed | A constant has a form that catches each failure. |
 

@@ -2,7 +2,7 @@
 // variant must give the result of the module.
 import { evaluate, space } from "@mark1russell7/vex";
 import { describe, expect, it } from "vitest";
-import { emitModule } from "../src/index.ts";
+import { emitModule } from "../src/module.ts";
 import { countAtEachKey, loadWalk, WALK_OPTIONS, WALK_PROGRAM, walkRecords } from "./limit-walk.ts";
 
 const source = (): string => {

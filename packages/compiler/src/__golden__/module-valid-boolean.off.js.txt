@@ -21,7 +21,7 @@ function M1(f) {
     return G(r);
   };
 }
-const v_1 = (x) => x;
+const v_1 = x => x;
 const k_boolean = (x) => (v_1(x) ? x : F());
 const k_number = (x) => (Number.isFinite(x) ? x : F());
 export function run(records, vars) {

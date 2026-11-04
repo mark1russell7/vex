@@ -16,8 +16,9 @@ npm install @mark1russell7/vex @mark1russell7/vex-domains
 |---|---|---|
 | `Vec2Domain` | `Vec2`: a 2D vector | `x`, `y`, `add`, `max`, `multiply`, `floor`, `length`, `dot`, `rotate` |
 | `XYDomain` | `{ x, y }`: a 2D vector as plain data, for a standalone module | `x`, `y`, `add`, `max`, `multiply`, `floor`, `dot`, `length` |
+| `InsetsDomain` | `{ startX, startY, endX, endY }`: the four sides of an inset as plain data. A number lifts to four sides | `startX`, `start`, `end`, `add`, `scale` |
 | `NDVectorDomain` | `NDVector`: a vector with named components | `add`, `subtract`, `min`, `max`, `scale`, `dot`, `get` |
-| `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt`, `vec2`, `xy`, `date` |
+| `NumDomain` | numbers | `add`, `multiply`, `min`, `max`, `sqrt`, `floor`, `gt`, `vec2`, `xy`, `insets`, `date` |
 | `BoolDomain` | booleans | `and`, `or`, `xor`, `not` |
 | `TextDomain` | texts | `concat`, `length`, `upper`, `lower`, `trim`, `contains` |
 | `JsonDomain` | JSON data: texts, numbers, booleans, arrays and plain objects. Put it last. | `kind`, `kinds`, `fields`, `field`, `leaves` |

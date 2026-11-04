@@ -122,6 +122,26 @@ const m = emitModule(cell, { domains: [NumDomain, XYDomain, BoolDomain], schema:
 m.ok; // => true
 ```
 
+## The four sides of an inset
+
+`InsetsDomain` keeps the four sides of an inset as plain data: `{ startX, startY, endX, endY }`. The op `insets` of `NumDomain` makes a value. `start` and `end` give the leading pair and the trailing pair as `XY` values, so a module can copy them. `startVec2` and `endVec2` give the same pairs as `Vec2` values, but a module refuses them.
+
+A number in the argument of `add` becomes four equal sides. Thus `insets(0, 0, 0, 0).add(pad)` takes a number or a value, with no test of the type. A box inset adds `start` to the corner, and it subtracts `start` and `end` from the size. `scale(-1)` gives the outset.
+
+```ts doctest
+import { app, evaluate, lit, ref, space } from "@mark1russell7/vex";
+import { InsetsDomain, NumDomain, XYDomain } from "@mark1russell7/vex-domains";
+
+const domains = [NumDomain, XYDomain, InsetsDomain];
+const sides = app("add", app("insets", lit(0), lit(0), lit(0), lit(0)), ref("pad"));
+const corner = app("add", ref("at"), app("start", sides));
+const size = app("subtract", app("subtract", ref("size"), app("start", sides)), app("end", sides));
+const boxes = space.array([{ at: { x: 10, y: 20 }, size: { x: 100, y: 50 }, pad: 8 }]);
+
+evaluate(corner, { space: boxes, origin: "0", domains }); // => { ok: true, value: { x: 18, y: 28 } }
+evaluate(size, { space: boxes, origin: "0", domains }); // => { ok: true, value: { x: 84, y: 34 } }
+```
+
 ## Named components
 
 An `NDVector` has a name for each component, for example `width` and `height`. Its ops work on the union of the names, and a component that one vector does not have counts as 0.

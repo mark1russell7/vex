@@ -73,6 +73,7 @@ Numbers. A result that is not finite gives `#NUM!`. The values are of the type `
 | `date` | `date(number, number, number)` | LocalDate |  |  |  |
 | `vec2` | `vec2(number, number)` | Vec2 |  |  |  |
 | `xy` | `xy(number, number)` | XY |  |  |  |
+| `insets` | `insets(number, number, number, number)` | Insets |  |  |  |
 | `floor` | `floor(number)` | number |  |  |  |
 | `ceil` | `ceil(number)` | number |  |  |  |
 | `round` | `round(number)` | number |  |  |  |
@@ -186,6 +187,23 @@ Texts. The values are of the type `string`.
 | `area` | `area(XY)` | number |  |  |  |
 | `sum` | `sum(XY)` | number |  |  |  |
 | `equals` | `equals(XY, XY)` | boolean |  | commutative |  |
+
+## `InsetsDomain`
+
+The four sides of an inset as plain data: `{ startX, startY, endX, endY }`, or `insets` of `NumDomain`. `start` and `end` give `XY` values, and a module can copy them. `startVec2` and `endVec2` give `Vec2` values, and a module refuses them. A side that is not finite gives `#NUM!`. The values are of the type `Insets`. A number lifts to a value of the domain.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity |
+|---|---|---|---|---|---|
+| `startX` | `startX(Insets)` | number |  |  |  |
+| `startY` | `startY(Insets)` | number |  |  |  |
+| `endX` | `endX(Insets)` | number |  |  |  |
+| `endY` | `endY(Insets)` | number |  |  |  |
+| `start` | `start(Insets)` | XY |  |  |  |
+| `end` | `end(Insets)` | XY |  |  |  |
+| `startVec2` | `startVec2(Insets)` | Vec2 |  |  |  |
+| `endVec2` | `endVec2(Insets)` | Vec2 |  |  |  |
+| `add` | `add(Insets, Insets)` | Insets | yes | commutative, associative | (0, 0, 0, 0) |
+| `scale` | `scale(Insets, number)` | Insets |  |  |  |
 
 ## `NDVectorDomain`
 

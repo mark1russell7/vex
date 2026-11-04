@@ -48,5 +48,7 @@ The four packages `vex`, `vex-domains`, `vex-testkit` and `vex-compiler` have on
 | The schema program of JSON documents in `vex-domains`: `SCHEMA_PROGRAM`, `SCHEMA_DOMAINS`, `schemaOf(docs)` and the type `JsonFieldSchema` | 0.17.0 |
 | A standalone module does not copy a list without error items before a list op reads it (a list op costs less, the values do not change). 0.17.1 was slower, so use 0.17.2 or later | 0.17.2 |
 | The limit of `iterate` from the size of the data (step B): `dataLimit(axis)`, or a list chain as the limit in the builder | the next release |
+| `InsetsDomain` and `insets`: the four sides of an inset as plain data. A number lifts to four sides, also in a module | the next release |
+| The declaration `fields` of a domain, so two domains of plain objects can share a module | the next release |
 
 A feature of the main branch that is not on npm yet has the version "the next release". Until it is on npm, a project can use it only from a local copy of the repository, for example with `pnpm link`. Do not write a workaround for a missing feature without a note. Tell the user which version has it.

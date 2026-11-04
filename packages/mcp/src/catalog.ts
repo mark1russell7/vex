@@ -7,7 +7,7 @@
  * argument, and it gives the kind of the value.
  */
 import { domainOf, type AnyDomain, type OpSpec, type ParamKind } from "@mark1russell7/vex";
-import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, JsonDomain, LiftedNDVectorDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LiftedNDVectorDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
 /** A domain of the catalog: its import name, the domain, the type of its values, a sample value and a short description. */
 export interface Entry {
@@ -25,6 +25,7 @@ export const CATALOG: readonly Entry[] = [
   { name: "TextDomain", d: TextDomain, type: "string", sample: "ab", about: "Texts." },
   { name: "Vec2Domain", d: Vec2Domain, type: "Vec2", sample: new Vec2(3, 4), about: "2D vectors: `new Vec2(x, y)`, or `vec2` of `NumDomain`. A component that is not finite gives `#NUM!`." },
   { name: "XYDomain", d: XYDomain, type: "XY", sample: { x: 3, y: 4 }, about: "2D vectors as plain data: `{ x, y }`, or `xy` of `NumDomain`. Each op is a function, so a standalone module can copy the domain. No op lifts a number. Put it before `NumRecordDomain`." },
+  { name: "InsetsDomain", d: InsetsDomain, type: "Insets", sample: { startX: 1, startY: 2, endX: 3, endY: 4 }, about: "The four sides of an inset as plain data: `{ startX, startY, endX, endY }`, or `insets` of `NumDomain`. `start` and `end` give `XY` values, and a module can copy them. `startVec2` and `endVec2` give `Vec2` values, and a module refuses them. A side that is not finite gives `#NUM!`." },
   { name: "NDVectorDomain", d: NDVectorDomain, type: "NDVector", sample: new NDVector({ width: 3, height: 4 }), about: "Vectors with named components. A component that one vector does not have counts as 0. No op lifts a number." },
   { name: "LiftedNDVectorDomain", d: LiftedNDVectorDomain, type: "NDVector", sample: new NDVector({ width: 3, height: 4 }), about: "The vectors of `NDVectorDomain`, but a number argument of `add`, `subtract`, `multiply` or `dot` becomes `{ scalar: n }`." },
   { name: "NumRecordDomain", d: NumRecordDomain, type: "record of numbers", sample: { width: 3, height: 4 }, about: "Plain records of finite numbers, for example from `rec`. `toNDVector` makes a vector." },

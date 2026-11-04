@@ -184,6 +184,23 @@ m.ok; // => true
 
 The run gives each list as a `vex.list`, with the keys as text. An error item has the error `VEX_ERROR`. The value of a program in `emitModule` can be a list too.
 
+## A box inset in a module
+
+`InsetsDomain` keeps the four sides of an inset. The program adds `pad` to a zero value, so `pad` can be a number or a value. In a module, a field has one kind, so this schema gives `pad` the kind `number`.
+
+```ts doctest
+import { app, lit, ref } from "@mark1russell7/vex";
+import { emitModule } from "@mark1russell7/vex-compiler";
+import { BoolDomain, InsetsDomain, NumDomain, XYDomain } from "@mark1russell7/vex-domains";
+
+const sides = app("add", app("insets", lit(0), lit(0), lit(0), lit(0)), ref("pad"));
+const box = app("xy", ref("w"), ref("h"));
+const inner = app("subtract", app("subtract", box, app("start", sides)), app("end", sides));
+const m = emitModule(inner, { domains: [NumDomain, XYDomain, InsetsDomain, BoolDomain], schema: { fields: { w: "number", h: "number", pad: "number" } } });
+
+m.ok; // => true
+```
+
 ## A program as data
 
 A program is JSON. `serialize` gives the text, and `parse` checks the text and gives the program. A literal of a domain needs `encode` and `decode` in its domain.

@@ -46,6 +46,9 @@ function result(e: Expr, options: GenerateOptions = ONE): Result<unknown> {
   return tiered(e, options).run({ space: S, origin: "0" });
 }
 
+/** This function gives a data limit whose later test uses an extension that gives #DEPTH!. */
+const depthTest = (first: Expr): Axis => axes.where(axes.all, app("if", app("gt", ref("n"), lit(1)), ext("depth", null), first));
+
 describe("a request for tier 1 in a context that catches an error", () => {
   it("V-071 COMPILE.FALLBACK: an empty reduce gives the identity of its op in each context", () => {
     const programs: readonly (readonly [Expr, unknown])[] = [
@@ -77,10 +80,9 @@ describe("a request for tier 1 in a context that catches an error", () => {
   });
 
   it("V-071 ITERATE.LIMIT.ERROR COMPILE.EXT: #DEPTH! of a later test of a data limit wins over a caught error", () => {
-    const test = (first: Expr): Axis => axes.where(axes.all, app("if", app("gt", ref("n"), lit(1)), ext("depth", null), first));
     for (const first of [lit("x"), ref("missing"), ext("error", null)]) {
       // In the second axis, only one of the two tests can use an extension.
-      for (const axis of [test(first), axes.where(test(first), lit(true))]) {
+      for (const axis of [depthTest(first), axes.where(depthTest(first), lit(true))]) {
         const e = app("ifError", iterate(dataLimit(axis), { a: lit(0) }, { a: lit(1) }, v("a")), lit(-1));
         expect(result(e)).toMatchObject({ ok: false, error: { code: "#DEPTH!" } });
         expect(fallbacks(e, ONE)).toBe(3);
@@ -237,7 +239,7 @@ describe("P17: each failing part in each context", () => {
   ] as const)("V-071 P17 COMPILE.FALLBACK: a tiered program gives the result of the interpreter, with %s", (_name, options) => {
     fc.assert(
       fc.property(arbCatching, (e) => {
-        fallbacks(e, options, [S, TREE, MIXED, S]);
+        expect(fallbacks(e, options, [S, TREE, MIXED, S])).toBeGreaterThanOrEqual(0);
       }),
     );
   });

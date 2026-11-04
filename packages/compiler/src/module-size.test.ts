@@ -319,12 +319,9 @@ describe("COMPILE.MODULE.SIZE.DEAD: code that no code reads", () => {
     expect(sourceOf(emitModule(op("count", NOTHING), { ...OPTIONS, fuse: false }))).toContain("function FI");
   });
 
-  it("COMPILE.MODULE.SIZE.DEAD: a name of the run keeps the refusal of each name of the printer", () => {
-    for (const e of [op("count", NOTHING), op("count", op("fill", lit(0), n)), orElse(NOTHING)]) {
-      const refused = emitModule(e, { ...OPTIONS, name: "FI" });
-      expect(refused.ok).toBe(false);
-      expect(refused).toStrictEqual(emitModule(e, { ...OPTIONS, name: "FI", fuse: false }));
-    }
+  it("COMPILE.MODULE.SIZE.DEAD: a name of a helper that the pass removed is a good name of the run", () => {
+    expect(sourceOf(emitModule(op("count", NOTHING), { ...OPTIONS, name: "FI" }))).toContain("export function FI(records, vars) {");
+    expect(sourceOf(emitModule(op("count", NOTHING), { ...OPTIONS, name: "FI", fuse: false }))).toMatch(/export \{ run\$0 as FI \};/);
   });
 
   it("COMPILE.MODULE.SIZE.DEAD: the pass removes a constant in each form, also through a chain of reads", () => {

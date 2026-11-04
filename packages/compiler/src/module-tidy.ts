@@ -60,6 +60,13 @@ function rewritten(line: string, find: RegExp, write: (match: RegExpExecArray) =
   return out + line.slice(at);
 }
 
+/** This function gives the names in code. A word in a comment or in a text is not a name. */
+export function namesOfCode(code: string): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const token of tokenizer(code, { ecmaVersion: "latest", sourceType: "module" })) if (token.type === tokTypes.name) names.add(token.value as string);
+  return names;
+}
+
 /** The words of a text. */
 const WORD = /[A-Za-z_$][\w$]*/g;
 

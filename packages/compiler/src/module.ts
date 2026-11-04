@@ -35,7 +35,7 @@ import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type C
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
-import { keepFaults, tidy, type Tidied } from "./module-tidy.ts";
+import { keepFaults, namesOfCode, tidy, type Tidied } from "./module-tidy.ts";
 import { canonical, keyText } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 import { originalOf, placesError, unsharedAll } from "./unshared.ts";
@@ -46,8 +46,8 @@ export interface ModuleOptions {
   /** The kinds of the fields of the records and of the variables. A module reads only the names of its schema. */
   readonly schema: Schema;
   /**
-   * The name of the function that the module exports. The default is `run`. A reserved word, a name that the module
-   * declares and a global that a module reads (`MODULE_GLOBALS`) are not names of the run (V-060).
+   * The name of the function that the module exports. The default is `run`. A reserved word, `VEX_ERROR` and
+   * `VexContractError` are not names of the run (V-060). Each other name hides nothing from the code (COMPILE.MODULE.NAME).
    */
   readonly name?: string;
   /**
@@ -2095,15 +2095,24 @@ const RESERVED: ReadonlySet<string> = new Set(
   "await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield arguments eval".split(" "),
 );
 
-/**
- * This function gives the reason that a name cannot be the name of the run, or `undefined` for a good name (V-060). A
- * reserved word does not parse, and a second declaration of a name of the module does not parse. The function of the
- * run with the name of a global of `MODULE_GLOBALS` hides that global from the code of the module.
- */
-function nameReason(name: string, declared: ReadonlySet<string>): string | undefined {
+/** The names that each module exports. A run with such a name is a second export, and the module does not parse. */
+const MODULE_EXPORTS: ReadonlySet<string> = new Set(["VEX_ERROR", "VexContractError"]);
+
+/** This function gives the reason that a name cannot be the name of the run, or `undefined` for a good name (V-060). */
+function nameReason(name: string): string | undefined {
   if (RESERVED.has(name)) return `the name "${name}" is a reserved word of JavaScript`;
-  if (MODULE_GLOBALS.has(name)) return `the name "${name}" is a global that a module reads`;
-  return declared.has(name) ? `the name "${name}" is a name of the module` : undefined;
+  return MODULE_EXPORTS.has(name) ? `the name "${name}" is a name of the module` : undefined;
+}
+
+/**
+ * This function gives the name of the function of the run (COMPILE.MODULE.NAME). A function with a name of the code hides
+ * that name from the code. Thus the run of such a module has an internal name that the code does not have.
+ */
+function innerName(name: string, code: ReadonlySet<string>): string {
+  if (!code.has(name)) return name;
+  let at = 0;
+  while (code.has(`run$${String(at)}`)) at += 1;
+  return `run$${String(at)}`;
 }
 
 class Printer {
@@ -4930,13 +4939,11 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   if (p.into) p.use("GI");
   if (p.runKeys) p.use("KC");
   [...p.helpers].toSorted().forEach(add);
-  // The names that this module declares at its top: the constants, the helpers and the declarations of the printer.
-  const declared = new Set<string>(["VexContractError", "VEX_ERROR", "E", ...(p.memos ? ["Z"] : []), ...(helpers.has("S") ? ["N", "W"] : []), ...helpers, ...p.top.keys()]);
-  const bad = nameReason(name, declared);
+  const bad = nameReason(name);
   if (bad !== undefined) return { ok: false, reason: bad };
   const textOf = (h: Helper): string => (h === "S" ? helperS(p.features) : flat && (h === "LI" || h === "LA") ? FLAT_LIST_HELPERS[h] : HELPERS[h]);
+  const params = `(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`;
   const start = [
-    `export function ${name}(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
     "  const n = R.length;",
@@ -4956,7 +4963,7 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   // The text with fuse false stays the form of the version before this pass (COMPILE.MODULE.FUSE.OFF).
   const small = options.fuse === false ? all : tidy({ ...all, kept: start.join("\n"), globals: MODULE_GLOBALS }, options.faults);
   const { decls, lines: statements } = options.faults === "throw" ? keepFaults(small, p.copies) : small;
-  const lines = [
+  const textWith = (head: string, tail: readonly string[]): string => [
     "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
     "/** The error of a run whose input does not keep the schema of the program. */",
     "export class VexContractError extends Error {}",
@@ -4967,12 +4974,16 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     // The values of an item of a node that keeps its items: excluded by a later test, and of the wrong kind.
     ...(decls.has("S") ? ["const N = {}, W = {};"] : []),
     ...decls.values(),
+    `${head}${params}`,
     ...start,
     ...statements,
     "}",
+    ...tail,
     "",
-  ];
-  return { ok: true, source: lines.join("\n") };
+  ].join("\n");
+  // The check reads each line of the module, with the copies of the ops. The function of the run has no name in that text.
+  const inner = innerName(name, namesOfCode(textWith("function", [])));
+  return { ok: true, source: inner === name ? textWith(`export function ${name}`, []) : textWith(`function ${inner}`, [`export { ${inner} as ${name} };`]) };
 }
 
 /**

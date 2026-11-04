@@ -1,23 +1,18 @@
 import { SheetRun } from "@mark1russell7/vex";
-import { emitSheetModule } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { fitChild as child, measureVars as vars } from "./inputs.ts";
-import { fitNode, MEASURE_COLUMNS, MEASURE_DOMAINS, MEASURE_KINDS, MEASURE_SCHEMA, measureRecords, measureSpace, type Fit, type FitChild, type MeasureVars } from "./ireko-measure.ts";
+import { fitNode, MEASURE_COLUMNS, MEASURE_DOMAINS, measureRecords, measureSpace, type Fit, type FitChild, type MeasureVars } from "./ireko-measure.ts";
+import { irekoRun, irekoSource } from "./ireko-modules.ts";
 
 type Columns = Readonly<Record<string, readonly unknown[]>>;
 type Run = (records: unknown, vars: unknown, parents: unknown) => Columns;
 
 /** This function gives the run of the standalone module of the sheet, as the build of ireko writes it. */
 function moduleOf(): Run {
-  const m = emitSheetModule(MEASURE_COLUMNS, { domains: MEASURE_DOMAINS, schema: MEASURE_SCHEMA, kinds: MEASURE_KINDS, space: "tree", name: "measureOf" });
-  if (!m.ok) throw new Error(m.reason);
-  expect(m.source).not.toContain("import");
   // The fit reads only its own record and the parent, so the module has no search.
-  expect(m.source).not.toContain("function SH(");
-  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitSheetModule, as in the build of ireko.
-  return new Function(`${m.source.replaceAll(/^export /gm, "")}
-return measureOf;`)() as Run;
+  expect(irekoSource("measure", "throw")).not.toContain("function SH(");
+  return irekoRun("measure") as Run;
 }
 
 /** This function gives the fit from the columns of a run: the node at the position 0, and the children after it. */

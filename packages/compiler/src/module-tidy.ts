@@ -141,8 +141,9 @@ export function aliases(lines: readonly string[]): readonly string[] {
     const [, alias, name] = m as unknown as readonly [string, string, string];
     const end = blockEnd(out, i);
     const block = out.slice(i + 1, end);
-    // Each read of the alias must be in its block, and no line of that block can give the name another meaning.
-    if (countOf(out, alias) !== 1 + countOf(block, alias) || block.some((x) => binds(x, name)) || !keeps(out, writes.get(name) ?? [], name, i, end)) continue;
+    // Each read of the alias must be in its block, and no line of that block can give either name another meaning. The
+    // printer prints the steps of a stopped walk two times, so a nested block can declare the alias again (V-073).
+    if (countOf(out, alias) !== 1 + countOf(block, alias) || block.some((x) => binds(x, name) || binds(x, alias)) || !keeps(out, writes.get(name) ?? [], name, i, end)) continue;
     for (let k = i + 1; k < end; k++) out[k] = renamed(out[k] as string, alias, name);
     gone.add(i);
   }
@@ -371,10 +372,40 @@ export function inlineOps(parts: TidyParts): Tidied {
   return { decls, lines };
 }
 
-/** This function gives the smaller form of a module, with the same behavior (COMPILE.MODULE.SIZE). */
-export function tidy(parts: TidyParts): Tidied {
+/** The helper of a catch that keeps only the error of Vex (COMPILE.MODULE.FAULT). */
+const FAULT_KEEP = "function FK(x) { if (x !== E) throw x; }";
+/** The helper that gives the error of Vex for each exception of a copy of a function of a domain. */
+const FAULT_WRAP = "function FW(f) { return (...a) => { try { return f(...a); } catch { throw E; } }; }";
+
+/** This function gives a line where each catch rethrows each value that is not the error of Vex. */
+function narrowCatches(line: string): string {
+  return line.replaceAll("catch {", "catch ($f) { FK($f);");
+}
+
+/** This function gives the declaration of a copy of a function of a domain, inside the wrapper. */
+function wrapFaults(name: string, text: string): string {
+  return `const ${name} = FW(${text.slice(`const ${name} = `.length, -1)});`;
+}
+
+/**
+ * This function gives the form of a module where a catch keeps only the error of Vex (COMPILE.MODULE.FAULT). The start
+ * of a fault tells the two cases. A copy of a function of a domain gives the error of Vex for each exception, as in the
+ * interpreter. Another exception comes from the printed code, and it leaves the run.
+ */
+export function keepFaults(parts: Tidied, copies: ReadonlySet<string>): Tidied {
+  const decls = new Map([...parts.decls].map(([name, text]) => [name, copies.has(name) ? wrapFaults(name, text) : narrowCatches(text)]));
+  decls.set("FK", FAULT_KEEP);
+  decls.set("FW", FAULT_WRAP);
+  return { decls, lines: parts.lines.map(narrowCatches) };
+}
+
+/**
+ * This function gives the smaller form of a module, with the same behavior (COMPILE.MODULE.SIZE). With `faults` at
+ * `throw`, each function of a domain stays a declaration, so the wrapper of `keepFaults` holds each of its exceptions.
+ */
+export function tidy(parts: TidyParts, faults: "value" | "throw" = "value"): Tidied {
   const lines = deadConstants(onceCells(deadConstants(aliases(deadKeys(parts.lines)))));
   const live = liveDecls(parts.decls, [parts.kept, ...lines].join("\n"));
-  const small = inlineOps({ ...parts, decls: live, lines });
+  const small = faults === "throw" ? { decls: live, lines } : inlineOps({ ...parts, decls: live, lines });
   return { decls: liveDecls(small.decls, [parts.kept, ...small.lines].join("\n")), lines: small.lines };
 }

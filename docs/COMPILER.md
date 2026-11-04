@@ -658,7 +658,7 @@ The decisions of the third block:
 - A key of a module list is a number for the position of a record, or a text for a key of a literal. `get` and `without` compare the text of each key. Thus a read of the focus stays fast.
 - `get` keeps an index of the keys on the array of the list. The array does not change after the op that makes it. Thus a step that reads each key of a list of `n` items costs O(n), as in the interpreter.
 - A list op over a `let` with literal options is the list op over the body of the `let`. A builder sheet prints `sum(let($0 = 0, each(…)))`. Thus the `each` stays one loop with a running value.
-- The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus an op on a `get` of a name whose first list is empty gives a reason.
+- The first list of a name of a loop fixes the kind of its items. Each step must give a list of the same kind. The empty literal fits each list, but its items have no kind. Thus the step of the name decides that kind (COMPILE.MODULE.LOOP.EMPTY). When no step decides it, an op on a `get` of the name gives a reason.
 - The focus of the axis `list` is the position of a record. A key of a literal is not such a position. Since COMPILE.MODULE.FILL, the axis `list` over such keys gives a reason only when it reads a record at a target.
 - Since 2026-10-27, a loop over the axis `list` can name its items with `as` (COMPILE.MODULE.LIST.ITEM, §13.3, "The names of the items").
 - Other constructs give a reason too. These are `flat` over a list of values and `append` of a list of lists and a list of values. An array as a list gives a reason. Since 2026-10-26, the value of a program and the branches of `if` and `ifError` can be lists ("Lists in cells" below). Since 2026-10-26, a module has graph spaces and `reduce`, so the force pilot is a module ("Graph spaces and reduce" below).
@@ -1331,7 +1331,7 @@ The measure pass of ireko gives a shape to each subtree that a tidy strategy rea
 
 The merge is a chain of folds over lists. It gives the ends of the valid bands, sorts them and removes the repeated cuts. Then it gives one band for each cut with an active band, and it joins neighbor bands with the same interval. Last, it halves the list until the limit holds. The comparisons keep the first of two equal values, as the comparisons of ireko do. Thus a negative zero has the bits of ireko.
 
-A name of a loop whose first value is the empty literal has no kind of items. Then `sortBy` gives the reason "the kinds of the items of "sortBy" do not decide the op "from" of the option by". The program starts each such name with `fill(0, value)`, an empty list whose items have the kind of the value. `fill(1, value)` makes the list of one value (COMPILE.MODULE.FILL). Before, the axis `window(0, 0)` made it.
+The printer takes the kind of the items of a name that starts with the empty literal from the step of the name (COMPILE.MODULE.LOOP.EMPTY). The program keeps `fill(0, value)` as its first list, because this first list is fresh, so the steps of the name push in place (COMPILE.MODULE.FUSE.ADOPT). With the empty literal, six appends of `NODE_SHAPE` copy their lists in each step, and the module of the sheet gets more bytes after gzip. `fill(0, value)` is an empty list whose items have the kind of the value. `fill(1, value)` makes the list of one value (COMPILE.MODULE.FILL). Before, the axis `window(0, 0)` made it.
 
 The body of the axis `list` cannot read the value of an item. Thus a map over a list is a fold with `append`. Before COMPILE.MODULE.APPEND.OWN, each step copied the list. Before COMPILE.MODULE.LIST.CALL, the module of the sheet had approximately 45 kB and 9.5 kB after gzip, before a minifier. A rough local timing on 2026-10-27 on a busy machine gave 0.24 ms for 13 nodes and 1.15 ms for 111 nodes. `shapesTree` took 0.06 ms and 0.11 ms. Thus the module is approximately 4 to 10 times slower.
 
@@ -1414,6 +1414,20 @@ The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 %
 In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out[o] = LPC(G(c136()), 1)` replaces the read `out[o] = G(c137())` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12520 bytes, and the default module has 13209 bytes. The golden file `module-plain.js` keeps its text.
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
+
+#### Names that start empty (COMPILE.MODULE.LOOP.EMPTY)
+
+The printer prints the first value of a name before its step, and the empty literal has no kind of items. A program with `sortBy` and the option `by` over such a name needs that kind. Thus the printer can print a program more than one time.
+
+1. The first print uses the facts of the first lists. A program that it can print keeps this text, so its size and its speed do not change.
+2. After a reason, searches start. In a search, a name that starts empty counts as an empty list, because an empty list fits each list. Thus the list of the step shows the kind of the items. The search keeps this kind, by the expression of the step.
+3. A later search uses the kinds that it has, so a step can take the kind of another such name. The searches stop when one finds no new kind.
+4. In a search, a part that the printer cannot print gives an empty list. For example, a filter of the name reads the items, and an `append` adds items of the kind. The search keeps no text.
+5. The last print gives each such name its kind. The check `fits` of each step proves the kind by induction: the first list has no items, and each step gives items of the kind. A step with another kind gives the reason that the list does not fit.
+
+A program that no step decides gets the reason of its first print. A name that holds its first list in each step gives no kind, and two kinds in one step give no kind. A read of the items in a search does not decide a kind, so a step that only reads its own items stays refused.
+
+The test `module-empty-start.test.ts` compares these modules with the interpreter, with and without fusion (P17). It also pins each case that stays refused.
 
 #### The names of the items (COMPILE.MODULE.LIST.ITEM)
 

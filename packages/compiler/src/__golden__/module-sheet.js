@@ -5,7 +5,6 @@ export class VexContractError extends Error {}
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function C(m) { throw new VexContractError(m); }
 function CH(P, n) {
   const h = [], r = [];
@@ -73,8 +72,7 @@ export function run(records, vars, parents) {
   const K17 = KO(H, RT, false, false);
   for (const o of K16) {
     try {
-      const f1 = o;
-      const A2 = H[f1];
+      const A2 = H[o];
       let a4 = 0;
       for (let q3 = 0; q3 < A2.length; q3++) {
         const j0 = A2[q3];
@@ -96,10 +94,9 @@ export function run(records, vars, parents) {
       let t15;
       try {
         let l7 = 0;
-        const f9 = o;
-        const A10 = GP[f9];
-        const h11 = Math.max(0, SI[f9] + -9);
-        const h12 = Math.min(A10.length, SI[f9] + -1 + 1);
+        const A10 = GP[o];
+        const h11 = Math.max(0, SI[o] + -9);
+        const h12 = Math.min(A10.length, SI[o] + -1 + 1);
         for (let q13 = h11; q13 < h12; q13++) {
           const j8 = A10[q13];
           const t14 = k_number((l7) + (G(D[0][j8])));

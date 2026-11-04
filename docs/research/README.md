@@ -13,4 +13,4 @@ The 2026-10-08 review used five research agents. This folder keeps four of their
 Notes:
 
 - These reports are research notes, not STE text. Each file starts with `<!-- ste-disable -->`. Also add `docs/research/**` to the `ignore` list of `ste.config.json` in P0.
-- The public copy has no local paths, no machine names and no details of private repositories. Graph appears only where `docs/REVIEW.md` names it.
+- The public copy has no local paths, no machine names and no details of private repositories.

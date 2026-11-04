@@ -51,6 +51,13 @@ describe("limitsFor", () => {
     expect(limitsFor(BY, "another CPU")).toMatchObject({ model: "other" });
   });
 
+  it("V-075: finds the model in a CPU name with another case, and keeps the spelling of the limits", () => {
+    const BY_NAME = { Xeon: { limit: 2.08, slow: 2.08 }, other: { limit: 1.74, slow: 1.74 } };
+    const names = ["INTEL(R) XEON(R) PLATINUM 8573C", "Intel(R) Xeon(R) Platinum 8573C CPU @ 2.30GHz", "intel(r) xeon(r)"];
+    expect(names.map((n) => limitsFor(BY_NAME, n))).toEqual(names.map(() => ({ limit: 2.08, slow: 2.08, model: "Xeon" })));
+    expect(limitsFor(BY_NAME, "AMD EPYC 9V45 96-CORE PROCESSOR")).toMatchObject({ model: "other" });
+  });
+
   it("reads back the model and a record only from a result line", () => {
     const l: CaseLimits = { limit: 1.5, slow: 1.2, model: "other" };
     expect(parseLine(line(1, undefined, 2, 0, l))?.limits).toEqual(l);

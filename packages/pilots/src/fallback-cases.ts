@@ -17,6 +17,8 @@ import { GRADE_COLUMNS, gradeFormula, studentKey, type SchoolClass } from "./gra
 import { heatStep, heatVex, type HeatGrid } from "./heat.ts";
 import {
   auditTree,
+  betweenInput,
+  boundsInput,
   bandLimit,
   BOM_BIKE,
   BOM_BROKEN,
@@ -39,6 +41,9 @@ import {
   INVOICE_GOOD,
   invoiceList,
   layersInput,
+  directedEdge,
+  routeNodes,
+  routerEdge,
   treeInput,
   LOAN_FOUR,
   LOAN_LONG,
@@ -47,6 +52,7 @@ import {
   measureVars,
   NODE_FIXED_KIDS,
   NODE_INFINITE,
+  overlapTree,
   placeTreeInput,
   RADIAL_MIXED,
   radialRing,
@@ -61,13 +67,14 @@ import {
   shapeTree,
 } from "./inputs.ts";
 import { INVOICE_COLUMNS, invoiceFormula, LINE_COLUMNS, lineKey, type Invoice } from "./invoice.ts";
-import { ESCAPE_DOMAINS, ESCAPE_PROGRAM, escapeRun } from "./ireko-audit.ts";
+import { BETWEEN_DOMAINS, BETWEEN_PROGRAM, betweenRun, BOUNDS_DOMAINS, BOUNDS_PROGRAM, boundsRun, ESCAPE_DOMAINS, ESCAPE_PROGRAM, escapeRun, OVERLAP_DOMAINS, OVERLAP_PROGRAM, overlapRun } from "./ireko-audit.ts";
 import { GRID_DOMAINS, GRID_PROGRAM, gridRun } from "./ireko-grid.ts";
 import { MEASURE_COLUMNS, MEASURE_DOMAINS, measureRecords, measureSpace } from "./ireko-measure.ts";
 import { PLACE_COLUMNS, PLACE_DOMAINS, placeSpace } from "./ireko-place.ts";
 import { LAYERS_DOMAINS, LAYERS_PROGRAM, layersRun } from "./ireko-layers.ts";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, radialRun } from "./ireko-radial.ts";
 import { MAX_BANDS, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, shapeSpace, type ShapeRecord } from "./ireko-shapes.ts";
+import { AVOID_PROGRAM, avoidRun, directionRecords, EDGE_DIRECTION_PROGRAM, LABEL_BOX_PROGRAM, nodeRecords, OBSTACLES_PROGRAM, obstaclesRun, ORTHOGONAL_PROGRAM, ROUTE_DOMAINS, routerRecords, STRAIGHT_PROGRAM } from "./ireko-route.ts";
 import { TREE_DOMAINS, TREE_PROGRAM, treeRun } from "./ireko-tree.ts";
 import { LOAN_COLUMNS, loanFormula, loanFormulas, type LoanMonth, type LoanTerms } from "./loan.ts";
 import { formulas, PILOTS } from "./programs.ts";
@@ -151,6 +158,82 @@ export function pilotCases(o: CaseOptions): ShareCase[] {
           const { space: s, vars } = treeRun(i);
           for (const origin of s.keys) p.run({ space: s, origin, vars });
         }
+      },
+    },
+    {
+      name: "overlap",
+      run: (m) => {
+        const p = m.program("overlap", OVERLAP_PROGRAM, { domains: OVERLAP_DOMAINS });
+        for (const nodes of sample(overlapTree, 20, o)) {
+          const s = overlapRun(nodes).space;
+          for (const origin of s.keys) p.run({ space: s, origin });
+        }
+      },
+    },
+    {
+      name: "bounds",
+      run: (m) => {
+        const p = m.program("bounds", BOUNDS_PROGRAM, { domains: BOUNDS_DOMAINS });
+        for (const { nodes, points } of sample(boundsInput, 20, o)) {
+          const s = boundsRun(nodes, points).space;
+          for (const origin of s.keys) p.run({ space: s, origin });
+        }
+      },
+    },
+    {
+      name: "between",
+      run: (m) => {
+        const p = m.program("between", BETWEEN_PROGRAM, { domains: BETWEEN_DOMAINS });
+        for (const { parents, edges } of sample(betweenInput, 20, o)) {
+          const s = betweenRun(parents, edges).space;
+          for (const origin of s.keys) p.run({ space: s, origin });
+        }
+      },
+    },
+    {
+      name: "route.direction",
+      run: (m) => {
+        const p = m.program("route.direction", EDGE_DIRECTION_PROGRAM, { domains: ROUTE_DOMAINS });
+        const s = space.array(directionRecords(sample(directedEdge(), 30, o)));
+        for (const origin of s.keys) p.run({ space: s, origin });
+      },
+    },
+    {
+      name: "route.label",
+      run: (m) => {
+        const p = m.program("route.label", LABEL_BOX_PROGRAM, { domains: ROUTE_DOMAINS });
+        const s = space.array(sample(routeNodes(6), 10, o).flatMap((i) => nodeRecords(i.nodes)));
+        for (const origin of s.keys) p.run({ space: s, origin });
+      },
+    },
+    {
+      name: "route.obstacles",
+      run: (m) => {
+        const p = m.program("route.obstacles", OBSTACLES_PROGRAM, { domains: ROUTE_DOMAINS });
+        for (const { nodes, s, t } of sample(routeNodes(8), 20, o)) p.run({ ...obstaclesRun(nodes, s, t), origin: "0" });
+      },
+    },
+    {
+      name: "route.straight",
+      run: (m) => {
+        const p = m.program("route.straight", STRAIGHT_PROGRAM, { domains: ROUTE_DOMAINS });
+        const s = space.array(routerRecords(sample(routerEdge(0), 30, o)));
+        for (const origin of s.keys) p.run({ space: s, origin });
+      },
+    },
+    {
+      name: "route.orthogonal",
+      run: (m) => {
+        const p = m.program("route.orthogonal", ORTHOGONAL_PROGRAM, { domains: ROUTE_DOMAINS });
+        const s = space.array(routerRecords(sample(routerEdge(0), 30, o)));
+        for (const origin of s.keys) p.run({ space: s, origin });
+      },
+    },
+    {
+      name: "route.avoid",
+      run: (m) => {
+        const p = m.program("route.avoid", AVOID_PROGRAM, { domains: ROUTE_DOMAINS });
+        for (const edge of sample(routerEdge(2), 4, o)) p.run({ ...avoidRun(edge), origin: "0" });
       },
     },
     {

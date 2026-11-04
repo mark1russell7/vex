@@ -6,7 +6,6 @@ export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
 function AN(P, k) { const o = []; for (let p = P[k]; p >= 0; p = P[p]) o.push(p); return o; }
 function F() { throw E; }
-function B(x) { return typeof x === "boolean" ? x : F(); }
 function BF(h, k) { const o = [k]; for (let i = 0; i < o.length; i++) for (const c of h[o[i]]) o.push(c); return o; }
 function C(m) { throw new VexContractError(m); }
 function CH(P, n) {
@@ -120,16 +119,14 @@ export function run(records, vars, parents) {
   try {
     let a189 = 0;
     for (let j181 = 0; j181 < n; j181++) {
-      const f183 = j181;
-      const A184 = H[f183];
+      const A184 = H[j181];
       let n187 = 0;
       for (let q185 = 0; q185 < A184.length; q185++) {
         const j182 = A184[q185];
         const x188 = R[j182]["n"];
         n187++;
       }
-      const x191 = n187;
-      a189 += x191;
+      a189 += n187;
     }
     c192 = k_number(a189);
   } catch {
@@ -189,8 +186,7 @@ export function run(records, vars, parents) {
       let t18;
       try {
         let l12 = 0;
-        const f14 = o;
-        const A15 = H[f14];
+        const A15 = H[o];
         for (let q16 = 0; q16 < A15.length; q16++) {
           const j13 = A15[q16];
           const t17 = k_number((k_number((l12) * (3))) - (R[j13]["n"]));
@@ -203,8 +199,7 @@ export function run(records, vars, parents) {
       let t23;
       try {
         let l19 = 0;
-        const f21 = o;
-        for (let j20 = P[f21]; j20 >= 0; j20 = P[j20]) {
+        for (let j20 = P[o]; j20 >= 0; j20 = P[j20]) {
           const t22 = k_number((k_number((l19) * (3))) - (R[j20]["n"]));
           l19 = t22;
         }
@@ -215,9 +210,8 @@ export function run(records, vars, parents) {
       let t31;
       try {
         let l24 = 0;
-        const f26 = o;
-        const A27 = PI[f26] + 1;
-        const h28 = A27 + SZ[f26] - 1;
+        const A27 = PI[o] + 1;
+        const h28 = A27 + SZ[o] - 1;
         for (let q29 = A27; q29 < h28; q29++) {
           const j25 = PO[q29];
           const t30 = k_number((k_number((l24) * (3))) - (R[j25]["n"]));
@@ -230,11 +224,10 @@ export function run(records, vars, parents) {
       let t38;
       try {
         let l32 = 0;
-        const f34 = o;
-        const A35 = GP[f34];
+        const A35 = GP[o];
         for (let q36 = 0; q36 < A35.length; q36++) {
           const j33 = A35[q36];
-          if (j33 === f34) continue;
+          if (j33 === o) continue;
           const t37 = k_number((k_number((l32) * (3))) - (R[j33]["n"]));
           l32 = t37;
         }
@@ -245,10 +238,9 @@ export function run(records, vars, parents) {
       let t47;
       try {
         let l39 = 0;
-        const f41 = o;
-        const A42 = GP[f41];
-        const h43 = Math.max(0, SI[f41] + -1);
-        const h44 = Math.min(A42.length, SI[f41] + 1 + 1);
+        const A42 = GP[o];
+        const h43 = Math.max(0, SI[o] + -1);
+        const h44 = Math.min(A42.length, SI[o] + 1 + 1);
         for (let q45 = h43; q45 < h44; q45++) {
           const j40 = A42[q45];
           const t46 = k_number((k_number((l39) * (3))) - (R[j40]["n"]));
@@ -261,10 +253,9 @@ export function run(records, vars, parents) {
       let t56;
       try {
         let l48 = 0;
-        const f50 = o;
-        const A51 = GP[f50];
-        const h52 = Math.max(0, SI[f50] + -20);
-        const h53 = Math.min(A51.length, SI[f50] + 20 + 1);
+        const A51 = GP[o];
+        const h52 = Math.max(0, SI[o] + -20);
+        const h53 = Math.min(A51.length, SI[o] + 20 + 1);
         for (let q54 = h52; q54 < h53; q54++) {
           const j49 = A51[q54];
           const t55 = k_number((k_number((l48) * (3))) - (R[j49]["n"]));
@@ -277,10 +268,9 @@ export function run(records, vars, parents) {
       let t65;
       try {
         let l57 = 0;
-        const f59 = o;
-        const A60 = GP[f59];
-        const h61 = Math.max(0, SI[f59] + 2);
-        const h62 = Math.min(A60.length, SI[f59] + 1 + 1);
+        const A60 = GP[o];
+        const h61 = Math.max(0, SI[o] + 2);
+        const h62 = Math.min(A60.length, SI[o] + 1 + 1);
         for (let q63 = h61; q63 < h62; q63++) {
           const j58 = A60[q63];
           const t64 = k_number((k_number((l57) * (3))) - (R[j58]["n"]));
@@ -293,8 +283,7 @@ export function run(records, vars, parents) {
       let t72;
       try {
         let l66 = 0;
-        const f68 = o;
-        const A69 = H[f68];
+        const A69 = H[o];
         for (let q70 = 0; q70 < A69.length; q70++) {
           const j67 = A69[q70];
           const t71 = k_number((k_number((l66) * (3))) - (R[j67]["n"]));
@@ -307,8 +296,7 @@ export function run(records, vars, parents) {
       let t79;
       try {
         let l73 = 0;
-        const f75 = o;
-        const A76 = (P[f75] < 0 ? [] : [P[f75]]);
+        const A76 = (P[o] < 0 ? [] : [P[o]]);
         for (let q77 = 0; q77 < A76.length; q77++) {
           const j74 = A76[q77];
           const t78 = k_number((k_number((l73) * (3))) - (R[j74]["n"]));
@@ -321,8 +309,7 @@ export function run(records, vars, parents) {
       let t86;
       try {
         let l80 = 0;
-        const f82 = o;
-        const A83 = BF(H, f82);
+        const A83 = BF(H, o);
         for (let q84 = 1; q84 < A83.length; q84++) {
           const j81 = A83[q84];
           const t85 = k_number((k_number((l80) * (3))) - (R[j81]["n"]));
@@ -332,18 +319,16 @@ export function run(records, vars, parents) {
       } catch {
         t86 = -99;
       }
-      const f92 = o;
       let a93 = 0;
       for (let j91 = 0; j91 < n; j91++) {
-        if (j91 === f92) continue;
+        if (j91 === o) continue;
         const x95 = R[j91]["n"];
         a93 += x95;
       }
       let t103;
       try {
         let l97 = 0;
-        const f99 = o;
-        const A100 = H[f99];
+        const A100 = H[o];
         for (let q101 = A100.length - 1; q101 >= 0; q101--) {
           const j98 = A100[q101];
           const t102 = k_number((k_number((l97) * (3))) - (R[j98]["n"]));
@@ -356,9 +341,8 @@ export function run(records, vars, parents) {
       let t111;
       try {
         let l104 = 0;
-        const f106 = o;
-        const A107 = PI[f106] + 1;
-        const h108 = A107 + SZ[f106] - 1;
+        const A107 = PI[o] + 1;
+        const h108 = A107 + SZ[o] - 1;
         for (let q109 = h108 - 1; q109 >= A107; q109--) {
           const j105 = PO[q109];
           const t110 = k_number((k_number((l104) * (3))) - (R[j105]["n"]));
@@ -371,8 +355,7 @@ export function run(records, vars, parents) {
       let t118;
       try {
         let l112 = 0;
-        const f114 = o;
-        const A115 = AN(P, f114);
+        const A115 = AN(P, o);
         for (let q116 = A115.length - 1; q116 >= 0; q116--) {
           const j113 = A115[q116];
           const t117 = k_number((k_number((l112) * (3))) - (R[j113]["n"]));
@@ -385,10 +368,9 @@ export function run(records, vars, parents) {
       let t127;
       try {
         let l119 = 0;
-        const f121 = o;
-        const A122 = GP[f121];
-        const h123 = Math.max(0, SI[f121] + -1);
-        const h124 = Math.min(A122.length, SI[f121] + 1 + 1);
+        const A122 = GP[o];
+        const h123 = Math.max(0, SI[o] + -1);
+        const h124 = Math.min(A122.length, SI[o] + 1 + 1);
         for (let q125 = h124 - 1; q125 >= h123; q125--) {
           const j120 = A122[q125];
           const t126 = k_number((k_number((l119) * (3))) - (R[j120]["n"]));
@@ -442,24 +424,21 @@ export function run(records, vars, parents) {
       } catch {
         t149 = -99;
       }
-      const f151 = o;
-      const A152 = PI[f151] + 1;
-      const h153 = A152 + SZ[f151] - 1;
+      const A152 = PI[o] + 1;
+      const h153 = A152 + SZ[o] - 1;
       let a155 = 0;
       for (let q154 = A152; q154 < h153; q154++) {
         const j150 = PO[q154];
         const x157 = R[j150]["w"];
         a155 += x157;
       }
-      const f159 = o;
       let n161 = 0;
-      for (let j158 = P[f159]; j158 >= 0; j158 = P[j158]) {
+      for (let j158 = P[o]; j158 >= 0; j158 = P[j158]) {
         const x162 = R[j158]["n"];
         n161++;
       }
-      const f164 = o;
-      const A165 = PI[f164] + 1;
-      const h166 = A165 + SZ[f164] - 1;
+      const A165 = PI[o] + 1;
+      const h166 = A165 + SZ[o] - 1;
       let n169 = 0;
       for (let q167 = A165; q167 < h166; q167++) {
         const j163 = PO[q167];
@@ -467,16 +446,14 @@ export function run(records, vars, parents) {
         const x170 = R[j163]["n"];
         n169++;
       }
-      const f172 = o;
-      const A173 = H[f172];
+      const A173 = H[o];
       const L175 = [];
       for (let q174 = 0; q174 < A173.length; q174++) {
         const j171 = A173[q174];
         L175.push([j171, R[j171]["n"]]);
       }
-      const b177 = L175;
       let a178 = 0;
-      for (const [, x180] of b177) {
+      for (const [, x180] of L175) {
         a178 += x180;
       }
       out[o] = ({ "moves": ({ "parent": t0, "grand": t1, "next": t2, "prev": t3, "uncle": t4, "far": t5, "zero": R[SO(GP, SI, o, 0)]["n"], "two": t6, "half": t7, "fixed": c10, "root": c11 }), "axes": ({ "children": t18, "ancestors": t23, "descendants": t31, "siblings": t38, "window": t47, "wide": t56, "none": t65, "successors": t72, "predecessors": t79, "reachable": t86, "all": G(c96()), "others": k_number(a93) }), "reversed": ({ "children": t103, "descendants": t111, "ancestors": t118, "window": t127 }), "at": ({ "parent": t134, "cousins": t142, "next": t149 }), "team": k_number((R[o]["w"]) + (k_number(a155))), "depth": n161, "tested": n169, "list": k_number(a178), "memo": G(c192) });

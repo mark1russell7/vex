@@ -4,7 +4,7 @@
  * counterexample. It also checks the kinds that a domain declares for a compiler. These are the primitive type of its
  * values (KIND.PRIMITIVE), its field names (KIND.FIELDS) and the kind of the result of each op (KIND.RETURNS).
  */
-import { resolveOp, type AnyDomain, type Law, type OpSpec, type ParamKind, type ReturnKind } from "@mark1russell7/vex";
+import { isVexList, listItemKind, resolveOp, type AnyDomain, type Law, type OpSpec, type ParamKind, type ReturnKind } from "@mark1russell7/vex";
 import * as fc from "fast-check";
 
 /** The options of the law checker. */
@@ -85,6 +85,9 @@ const domainOfKind = (domain: AnyDomain, kind: ReturnKind, others: readonly AnyD
 function hasKind(domain: AnyDomain, kind: ReturnKind, u: unknown, others: readonly AnyDomain[]): boolean {
   const named = domainOfKind(domain, kind, others);
   if (named !== undefined) return named.is(u);
+  const item = listItemKind(kind);
+  // An error item is an error of the op, so it does not count (KIND.RETURNS.LIST).
+  if (item !== undefined) return isVexList(u) && u.items.every((it) => !it.result.ok || typeof it.result.value === item);
   switch (kind as ParamKind) {
     case "domain":
       return domain.is(u);

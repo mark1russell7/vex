@@ -12,8 +12,9 @@ export const SHEET_COLUMNS = ["A", "B", "C"] as const;
 const ADDRESSES: readonly (readonly FixedMove[])[] = [[], [offset(-1)], [offset(1)], [offset(-2)], [index(0)]];
 
 /**
- * A formula of a random sheet: numbers, the field v, cell references, add, ifError and a sum over the other rows.
- * With `tables`, a formula can also sum a column over each row of a table (SHEET.TABLES).
+ * A formula of a random sheet has numbers, the field v, cell references and reads at a computed position. It also has
+ * add, ifError and a sum over the other rows. With `tables`, a formula can sum a column over each row of a table
+ * (SHEET.TABLES).
  */
 export const arbSheetFormula = (tables: readonly string[] = []): fc.Arbitrary<Expr> =>
   fc.letrec<{ e: Expr }>((tie) => ({
@@ -22,6 +23,8 @@ export const arbSheetFormula = (tables: readonly string[] = []): fc.Arbitrary<Ex
       fc.integer({ min: -5, max: 5 }).map((n): Expr => lit(n)),
       fc.constant(ref("v")),
       fc.tuple(fc.constantFrom(...SHEET_COLUMNS), fc.constantFrom(...ADDRESSES)).map(([c, at]): Expr => cell(c, at)),
+      fc.tuple(fc.constantFrom(...SHEET_COLUMNS), tie("e")).map(([c, i]): Expr => cell(c, [index(i)])),
+      fc.tuple(fc.constantFrom(...SHEET_COLUMNS), tie("e")).map(([c, i]): Expr => cell(c, [offset(-1), index(i)])),
       fc.tuple(tie("e"), tie("e")).map(([a, b]): Expr => app("add", a, b)),
       fc.tuple(tie("e"), tie("e")).map(([a, b]): Expr => app("ifError", a, b)),
       fc.constantFrom(...SHEET_COLUMNS).map((c): Expr => app("sum", each(axes.others, cell(c)))),

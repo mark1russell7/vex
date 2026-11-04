@@ -1,72 +1,32 @@
 /**
- * The speed of the schema pilot (EXAMPLE.SCHEMA), for the speed job of the nightly workflow. A private app needs 5 ms or less
+ * The speed of the schema pilot (EXAMPLE.SCHEMA), for the speed job of the nightly workflow. The target is 5 ms or less
  * for one sample of 20 documents of 30 fields.
  *
  * Start it from the repo root with `node packages/pilots/bench/schema-speed.ts`. It needs Node 24 or later, for the
  * type stripping. It prints one line for each case. With `BENCH_OUT=<file>`, it also writes the records as JSON.
  *
  * Each case runs `RUNS` times (default 40) after `WARM` runs (default 10). Thus the numbers are of the warm interpreter,
- * as in that app after its first samples. `COLD=1` adds the cold case of `schema.test.ts`: the mean of 5 runs after one.
+ * as in a host after its first samples. `COLD=1` adds the cold case of `schema.test.ts`: the mean of 5 runs after one.
  * `schema-cold.ts` measures the first sample in new processes.
  *
- * Two cases are references in the same run: `TypeScript inferSchema` and `calibration`, a fixed JavaScript work of
+ * Two cases are references in the same run: `TypeScript reference` and `calibration`, a fixed JavaScript work of
  * Map, filter and object steps. Each line gives the ratio of its median to the median of `calibration`. The runners of
  * CI differ by up to 1.4x, and the ratio removes most of that difference. `README.md` tells how to read the numbers.
  *
- * The script fails (exit 1) when a result is not the same as the result of the copy of `inferSchema` of that app. The
- * time does not make it fail.
+ * On 2026-11-04 the code of `TypeScript reference` changed, so do not compare its time or a ratio to it across this date.
+ * Each record gives this date in `referenceSince`.
+ *
+ * The script fails (exit 1) when a result is not the same as the result of `schemaReference`. The time does
+ * not make it fail.
  */
 import { writeFileSync } from "node:fs";
 import { app, axes, call, compile, each, evaluate, fn, fold, let_, lit, rec, space, v, vexList, type Expr, type ItemNames, type Result } from "@mark1russell7/vex";
+import { schemaReference } from "../src/schema-reference.ts";
 import { SCHEMA_DOMAINS, SCHEMA_PROGRAM } from "../src/schema.ts";
 import { context, env, envLine } from "../../core/bench/measure.ts";
 
 const RUNS = Number(process.env["RUNS"] ?? 40);
 const WARM = Number(process.env["WARM"] ?? 10);
-
-/** One record of the schema: a path, its kinds and the count of its documents. */
-interface Row {
-  readonly path: string;
-  readonly kinds: readonly string[];
-  readonly count: number;
-}
-
-// The reference of that app, as in schema.test.ts.
-const isRec = (u: unknown): u is Readonly<Record<string, unknown>> => typeof u === "object" && u !== null && !Array.isArray(u);
-
-function valueKind(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (Array.isArray(value)) {
-    const items = [...new Set((value as readonly unknown[]).map((x) => (Array.isArray(x) ? "array" : valueKind(x))))];
-    return items.length > 0 ? `array<${items.join("|")}>` : "array";
-  }
-  const t = typeof value;
-  return t === "string" || t === "number" || t === "boolean" ? t : t === "object" ? "object" : "string";
-}
-
-function inferSchema(input: readonly unknown[]): readonly Row[] {
-  const fields = new Map<string, { kinds: Set<string>; docs: Set<number> }>();
-  const addNote = (p: string, k: string, d: number): void => {
-    let f = fields.get(p);
-    if (f === undefined) {
-      f = { kinds: new Set(), docs: new Set() };
-      fields.set(p, f);
-    }
-    f.kinds.add(k);
-    f.docs.add(d);
-  };
-  const walk = (val: Readonly<Record<string, unknown>>, prefix: string, depth: number, doc: number): void => {
-    for (const [key, x] of Object.entries(val)) {
-      const p = prefix === "" ? key : `${prefix}.${key}`;
-      if (isRec(x) && Object.keys(x).length > 0 && depth < 3) walk(x, p, depth + 1, doc);
-      else addNote(p, valueKind(x), doc);
-    }
-  };
-  input.forEach((d, i) => {
-    if (isRec(d)) walk(d, "", 1, i);
-  });
-  return [...fields].map(([path, f]) => ({ path, kinds: [...f.kinds], count: f.docs.size }));
-}
 
 // The input of the speed case of schema.test.ts: 20 documents of 30 fields.
 const docs = Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${String(f)}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
@@ -110,7 +70,7 @@ const table = fold(axes.list(v("notes")), { paths: EMPTY, rows: EMPTY }, {
   rows: let_({ j: app("ifError", app("indexOf", v("paths"), field(v("n"), "path")), lit(-1)) }, app("if", app("lt", v("j"), lit(0)), app("append", v("rows"), one(newRow)), app("setNth", v("rows"), v("j"), upd))),
 }, v("rows"), undefined, ["n"]);
 const opts = { space: space.array([{}]), origin: "0", domains: SCHEMA_DOMAINS, vars: { docs } };
-const want = JSON.stringify(inferSchema(docs));
+const want = JSON.stringify(schemaReference(docs));
 
 /** This function tells if a value is a result of `evaluate`. */
 const isResult = (r: unknown): r is Result<unknown> => typeof r === "object" && r !== null && "ok" in r;
@@ -135,7 +95,7 @@ const exprs: Readonly<Record<string, Expr>> = {
 };
 const cases: Record<string, () => unknown> = Object.fromEntries(Object.entries(exprs).map(([name, e]) => [name, () => evaluate(e, opts)]));
 cases["compile alone"] = () => compile(SCHEMA_PROGRAM, { domains: SCHEMA_DOMAINS });
-cases["TypeScript inferSchema"] = () => inferSchema(docs);
+cases["TypeScript reference"] = () => schemaReference(docs);
 // A fixed work of plain JavaScript, of the kinds of steps of the interpreter. Its time follows the speed of the runner.
 const CAL_ITEMS = Object.freeze(Array.from({ length: 600 }, (_x, i) => Object.freeze({ k: `p${String(i % 30)}`, n: i })));
 cases["calibration"] = () => {
@@ -147,8 +107,8 @@ cases["calibration"] = () => {
   }
   return size;
 };
-// The cases that must give the records of inferSchema.
-const SAME = new Set(["pilot (evaluate)", "pilot v1 (functions of the walk)", "rewrite (c): one fold", "TypeScript inferSchema"]);
+// The cases that must give the records of schemaReference.
+const SAME = new Set(["pilot (evaluate)", "pilot v1 (functions of the walk)", "rewrite (c): one fold", "TypeScript reference"]);
 
 /** The record of one case: the times in ms, and the check of its result. */
 interface Measure {
@@ -195,16 +155,16 @@ for (const [name] of entries) {
 console.info(envLine("process"));
 const pilot = out.find((o) => o.name === "pilot (evaluate)")?.median ?? Number.NaN;
 const cal = out.find((o) => o.name === "calibration")?.median ?? Number.NaN;
-const ts = out.find((o) => o.name === "TypeScript inferSchema")?.median ?? Number.NaN;
+const ts = out.find((o) => o.name === "TypeScript reference")?.median ?? Number.NaN;
 for (const o of out) {
   console.info(`${o.name.padEnd(40)} median ${o.median.toFixed(2).padStart(8)} ms  min ${o.min.toFixed(2).padStart(8)}  share of the pilot ${((100 * o.median) / pilot).toFixed(0).padStart(4)} %  per calibration ${(o.median / cal).toFixed(3).padStart(7)}  per TypeScript ${(o.median / ts).toFixed(1).padStart(7)}  same as the reference: ${o.check}`);
 }
 console.info(`target: 5 ms for one sample, ${(5 / cal).toFixed(3)} per calibration. The warm pilot needs a factor of ${(pilot / 5).toFixed(1)} on this runner.`);
 const file = process.env["BENCH_OUT"];
-if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ mode: "process", context: context(), env: env(), node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
+if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ mode: "process", referenceSince: "2026-11-04", context: context(), env: env(), node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
 // A result that is not the result of the reference fails the step. The numbers stay in the report.
 const wrong = out.filter((o) => o.check !== "true" && o.check !== "n/a");
 if (wrong.length > 0) {
-  console.error(`not the same as the reference inferSchema: ${wrong.map((o) => `${o.name} (${o.check})`).join(", ")}`);
+  console.error(`not the same as the reference: ${wrong.map((o) => `${o.name} (${o.check})`).join(", ")}`);
   process.exitCode = 1;
 }

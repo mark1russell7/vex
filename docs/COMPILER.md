@@ -612,13 +612,13 @@ Vex has no loop, so each program ends. The language keeps this property, and it 
 - `iterate(n, init, step)`: `n` steps of an expression. A fixed point stops at a stable value or at a limit.
 - **Domain kernels**: ops of a domain for the algorithms of data structures. Vex composes them.
 
-These give the strategies of ireko that are not formulas today:
+`packages/pilots` has these strategies of ireko as programs:
 
 | ireko | In Vex |
 |---|---|
-| `tree`, the tidy tree | A `fold` over the siblings: `contour.merge(child.contour.shift(offset))`, with a contour domain |
-| `layers`, the layers | The layer of a node is a recurrence over its predecessors, with a graph space and a sheet. The order of a layer is `iterate(8, ...)`. |
-| `avoid`, the router | An op of a routing domain |
+| `tree`, the tidy tree | A `fold` over the children, with lists of bands as names (`ireko-tree.ts`) |
+| `layers`, the layers | `iterate` loops with lists as names, for the search, the longest path and the eight passes (`ireko-layers.ts`) |
+| `avoid`, the router | A heap and a search in `iterate` loops (`ireko-route.ts`). The item ASTAROP of the roadmap gives a kernel op. |
 
 Each new construct goes through each stage. The stages are the interpreter, `explain`, `deps`, JSON, the builder, the formulas, the reference interpreter of the test kit and the compiler.
 

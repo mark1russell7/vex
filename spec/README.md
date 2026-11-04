@@ -269,6 +269,11 @@ The node `fix` makes a column: one value for each row of the space. It repeats a
 - **[DOMAIN.LAWS]** Each law that a domain declares holds for the values of the domain. `@mark1russell7/vex-testkit` checks each law with property tests.
 - **[KIND.PRIMITIVE]** A domain with `primitive` accepts each value of that JavaScript type, and no other value. The law checker of the test kit checks it.
 - **[KIND.RETURNS]** An op with `returns` gives a result of that kind, or an error. The law checker checks each such op on random values. The kind `domain:Name` is a value of the domain `Name`, for example the op `xy` of `NumDomain` gives a value of `XYDomain`. The law checker checks such an op when its option `domains` has that domain.
+- **[KIND.RETURNS.LIST]** The kind `list:number`, `list:string` or `list:boolean` is a `vex.list` with items of that primitive type. An error item does not break the kind. The law checker checks such an op on random values.
+
+### 7.0 The op `codePoints` of `TextDomain`
+
+- **[TEXT.CODEPOINTS]** `codePoints(text)` gives a list of numbers with one item for each code point of the text, in order. The key of an item is its position, from `"0"`. A pair of surrogates is one item, and a lone surrogate is an item with its own value. The empty text gives the empty list. The op has the kind `list:number`. A receiver that is not a text has no op.
 
 ### 7.1 The axes of `Vec2Domain`
 
@@ -386,6 +391,7 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[COMPILE.MODULE.LIST.ARG]** An argument of an op after its receiver can be a list. The op gets a frozen `vex.list`, as in the interpreter. An error item has the error `VEX_ERROR`. A parameter that takes no list gives the error of the interpreter. An argument of a call can be a list too. A list as the receiver of an op that is not a list op of the module gives a reason.
 - **[COMPILE.MODULE.LIST.CALL]** The value of a call can be a list. The place of the call takes it as a list, also the list ops, the axis `list`, a field and an argument. Each kind of the arguments has its own function and the facts of its list. A list of a call at a place that takes no list gives a reason.
 - **[COMPILE.MODULE.LIST.INPUT]** A field of the schema can have a `ListKind`, also a list of lists and a list of `domain:<Name>`. The record holds the list as a `vex.list`. The program uses the field as a list, and the run gives the values of the interpreter. Another value, an item of another kind and an error item of `#DEPTH!` throw a `VexContractError`. The axis `list` cannot read a record at a key of such a list.
+- **[COMPILE.MODULE.LIST.OP]** An op of a domain with the kind `list:<Kind>` gives a list of the module (KIND.RETURNS.LIST). The place of the op takes it as a list, also the list ops, the axis `list`, a name and a result. Its run gives the values of the interpreter. A result that is not such a list is an error of Vex. The keys are text, so the axis `list` cannot read a record at a key of such a list. An earlier domain with the op can decide the site. Then the place of a list gives a reason.
 - **[COMPILE.MODULE.LIST.PLAIN]** `emitModule` and `emitSheetModule` have the option `lists`, with the default `"envelope"`. The default prints the same module as before. With `lists: "plain"`, a list field of the input holds an array of the values of its items. A list of lists holds arrays to the depth of its kind. The key of an item is the text of its position. The `VEX_ERROR` of the module is an error item. Another value throws a `VexContractError`.
 
   The value of the run and a column of lists give an array of the values of the items, with no keys. An error item is `VEX_ERROR`. A list in a record or in an argument of an op stays a `vex.list`. The run gives the values of the interpreter in this form. Another value of `lists` gives a reason.

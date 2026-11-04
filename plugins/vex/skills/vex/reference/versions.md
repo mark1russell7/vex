@@ -54,5 +54,7 @@ The four packages `vex`, `vex-domains`, `vex-testkit` and `vex-compiler` have on
 | The fixed-point column (step B): `fix(name, join, init, step)` and `last(name)`, the check `monotoneError`, and `monotone` on an op or a function of the host. It is in the interpreter and the reference tier | the next release |
 | `setNth(list, i, value)`: a new value at one position of a list, in the interpreter, tier 2 and a standalone module. A list chain has `setNth(i, value)` | the next release |
 | The builder method `fix(name, join, init, step)`, with the kind of the chain from the join and the type `FixValue`. The step gets a chain of the last round | the next release |
+| `codePoints` of `TextDomain`: the code points of a text as a list of numbers, in each tier | the next release |
+| The kind `list:number` of `returns`: an op of a domain with a list of a primitive type as its result, also in a module | the next release |
 
 A feature of the main branch that is not on npm yet has the version "the next release". Until it is on npm, a project can use it only from a local copy of the repository, for example with `pnpm link`. Do not write a workaround for a missing feature without a note. Tell the user which version has it.

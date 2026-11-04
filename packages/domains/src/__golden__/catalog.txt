@@ -42,6 +42,7 @@ Bool (fromScalar -, valid -, encode -, methods -)
 Text (fromScalar -, valid -, encode -, methods -)
   concat(any) | no lift | no laws | no identity | fn
   length(?) | no lift | no laws | no identity | fn
+  codePoints(?) | no lift | no laws | no identity | fn
   upper(?) | no lift | no laws | no identity | fn
   lower(?) | no lift | no laws | no identity | fn
   trim(?) | no lift | no laws | no identity | fn

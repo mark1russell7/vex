@@ -115,6 +115,7 @@ Texts. The values are of the type `string`.
 |---|---|---|---|---|---|---|
 | `concat` | `concat(string, value)` | string |  |  |  |  |
 | `length` | `length(string)` | number |  |  |  |  |
+| `codePoints` | `codePoints(string)` | list of number |  |  |  |  |
 | `upper` | `upper(string)` | string |  |  |  |  |
 | `lower` | `lower(string)` | string |  |  |  |  |
 | `trim` | `trim(string)` | string |  |  |  |  |

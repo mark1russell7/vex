@@ -1476,15 +1476,13 @@ The result differs from ireko in rare cases:
 
 - A value that is not finite gives an error. Thus a ratio of `borderPoint` that overflows gives an error, where ireko keeps the other ratio.
 - A search of more than 100000 phases gives an error. A grid of more than 50000 points also gives an error (LIST.FILL). ireko has no limit.
-- A text has no op that reads its characters. Thus the host gives each label as a list of code points in the field `codes`.
 
 The pilot found these gaps:
 
 - A module takes only one domain of objects. The program `add(from(band(0, 1, 0, 1)), x(xy(1, 2)))` gives no module with `BandDomain` and `XYDomain`. Thus the ranges of the boxes are lists of `XY` values.
-- No op reads the characters or the code points of a text. Thus `estimateWidth` cannot be a whole program.
 - A step of a loop cannot change one item of a list, because LOOP.SIZE refuses `append(take(xs, k), append(fill(1, x), drop(xs, k + 1)))`. The `each` of the workaround costs one pass over all the states for each change of a cost.
 
-The third gap sets the speed. On 4000 random edges with up to 34 obstacles, the module took approximately 50 times the time of ireko. A closed ring around the target with 34 to 49 boxes took 5 to 34 seconds, and ireko took 10 to 21 milliseconds. These numbers come from one busy computer, so a bench in CI must replace them.
+The second gap sets the speed. On 4000 random edges with up to 34 obstacles, the module took approximately 50 times the time of ireko. A closed ring around the target with 34 to 49 boxes took 5 to 34 seconds, and ireko took 10 to 21 milliseconds. These numbers come from one busy computer, so a bench in CI must replace them.
 
 The source of the module of `avoid` has approximately 49 kB, with `lists: "plain"`. The modules of `straight` and `orthogonal` have approximately 5 kB and 8 kB. ireko does not use the modules yet. It needs a decision about their size budget and a speed check in CI.
 
@@ -1554,6 +1552,15 @@ The measure loop of ireko measures one node at a time. A module for one node nee
 `NODE_SHAPE` of `@vex/pilots` is the shapes pass for one linked node with children. Each record is a child, with its offset and the two lists of bands of its shape. The variables are the box of the node and the limit. A property compares the module with `joinShapes` of ireko, with the same bits. The module has 13481 bytes and 3666 bytes after gzip with the default level, before a minifier (2026-10-27).
 
 The `Set` of the cuts of ireko turns -0 into 0, and the program keeps -0. A shape of ireko has no end -0, so the property gives no such end.
+
+#### Lists of ops (COMPILE.MODULE.LIST.OP)
+
+An op of a domain can declare the kind `list:<Kind>` (KIND.RETURNS.LIST), for example `codePoints` of `TextDomain` (TEXT.CODEPOINTS).
+
+- The function of the op gives a `vex.list` in each tier, so the value of a program does not depend on the tier. Thus the function reads no name of Vex, and a module copies it.
+- The module reads the result with the helper `LI` of the input, into the array of pairs of the module. `LI` gives `undefined` for a result that is not such a list, and the code then calls `F`.
+- A list costs two passes before the fold in a module: the op makes the `vex.list`, and `LI` makes the pairs.
+- The scan `listy` runs before the print, so it does not know the kinds of a site. It reads the declaration of each domain with the op. An earlier domain with the same op name makes the place of a list give a reason.
 
 #### Plain lists (COMPILE.MODULE.LIST.PLAIN)
 

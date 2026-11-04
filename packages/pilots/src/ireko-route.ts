@@ -33,7 +33,6 @@
  *   value goes to its check of the route.
  * - The search has at most 100000 phases, and the grid has at most 50000 points. The op `fill` holds this second limit.
  *   A longer search or a larger grid gives an error. ireko has no limit.
- * - A text has no op that reads its characters. Thus the host gives the label of a container as a list of code points.
  */
 import { app, axes, call, each, fn, fold, index, iterate, let_, lit, ok, rec, ref, space, v, vexList, type Expr, type ItemNames, type Space } from "@mark1russell7/vex";
 import type { Schema } from "@mark1russell7/vex-compiler";
@@ -303,11 +302,8 @@ export const EDGE_DIRECTION_SCHEMA: Schema = {
   vars: {},
 };
 
-/** This function gives the code points of a text. Vex has no op for them, so the host reads the text. */
-const codePoints = (text: string): readonly number[] => Array.from(text, (ch) => ch.codePointAt(0) ?? 0);
-
 /** A table of ireko as a list literal of code points. */
-const codes = (text: string): Expr => numbers(...codePoints(text));
+const codes = (text: string): Expr => numbers(...Array.from(text, (ch) => ch.codePointAt(0) ?? 0));
 const NARROW = codes("ijl.,:;|!'`");
 const SEMI = codes('ftrI()[]{}-/\\"');
 const WIDE = codes("mwMW@%");
@@ -335,7 +331,7 @@ const WIDTH = when(
 );
 
 /** The sum of the widths of the characters of the label of the focus, in parts of the size of the font. */
-const EM = over(ref("codes"), ["$code"], { $em: lit(0) }, { $em: add(v("$em"), WIDTH) }, v("$em"));
+const EM = over(op("codePoints", ref("label")), ["$code"], { $em: lit(0) }, { $em: add(v("$em"), WIDTH) }, v("$em"));
 
 const SCALED = (factor: number): Expr => multiply(lit(factor), ref("scale"));
 
@@ -392,13 +388,13 @@ export const OBSTACLES_PROGRAM: Expr = bindAll(
 
 /** The kinds of the fields of a node and of the variables, for the compiler. */
 export const OBSTACLES_SCHEMA: Schema = {
-  fields: { i: "number", x: "number", y: "number", width: "number", height: "number", scale: "number", nested: "boolean", last: "number", codes: { list: "number" } },
+  fields: { i: "number", x: "number", y: "number", width: "number", height: "number", scale: "number", nested: "boolean", last: "number", label: "string" },
   vars: { s: "number", t: "number" },
 };
 
 /** The kinds of the fields of a container for the program of the box of a label. */
 export const LABEL_BOX_SCHEMA: Schema = {
-  fields: { x: "number", y: "number", width: "number", height: "number", scale: "number", codes: { list: "number" } },
+  fields: { x: "number", y: "number", width: "number", height: "number", scale: "number", label: "string" },
   vars: {},
 };
 
@@ -941,7 +937,7 @@ export function directionRecords(edges: readonly DirectedEdge[]): readonly Reado
 
 /** This function gives the records of the nodes. */
 export function nodeRecords(nodes: readonly RouteNode[]): readonly Readonly<Record<string, unknown>>[] {
-  return nodes.map((n, i) => ({ i, x: n.x, y: n.y, width: n.width, height: n.height, scale: n.scale, nested: n.mode === "nested", last: n.lastChild, codes: codePoints(n.label) }));
+  return nodes.map((n, i) => ({ i, x: n.x, y: n.y, width: n.width, height: n.height, scale: n.scale, nested: n.mode === "nested", last: n.lastChild, label: n.label }));
 }
 
 /** This function gives the space and the variables of the program of the obstacles. */

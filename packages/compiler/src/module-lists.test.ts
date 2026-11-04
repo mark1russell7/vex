@@ -323,6 +323,7 @@ describe("COMPILE.MODULE.SETNTH: setNth in a module", () => {
     both(e);
     both(e, RECORDS.slice(0, 2));
     both(e, []);
+    expect(sourceOf(e, OPTIONS)).toContain("function run");
   });
 
   it("COMPILE.MODULE.SETNTH: the old array does not change, and the first form of each name keeps its own items", () => {
@@ -330,6 +331,7 @@ describe("COMPILE.MODULE.SETNTH: setNth in a module", () => {
     both(iterate(2, { a: LIT, b: LIT }, { a: op("setNth", v("a"), lit(0), lit(9)), b: v("a") }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })));
     both(fold(axes.all, { a: EMPTY }, { a: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), n) }, op("sum", v("a"))));
     both(fold(axes.all, { a: EMPTY, b: EMPTY }, { a: op("append", v("a"), op("fill", lit(1), n)), b: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), lit(5)) }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })));
+    expect(sourceOf(fold(axes.all, { a: EMPTY, b: EMPTY }, { a: op("append", v("a"), op("fill", lit(1), n)), b: op("setNth", op("append", v("a"), op("fill", lit(1), n)), lit(0), lit(5)) }, rec({ a: op("sum", v("a")), b: op("sum", v("b")) })), OPTIONS)).toContain("function run");
   });
 
   it("COMPILE.MODULE.SETNTH: the value can be a list, and a list of lists keeps its facts", () => {
@@ -337,6 +339,7 @@ describe("COMPILE.MODULE.SETNTH: setNth in a module", () => {
     both(op("sum", op("flat", op("setNth", nested(), lit(1), EMPTY))));
     both(op("count", op("flat", op("setNth", nested(), lit(0), inv))));
     both(op("count", op("flat", op("setNth", nested(), lit(0), inv), strict)));
+    expect(sourceOf(op("count", op("flat", op("setNth", nested(), lit(0), inv), strict)), OPTIONS)).toContain("function run");
   });
 
   it("COMPILE.MODULE.SETNTH: a module gives a reason for what the facts cannot hold", () => {

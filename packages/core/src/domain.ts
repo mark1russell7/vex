@@ -26,7 +26,7 @@ export type ReturnKind = ParamKind | `domain:${string}`;
  * - `"each"`: the size adds one time for each item of the first argument.
  * - `"number"`: the argument is a number that sets a count. A literal number gives that count, and another number
  *   gives a fixed bound.
- * - `"limit"`: the size adds one time for each item that the literal number at the position `limit` keeps, and each item
+ * - `"limit"`: the size adds one time for each item that the literal number at the position `limit` keeps. Each item
  *   adds a key with a fixed bound. Without a literal number, this use is the same as `"many"`.
  */
 export type SizeUse = 0 | 1 | "scaled" | "many" | "unbounded" | "text" | "copies" | "each" | "number" | "limit";

@@ -443,11 +443,11 @@ class Checker {
     const entry = env.get(e.fn);
     // FN.ARGS: a call of a value, of a missing name or with another number of arguments gives an error.
     if (entry?.t !== "fn" || entry.params.length !== args.length) return zero(NO_KIND);
-    const bound = new Map<string, Form>();
+    const bindings = new Map<string, Form>();
     entry.params.forEach((id, i) => {
-      for (const m of MEASURES) bound.set(variable(m, id), (args[i] as Shape)[m]);
+      for (const m of MEASURES) bindings.set(variable(m, id), (args[i] as Shape)[m]);
     });
-    const sigma = (v: string): Form | undefined => bound.get(v);
+    const sigma = (v: string): Form | undefined => bindings.get(v);
     return { ...substShape(entry.result, sigma), long: entry.result.long || args.some((a) => a.long) };
   }
 
@@ -636,7 +636,7 @@ class Checker {
       // part of the size of the list.
       const whole = scale(list.size, keys && list.long ? (Math.max(1, sizes) as Coef) : sizes);
       // LOOP.SIZE.PART: more than one use of each item has the bound of the count of the items times the largest item.
-      const values = this.#parts && sizes > 1 && !(keys && list.long) ? scale(times(c("size") > 0 || c("inner") > 0 ? list.item : list.part, list.count), sizes as Coef) : whole;
+      const values = this.#parts && sizes > 1 && !(keys && list.long) ? scale(times(c("size") > 0 || c("inner") > 0 ? list.item : list.part, list.count), sizes) : whole;
       const short = keys && !list.long ? times(list.count, SOME) : NONE;
       return plus(plus(plus(values, short), scale(list.inner, c("count"))), times([rest], list.count));
     };
@@ -1025,8 +1025,8 @@ class Loop {
    * This method gives a bound of the last value of each name, from the values of `init` and the steps. The number of the
    * steps is `steps`. Each sum of a measure in a cycle gets at most one measure of its cycle at each step. A sum with a
    * measure of the cycle adds its other parts one time for each step. A sum without such a measure sets the value again,
-   * so it adds to the bound one time (LOOP.SIZE.BRANCH). Thus the last value is the largest first value of the cycle or
-   * of these sums, with the parts of the other sums one time for each step. A measure outside a cycle has its first
+   * so it adds to the bound one time (LOOP.SIZE.BRANCH). The last value starts from the largest first value of the cycle
+   * or of these sums. It adds the parts of the other sums one time for each step. A measure outside a cycle has its first
    * value or the value of its step.
    */
   last(init: ReadonlyMap<string, Shape>, steps: Form): ReadonlyMap<string, Shape> {

@@ -15,6 +15,8 @@ const RECORDS = Array.from({ length: 6 }, (_x, i) => ({ n: i }));
 const DATA = space.array(RECORDS);
 const NONE = lit(vexList([]));
 const BIG = app("gt", ref("n"), lit(3));
+/** A test that is true at each record, and that the check does not read. */
+const ALWAYS = app("gt", ref("n"), lit(-1));
 /** The number of steps of a run. A step that doubles gives 2^20 times the first size. */
 const STEPS = 20;
 
@@ -116,7 +118,7 @@ const WRAPS: readonly ((e: Expr, x: Expr) => Expr)[] = [
   (e) => e,
   (e) => let_({ y: e }, v("y")),
   (e) => let_({ f: fn(["p"], v("p")) }, call("f", e)),
-  (e, x) => app("if", BIG, e, x),
+  (e, x) => app("if", ALWAYS, e, x),
   (e, x) => app("ifError", e, x),
   (e) => app("append", e, one(lit(1))),
 ];
@@ -179,7 +181,7 @@ describe("the steps that the check accepts in the tiers (P17)", () => {
   });
 
   it.each(Object.keys(ACCEPTED))("P17 LOOP.SIZE.COPY LOOP.SIZE.PART: the module of the class %s gives the values of the interpreter", (name) => {
-    const e = ACCEPTED[name] as Expr;
+    const e = ACCEPTED[name];
     const options: ModuleOptions = { domains: DOMAINS, schema: { fields: { n: "number" } } };
     expect(sizeError(e, { domains: DOMAINS })).toBeUndefined();
     const emitted = emitModule(e, options);

@@ -8,6 +8,40 @@ import { children, type Expr, MAX_NESTING, nestingOf } from "@mark1russell7/vex"
 /** The original of each copy that `unsharedAll` made. */
 const ORIGINALS = new WeakMap<Expr, Expr>();
 
+/**
+ * The most places that a program can have for a compile (COMPILE.PLACES). A place is a node at one position of the tree
+ * of the program, so a shared object counts once for each place. The compile takes time at each place.
+ */
+export const MAX_PLACES = 1 << 16;
+
+/**
+ * This function gives the number of places of the expressions, with a walk that visits each object once. So it takes
+ * the time of the objects, not of the places. An object that holds itself has no end, and its count is infinite.
+ */
+export function placesOf(exprs: readonly Expr[]): number {
+  const counts = new Map<Expr, number>();
+  const open = new Set<Expr>();
+  const todo = [...exprs];
+  for (let x = todo.at(-1); x !== undefined; x = todo.at(-1)) {
+    if (counts.has(x)) {
+      todo.pop();
+    } else if (open.has(x)) {
+      todo.pop();
+      counts.set(x, children(x).reduce((sum, part) => sum + (counts.get(part) ?? Infinity), 1));
+    } else {
+      open.add(x);
+      todo.push(...children(x).filter((part) => !counts.has(part)));
+    }
+  }
+  return exprs.reduce((sum, e) => sum + (counts.get(e) as number), 0);
+}
+
+/** This function gives the reason that a compile refuses the expressions, or `undefined` (COMPILE.PLACES). */
+export function placesError(exprs: readonly Expr[]): string | undefined {
+  const places = placesOf(exprs);
+  return places > MAX_PLACES ? `COMPILE.PLACES: the program has ${String(places)} places, and the limit is ${String(MAX_PLACES)}` : undefined;
+}
+
 /** This function tells if two places of the expressions hold one object. */
 function sharesNode(exprs: readonly Expr[]): boolean {
   const seen = new Set<Expr>();

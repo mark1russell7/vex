@@ -62,7 +62,7 @@ import {
   type LoopProgram,
   type LStmt,
 } from "./loop.ts";
-import { unshared } from "./unshared.ts";
+import { placesError, unshared } from "./unshared.ts";
 
 /** The error of an expression that the compiler cannot lower. Then the program operates in tier 1. */
 export class Unsupported extends Error {}
@@ -166,6 +166,9 @@ const join = (a: PrimitiveKind | undefined, b: PrimitiveKind | undefined): Primi
  * lower. The facts of the options decide the op of a site whose values have known kinds (KIND.STATIC).
  */
 export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {}): LoopProgram {
+  // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
+  const places = placesError([expr]);
+  if (places !== undefined) throw new Unsupported(places);
   // EVAL.SHAPE and EVAL.NESTING: tier 1 gives the error of a program that is not valid or that is nested too deep.
   const shape = shapeError(expr);
   if (shape !== undefined) throw new Unsupported(shape);

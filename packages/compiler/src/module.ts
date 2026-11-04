@@ -38,7 +38,7 @@ import { memoNodes } from "./memo.ts";
 import { keepFaults, tidy, type Tidied } from "./module-tidy.ts";
 import { canonical, keyText } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
-import { originalOf, unsharedAll } from "./unshared.ts";
+import { originalOf, placesError, unsharedAll } from "./unshared.ts";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {
@@ -2177,7 +2177,7 @@ class Printer {
   /** The kind of each column at the start of a run that holds no list. A column of a call is not in this map. */
   readonly #runColumns = new Map<string, Kind | undefined>();
   /** The function and the kind of each column of a call that holds no list. Only a read in that function reads its pack. */
-  readonly #callColumns = new Map<string, { readonly scope: CallScope; readonly kind: Kind | undefined }>();
+  readonly #callColumns = new Map<string, { readonly scope: CallScope; readonly kind: Kind | undefined; readonly deps: ReadonlySet<number> }>();
   /** The code of each printed function, by its name. A fast sum looks in it for the columns that a call reads. */
   readonly #specCode = new Map<string, string>();
   /** The module variable of the pack of each column of the run, by the name of the column. */
@@ -2686,8 +2686,8 @@ class Printer {
       pack.cols.set(name, local);
     }
     const held = `${local}[${ctx.focus as string}]`;
-    // A column of a call reads a parameter, so its read keeps the marker of the parameters.
-    const deps = new Set(own === undefined ? [ctx.level] : [ctx.level, own.scope.param]);
+    // A column of a call can read a parameter, the focus and the origin of the function, so its read keeps these markers (V-081).
+    const deps = new Set([ctx.level, ...(own?.deps ?? [])]);
     return bare({ code: `${this.use("G")}(${held})`, kind: own === undefined ? this.#runColumns.get(name) : own.kind, safe: false, held, deps });
   }
 
@@ -2704,7 +2704,7 @@ class Printer {
       (scope?.decls ?? this.run).push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
       if (c.v.list === undefined) {
         if (scope === undefined) this.#runColumns.set(name, c.v.kind);
-        else this.#callColumns.set(name, { scope, kind: c.v.kind });
+        else this.#callColumns.set(name, { scope, kind: c.v.kind, deps: new Set([...c.v.deps].filter((d) => d !== ctx.level)) });
       }
       this.#columns.set(key, name);
     }
@@ -3091,12 +3091,14 @@ class Printer {
     // A function at the place of its binding reads names of that place, so its body stays in its function.
     if (bound.local || ++(this.#pack as Pack).inlines > INLINES) throw new NoPack();
     const s: string[] = [];
+    const deps: number[] = [];
     const env = new Map(bound.ctx.env);
     bound.fn.params.forEach((p, i) => {
       const x = e.args[i] as Expr;
       this.#wantList.add(x);
       const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
       if (c.v.list !== undefined) throw new NoPack();
+      deps.push(...c.v.deps);
       // A short safe value is the read itself. A read of a name that can hold the error reads that name.
       let code = c.v.code;
       if (!c.v.safe && c.s.length === 0 && c.v.held !== undefined) code = c.v.held;
@@ -3109,7 +3111,8 @@ class Printer {
     this.#wantList.add(bound.fn.body);
     const body = this.expr(bound.fn.body, { ...ctx, env, fns: bound.ctx.fns, keys: new Map() });
     if (body.v.list !== undefined) throw new NoPack();
-    return { s: [...s, ...body.s], v: body.v };
+    // The statements of an argument read their keys, also when the body does not read the parameter (V-081).
+    return { s: [...s, ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
   }
 
   /** This method runs `f` outside the second print of a fast sum: a function and a node of the memo print as before. */
@@ -5028,6 +5031,9 @@ function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: Key
   const read = isDocument(source) ? fromDocument(source, options.domains) : { ok: true as const, value: source };
   if (!read.ok) return { ok: false, reason: read.error.message };
   const expr = read.value;
+  // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
+  const places = placesError([expr]);
+  if (places !== undefined) return { ok: false, reason: places };
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
@@ -5105,6 +5111,9 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   const cells: CellFormulas = options.cells ?? new Map();
   // A formula of a cell has a position as its key at the time of the build, and the keys of a run come later.
   if (options.keys === true && cells.size > 0) return { ok: false, reason: 'the option "keys" with formulas of cells' };
+  // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
+  const places = placesError([...columns.values(), ...[...cells.values()].flatMap((own) => [...own.values()])]);
+  if (places !== undefined) return { ok: false, reason: places };
   const names = [...new Set([...columns.keys(), ...cells.keys()])];
   const order = columnOrder(columns, cells);
   // The formulas in the order of the columns. A key of a cell that is not the text of a position is not a key of the

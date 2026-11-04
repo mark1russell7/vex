@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { emitModule, MODULE_GLOBALS, type ModuleOptions } from "./module.ts";
+import { nameFaults } from "./test-names.ts";
 import { tiered } from "./tiers.ts";
 import { unshared } from "./unshared.ts";
 
@@ -1735,6 +1736,9 @@ const reusing = (calls: readonly string[]): fc.Arbitrary<Expr> =>
 /** A read of the origin in a test of an axis: the node of the memo that the program `reused` holds in the field `t`. */
 const memoed = (x: string, body: Expr): Expr => op("sum", each(axes.where(axes.all, op("eq", n, op("add", K, v(x)))), body));
 
+/** This function gives a call of a function with a column in the step of a fold. The column reads the parameter and the origin, so the second print of the fold reads its pack (V-081). */
+const columned = (x: string, term: Expr): Expr => let_({ h: fn([x], fold(axes.all, { y: lit(0) }, { y: op("add", term, memoed(x, lit(1))) }, v("y"))) }, call("h", lit(0)));
+
 /** This function gives one object for each structure of a program, so one object holds a read under each let. A node of a literal keeps its value. */
 function interned(e: Expr): Expr {
   const seen = new Map<string, unknown>();
@@ -1754,20 +1758,26 @@ function interned(e: Expr): Expr {
 /** This function gives the body of a function. With `nested`, the body has a column of each call, which reads the parameter `p`. */
 const bodyOf = (body: Expr, p: string, nested: boolean): Expr => (nested ? op("add", body, op("sum", each(axes.all, op("sum", each(axes.all, costly(v(p))))))) : body);
 
+/** This arbitrary gives the value of a name of the root. */
+const rootOf: fc.Arbitrary<Expr> = fc.constantFrom<Expr>(lit(1), lit(1), op("sum", each(axes.all, n)), v("a"));
+
 /**
  * A program with the names of `NAMES` at the root, two functions and three fields. Two names of the root can hold one
  * value. The fields put constants, columns and calls side by side, so one key can reach two of them.
  */
 const reused: fc.Arbitrary<Expr> = fc
   .record({
-    roots: fc.tuple(...NAMES.map(() => fc.constantFrom<Expr>(lit(1), lit(1), op("sum", each(axes.all, n)), v("a")))),
+    roots: fc.tuple(rootOf, rootOf, rootOf),
     f: fc.record({ p: someName, body: reusing([]), nested: fc.boolean() }),
     g: fc.record({ ps: twoNames, body: reusing(["f"]), nested: fc.boolean() }),
     p: reusing(["f", "g"]),
     q: reusing(["f", "g"]),
     t: fc.tuple(someName, reusing([])).map(([x, body]) => memoed(x, body)),
+    c: fc.tuple(someName, reusing([])),
   })
-  .map(({ roots: [s, u, x], f, g, p, q, t }) => let_({ s, u, x }, let_({ f: fn([f.p], bodyOf(f.body, f.p, f.nested)) }, let_({ g: fn(g.ps, bodyOf(g.body, g.ps[0], g.nested)) }, rec({ p, q, r: n, t })))));
+  .map(({ roots: [s, u, x], f, g, p, q, t, c }) =>
+    let_({ s, u, x }, let_({ f: fn([f.p], bodyOf(f.body, f.p, f.nested)) }, let_({ g: fn(g.ps, bodyOf(g.body, g.ps[0], g.nested)) }, rec({ p, q, r: n, t, c: columned(...c) })))),
+  );
 
 describe("COMPILE.MODULE: the text of the modules of a fixed set of random programs", () => {
   it("each module gives the value of the interpreter, and the golden file has the hash of the text of each module", async () => {
@@ -1870,6 +1880,15 @@ describe("COMPILE.MODULE: random programs", () => {
     fc.assert(
       fc.property(hidden, records, fc.integer({ min: -3, max: 3 }), (e, rs, a) => {
         expectSame(make(sourceOf(e)), e, rs, { a, t: "x" });
+      }),
+    );
+  });
+
+  it("V-081 COMPILE.MODULE: a module of each mode has no read of a name without a declaration", () => {
+    const modes = fc.constantFrom<Partial<ModuleOptions>>({ faults: "value" }, { faults: "throw" }, { fuse: false }, { keys: true });
+    fc.assert(
+      fc.property(fc.oneof(reused, program.num), modes, (e, mode) => {
+        expect(nameFaults(sourceOf(e, { ...OPTIONS, ...mode }), MODULE_GLOBALS)).toStrictEqual([]);
       }),
     );
   });

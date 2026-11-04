@@ -1,4 +1,4 @@
-# Throwaway measure of a draft pull request: the share of generated programs that reach the bad state of V-077.
+# Throwaway measure of a draft pull request: the share of generated programs that reach the bad state of V-077 (on the printer of the branch).
 name: keyscope share
 on:
   push:

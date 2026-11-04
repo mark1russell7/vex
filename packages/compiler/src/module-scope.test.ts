@@ -3,7 +3,7 @@
  * so a key of the printer must hold the meaning of a read, and a shared object of a program must not join two places.
  * Each test compares the module and tier 2 with the interpreter (P17).
  */
-import { app, axes, call, each, evaluate, fn, fold, iterate, let_, lit, rec, ref, space, v, vexList, type Expr } from "@mark1russell7/vex";
+import { app, axes, type Axis, call, each, evaluate, fn, fold, iterate, let_, lit, rec, ref, space, v, vexList, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { fromCore } from "@mark1russell7/vex-testkit";
 import { describe, expect, it } from "vitest";
@@ -33,6 +33,11 @@ const FIVES = { x: lit(5), y: lit(5) };
 
 /** This function gives a function with the parameter `x` and the body `body`, and a call of it. */
 const local = (body: Expr): Expr => let_({ h: fn(["x"], body) }, call("h", lit(1)));
+/** These functions give the parts of a call whose function has a column in the step of a fold. */
+const near = (x: Expr, u: Expr): Axis => axes.where(axes.all, app("eq", n, add(x, u)));
+const steps = (term: Expr): Expr => fold(axes.all, { s: lit(0) }, { s: add(n, term) }, v("s"));
+const called = (body: Expr): Expr => let_({ g: fn(["u"], body) }, call("g", lit(0)));
+const unread = (body: Expr): Expr => let_({ h: fn(["x"], lit(1)) }, body);
 
 /** This function makes the module of a source with `new Function`. */
 function make(source: string): Loaded {
@@ -107,10 +112,7 @@ describe("V-080 COMPILE.MODULE: an object that a program uses at two places has 
 
 describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps the markers of the column", () => {
   const origin = ref("n", [{ t: "origin" }]);
-  const near = (x: Expr, u: Expr): Expr => axes.where(axes.all, app("eq", n, add(x, u)));
   const count = (x: Expr): Expr => app("sum", each(near(x, v("u")), lit(1)));
-  const steps = (term: Expr): Expr => fold(axes.all, { s: lit(0) }, { s: add(n, term) }, v("s"));
-  const called = (body: Expr): Expr => let_({ g: fn(["u"], body) }, call("g", lit(0)));
 
   it("V-081: a column of a call reads the origin", () => {
     expectSame(called(steps(count(origin))));
@@ -125,7 +127,6 @@ describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps t
   });
 
   it("V-081: a call at the focus of a second print has an argument that its function does not read", () => {
-    const unread = (body: Expr): Expr => let_({ h: fn(["x"], lit(1)) }, body);
     expectSame(unread(called(steps(add(call("h", origin), count(v("u")))))));
   });
 });

@@ -23,6 +23,13 @@ const NOTHING: KeyScope = { keys: new Map(), env: new Map(), fns: new Map(), col
 const ITEMS = lit(vexList([{ key: "0", result: { ok: true, value: 1 } }]));
 
 const add = (a: Expr, b: Expr): Expr => app("add", a, b);
+const eachOver = (list: Expr, body: Expr): Expr => each(axes.list(list), body, undefined, ["x"]);
+const foldOf = (init: Expr, step: Expr, result: Expr): Expr => fold(axes.all, { x: init }, { x: step }, result);
+const foldItems = (step: Expr, result: Expr): Expr => fold(axes.list(ITEMS), { s: lit(0) }, { s: step }, result, undefined, ["x"]);
+const foldAt = (list: Expr, place: Expr): Expr => fold(axes.list(list), { x: lit(0) }, { x: lit(0) }, lit(0), [{ t: "key", key: place }]);
+const iterateOf = (init: Expr, step: Expr, result: Expr, until?: Expr): Expr => iterate(1, { x: init }, { x: step }, result, until);
+const limited = (list: Expr): Expr => iterate({ axis: axes.list(list) }, { x: lit(0) }, { x: lit(0) }, lit(0));
+const first = (name: string, body: Expr): Expr => fix(name, "max", body, lit(0));
 
 /** A program with holes: each hole takes the next name of a list, so two programs of one shape differ only in their reads. */
 type Shape = (next: () => string) => Expr;
@@ -67,7 +74,7 @@ const { shape } = fc.letrec<{ shape: Shape }>((tie) => {
 /** This function fills a shape with names. */
 function filled(s: Shape, names: readonly string[]): Expr {
   let i = 0;
-  return s(() => names[i++ % names.length] as string);
+  return s(() => String(names[i++ % names.length]));
 }
 
 /** This function gives the scope of a site. */
@@ -129,39 +136,32 @@ describe("V-078 KEY: a key holds the meaning of each read", () => {
   });
 
   it("V-078: the name of an item is only in the body of an each", () => {
-    const over = (list: Expr, body: Expr): Expr => each(axes.list(list), body, undefined, ["x"]);
-    expect(key(over(ITEMS, X))).not.toBe(key(over(ITEMS, Y)));
-    expect(key(over(X, lit(1)))).toBe(key(over(Y, lit(1))));
+    expect(key(eachOver(ITEMS, X))).not.toBe(key(eachOver(ITEMS, Y)));
+    expect(key(eachOver(X, lit(1)))).toBe(key(eachOver(Y, lit(1))));
     expect(key(each(axes.where(axes.all, X), lit(1), undefined, ["x"]))).toBe(key(each(axes.where(axes.all, Y), lit(1), undefined, ["x"])));
     expect(key(each(axes.all, lit(1), [{ t: "key", key: X }], ["x"]))).toBe(key(each(axes.all, lit(1), [{ t: "key", key: Y }], ["x"])));
     expect(key(each(axes.all, X))).toBe(key(each(axes.all, Y)));
   });
 
   it("V-078: a fold gives its names to its steps and to its result, and its items only to its steps", () => {
-    const loop = (init: Expr, step: Expr, result: Expr): Expr => fold(axes.all, { x: init }, { x: step }, result);
-    expect(key(loop(X, lit(0), lit(0)))).toBe(key(loop(Y, lit(0), lit(0))));
-    expect(key(loop(lit(0), X, lit(0)))).not.toBe(key(loop(lit(0), Y, lit(0))));
-    expect(key(loop(lit(0), lit(0), X))).not.toBe(key(loop(lit(0), lit(0), Y)));
-    const items = (step: Expr, result: Expr): Expr => fold(axes.list(ITEMS), { s: lit(0) }, { s: step }, result, undefined, ["x"]);
-    expect(key(items(X, lit(0)))).not.toBe(key(items(Y, lit(0))));
-    expect(key(items(lit(0), X))).toBe(key(items(lit(0), Y)));
-    const over = (list: Expr, place: Expr): Expr => fold(axes.list(list), { x: lit(0) }, { x: lit(0) }, lit(0), [{ t: "key", key: place }]);
-    expect(key(over(X, lit(0)))).toBe(key(over(Y, lit(0))));
-    expect(key(over(ITEMS, X))).toBe(key(over(ITEMS, Y)));
+    expect(key(foldOf(X, lit(0), lit(0)))).toBe(key(foldOf(Y, lit(0), lit(0))));
+    expect(key(foldOf(lit(0), X, lit(0)))).not.toBe(key(foldOf(lit(0), Y, lit(0))));
+    expect(key(foldOf(lit(0), lit(0), X))).not.toBe(key(foldOf(lit(0), lit(0), Y)));
+    expect(key(foldItems(X, lit(0)))).not.toBe(key(foldItems(Y, lit(0))));
+    expect(key(foldItems(lit(0), X))).toBe(key(foldItems(lit(0), Y)));
+    expect(key(foldAt(X, lit(0)))).toBe(key(foldAt(Y, lit(0))));
+    expect(key(foldAt(ITEMS, X))).toBe(key(foldAt(ITEMS, Y)));
   });
 
   it("V-078: an iterate gives its names to its steps, to its test and to its result", () => {
-    const loop = (init: Expr, step: Expr, result: Expr, until?: Expr): Expr => iterate(1, { x: init }, { x: step }, result, until);
-    expect(key(loop(X, lit(0), lit(0)))).toBe(key(loop(Y, lit(0), lit(0))));
-    expect(key(loop(lit(0), X, lit(0)))).not.toBe(key(loop(lit(0), Y, lit(0))));
-    expect(key(loop(lit(0), lit(0), X))).not.toBe(key(loop(lit(0), lit(0), Y)));
-    expect(key(loop(lit(0), lit(0), lit(0), X))).not.toBe(key(loop(lit(0), lit(0), lit(0), Y)));
-    const limited = (list: Expr): Expr => iterate({ axis: axes.list(list) }, { x: lit(0) }, { x: lit(0) }, lit(0));
+    expect(key(iterateOf(X, lit(0), lit(0)))).toBe(key(iterateOf(Y, lit(0), lit(0))));
+    expect(key(iterateOf(lit(0), X, lit(0)))).not.toBe(key(iterateOf(lit(0), Y, lit(0))));
+    expect(key(iterateOf(lit(0), lit(0), X))).not.toBe(key(iterateOf(lit(0), lit(0), Y)));
+    expect(key(iterateOf(lit(0), lit(0), lit(0), X))).not.toBe(key(iterateOf(lit(0), lit(0), lit(0), Y)));
     expect(key(limited(X))).toBe(key(limited(Y)));
   });
 
   it("V-078: a fix gives its name only to its step", () => {
-    const first = (name: string, body: Expr): Expr => fix(name, "max", body, lit(0));
     expect(key(fix("r", "max", lit(0), last("s")))).toBe(key(fix("r", "max", lit(0), last("s"))));
     expect(key(fix("r", "max", lit(0), last("r")))).not.toBe(key(fix("r", "max", lit(0), last("s"))));
     expect(key(first("r", X))).toBe(key(first("r", Y)));

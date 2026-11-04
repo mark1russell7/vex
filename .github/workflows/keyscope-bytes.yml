@@ -1,0 +1,33 @@
+# Throwaway measure of a draft pull request: the bytes and the places of the sixteen ireko modules, on the branch and on the base.
+name: keyscope bytes
+on:
+  push:
+    branches: [keyscope]
+    paths: [.github/workflows/keyscope-bytes.yml]
+permissions: {}
+jobs:
+  bytes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @vex/pilots...
+      - name: Measure
+        working-directory: packages/pilots
+        run: |
+          cp ../../tools/keyscope/bytes.test.ts.txt src/zz-bytes.test.ts
+          cp ../../tools/keyscope/places.test.ts.txt src/zz-places.test.ts
+          pnpm exec vitest run src/zz-places.test.ts --maxWorkers=1 --reporter=basic | grep PLACES || true
+          BYTES_LABEL=branch pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 --reporter=basic | grep BYTES || true
+          git checkout 3a0019f -- ../compiler/src
+          BYTES_LABEL=base pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 --reporter=basic | grep BYTES || true

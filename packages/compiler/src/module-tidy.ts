@@ -5,8 +5,11 @@
  *
  * The printer gives one statement on each line, and each block adds two spaces. A name with digits is a fresh name of
  * the printer. A text of a program can hold each word, so each count of a word here also counts the words in a text. A
- * count that is too high only stops a rule. A rule that writes a line skips each text.
+ * count that is too high only stops a rule. A rule that writes code reads the tokens of the code (`rewritten`), so it
+ * does not change a text.
  */
+import { tokenizer, tokTypes } from "acorn";
+
 
 /** The parts of a module for the pass. */
 export interface TidyParts {
@@ -24,6 +27,37 @@ export interface TidyParts {
 export interface Tidied {
   readonly decls: ReadonlyMap<string, string>;
   readonly lines: readonly string[];
+}
+
+/** The tokens that hold a text of the code: a string, a part of a template and a regular expression. */
+const TEXT_TOKENS: ReadonlySet<unknown> = new Set([tokTypes.string, tokTypes.template, tokTypes.regexp]);
+
+/** This function gives a line of code with spaces at the place of each text. Each other character keeps its offset. */
+function codeOf(line: string): string {
+  let out = "";
+  let at = 0;
+  for (const token of tokenizer(line, { ecmaVersion: "latest" })) {
+    if (!TEXT_TOKENS.has(token.type)) continue;
+    out += line.slice(at, token.start) + " ".repeat(token.end - token.start);
+    at = token.end;
+  }
+  return out + line.slice(at);
+}
+
+/**
+ * This function writes each match of `find` in the code of a line. A match in a text does not count, and each text
+ * keeps its characters. `find` must have the flag `g`. A line with no match needs no tokens.
+ */
+function rewritten(line: string, find: RegExp, write: (match: RegExpExecArray) => string): string {
+  // Stryker disable next-line ConditionalExpression: the result is the same with no guard, and the guard saves the tokens.
+  if (line.search(find) < 0) return line;
+  let out = "";
+  let at = 0;
+  for (const match of codeOf(line).matchAll(find)) {
+    out += line.slice(at, match.index) + write(match);
+    at = match.index + match[0].length;
+  }
+  return out + line.slice(at);
 }
 
 /** The words of a text. */
@@ -83,11 +117,14 @@ export function deadKeys(lines: readonly string[]): readonly string[] {
   });
 }
 
-/** The parts of a line of code. The group holds a key of an object. The other names are the last alternative. */
-const PARTS = /\.{3}|\.[A-Za-z_$][\w$]*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`|\d[\w.]*|((?<=[{,]\s*)[A-Za-z_$][\w$]*(?=\s*:))|[A-Za-z_$][\w$]*/g;
-
-/** This function gives a line with each read of the name `from` as a read of the name `to`. */
-const renamed = (line: string, from: string, to: string): string => line.replace(PARTS, (t: string, key: string | undefined) => (key === undefined && t === from ? to : t));
+/**
+ * This function gives a line with each read of the name `from` as a read of the name `to`. A property, a key of an
+ * object and a part of a longer word are not reads. A spread reads its name.
+ */
+function renamed(line: string, from: string, to: string): string {
+  const read = new RegExp(`(?<![\\w$])(?<!(?<!\\.\\.)\\.)(?:(?<![{,]\\s*)${from}|${from}(?!\\s*:))(?![\\w$])`, "g");
+  return rewritten(line, read, () => to);
+}
 
 /** The writes to a name. The first group holds the name after `++` or `--`, and the second group the name before an operator. */
 const WRITE = /(?:\+\+|--)\s*([A-Za-z_$][\w$]*)|(?<![\w$.])(?<!\b(?:const|let) )([A-Za-z_$][\w$]*)\s*(?:\+\+|--|(?:[-+*/%&|^]|<<|>>>?|\*\*|&&|\|\||\?\?)?=(?![=>]))/g;
@@ -184,10 +221,11 @@ export function onceCells(lines: readonly string[]): readonly string[] {
     const name = CELL.exec(out[i] as string)?.[1];
     const value = /^ {4}return (.*);$/.exec(out[i + 1] as string)?.[1];
     if (name === undefined || value === undefined || out[i + 2] !== "  });" || countOf(out, name) !== 2) continue;
-    const read = new RegExp(`(?<![\\w$.])G\\(${name}\\(\\)\\)`);
-    const site = out.findIndex((x) => read.test(x));
+    const read = new RegExp(`(?<![\\w$.])G\\(${name}\\(\\)\\)`, "g");
+    const inlined = (x: string): string => rewritten(x, read, () => `G(${value})`);
+    const site = out.findIndex((x) => inlined(x) !== x);
     if (site < 0 || !runsOnce(out, site)) continue;
-    out = out.flatMap((x, k) => (k === site ? [x.replace(read, () => `G(${value})`)] : k >= i && k <= i + 2 ? [] : [x]));
+    out = out.flatMap((x, k) => (k === site ? [inlined(x)] : k >= i && k <= i + 2 ? [] : [x]));
     i = -1;
   }
   return out;
@@ -332,15 +370,12 @@ function opForm(text: string, globals: ReadonlySet<string>): OpForm | undefined 
  * name for each argument.
  */
 function withSite(text: string, f: OpForm): string | undefined {
-  const site = new RegExp(`"(?:[^"\\\\]|\\\\.)*"|(?<![\\w$.])${f.name}\\(([A-Za-z_$][\\w$]*(?:, [A-Za-z_$][\\w$]*)*)\\)`, "g");
-  let found = false;
-  const out = text.replace(site, (t: string, list: string | undefined) => {
-    const args = list?.split(", ");
-    if (args?.length !== f.params.length) return t;
-    found = true;
-    return `(${f.parts.map((p) => (typeof p === "number" ? (args[p] as string) : p)).join("")})`;
+  const site = new RegExp(`(?<![\\w$.])${f.name}\\(([A-Za-z_$][\\w$]*(?:, [A-Za-z_$][\\w$]*)*)\\)`, "g");
+  const out = rewritten(text, site, (match) => {
+    const args = (match[1] as string).split(", ");
+    return args.length === f.params.length ? `(${f.parts.map((p) => (typeof p === "number" ? (args[p] as string) : p)).join("")})` : match[0];
   });
-  return found ? out : undefined;
+  return out === text ? undefined : out;
 }
 
 /**
@@ -379,7 +414,7 @@ const FAULT_WRAP = "function FW(f) { return (...a) => { try { return f(...a); } 
 
 /** This function gives a line where each catch rethrows each value that is not the error of Vex. */
 function narrowCatches(line: string): string {
-  return line.replaceAll("catch {", "catch ($f) { FK($f);");
+  return rewritten(line, /catch \{/g, () => "catch ($f) { FK($f);");
 }
 
 /** This function gives the declaration of a copy of a function of a domain, inside the wrapper. */

@@ -2,7 +2,7 @@
  * The runtime of generated code. Each function follows the rule of the interpreter of the core. Where the interpreter
  * gives an error value, the function gives `FALLBACK`, and it records the detail of the failure in two variables. On the
  * value path, the runtime makes no error values and no `Result` objects (docs/COMPILER.md §4.1). A list op on a list
- * value is the exception: it runs the code of the interpreter (COMPILE.LIST.VALUE).
+ * value or an array is the exception: it runs the code of the interpreter (COMPILE.LIST.VALUE, COMPILE.LIST.ARRAY).
  *
  * The failure path of generated code keeps a lazy error: the site, the position and the operands. When the program ends
  * with it, `take` gives the error of the interpreter. It uses the error texts of the core (`materialize`).
@@ -484,9 +484,14 @@ export function createRuntime(options: RuntimeOptions): Runtime {
           if (r !== undefined) return r;
         }
         // LIST.ARRAY: after the domains and the function of the host, a list op on an array is a list op on a list.
-        // FALLBACK is an error, and a list op skips an error item, so an exception must stop the program (V-064).
-        // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
-        if (listOp && fn === undefined && Array.isArray(values[0])) throw new Error("tier 1 gives a list op on an array");
+        if (listOp && fn === undefined && Array.isArray(values[0])) {
+          const r = lists.array(name, values[0], values.slice(1), NOWHERE, HERE);
+          // The value of `errors` has the position of the call, and a site has no position (COMPILE.LIST.ARRAY). FALLBACK
+          // is an error, and a list op skips an error item, so an exception must stop the program (V-064).
+          // Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message
+          if (name === "errors" && r.ok && (r.value as readonly unknown[]).length > 0) throw new Error("tier 1 gives the errors of an array");
+          return listResult(r);
+        }
         if (name === "fill" && fn === undefined) return listResult(lists.fill(values, NOWHERE, HERE));
         try {
           if (fn === undefined) return record("no-op", values.length > 0, values[0]);

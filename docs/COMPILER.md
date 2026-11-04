@@ -154,7 +154,7 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 - An `each` with an error item, because generated code makes no error item.
 - The axis `list` over a list with an error item, or over an array with a hole (the paragraph "The axis list").
 - An error of an item that a list op on a list value gives with `strict`, and `#DEPTH!` of such an op (the next paragraph).
-- A list op on an array (V-064).
+- `errors` of an array with a hole, because its values have the position of the call (COMPILE.LIST.ARRAY).
 - A failed kind check of a schema, because it is no error of the interpreter.
 - `reduce` on an empty list, where the result can be the identity of the op. A call cannot give an identity if its op has a literal name, the call has no options, and the identities are not exactly one. For such a call, the check is an error of the program, and a context can drop it.
 - A failed test of a data limit, where a test can use an extension. The interpreter evaluates each test, so `#DEPTH!` of a later test comes first.
@@ -164,11 +164,12 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 - A node with two failed arguments past `MAX_COPIED`.
 - A data limit that is not valid, because its error keeps its cause (ITERATE.LIMIT.ERROR).
 
-**Lists as values.** A list op on an `each` is one loop (`count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first`, `values`, `keys`, `errors` and `reduce`). Each other list op, and each list op on another list, is a call of the site of the op. There, `generic` of the runtime calls `listOps` of the core, which is the code of the interpreter (LIST.OPS, COMPILE.LIST.VALUE). No second copy of the list ops exists. Thus the value of a list op is the value of the interpreter, for each list.
+**Lists as values.** A list op on an `each` is one loop (`count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first`, `values`, `keys`, `errors` and `reduce`). Each other list op, and each list op on another list or on an array, is a call of the site of the op. There, `generic` of the runtime calls `listOps` of the core, which is the code of the interpreter (LIST.OPS, COMPILE.LIST.VALUE, COMPILE.LIST.ARRAY). No second copy of the list ops exists. Thus the value of a list op is the value of the interpreter, for each list.
 
 The rules of a failure:
 
 - An error of the op has the marker path of the runtime. The runtime keeps the error in the record of the failure, and `materialize` gives it the path and the position of the site. So `ifError`, a binding, `#ARGS` and a list op around the site take it as the error of an op.
+- A hole of an array is an error item with the marker path, so `strict` gives an error of the op at the site. Only `errors` makes such an item a value, and a site has no position for that value. So `errors` of an array with a hole throws, and tier 1 gives the result.
 - `#DEPTH!` throws, and tier 1 gives the result. So the V-066 and V-067 rule holds: the program cannot catch it, and it wins over each other error, in each order of the arguments. The order in the interpreter is in `goodItems`, which the runtime shares.
 - An error of an item has another path. It comes from a list of the input with `strict`. It throws too, and tier 1 gives the result.
 
@@ -659,7 +660,7 @@ The status on 2026-10-17:
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
 - Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 has them too (COMPILE.LIST.VALUE, §4.1), but not the axis `list` yet. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
 - The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 gives them with the code of the interpreter (COMPILE.LIST.VALUE).
-- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
+- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). Tier 2 gives a list op on an array with the code of the interpreter (COMPILE.LIST.ARRAY), so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
 - Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 has them (COMPILE.LIST.VALUE).
 - Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus the force layouts of Graph and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
 - Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops come from `XYDomain`, because a module cannot copy the methods of `Vec2Domain`.
@@ -1334,7 +1335,7 @@ These parts are not in a module yet:
 - The value of an op of a domain is not a list in a module. The kind of a result cannot tell a list, so the module does not know the facts of its items. Such an op gives the reason "the op "spread" does not declare the kind of its result", with the name of the op.
 - Vex has no op that reads a field of a record. Only an op of a domain reads the lists of a record, and a record is not the receiver of an op in a module.
 - A body of the axis `list` reads the record at the key of each item, not the value of the item. Thus a loop over a list of bands reads each band with `nth`.
-- Only the strategies `grid`, `radial` and `layers` of ireko are Vex programs. Thus one sheet for the whole measure pass also needs the strategy `tree`.
+- The strategies `grid`, `radial`, `layers` and `tree` of ireko are four separate programs. No sheet holds the whole measure pass yet.
 - A variable of the schema cannot be a list. Only a field of the schema can be a list (COMPILE.MODULE.LIST.INPUT).
 - A field of a list kind takes only a `vex.list`. A plain array in such a field is against the schema, although the interpreter takes a plain array as a list (LIST.ARRAY).
 
@@ -1380,6 +1381,37 @@ The pilot found these gaps:
 - The fields of the edges are arrays, and a list op on an array goes to tier 1 (V-064). Thus a run of tier 2 with an edge gives the value of tier 1.
 
 The source of the module has approximately 26 kB, with `lists: "plain"`. ireko does not use the module yet. It needs a decision about its size budget, a speed check in CI and a wrapper that puts the edges in the first record.
+
+#### The tree pilot (the strategies)
+
+The strategy `tree` of ireko puts the children of a node in one row, on one side of the node. It packs the subtrees by their shapes, so a small subtree fits under the edge of a large subtree. It packs the row from the first child to the last, and from the last child to the first. The mean of the two packings gives the place of each child.
+
+`TREE_PROGRAM` of `@vex/pilots` is one program that evaluates at each child. A function `pack` gives the places of a row. The program calls it on the bands of the children, and on the mirrored bands in the reverse order. Past 256 bands, `pack` uses the merge of the shapes pilot, with a limit of 128 bands. `treeRun` makes the records and the variables, and `treeOutput` makes the record of ireko.
+
+The test `ireko-tree.test.ts` holds a copy of `strategies/tree.ts` of ireko. Properties compare the copy with the module, with tier 2 and with the interpreter on random rows. Some rows go past the limit, and some rows have infinite numbers. Fixed cases hold the offsets that the function of ireko gave, and a stair of bands pins the limits of the merge. On 2026-11-04 a one-time run compared the module with the function of ireko on 7300 seeded inputs, 280 of them past the limit. The bits were the same. A second run used 20000 inputs with infinite numbers. It gave the bits of ireko for each finite result, and an error at each child for each other result.
+
+The program differs from ireko in three ways, and these ways keep the result:
+
+- A fold has two steps for each child. The first step finds the place, and the second step keeps the place and the moved bands.
+- The op `clear` of `BandDomain` holds the `Math.max` of `pack`. Thus a clearance of `-Infinity` leaves the place, as in ireko. The op `max` of numbers gives `#NUM!` for it.
+- The op `move` adds 0 on the other axis, so a field -0 becomes 0. The sign does not reach a place, because each place is a maximum with a place that starts at 0.
+
+The result differs from ireko in four rare cases:
+
+- An offset that is not finite gives an error at each child. ireko keeps the offsets that stay finite. Its check then fails, and the engine uses `grid`.
+- A band with a field `NaN` gives an error at each child, also where ireko ignores the band. In 20000 inputs with one `NaN`, the module gave no finite offset where ireko gave `NaN` or `Infinity`.
+- A list of no children gives a list of no offsets. ireko throws a `RangeError`.
+- A row of more than 50000 children gives an error, because `fill` has at most 100000 items (LIST.FILL).
+
+The pilot found these gaps:
+
+- LOOP.SIZE refuses a step that copies a list of the loop item by item. The merge gives at most 128 bands, but the check cannot read this limit. Thus the step copies the merged bands again in a loop with a literal limit. The op `extend` of a band with itself gives a band of fixed size.
+- A step of a fold has no name for all its names. Thus a value that two names need takes a second step.
+- `nth` and `count` skip the error items of a list, so an error item moves the items after it. Thus the depths and the moved bands are folds, which give the first error for the whole row.
+- A list op cannot take `nth` of a list of lists in a module, as in the layers pilot.
+- The fields of the bands are arrays, and a list op on an array goes to tier 1 (V-064). Thus a run of tier 2 with a shape gives the value of tier 1.
+
+The source of the module has approximately 23 kB, with `lists: "plain"`. The module packs the row one time for all the children. ireko does not use the module yet. It needs a decision about its size budget and a speed check in CI.
 
 #### Lists of calls (COMPILE.MODULE.LIST.CALL)
 

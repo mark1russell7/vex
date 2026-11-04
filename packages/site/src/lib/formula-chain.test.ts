@@ -1,4 +1,4 @@
-import { app, call, fn, iterate, let_, lit, ref, SheetRun, v, vex, type AnyDomain, type Expr, type Space } from "@mark1russell7/vex";
+import { app, call, fix, fn, iterate, last, let_, lit, ref, SheetRun, v, vex, type AnyDomain, type Expr, type Space } from "@mark1russell7/vex";
 import { fromCore } from "@mark1russell7/vex-testkit";
 import { compileAst, compileFormula, FORMULA_DOMAINS, toVexChain, type FormulaContext } from "@vex/formula";
 import { arbAst, arbTable, TABLE_COLUMNS } from "@vex/formula/testing";
@@ -21,6 +21,16 @@ const chain = (text: string): string => {
 };
 
 describe("the Vex view of a formula", () => {
+  it("FORMULA.CHAIN FORMULA.FIX: a column has a chain of the method fix, with a parameter for its last round", () => {
+    expect(chain("FIX(r, OR, FALSE, LAST(r))")).toBe('root.start(0).fix("r", "or", false, (v0) => v0)');
+    expect(chain("FIX(x, MAX, 1, MIN(LAST(x), 2))")).toBe('root.start(0).fix("x", "max", 1, (v0) => v0._.min(2))');
+    // The first value of an inner column is outside it, so it reads the outer column.
+    expect(toVexChain(fix("x", "or", lit(false), fix("x", "or", last("x"), last("x"))))).toBe('root.start(0).fix("x", "or", false, (v0) => root.start(0).fix("x", "or", v0, (v1) => v1))');
+    // A step ends with its column, so a read after it has no parameter.
+    expect(toVexChain(app("or", fix("x", "or", lit(false), last("x")), last("x")))).toBe('root.start(0).fix("x", "or", false, (v0) => v0)._.or(root.start(null))');
+    expect(toVexChain(last("x"))).toBe("root.start(null)");
+  });
+
   it("FORMULA.CHAIN: the Lab reader reads the chain of a formula, and the chain gives the same result at each row", () => {
     fc.assert(
       fc.property(arbTable, arbAst(TABLE_COLUMNS), arbAst([...TABLE_COLUMNS, "f1"]), (t, ast1, ast2) => {

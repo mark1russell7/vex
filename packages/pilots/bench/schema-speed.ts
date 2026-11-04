@@ -13,6 +13,9 @@
  * Map, filter and object steps. Each line gives the ratio of its median to the median of `calibration`. The runners of
  * CI differ by up to 1.4x, and the ratio removes most of that difference. `README.md` tells how to read the numbers.
  *
+ * On 2026-11-04 the code of `TypeScript reference` changed, so do not compare its time or a ratio to it across this date.
+ * Each record gives this date in `referenceSince`.
+ *
  * The script fails (exit 1) when a result is not the same as the result of `schemaReference`. The time does
  * not make it fail.
  */
@@ -25,7 +28,6 @@ import { context, env, envLine } from "../../core/bench/measure.ts";
 const RUNS = Number(process.env["RUNS"] ?? 40);
 const WARM = Number(process.env["WARM"] ?? 10);
 
-/** One record of the schema: a path, its kinds and the count of its documents. */
 // The input of the speed case of schema.test.ts: 20 documents of 30 fields.
 const docs = Array.from({ length: 20 }, (_doc, d) => Object.fromEntries(Array.from({ length: 30 }, (_field, f) => [`f${String(f)}`, f % 3 === 0 ? { a: { b: [d, "x"] } } : f % 3 === 1 ? d : [d, null]])));
 
@@ -143,7 +145,7 @@ for (const o of out) {
 }
 console.info(`target: 5 ms for one sample, ${(5 / cal).toFixed(3)} per calibration. The warm pilot needs a factor of ${(pilot / 5).toFixed(1)} on this runner.`);
 const file = process.env["BENCH_OUT"];
-if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ mode: "process", context: context(), env: env(), node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
+if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ mode: "process", referenceSince: "2026-11-04", context: context(), env: env(), node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
 // A result that is not the result of the reference fails the step. The numbers stay in the report.
 const wrong = out.filter((o) => o.check !== "true" && o.check !== "n/a");
 if (wrong.length > 0) {

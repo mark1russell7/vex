@@ -16,6 +16,7 @@ The runners of CI are not all of the same speed. The same code gave a warm media
 3. Give the median of the ratio over 5 nightly runs or more. Do not give the ratio of one run as a result.
 4. For each number, tell if it is warm or cold, and if it is a median or a mean.
 5. The column `per TypeScript` compares a case with the reference in plain TypeScript. That reference takes less than 1 ms, and its noise is high. Do not use it to measure a change.
+6. The code of the reference in plain TypeScript changed on 2026-11-04. Do not compare its time or the column `per TypeScript` across this date. Each record gives the date in `referenceSince`.
 
 ## Cold and warm time
 

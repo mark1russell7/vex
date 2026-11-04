@@ -7,6 +7,13 @@ export interface JsonLeaf {
   readonly value: unknown;
 }
 
+/** This type is the row of one path while the walk runs. */
+interface PathRow {
+  readonly kinds: Set<string>;
+  count: number;
+  lastDoc: number;
+}
+
 /** This constant is the deepest level of objects that a schema opens. A deeper object is one leaf. */
 const DEPTH_LIMIT = 3;
 
@@ -17,37 +24,49 @@ export const isJsonObject = (value: unknown): value is Readonly<Record<string, u
 export function jsonKind(value: unknown): string {
   if (value === null || value === undefined) return "null";
   if (!Array.isArray(value)) return typeof value;
-  const items = new Set(value.map((item: unknown) => (Array.isArray(item) ? "array" : jsonKind(item))));
+  const items = new Set<string>();
+  for (const item of value as readonly unknown[]) items.add(Array.isArray(item) ? "array" : jsonKind(item));
   return items.size === 0 ? "array" : `array<${[...items].join("|")}>`;
 }
 
-/** This function gives the leaves of a JSON object, depth first, in the order of its keys. */
-export function jsonLeaves(doc: Readonly<Record<string, unknown>>, path = "", depth = 1): readonly JsonLeaf[] {
-  return Object.keys(doc).flatMap((key): readonly JsonLeaf[] => {
+/** This function gives each leaf of a JSON object to `visit`, depth first, in the order of its keys. */
+function visitLeaves(doc: Readonly<Record<string, unknown>>, path: string, depth: number, visit: (path: string, value: unknown) => void): void {
+  for (const key of Object.keys(doc)) {
     const value = doc[key];
     const at = path === "" ? key : `${path}.${key}`;
-    const opens = isJsonObject(value) && depth < DEPTH_LIMIT && Object.keys(value).length > 0;
-    return opens ? jsonLeaves(value, at, depth + 1) : [{ path: at, kind: jsonKind(value), value }];
-  });
+    if (isJsonObject(value) && depth < DEPTH_LIMIT && Object.keys(value).length > 0) visitLeaves(value, at, depth + 1, visit);
+    else visit(at, value);
+  }
+}
+
+/** This function gives the leaves of a JSON object, in the order of the walk. */
+export function jsonLeaves(doc: Readonly<Record<string, unknown>>): readonly JsonLeaf[] {
+  const leaves: JsonLeaf[] = [];
+  visitLeaves(doc, "", 1, (path, value) => leaves.push({ path, kind: jsonKind(value), value }));
+  return leaves;
 }
 
 /**
  * This function gives the schema of a collection from sample documents, in plain TypeScript. Each row is one path,
- * with its distinct kinds and the count of documents that have the path. The rows keep the order of first sight.
+ * with its distinct kinds and the count of documents that have the path. The rows keep the order of first sight. A
+ * row keeps the last document that it saw, so the count needs no set of documents.
  */
 export function schemaReference(docs: readonly unknown[]): readonly JsonFieldSchema[] {
-  const byPath = new Map<string, { readonly kind: string; readonly doc: number }[]>();
+  const rows = new Map<string, PathRow>();
   docs.forEach((doc, index) => {
     if (!isJsonObject(doc)) return;
-    for (const { path, kind } of jsonLeaves(doc)) {
-      const seen = byPath.get(path);
-      if (seen === undefined) byPath.set(path, [{ kind, doc: index }]);
-      else seen.push({ kind, doc: index });
-    }
+    visitLeaves(doc, "", 1, (path, value) => {
+      let row = rows.get(path);
+      if (row === undefined) {
+        row = { kinds: new Set(), count: 0, lastDoc: -1 };
+        rows.set(path, row);
+      }
+      row.kinds.add(jsonKind(value));
+      if (row.lastDoc !== index) {
+        row.lastDoc = index;
+        row.count += 1;
+      }
+    });
   });
-  return [...byPath].map(([path, seen]) => ({
-    path,
-    kinds: [...new Set(seen.map((s) => s.kind))],
-    count: new Set(seen.map((s) => s.doc)).size,
-  }));
+  return Array.from(rows, ([path, row]) => ({ path, kinds: [...row.kinds], count: row.count }));
 }

@@ -32,12 +32,21 @@ function LA(x, h, t) {
 function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }
 function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }
 function SKI(l, f) {
-  const n = l.length;
-  for (let i = 0; i < n; i++) l[i] = [l[i], f(l[i][1])];
-  const t = n > 0 ? typeof l[0][1] : "number";
-  for (const [, v] of l) if (typeof v !== t || (t !== "number" && t !== "string") || v !== v) F();
-  l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
-  for (let i = 0; i < n; i++) l[i] = l[i][0];
+  const n = l.length, k = new Array(n);
+  for (let i = 0; i < n; i++) k[i] = f(l[i][1]);
+  const t = n > 0 ? typeof k[0] : "number";
+  for (const v of k) if (typeof v !== t || (t !== "number" && t !== "string") || v !== v) F();
+  if (n > 64) {
+    const o = new Array(n), c = l.slice();
+    for (let i = 0; i < n; i++) o[i] = i;
+    o.sort((a, b) => (k[a] < k[b] ? -1 : k[a] > k[b] ? 1 : 0));
+    for (let i = 0; i < n; i++) l[i] = c[o[i]];
+  } else for (let i = 1; i < n; i++) {
+    const v = k[i], x = l[i];
+    let j = i - 1;
+    for (; j >= 0 && k[j] > v; j--) { k[j + 1] = k[j]; l[j + 1] = l[j]; }
+    k[j + 1] = v; l[j + 1] = x;
+  }
   return l;
 }
 function T(f) { try { return f(); } catch { return E; } }

@@ -53,6 +53,8 @@ export type Expr =
   | { readonly tag: "each"; readonly axis: Axis; readonly body: Expr; readonly at?: Addr; readonly as?: ItemNames }
   | { readonly tag: "fold"; readonly axis: Axis; readonly init: Names; readonly step: Names; readonly result: Expr; readonly at?: Addr; readonly as?: ItemNames }
   | { readonly tag: "iterate"; readonly limit: number | DataLimit; readonly init: Names; readonly step: Names; readonly until?: Expr; readonly result: Expr }
+  | { readonly tag: "fix"; readonly name: string; readonly join: FixJoin; readonly init: Expr; readonly step: Expr }
+  | { readonly tag: "last"; readonly name: string }
   | { readonly tag: "fn"; readonly params: readonly string[]; readonly body: Expr }
   | { readonly tag: "call"; readonly fn: string; readonly args: readonly Expr[] }
   | { readonly tag: "ext"; readonly kind: string; readonly data: unknown };
@@ -65,6 +67,9 @@ export type Names = Readonly<Record<string, Expr>>;
  * its position (AXIS.LIST.ITEM, AXIS.LIST.INDEX). The body of `each` and the steps of `fold` see them (AXIS.LIST.SCOPE).
  */
 export type ItemNames = readonly [item: string] | readonly [item: string, index: string];
+
+/** The joins of `fix`. The join `or` or `max` moves a row up, and `and` or `min` moves a row down (FIX.JOIN). */
+export type FixJoin = "or" | "and" | "max" | "min";
 
 /** The largest number of steps of `iterate` (ITERATE.LIMIT). */
 export const MAX_ITERATIONS = 100_000;
@@ -137,6 +142,19 @@ export function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Ad
  */
 export function iterate(limit: number | DataLimit, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate"> {
   return until === undefined ? { tag: "iterate", limit, init, step, result } : { tag: "iterate", limit, init, step, until, result };
+}
+
+/**
+ * This function makes a fixed-point column (FIX.ROUNDS). `init` gives the first value of each row. `step` gives the next
+ * value of each row, and it reads the last round with `last`. `join` joins each next value to the old value of its row.
+ */
+export function fix(name: string, join: FixJoin, init: Expr, step: Expr): ExprOf<"fix"> {
+  return { tag: "fix", name, join, init, step };
+}
+
+/** This function makes a read of the value of the focus in the last round of the `fix` with the name `name` (FIX.LAST). */
+export function last(name: string): ExprOf<"last"> {
+  return { tag: "last", name };
 }
 
 /** This function makes the limit of `iterate` from the size of the data: the number of targets of an axis (ITERATE.LIMIT.DATA). */
@@ -299,7 +317,10 @@ export function isExpr(u: unknown): u is Expr {
 }
 
 /** The tags of the expressions of this version of Vex. */
-const TAGS: ReadonlySet<unknown> = new Set(["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "fn", "call", "ext"]);
+const TAGS: ReadonlySet<unknown> = new Set(["lit", "ref", "app", "let", "var", "rec", "each", "fold", "iterate", "fix", "last", "fn", "call", "ext"]);
+
+/** The joins of `fix`. */
+const JOINS: ReadonlySet<unknown> = new Set<FixJoin>(["or", "and", "max", "min"]);
 
 /**
  * This function gives the reason that a value is not a valid expression, or `undefined` for a valid expression
@@ -435,6 +456,13 @@ function badPart(todo: { readonly axis: boolean; readonly u: unknown }[], whole:
         push(false, [...names, ...(u["until"] === undefined ? [] : [u["until"]])]);
         break;
       }
+      case "fix":
+        if (typeof u["name"] !== "string" || !JOINS.has(u["join"])) return item;
+        push(false, [u["init"], u["step"]]);
+        break;
+      case "last":
+        if (typeof u["name"] !== "string") return item;
+        break;
       case "ext":
         if (typeof u["kind"] !== "string" || !("data" in u)) return item;
         break;
@@ -468,10 +496,13 @@ export function children(e: Expr): readonly Expr[] {
       const axis = limitAxis(e);
       return [...Object.values(e.init), ...Object.values(e.step), ...(axis === undefined ? [] : axisExprs(axis)), ...(e.until === undefined ? [] : [e.until]), e.result];
     }
+    case "fix":
+      return [e.init, e.step];
     case "ref":
       return addrExprs(e.at);
     case "lit":
     case "var":
+    case "last":
     case "ext":
       return [];
   }

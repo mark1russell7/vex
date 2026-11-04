@@ -3,7 +3,7 @@
  * data. A value of a domain in that data has the JSON form of a literal of the IR, for example
  * `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`. A result has the same form.
  */
-import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, MAX_NESTING, nestingOf, parse, programStep, serialize, shapeError, sizeError, sizeOf, space, stepError, type AnyDomain, type Expr, type Result, type Space, type VexError, type VexStep } from "@mark1russell7/vex";
+import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, MAX_NESTING, monotoneError, nestingOf, parse, programStep, serialize, shapeError, sizeError, sizeOf, space, stepError, type AnyDomain, type Expr, type Result, type Space, type VexError, type VexStep } from "@mark1russell7/vex";
 import { emitModule, generate, type Schema } from "@mark1russell7/vex-compiler";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, JsonDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
@@ -47,7 +47,7 @@ export function programOf(program: unknown, domains: readonly AnyDomain[], maxSt
   if (r.ok) {
     // LOOP.SIZE: a step of a loop that can double the size of a list makes the program not valid.
     // STEP.MAX: a program above the highest step of the host is not valid, and the reason names its step.
-    const size = nestingOf(r.value) > MAX_NESTING ? undefined : (sizeError(r.value, { domains }) ?? stepError(r.value, maxStep === undefined ? {} : { maxStep }));
+    const size = nestingOf(r.value) > MAX_NESTING ? undefined : (sizeError(r.value, { domains }) ?? stepError(r.value, maxStep === undefined ? {} : { maxStep }) ?? monotoneError(r.value, { domains }));
     if (size === undefined) return r.value;
     throw new ToolError(`the program is not valid: ${size}.`);
   }

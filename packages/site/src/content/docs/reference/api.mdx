@@ -229,10 +229,11 @@ Under `isolatedDeclarations`, give a domain an explicit type. `OpTable<D, Names,
 | `kernelPlan(source, { domains, fns, extensions })` | The reference tier: a plan of the kernel of coeval. `run({ space, origin, vars, tables })` gives a result of Vex, and `evaluate` gives the result of the kernel. `reference` reads the document with the reference interpreter of the kernel, which compiles nothing. `agree(options, tier)` compares the tiers of the kernel and your tier (`EVAL.AGREE`). |
 | `VEX_WORLD`, `vexMachine(options)`, `vexChecker()`, `vexDefinitions(options)`, `vexSelf(space, origin, tables)` | The contracts of the kinds of Vex as data, the machine of the kernel that evaluates the documents of Vex, and the machine of the checks, without the code of the evaluators. Also the definitions of the formula kit for the reference interpreter of the kernel, and the position that is the root `self` of an evaluation. |
 | `toVexError(error)`, `toKernelError(error)`, `toVexResult(result)` | The conversions between the errors of the kernel and the errors of Vex |
+| `monotoneError(expr, options)` | The reason that the check of `fix` refuses a program, or `undefined` (FIX.MONOTONE) |
 
 ## The IR
 
-`lit`, `ref`, `app`, `let_`, `v`, `fn`, `call`, `rec`, `each`, `fold`, `iterate` and `ext` make expressions. `key`, `index`, `other`, `offset`, `origin` and `parent` make moves. `axes.all`, `axes.others`, `axes.other`, `axes.neighbors(n)`, `axes.children`, `axes.ancestors`, `axes.descendants`, `axes.siblings`, `axes.reverse(axis)`, `axes.list(expr)` and `axes.where(axis, test)` make axes. `dataLimit(axis)` makes a limit of `iterate` from the size of the data. Refer to [the IR](../ir/).
+`lit`, `ref`, `app`, `let_`, `v`, `fn`, `call`, `rec`, `each`, `fold`, `iterate`, `fix`, `last` and `ext` make expressions. `key`, `index`, `other`, `offset`, `origin` and `parent` make moves. `axes.all`, `axes.others`, `axes.other`, `axes.neighbors(n)`, `axes.children`, `axes.ancestors`, `axes.descendants`, `axes.siblings`, `axes.reverse(axis)`, `axes.list(expr)` and `axes.where(axis, test)` make axes. `dataLimit(axis)` makes a limit of `iterate` from the size of the data. Refer to [the IR](../ir/).
 
 ## Results
 

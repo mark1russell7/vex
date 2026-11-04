@@ -1,17 +1,19 @@
 /**
  * The size budget. The check loads each page of the built site and adds the gzip size of each response. A page stays
- * at 256 kB or less, and its script stays at 164 kB or less. The heaviest page was 205 kB when the budget started.
+ * at 256 kB or less, and its script stays at 169 kB or less. The heaviest page was 205 kB when the budget started.
  *
  * The script budget is the heaviest script that a build measured, plus 2 %, up to the next whole kB. On 2026-11-03 the
  * check of steps (STEPS) added 918 B of used code to the chunk of the sheet. The script of `/gallery/audit/` went to
- * 164511 B, over the old budget of 160 kB. Thus the budget became 164 kB (164511 B plus 2 % is 167801 B).
+ * 164511 B, over the old budget of 160 kB. Thus the budget became 164 kB (164511 B plus 2 % is 167801 B). On 2026-11-04
+ * the construct `fix` (FIXPOINT) took the same script to 168736 B. Thus the budget became 169 kB (168736 B plus 2 % is
+ * 172111 B).
  */
 import { expect, test } from "@playwright/test";
 import { gzipSync } from "node:zlib";
 import { routes } from "./routes.ts";
 
 const PAGE_BUDGET = 256 * 1024;
-const SCRIPT_BUDGET = 164 * 1024;
+const SCRIPT_BUDGET = 169 * 1024;
 
 for (const route of routes()) {
   test(`the page /${route} stays in the size budget`, async ({ page }) => {

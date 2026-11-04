@@ -356,6 +356,10 @@
     "comment": "// Stryker disable next-line ConditionalExpression,BlockStatement: the cache holds only lists that pass the check again"
   },
   {
+    "file": "packages/core/src/monotone.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: only a Refusal comes here, and a mutant that always takes it reads its field"
+  },
+  {
     "file": "packages/core/src/plan.ts",
     "comment": "// Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value"
   },

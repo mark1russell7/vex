@@ -83,6 +83,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile --filter @mark1russell7/vex-compiler...
       - name: The properties of the name gate
         working-directory: packages/compiler

@@ -1889,8 +1889,9 @@ describe("COMPILE.MODULE: random programs", () => {
     );
   });
 
-  it("V-081 COMPILE.MODULE: a module of each mode has no read of a name without a declaration", () => {
-    const modes = fc.constantFrom<Partial<ModuleOptions>>({ faults: "value" }, { faults: "throw" }, { fuse: false }, { keys: true });
+  it("V-081 V-086 COMPILE.MODULE: a module of each combination of the modes has no read of a name without a declaration", () => {
+    // The gate reads each function of the module, so each free name of a function needs a declaration or a known global.
+    const modes = fc.record<Partial<ModuleOptions>>({ faults: fc.constantFrom("value", "throw"), fuse: fc.boolean(), keys: fc.boolean() });
     fc.assert(
       fc.property(fc.oneof(reused, program.num), modes, (e, mode) => {
         // The option keys refuses this one shape. Each other refusal fails the test.

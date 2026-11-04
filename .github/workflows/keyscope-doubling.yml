@@ -1,4 +1,4 @@
-# Throwaway measure of a draft pull request: compile time, bytes and memory of doubling programs with shared objects.
+# Throwaway measure of a draft pull request: compile time, bytes and memory of doubling programs with shared objects (second run).
 name: keyscope doubling
 on:
   push:

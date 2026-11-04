@@ -112,6 +112,7 @@ evaluate(byX, { space: boxes, origin: "0", domains: [NumDomain] }); // => { ok: 
 | `sortBy(list)` | a list with the items in the order of their values, from the smallest. The values are numbers or texts. Equal values keep their order. |
 | `take(list, n)` | a list of the first `n` items |
 | `nth(list, i)` | the value of the item at the position `i`, from 0. A position after the last item gives `#N/A`. |
+| `setNth(list, i, value)` | a list with the value at the position `i`, from 0. The item keeps its key. A position after the last item gives `#N/A`. |
 | `drop(list, n)` | a list of the items after the first `n` items |
 | `append(list, other)` | a list of the items of `list`, and then the items of `other` |
 | `without(list, other)` | a list of the items of `list` whose key is not the key of an item of `other` |

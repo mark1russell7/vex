@@ -7,6 +7,7 @@ import { defineDomain, type AnyDomain, type OpSpec, type ReturnKind, type SizeRu
 import { vexError } from "./errors.ts";
 import { compile, evaluate } from "./evaluate.ts";
 import { app, axes, call, each, ext, fn, fold, iterate, let_, lit, rec, ref, v, type Expr } from "./ir.ts";
+import { ok } from "./result.ts";
 import { LIST_OPS, LIST_SIZES, vexList } from "./list.ts";
 import { ruleOf, sizeError, type SizeOptions } from "./size.ts";
 import { space } from "./space.ts";
@@ -255,6 +256,62 @@ describe("the size check of the loops (LOOP.SIZE)", () => {
     expect(check(folded(NONE, (x) => app("append", app("take", x, lit(0)), app("fill", lit(1), big))))).toBeUndefined();
     expect(check(rec({ big, loop: step(NONE, (x) => app("append", x, x)) }))).toBe(refusal("x", TWICE, 'the op "append"', "iterate"));
     expect(check(rec({ big, loop: step(lit(0), (x) => app("if", lit(true), lit(NONE.value), x)) }))).toBeUndefined();
+  });
+});
+
+describe("the size rule of setNth (LOOP.SIZE.SETNTH)", () => {
+  const ITEM = "a value that uses the lists of the loop more than one time in its largest item";
+  const set = (x: Expr, value: Expr): Expr => app("setNth", x, lit(0), value);
+  const itemOf = (x: Expr, i = 0): Expr => app("nth", x, lit(i));
+  // A list of lists: from an empty list, the kinds of the items are not known, so these tests start here.
+  const LISTS = lit(vexList([{ key: "0", result: ok(vexList([{ key: "a", result: ok(1) }])) }, { key: "1", result: ok(vexList([{ key: "b", result: ok(2) }])) }]));
+
+  it("LOOP.SIZE.SETNTH: a step takes a value that does not grow, also a value from an old item", () => {
+    expect(check(folded(NONE, (x) => set(x, lit(1))))).toBeUndefined();
+    expect(check(folded(NONE, (x) => set(x, itemOf(x, 1))))).toBeUndefined();
+    expect(check(folded(NONE, (x) => set(x, app("add", itemOf(x), lit(1)))))).toBeUndefined();
+    expect(check(folded(NONE, (x) => set(x, app("count", x))))).toBeUndefined();
+    expect(check(folded(NONE, (x) => app("setNth", x, app("count", x), ref("n"))))).toBeUndefined();
+    expect(check(folded(NONE, (x) => app("setNth", x, lit(0), lit(1), lit({ strict: true }))))).toBeUndefined();
+  });
+
+  it("LOOP.SIZE.SETNTH: a step can add to one old item, because the item bound grows by a constant", () => {
+    expect(check(folded(NONE, (x) => set(x, app("append", itemOf(x), one(lit(1))))))).toBeUndefined();
+    expect(check(folded(NONE, (x) => set(x, rec({ a: itemOf(x), b: ref("n") }))))).toBeUndefined();
+  });
+
+  it("LOOP.SIZE.SETNTH: a value that holds the list counts the list two times, so the check refuses it", () => {
+    expect(check(folded(NONE, (x) => set(x, x)))).toBe(refusal("x", TWICE, 'the op "setNth"'));
+    expect(check(folded(NONE, (x) => set(x, app("take", x, lit(1)))))).toBe(refusal("x", TWICE, 'the op "setNth"'));
+    expect(check(folded(NONE, (x) => set(x, app("flat", x))))).toBe(refusal("x", TWICE, 'the op "setNth"'));
+    expect(check(folded(NONE, (x) => set(x, app("values", x))))).toBe(refusal("x", TWICE, 'the op "setNth"'));
+    // An each with a fixed body has one small item for each item, so the bound stays linear.
+    expect(check(folded(NONE, (x) => set(x, each(axes.list(x), lit(1)))))).toBeUndefined();
+    expect(check(folded(LISTS, (x) => set(x, each(axes.list(x), itemOf(x)))))).toBeDefined();
+  });
+
+  it("LOOP.SIZE.SETNTH: a value that holds two old items doubles the largest item, so the check refuses it", () => {
+    expect(check(folded(LISTS, (x) => set(x, app("append", itemOf(x), itemOf(x)))))).toBe(refusal("x", ITEM, 'the op "setNth"'));
+    expect(check(folded(LISTS, (x) => set(x, app("append", itemOf(x), itemOf(x, 1)))))).toBe(refusal("x", ITEM, 'the op "setNth"'));
+    expect(check(folded(NONE, (x) => set(x, rec({ a: itemOf(x), b: itemOf(x, 1) }))))).toBe(refusal("x", ITEM, 'a node "rec"'));
+    expect(check(folded(NONE, (x) => set(x, app("fill", lit(2), itemOf(x)))))).toBe(refusal("x", "a largest item that can grow by a factor at each step", 'the op "setNth"'));
+    expect(check(folded(LISTS, (x) => set(x, app("flat", app("fill", ref("n"), itemOf(x))))))).toBeDefined();
+  });
+
+  it("LOOP.SIZE.SETNTH: the old list of a second name counts as the list", () => {
+    const two = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: NONE, y: NONE }, next, v("x"));
+    expect(check(two({ y: v("x"), x: set(v("x"), v("y")) }))).toBeDefined();
+    const lists = (next: Readonly<Record<string, Expr>>): Expr => fold(axes.all, { x: LISTS, y: NONE }, next, v("x"));
+    expect(check(lists({ y: app("append", itemOf(v("x")), itemOf(v("x"))), x: set(v("x"), v("y")) }))).toBeDefined();
+    expect(check(two({ y: itemOf(v("x")), x: set(v("x"), lit(1)) }))).toBeUndefined();
+  });
+
+  it("LOOP.SIZE.SETNTH: the kind of the items joins the kind of the value", () => {
+    // The items of the list are numbers, and the value is a text, so concat at an item has no number bound.
+    const numbers = each(axes.all, ref("n"));
+    expect(check(step(numbers, (x) => set(x, lit(1))))).toBeUndefined();
+    expect(check(iterate(3, { x: numbers }, { x: set(v("x"), lit("a")) }, app("sum", v("x"))))).toBeUndefined();
+    expect(check(step(numbers, (x) => app("append", set(x, lit(1)), lit(vexList([])))))).toBeUndefined();
   });
 });
 

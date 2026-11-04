@@ -50,5 +50,6 @@ The four packages `vex`, `vex-domains`, `vex-testkit` and `vex-compiler` have on
 | The limit of `iterate` from the size of the data (step B): `dataLimit(axis)`, or a list chain as the limit in the builder | the next release |
 | `sign` of `NumDomain`, and `sign` and `minAxis` of `Vec2Domain` and `XYDomain`, for a push along the smallest axis | the next release |
 | The fixed-point column (step B): `fix(name, join, init, step)` and `last(name)`, the check `monotoneError`, and `monotone` on an op or a function of the host. It is in the interpreter and the reference tier | the next release |
+| `setNth(list, i, value)`: a new value at one position of a list, in the interpreter, tier 2 and a standalone module. A list chain has `setNth(i, value)` | the next release |
 
 A feature of the main branch that is not on npm yet has the version "the next release". Until it is on npm, a project can use it only from a local copy of the repository, for example with `pnpm link`. Do not write a workaround for a missing feature without a note. Tell the user which version has it.

@@ -1039,7 +1039,7 @@ class Compiler {
 
   listOp(op: ListOp, list: VexList, rest: readonly unknown[], f: Frame, path: readonly number[]): Result<unknown> {
     // The options come after the second argument of an op with one, for example the count of take.
-    const optsArg = WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
+    const optsArg = op === "setNth" ? rest[2] : WITH_ARGUMENT.has(op) ? rest[1] : rest[0];
     const strict = (optsArg as ListOptions | null | undefined)?.strict === true;
     if (op === "get") return this.#get(list, rest[0], strict, f, path);
     if (op === "group") return this.#group(list, rest[0], strict, f, path);
@@ -1118,6 +1118,16 @@ class Compiler {
         const i = whole();
         if (!i.ok) return i;
         return i.value < okValues.length ? ok(okValues[i.value]) : this.#err("empty", `"nth" has no item at the position ${String(i.value)}, and the list has ${String(okValues.length)} items`, f, path, { op });
+      }
+      case "setNth": {
+        const i = whole();
+        if (!i.ok) return i;
+        const old = okItems[i.value];
+        if (old === undefined) return this.#err("empty", `"setNth" has no item at the position ${String(i.value)}, and the list has ${String(okItems.length)} items`, f, path, { op });
+        if (rest[1] === undefined) return this.#err("bad-expression", '"setNth" needs argument 3', f, path, { op });
+        const items = [...okItems];
+        items[i.value] = { key: old.key, result: ok(rest[1]) };
+        return ok(checkedList(items));
       }
       case "count":
         return ok(okValues.length);

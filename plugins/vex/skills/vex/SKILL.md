@@ -123,6 +123,8 @@ Four list ops build lists. Each item keeps its key and its value. `drop(list, n)
 
 Thus a search can keep a stack in a list: `take(stack, 1)` is the top, and `drop(stack, 1)` removes it. In the builder, a list chain has `drop(n)`, `append(other)`, `without(other)` and `flat()`. A standalone module has these four ops from 0.13.1.
 
+`setNth(list, i, value)` gives a list with a new value at the position `i`, and the item keeps its key. A position past the last item gives `#N/A`. A list chain has `setNth(i, value)` (the next release). In a loop, the value can read one old item: `setNth(xs, i, add(nth(xs, i), 1))`. A value with two reads of old items, as in `rec({ a: old.a, b: old.b })`, doubles the bound, so LOOP.SIZE refuses it. Read each old item one time, or keep each column in its own list.
+
 A name of `iterate` or `fold` can hold a list, and each step gives the next list. `get(list, key)` gives the value of the first item with the key. A key that no item has gives `#N/A`. A literal can be a list: `lit(vexList([]))` is the empty list. In the builder, `root.list(items)` makes a list literal, and a list chain has `get(key)`.
 
 An array of a field or of a name is a list where a list op or the axis `list` needs one. The keys are the positions, from `"0"`. Thus `count(fr)`, `nth(fr, s)` and `take(fr, s)` read a config array `fr`, and a layout needs no host functions for it. `indexOf(list, value)` gives the position of a number, a text or a boolean, and `fill(n, value)` makes a list of `n` equal items. A domain or a function of the host with the op comes first.

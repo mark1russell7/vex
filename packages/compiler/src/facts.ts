@@ -12,7 +12,7 @@ import { isListOp, isOpName, liftsAt, type AnyDomain, type ExtHandler, type Free
 export const MAX_CALLS = 10_000;
 
 /** The list ops that are one loop with an `each`. Each other list op takes the list as a value (COMPILE.LIST.VALUE). */
-export type FusedOp = Exclude<ListOp, "sortBy" | "take" | "nth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf" | "distinct" | "group" | "join">;
+export type FusedOp = Exclude<ListOp, "sortBy" | "take" | "nth" | "setNth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf" | "distinct" | "group" | "join">;
 
 const FUSED_OPS: ReadonlySet<string> = new Set<FusedOp>(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors"]);
 

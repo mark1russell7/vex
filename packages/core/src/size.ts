@@ -752,6 +752,8 @@ function listResult(op: ListOp | "fill", item: Kind, args: readonly Shape[]): Ki
       return listKind(item);
     case "append":
       return listKind(joinKind(item, itemOf(args[1]?.kind ?? ANY)));
+    case "setNth":
+      return listKind(joinKind(item, args[2]?.kind ?? ANY));
     case "flat":
       return listKind(itemOf(item));
     case "group":

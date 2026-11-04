@@ -130,7 +130,7 @@ export const arbLiteral = (domainValue: fc.Arbitrary<unknown>): fc.Arbitrary<unk
     domainValue,
   );
 
-const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "drop", "append", "flat", "without", "get", "indexOf", "fill", "distinct", "group", "join"];
+const LIST_OPS = ["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "setNth", "drop", "append", "flat", "without", "get", "indexOf", "fill", "distinct", "group", "join"];
 const FORMS = ["if", "and", "or", "ifError"];
 const NAMES = ["a", "b"];
 
@@ -226,6 +226,13 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
           const step: Expr = push ? { tag: "app", op: "append", args: [more, a] } : { tag: "app", op: "drop", args: [a, { tag: "lit", value: 1 }] };
           return { tag: "iterate", limit, init: { a: init }, step: { a: step }, result };
         }),
+      // One item of a list as a name of a loop (LOOP.LIST, LIST.SETNTH): the step gives one position a new value.
+      fc
+        .tuple(fc.integer({ min: 0, max: 3 }), tie("list"), fc.integer({ min: -1, max: 3 }), tie("expr"), tie("expr"))
+        .map(([limit, init, i, value, result]): Expr => {
+          const a: Expr = { tag: "var", name: "a" };
+          return { tag: "iterate", limit, init: { a: init }, step: { a: { tag: "app", op: "setNth", args: [a, { tag: "lit", value: i }, value] } }, result };
+        }),
       // The value at a key of a list (LIST.GET): a key of the records, a key of an array or a grid, or no key.
       fc
         .tuple(tie("list"), fc.constantFrom(...RECORD_KEYS, "0", "1,1", "Z"))
@@ -249,6 +256,7 @@ export function arbExpr(opts: ArbOptions): fc.Arbitrary<Expr> {
       tie("list").map((list): Expr => ({ tag: "app", op: "sortBy", args: [list] })),
       fc.tuple(tie("list"), fc.integer({ min: -1, max: 3 })).map(([list, n]): Expr => ({ tag: "app", op: "take", args: [list, { tag: "lit", value: n }] })),
       fc.tuple(tie("list"), fc.integer({ min: -1, max: 3 })).map(([list, n]): Expr => ({ tag: "app", op: "drop", args: [list, { tag: "lit", value: n }] })),
+      fc.tuple(tie("list"), fc.integer({ min: -1, max: 3 }), tie("expr")).map(([list, i, value]): Expr => ({ tag: "app", op: "setNth", args: [list, { tag: "lit", value: i }, value] })),
       fc.tuple(tie("list"), tie("list")).map(([list, other]): Expr => ({ tag: "app", op: "append", args: [list, other] })),
       fc.tuple(tie("list"), tie("list")).map(([list, other]): Expr => ({ tag: "app", op: "without", args: [list, other] })),
       fc.tuple(tie("axis"), tie("list")).map(([axis, body]): Expr => ({ tag: "app", op: "flat", args: [{ tag: "each", axis, body }] })),

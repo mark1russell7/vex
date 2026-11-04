@@ -529,6 +529,18 @@ describe("functions and lists in the builder (BUILD.FN, BUILD.LIST.ORDER, BUILD.
     expect(Object.values((program as { bind: Readonly<Record<string, { tag: string }>> }).bind).map((x) => x.tag)).toEqual(["fn", "fn"]);
   });
 
+  it("LIST.SETNTH: setNth on a list chain takes a number or a chain as the position, and a chain as the value", () => {
+    const byW = rows.start(0).each((c) => c.from("w")).sortBy();
+    expect(byW.setNth(1, rows.lit(9)).program).toEqual(app("setNth", byW.program, lit(1), lit(9)));
+    expect(optionalValue(byW.setNth(1, rows.lit(9)).values().at("0"))).toEqual([1, 9, 3]);
+    expect(optionalValue(byW.setNth(1, rows.lit(9)).keys().at("0"))).toEqual(["1", "2", "0"]);
+    expect(optionalValue(byW.setNth(rows.from("w"), rows.lit(9)).values().at("1"))).toEqual([1, 9, 3]);
+    expect(optionalValue(byW.setNth(0, rows.from("n")).values().at("1"))).toEqual([10, 2, 3]);
+    expectTypeOf(byW.setNth(0, rows.lit("a")).nth(0).result("0")).toEqualTypeOf<Result<number | "a">>();
+    expect(error(byW.setNth(5, rows.lit(9)).result("0")).code).toBe("#N/A");
+    expect(byW.setNth(0, rows.lit(9), { strict: true }).program).toEqual(app("setNth", byW.program, lit(0), lit(9), lit({ strict: true })));
+  });
+
   it("BUILD.LIST.ORDER: sortBy, take and nth on a list chain, and each over the items of a list", () => {
     const byW = rows.start(0).each((c) => c.from("w")).sortBy();
     expect(optionalValue(byW.keys().at("0"))).toEqual(["1", "2", "0"]);

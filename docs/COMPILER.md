@@ -149,13 +149,36 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 **What stays with tier 1.** These results still use `FALLBACK`:
 
 - `#DEPTH!` of an extension and a full call stack, by the rule above.
-- A list with an error item, and the op `errors` on such an item, because generated code makes no error item.
+- An `each` with an error item, because generated code makes no error item.
+- The axis `list` over a list with an error item, or over an array with a hole (the paragraph "The axis list").
+- An error of an item that a list op on a list value gives with `strict`, and `#DEPTH!` of such an op (the next paragraph).
+- A list op on an array (V-064).
 - A failed kind check of a schema, because it is no error of the interpreter.
 - `reduce` on an empty list, because the result can be the identity of the op.
 - An op that fails in a list op, where the list can use an extension or the option `strict` is set. The interpreter makes each item first, so an earlier error item or `#DEPTH!` can come first.
 - A failed argument of a list op after its list, because the interpreter evaluates the list first.
 - An exception of a getter of a record.
 - A node with two failed arguments past `MAX_COPIED`.
+- A data limit that is not valid, because its error keeps its cause (ITERATE.LIMIT.ERROR).
+
+**Lists as values.** A list op on an `each` is one loop (`count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `none`, `first`, `values`, `keys`, `errors` and `reduce`). Each other list op, and each list op on another list, is a call of the site of the op. There, `generic` of the runtime calls `listOps` of the core, which is the code of the interpreter (LIST.OPS, COMPILE.LIST.VALUE). No second copy of the list ops exists. Thus the value of a list op is the value of the interpreter, for each list.
+
+The rules of a failure:
+
+- An error of the op has the marker path of the runtime. The runtime keeps the error in the record of the failure, and `materialize` gives it the path and the position of the site. So `ifError`, a binding, `#ARGS` and a list op around the site take it as the error of an op.
+- `#DEPTH!` throws, and tier 1 gives the result. So the V-066 and V-067 rule holds: the program cannot catch it, and it wins over each other error, in each order of the arguments. The order in the interpreter is in `goodItems`, which the runtime shares.
+- An error of an item has another path. It comes from a list of the input with `strict`. It throws too, and tier 1 gives the result.
+
+**The axis list.** Each loop over the axis `list` has the statements of each other loop, with these changes (COMPILE.LIST.AXIS). A data limit is such a loop too, and it counts the targets. Its failures are plain, so tier 1 gives the error of the limit.
+
+- The address evaluates first. Then the list evaluates at the key of the address.
+- The runtime function `items` gives the keys, the values and the positions of the items. A value that is not a list gives `FALLBACK`, and the site `listAxis` gives the error, so `ifError` takes it.
+- An error item throws, and tier 1 gives the result. The error item can also be under a false test or after the first item, and tier 2 gives no second copy of these rules.
+- A key of a list has no index in the space, and it can be outside the space. So the record of a target comes from `get`, not from the array of the records.
+- The names `as` are in the scope of the body or the step only. A test of `where` does not see them.
+- An array is a list, so the positions are its keys. A hole of an array is an error item.
+
+**A list with an error item.** Generated code makes no error item, because `each` stops the program at one. A list with an error item can only come from the input: a variable, a field or a literal. Tier 2 does not read its items. It gives the list to a list op, and the code of the interpreter skips the error items. Thus such a list stays on the value path, and the shared code is the proof that the result is the same. The differential test `list-values.test.ts` checks it, also with `#DEPTH!` items.
 
 ### 4.2 The same bits
 
@@ -341,7 +364,7 @@ The clean form does not move a part of the code. Thus each part evaluates in the
 - `sortBy` with `by` collects the items in the loop of the stage before it. `SKI` keeps the sort values in an array of their own, so it makes no pair for an item. After the sort, the next stage reads the buffer. This removes the copy of `V`, the `map` before the sort and the `map` after it.
 - `LO` of a fused chain makes the items of the `vex.list` in the loop.
 - **Adoption (COMPILE.MODULE.FUSE.ADOPT).** `AO` takes a fresh list as its own array, so the first append of a loop makes no copy. A fresh list is the output of a fused chain or of `fill`, and no other part holds it. The last append to a name after its loop pushes into the array of the loop when no part reads the name after it. An append of `fill(1, x)` into that array pushes the item directly. The rules of the adoption follow this list.
-- **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LO` for each run. Each key gets that object. The printer tests the levels of the value: a value with no levels reads no key. The `L` of the envelope evaluates on the first read, so a run with no keys makes no envelope. An error stays the error of each key. `LO` and `LOC` give a frozen list, and they keep no object on the array.
+- **One envelope for each run (COMPILE.MODULE.FUSE.OUT).** A value of the run that does not depend on the key gets one `LS` for each run. Each key gets that object. The printer tests the levels of the value: a value with no levels reads no key. The `L` of the envelope evaluates on the first read, so a run with no keys makes no envelope. An error stays the error of each key. `LS` and `LSC` give a frozen list, because the keys share the object. They keep no object on the array. `LO` and `LOC` give a list of one key, and they print no freeze. Thus a module with no shared list has no freeze of a list.
 - **The cheap sort (COMPILE.MODULE.FUSE.SORT).** `SBI` and `SKI` use an insertion sort for a list of 64 items or fewer, and they call no comparator function. The test `>` moves an item only past a larger value, so equal values keep their order. A longer list uses the stable sort of the engine. `SKI` sorts an array of indices by the sort values, and then reads the items from a copy. The check of the kinds of the sort values comes before each of the two sorts. The limit counts the items at the sort, because a fresh list has no error items. Only the sort in place changes. `SB`, `SK`, `SBC` and `SKC` keep the sort of the engine.
 - The fused code uses no new global, so the test of `MODULE_GLOBALS` (V-060) does not change. It makes no own property on an array.
 
@@ -430,7 +453,7 @@ With `strict` on `flat`, the `catch` block is `F()`. The check of a band (`k_dom
 
 #### Requirement IDs
 
-`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6, and `COMPILE.MODULE.FUSE.OUT` moved with step 7. Step 7 added the frozen form to `COMPILE.MODULE.LIST.RESULT`. `COMPILE.MODULE.FUSE.SORT` moved with step 8.
+`COMPILE.MODULE.FUSE.OFF`, `COMPILE.MODULE.FUSE.FACTS` and `COMPILE.MODULE.FUSE.CLEAN` moved to `spec/README.md` with steps 1 to 3. `COMPILE.MODULE.FUSE` and `COMPILE.MODULE.FUSE.ITEM` moved with step 4. Step 5 added the chains of `append` and the sort in place to `COMPILE.MODULE.FUSE`, with no new ID. `COMPILE.MODULE.FUSE.ADOPT` moved with step 6, and `COMPILE.MODULE.FUSE.OUT` moved with step 7. Step 7 added the frozen form of a shared list to `COMPILE.MODULE.LIST.RESULT`. `COMPILE.MODULE.FUSE.SORT` moved with step 8.
 
 #### Measure before a release
 
@@ -452,7 +475,7 @@ Each step is one pull request. P17 and the golden files check each step, and the
 4. Fuse `each` with `flat`, also the filter form and `fill(1, v)` in a body (COMPILE.MODULE.FUSE, COMPILE.MODULE.FUSE.ITEM). Done.
 5. Fuse the chains of `append`, and make `sortBy` a sink. Done. A chain fuses only when a part pushes its items, because a copy loop costs more than `concat`. In a sheet with a search, a chain that reads a cell keeps its arrays. The interpreter reads each cell of an append also after an error, and the fused chain stops at the first error.
 6. Make `AO` take a fresh list, and the last append after a loop push in place (COMPILE.MODULE.FUSE.ADOPT). Done. A literal is not fresh, so a loop that starts with the empty literal keeps its first copy. That copy has no items, so its cost is small. Then an append of `fill(1, x)` into the array pushes its item directly, with no `FI` and no `AOC`.
-7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions). Done. A list of a result is frozen in each form. These forms are a value that reads a key, a column of lists of a sheet and a module of `fuse` false. Thus the option `fuse` does not change the contract. With `fuse` false, each key keeps its own envelope, so a bench can compare the two forms. A plain array stays one array for each key, and it is not frozen. The decision covers only the `vex.list`, and a host can change an array. A column of a sheet keeps one frozen list for each cell.
+7. Make one frozen envelope for each run (COMPILE.MODULE.FUSE.OUT), in a MINOR version (§7.6, the open questions). Done. Only a list that one object serves to more than one key is frozen, with its array of items and its nested lists. The helpers `LS` and `LSC` print this form. Each other list of a result is not frozen, as in version 0.17.2. These lists are a value that reads a key, a column of lists of a sheet and each list of a module of `fuse` false. Thus the option `fuse` changes the frozen state of a list that reads no key, and it changes no value. With `fuse` false, each key keeps its own envelope, so a bench can compare the two forms. A plain array stays one array for each key, and it is not frozen. The decision covers only the `vex.list`, and a host can change an array. A column of a sheet keeps one list for each cell, so no two keys share a list, and the list is not frozen. A list in an argument or in a field stays frozen (`LV`, `LVC`), as in version 0.17.2 (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). The array keeps that object, so more than one key can read it.
 8. Make the sort in place cheap for small lists (COMPILE.MODULE.FUSE.SORT). Done. A list of 64 items or fewer gets an insertion sort, with the results of the interpreter. This step has no bench result, so it claims no speed gain.
 9. Run P17 with `fuse` on and off, and the mutation lane of the compiler in CI. Then make the release with its bench result.
 
@@ -475,6 +498,7 @@ These golden files change. The files in `packages/core/src/__golden__` do not ch
   - The memo of a module already gives the same object at each origin (§13.2, the memo of each space). Thus the identity of a value is not a part of the contract.
   - The host of ireko only reads the value (`valuesOf` in `shape-vex.ts`).
   - A host that changes the value of the run gets a `TypeError` in strict code, or no change. The project treats this as a breaking change. Thus step 7 goes into a MINOR version (0.18.0 or later), with a changeset that tells the change.
+- **Only a shared list is frozen (decided 2026-11-03).** The first form of step 7 froze each list of a result. A freeze protects only an object that two keys share, so a list of one key pays for the freeze and gains nothing. A paired measure on one runner compared three forms of the shapes case. The ratio is the time of the module over the time of the hand code, so a lower ratio is better. Each freeze gave 1.92. A freeze of each `vex.list` but not of its items gave 1.87. No freeze gave 1.76. `LO` makes a new `vex.list` at each key, with new nested lists. Thus a change of a list of one key changes no result of another key.
 - **Values without keys.** In the shapes module, each list of `merge` after its first `each` has the key 0 for each item. An array of values without pairs removes most of the remaining allocation. But each helper then needs two forms. The work decides after the measure of step 5.
 - **The model of the full layout.** The model `1 + 0.26 × (module ratio - 1)` gives 1.46 for 2.76, but CI measured 1.58. The difference is approximately 0.12, and the wrapper `shape-vex.ts` of ireko is the probable cause. Thus the gate of 1.1 can also need a change of the wrapper.
 
@@ -556,7 +580,18 @@ A value of a loop is a value of a name, not a field of a record. Thus a bisectio
 
 A fold evaluates `init` at the node. Then it evaluates `step` at each target of the axis, in the order of the axis. The focus of a step is the target. A target that a test of `where` removes has no step. The first error of a value, of a test or of `result` is the value of the fold.
 
-An iteration evaluates `init` at the node, and then `step` up to `limit` times, at the same position. `limit` is a whole number from 0 to 100000 in the expression, not a value of a run. Thus each program ends.
+An iteration evaluates `init` at the node, and then `step` up to `limit` times, at the same position. `limit` is a whole number from 0 to 100000 in the expression, or a data limit. Thus each program ends.
+
+A data limit (ITERATE.LIMIT.DATA) names an axis, and the limit is the number of targets of that axis. It is the first construct of step B. The limit is not a free expression, for these reasons:
+
+- A count is a whole number from 0, so a data limit has no negative or fractional case to check at run time.
+- A count is finite in each run, because the space and each list are finite. So the language stays total.
+- `iterate` over a data limit makes the steps of a `fold` over the same axis. So LOOP.SIZE needs no new rule, and a limit that reads a list of an outer loop counts as a use of it.
+- The axis `list` gives the count of a list. A number that is not a count needs a free expression, and that stays out of step B at this time.
+
+The cap of 100000 stays. A loop can make heavy steps, so a large input must fail with a defined error and not take a long time. A count above the cap gives `#NUM!` of the kind `limit` (ITERATE.LIMIT.ERROR). The same error wraps each failure of the axis, so a host reads one error for each cause.
+
+Tier 2 counts the targets in a loop, and a test of `where` that fails goes to tier 1 as each failure does. A module uses the strict `count`, so an error item stops the count there too. Neither tier reads a limit that is a number at run time, so such an `iterate` keeps its code and its speed.
 
 Without `until`, the iteration makes `limit` steps. With `until`, the test evaluates before each step and after the last one. A true test stops the iteration, and with no true test the value is `#NUM!`. The first error of a value, of the test or of `result` is the value of the iteration.
 
@@ -599,10 +634,10 @@ The status on 2026-10-17:
 
 - The reverse axis is done (AXIS.REVERSE). A module prints a loop from the end.
 - Functions are done in the interpreter, in `deps`, in tier 2 and in a module (FN.BIND, FN.CALL, FN.TOTAL, FN.ARGS and FN.VALUE). Tier 2 puts the body at each call. A module prints one JavaScript function for each function and each set of kinds of its arguments. With functions, the radial module went from 2940 B to 1960 B of minified gzip.
-- Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 gives a reason for a program with lists, and tier 1 evaluates it. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
-- The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 and a module give a reason for them, and tier 1 evaluates the program.
-- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives a reason for `indexOf`, `fill`, `distinct`, `group` and `join`. A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
-- Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 gives a reason for them, and tier 1 evaluates the program.
+- Lists as values are done in the interpreter (LIST.VALUE, AXIS.LIST, LIST.SORT, LIST.TAKE and LIST.NTH). The op of the proposal `at` has the name `nth`, because the builder has the method `at(key)`. Tier 2 has them too (COMPILE.LIST.VALUE, §4.1), but not the axis `list` yet. A module keeps each list as an array of pairs of a key and a value, and an error item holds the error sentinel. A list of the run, for example the sorted boxes, evaluates once for each run. A list is a value only in a binding, as the head of a list op and as the list of the axis list.
+- The list ops that build lists are done in the interpreter (LIST.DROP, LIST.APPEND, LIST.WITHOUT, LIST.FLAT and LIST.BUILD). They are the first block of design E of the study of recursion. Tier 2 gives them with the code of the interpreter (COMPILE.LIST.VALUE).
+- Arrays as lists are done in the interpreter (LIST.ARRAY, LIST.INDEXOF and LIST.FILL). An array of a field or of a name is a list where a list op or the axis `list` needs one. Its keys are its positions. A domain or a function of the host with the op comes first, so each earlier result stays. Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` (COMPILE.LIST.VALUE). A list op of tier 2 on an array goes to tier 1 at run time, so the two tiers give the same result (P17). A module has `indexOf` over a list since block 3, and `fill` since 2026-10-27 (COMPILE.MODULE.FILL, §13.3), but not `distinct`, `group` or `join` yet (LIST.DISTINCT, LIST.GROUP, LIST.JOIN). An array is not a list of a module, so the kinds of an array do not decide an op of a module.
+- Lists as the state of a loop are done in the interpreter (LOOP.LIST, LIST.GET, LIST.LITERAL and BUILD.LIST.LOOP). They are the second block of design E of the study of recursion. A name of `fold` or `iterate` holds a list, and a step reads the old value at a key with `get(list, key)`. Tier 2 has them (COMPILE.LIST.VALUE).
 - Lists in modules are done (COMPILE.MODULE.LIST, block 3 of design E, 2026-10-25). A module has the ops of the two blocks, `get`, `indexOf`, list literals and lists as names of loops. Thus the force layouts of Graph and the engine of ireko can be modules. The module prints plain loops and arrays, with no call to the interpreter.
 - Graph spaces and `reduce` in modules are done (COMPILE.MODULE.GRAPH and COMPILE.MODULE.REDUCE, 2026-10-26). Thus the force pilot is a module with plain loops (§13.3, "Graph spaces and reduce"). Its ops come from `XYDomain`, because a module cannot copy the methods of `Vec2Domain`.
 
@@ -760,7 +795,7 @@ Two caches of the runtime give most of the speed:
 
 The rest of the time goes into the reads of the space and into the checks that the semantics need, for example `valid`. Phase C2 removes this time with the kinds and the inline forms.
 
-These cases operate in tier 1: a list value with an error item, and a list op on a list value. Each exception that is not an error of an op also operates in tier 1. Since COMPILE.EXT, an error of an extension operates in tier 1 only where it is the result (§4.1).
+These cases operate in tier 1: an `each` with an error item, and the axis `list` over an error item. Each exception that is not an error of an op also operates in tier 1. Since COMPILE.EXT, an error of an extension operates in tier 1 only where it is the result (§4.1).
 
 An item for the owner: npm trusted publishing needs the package on npm. Before the next release, the owner publishes `@mark1russell7/vex-compiler` once, or adds its trust, as for the other packages.
 
@@ -1045,13 +1080,14 @@ Before the loop over the keys, the run makes only the parts of the tree that the
 | Part | Helper | For |
 |---|---|---|
 | The parent of each record, in an `Int32Array` | `PT` | Each tree |
-| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the two parts below |
+| The children of each record and the roots, in key order | `CH` | `children`, `successors`, `reachable`, and the part below |
 | The siblings of each record with the record itself, and its position among them | `SG` | `siblings`, `window` and the offsets |
-| The keys depth first, and the position and the size of the subtree of each key | `PR` | `descendants` |
+| The keys depth first, and the position and the size of the subtree of each key, in `Int32Array` | `PR` | `descendants`. It reads only the parents, so a program with only this axis has no `CH` |
 
 Thus the targets of each axis are a range of an array, and the loop over them is a `for` loop over that range. The reverse order is the same loop from the end.
 
 - `children` and `successors` are the children of the focus. `siblings` are the siblings of the focus, and the loop skips the focus.
+- `ancestors` in the forward order are a walk up the parents, with no array (COMPILE.MODULE.TREE.ALLOC). The reverse order reads the array of `AN`. A walk reads each parent once, and the array read each parent and then its own slot. Thus a deep tree costs no more time than before. A chain of `n` keys still has `n` times `n` reads over all the keys.
 - `descendants` are the keys after the focus in the order depth first, as many as the subtree of the focus has under it.
 - `window(from, to)` is the range of the siblings from the position of the focus plus `from` to its position plus `to`.
 - `ancestors` and `reachable` make an array for each loop. `predecessors` is the parent, or no target for a root.
@@ -1339,7 +1375,7 @@ The measure loop of ireko measures one node at a time. A module for one node nee
 - Another value, an item of another kind, an item without a value or an error item of `#DEPTH!` throws a `VexContractError`. A list op of the interpreter does not skip `#DEPTH!`, but the sentinel of the module does. Thus the check refuses it.
 - With the default form of the lists, a plain array is against the schema. The interpreter gives a plain array to an op and to a record as it is, but the module gives a `vex.list`. The option `lists: "plain"` reads plain arrays (COMPILE.MODULE.LIST.PLAIN).
 - The keys of the input are text, so the axis `list` over such a list cannot read a record at its keys. The reason is "the axis "list" reads a record at a key of a literal or of "fill"". The body of the axis has the focus at a key of an item, so a name outside the loop holds the list.
-- An item of the run has the error `VEX_ERROR`, not the error of the input. A list of the input in the value of the run is a new frozen `vex.list`, not the object of the input.
+- An item of the run has the error `VEX_ERROR`, not the error of the input. A list of the input in the value of the run is a new `vex.list`, not the object of the input.
 - Tier 2 does not check the kind of a field of a list kind. Thus it keeps the semantics of the interpreter.
 
 `NODE_SHAPE` of `@vex/pilots` is the shapes pass for one linked node with children. Each record is a child, with its offset and the two lists of bands of its shape. The variables are the box of the node and the limit. A property compares the module with `joinShapes` of ireko, with the same bits. The module has 13481 bytes and 3666 bytes after gzip with the default level, before a minifier (2026-10-27).
@@ -1363,7 +1399,7 @@ The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 %
 - The helper `LP` gives the result, and `LPC` is its clean form (COMPILE.MODULE.FUSE.CLEAN). The helper `LCP` gives a column of lists of a sheet.
 - The module prints no types. The host declares them: `T[]` for a list of `T`, and `T | typeof VEX_ERROR` for an item that can be an error.
 
-In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out.push(LPC(G(c136()), 1))` replaces the read `out.push(G(c137()))` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12857 bytes, and the default module has 13463 bytes. The golden file `module-plain.js` keeps its text.
+In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out[o] = LPC(G(c136()), 1)` replaces the read `out[o] = G(c137())` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12520 bytes, and the default module has 13209 bytes. The golden file `module-plain.js` keeps its text.
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
 
@@ -1378,4 +1414,4 @@ The field `as` of `each` and `fold` names the value and the index of each item o
 - The names have a level of their own. Thus a part that reads them stays in the loop. A read of a name is not a read of the target. Thus a loop over the keys of a literal or of `fill` can read the names.
 - The value of an item keeps the facts of its list. Thus an item that is a list is a list in the body. The printer knows these facts only in the loop. So a list op over such an `each` goes over its array when the body can give a list.
 - A name of `as` is not a name of `init` (the check of the document). Thus a step that appends to its own list and reads a name of `as` keeps the append of COMPILE.MODULE.APPEND.OWN.
-- Tier 2 still gives a reason for each program with the axis `list`.
+- Tier 2 gave a reason for each program with the axis `list` until COMPILE.LIST.AXIS.

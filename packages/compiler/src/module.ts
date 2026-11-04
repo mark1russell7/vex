@@ -31,7 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
-import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, listOf, lit, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
+import { addrExprs, app, axisExprs, CELL_KIND, children, fromDocument, isDocument, isFieldName, isListOp, isVexList, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, moveExpr, nestingOf, rec, shapeError, sizeError, splitLimit, stepError, vexList, type AnyDomain, type Axis, type CellFormulas, type Envelope, type Expr, type ExprOf, type ItemNames, type Move, type Names, type PrimitiveKind, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import { columnOrder, isCellRef, keyOrderOf, readsFinished, readsOf } from "./sheet-order.ts";
@@ -221,7 +221,7 @@ interface Part {
 const FOCUS_TAGS: ReadonlySet<string> = new Set(["ref", "ext", "call", "each", "fold"]);
 
 /** This function tells if an expression has a node that can read at the focus. */
-const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || children(e).some(readsFocus);
+const readsFocus = (e: Expr): boolean => FOCUS_TAGS.has(e.tag) || (e.tag === "iterate" && limitAxis(e) !== undefined) || children(e).some(readsFocus);
 
 /**
  * This function tells if an expression has a node that can read a cell: a read of a cell or a call. The interpreter
@@ -415,13 +415,13 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | "LS" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
  * lists that the facts prove clean. Thus it has no scan of `V`, no `VW` and no test of the sentinel.
  */
-type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LVC" | "LPC";
+type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "FSC" | "LOC" | "LSC" | "LVC" | "LPC";
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX";
@@ -691,19 +691,33 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // The keys depth first, with each parent before its children, and the position and the size of the subtree of each
   // record. Thus the descendants of a record are the keys after it, as many as its subtree has under it.
   PR: [
-    "function PR(h, r, n) {",
-    "  const o = [], at = new Int32Array(n), z = new Int32Array(n), st = [];",
-    "  for (let q = r.length - 1; q >= 0; q--) st.push(r[q]);",
-    "  while (st.length > 0) {",
-    "    const k = st.pop();",
-    "    at[k] = o.length;",
-    "    o.push(k);",
-    "    for (let q = h[k].length - 1; q >= 0; q--) st.push(h[k][q]);",
+    "function PR(P, n) {",
+    "  const f = new Int32Array(n).fill(-1), x = new Int32Array(n), o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n);",
+    "  let r = -1;",
+    "  for (let i = n - 1; i >= 0; i--) {",
+    "    const p = P[i];",
+    "    if (p < 0) {",
+    "      x[i] = r;",
+    "      r = i;",
+    "    } else {",
+    "      x[i] = f[p];",
+    "      f[p] = i;",
+    "    }",
+    "  }",
+    "  let m = 0;",
+    "  for (let k = r; k >= 0; ) {",
+    "    at[k] = m;",
+    "    o[m++] = k;",
+    "    if (f[k] >= 0) k = f[k];",
+    "    else {",
+    "      while (k >= 0 && x[k] < 0) k = P[k];",
+    "      if (k >= 0) k = x[k];",
+    "    }",
     "  }",
     "  for (let q = n - 1; q >= 0; q--) {",
-    "    const k = o[q];",
-    "    z[k] = 1;",
-    "    for (const c of h[k]) z[k] += z[c];",
+    "    const k = o[q], p = P[k];",
+    "    z[k]++;",
+    "    if (p >= 0) z[p] += z[k];",
     "  }",
     "  return [o, at, z];",
     "}",
@@ -744,10 +758,12 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // A cell without a formula has the error sentinel from the start, as the error of its read.
   // A column of a direct fill (COMPILE.MODULE.SHEET.DIRECT): the error sentinel of a cell changes to VEX_ERROR.
   DO: "function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }",
-  // A list of a result (COMPILE.MODULE.LIST.RESULT): a frozen `vex.list` with a text key for each item, as the interpreter
-  // gives. An error item has the error VEX_ERROR. The depth `h` is the number of the levels of lists in the items. LO
+  // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
+  // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items. One key gets the list, so it is not frozen.
+  LO: 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
+  // The list of a run that each key gets (COMPILE.MODULE.FUSE.OUT): LO, but frozen, because the keys share the object. LS
   // keeps no object on the array, because a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
-  LO: 'function LO(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } }))) }); }',
+  LS: 'function LS(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LS(v, h - 1) : v } }))) }); }',
   // A plain list of a result (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with no keys. An error
   // item is VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
   LP: "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
@@ -844,7 +860,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   NTC: "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
   FSC: "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
-  LOC: 'function LOC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } }))) }); }',
+  LOC: 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
+  LSC: 'function LSC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LSC(v, h - 1) : v } }))) }); }',
   LPC: "function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }",
   // LV and LVC keep one object on the array. A clean list gives the same object from both.
   LVC: [
@@ -857,7 +874,7 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  return o;",
     "}",
   ].join("\n"),
-  // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`.
+  // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`. No two cells share it, so LC uses LO.
   LC: "function LC(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LO(d[k], h); return d; }",
   // A plain column of lists (COMPILE.MODULE.LIST.PLAIN): each cell with a list gives an array.
   LCP: "function LCP(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LP(d[k], h); return d; }",
@@ -956,8 +973,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "    else D[c][k] = x;",
     "  };",
     "  const o = (c) => {",
-    "    const d = D[c], out = [];",
-    "    for (let k = 0; k < n; k++) out.push(d[k] === E ? VEX_ERROR : d[k]);",
+    "    const d = D[c], out = new Array(n);",
+    "    for (let k = 0; k < n; k++) out[k] = d[k] === E ? VEX_ERROR : d[k];",
     "    return out;",
     "  };",
     "  return { r, f, o };",
@@ -1155,13 +1172,13 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   PT: ["C"], GR: ["C"], UP: ["F"], SO: ["F"],
   CH: [], SG: [], PR: [], AN: [], BF: [],
   GI: [], RB: [],
-  SH: [], KO: [], DO: [], LO: [], LC: ["LO"], LV: [], LCP: ["LP"],
-  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LVC: [], LPC: [],
+  SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
+  SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
   SBI: ["F"], SKI: ["F"], QA: [],
 };
 
 /** The clean form of each helper that gives a list of the code to the outside (COMPILE.MODULE.FUSE.CLEAN). */
-const CLEAN_FORMS = { LO: "LOC", LV: "LVC", LP: "LPC" } as const;
+const CLEAN_FORMS = { LO: "LOC", LS: "LSC", LV: "LVC", LP: "LPC" } as const;
 
 /** The parts of a tree that a run computes before the loop over its keys, if the program needs them. */
 type TreePart = "children" | "siblings" | "order";
@@ -1170,7 +1187,7 @@ type TreePart = "children" | "siblings" | "order";
 const TREE_PARTS: Readonly<Record<TreePart, readonly [TreeHelper, string]>> = {
   children: ["CH", "const [H, RT] = CH(P, n);"],
   siblings: ["SG", "const [GP, SI] = SG(P, H, RT, n);"],
-  order: ["PR", "const [PO, PI, SZ] = PR(H, RT, n);"],
+  order: ["PR", "const [PO, PI, SZ] = PR(P, n);"],
 };
 
 /** An axis whose targets in a tree space are a range of an array of positions: an axis of a tree, or a window. */
@@ -1420,12 +1437,14 @@ function refsOf(e: Expr, name: string): number {
     }
     case "fold":
     case "iterate": {
-      // The steps and the result see the names of the loop. The tests of a fold read only the names outside the fold.
+      // The steps and the result see the names of the loop. The tests of a fold or of a data limit read only the names outside the loop.
       const hidden = name in e.init;
       const steps = [...Object.values(e.step), ...(e.tag === "iterate" && e.until !== undefined ? [e.until] : [])];
-      const once = e.tag === "fold" ? [...(listOf(e.axis) === undefined ? [] : [listOf(e.axis) as Expr]), ...addrExprs(e.at)] : [];
+      const axis = e.tag === "fold" ? e.axis : limitAxis(e);
+      const list = axis === undefined ? undefined : listOf(axis);
+      const once = [...(list === undefined ? [] : [list]), ...(e.tag === "fold" ? addrExprs(e.at) : [])];
       // Stryker disable next-line ArrayDeclaration: refsOf of a string gives NaN, and again(NaN) gives 0.
-      const tests = e.tag === "fold" ? axisExprs(e.axis).filter((x) => x !== listOf(e.axis)) : [];
+      const tests = axis === undefined ? [] : axisExprs(axis).filter((x) => x !== list);
       const item = e.tag === "fold" && e.as?.includes(name) === true;
       return refsIn([...Object.values(e.init), ...once], name) + again(refsIn(tests, name)) + (hidden || item ? 0 : again(refsIn(steps, name))) + (hidden ? 0 : refsOf(e.result, name));
     }
@@ -2025,7 +2044,7 @@ class Printer {
    * This method gives the code of a list in the form of the helper `form`: a `vex.list`, or a plain array for `LP`
    * (COMPILE.MODULE.LIST.PLAIN). A list that the facts prove clean uses the clean form of the helper (COMPILE.MODULE.FUSE.CLEAN).
    */
-  envelope(v: Value, form: "LO" | "LV" | "LP"): string {
+  envelope(v: Value, form: keyof typeof CLEAN_FORMS): string {
     const list = v.list as ListInfo;
     const helper = this.#clean(list, true) ? CLEAN_FORMS[form] : form;
     return `${this.use(helper)}(${v.code}, ${String(depthOf(list))})`;
@@ -2033,13 +2052,12 @@ class Printer {
 
   /**
    * This method gives the code of a list that is the value of the run at a key. With `fuse`, a `vex.list` that reads no
-   * key evaluates once, on its first read, so each key gets one object (COMPILE.MODULE.FUSE.OUT). A plain array stays
-   * one array for each key, because a host can change an array.
+   * key evaluates once, on its first read, so each key gets one object (COMPILE.MODULE.FUSE.OUT). The keys share that
+   * object, so only that object is frozen. A plain array stays one array for each key, because a host can change an array.
    */
   runList(v: Value, plain: boolean): string {
-    const code = this.envelope(v, plain ? "LP" : "LO");
-    if (plain || !this.#fuse || v.deps.size > 0) return code;
-    return this.#hoist(bare({ ...v, code, plain: false }), true).v.code;
+    if (plain || !this.#fuse || v.deps.size > 0) return this.envelope(v, plain ? "LP" : "LO");
+    return this.#hoist(bare({ ...v, code: this.envelope(v, "LS"), plain: false }), true).v.code;
   }
 
   /** This method gives the name of a part of the tree, for example `H` for the children, and marks the part as read. */
@@ -3093,6 +3111,11 @@ class Printer {
     }
     const startSafe = at.every((m) => m.t === "origin");
     if (base.t === "window" && (!Number.isInteger(base.from) || !Number.isInteger(base.to))) throw new NotStandalone('the axis "window" with a bound that is not an integer');
+    // The ancestors are a walk up the parents, with no array (COMPILE.MODULE.TREE.ALLOC). The reverse order needs the array.
+    if (this.#tree && base.t === "ancestors" && !reverse) {
+      const parts = { init: `P[${f as string}]`, cond: `${j} >= 0`, next: `${j} = P[${j}]` };
+      return { s, j, head: forHead(j, parts), parts, key: [], check: [], checkSafe: true, skip: undefined, fixed: false, start, startSafe, tests, inner, texts: false, items: NO_NAMES, item: undefined };
+    }
     // In a tree space, the targets of a tree axis and of a window are a range of an array of positions.
     if (this.#tree && isTreeAxis(base)) {
       const range = this.#treeRange(base, f as string);
@@ -3944,6 +3967,8 @@ class Printer {
     const loop = this.#loops++;
     const names = this.#loopNames(e.init, e.step, ctx, loop);
     const inner: Ctx = { ...ctx, env: names.env };
+    // The data limit reads the names outside the loop, after the first values (ITERATE.LIMIT.DATA).
+    const limit = this.#limit(e, ctx);
     // A loop at a place that takes a list gives its result there (LOOP.LIST).
     if (this.#wantList.has(e)) this.#wantList.add(e.result);
     const until = e.until === undefined ? undefined : this.expr(e.until, inner);
@@ -3952,12 +3977,27 @@ class Printer {
     const k = this.fresh("k");
     const body = [
       ...(until === undefined ? [] : [...until.s, `if (${this.#boolean(until.v)}) break;`]),
-      `if (${k} === ${String(e.limit)}) ${until === undefined ? "break;" : `${this.use("F")}();`}`,
+      `if (${k} === ${limit.code}) ${until === undefined ? "break;" : `${this.use("F")}();`}`,
       ...step.s,
     ];
     const inside = [...(until?.v.deps ?? []), ...step.deps, ...result.v.deps].filter((d) => d !== loop);
-    const deps = new Set([...names.deps, ...inside]);
-    return { s: [...names.s, ...this.#ownVars(step.owners), `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+    const deps = new Set([...names.deps, ...limit.deps, ...inside]);
+    return { s: [...names.s, ...limit.s, ...this.#ownVars(step.owners), `for (let ${k} = 0; ; ${k}++) {`, ...ind(body), "}", ...result.s], v: { code: result.v.code, kind: result.v.kind, safe: false, deps, list: result.v.list } };
+  }
+
+  /**
+   * The number of steps of an iteration. A data limit is the strict count of the targets of its axis. An error of the
+   * axis, of a test or of an item throws. A count above the cap throws too (ITERATE.LIMIT.ERROR).
+   */
+  #limit(e: ExprOf<"iterate">, ctx: Ctx): { readonly s: readonly string[]; readonly code: string; readonly deps: ReadonlySet<number> } {
+    const [targets] = splitLimit(e) ?? [];
+    if (targets === undefined) {
+      const limit = e.limit as number;
+      return { s: [], code: String(limit), deps: new Set() };
+    }
+    const count = this.expr(app("count", targets, lit({ strict: true })), ctx);
+    const n = this.fresh("n");
+    return { s: [...count.s, `const ${n} = ${count.v.code};`, `if (${n} > ${String(MAX_ITERATIONS)}) ${this.use("F")}();`], code: n, deps: count.v.deps };
   }
 
   /**
@@ -4369,10 +4409,10 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     return reasonOf(thrown);
   }
   const { name, tree, graph } = run;
-  // A tree checks its parents, and it computes the parts that the program reads. The siblings and the order need the
-  // children.
+  // A tree checks its parents, and it computes the parts that the program reads. The siblings need the children. The
+  // order reads only the parents (COMPILE.MODULE.TREE.ALLOC).
   if (tree) p.use("PT");
-  if (p.treeParts.size > 0) p.treeParts.add("children");
+  if (p.treeParts.has("siblings")) p.treeParts.add("children");
   const parts = (["children", "siblings", "order"] as const).filter((x) => p.treeParts.has(x));
   for (const x of parts) p.use(TREE_PARTS[x][0]);
   // A graph checks its edges, and it computes the predecessors if the program reads them.
@@ -4445,7 +4485,7 @@ export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emi
   }
   // A list gives a vex.list (COMPILE.MODULE.LIST.RESULT), or a plain array (COMPILE.MODULE.LIST.PLAIN).
   const result = value.v.list === undefined ? value.v.code : p.runList(value.v, run.plain);
-  const body = ["const out = [];", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out.push(${result});`, "  } catch {", "    out.push(VEX_ERROR);", "  }", "}", "return out;"];
+  const body = ["const out = new Array(n);", "for (let o = 0; o < n; o++) {", "  try {", ...ind(ind(value.s)), `    out[o] = ${result};`, "  } catch {", "    out[o] = VEX_ERROR;", "  }", "}", "return out;"];
   return printModule(p, options, run, body);
 }
 

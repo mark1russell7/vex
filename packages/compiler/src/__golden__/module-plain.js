@@ -415,12 +415,12 @@ export function nodeShape(records, vars) {
     o135.push([0, G(c134())]);
     return o135;
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
-      out.push(LPC(G(c136()), 1));
+      out[o] = LPC(G(c136()), 1);
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

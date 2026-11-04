@@ -29,12 +29,12 @@ export function run(records, vars) {
   }
   if (typeof vars !== "object" || vars === null || !is_1(vars["base"])) C("the variables do not keep the schema");
   const v0 = vars["base"];
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
-      out.push(({ "grown": k_number(op_1_1(k_domain_Interval(op_1_0(R[o]["iv"], R[o]["n"])))), "merged": k_number(op_1_1(k_domain_Interval(op_1_2(v0, R[o]["iv"])))) }));
+      out[o] = ({ "grown": k_number(op_1_1(k_domain_Interval(op_1_0(R[o]["iv"], R[o]["n"])))), "merged": k_number(op_1_1(k_domain_Interval(op_1_2(v0, R[o]["iv"])))) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

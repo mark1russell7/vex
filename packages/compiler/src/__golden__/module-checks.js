@@ -31,7 +31,7 @@ export function run(records, vars) {
     t3 = 99;
   }
   const c6 = t3;
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t0;
@@ -52,9 +52,9 @@ export function run(records, vars) {
       } catch {
         t4 = 99;
       }
-      out.push(({ "offsets": t0, "computed": t1, "origin": c5, "last": c6, "other": t4 }));
+      out[o] = ({ "offsets": t0, "computed": t1, "origin": c5, "last": c6, "other": t4 });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

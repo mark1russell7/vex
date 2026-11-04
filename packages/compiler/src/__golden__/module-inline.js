@@ -34,7 +34,7 @@ export function run(records, vars) {
   if (typeof vars !== "object" || vars === null || typeof vars["a"] !== "number" || typeof vars["t"] !== "string") C("the variables do not keep the schema");
   const v0 = vars["a"];
   const c0 = T(() => k_number((v0) * (v0)));
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t1;
@@ -193,9 +193,9 @@ export function run(records, vars) {
       } catch {
         t26 = 0;
       }
-      out.push(({ "tight": k_number((R[o]["n"])+(R[o]["w"])), "loose": k_number((R[o]["n"])  -  (R[o]["w"])), "bare": k_number(-(R[o]["n"])), "square": ({ "plain": G(c0), "read": k_number(op_0_3(R[o]["n"])) }), "finite": (Number.isFinite((R[o]["n"]))), "decimal": k_number((R[o]["n"]) * 2.5 + .5), "math": ({ "abs": t1, "ceil": t2, "floor": t3, "round": t4, "trunc": t5, "sign": t6, "sqrt": t7, "cbrt": t8, "exp": t9, "log": t10, "log10": t11, "log2": t12, "sin": t13, "cos": t14, "tan": t15, "min": t16, "max": t17, "pow": t18, "hypot": t19, "atan2": t20 }), "quoted": op_0_26(R[o]["n"]), "assign": ({ "value": k_number(op_0_27(R[o]["n"])), "n": R[o]["n"] }), "increment": ({ "value": k_number(op_0_28(R[o]["n"])), "n": R[o]["n"] }), "call": 1, "group": 1, "spacedCall": 1, "spacedGroup": 1, "looseEq": ((R[o]["n"]) == (R[o]["w"])), "looseNe": ((R[o]["n"]) != (R[o]["w"])), "grouped": k_number((R[o]["n"]) + (1)), "unused": t25, "exponent": k_number(op_0_38(R[o]["n"])), "member": op_0_39(R[o]["n"]), "fn": k_number(op_0_40(R[o]["n"])), "none": k_number(op_0_41(R[o]["n"])), "more": k_number(op_0_0(R[o]["n"], R[o]["w"], 1)), "fewer": t26 }));
+      out[o] = ({ "tight": k_number((R[o]["n"])+(R[o]["w"])), "loose": k_number((R[o]["n"])  -  (R[o]["w"])), "bare": k_number(-(R[o]["n"])), "square": ({ "plain": G(c0), "read": k_number(op_0_3(R[o]["n"])) }), "finite": (Number.isFinite((R[o]["n"]))), "decimal": k_number((R[o]["n"]) * 2.5 + .5), "math": ({ "abs": t1, "ceil": t2, "floor": t3, "round": t4, "trunc": t5, "sign": t6, "sqrt": t7, "cbrt": t8, "exp": t9, "log": t10, "log10": t11, "log2": t12, "sin": t13, "cos": t14, "tan": t15, "min": t16, "max": t17, "pow": t18, "hypot": t19, "atan2": t20 }), "quoted": op_0_26(R[o]["n"]), "assign": ({ "value": k_number(op_0_27(R[o]["n"])), "n": R[o]["n"] }), "increment": ({ "value": k_number(op_0_28(R[o]["n"])), "n": R[o]["n"] }), "call": 1, "group": 1, "spacedCall": 1, "spacedGroup": 1, "looseEq": ((R[o]["n"]) == (R[o]["w"])), "looseNe": ((R[o]["n"]) != (R[o]["w"])), "grouped": k_number((R[o]["n"]) + (1)), "unused": t25, "exponent": k_number(op_0_38(R[o]["n"])), "member": op_0_39(R[o]["n"]), "fn": k_number(op_0_40(R[o]["n"])), "none": k_number(op_0_41(R[o]["n"])), "more": k_number(op_0_0(R[o]["n"], R[o]["w"], 1)), "fewer": t26 });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

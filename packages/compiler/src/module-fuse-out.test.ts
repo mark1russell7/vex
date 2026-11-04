@@ -1,7 +1,7 @@
 /**
- * The value of a run as a list (docs/COMPILER.md §7.6, step 7). A list of a result is a frozen `vex.list`, as the
- * interpreter gives (COMPILE.MODULE.LIST.RESULT). With `fuse`, a value that reads no key has one `vex.list` for each run,
- * and each key gets that object (COMPILE.MODULE.FUSE.OUT).
+ * The value of a run as a list (docs/COMPILER.md §7.6, step 7). With `fuse`, a value that reads no key has one `vex.list`
+ * for each run. Each key gets that object, so that object is frozen (COMPILE.MODULE.FUSE.OUT). Each other list of a result
+ * belongs to one key, so it is not frozen (COMPILE.MODULE.LIST.RESULT).
  */
 import * as fc from "fast-check";
 import { app, axes, each, evaluate, isVexList, let_, lit, ref, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
@@ -29,6 +29,8 @@ const FAILED = each(axes.all, op("divide", lit(1), ref("w")));
 const NEVER = op("sortBy", lit(vexList([item("0", 1), item("1", "a")])));
 /** A list that depends on the key. */
 const KEYED = op("fill", lit(2), n);
+/** A list that depends on the key, with items that are one list that reads no key. */
+const KEYED_OF_SHARED = op("fill", ref("w"), COLUMN);
 
 type Run = (records: unknown, vars: unknown, parents?: unknown) => readonly unknown[];
 interface Loaded {
@@ -78,34 +80,75 @@ function frozen(value: unknown): boolean {
   return isList(value) && Object.isFrozen(value) && Object.isFrozen(value.items) && value.items.every((x) => !x.result.ok || !isList(x.result.value) || frozen(x.result.value));
 }
 
+/** This function tells if a value is a `vex.list` that is not frozen, and each list of its items too. */
+function open(value: unknown): boolean {
+  return isList(value) && !Object.isFrozen(value) && !Object.isFrozen(value.items) && value.items.every((x) => !x.result.ok || !isList(x.result.value) || open(x.result.value));
+}
+
+/** This function gives the count of the freezes of lists in a source. The constant `VEX_ERROR` has the one other freeze. */
+const freezes = (source: string): number => source.split("Object.freeze(").length - 2;
+
+/** This function changes a `vex.list` as a host can: each item, the array of the items, the kind and each nested list. */
+function change(list: unknown): void {
+  const { items } = list as { items: { key: string; result: { ok: true; value: unknown } }[] };
+  for (const entry of items) {
+    if (isList(entry.result.value)) change(entry.result.value);
+    else entry.result.value = "changed";
+  }
+  items.push({ key: "new", result: { ok: true, value: "new" } });
+  (list as { kind: string }).kind = "changed";
+}
+
 /** This function gives the count of the different objects in a list of values. */
 const distinct = (values: readonly unknown[]): number => new Set(values).size;
 
-describe("COMPILE.MODULE.LIST.RESULT: a list of a result is frozen", () => {
-  it("COMPILE.MODULE.LIST.RESULT: a list at each key is a frozen vex.list, in the form with and without error items", () => {
-    const lists = [KEYED, each(axes.window(-1, 1), op("divide", lit(1), ref("w"))), op("fill", lit(2), KEYED)];
-    expect(lists.flatMap((e) => valuesOf(e)).every((x) => frozen(x))).toBe(true);
+/** This function gives the source of a sheet with the one column `A`. */
+const sheetOf = (formula: Expr, options: Partial<SheetModuleOptions> = {}): string => sourceOf(emitSheetModule(new Map([["A", formula]]), { ...OPTIONS, kinds: {}, ...options }));
+
+/** This function gives the values of the column `A` of a sheet. */
+const columnOf = (source: string): readonly unknown[] => (make(source).run(RECORDS, {}) as unknown as { readonly A: readonly unknown[] }).A;
+
+/** This function gives the options of a sheet with a formula of a cell. The run of that sheet has the search of `SheetRun`. */
+const ownCell = (e: Expr): Partial<SheetModuleOptions> => ({ cells: new Map([["A", new Map([["1", e]])]]) });
+
+describe("COMPILE.MODULE.LIST.RESULT: a list of one key is not frozen", () => {
+  it("COMPILE.MODULE.LIST.RESULT: a list at each key is not frozen, in the form with and without error items", () => {
+    const lists = [KEYED, each(axes.window(-1, 1), op("divide", lit(1), ref("w"))), op("fill", lit(2), KEYED), KEYED_OF_SHARED];
+    expect(lists.flatMap((e) => valuesOf(e)).every((x) => open(x))).toBe(true);
   });
 
-  it("COMPILE.MODULE.LIST.RESULT: fuse false gives the frozen form too, so the option changes no contract", () => {
+  it("COMPILE.MODULE.LIST.RESULT: with fuse false, each key has its own list, so no list is frozen", () => {
     const lists = [KEYED, COLUMN, FAILED, op("fill", lit(2), COLUMN)];
     const values = lists.flatMap((e) => valuesOf(e, { ...OPTIONS, fuse: false }));
-    expect(values.every((x) => frozen(x))).toBe(true);
+    expect(values.every((x) => open(x))).toBe(true);
   });
 
-  it("COMPILE.MODULE.LIST.RESULT: an error item of a frozen list has the error VEX_ERROR, and a change of the list throws", () => {
-    const m = moduleOf(FAILED);
+  it("COMPILE.MODULE.LIST.RESULT: an error item of a list has the error VEX_ERROR", () => {
+    const m = moduleOf(FAILED, { ...OPTIONS, fuse: false });
     const [value] = m.run(RECORDS, {}) as readonly { readonly items: ListItem[] }[];
     expect(value?.items[1]).toStrictEqual({ key: "1", result: { ok: false, error: m.VEX_ERROR } });
-    expect(() => value?.items.pop()).toThrow(TypeError);
   });
 
-  it("COMPILE.MODULE.LIST.RESULT: a column of lists of a sheet holds a frozen vex.list in each cell", () => {
-    const options: SheetModuleOptions = { ...OPTIONS, kinds: {} };
-    for (const formula of [KEYED, FAILED]) {
-      const m = make(sourceOf(emitSheetModule(new Map([["A", formula]]), options)));
-      const { A } = m.run(RECORDS, {}) as unknown as { readonly A: readonly unknown[] };
-      expect(A.every((x) => frozen(x))).toBe(true);
+  it("COMPILE.MODULE.LIST.RESULT: each cell of a column of lists holds its own list, and no list is frozen", () => {
+    for (const source of [KEYED, FAILED, COLUMN, op("fill", lit(2), COLUMN)].flatMap((e) => [sheetOf(e), sheetOf(e, ownCell(e))])) {
+      const column = columnOf(source);
+      expect(column.every((x) => open(x))).toBe(true);
+      expect(distinct(column)).toBe(RECORDS.length);
+    }
+  });
+
+  it("COMPILE.MODULE.LIST.RESULT: a module with no list that keys share prints no freeze of a list", () => {
+    const sources = [sourceOf(emitModule(KEYED, OPTIONS)), sourceOf(emitModule(FAILED, { ...OPTIONS, fuse: false })), sheetOf(COLUMN), sheetOf(FAILED, ownCell(FAILED))];
+    expect(sources.map((x) => freezes(x))).toStrictEqual(sources.map(() => 0));
+    expect(sources.some((x) => /\bLSC?\(/.test(x))).toBe(false);
+  });
+
+  it("COMPILE.MODULE.LIST.RESULT: a change of a list of one key does not change the result of another key", () => {
+    const runs: readonly (() => readonly unknown[])[] = [() => valuesOf(KEYED_OF_SHARED), () => valuesOf(op("fill", lit(2), COLUMN), { ...OPTIONS, fuse: false }), () => columnOf(sheetOf(COLUMN))];
+    for (const fresh of runs) {
+      const [first, ...others] = fresh();
+      change(first);
+      expect(others).toStrictEqual(fresh().slice(1));
     }
   });
 });
@@ -119,11 +162,29 @@ describe("COMPILE.MODULE.FUSE.OUT: one vex.list for each run", () => {
     expect(values.every((x) => frozen(x[0]))).toBe(true);
   });
 
+  it("COMPILE.MODULE.FUSE.OUT COMPILE.MODULE.LIST.RESULT: a change of the object that the keys share throws, and an error item has the error VEX_ERROR", () => {
+    const m = moduleOf(FAILED);
+    const [value] = m.run(RECORDS, {}) as readonly { readonly items: ListItem[] }[];
+    expect(value?.items[1]).toStrictEqual({ key: "1", result: { ok: false, error: m.VEX_ERROR } });
+    expect(() => value?.items.pop()).toThrow(TypeError);
+    const [nested] = valuesOf(op("fill", lit(2), COLUMN)) as readonly { readonly items: readonly { readonly result: { readonly value: { items: unknown[] } } }[] }[];
+    expect(() => nested?.items[0]?.result.value.items.push(0)).toThrow(TypeError);
+    expect(() => {
+      (value as unknown as { kind: string }).kind = "changed";
+    }).toThrow(TypeError);
+  });
+
   it("COMPILE.MODULE.FUSE.OUT: the module prints one envelope before the loop over the keys, and no property on the array", () => {
     const source = sourceOf(emitModule(COLUMN, OPTIONS));
-    expect(source).toMatch(/const c\d+ = L\(\(\) => \{\n\s+return LOC\(/);
-    expect(source).toMatch(/out\.push\(G\(c\d+\(\)\)\);/);
+    expect(source).toMatch(/const c\d+ = L\(\(\) => \{\n\s+return LSC\(/);
+    expect(source).toMatch(/out\[o\] = G\(c\d+\(\)\);/);
     expect(source).not.toContain(".vl");
+  });
+
+  it("COMPILE.MODULE.FUSE.OUT: the shared form replaces the form of one key, so a module prints one form of the envelope", () => {
+    expect(sourceOf(emitModule(FAILED, OPTIONS))).toMatch(/return LS\(/);
+    for (const e of [COLUMN, FAILED]) expect(sourceOf(emitModule(e, OPTIONS))).not.toMatch(/function LOC?\(/);
+    expect(sourceOf(emitModule(KEYED, OPTIONS))).not.toMatch(/function LSC?\(/);
   });
 
   it("COMPILE.MODULE.FUSE.OUT: each run has its own object, and a second run reads its own records", () => {
@@ -143,13 +204,13 @@ describe("COMPILE.MODULE.FUSE.OUT: one vex.list for each run", () => {
   it("COMPILE.MODULE.FUSE.OUT: a value that reads the key keeps one object for each key", () => {
     const values = valuesOf(KEYED);
     expect(distinct(values)).toBe(RECORDS.length);
-    expect(sourceOf(emitModule(KEYED, OPTIONS))).toMatch(/out\.push\(LOC\(/);
+    expect(sourceOf(emitModule(KEYED, OPTIONS))).toMatch(/out\[o\] = LOC\(/);
   });
 
   it("COMPILE.MODULE.FUSE.OUT COMPILE.MODULE.FUSE.OFF: with fuse false, each key makes its own envelope", () => {
     const off = { ...OPTIONS, fuse: false };
     expect(distinct(valuesOf(COLUMN, off))).toBe(RECORDS.length);
-    expect(sourceOf(emitModule(COLUMN, off))).toMatch(/out\.push\(LO\(/);
+    expect(sourceOf(emitModule(COLUMN, off))).toMatch(/out\[o\] = LO\(/);
   });
 
   it("COMPILE.MODULE.FUSE.OUT COMPILE.MODULE.LIST.PLAIN: a plain array stays one new array for each key, and it is not frozen", () => {
@@ -166,7 +227,7 @@ describe("COMPILE.MODULE.FUSE.OUT: one vex.list for each run", () => {
 
   it("COMPILE.MODULE.FUSE.OUT: a run of a value that is not a list has no envelope", () => {
     const source = sourceOf(emitModule(op("count", COLUMN), OPTIONS));
-    expect(source).not.toMatch(/\bLOC?\(/);
+    expect(source).not.toMatch(/\bL[OS]C?\(/);
   });
 });
 
@@ -187,6 +248,18 @@ describe("COMPILE.MODULE.FUSE.OUT P17: random values that read no key", () => {
         for (const { expected, got } of sides(e, rs)) expect(got).toStrictEqual(expected);
       }),
       { numRuns: 200 },
+    );
+  });
+
+  it("COMPILE.MODULE.FUSE.OUT COMPILE.MODULE.LIST.RESULT: a list that two keys get is frozen, and with fuse false no list is frozen", () => {
+    fc.assert(
+      fc.property(list, records, (e, rs) => {
+        const values = moduleOf(e).run(rs, {}).filter((x) => isList(x));
+        expect(values.filter((x) => values.indexOf(x) !== values.lastIndexOf(x)).every((x) => frozen(x))).toBe(true);
+        const own = moduleOf(e, { ...OPTIONS, fuse: false }).run(rs, {}).filter((x) => isList(x));
+        expect(own.every((x) => open(x))).toBe(true);
+      }),
+      { numRuns: 100 },
     );
   });
 });

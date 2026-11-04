@@ -55,7 +55,7 @@ export function run(records, vars) {
     }
     return t30;
   });
-  const out = [];
+  const out = new Array(n);
   for (let o = 0; o < n; o++) {
     try {
       let t8;
@@ -96,9 +96,9 @@ export function run(records, vars) {
         const t25 = k_number((l24) * (2));
         l24 = t25;
       }
-      out.push(({ "digits": G(c31()), "window": t8, "tested": k_number((l9) + (R[o]["n"])), "root": G(c32()), "swap": k_number((l19) - (l20)), "until": l24, "never": G(c33()) }));
+      out[o] = ({ "digits": G(c31()), "window": t8, "tested": k_number((l9) + (R[o]["n"])), "root": G(c32()), "swap": k_number((l19) - (l20)), "until": l24, "never": G(c33()) });
     } catch {
-      out.push(VEX_ERROR);
+      out[o] = VEX_ERROR;
     }
   }
   return out;

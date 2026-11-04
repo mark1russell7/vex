@@ -17,7 +17,9 @@ import {
   children,
   errorText,
   isFieldName,
-  isListOp,
+  limitAxis,
+  listOf,
+  MAX_ITERATIONS,
   MAX_NESTING,
   nestingOf,
   shapeError,
@@ -26,11 +28,10 @@ import {
   type ErrorText,
   type Expr,
   type ExprOf,
-  type ListOp,
   type Names,
   type PrimitiveKind,
 } from "@mark1russell7/vex";
-import { factsOf, listReason, MAX_CALLS, primitiveOf, type Facts, type Schema } from "./facts.ts";
+import { factsOf, isFusedOp, MAX_CALLS, primitiveOf, type Facts, type FusedOp, type Schema } from "./facts.ts";
 import { memoNodes } from "./memo.ts";
 import {
   array,
@@ -119,6 +120,9 @@ function whereTests(a: Axis): readonly Expr[] {
   return out;
 }
 
+/** This function gives the number of children of an axis: its list, then the tests of `where`. */
+const axisChildren = (a: Axis): number => whereTests(a).length + (listOf(a) === undefined ? 0 : 1);
+
 /** This function gives the `each` under the `let` expressions of a list argument, or `undefined`. */
 function eachUnderLets(e: Expr | undefined): ExprOf<"each"> | undefined {
   let x = e;
@@ -144,9 +148,7 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   const shape = shapeError(expr);
   if (shape !== undefined) throw new Unsupported(shape);
   if (nestingOf(expr) > MAX_NESTING) throw new Unsupported(`the expression is nested deeper than ${MAX_NESTING} levels`);
-  const lists = listReason(expr);
-  if (lists !== undefined) throw new Unsupported(lists);
-  const l = new Lowerer(memoNodes(expr), facts, schema);
+  const l = new Lowerer(memoNodes(expr, isFusedOp), facts, schema);
   const b = block(RETURN);
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)) };
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space", l.site(b, top, { t: "key" }));
@@ -578,7 +580,7 @@ class Lowerer {
       case "ifError":
         return this.#ifError(args, s, path, b);
     }
-    if (isListOp(op)) {
+    if (isFusedOp(op)) {
       const target = eachUnderLets(args[0]);
       if (target !== undefined) return this.#fused(op, e, target, s, path, b);
     }
@@ -664,7 +666,7 @@ class Lowerer {
    * in the list, the interpreter evaluates each item before the op. In both cases, a check of the op keeps no error.
    * The later arguments evaluate before the loop, and the interpreter evaluates them after the list, so they keep no error.
    */
-  #fused(op: ListOp, e: ExprOf<"app">, target: ExprOf<"each">, s: Scope, path: readonly number[], b: Block): LExpr {
+  #fused(op: FusedOp, e: ExprOf<"app">, target: ExprOf<"each">, s: Scope, path: readonly number[], b: Block): LExpr {
     // The `let` expressions above the `each`, from the outside in.
     let inner = s;
     let at = [...path, 0];
@@ -768,24 +770,6 @@ class Lowerer {
         // An empty list can give the identity of the op, so tier 1 gives its result.
         this.check(plain, prim("!==", local(n), num(0)), "a list that is not empty");
         return local(acc);
-      // listReason stops a program with these ops before the lowering, so this case is defensive.
-      // Stryker disable StringLiteral,ConditionalExpression: listReason stops these ops before the lowering
-      case "sortBy":
-      case "take":
-      case "nth":
-      case "drop":
-      case "append":
-      case "flat":
-      case "without":
-      case "get":
-      case "indexOf":
-      case "distinct":
-      case "group":
-      case "join":
-        // Stryker restore StringLiteral,ConditionalExpression
-        /* v8 ignore next -- @preserve */
-        // Stryker disable next-line all: listReason stops these ops before the lowering
-        throw new Unsupported(`the list op "${op}"`);
     }
   }
 
@@ -804,33 +788,45 @@ class Lowerer {
   }
 
   #loop(e: ExprOf<"each">, s: Scope, path: readonly number[], b: Block, items: (label: number) => Fail, onItem: (body: Block, key: LExpr, value: LExpr) => void): void {
-    this.#targetLoop(e.axis, e.at, s, path, 1, b, items, (body, key, at) => {
-      onItem(body, key, this.expr(e.body, at, [...path, 0], body));
+    this.#targetLoop(e, s, path, 1, b, items, (body, key, at, names) => {
+      onItem(body, key, this.expr(e.body, { ...at, env: new Map([...at.env, ...names]) }, [...path, 0], body));
     });
   }
 
   /**
-   * This method lowers the loop over the targets of an axis with the address `addr`. The tests of `where` have the child
-   * indexes from `firstTest`, and the expressions of the address come after them. `each` adds the statements of a target.
+   * This method lowers the loop over the targets of an axis with an address. The list of the axis `list` has the child
+   * index `firstTest`. The tests of `where` come next, and the expressions of the address come after them. `each` adds
+   * the statements of a target. The map `names` has the names `as` of the item. Only the body or the step reads them.
    */
   #targetLoop(
-    axis: Axis,
-    addr: Addr | undefined,
+    e: Pick<ExprOf<"each">, "axis" | "at" | "as">,
     s: Scope,
     path: readonly number[],
     firstTest: number,
     b: Block,
     items: (label: number) => Fail,
-    each: (body: Block, key: LExpr, at: Scope) => void,
+    each: (body: Block, key: LExpr, at: Scope, names: ReadonlyMap<string, Bound>) => void,
   ): void {
-    const from = addr === undefined || addr.length === 0 ? s.focus : this.#address(addr, s, path, firstTest + whereTests(axis).length, b);
+    const { axis, at: addr, as } = e;
+    const list = listOf(axis);
+    const tests = firstTest + axisChildren(axis) - whereTests(axis).length;
+    const from = addr === undefined || addr.length === 0 ? s.focus : this.#address(addr, s, path, firstTest + axisChildren(axis), b);
     const base = baseAxis(axis);
     let space = s.space;
     let over: LExpr;
     let skip: LExpr | undefined;
     // The index of the record of each target: the index of the loop, or else the index that the axis gives.
     let idx: LExpr | undefined;
-    if (base.t === "table") {
+    // The value and the position of each item of the axis list.
+    let item: { readonly values: LExpr; readonly nth: LExpr } | undefined;
+    if (list !== undefined) {
+      // The list evaluates at the key of the address (AXIS.LIST).
+      const moved: Scope = from === s.focus ? s : { ...s, focus: from, rec: prim("get", s.space, from) };
+      const value = this.value(b, this.expr(list, moved, [...path, firstTest], b));
+      const targets = this.checked(b, call("items", value, bool(base.t === "reverse")), "a list of the axis list", this.site(b, moved, { t: "listAxis", path }, value));
+      over = prim("keysOf", targets);
+      item = { values: prim("valuesOf", targets), nth: prim("idxOf", targets) };
+    } else if (base.t === "table") {
       // The axis table moves the evaluation to the space of its table, and there the origin is the target.
       space = this.checked(b, call("table", local(TABLES), this.constant(base.name)), "a table", this.#text(b, s, path, errorText.noTable(base.name)));
       over = call("keys", space);
@@ -842,23 +838,29 @@ class Lowerer {
       over = prim("keysOf", targets);
       idx = this.value(b, prim("idxOf", targets));
     }
-    const records = this.value(b, prim("records", space));
+    // A key of a list can be outside the space, and it has no index of the space, so the record comes from the key.
+    const records = list === undefined ? this.value(b, prim("records", space)) : undefined;
     const label = this.labels++;
     const array_ = this.locals++;
     const index = this.locals++;
-    const item = this.locals++;
-    const key = local(item);
+    const target = this.locals++;
+    const key = local(target);
     const body = block(items(label));
     if (skip !== undefined) body.stmts.push({ t: "if", cond: prim("===", key, skip), yes: [{ t: "next" }], no: [] });
     const slot = idx === undefined ? local(index) : prim("member", idx, local(index));
-    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec: prim("recordAt", records, slot, space, key) };
+    const rec = records === undefined ? prim("get", space, key) : prim("recordAt", records, slot, space, key);
+    const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec };
     whereTests(axis).forEach((test, i) => {
-      const testPath = [...path, firstTest + i];
+      const testPath = [...path, tests + i];
       const ok = this.#boolean(this.expr(test, at, testPath, body), body, at, { t: "test", path: testPath });
       body.stmts.push({ t: "if", cond: prim("!", ok), yes: [{ t: "next" }], no: [] });
     });
-    each(body, key, at);
-    b.stmts.push({ t: "loop", label, item, index, array: array_, over, body: body.stmts });
+    const names = new Map<string, Bound>();
+    const [name, position] = as ?? [];
+    if (name !== undefined && item !== undefined) names.set(name, { value: this.value(body, prim("member", item.values, local(index))) });
+    if (position !== undefined && item !== undefined) names.set(position, { value: this.#typed(this.value(body, prim("member", item.nth, local(index))), "number") });
+    each(body, key, at, names);
+    b.stmts.push({ t: "loop", label, item: target, index, array: array_, over, body: body.stmts });
   }
 
   /** This method gives a local for each name of a loop, with its first value at the node (LOOP.NAMES). */
@@ -895,22 +897,42 @@ class Lowerer {
     const tests = first + Object.keys(e.step).length;
     const { env, locals } = this.#loopNames(e.init, s, path, b);
     const inner: Scope = { ...s, env };
+    const limit = this.#limit(e, s, path, tests, b);
+    const untilAt = tests + axisChildren(limitAxis(e) ?? { t: "all" });
     const label = this.labels++;
     const k = this.typedLocal("number");
     b.stmts.push({ t: "let", n: k, value: num(0) });
     const body = block(b.fail);
     if (e.until !== undefined) {
-      const stop = this.#boolean(this.expr(e.until, inner, [...path, tests], body), body, inner, { t: "until", path: [...path, tests] });
+      const stop = this.#boolean(this.expr(e.until, inner, [...path, untilAt], body), body, inner, { t: "until", path: [...path, untilAt] });
       body.stmts.push({ t: "check", ok: prim("!", stop), reason: "the test until", fail: { t: "break", label } });
     }
     // At the limit, an iteration without a test ends, and an iteration with a test fails.
-    const more = prim("!==", local(k), num(e.limit));
+    const more = prim("!==", local(k), limit);
     if (e.until === undefined) body.stmts.push({ t: "check", ok: more, reason: "the limit of iterate", fail: { t: "break", label } });
-    else this.check(body, more, "the limit of iterate", this.#text(body, s, path, errorText.limit(e.limit)));
+    else this.check(body, more, "the limit of iterate", this.site(body, s, { t: "limit", path }, limit));
     this.#loopStep(e.step, inner, path, first, body, locals);
     body.stmts.push({ t: "set", n: k, value: prim("+", local(k), num(1)) });
     b.stmts.push({ t: "repeat", label, body: body.stmts });
-    return this.expr(e.result, inner, [...path, tests + (e.until === undefined ? 0 : 1)], b);
+    return this.expr(e.result, inner, [...path, untilAt + (e.until === undefined ? 0 : 1)], b);
+  }
+
+  /**
+   * This method gives the number of steps of an iteration. A data limit counts the targets of its axis. Its failure
+   * stops the program, and tier 1 gives the error (ITERATE.LIMIT.ERROR).
+   */
+  #limit(e: ExprOf<"iterate">, s: Scope, path: readonly number[], firstTest: number, b: Block): LExpr {
+    const axis = limitAxis(e);
+    if (axis === undefined) return num(e.limit as number);
+    const n = this.typedLocal("number");
+    b.stmts.push({ t: "let", n, value: num(0) });
+    // The error of a limit that is not valid keeps its cause, so each failure here is the plain failure of the block.
+    const plain: Block = { stmts: b.stmts, fail: plainOf(b.fail) };
+    this.#targetLoop({ axis }, s, path, firstTest, plain, () => plain.fail, (body) => {
+      body.stmts.push({ t: "set", n, value: prim("+", local(n), num(1)) });
+    });
+    this.check(b, prim("===", prim("min", local(n), num(MAX_ITERATIONS)), local(n)), "a data limit in the cap");
+    return local(n);
   }
 
   /** This method lowers a fold (FOLD.ORDER): the loop over the targets, with a step at each target. */
@@ -919,10 +941,10 @@ class Lowerer {
     const tests = first + Object.keys(e.step).length;
     const { env, locals } = this.#loopNames(e.init, s, path, b);
     // An error of a test or of a step is the error of the fold.
-    this.#targetLoop(e.axis, e.at, s, path, tests, b, () => b.fail, (body, _key, at) => {
-      this.#loopStep(e.step, { ...at, env }, path, first, body, locals);
+    this.#targetLoop(e, s, path, tests, b, () => b.fail, (body, _key, at, names) => {
+      this.#loopStep(e.step, { ...at, env: new Map([...env, ...names]) }, path, first, body, locals);
     });
-    return this.expr(e.result, { ...s, env }, [...path, tests + whereTests(e.axis).length + addrExprs(e.at).length], b);
+    return this.expr(e.result, { ...s, env }, [...path, tests + axisChildren(e.axis) + addrExprs(e.at).length], b);
   }
 }
 

@@ -4,7 +4,7 @@
  * a function at each of its calls (FN.CALL).
  */
 import { pathMatches, refsOf, type DocVisit, type Key, type RefUse } from "@mark1russell7/coeval";
-import type { Addr, Axis, Expr, ExprOf } from "./ir.ts";
+import type { Addr, Axis, DataLimit, Expr, ExprOf } from "./ir.ts";
 import { VEX_WORLD } from "./kernel.ts";
 import { writeDocument } from "./write.ts";
 
@@ -122,6 +122,9 @@ export function deps(e: Expr): readonly Dependency[] {
       const around: Around = { t: node.axis.t, at: node.at ?? [] };
       if (head === "body" || head === "step") axes = { item: around, up: axes };
       else if (head === "axis") axis = around;
+    } else if (kind === "size") {
+      // The size of the writer is the data limit of its node, so the axis has no address (ITERATE.LIMIT.DATA).
+      axis = { t: ((nodes.get(parent.doc) as ExprOf<"iterate">).limit as DataLimit).axis.t, at: [] };
     }
     if (kind === "fn") {
       fn = parent;

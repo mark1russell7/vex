@@ -9,6 +9,7 @@ export * from "./ir.ts";
 export * from "./space.ts";
 export * from "./domain.ts";
 export * from "./list.ts";
+export { asList } from "./array-list.ts";
 export * from "./trace.ts";
 export * from "./evaluate.ts";
 export * from "./deps.ts";

@@ -1,11 +1,14 @@
 /**
  * This script writes a standalone module of ireko (docs/COMPILER.md §13.3). Start it with
- * `npx tsx scripts/ireko-module.ts <grid|radial|layers|tree|place|measure> <file>`. The strategies `grid`, `radial`, `layers` and `tree` are programs.
- * The place pass of the engine is a sheet over the tree of the nodes. The fit of the measure pass is a sheet over one
- * node and its children. Node itself leaves spaces where the types of the copied functions were.
+ * `npx tsx scripts/ireko-module.ts <grid|radial|layers|tree|overlap|bounds|between|place|measure> <file>`.
+ *
+ * The strategies `grid`, `radial`, `layers` and `tree` are programs. The programs `overlap`, `bounds` and `between`
+ * are parts of the engine. The place pass of the engine is a sheet over the tree of the nodes. The fit of the measure
+ * pass is a sheet over one node and its children. Node itself leaves spaces where the types of the copied functions were.
  */
 import { emitModule, emitSheetModule, type Emitted } from "@mark1russell7/vex-compiler";
 import { writeFileSync } from "node:fs";
+import { BETWEEN_DOMAINS, BETWEEN_PROGRAM, BETWEEN_SCHEMA, BOUNDS_DOMAINS, BOUNDS_PROGRAM, BOUNDS_SCHEMA, OVERLAP_DOMAINS, OVERLAP_PROGRAM, OVERLAP_SCHEMA } from "../src/ireko-audit.ts";
 import { GRID_DOMAINS, GRID_PROGRAM, GRID_SCHEMA } from "../src/ireko-grid.ts";
 import { LAYERS_DOMAINS, LAYERS_PROGRAM, LAYERS_SCHEMA } from "../src/ireko-layers.ts";
 import { MEASURE_COLUMNS, MEASURE_DOMAINS, MEASURE_KINDS, MEASURE_SCHEMA } from "../src/ireko-measure.ts";
@@ -18,13 +21,16 @@ const MODULES: Readonly<Record<string, () => Emitted>> = {
   radial: () => emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radialOf" }),
   layers: () => emitModule(LAYERS_PROGRAM, { domains: LAYERS_DOMAINS, schema: LAYERS_SCHEMA, name: "layersOf", lists: "plain" }),
   tree: () => emitModule(TREE_PROGRAM, { domains: TREE_DOMAINS, schema: TREE_SCHEMA, name: "treeOf", lists: "plain" }),
+  overlap: () => emitModule(OVERLAP_PROGRAM, { domains: OVERLAP_DOMAINS, schema: OVERLAP_SCHEMA, name: "overlapsOf", lists: "plain" }),
+  bounds: () => emitModule(BOUNDS_PROGRAM, { domains: BOUNDS_DOMAINS, schema: BOUNDS_SCHEMA, name: "boundsOf", lists: "plain" }),
+  between: () => emitModule(BETWEEN_PROGRAM, { domains: BETWEEN_DOMAINS, schema: BETWEEN_SCHEMA, name: "betweenOf", lists: "plain" }),
   place: () => emitSheetModule(PLACE_COLUMNS, { domains: PLACE_DOMAINS, schema: PLACE_SCHEMA, kinds: PLACE_KINDS, space: "tree", name: "placeOf" }),
   measure: () => emitSheetModule(MEASURE_COLUMNS, { domains: MEASURE_DOMAINS, schema: MEASURE_SCHEMA, kinds: MEASURE_KINDS, space: "tree", name: "measureOf" }),
 };
 
 const [which, out] = process.argv.slice(2);
 const emit = which === undefined ? undefined : MODULES[which];
-if (emit === undefined) throw new Error("Give the module: grid, radial, layers, tree, place or measure.");
+if (emit === undefined) throw new Error("Give the module: grid, radial, layers, tree, overlap, bounds, between, place or measure.");
 if (out === undefined) throw new Error("Give the path of the module file.");
 const m = emit();
 if (!m.ok) throw new Error(m.reason);

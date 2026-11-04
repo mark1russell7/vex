@@ -17,6 +17,8 @@ import { GRADE_COLUMNS, gradeFormula, studentKey, type SchoolClass } from "./gra
 import { heatStep, heatVex, type HeatGrid } from "./heat.ts";
 import {
   auditTree,
+  betweenInput,
+  boundsInput,
   bandLimit,
   BOM_BIKE,
   BOM_BROKEN,
@@ -47,6 +49,7 @@ import {
   measureVars,
   NODE_FIXED_KIDS,
   NODE_INFINITE,
+  overlapTree,
   placeTreeInput,
   RADIAL_MIXED,
   radialRing,
@@ -61,7 +64,7 @@ import {
   shapeTree,
 } from "./inputs.ts";
 import { INVOICE_COLUMNS, invoiceFormula, LINE_COLUMNS, lineKey, type Invoice } from "./invoice.ts";
-import { ESCAPE_DOMAINS, ESCAPE_PROGRAM, escapeRun } from "./ireko-audit.ts";
+import { BETWEEN_DOMAINS, BETWEEN_PROGRAM, betweenRun, BOUNDS_DOMAINS, BOUNDS_PROGRAM, boundsRun, ESCAPE_DOMAINS, ESCAPE_PROGRAM, escapeRun, OVERLAP_DOMAINS, OVERLAP_PROGRAM, overlapRun } from "./ireko-audit.ts";
 import { GRID_DOMAINS, GRID_PROGRAM, gridRun } from "./ireko-grid.ts";
 import { MEASURE_COLUMNS, MEASURE_DOMAINS, measureRecords, measureSpace } from "./ireko-measure.ts";
 import { PLACE_COLUMNS, PLACE_DOMAINS, placeSpace } from "./ireko-place.ts";
@@ -150,6 +153,36 @@ export function pilotCases(o: CaseOptions): ShareCase[] {
         for (const i of sample(treeInput(4, 3), 20, o)) {
           const { space: s, vars } = treeRun(i);
           for (const origin of s.keys) p.run({ space: s, origin, vars });
+        }
+      },
+    },
+    {
+      name: "overlap",
+      run: (m) => {
+        const p = m.program("overlap", OVERLAP_PROGRAM, { domains: OVERLAP_DOMAINS });
+        for (const nodes of sample(overlapTree, 20, o)) {
+          const s = overlapRun(nodes).space;
+          for (const origin of s.keys) p.run({ space: s, origin });
+        }
+      },
+    },
+    {
+      name: "bounds",
+      run: (m) => {
+        const p = m.program("bounds", BOUNDS_PROGRAM, { domains: BOUNDS_DOMAINS });
+        for (const { nodes, points } of sample(boundsInput, 20, o)) {
+          const s = boundsRun(nodes, points).space;
+          for (const origin of s.keys) p.run({ space: s, origin });
+        }
+      },
+    },
+    {
+      name: "between",
+      run: (m) => {
+        const p = m.program("between", BETWEEN_PROGRAM, { domains: BETWEEN_DOMAINS });
+        for (const { parents, edges } of sample(betweenInput, 20, o)) {
+          const s = betweenRun(parents, edges).space;
+          for (const origin of s.keys) p.run({ space: s, origin });
         }
       },
     },

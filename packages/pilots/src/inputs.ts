@@ -11,7 +11,7 @@ import type { SchoolClass } from "./grades.ts";
 import type { HeatGrid } from "./heat.ts";
 import type { Field, Invoice } from "./invoice.ts";
 import type { Band } from "./ireko-band.ts";
-import type { PlacedBox } from "./ireko-audit.ts";
+import type { BoundsRect, OverlapNode, PlacedBox, TreeEdge } from "./ireko-audit.ts";
 import type { GridInput } from "./ireko-grid.ts";
 import type { LayersEdge, LayersInput } from "./ireko-layers.ts";
 import type { FitChild, MeasureVars } from "./ireko-measure.ts";
@@ -49,6 +49,68 @@ export const auditTree: fc.Arbitrary<PlacedBox[]> = fc
     });
     return out;
   });
+
+// The overlap, bounds and edge pilots (ireko-audit.test.ts).
+
+/**
+ * Coordinates and sizes for a layout with many pairs. The steps of 0.5 give ties at the tolerance, and the steps of 1/7 give
+ * numbers that round. A plain `fc.double` gives boxes that are too small to overlap.
+ */
+const overlapCoord = fc.oneof(fc.constant(-0), fc.integer({ min: -40, max: 60 }).map((n) => n / 2), fc.integer({ min: -140, max: 210 }).map((n) => n / 7));
+const overlapSize = fc.oneof(fc.integer({ min: 0, max: 60 }).map((n) => n / 2), fc.integer({ min: 0, max: 210 }).map((n) => n / 7));
+/** The factors of x and y. A wide or a tall layout gives a sweep along each axis. */
+const overlapStretch = fc.constantFrom([1, 1] as const, [8, 1] as const, [1, 8] as const);
+
+/** A row of a tree in pre-order: the count of levels to go up before the node. */
+const treeRow = fc.nat(3);
+
+/** This function gives the parent of each node of a tree from its rows. The first node is the root. */
+function parentsOf(rows: readonly number[]): number[] {
+  const parents: number[] = [];
+  const path: number[] = [];
+  rows.forEach((up, i) => {
+    path.length = Math.max(path.length - up, Math.min(i, 1));
+    parents.push(path.at(-1) ?? -1);
+    path.push(i);
+  });
+  return parents;
+}
+
+/** Random trees of boxes in pre-order, with the fields of `OverlapNode`. A box has the fit `clip` only if it is nested and it has children. */
+export const overlapTree: fc.Arbitrary<OverlapNode[]> = fc
+  .record({
+    stretch: overlapStretch,
+    rows: fc.array(fc.record({ up: treeRow, nested: fc.boolean(), fit: fc.boolean(), dx: overlapCoord, dy: overlapCoord, width: overlapSize, height: overlapSize }), { maxLength: 24, size: "max" }),
+  })
+  .map(({ stretch: [sx, sy], rows }) => {
+    const parents = parentsOf(rows.map((r) => r.up));
+    const lasts = rows.map((_, i) => parents.lastIndexOf(i));
+    const out: OverlapNode[] = [];
+    rows.forEach((r, i) => {
+      const p = parents[i] ?? -1;
+      const parent = out[p];
+      const container = parent === undefined ? -1 : parent.nested ? p : parent.container;
+      const c = out[container];
+      const last = lasts[i] ?? -1;
+      out.push({ x: (c?.x ?? 0) + r.dx * sx, y: (c?.y ?? 0) + r.dy * sy, width: r.width * sx, height: r.height * sy, container, clip: r.nested && r.fit && last >= 0, last, nested: r.nested });
+    });
+    return out;
+  });
+
+/** Numbers with ties, values under the limit of `clean` of ireko, and sums that round. */
+const boundsNumber = fc.oneof(fc.constantFrom(0, -0, 1e-10, -1e-10, 1e-9, 0.1, 0.2, 0.3), fc.double({ min: -1000, max: 1000, noNaN: true, noDefaultInfinity: true }));
+const boundsSize = fc.oneof(fc.constantFrom(0, 1e-10, 0.1, 0.2, 0.3), fc.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }));
+
+/** Random boxes and points of edges for the final bounds. */
+export const boundsInput: fc.Arbitrary<{ readonly nodes: readonly BoundsRect[]; readonly points: readonly { readonly x: number; readonly y: number }[] }> = fc.record({
+  nodes: fc.array(fc.record({ x: boundsNumber, y: boundsNumber, width: boundsSize, height: boundsSize }), { maxLength: 30 }),
+  points: fc.array(fc.record({ x: boundsNumber, y: boundsNumber }), { maxLength: 10 }),
+});
+
+/** Random trees with extra edges. `parents` has the parent of each node in pre-order, and -1 for the root. */
+export const betweenInput: fc.Arbitrary<{ readonly parents: readonly number[]; readonly edges: readonly TreeEdge[] }> = fc
+  .record({ rows: fc.array(treeRow, { minLength: 1, maxLength: 40 }), ends: fc.array(fc.tuple(fc.nat(), fc.nat()), { maxLength: 30 }) })
+  .map(({ rows, ends }) => ({ parents: parentsOf(rows), edges: ends.map(([source, target]) => ({ source: source % rows.length, target: target % rows.length })) }));
 
 // The grid pilot (ireko-grid.test.ts).
 

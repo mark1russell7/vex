@@ -1,11 +1,12 @@
 import { compile, type Result } from "@mark1russell7/vex";
-import { emitModule, tiered } from "@mark1russell7/vex-compiler";
+import { tiered } from "@mark1russell7/vex-compiler";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { treeInput as input, treeLong, treeWild } from "./inputs.ts";
 import type { Band } from "./ireko-band.ts";
+import { irekoRun } from "./ireko-modules.ts";
 import { mergeBands } from "./ireko-shapes.ts";
-import { PACK_MERGED, PACK_MOST, TREE_DOMAINS, TREE_PROGRAM, TREE_SCHEMA, treeOutput, treeRun, type TreeChild, type TreeInput, type TreeOptions, type TreeOutput, type TreeValue } from "./ireko-tree.ts";
+import { PACK_MERGED, PACK_MOST, TREE_DOMAINS, TREE_PROGRAM, treeOutput, treeRun, type TreeChild, type TreeInput, type TreeOptions, type TreeOutput, type TreeValue } from "./ireko-tree.ts";
 
 type TreeRun = ReturnType<typeof treeRun>;
 
@@ -108,12 +109,7 @@ function arrangeWith(run: (r: { readonly space: TreeRun["space"]; readonly origi
 
 /** This function gives the function of the standalone module of the program. */
 function moduleOf(): (records: unknown, vars: unknown) => readonly TreeValue[] {
-  const m = emitModule(TREE_PROGRAM, { domains: TREE_DOMAINS, schema: TREE_SCHEMA, name: "tree", lists: "plain" });
-  if (!m.ok) throw new Error(m.reason);
-  expect(m.source).not.toContain("import");
-  // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from emitModule, as in the build of ireko.
-  return new Function(`${m.source.replaceAll(/^export /gm, "")}
-return tree;`)() as (records: unknown, vars: unknown) => readonly TreeValue[];
+  return irekoRun("tree") as (records: unknown, vars: unknown) => readonly TreeValue[];
 }
 
 /** This function gives the output of the module for one input. */

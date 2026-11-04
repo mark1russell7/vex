@@ -34,8 +34,8 @@ function make(source: string): Loaded {
 }
 
 /** This function gives the source of a program, and fails the test for a program that cannot be a module. */
-function sourceOf(e: Expr): string {
-  const m = emitModule(e, OPTIONS);
+function sourceOf(e: Expr, faults: "value" | "throw" = "throw"): string {
+  const m = emitModule(e, { ...OPTIONS, faults });
   if (!m.ok) throw new Error(m.reason);
   return m.source;
 }
@@ -87,7 +87,9 @@ const chain = (depth: number, termOf: (h: (i: number) => Expr) => Expr): Expr =>
 
 describe("the fast sum: a loop over the packs of the columns of the run", () => {
   it("a sum over all the records whose term reads a column through a call reads the pack of the column", () => {
-    const source = expectSame(withFns(rec({ a: call("total", lit(3)), b: call("total", op("add", n, lit(3))) })));
+    const summed = withFns(rec({ a: call("total", lit(3)), b: call("total", op("add", n, lit(3))) }));
+    expectSame(summed);
+    const source = sourceOf(summed, "value");
     expect(source).toContain("function QA(n, f) {");
     expect(source).toMatch(/const (pk\d+) = (PK\d+) \|\| \(\2 = QA\(n, col\d+\)\);\n\s*for \(let (j\d+) = 0; \3 < n; \3\+\+\) \{\n\s*try \{\n\s*for \(; \3 < n; \3\+\+\) \{\n[^\n]*G\(\1\[\3\]\)/);
     expect(source).toContain("} catch {}");
@@ -108,7 +110,9 @@ describe("the fast sum: a loop over the packs of the columns of the run", () => 
   });
 
   it("an error item of the column is skipped, and with strict it is an error of the sum", () => {
-    const source = expectSame(withFns(rec({ a: call("total", lit(3)), s: call("strict", lit(3)) })));
+    const strict = withFns(rec({ a: call("total", lit(3)), s: call("strict", lit(3)) }));
+    expectSame(strict);
+    const source = sourceOf(strict, "value");
     expect(source).toMatch(/try \{\n\s*for \(let (j\d+) = 0; \1 < n; \1\+\+\) \{\n[^]*?\} catch \{\n\s*F\(\);/);
     // Without an error item, the strict sum has a value.
     expectSame(withFns(rec({ s: call("strict", lit(3)) })), CLEAN);

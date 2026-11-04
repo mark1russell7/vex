@@ -77,8 +77,8 @@ describe("COMPILE.MODULE.FUSE.OFF: the option fuse", () => {
 
   it("COMPILE.MODULE.FUSE.OFF: the default is fuse true, and fuse false prints the module of the version before fusion", () => {
     for (const e of programs) expect(sourceOf(emitModule(e, { ...OPTIONS, fuse: true }))).toBe(sourceOf(emitModule(e, OPTIONS)));
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
-    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
+    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", faults: "value" };
     expect(sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: true }))).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
     expect(sourceOf(emitSheetModule(SHAPE_COLUMNS, { ...shapes, fuse: true }))).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
     // The hashes of the shapes of ireko in version 0.10 of the compiler, before step 3 of COMPILE-FUSE, with the writes of
@@ -98,11 +98,11 @@ describe("COMPILE.MODULE.FUSE.OFF: the option fuse", () => {
   });
 
   it("COMPILE.MODULE.FUSE.OFF COMPILE.MODULE.FUSE.FACTS: the notes of the facts do not change the code of the shapes of ireko", () => {
-    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf" };
+    const shapes: SheetModuleOptions = { domains: SHAPE_DOMAINS, schema: SHAPE_SCHEMA, kinds: SHAPE_KINDS, space: "tree", name: "shapesOf", faults: "value" };
     const sheet = listFactsOf(() => emitSheetModule(SHAPE_COLUMNS, shapes));
     expect(sourceOf(sheet.emitted)).toBe(sourceOf(emitSheetModule(SHAPE_COLUMNS, shapes)));
     expect(sheet.facts.size).toBeGreaterThan(10);
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
     const merged = listFactsOf(() => emitModule(NODE_SHAPE, node));
     expect(sourceOf(merged.emitted)).toBe(sourceOf(emitModule(NODE_SHAPE, node)));
     // The value of the run is the append of the shapes of the rows and of the columns, so it is clean.
@@ -571,7 +571,7 @@ describe("COMPILE.MODULE.FUSE: flat over an each is one loop", () => {
   });
 
   it("COMPILE.MODULE.FUSE: the modules of NODE_SHAPE and of the shapes of ireko keep their golden code", async () => {
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
     const source = sourceOf(emitModule(NODE_SHAPE, node));
     await expect(source).toMatchFileSnapshot("./__golden__/module-fuse.js");
     // The fused chains: the two lists of the bands of the children, UNSORTED, the three sides and the bands that stay.
@@ -602,7 +602,7 @@ describe("COMPILE.MODULE.FUSE.ITEM: the error items of a fused flat", () => {
     const strict = op("ifError", flatOf(body, STRICT), NONE);
     // The lenient loop puts the length of the output back, and the strict loop raises the error.
     expect(printed(lenient, true)).toMatch(/\.length = m\d+;/);
-    expect(printed(strict, true)).toMatch(/catch \{\n\s+F\(\);/);
+    expect(printed(strict, true)).toMatch(/catch \(\$f\) \{ FK\(\$f\);\n\s+F\(\);/);
     // The branches of a filter can throw too: the condition, and the value of the target.
     const filter = flatOf(op("if", op("gt", op("divide", lit(1), ref("w")), lit(0)), op("fill", lit(1), op("divide", n, ref("w"))), NONE));
     for (const x of [lenient, strict, filter, op("ifError", op("flat", each(axes.all, op("if", op("gt", op("divide", lit(1), ref("w")), lit(0)), op("fill", lit(1), n), NONE)), STRICT), NONE)]) expectSame(x);
@@ -997,7 +997,7 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
   });
 
   it("COMPILE.MODULE.FUSE.ADOPT: the accumulators of NODE_SHAPE take their first lists, and the open bands keep their copy", () => {
-    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape" };
+    const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
     const on = sourceOf(emitModule(NODE_SHAPE, node));
     // The names out of the sweep and acc of the pairs start with fill(0), so both take their first lists. The step of
     // open reads its list in a binding, so open has no array of its own.

@@ -140,6 +140,8 @@ The signal stays `FALLBACK`. The generated code puts the lazy error in a slot of
 
 **A context that drops the error.** An item of a list op and the first argument of `ifError` drop the error, so their checks keep nothing. A binding of `let` keeps its error in the local of its value. Only a failure writes there, and a read of the name tests the flag of the binding.
 
+**A request for tier 1.** A failed check tells one of two things. An error of the program is a failure of the block, so a context that drops the error catches it. A request for tier 1 is no error, so no context can catch it. Such a check has the failure `STOP` in each block (`#decide`). V-071 records the defect of the first design: an empty `reduce` was a check of the first kind, so `ifError(reduce(empty, "add"), -1)` gave -1.
+
 **`#ARGS`.** The interpreter evaluates each argument, also after an error (`#all`). Two errors give `#ARGS`. The value path has no flags for this. Each argument has a block for its failure, and the code after this block is a copy of the next argument that can fail. Thus a failure jumps to the copies of the later arguments, and each argument evaluates once. The order of evaluation is the order of the interpreter, and no extension runs twice.
 
 A copy can read flags, because the value path does not read a copy (`#collect`). So a node in a copy adds no other copy. The size of the code grows with the depth of the failing nodes, not with the number of their paths. `MAX_COPIED` limits the nodes of the copies. Past the limit, a node with two arguments that can fail keeps no error, and tier 1 gives its result. `MAX_CHAINED` limits the arguments of a chain in the same way, because each argument that can fail adds a level of blocks.
@@ -154,7 +156,8 @@ A copy can read flags, because the value path does not read a copy (`#collect`).
 - An error of an item that a list op on a list value gives with `strict`, and `#DEPTH!` of such an op (the next paragraph).
 - A list op on an array (V-064).
 - A failed kind check of a schema, because it is no error of the interpreter.
-- `reduce` on an empty list, because the result can be the identity of the op.
+- `reduce` on an empty list, where the result can be the identity of the op. A call cannot give an identity if its op has a literal name, the call has no options, and the identities are not exactly one. For such a call, the check is an error of the program, and a context can drop it.
+- A failed test of a data limit, where a test can use an extension. The interpreter evaluates each test, so `#DEPTH!` of a later test comes first.
 - An op that fails in a list op, where the list can use an extension or the option `strict` is set. The interpreter makes each item first, so an earlier error item or `#DEPTH!` can come first.
 - A failed argument of a list op after its list, because the interpreter evaluates the list first.
 - An exception of a getter of a record.
@@ -1414,6 +1417,23 @@ The CPU profile of the module of `NODE_SHAPE` in ireko had 12 % in `LOC` and 6 %
 In the module of `NODE_SHAPE`, only the helpers of the lists change. `LA(r["rows"], 0, is_3)` and `LA(r["cols"], 0, is_3)` replace the two reads with `LI`, and `out[o] = LPC(G(c136()), 1)` replaces the read `out[o] = G(c137())` of the one envelope of the run (COMPILE.MODULE.FUSE.OUT). The value at each key is `[rows, columns]`, two arrays of bands. The module has 12520 bytes, and the default module has 13209 bytes. The golden file `module-plain.js` keeps its text.
 
 A test compares the plain module with the interpreter (P17), with `fuse` on and off. The test gives the plain input to the interpreter as `vex.list` values with the keys of the positions. Then it changes the result of the interpreter to the plain form. The programs have error items, empty lists, lists of lists and lists with keys of texts. A property of the pilots compares the plain module of `NODE_SHAPE` with the interpreter and with `joinShapes` of ireko.
+
+#### The keys of the records (COMPILE.MODULE.KEYS)
+
+In a module, the key of a record is the text of its position. A host keys its nodes by its own ids. Thus `get(list, id)` found an item only when each id was that text. The interpreter reads the keys from its space, so the option `keys` gives the keys to the run.
+
+- With `keys: true`, the run takes an array of texts as its last argument, after the parents or the edges. Each record has one text, and the texts are different. The helper `KC` checks them and makes a map of each key to its position.
+- A pair of a list holds the key of its record, not its position. `GT`, `WO` and `LO` read a pair as text, so these helpers have no change. A key of a literal and of `fill` stays that key. Thus `fill(1, x)` keeps its key `"0"`, also when the record at the position 0 has another key.
+- The axis `list` over a list of records reads the position of each key from the map. A list with keys of a literal or of `fill` keeps its target, as before.
+- The move `key` reads the map with the helper `KP`. A value that is not a key of the space fails, as NAV.KEY tells.
+- The printer prints each program one time. A print with no read of a key is the module. Thus its text is the text without the option, and the run ignores its last argument. A read of a key is `get`, `without`, a `vex.list` of a result, a field or an argument, and the move `key`. After a read, the printer prints the program again with the keys. The second print adds the argument only when a pair or a move uses the keys.
+- The reference of an array space with keys is a record space, and a record space has no offsets. Thus an offset or the axis `window` in such a print gives a reason. A tree and a graph keep their moves. A program that reads no key keeps its offsets, because its results do not depend on the keys.
+- A formula of a cell has its key at the time of the build, and the keys come at the time of the run. Thus `keys` with `cells` gives a reason.
+- With `lists: "plain"`, a list of the input keeps the text of each position, and the result has no keys. Thus only `get`, `without` and the moves read the keys there.
+
+The order of the keys is the order of the records. `Object.entries` puts a key that is a whole number first. Thus a test with such keys needs a space that keeps its order.
+
+The test `module-keys.test.ts` compares each form with the interpreter over a space with the same keys (P17). It also pins the text of the programs that read no key.
 
 #### The names of the items (COMPILE.MODULE.LIST.ITEM)
 

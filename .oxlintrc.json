@@ -66,6 +66,10 @@
   ],
   "overrides": [
     {
+      "files": ["packages/site/src/check-probe.ts"],
+      "rules": { "unicorn/require-module-specifiers": "off" }
+    },
+    {
       "files": [
         "**/*.test.ts",
         "**/*.test-d.ts"

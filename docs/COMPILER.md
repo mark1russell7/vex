@@ -198,6 +198,12 @@ Generated code makes no trace. `explain` always operates in tier 0, so the quest
 
 ### 4.4 Standalone modules
 
+#### The bytes of a committed module (COMPILE.MODULE.BYTES)
+
+A repository can commit a printed module. The committed file then equals its print byte for byte, or the file is not the program that the repository names. The reusable workflow `.github/workflows/module-bytes.yml` takes a commit of vex, prints each module from that commit and compares the bytes with `packages/pilots/scripts/module-bytes.ts`. The commit is the pin: to print a module again, change the commit and start the script with `--write`. A change of the compiler thus reaches a committed file only by a change of the pin. The gate runs on each runner, because the print does not depend on the runner (COMPILE.MODULE.TEXT).
+
+A pin that stays in one place proves only that the files match an old compiler. A repository with committed modules has no dependency on the compiler, so a release does not move the pin. Thus the gate reads the published versions and fails when the pin is more than one version behind. The repository then moves the pin and prints the files again.
+
 #### The text of a copied function (COMPILE.MODULE.TEXT)
 
 A module copies the functions of its domains. JavaScript gives the text of a function, and that text depends on the program that loaded the function. A runner that only removes types keeps the spaces of the types and the parentheses of the source. A runner that compiles can drop parentheses, change a quote and add a call that names a function. Without a rule, two runners print two programs.
@@ -1570,6 +1576,7 @@ The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its l
 | COMPILE.MODULE.SIZE.ONCE | A lazy cell prints its value at its read | The cell has one `return` and one read `G(c())`. The read is not in a loop or in a function, other than a lazy cell. |
 | COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
 | COMPILE.MODULE.FAULT | With `faults` at `throw`, a fault of the printed code leaves the run | Each copy of a function of a domain has a wrapper that gives the error of Vex for each exception. Each other catch rethrows each value that is not the error of Vex. No op prints at its call. |
+| COMPILE.MODULE.BYTES | A committed module equals its print | The workflow `module-bytes.yml` prints each module from a pinned commit and compares the bytes. |
 | COMPILE.MODULE.TEXT | The text of a copied function does not depend on the runner | The compiler parses the text and prints the tree. A text that is not one expression stays as it is. |
 | COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |
 | COMPILE.MODULE.SIZE.DEAD | A helper, an op or a constant of the run that no code reads is not printed | A constant has a form that catches each failure. |

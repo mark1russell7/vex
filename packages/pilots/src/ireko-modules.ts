@@ -34,8 +34,17 @@ const ROWS: Readonly<Record<IrekoModule, IrekoRow>> = {
   measure: { name: "measureOf", print: (faults) => emitSheetModule(MEASURE_COLUMNS, { domains: MEASURE_DOMAINS, schema: MEASURE_SCHEMA, kinds: MEASURE_KINDS, space: "tree", name: "measureOf", faults }) },
 };
 
+/** The path of each committed file in the repository of ireko. */
+export const IREKO_FILES: Readonly<Partial<Record<IrekoModule, string>>> = {
+  measure: "packages/ireko/src/core/engine/measure.generated.js",
+  place: "packages/ireko/src/core/engine/place.generated.js",
+  shape: "packages/ireko/src/core/engine/shape.generated.js",
+  grid: "packages/ireko/src/core/strategies/grid.generated.js",
+  radial: "packages/ireko/src/core/strategies/radial.generated.js",
+};
+
 /** The modules that have a committed file in ireko. */
-export const IREKO_COMMITTED: readonly IrekoModule[] = ["measure", "place", "shape", "grid", "radial"];
+export const IREKO_COMMITTED: readonly IrekoModule[] = Object.keys(IREKO_FILES).filter(isIrekoModule);
 
 /** The modules that have a program here and no committed file in ireko at this time. */
 export const IREKO_NOT_COMMITTED: readonly IrekoModule[] = ["layers", "tree"];
@@ -50,6 +59,38 @@ export function irekoSource(which: IrekoModule, faults: Faults): string {
   const m = ROWS[which].print(faults);
   if (!m.ok) throw new Error(m.reason);
   return m.source;
+}
+
+/**
+ * This function compares a print with the bytes of its committed file. It gives nothing for equal bytes, and otherwise
+ * a message with the first line that differs and the command that prints the file again (COMPILE.MODULE.BYTES).
+ */
+export function moduleDrift(file: string, printed: string, committed: string): string | undefined {
+  if (printed === committed) return undefined;
+  const ours = committed.split("\n");
+  const theirs = printed.split("\n");
+  const line = ours.findIndex((text, i) => text !== theirs[i]);
+  const at = line < 0 ? ours.length : line;
+  return [
+    `${file} differs from its print at line ${String(at + 1)}.`,
+    `  committed: ${(ours[at] ?? "(end of the file)").slice(0, 120)}`,
+    `  printed:   ${(theirs[at] ?? "(end of the file)").slice(0, 120)}`,
+    "Print the file again from the pinned commit of vex:",
+    "  node packages/pilots/scripts/module-bytes.ts <path of this repository> --write",
+  ].join("\n");
+}
+
+/** The largest number of published versions between a pin and the last version of the compiler. */
+export const PIN_LIMIT = 1;
+
+/**
+ * This function gives the number of stable versions that come after a pin, in a list in publish order. A version that
+ * the list does not hold gives 0, because that commit is ahead of the last release (COMPILE.MODULE.BYTES).
+ */
+export function versionsBehind(version: string, published: readonly string[]): number {
+  const stable = published.filter((name) => !name.includes("-"));
+  const at = stable.indexOf(version);
+  return at < 0 ? 0 : stable.length - 1 - at;
 }
 
 /** This function gives the name of the function of a module of ireko. */

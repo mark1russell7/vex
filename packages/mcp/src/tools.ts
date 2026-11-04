@@ -4,7 +4,8 @@
  * `{ "$vex": "domain", "domain": "Vec2", "value": [1, 2] }`. A result has the same form.
  */
 import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, lit, MAX_NESTING, monotoneError, nestingOf, parse, programStep, serialize, shapeError, sizeError, sizeOf, space, stepError, type AnyDomain, type Expr, type Result, type Space, type VexError, type VexStep } from "@mark1russell7/vex";
-import { emitModule, generate, type Schema } from "@mark1russell7/vex-compiler";
+import { generate, type Schema } from "@mark1russell7/vex-compiler";
+import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
 
 /** The error of a tool for an input that is not valid. The server gives its message to the caller. */

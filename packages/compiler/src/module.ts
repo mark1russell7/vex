@@ -33,6 +33,7 @@
  */
 import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, evaluate, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, MAX_NESTING, monotoneError, type Move, moveExpr, type Names, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
+import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
 import { keepFaults, tidy, type Tidied } from "./module-tidy.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
@@ -1878,7 +1879,7 @@ function sameCall(a: () => unknown, b: () => unknown): boolean {
  * the same for the samples of their kinds.
  */
 function copied(f: (...a: never[]) => unknown, each: readonly (readonly unknown[])[], what: string): string {
-  const src = Function.prototype.toString.call(f);
+  const src = functionText(f);
   let copy: (...a: unknown[]) => unknown;
   try {
     // oxlint-disable-next-line typescript/no-implied-eval -- the source is the source of a function of a domain.
@@ -4506,7 +4507,7 @@ class Printer {
     // The test is an op whose inline form cannot fail, as for the prefixes of a node that keeps its items (`#cached`).
     const site = this.#facts.staticSite(x.op, sides.map((c) => c.v.kind));
     if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
-    const form = inlineForm(Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[x.op] as { fn: (...a: never[]) => unknown }).fn));
+    const form = inlineForm(functionText(((this.#domains[site.domain] as AnyDomain).ops[x.op] as { fn: (...a: never[]) => unknown }).fn));
     if (form?.params.length !== 2) return undefined;
     // `#0` is the value of the target and `#1` is the key, in the order of the parameters of the op.
     const pattern = patternOf(form, (i) => (at === 0 ? 1 - i : i));
@@ -4618,7 +4619,7 @@ class Printer {
     const site = this.#facts.staticSite(test.op, keyFirst ? [kind, t.v.kind] : [t.v.kind, kind]);
     if (site?.t !== "fn" || site.bad || site.returns !== "boolean" || this.check("boolean") !== undefined) return undefined;
     // A static site of a domain has the function of the op of that domain.
-    const src = Function.prototype.toString.call(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn);
+    const src = functionText(((this.#domains[site.domain] as AnyDomain).ops[test.op] as { fn: (...a: never[]) => unknown }).fn);
     const form = inlineForm(src);
     if (form?.params.length !== 2 || !givesValue(src)) return undefined;
     const before = tests.slice(0, at).map((x) => this.#hoist(this.expr(x, loop)));

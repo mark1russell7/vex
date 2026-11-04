@@ -6,7 +6,7 @@
 import { agree as kernelAgree, context, prepare, reference as kernelReference, type Agreement, type Context, type Failed, type Result as Outcome } from "@mark1russell7/coeval";
 import { fromDocument, isDocument, type Envelope } from "./document.ts";
 import { vexError, type VexError } from "./errors.ts";
-import { MAX_NESTING, nestingOf, type CompileOptions, type RunOptions } from "./evaluate.ts";
+import { nestingError, type CompileOptions, type RunOptions } from "./evaluate.ts";
 import { shapeError, type Expr } from "./ir.ts";
 import { toKernelError, toVexResult, vexDefinitions, vexMachine, vexSelf } from "./kernel.ts";
 import type { Result } from "./result.ts";
@@ -65,8 +65,7 @@ export function kernelPlan(source: Expr | Envelope, opts: CompileOptions = {}): 
     else bad = read.ok ? vexError("bad-expression", size ?? "") : read.error;
   } else {
     const shape = shapeError(source);
-    const nesting = shape === undefined ? nestingOf(source) : 0;
-    const deep = shape ?? (nesting > MAX_NESTING ? `the expression is nested ${String(nesting)} levels deep, and the limit is ${String(MAX_NESTING)}` : undefined);
+    const deep = shape ?? nestingError(source);
     const reason = deep ?? sizeError(source, opts) ?? stepError(source, opts) ?? monotoneError(source, opts);
     // Stryker disable next-line StringLiteral: the writer tests only the mode "json" and the order "reads"
     if (reason === undefined) doc = writeDocument(source, { domains, literals: "host", order: "document" });

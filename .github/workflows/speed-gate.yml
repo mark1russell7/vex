@@ -10,7 +10,7 @@ on:
   # Each week the job modules reads main once, with its catch. That read adds to the count of each model and to the
   # record of the version of Node.js on each read. The other gates do not start: the nightly measures main each day.
   schedule:
-    - cron: "41 5 * * 3"
+    - cron: "58 5 * * 3"
   workflow_dispatch:
     inputs:
       reps:
@@ -60,14 +60,6 @@ jobs:
       match: ${{ steps.changes.outputs.match == 'true' || steps.inputs.outputs.same == 'false' }}
       module_gate: ${{ steps.module_gate.outputs.match }}
     steps:
-      # The catch of the job modules reads on a pull request that changes the files of that gate.
-      - id: module_gate
-        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
-        with:
-          paths: |
-            packages/core/bench/measure.ts
-            packages/pilots/bench/module-cost*.ts
-            .github/workflows/speed-gate.yml
       - id: changes
         uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
         with:
@@ -85,6 +77,14 @@ jobs:
             .github/workflows/speed-gate.yml
             !packages/*/src/**/*.test.ts
             !packages/*/src/__golden__/**
+      # The catch of the job modules reads on a pull request that changes the files of that gate.
+      - id: module_gate
+        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
+        with:
+          paths: |
+            packages/core/bench/measure.ts
+            packages/pilots/bench/module-cost*.ts
+            .github/workflows/speed-gate.yml
       - id: lock
         uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
         with:

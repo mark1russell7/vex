@@ -36,7 +36,7 @@ function budgetReporter(budget: number): (details: fc.RunDetails<unknown>) => vo
     seen.set(test, place + 1);
     const record: RunRecord = { key: place === 0 ? test : `${test} #${String(place + 1)}`, runs: details.numRuns, target: numRuns, interrupted: details.interrupted, failed: details.failed, cpu };
     if (out !== undefined) appendFileSync(out, `${JSON.stringify(record)}\n`);
-    if (details.failed) throw new Error(fc.defaultReportMessage(details));
+    if (details.failed) throw new Error(fc.defaultReportMessage(details), { cause: details.errorInstance });
     if (details.interrupted) console.info(`fast-check: the time budget of ${String(budget)} ms stopped "${record.key}" after ${String(details.numRuns)} of ${String(numRuns)} runs`);
     const note = ungatedNote(record, gates);
     if (note !== undefined) {

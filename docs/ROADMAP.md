@@ -36,6 +36,8 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
+| PLACESSPREAD | Find the cause of the spread of the rows of the places gate. | compiler | P3 | later | KEYSCOPE |
+| SHARE49 | Find the cause of the share job that stopped after 49 minutes on 11-04. The cause stays open. | compiler | P3 | later | KEYSCOPE |
 | GRADIENT | The derivative of a program against a variable, as a transform of the program. | core | P3 | later: #270 | |
 | DFSOP | A kernel op for a depth-first search, with the order of ties in the spec. | domains | P2 | later | |
 | ASTAROP | A kernel op for the A* search, with the order of ties in the spec. It gives the `avoid` router of ireko after 0.18.0. Its prediction has a target ratio over the same 4000 seeded edges, with hand code and an A/A arm. | domains | P2 | later | 0.18.0 |

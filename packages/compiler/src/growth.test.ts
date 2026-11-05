@@ -4,8 +4,9 @@
  */
 import { MAX_NESTING, nestingOf } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BYTES_LIMIT, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import type * as Module from "./module.ts";
 import { emitModule } from "./module.ts";
 import { MAX_PLACES, placesOf } from "./unshared.ts";
 
@@ -14,12 +15,16 @@ const SHAPE: GrowthShape = { name: "s", make: () => ({ tag: "lit", value: 0 }), 
 const row = (places: number, ms: number | undefined, bytes: number | undefined): GrowthRow => ({ shape: "s", levels: places, places, ms, bytes });
 
 describe("COMPILE.GROWTH", () => {
-  it.each(GROWTH_SHAPES.map((s) => [s.name, s] as const))("COMPILE.GROWTH: the sizes of %s are legal, and they print", (_name, shape) => {
+  it.each(GROWTH_SHAPES.map((s) => [s.name, s] as const))("COMPILE.GROWTH: the sizes of %s are legal, and they print", async (_name, shape) => {
     const large = JSON.parse(JSON.stringify(shape.make(shape.large))) as ReturnType<GrowthShape["make"]>;
+    const small = shape.make(shape.small);
     expect(nestingOf(large)).toBeLessThanOrEqual(MAX_NESTING);
     expect(placesOf([large])).toBeLessThanOrEqual(MAX_PLACES);
-    expect(emitModule(large, OPTIONS).ok).toBe(true);
-    expect(placesOf([shape.make(shape.small)])).toBeLessThan(placesOf([large]));
+    // The gates of the test setup read the small size. The bench reads the names of the large size, and the gate of the keys does not read it.
+    const printer = await vi.importActual<typeof Module>("./module.ts");
+    expect(printer.emitModule(large, OPTIONS).ok).toBe(true);
+    expect(emitModule(small, OPTIONS).ok).toBe(true);
+    expect(placesOf([small])).toBeLessThan(placesOf([large]));
   });
 
   it("COMPILE.GROWTH: a shape with a limit of its own states the reason", () => {

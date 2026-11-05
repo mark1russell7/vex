@@ -38,7 +38,7 @@ import { memoNodes } from "./memo.ts";
 import { deadConstants, keepFaults, namesOfCode, tidy, type Tidied, wordsOf } from "./module-tidy.ts";
 import { canonical, type KeyScope, KeyTable, keyText, NotStandalone } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
-import { originalOf, placesError, unsharedAll } from "./unshared.ts";
+import { originalOf, placesRead, unsharedAll } from "./unshared.ts";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {
@@ -5044,8 +5044,8 @@ function settledPrint(print: (starts: EmptyStarts) => Emitted): Emitted {
 const bothPlaces = (a: ListFacts, b: ListFacts): ListFacts => ({ clean: a.clean && b.clean, fresh: a.fresh && b.fresh, inner: b.inner.map((x, i) => x && a.inner[i] === true), reads: Math.max(a.reads, b.reads) });
 
 /** This function gives the expressions of a program with one object at each place, the same copies for each print of the program. */
-function copiesOf(program: object, exprs: readonly Expr[], starts: EmptyStarts): readonly Expr[] {
-  const copies = starts.copies.get(program) ?? unsharedAll(exprs);
+function copiesOf(program: object, exprs: readonly Expr[], starts: EmptyStarts, shares: boolean): readonly Expr[] {
+  const copies = starts.copies.get(program) ?? unsharedAll(exprs, shares);
   starts.copies.set(program, copies);
   return copies;
 }
@@ -5079,15 +5079,15 @@ function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: Key
   if (!read.ok) return { ok: false, reason: read.error.message };
   const expr = read.value;
   // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
-  const places = placesError([expr]);
-  if (places !== undefined) return { ok: false, reason: places };
+  const places = placesRead([expr]);
+  if (places.error !== undefined) return { ok: false, reason: places.error };
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
   // COMPILE.MODULE.NESTING, LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses.
   const size = nestingError(expr) ?? sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options);
   if (size !== undefined) return { ok: false, reason: size };
-  const plain = copiesOf(expr, [expr], starts)[0] as Expr;
+  const plain = copiesOf(expr, [expr], starts, places.shares)[0] as Expr;
   const p = new Printer(plain, options, keys, starts);
   let value: Code;
   try {
@@ -5159,8 +5159,8 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   // A formula of a cell has a position as its key at the time of the build, and the keys of a run come later.
   if (options.keys === true && cells.size > 0) return { ok: false, reason: 'the option "keys" with formulas of cells' };
   // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
-  const places = placesError([...columns.values(), ...[...cells.values()].flatMap((own) => [...own.values()])]);
-  if (places !== undefined) return { ok: false, reason: places };
+  const places = placesRead([...columns.values(), ...[...cells.values()].flatMap((own) => [...own.values()])]);
+  if (places.error !== undefined) return { ok: false, reason: places.error };
   const names = [...new Set([...columns.keys(), ...cells.keys()])];
   const order = columnOrder(columns, cells);
   // The formulas in the order of the columns. A key of a cell that is not the text of a position is not a key of the
@@ -5187,7 +5187,7 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   // A sheet whose reads all read finished cells needs no search: each cell is the value of its formula
   // (COMPILE.MODULE.SHEET.DIRECT). A sheet with formulas of cells always has the search.
   const direct = formulas.every((f) => f.key === undefined) && order.every((c) => readsFinished(columns, order, c, run.tree));
-  const plain = copiesOf(columns, formulas.map((f) => f.expr), starts);
+  const plain = copiesOf(columns, formulas.map((f) => f.expr), starts, places.shares);
   const p = new Printer(rec(Object.fromEntries(plain.map((expr, i) => [`f${String(i)}`, expr]))), options, keyPrint, starts, { columns: index, kinds, lists, direct });
   const fns: string[] = [];
   const decls: string[] = [];

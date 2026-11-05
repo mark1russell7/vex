@@ -61,7 +61,7 @@ import {
   type LoopProgram,
   type LStmt,
 } from "./loop.ts";
-import { placesError, unshared } from "./unshared.ts";
+import { placesRead, unshared } from "./unshared.ts";
 
 /** The error of an expression that the compiler cannot lower. Then the program operates in tier 1. */
 export class Unsupported extends Error {}
@@ -166,14 +166,14 @@ const join = (a: PrimitiveKind | undefined, b: PrimitiveKind | undefined): Primi
  */
 export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {}): LoopProgram {
   // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
-  const places = placesError([expr]);
-  if (places !== undefined) throw new Unsupported(places);
+  const places = placesRead([expr]);
+  if (places.error !== undefined) throw new Unsupported(places.error);
   // EVAL.SHAPE and EVAL.NESTING: tier 1 gives the error of a program that is not valid or that is nested too deep.
   const shape = shapeError(expr);
   if (shape !== undefined) throw new Unsupported(shape);
   const deep = nestingError(expr);
   if (deep !== undefined) throw new Unsupported(deep);
-  const plain = unshared(expr);
+  const plain = unshared(expr, places.shares);
   const l = new Lowerer(memoNodes(plain, isFusedOp), facts, schema);
   const b = block(RETURN);
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)), columns: new Map(), slot: undefined };

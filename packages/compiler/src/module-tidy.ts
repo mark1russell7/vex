@@ -32,8 +32,14 @@ export interface Tidied {
 /** The tokens that hold a text of the code: a string, a part of a template and a regular expression. */
 const TEXT_TOKENS: ReadonlySet<unknown> = new Set([tokTypes.string, tokTypes.template, tokTypes.regexp]);
 
-/** This function gives a line of code with spaces at the place of each text. Each other character keeps its offset. */
+/** A text of the code starts with one of these characters. A comment starts with the slash too. */
+// Stryker disable next-line Regex: `rewritten` calls `codeOf` on a line with a match, so a form that finds other characters also finds that line.
+const TEXT_START = /["'`/]/;
+
+/** This function gives a line of code with spaces at the place of each text. Each other character keeps its offset. A line with no text needs no tokens. */
 function codeOf(line: string): string {
+  // Stryker disable next-line ConditionalExpression: the result is the same with no guard, and the guard saves the tokens.
+  if (!TEXT_START.test(line)) return line;
   let out = "";
   let at = 0;
   for (const token of tokenizer(line, { ecmaVersion: "latest" })) {

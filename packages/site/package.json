@@ -8,7 +8,7 @@
     "gen": "node scripts/gen-spec.mjs",
     "report": "node scripts/test-report.mjs",
     "dev": "node scripts/gen-spec.mjs && astro dev",
-    "build": "node scripts/gen-spec.mjs && astro build",
+    "build": "node scripts/gen-spec.mjs && astro build && tsx scripts/kpi.ts",
     "preview": "astro preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -19,6 +19,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@mark1russell7/cue": "github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7",
+    "@mark1russell7/site-pages": "^0.2.22",
     "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",

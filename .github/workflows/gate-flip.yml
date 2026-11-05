@@ -41,9 +41,13 @@ jobs:
             packages/compiler/test/growth.ts
             packages/pilots/scripts/module-bytes.ts
             packages/testkit/src/fc-budget.ts
+            packages/testkit/src/fc-setup.ts
+            packages/testkit/test/budget-flip/budget.flip.ts
+            packages/testkit/test/budget-flip/flip.config.ts
             packages/testkit/src/workflow-faults.ts
             scripts/name-run.ts
             scripts/workflow-gate.ts
+            vitest.config.ts
             scripts/gate-flip.ts
             .github/workflows/gate-flip.yml
 

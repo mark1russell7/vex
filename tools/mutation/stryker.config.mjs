@@ -19,6 +19,9 @@ export default {
   coverageAnalysis: "perTest",
   dryRunOnly: process.env.VEX_DRY_RUN === "1",
   disableTypeChecks: false,
+  // The file tsconfig.json of this folder is for the lint only. Stryker rewrites a tsconfig.json of its sandbox with the
+  // JavaScript API of TypeScript, and TypeScript 7 has no such API. So this file stays out of the sandbox.
+  ignorePatterns: ["/tsconfig.json"],
   reporters: ["clear-text", "progress", "html", "json"],
   htmlReporter: { fileName: "../../reports/mutation/index.html" },
   jsonReporter: { fileName: "../../reports/mutation/mutation.json" },

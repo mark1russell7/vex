@@ -1,5 +1,9 @@
 {
-  "extends": "../../tsconfig.repo.json",
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": [
+    "@mark1russell7/cue/ts/config/node.json",
+    "../../tsconfig.repo.json"
+  ],
   "compilerOptions": {
     "allowJs": true,
     "checkJs": false

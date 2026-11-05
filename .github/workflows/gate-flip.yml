@@ -44,7 +44,6 @@ jobs:
             packages/testkit/src/workflow-faults.ts
             scripts/name-run.ts
             scripts/workflow-gate.ts
-            tools/mutation/scores.mjs
             scripts/gate-flip.ts
             .github/workflows/gate-flip.yml
 

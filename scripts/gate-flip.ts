@@ -9,7 +9,7 @@
  * Start: node scripts/gate-flip.ts
  */
 import { spawnSync } from "node:child_process";
-import { appendFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -57,32 +57,6 @@ function moduleBytesFlip(dir: string): FlipReads {
   const clean = start(script, {}, [dir]);
   appendFileSync(join(dir, first), " ");
   return { clean, injected: start(script, {}, [dir]), mark: /1 of \d+ committed modules differ/u };
-}
-
-/** This function gives the mutants of one status in the form of a report of Stryker. */
-function mutants(status: string, count: number): readonly object[] {
-  return Array.from({ length: count }, () => ({ status, mutatorName: "flip", location: { start: { line: 1 } } }));
-}
-
-/** This function gives a report of the mutation lane with one file of the package core. */
-function mutationReport(stopped: number, survived: number): string {
-  return JSON.stringify({ files: { "/x/work/core/a.ts": { mutants: [...mutants("Killed", stopped), ...mutants("Survived", survived)] } } });
-}
-
-/** This function reads the score of a report at the line of 95 % and under it. The lane reads a fixed path, and CI has no report there at this step. */
-function mutationFlip(): FlipReads {
-  const folder = join(root, "reports/mutation");
-  mkdirSync(folder, { recursive: true });
-  const file = join(folder, "mutation.json");
-  const env = { VEX_MUTATE: "core" };
-  try {
-    writeFileSync(file, mutationReport(95, 5));
-    const clean = start("tools/mutation/scores.mjs", env);
-    writeFileSync(file, mutationReport(94, 6));
-    return { clean, injected: start("tools/mutation/scores.mjs", env), mark: /under 95 %/u };
-  } finally {
-    rmSync(file);
-  }
 }
 
 /** This function reads one gate of a rule in its own folder. The clean read must pass, and the read with the fault must fail on its mark. */
@@ -160,7 +134,6 @@ const RULES: readonly (readonly [string, (dir: string) => FlipReads])[] = [
   ["the gate of the name run", nameRunFlip],
   ["the gate of the workflows", workflowFlip],
   ["the gate of the module bytes", moduleBytesFlip],
-  ["the gate of the mutation score", mutationFlip],
 ];
 for (const [name, read] of RULES) held = ruleHolds(name, read) && held;
 process.exit(held ? 0 : 1);

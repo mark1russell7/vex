@@ -20,10 +20,11 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
-| V-089 | The print of tier 2 takes more time and bytes at each level of depth, because each line carries its indent. | compiler | P1 | in progress | |
 | CATCHFAULT | A print-time refusal of a fault that a catch can hide. The runtime check is dropped, and #278 is closed. | compiler | P1 | later: after 0.18.0 | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 8 merged, the size of the printer is #242 | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
+| V-089 | The time of the source of tier 2 grows faster than the places on `wide`, `wideloop` and `constlet`, with linear bytes. The collector is not the cause. The gate reads this time as report only. | compiler | P1 | in progress | |
+| V-092 | A stack overflow in the lowering of tier 2 gives tier 1 with no message to the caller. The gate prints the depth on half of the default stack. | compiler | P2 | later | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
 | NIGHTLY1103 | The Nightly is green again. A test file that does not load fails the lane, and the lane loads each setup file of a package (V-090, V-091). | quality | P1 | in progress: #293 | |
 | LANETIME | Each part of the lane finishes in its time limit. The weekly run reads each part and holds the gate, and the nights read the changed files. The first full read is due by 2026-11-12. | quality | P1 | in progress | |
@@ -41,7 +42,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | PLACESSPREAD | Find the cause of the spread of the rows of the places gate. | compiler | P3 | later | |
 | WEEKLYGATE | The Weekly gate reads a run count at a fixed time budget, so it also measures the speed of the runner. Measure the runs that catch a stated fault in a property, and read if the budget reaches them on the slowest CPU model, by 2026-11-21. Add the flip and the cost of the budget stops. | testkit | P2 | later | 0.18.0 |
 | SHARE49 | Find the cause of the share job that stopped after 49 minutes on 11-04. The cause stays open. | compiler | P3 | later | |
-| BOUNDSCOST | Bring the print of each module over 1.10 of the base under 1.10 and remove its line in the gate, by 2026-11-12. Find the cause of the 1.5 ms of `bounds` outside `emitModule`. Find why `layers` went from 5 of 5 reads over its A/A arm to 0 of 5. | compiler | P1 | in progress | |
+| BOUNDSCOST | Bring the print of each module over 1.10 of the base under 1.10 and remove its line in the gate, by 2026-11-12. Find the cause of the 1.5 ms of `bounds` outside `emitModule`. Find why `layers` went from 5 of 5 reads over its A/A arm to 0 of 5. The cause stays open: one read on a 7763 separates 5.5 %, and 2 % needs 8 reads there. | compiler | P1 | in progress | |
 | MODELGAIN | Find why the gain of `build` and `avoid` does not read on the CPU model 9V45, by 2026-11-19. Compute the limits again at 20 reads of that model. | compiler | P2 | later | |
 | ROUNDCOST | Let the bench add a cost in chosen rounds, as the control of the second pair clause. | compiler | P2 | later | |
 | D12GAIN | Find why tier 2 of the base is faster at `shared plain d12` only, by 2026-11-12. Keep the gain on the branch if it is real. | compiler | P2 | later | |

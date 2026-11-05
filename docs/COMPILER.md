@@ -228,6 +228,14 @@ A test of the shapes prints the largest size with no gate, because the gate of t
 
 The limit of the time exponent is 1.1, and the shape `origin` has its own limit of 1.25. Five reads of CI (run 41912930573) give these limits: the worst read of the shapes plus the largest spread of a shape, 0.12. The worst read is 0.98 for `wideorigin` and 1.13 for `origin`. The time of `origin` follows its text.
 
+#### The size of the source of tier 2 (COMPILE.SOURCE.SIZE)
+
+Tier 2 gives a string of JavaScript to `new Function`. A line of that string has no indent, so the block nesting of a line does not change its size. The golden files read the form with an indent, `printJs(p, facts, true)`. A property test holds that the two forms differ only in the spaces at the start of a line.
+
+The lowering keeps a map of the functions of a scope, and `#mayExt` keeps one answer for each map. A let with no function keeps the map, so those answers stay. A let that binds a function makes a new map, so a chain of those lets walks its expression again at each catch.
+
+The gate `bench/growth.ts` reads the time and the bytes of tier 2 for each shape. It starts `generate` and `load` in five fresh processes for each size. A shape with a limit of its own states the reason in `test/growth.ts`.
+
 #### The time of a print of each module (COMPILE.MODULE.COST)
 
 The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the arms and the order of the modules turn at each round.
@@ -288,6 +296,8 @@ The second pair clause has no flip at this time. The step `The gate fails a know
 | `between` | 32.23 | 35.26 | 1.068 | 1.19 | 1.22 |
 | `build` | 463.74 | 428.00 | 0.929 | 0.98 | 1.19 |
 | `build-no-avoid` | 310.20 | 318.80 | 1.016 | 1.16 | 1.25 |
+
+5 reads separate 1.0 % to 2.4 %, by row (2.8 x the spread of the A/A arm of the row / sqrt 5). A ratio under that of its row is read against the limit, not as a change. The rows `layers` and `tree` are under their size, and `build-no-avoid` is at its size of 1.6 %. These sizes pool the CPU models.
 
 #### The limit of the places of a program (COMPILE.PLACES)
 

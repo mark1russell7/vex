@@ -33,7 +33,7 @@ const name = (n: number): string => `l${n}`;
  * no indent, so its size stays linear in the block nesting (COMPILE.SOURCE.SIZE). With `indented`, each line shows its
  * block. The golden files read that form, and the two forms differ only in the spaces at the start of a line.
  */
-export function printJs(p: LoopProgram, facts: Facts, indented = true): string {
+export function printJs(p: LoopProgram, facts: Facts, indented = false): string {
   const deeper = (indent: string): string => (indented ? `${indent}  ` : indent);
   const used = new Set<RuntimeFn>();
   const constants = new Set<number>();

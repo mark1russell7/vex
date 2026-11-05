@@ -40,7 +40,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 |---|---|---|---|---|---|
 | PLACESSPREAD | Find the cause of the spread of the rows of the places gate. | compiler | P3 | later | |
 | SHARE49 | Find the cause of the share job that stopped after 49 minutes on 11-04. The cause stays open. | compiler | P3 | later | |
-| BOUNDSCOST | Bring the print of each module over 1.10 of the base under 1.10 and remove its line in the gate, by 2026-11-12. Find the cause of the 1.5 ms of `bounds` outside `emitModule`. Find why `layers` went from 5 of 5 reads over its A/A arm to 0 of 5. | compiler | P1 | in progress | |
+| BOUNDSCOST | Bring the print of each module over 1.10 of the base under 1.10 and remove its line in the gate, by 2026-11-12. Find the cause of the 1.5 ms of `bounds` outside `emitModule`. Find why `layers` went from 5 of 5 reads over its A/A arm to 0 of 5. The cause stays open: one read on a 7763 separates 5.5 %, and 2 % needs 8 reads there. | compiler | P1 | in progress | |
 | MODELGAIN | Find why the gain of `build` and `avoid` does not read on the CPU model 9V45, by 2026-11-19. Compute the limits again at 20 reads of that model. | compiler | P2 | later | |
 | ROUNDCOST | Let the bench add a cost in chosen rounds, as the control of the second pair clause. | compiler | P2 | later | |
 | D12GAIN | Find why tier 2 of the base is faster at `shared plain d12` only, by 2026-11-12. Keep the gain on the branch if it is real. | compiler | P2 | later | |

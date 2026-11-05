@@ -29,6 +29,13 @@ const LIMIT_MS = 60_000;
 const STACK = "--stack-size=3000";
 const OPTIONS = { domains: [NumDomain, BoolDomain, TextDomain], schema: { fields: { n: "number" } } } as const;
 
+/**
+ * This function gives the count of the prints of a child. The count is 1 with no fault.
+ * The flip of the gate (`scripts/gate-flip.ts`) sets `GROWTH_FAULT`. Then a child repeats its work and its text once for each 8 levels.
+ * So its time and its bytes grow with the square of the levels.
+ */
+const printsOf = (levels: number): number => (process.env["GROWTH_FAULT"] === "1" ? Math.max(1, Math.floor(levels / 8)) : 1);
+
 /** This function gives a program with no shared object, as a program from JSON has. */
 function programOf(shape: GrowthShape, levels: number): Expr {
   return JSON.parse(JSON.stringify(shape.make(levels))) as Expr;
@@ -97,20 +104,24 @@ function gates(): void {
 /** This function compiles one program, and it prints its record. */
 function child(name: string, levels: number): void {
   const e = programOf(shapeOf(name), levels);
+  const prints = printsOf(levels);
   const start = performance.now();
-  const r = emitModule(e, OPTIONS);
+  let r = emitModule(e, OPTIONS);
+  for (let i = 1; i < prints; i++) r = emitModule(e, OPTIONS);
   const ms = performance.now() - start;
-  console.info(JSON.stringify({ ms, bytes: r.ok ? r.source.length : undefined, reason: r.ok ? undefined : r.reason }));
+  console.info(JSON.stringify({ ms, bytes: r.ok ? r.source.length * prints : undefined, reason: r.ok ? undefined : r.reason }));
 }
 
 /** This function makes the function of tier 2 of one program, and it prints its record. */
 function sourceChild(name: string, levels: number): void {
   const e = programOf(shapeOf(name), levels);
+  const prints = printsOf(levels);
   const start = performance.now();
-  const g = generate(e, OPTIONS);
+  let g = generate(e, OPTIONS);
+  for (let i = 1; i < prints; i++) g = generate(e, OPTIONS);
   if (g.ok) load(g);
   const ms = performance.now() - start;
-  console.info(JSON.stringify({ ms, bytes: g.ok ? g.source.length : undefined, reason: g.ok ? undefined : g.reason }));
+  console.info(JSON.stringify({ ms, bytes: g.ok ? g.source.length * prints : undefined, reason: g.ok ? undefined : g.reason }));
 }
 
 /** The command of a child for each kind of row. */

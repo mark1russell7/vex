@@ -5,7 +5,7 @@
 import { MAX_NESTING, nestingOf } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it, vi } from "vitest";
-import { BYTES_LIMIT, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { BYTES_LIMIT, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, sourceFaults, sourceLarge, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 import type * as Module from "./module.ts";
 import { emitModule } from "./module.ts";
 import { MAX_PLACES, placesOf } from "./unshared.ts";
@@ -52,5 +52,27 @@ describe("COMPILE.GROWTH", () => {
     expect(growthFaults(SHAPE, row(100, undefined, 1000), row(400, 40, 4000))).toStrictEqual(["s has a size with no result"]);
     expect(growthFaults(SHAPE, row(100, 10, 1000), row(400, 40, undefined))).toStrictEqual(["s has a size with no result"]);
     expect(exponentsOf(row(100, 10, undefined), row(400, 40, 4000))).toBeUndefined();
+  });
+});
+
+describe("COMPILE.SOURCE.SIZE", () => {
+  it("COMPILE.SOURCE.SIZE: a limit of the module does not apply to the source", () => {
+    const own: GrowthShape = { ...SHAPE, time: 2, bytes: 2, why: "a reason" };
+    expect(sourceFaults(own, row(100, 10, 1000), row(400, 40, 16_000))).toStrictEqual([`source of s has a bytes exponent of 2.00, and the limit is ${String(BYTES_LIMIT)}`]);
+  });
+
+  it("COMPILE.SOURCE.SIZE: a limit of the source replaces the limit of the gate", () => {
+    const own: GrowthShape = { ...SHAPE, source: { time: 2, bytes: 2, why: "a reason" } };
+    expect(sourceFaults(own, row(100, 10, 1000), row(400, 160, 16_000))).toStrictEqual([]);
+    expect(sourceFaults(own, row(100, 10, 1000), row(400, 170, 16_000))).toStrictEqual(["source of s has a time exponent of 2.04, and the limit is 2"]);
+  });
+
+  it("COMPILE.SOURCE.SIZE: a size with no source is a fault", () => {
+    expect(sourceFaults(SHAPE, row(100, 10, 1000), row(400, 40, undefined))).toStrictEqual(["source of s has a size with no result"]);
+  });
+
+  it("COMPILE.SOURCE.SIZE: a shape reads its larger size, or the larger size of its source", () => {
+    expect(sourceLarge(SHAPE)).toBe(SHAPE.large);
+    expect(sourceLarge({ ...SHAPE, source: { large: 1, why: "a reason" } })).toBe(1);
   });
 });

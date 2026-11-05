@@ -212,13 +212,18 @@ jobs:
       - name: The gate fails a known cost
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.module_gate == 'true') }}
         run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch | tee -a module-cost.txt
+      # This step holds the second pair clause. The cost goes in 2 rounds of 7, so the median stays under its limit and the
+      # clause must fail alone (rule 8i). The read of the gate above is the clean copy of this job.
+      - name: The gate fails a cost in 2 rounds
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.module_gate == 'true') }}
+        run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --rounds | tee -a module-cost.txt
       - if: ${{ !cancelled() }}
         run: |
           {
             echo "### The time of a print of each module (ratios against $BASE: lower is better)"
             echo
             echo '```'
-            grep -E "^(runner|order|ok|FAIL|undecided|UNDECIDED|false-fail|gain|catch (order|ok|FAIL|fault|undecided|UNDECIDED))" module-cost.txt
+            grep -E "^(runner|order|ok|FAIL|undecided|UNDECIDED|false-fail|gain|(catch|rounds) (order|ok|FAIL|fault|undecided|UNDECIDED))" module-cost.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       # The reads of each model add up over weeks, so the record stays for the longest time that the repository gives.

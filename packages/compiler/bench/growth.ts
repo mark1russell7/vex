@@ -7,10 +7,12 @@
 //   node bench/growth.ts gates      prints the largest size of each shape under the gate of the keys and the gate of names
 //
 // The gate also reads the source of tier 2 of each shape, with `generate` and `load` in a fresh process (COMPILE.SOURCE.SIZE).
+// Its bytes hold, and its time is report only, because the cause of that time is open (V-089).
 //
 // The parser of the gate of names has a larger stack here than in a test, so that gate reads the largest size of each shape.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { GCProfiler } from "node:v8";
 import type { Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { median } from "../../core/bench/measure.ts";
@@ -19,7 +21,7 @@ import { generate, load } from "../src/tiers.ts";
 import { placesOf } from "../src/unshared.ts";
 import { keyWatch } from "../test/key-gate.ts";
 import { nameFaults } from "../test/names.ts";
-import { exponentsOf, GROWTH_SHAPES, growthFaults, sourceFaults, sourceLarge, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { bytesFlipReadsRed, exponentsOf, GROWTH_SHAPES, growthFaults, sourceVerdict, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 
 /** The processes of each size. */
 const SAMPLES = 5;
@@ -27,6 +29,9 @@ const SAMPLES = 5;
 const LIMIT_MS = 60_000;
 /** The stack of the parser of the gate of names, in KB. */
 const STACK = "--stack-size=3000";
+/** The shape of the read of the depth, and the stack of that read, in KB. The default stack of V8 is 984 KB. */
+const DEPTH_SHAPE = "wide";
+const LESS_STACK = "--stack-size=492";
 const OPTIONS = { domains: [NumDomain, BoolDomain, TextDomain], schema: { fields: { n: "number" } } } as const;
 
 /**
@@ -40,6 +45,12 @@ const printsOf = (levels: number): number => (process.env["GROWTH_FAULT"] === "1
 function programOf(shape: GrowthShape, levels: number): Expr {
   return JSON.parse(JSON.stringify(shape.make(levels))) as Expr;
 }
+
+/**
+ * This function gives the factor of the bytes of a source. The factor is 1 with no fault. The flip of the gate sets `GROWTH_BYTES_FAULT`.
+ * Then the bytes at the large size of the shape grow by that factor, and the time and the small size stay.
+ */
+const bytesFaultOf = (shape: GrowthShape, levels: number): number => (levels === shape.large ? Number(process.env["GROWTH_BYTES_FAULT"] ?? "1") : 1);
 
 /** This function gives the shape of a name. */
 function shapeOf(name: string): GrowthShape {
@@ -114,25 +125,30 @@ function child(name: string, levels: number): void {
 
 /** This function makes the function of tier 2 of one program, and it prints its record. */
 function sourceChild(name: string, levels: number): void {
-  const e = programOf(shapeOf(name), levels);
+  const shape = shapeOf(name);
+  const e = programOf(shape, levels);
   const prints = printsOf(levels);
+  const collector = new GCProfiler();
+  collector.start();
   const start = performance.now();
   let g = generate(e, OPTIONS);
   for (let i = 1; i < prints; i++) g = generate(e, OPTIONS);
   if (g.ok) load(g);
   const ms = performance.now() - start;
-  console.info(JSON.stringify({ ms, bytes: g.ok ? g.source.length * prints : undefined, reason: g.ok ? undefined : g.reason }));
+  // The cost of a collection is in microseconds. The row prints the sum, so a read can separate the collector from the compile.
+  const gc = (collector.stop()?.statistics ?? []).reduce((sum, entry: { readonly cost: number }) => sum + entry.cost, 0) / 1000;
+  console.info(JSON.stringify({ ms, gc, bytes: g.ok ? Math.round(g.source.length * prints * bytesFaultOf(shape, levels)) : undefined, reason: g.ok ? undefined : g.reason }));
 }
 
 /** The command of a child for each kind of row. */
 type Kind = "child" | "source";
 
 /** This function gives the record of one process, or `undefined` if the process gave no result. */
-function sample(shape: GrowthShape, levels: number, kind: Kind = "child"): { readonly ms: number; readonly bytes: number } | undefined {
-  const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), kind, shape.name, String(levels)], { timeout: LIMIT_MS, killSignal: "SIGKILL", encoding: "utf8", maxBuffer: 1 << 20 });
+function sample(shape: GrowthShape, levels: number, kind: Kind = "child", flags: readonly string[] = []): { readonly ms: number; readonly gc: number; readonly bytes: number } | undefined {
+  const r = spawnSync(process.execPath, [...flags, fileURLToPath(import.meta.url), kind, shape.name, String(levels)], { timeout: LIMIT_MS, killSignal: "SIGKILL", encoding: "utf8", maxBuffer: 1 << 20 });
   const line = r.status === 0 ? r.stdout.trim().split("\n").at(-1) : undefined;
-  const record = line === undefined ? undefined : (JSON.parse(line) as { readonly ms: number; readonly bytes?: number; readonly reason?: string });
-  if (record?.bytes !== undefined) return { ms: record.ms, bytes: record.bytes };
+  const record = line === undefined ? undefined : (JSON.parse(line) as { readonly ms: number; readonly gc?: number; readonly bytes?: number; readonly reason?: string });
+  if (record?.bytes !== undefined) return { ms: record.ms, gc: record.gc ?? 0, bytes: record.bytes };
   console.error(`no result: ${shape.name} ${String(levels)} exit ${String(r.status)} ${record?.reason ?? r.stderr.slice(0, 200)}`);
   return undefined;
 }
@@ -142,8 +158,9 @@ function row(shape: GrowthShape, levels: number, kind: Kind = "child"): GrowthRo
   const records = Array.from({ length: SAMPLES }, () => sample(shape, levels, kind));
   const done = records.filter((x) => x !== undefined);
   const whole = done.length === SAMPLES;
-  const r: GrowthRow = { shape: shape.name, levels, places: placesOf([programOf(shape, levels)]), ms: whole ? median(done.map((x) => x.ms)) : undefined, bytes: whole ? median(done.map((x) => x.bytes)) : undefined };
-  console.info(`${kind === "source" ? "source row" : "row"} ${shape.name} levels=${String(levels)} places=${String(r.places)} ms=${r.ms?.toFixed(1) ?? "none"} bytes=${String(r.bytes)} samples=${done.map((x) => x.ms.toFixed(1)).join(",")}`);
+  const distinct = [...new Set(done.map((x) => x.bytes))];
+  const r: GrowthRow = { shape: shape.name, levels, places: placesOf([programOf(shape, levels)]), ms: whole ? median(done.map((x) => x.ms)) : undefined, bytes: whole ? median(done.map((x) => x.bytes)) : undefined, sameBytes: distinct.length <= 1 };
+  console.info(`${kind === "source" ? "source row" : "row"} ${shape.name} levels=${String(levels)} places=${String(r.places)} ms=${r.ms?.toFixed(1) ?? "none"} gc=${whole ? median(done.map((x) => x.gc)).toFixed(1) : "none"} bytes=${String(r.bytes)} processes with these bytes=${distinct.length === 1 ? String(done.length) : distinct.join("|")} samples=${done.map((x) => x.ms.toFixed(1)).join(",")}`);
   return r;
 }
 
@@ -163,26 +180,34 @@ function gate(shapes: readonly GrowthShape[]): void {
 }
 
 /** This function gives the largest level of a shape with a source, in a fresh process for each level. It reads the sizes between the two sizes of the shape. */
-function deepestSource(shape: GrowthShape): number {
+function deepestSource(shape: GrowthShape, flags: readonly string[] = []): number {
   let low = shape.small;
   let high = shape.large + 1;
   while (high - low > 1) {
     const middle = Math.floor((low + high) / 2);
-    if (sample(shape, middle, "source") === undefined) high = middle;
+    if (sample(shape, middle, "source", flags) === undefined) high = middle;
     else low = middle;
   }
   return low;
 }
 
-/** This function reads the source of tier 2 of a shape, and it fails on a fault of the rule. */
+/** This function reads the source of tier 2 of a shape. It fails on a size with no source, on bytes over the limit and on a limit under the flip of its row. */
 function sourceGate(shape: GrowthShape): void {
   const small = row(shape, shape.small, "source");
-  const large = row(shape, sourceLarge(shape), "source");
+  const large = row(shape, shape.large, "source");
   const found = exponentsOf(small, large);
-  const faults = sourceFaults(shape, small, large);
-  console.info(`${faults.length === 0 ? "ok" : "FAIL"} source ${shape.name}: time exponent ${found?.time.toFixed(2) ?? "none"}, bytes exponent ${found?.bytes.toFixed(2) ?? "none"}, bytes ${String(large.bytes)}`);
-  // A size with no source gives tier 1 with no message, so the row names the depth (V-092).
-  if (sourceLarge(shape) < shape.large || large.bytes === undefined) console.info(`depth ${shape.name}: the last level with a source is ${String(deepestSource(shape))}, and the shape has ${String(shape.large)} levels`);
+  const { faults, notes } = sourceVerdict(shape, small, large);
+  const flipRed = bytesFlipReadsRed(shape, small, large);
+  console.info(`${faults.length === 0 && flipRed ? "ok" : "FAIL"} source ${shape.name}: time exponent ${found?.time.toFixed(2) ?? "none"}, bytes exponent ${found?.bytes.toFixed(3) ?? "none"}, bytes limit ${String(shape.source.bytes)}, bytes ${String(large.bytes)}`);
+  for (const note of notes) console.info(`report only: ${note}`);
+  if (!flipRed) {
+    console.error(`The bytes limit of ${shape.name} does not find 5 % more bytes at its large size.`);
+    process.exitCode = 1;
+  }
+  // A size with no source gives tier 1 with no message, so the row names the depth (V-092). The default stack holds the
+  // largest size of each shape, and the fault fails the gate. A caller can have less stack, so the gate reads a part of it too.
+  if (large.bytes === undefined) console.info(`depth ${shape.name}: the last level with a source is ${String(deepestSource(shape))}, and the shape has ${String(shape.large)} levels`);
+  if (shape.name === DEPTH_SHAPE) console.info(`depth ${shape.name}: with a stack of ${LESS_STACK.slice(LESS_STACK.indexOf("=") + 1)} KB, the last level with a source is ${String(deepestSource(shape, [LESS_STACK]))}, and the shape has ${String(shape.large)} levels`);
   for (const fault of faults) console.error(`FAIL ${fault}`);
   if (faults.length > 0) process.exitCode = 1;
 }

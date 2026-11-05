@@ -2,7 +2,7 @@
  * The flip test of the speed gates (rule 8i of the fleet). A gate of a measure holds a gain only if it can fail. This
  * script reads each gate two times in one job: on a clean copy, and with a known cost in the measured arm
  * (`packages/core/bench/fault.ts`). The clean read must pass. The read with the fault must fail on each of its cases, and
- * it must fail on the measure, so a crash does not count. The growth gate has a fault of its own, `GROWTH_FAULT`.
+ * it must fail on the measure, so a crash does not count. The growth gate has two faults of its own: `GROWTH_FAULT` and `GROWTH_BYTES_FAULT`.
  *
  * The script starts the entry of each gate, the file that CI starts, so the flip reads the exit code that CI reads.
  * The gates of a rule read a file and not a time. So a flip of a rule gives the gate a clean file and a file with a fault.
@@ -139,8 +139,10 @@ const COST: Readonly<Record<string, string>> = { GATE_FAULT_TIMES: FAULT_TIMES }
 const GATES: readonly FlipGate[] = [
   { name: "the speed gate of the core", file: "packages/core/bench/gate.ts", env: {}, fault: COST, cases: 2 },
   { name: "the speed gate of the compiler", file: "packages/compiler/bench/gate-processes.ts", env: { GATE_CASE: compilerCases() }, fault: COST, cases: 2 },
-  // The fault gives a quadratic time and quadratic bytes. So the module and the source each fail a row, a time clause and a bytes clause.
-  { name: "the growth gate of the compiler", file: "packages/compiler/bench/growth.ts", env: {}, args: ["chain"], fault: { GROWTH_FAULT: "1" }, cases: 6 },
+  // The fault gives a quadratic time and quadratic bytes. The module fails a row, a time clause and a bytes clause. The source fails a row and a bytes clause, because its time is report only.
+  { name: "the growth gate of the compiler", file: "packages/compiler/bench/growth.ts", env: {}, args: ["chain"], fault: { GROWTH_FAULT: "1" }, cases: 5 },
+  // The fault gives 5 % more bytes at the large size of the source, with no other change. The source fails a row and a bytes clause.
+  { name: "the growth gate of the bytes of the source", file: "packages/compiler/bench/growth.ts", env: {}, args: ["chain"], fault: { GROWTH_BYTES_FAULT: "1.05" }, cases: 2 },
 ];
 
 let held = true;

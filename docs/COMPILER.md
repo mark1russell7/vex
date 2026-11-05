@@ -234,15 +234,43 @@ Tier 2 gives a string of JavaScript to `new Function`. A line of that string has
 
 The lowering keeps a map of the functions of a scope, and `#mayExt` keeps one answer for each map. A let with no function keeps the map, so those answers stay. A let that binds a function makes a new map, so a chain of those lets walks its expression again at each catch.
 
-The gate `bench/growth.ts` reads the time and the bytes of tier 2 for each shape. It starts `generate` and `load` in five fresh processes for each size. A shape with a limit of its own states the reason in `test/growth.ts`.
+The gate `bench/growth.ts` reads the time and the bytes of tier 2 for each shape. It starts `generate` and `load` in five fresh processes for each size.
+
+**The bytes hold.** A row prints the count of processes with its bytes. The bytes limit of a shape is the exponent of CI run `42021404905`, with 2.5 % more bytes at the large size, rounded up. So the limit is 2.50 % to 2.71 % over that read at the large size. The gate also reads each row with 5 % more bytes at the large size, and it fails if the limit does not find that. The script `scripts/gate-flip.ts` starts the same fault in a child, and a clean copy passes. A row with different bytes in its processes is report only on its bytes, and the gate names that row. The exponent reads a slope: the same rise at both sizes does not move it.
+
+**The time is report only.** A time exponent over its limit prints a line and fails nothing. The cause of that time is open, so this section does not call the time of tier 2 fixed. A size with no source still fails the gate.
+
+Two CI reads, run `42016811553` and run `42021404905`, both on Node 26, give the table. The time and the bytes are the second read.
+
+| Shape | Levels | Places | Bytes | Time | Time exponents | Bytes exponent | Bytes limit |
+|---|---|---|---|---|---|---|---|
+| `plain` | 14 | 32,767 | 35.2 MB | 2,020 ms | 0.90, 0.88 | 0.899 | 0.911 |
+| `constant` | 13 | 32,767 | 28.7 MB | 1,925 ms | 0.98, 0.97 | 1.026 | 1.039 |
+| `loop` | 13 | 32,765 | 23.5 MB | 1,449 ms | 0.96, 0.93 | 1.025 | 1.037 |
+| `chain` | 499 | 999 | 0.76 MB | 120 ms | 1.03, 0.96 | 1.022 | 1.034 |
+| `wide` | 480 | 30,721 | 32.5 MB | 4,494 ms | 1.32, 1.25 | 0.922 | 0.934 |
+| `loopchain` | 165 | 661 | 0.41 MB | 69 ms | 0.92, 0.83 | 1.034 | 1.052 |
+| `wideloop` | 160 | 10,561 | 8.3 MB | 682 ms | 1.19, 1.15 | 1.024 | 1.042 |
+| `letchain` | 240 | 961 | 0.30 MB | 67 ms | 1.10, 0.98 | 1.019 | 1.038 |
+| `letloop` | 240 | 1,443 | 0.82 MB | 141 ms | 0.99, 0.96 | 1.017 | 1.035 |
+| `constlet` | 240 | 31,203 | 26.9 MB | 2,832 ms | 1.21, 1.21 | 1.031 | 1.049 |
+| `readchain` | 480 | 1,923 | 0.72 MB | 112 ms | 0.94, 0.92 | 1.022 | 1.041 |
+| `origin` | 166 | 665 | 4.8 MB | 505 ms | 1.71, 1.65 | 1.859 | 1.877 |
+| `wideorigin` | 160 | 32,321 | 32.8 MB | 1,910 ms | 1.15, 1.13 | 1.097 | 1.115 |
+
+Before this change, `chain` printed 23 MB at 499 levels and `constlet` printed 266 MB at 240 levels. The text of `origin` stays quadratic, because each memo prints a key tuple with one entry for each level around it. The exponent was 2.76.
+
+The bytes of `wide`, `wideloop` and `constlet` are linear, but their time exponents are over 1.1 in both reads. The collector is not the cause. One job gives 1.25 for `wide` and 1.20 for `constlet` without the time of the collector. The collector is 11.8 % of the time of `wide` at 480 levels and 29.0 % of the time of `plain` at depth 14.
+
+The lowering runs on the call stack. A stack overflow gives tier 1, and the reason of `generate` states "the lowering threw an exception" (V-092). The default stack holds the largest size of each shape, and the gate fails a size with no source. A caller can have less stack than a fresh process. So the gate also prints the last level of `wide` with a source on half of the default stack.
 
 #### The time of a print of each module (COMPILE.MODULE.COST)
 
-The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the arms and the order of the modules turn at each round.
+The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the modules turns at each round. The order of the arms comes from `armOrder` of `@mark1russell7/rigor-bench`. Each odd round is the reverse of the round before it. Each even round turns the arms by one more place. So each pair of arms has each order within 1 over the rounds.
 
 The workflow holds the base as a fixed commit, so the base does not move with main. Only a pull request moves it, with a ruling on its reason and new limits from new reads. A move hides each cost that came since the old base. So the pull request states the ratio of the new base to the old base on the row `build`.
 
-The gate reads each module alone, with no average over the modules. A module has a median limit and a limit for its second pair. The second pair is the second largest ratio of one round, so one slow process cannot move it. A second pair is a fault only if it is also over the worst second pair of the A/A arm of the same run. The worst pair is a record. A real cost in 1 round of 7 cannot be told from noise at 7 rounds.
+The gate reads each module alone, with no average over the modules. The rule is `tailLimitVerdict` of `@mark1russell7/rigor-bench`. A module has a median limit and a limit for its second pair. The median is the median of the ratios of the rounds, not a ratio of two medians. The second pair is the second largest ratio of one round, so one slow process cannot move it. A second pair is a fault only if it is also over the worst second pair of the A/A arm of the same run. The worst pair is a record. A real cost in 1 round of 7 cannot be told from noise at 7 rounds.
 
 A read has no power if the worst second pair of its A/A arm is over the cap `AA_CAP`. Such a read prints `UNDECIDED`. It is not a pass, and it does not count. The gate takes another read, up to 3 reads, and it fails if no read decides.
 
@@ -250,7 +278,7 @@ Each row has its own limits, with a cap of 1.25. A limit is the worst of 26 read
 
 A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays. The row `build-no-avoid` leaves out `avoid`, because the total of `build` does not show that each module is cheap.
 
-Each read prints the first row of each round and the times of each row. It also prints the count of false fails: the rule on each A/A arm as a branch, against the A/A arms of the other rows. A row with a limit under 1 fails that count by its limit, so the line states those rows.
+Each read prints the first row of each round and the times of each row. It also prints the count of false fails: the rule on each A/A arm as a branch, against the A/A arms of the other rows. An A/A pair shows no gain, so a row with a limit under 1 has no read there. The line names those rows.
 
 These rows do not follow that rule:
 
@@ -272,7 +300,7 @@ A pull request reads this step only if it changes a file of the gate. A miss by 
 
 A limit set from the cost of today holds the cost of today. The target of 1.10 for each module is not proven, and the item BOUNDSCOST owes it.
 
-The second pair clause has no flip at this time. The step `The gate fails a known cost` holds the median clause only. The flip of the second pair clause is due on 2026-11-12. A fault in 2 rounds that leaves the median under its limit must fail. A clean copy must pass in the same job.
+The step `The gate fails a known cost` holds the median clause only. The step `The gate fails a cost in 2 rounds` holds the second pair clause. The branch arm adds 40 % of work in `grid` and `shape` in 2 of the 7 rounds. So the median stays under its limit, and the step fails if the second pair clause does not fail each module alone. The read of the gate in the same job is the clean copy.
 
 `emitModule` is a tool of a build. A caller on a request path keeps the printed module. This table gives the median of 5 reads of run 41985651921, against the base 8ae233b. The Module cost jobs had the models 8573C, 9V74 and 7763, so this table has no read on 9V45. The rows `build` and `build-no-avoid` read the modules in one process.
 
@@ -952,7 +980,7 @@ The owner made these decisions on 2026-10-16:
 | C5 Later | Cell reads in the generated code (§7.4), other back ends, recalculation (§7.5) | A decision of the owner |
 | C6 Fusion (planned) | The fusion of list ops in modules (§7.6): one loop for a chain, lists without error items, one envelope for each run | P17 passes with the option `fuse` on and off, and the module of the shapes of ireko is at 1.4 times the hand code or less |
 
-A separate item: the mutation score of the test kit was 95.47 %, near the gate of 95 %. Tests for its survivors gave it 99.5 % (2026-10-15).
+A separate item: the mutation score of the test kit was 95.47 %, near the gate of 95 %. Tests for its survivors gave it 99.5 % (2026-10-15). Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A re-read follows the lane PR.
 
 ## 13. Record
 
@@ -965,7 +993,7 @@ The tests:
 - P17 compares `tiered` with `evaluate` on three generators: the whole grammar, the chains of the builder, and list ops over axes. Tier 2 gave approximately 97 %, 85 % and 90 % of the values. The gate of the share is 50 %.
 - The work put ten defects into the lowering, one at a time. P17 found each of them.
 - The unit tests alone cover each statement and each branch of the package. The golden files hold the source of five programs.
-- The mutation score is 100 % (997 mutants). Seven comments disable 30 equivalent mutants, each with its reason. Two tests count the reads of the host, so they find a cache that does not operate.
+- The mutation score is 100 % (997 mutants). Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A re-read follows the lane PR. Seven comments disable 30 equivalent mutants, each with its reason. Two tests count the reads of the host, so they find a cache that does not operate.
 
 The speed, measured by `bench/gate.ts` on one machine:
 
@@ -1037,7 +1065,7 @@ The gate measures the share of each value in the total. The run at each of 1000 
 
 Phase C2 adds three tests. A property gives many runs of one program on the same spaces. A test counts the calls in a node of the memo. A test gives the nodes of the memo for each kind of expression.
 
-The mutation score of the compiler is 100 % of 1364 mutants. Comments disable 68 equivalent mutants, each with its reason. Most of them are labels of a `case` that gives the same value as a missing case.
+The mutation score of the compiler is 100 % of 1364 mutants. Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A re-read follows the lane PR. Comments disable 68 equivalent mutants, each with its reason. Most of them are labels of a `case` that gives the same value as a missing case.
 
 #### Aggregates by group: the keys of the memo
 

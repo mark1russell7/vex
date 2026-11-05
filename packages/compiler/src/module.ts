@@ -1931,7 +1931,7 @@ function sameObjects(a: unknown, b: unknown): boolean | undefined {
 function same(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (!isObject(a) || !isObject(b)) return false;
-  return call(() => JSON.stringify(a)).value === call(() => JSON.stringify(b)).value && sameValue(a, b, sameObjects);
+  return call(() => JSON.stringify(a)).value === call(() => JSON.stringify(b)).value;
 }
 
 /** This function gives the value of a call, or that it threw. */

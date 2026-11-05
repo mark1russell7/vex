@@ -162,6 +162,40 @@ export interface ModuleTimes {
   readonly aa: readonly number[];
 }
 
+/** The version of the form of a line of the record. A read refuses a line with another version. */
+export const RECORD_FORMAT = 1;
+
+/**
+ * The kinds of a row. A row of the kind `fault` comes from a step that tests the gate. Its branch arm does added work, so
+ * it states no cost of the code. The log of a job shows all rows, so a read of a cost uses the record and not the log.
+ */
+export const ROW_KINDS = ["gate", "fault"] as const;
+
+/** The kind of one row. */
+export type RowKind = (typeof ROW_KINDS)[number];
+
+/** The step of the gate that gives a read. */
+export type ReadStep = "gate" | "catch" | "rounds";
+
+/** One line of the record of the gate: the times of one module in one read. */
+export interface ModuleRecord extends ModuleTimes {
+  readonly format: typeof RECORD_FORMAT;
+  readonly kind: RowKind;
+  readonly step: ReadStep;
+  /** The number of the read in its step, from 0. */
+  readonly read: number;
+  /** This value is true when the home rule decided this read. A read that did not decide does not count. */
+  readonly decided: boolean;
+  readonly cpu: string;
+  /** The facts of the processor that its model name does not state. Two jobs on one model can have different speeds. */
+  readonly cpuFacts: Readonly<Record<string, string>>;
+  readonly node: string;
+  /** The commit that the job checked out. */
+  readonly commit: string;
+  /** The commit of the base arm. */
+  readonly baseCommit: string;
+}
+
 /** The values of one row of the gate. */
 export interface ModuleReading {
   readonly baseMs: number;
@@ -178,6 +212,50 @@ export interface ModuleReading {
   readonly aaWorst: number;
   /** The second largest ratio of one round of the second copy of the base on this row. */
   readonly aaSecond: number;
+}
+
+/** The fields of `/proc/cpuinfo` that a record keeps. */
+const CPU_FACTS = ["cpu family", "model", "stepping", "microcode", "cpu MHz", "cache size", "bogomips"] as const;
+
+/** This function gives the facts of the first processor from the text of `/proc/cpuinfo`, and if its flags name a hypervisor. An empty text gives no facts. */
+export function cpuFacts(text: string): Readonly<Record<string, string>> {
+  const first = text.split(/\r?\n\r?\n/u)[0] ?? "";
+  const fields = new Map(first.split(/\r?\n/u).map((line) => [line.slice(0, line.indexOf(":")).trim(), line.slice(line.indexOf(":") + 1).trim()] as const));
+  const flags = fields.get("flags");
+  const facts = CPU_FACTS.flatMap((name) => {
+    const value = fields.get(name);
+    return value === undefined ? [] : [[name, value] as const];
+  });
+  return Object.fromEntries(flags === undefined ? facts : [...facts, ["hypervisor", String(flags.split(" ").includes("hypervisor"))] as const]);
+}
+
+/** This function gives the step of a read from the flags of the gate. */
+export function readStep(flags: { readonly catch: boolean; readonly rounds: boolean }): ReadStep {
+  if (flags.rounds) return "rounds";
+  return flags.catch ? "catch" : "gate";
+}
+
+/** This function gives the lines of the record for one read, with one line for each row and a new line after each. The step gives the kind of each row. */
+export function recordLines(read: Omit<ModuleRecord, keyof ModuleTimes | "format" | "kind">, rows: readonly ModuleTimes[]): string {
+  const kind: RowKind = read.step === "gate" ? "gate" : "fault";
+  return rows.map((row) => `${JSON.stringify({ format: RECORD_FORMAT, kind, ...read, ...row })}\n`).join("");
+}
+
+/** This function gives one line of a record. A line with another version or no known kind is a fault, so a change of the form cannot pass as a read. */
+function parseRecord(line: string): ModuleRecord {
+  const record = JSON.parse(line) as ModuleRecord;
+  if (record.format !== RECORD_FORMAT) throw new Error(`module-cost: a record has another format: ${line}`);
+  if (!ROW_KINDS.includes(record.kind)) throw new Error(`module-cost: a record has no known kind: ${line}`);
+  return record;
+}
+
+/** This function gives the rows of the gate in the text of a record: only the kind `gate`, and only a read that decided. */
+export function gateRecords(text: string): readonly ModuleRecord[] {
+  return text
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => parseRecord(line))
+    .filter((record) => record.kind === "gate" && record.decided);
 }
 
 /** This function gives the limit of a module. A line of the module comes first, and then the class that its program gives. */

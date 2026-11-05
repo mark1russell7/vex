@@ -202,7 +202,7 @@ jobs:
           cp packages/pilots/bench/module-cost-child.ts ../base/packages/pilots/bench/
           cd ../base
           pnpm install --frozen-lockfile --filter @vex/pilots...
-      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --turn "$((REP - 1))" | tee module-cost.txt
+      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --turn "$((REP - 1))" --record "$PWD/module-cost.jsonl" | tee module-cost.txt
         env:
           REP: ${{ matrix.rep }}
       # This step holds the median clause of the rule. It does not hold the second pair clause: a cost in each round moves
@@ -211,12 +211,12 @@ jobs:
       # module, and the smallest margin at these limits is 0.015. This step adds 20 %: docs/COMPILER.md has that count.
       - name: The gate fails a known cost
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.module_gate == 'true') }}
-        run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch | tee -a module-cost.txt
+        run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch --record "$PWD/module-cost.jsonl" | tee -a module-cost.txt
       # This step holds the second pair clause. The cost goes in 2 rounds of 7, so the median stays under its limit and the
       # clause must fail alone (rule 8i). The read of the gate above is the clean copy of this job.
       - name: The gate fails a cost in 2 rounds
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.module_gate == 'true') }}
-        run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --rounds | tee -a module-cost.txt
+        run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --rounds --record "$PWD/module-cost.jsonl" | tee -a module-cost.txt
       - if: ${{ !cancelled() }}
         run: |
           {
@@ -231,7 +231,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: module-cost-${{ matrix.rep }}
-          path: module-cost.txt
+          path: |
+            module-cost.txt
+            module-cost.jsonl
           retention-days: 90
 
   speed-gate-ok:

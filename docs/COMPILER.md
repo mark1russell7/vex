@@ -268,6 +268,8 @@ The lowering runs on the call stack. A stack overflow gives tier 1, and the reas
 
 The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the modules turns at each round. The order of the arms comes from `armOrder` of `@mark1russell7/rigor-bench`. Each odd round is the reverse of the round before it. Each even round turns the arms by one more place. So each pair of arms has each order within 1 over the rounds.
 
+Each read writes `module-cost.jsonl`, and the job saves it with its text output (`COMPILE.MODULE.RECORD`). The log also shows the rows of the steps that test the gate, and these rows hold added work. So a read of a cost uses `gateRecords` on the record, and not the log.
+
 The workflow holds the base as a fixed commit, so the base does not move with main. Only a pull request moves it, with a ruling on its reason and new limits from new reads. A move hides each cost that came since the old base. So the pull request states the ratio of the new base to the old base on the row `build`.
 
 The gate reads each module alone, with no average over the modules. The rule is `tailLimitVerdict` of `@mark1russell7/rigor-bench`. A module has a median limit and a limit for its second pair. The median is the median of the ratios of the rounds, not a ratio of two medians. The second pair is the second largest ratio of one round, so one slow process cannot move it. A second pair is a fault only if it is also over the worst second pair of the A/A arm of the same run. The worst pair is a record. A real cost in 1 round of 7 cannot be told from noise at 7 rounds.

@@ -17,7 +17,7 @@ import { relative } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createVitest } from "vitest/node";
-import { laneParts, mutateOf, NOT_READ, staleEntries, testFilesOnDisk, unreadTests } from "./layout.ts";
+import { laneParts, mutateOf, NOT_READ, SELECTION_FILE, staleEntries, testFilesOnDisk, unreadTests } from "./layout.ts";
 
 /** This is the test file with a load fault that the flip adds to the copy. */
 const FLIP_FILE = "work/compiler/load-check-flip.test.ts";
@@ -33,6 +33,12 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 
 /** The text of the test file that the flip adds to show the check by name. It loads, and it imports no mutated file. */
 const FLIP_TEXT = 'import { expect, it } from "vitest";\nit("flip", () => { expect(1).toBe(1); });\n';
+
+/** A test file with a dynamic import of a mutated file, by a literal path. */
+const FLIP_LITERAL = 'import { expect, it } from "vitest";\nit("flip", async () => { expect(await import("./js.ts")).toBeDefined(); });\n';
+
+/** A test file with a dynamic import of the same file, by a computed path. Its only path to that file has no name that a walk of the imports can read. */
+const FLIP_COMPUTED = 'import { expect, it } from "vitest";\nit("flip", async () => { expect(await import(["./js", "ts"].join("."))).toBeDefined(); });\n';
 
 /** This function gives the faults of the check by name, from the test files that the selection over all parts keeps. */
 function nameFaults(selected: readonly string[], collected: number): string[] {
@@ -59,8 +65,10 @@ async function loadFaults(): Promise<string[]> {
   console.info(`The load check read ${testModules.length} test files, with ${faults.length} faults.`);
   // These calls are the calls of the runner of Stryker: it sets this option, and Vitest then reads the imports of each test file.
   vitest.config.related = [...new Set(laneParts().flatMap((part) => mutateOf(root, part)).map((entry) => entry.split(":")[0] ?? entry))].map((file) => `${here}${file}`.replaceAll("\\", "/"));
-  const selected = await vitest.getRelevantTestSpecifications();
-  faults.push(...nameFaults(selected.map((s) => relative(here, s.moduleId).replaceAll("\\", "/")), testModules.length));
+  const selected = (await vitest.getRelevantTestSpecifications()).map((s) => relative(here, s.moduleId).replaceAll("\\", "/")).toSorted();
+  // The gate compares this selection with the reports of the run: two reads of one question (LANE.FILES).
+  writeFileSync(`${here}${SELECTION_FILE}`, `${JSON.stringify(selected, null, 2)}\n`);
+  faults.push(...nameFaults(selected, testModules.length));
   await vitest.close();
   return faults;
 }
@@ -82,6 +90,14 @@ function faultIsRed(name: string, files: readonly string[], text: string, word: 
   return red;
 }
 
+/** This function prints what the check does with a dynamic import by a literal path. This row states a result and fails nothing. */
+function printLiteral(files: readonly string[], word: string): void {
+  for (const file of files) writeFileSync(file, FLIP_LITERAL);
+  const read = checkInProcess();
+  for (const file of files) rmSync(file);
+  console.info(`flip, a dynamic import by a literal path: the exit code is ${String(read.code)}, and the check ${read.text.includes(word) ? "names the file" : "does not name the file"}.`);
+}
+
 /** This function adds each fault in turn and reads the check, then it reads the check on the clean copy. */
 function flip(): boolean {
   const inCopy = `${here}work/compiler/${FLIP_NAME}`;
@@ -90,7 +106,9 @@ function flip(): boolean {
     faultIsRed("a test file that does not load", [`${here}${FLIP_FILE}`], 'import "vex-load-check-no-such-package";\n', "load-check-flip.test.ts"),
     faultIsRed("a test file on the disk that does not reach the copy", [onDisk], FLIP_TEXT, `file not read: packages/compiler/src/${FLIP_NAME}`),
     faultIsRed("a test file in the copy that no part selects", [onDisk, inCopy], FLIP_TEXT, `file not read: packages/compiler/src/${FLIP_NAME}`),
+    faultIsRed("a dynamic import by a computed path", [onDisk, inCopy], FLIP_COMPUTED, `file not read: packages/compiler/src/${FLIP_NAME}`),
   ];
+  printLiteral([onDisk, inCopy], `file not read: packages/compiler/src/${FLIP_NAME}`);
   const clean = checkInProcess();
   console.info(`flip, the clean copy: the exit code is ${String(clean.code)}.`);
   if (clean.code !== 0) console.error(`The check failed on the clean copy:\n${clean.text}`);

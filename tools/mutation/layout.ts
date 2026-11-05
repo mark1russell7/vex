@@ -469,6 +469,9 @@ export function staleEntries(root: string, read: ReadonlySet<string>): string[] 
   return Object.keys(NOT_READ).filter((file) => !onDisk.has(file) || read.has(`work/${pathInLane(file)}`));
 }
 
+/** The file in which the load check saves its selection, as a path in this folder. Each job of the lane copies it beside its report. */
+export const SELECTION_FILE = "work/lane-selection.json";
+
 /** This function gives the path of the lane that a changed file of the repository selects, if it selects one. */
 function selectedBy(path: string): string | undefined {
   const copy = COPIES.find((c) => c.tests && path.startsWith(`${c.from}/`));

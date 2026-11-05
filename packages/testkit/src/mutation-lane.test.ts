@@ -46,6 +46,7 @@ interface Checks {
   readonly lastTests?: Readonly<Record<string, number>> | undefined;
   readonly planned?: readonly { readonly part: string; readonly old: number; readonly new: number; readonly pr: string }[];
   readonly unread?: (read: ReadonlySet<string>) => readonly string[];
+  readonly selection?: readonly string[] | undefined;
 }
 
 /** The part of `tools/mutation/lane-read.ts` that this test reads. */
@@ -61,7 +62,7 @@ interface LaneRead {
     readonly lines: readonly string[];
     readonly packages: readonly { readonly name: string; readonly outcome: string; readonly score: number; readonly scoreWithClock: number }[];
   };
-  readonly flipCases: (expected?: readonly string[]) => readonly { readonly name: string; readonly reports: ReadonlyMap<string, LaneReport | undefined>; readonly core: string; readonly lastTests?: Readonly<Record<string, number>> }[];
+  readonly flipCases: (expected?: readonly string[]) => readonly { readonly name: string; readonly reports: ReadonlyMap<string, LaneReport | undefined>; readonly core: string; readonly lastTests?: Readonly<Record<string, number>>; readonly selection: readonly string[] }[];
   readonly staticLine: (read: unknown) => string;
 }
 
@@ -252,7 +253,7 @@ describe("the gate of the mutation lane", () => {
     const file = "work/core/a.test.ts";
     const unread = (names: ReadonlySet<string>): readonly string[] => (names.has(file) ? [] : ["packages/core/src/a.test.ts"]);
     const outcomes = read.flipCases([file]).map((c) => {
-      const verdict = read.laneVerdict(c.reports, { lastTests: c.lastTests, unread });
+      const verdict = read.laneVerdict(c.reports, { lastTests: c.lastTests, unread, selection: c.selection });
       return [verdict.packages.find((p) => p.name === "core")?.outcome, verdict.failed];
     });
     expect(outcomes).toEqual([
@@ -260,6 +261,9 @@ describe("the gate of the mutation lane", () => {
       ["under the line", true],
       ["no read", true],
       ["under the line", true],
+      ["no read", true],
+      ["no read", true],
+      ["no read", true],
       ["no read", true],
       ["no read", true],
     ]);
@@ -359,6 +363,34 @@ describe("the gate of the mutation lane", () => {
     const found = read.laneVerdict(new Map([["testkit", report]]), { unread: (names) => (names.has("work/testkit/testkit.test.ts") ? ["packages/compiler/src/a.test.ts"] : []) });
     expect(clean.failed).toBe(false);
     expect(found.lines.join("\n")).toContain("compiler: no read: file not read. No part read packages/compiler/src/a.test.ts");
+  });
+
+  it("LANE.FILES: a difference of the two reads is no read, with its own text, on each side", async () => {
+    const read = await loadRead();
+    const report = read.fixtureReport("testkit", 99, { status: "Survived" });
+    const same = read.laneVerdict(new Map([["testkit", report]]), { selection: ["work/testkit/testkit.test.ts"] });
+    const more = read.laneVerdict(new Map([["testkit", report]]), { selection: ["work/testkit/testkit.test.ts", "work/compiler/a.test.ts"] });
+    const less = read.laneVerdict(new Map([["testkit", report]]), { selection: ["work/compiler/a.test.ts"] });
+    expect(same.failed).toBe(false);
+    expect(more.lines.join("\n")).toContain("compiler: no read: the two reads differ. The load check selects work/compiler/a.test.ts, and no report of the run read it.");
+    expect(less.lines.join("\n")).toContain("testkit: no read: the two reads differ. A report of the run read work/testkit/testkit.test.ts, and the load check does not select it.");
+    expect(less.packages.find((p) => p.name === "testkit")?.outcome).toBe("no read");
+  });
+
+  it("LANE.FILES: a full run that saved no selection is no read, and a run that does not ask for one reads as before", async () => {
+    const read = await loadRead();
+    const report = read.fixtureReport("testkit", 99, { status: "Survived" });
+    const none = read.laneVerdict(new Map([["testkit", report]]), { selection: [] });
+    expect(none.lines.join("\n")).toContain("testkit: no read: no selection.");
+    expect(none.failed).toBe(true);
+    expect(read.laneVerdict(new Map([["testkit", report]])).failed).toBe(false);
+  });
+
+  it("LANE.FILES: the load check saves its selection, and each job copies it beside its report", () => {
+    const check = readFileSync(join(repoRoot(), "tools", "mutation", "load-check.ts"), "utf8");
+    const lane = readFileSync(join(repoRoot(), "tools", "mutation", "lane-read.ts"), "utf8");
+    expect(check).toContain("writeFileSync(`${here}${SELECTION_FILE}`");
+    expect(lane).toContain('"load-selection.json"');
   });
 
   it("LANE.FILES: a run with a missing part does not read the files by name", async () => {

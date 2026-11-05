@@ -2182,7 +2182,7 @@ class Printer {
   /** The kind of each column at the start of a run that holds no list. A column of a call is not in this map. */
   readonly #runColumns = new Map<string, Kind | undefined>();
   /** The function and the kind of each column of a call that holds no list. Only a read in that function reads its pack. */
-  readonly #callColumns = new Map<string, { readonly scope: CallScope; readonly kind: Kind | undefined }>();
+  readonly #callColumns = new Map<string, { readonly scope: CallScope; readonly kind: Kind | undefined; readonly deps: ReadonlySet<number> }>();
   /** The code of each printed function, by its name. A fast sum looks in it for the columns that a call reads. */
   readonly #specCode = new Map<string, string>();
   /** The module variable of the pack of each column of the run, by the name of the column. */
@@ -2457,7 +2457,7 @@ class Printer {
     const hit = key === undefined ? undefined : this.#constants.get(key);
     if (hit !== undefined) return hit;
     // A pack is a local of the loop of a second print, so a constant of the run cannot read it (V-077).
-    if (this.#readsPack(c)) throw new NoPack();
+    if (this.#readsPack([c.v.code, ...c.s])) throw new NoPack();
     const name = this.fresh("c");
     const deferred = lazy || this.#defers(c);
     if (deferred) {
@@ -2660,10 +2660,19 @@ class Printer {
     return work;
   }
 
-  /** This method tells if a code reads a pack of the second print that the printer prints. */
-  #readsPack(c: Code): boolean {
-    const text = [c.v.code, ...c.s].join("\n");
+  /** This method tells if some lines read a pack of the second print that the printer prints. */
+  #readsPack(lines: readonly string[]): boolean {
+    const text = lines.join("\n");
     return [...(this.#pack?.cols.values() ?? [])].some((local) => text.includes(`${local}[`));
+  }
+
+  /**
+   * This method adds some lines to the run. A pack is a local of the loop of a second print, so a line of the run
+   * cannot read it (V-077, V-084). Then the second print stops, and the loop keeps its first print.
+   */
+  #intoRun(lines: readonly string[]): void {
+    if (this.#readsPack(lines)) throw new NoPack();
+    this.run.push(...lines);
   }
 
   /** This method tells if a second print (`#packed`, `#packedSteps`) reads the packs of the columns at the focus of `ctx`. */
@@ -2687,8 +2696,8 @@ class Printer {
       pack.cols.set(name, local);
     }
     const held = `${local}[${ctx.focus as string}]`;
-    // A column of a call reads a parameter, so its read keeps the marker of the parameters.
-    const deps = new Set(own === undefined ? [ctx.level] : [ctx.level, own.scope.param]);
+    // A column of a call can read a parameter, the focus and the origin of the function, so its read keeps these markers (V-081).
+    const deps = new Set([ctx.level, ...(own?.deps ?? [])]);
     return bare({ code: `${this.use("G")}(${held})`, kind: own === undefined ? this.#runColumns.get(name) : own.kind, safe: false, held, deps });
   }
 
@@ -2705,7 +2714,7 @@ class Printer {
       (scope?.decls ?? this.run).push(`const ${name} = ${this.use("Q")}((${ctx.focus as string}) => {`, ...ind(c.s), `  return ${c.v.code};`, "});");
       if (c.v.list === undefined) {
         if (scope === undefined) this.#runColumns.set(name, c.v.kind);
-        else this.#callColumns.set(name, { scope, kind: c.v.kind });
+        else this.#callColumns.set(name, { scope, kind: c.v.kind, deps: new Set([...c.v.deps].filter((d) => d !== ctx.level)) });
       }
       this.#columns.set(key, name);
     }
@@ -3079,7 +3088,7 @@ class Printer {
     // statements read their keys, so the marker of the parameters gives no level.
     const levels = (d: number): readonly number[] => (d === spec.origin ? [ctx.originLevel] : d === spec.focus ? [ctx.level] : d === spec.param ? [] : [d]);
     const deps = new Set([...args.flatMap((a) => [...a.deps]), ...[...spec.deps].flatMap(levels)]);
-    const position = spec.deps.has(spec.origin) ? [ctx.focus, ctx.origin] : spec.deps.has(spec.focus) ? [ctx.focus] : [];
+    const position = [...(spec.deps.has(spec.focus) ? [ctx.focus] : []), ...(spec.deps.has(spec.origin) ? [ctx.origin] : [])];
     return { s, v: { code: `${spec.name}(${[...args.map((a) => a.code), ...position].join(", ")})`, kind: spec.kind, safe: spec.safe, deps, list: heldList(spec.list) } };
   }
 
@@ -3092,12 +3101,14 @@ class Printer {
     // A function at the place of its binding reads names of that place, so its body stays in its function.
     if (bound.local || ++(this.#pack as Pack).inlines > INLINES) throw new NoPack();
     const s: string[] = [];
+    const deps: number[] = [];
     const env = new Map(bound.ctx.env);
     bound.fn.params.forEach((p, i) => {
       const x = e.args[i] as Expr;
       this.#wantList.add(x);
       const c = this.#hoist(this.expr(x, ctx), hasLoop(x));
       if (c.v.list !== undefined) throw new NoPack();
+      deps.push(...c.v.deps);
       // A short safe value is the read itself. A read of a name that can hold the error reads that name.
       let code = c.v.code;
       if (!c.v.safe && c.s.length === 0 && c.v.held !== undefined) code = c.v.held;
@@ -3110,7 +3121,8 @@ class Printer {
     this.#wantList.add(bound.fn.body);
     const body = this.expr(bound.fn.body, { ...ctx, env, fns: bound.ctx.fns, keys: new Map() });
     if (body.v.list !== undefined) throw new NoPack();
-    return { s: [...s, ...body.s], v: body.v };
+    // The statements of an argument read their keys, also when the body does not read the parameter (V-081).
+    return { s: [...s, ...body.s], v: { ...body.v, deps: new Set([...deps, ...body.v.deps]) } };
   }
 
   /** This method runs `f` outside the second print of a fast sum: a function and a node of the memo print as before. */
@@ -3153,7 +3165,8 @@ class Printer {
     const global = [...body.v.deps].every((d) => markers.has(d));
     const name = this.fresh("fn");
     if (hasLoop(bound.fn.body) || this.#defers(body)) this.#deferred.add(name);
-    const position = body.v.deps.has(origin) ? [k, o] : body.v.deps.has(focus) ? [k] : [];
+    // A parameter is here only if the body reads it, so the text of a call reads only the levels of its deps (V-085).
+    const position = [...(body.v.deps.has(focus) ? [k] : []), ...(body.v.deps.has(origin) ? [o] : [])];
     const head = `const ${name} = (${[...names, ...position].join(", ")}) =>`;
     // The columns of the call come first. Each one reads a binding of the root only after the binding has its value.
     const s = [...scope.decls, ...body.s];
@@ -4641,7 +4654,7 @@ class Printer {
     const arrow = (params: string, lines: readonly string[], code: string): readonly string[] => (lines.length === 0 ? [`(${params}) => ${code}`] : [`(${params}) => {`, ...ind(lines), `  return ${code};`, "}"]);
     const fns = [arrow("", names.s, pack), arrow(t.j, value.s, value.v.code), [`(t, q) => ${keyTest}`], arrow(`${s}, ${t.j}`, [...unpack, ...step.s], pack), arrow(s, [...unpack, ...result.s], result.v.code)];
     const name = this.fresh("P");
-    this.run.push(`const ${name} = ${this.use("PF")}(n,`, ...ind(fns.flatMap((f, i) => [...f.slice(0, -1), `${f.at(-1) as string}${i < fns.length - 1 ? "," : ""}`])), ");");
+    this.#intoRun([`const ${name} = ${this.use("PF")}(n,`, ...ind(fns.flatMap((f, i) => [...f.slice(0, -1), `${f.at(-1) as string}${i < fns.length - 1 ? "," : ""}`])), ");"]);
     const q = this.fresh("q");
     return { s: this.#store(q, key), v: { code: `${name}(${q})`, kind: result.v.kind, safe: false, deps: key.v.deps } };
   }
@@ -4679,19 +4692,19 @@ class Printer {
     let fn = this.#structures.get(structure);
     if (fn === undefined) {
       fn = this.fresh("m");
-      this.#structures.set(structure, fn);
       this.memos = true;
       const cached = varying.length === 1 ? this.#cached(e, varying[0] as Expr, bodyCtx, fn) : undefined;
       if (cached !== undefined) {
         this.#kinds.set(fn, cached.kind);
-        this.run.push(...cached.lines);
+        this.#intoRun(cached.lines);
       } else {
         // The loop of the node gives statements.
         const body = this.expr(e, bodyCtx);
         this.#kinds.set(fn, body.v.kind);
         this.#lists.set(fn, heldList(body.v.list));
-        this.run.push(`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});");
+        this.#intoRun([`const ${fn} = ${this.use(params.length === 1 ? "M1" : "M")}((${params.join(", ")}) => {`, ...ind(body.s), `  return ${body.v.code};`, "});"]);
       }
+      this.#structures.set(structure, fn);
     }
     this.#inside = outer;
     // Each key of the function gets its value, or the error sentinel.

@@ -2,7 +2,7 @@
  * The read of a column of a call in a second print of a standalone module. A fold in a function prints twice, and each
  * print must hold the markers of the first print. Each test compares the module and tier 2 with the interpreter (P17).
  */
-import { app, axes, call, each, evaluate, fn, fold, let_, lit, ref, space, v, type Expr } from "@mark1russell7/vex";
+import { app, axes, type Axis, call, each, evaluate, fn, fold, let_, lit, ref, space, v, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { fromCore } from "@mark1russell7/vex-testkit";
 import { describe, expect, it } from "vitest";
@@ -23,10 +23,11 @@ const VARS = { a: 2, v0: 30 };
 const n = ref("n");
 const origin = ref("n", [{ t: "origin" }]);
 const add = (...args: Expr[]): Expr => app("add", ...args);
-const near = (x: Expr, u: Expr): Expr => axes.where(axes.all, app("eq", n, add(x, u)));
+const near = (x: Expr, u: Expr): Axis => axes.where(axes.all, app("eq", n, add(x, u)));
 const count = (x: Expr): Expr => app("sum", each(near(x, v("u")), lit(1)));
 const steps = (term: Expr): Expr => fold(axes.all, { s: lit(0) }, { s: add(n, term) }, v("s"));
 const called = (body: Expr): Expr => let_({ g: fn(["u"], body) }, call("g", lit(0)));
+const unread = (body: Expr): Expr => let_({ h: fn(["x"], lit(1)) }, body);
 
 /** This function makes the module of a source with `new Function`. */
 function make(source: string): Loaded {
@@ -61,7 +62,6 @@ describe("V-081 COMPILE.MODULE: a read of the pack of a column of a call keeps t
   });
 
   it("V-081: a call at the focus of a second print has an argument that its function does not read", () => {
-    const unread = (body: Expr): Expr => let_({ h: fn(["x"], lit(1)) }, body);
     expectSame(unread(called(steps(add(call("h", origin), count(v("u")))))));
   });
 });

@@ -49,6 +49,19 @@ function workflowFlip(dir: string): FlipReads {
   return { clean, injected: start("scripts/workflow-gate.ts", {}, [], dir), mark: /workflow-gate: zz-fault\.yml: .*\|\|/u };
 }
 
+/** This function reads a property past its time budget. The first read has a minimum that it reaches, and the second has one that it cannot reach. */
+function minimumRunsFlip(dir: string): FlipReads {
+  const file = join(dir, "weekly-runs.json");
+  const key = "flip > the property of the budget flip";
+  const env = { FC_NUM_RUNS: "1000000", FC_TIME_LIMIT_MS: "300", FC_MIN_RUNS_FILE: file, npm_package_name: "flip" };
+  const args = ["run", "--config", "test/budget-flip/flip.config.ts"];
+  const cwd = join(root, "packages/testkit");
+  writeFileSync(file, JSON.stringify({ minimums: { [key]: 1 } }));
+  const clean = start("packages/testkit/node_modules/vitest/vitest.mjs", env, args, cwd);
+  writeFileSync(file, JSON.stringify({ minimums: { [key]: 1_000_000 } }));
+  return { clean, injected: start("packages/testkit/node_modules/vitest/vitest.mjs", env, args, cwd), mark: /Its minimum is 1000000 runs/u };
+}
+
 /** This function prints each committed module into a folder, reads the folder, and reads it again with one more space in one file. */
 function moduleBytesFlip(dir: string): FlipReads {
   const script = "packages/pilots/scripts/module-bytes.ts";
@@ -134,6 +147,7 @@ const RULES: readonly (readonly [string, (dir: string) => FlipReads])[] = [
   ["the gate of the name run", nameRunFlip],
   ["the gate of the workflows", workflowFlip],
   ["the gate of the module bytes", moduleBytesFlip],
+  ["the gate of the minimum runs of the Weekly", minimumRunsFlip],
 ];
 for (const [name, read] of RULES) held = ruleHolds(name, read) && held;
 process.exit(held ? 0 : 1);

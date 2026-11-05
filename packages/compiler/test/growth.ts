@@ -136,7 +136,7 @@ export function growthFaults(shape: GrowthShape, small: GrowthRow, large: Growth
   ];
 }
 
-/** This function gives the faults of the source of tier 2 of a shape (COMPILE.SOURCE.SIZE): the rule of the gate, with the limits of the source. */
+/** This function gives the faults of the source of tier 2 of a shape (COMPILE.SOURCE.SIZE). It applies the rule of the gate with the limits of the source. */
 export function sourceFaults(shape: GrowthShape, small: GrowthRow, large: GrowthRow): readonly string[] {
   const { time, bytes } = shape.source ?? {};
   const limits = { ...(time === undefined ? {} : { time }), ...(bytes === undefined ? {} : { bytes }) };

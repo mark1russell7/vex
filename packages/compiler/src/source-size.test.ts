@@ -54,7 +54,7 @@ function lengthOf(e: Expr): number {
   return g.ok ? g.source.length : Number.NaN;
 }
 
-/** This function gives the count of the walks of a node in the lowering of a chain of lets, each with a catch of its errors. */
+/** This function gives the count of the walks of a node in the lowering of a chain of lets. Each let has a catch of its errors. */
 function walkOf(levels: number): number {
   const e = repeat(levels, (inner, i) => {
     const name = `x${String(i)}`;

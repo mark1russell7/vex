@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { SETUP_FILES } from "./layout.ts";
 
 const work = (p: string): string => fileURLToPath(new URL(`./work/${p}`, import.meta.url));
 // Stryker runs this folder in a copy (.stryker-tmp/sandbox-*), so the paths come from the folder of this file.
@@ -37,9 +38,9 @@ export default defineConfig({
   test: {
     include: ["work/**/*.test.ts"],
     // The spec coverage test reads the spec by a path from packages/core, so it does not run here. The test of the gate
-    // of the names needs the setup of the package, and this lane does not have that setup.
+    // of the names reads work/test, and Stryker does not mutate that folder. So that test stops no mutant.
     exclude: ["work/core/spec-coverage.test.ts", "work/compiler/names-gate.test.ts"],
-    setupFiles: [work("testkit/fc-setup.ts")],
+    setupFiles: SETUP_FILES.map((file) => work(file)),
     // The counters of Stryker make a property test slower. The P17 tests of 1500 runs passed the limit of 5 s on 11-04.
     testTimeout: 60_000,
   },

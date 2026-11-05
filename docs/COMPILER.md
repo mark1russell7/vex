@@ -256,7 +256,38 @@ The cap `AA_CAP` is 1.18: the third quartile of the 26 reads plus 3 times their 
 
 The step `The gate fails a known cost` tests the gate. The branch arm adds 20 % of work in `grid` and `shape`, and the step fails if the gate passes either module. The same read adds 11 % in `radial`, which stays under its limit, and it prints that row as a record. The step holds the median clause, and it does not hold the second pair clause. A cost in each round moves the median first.
 
-A pull request reads this step only if it changes a file of the gate. A miss by noise must not block each pull request. A dispatch and the weekly run read it in each rep. At an added 15 %, the gate failed each module on 20 of 20 reads, and the smallest margin at these limits is 0.015. The count at an added 20 % comes from the reads of the head that merges this gate.
+A pull request reads this step only if it changes a file of the gate. A miss by noise must not block each pull request. A dispatch and the weekly run read it in each rep. At an added 15 %, the gate failed each module on 20 of 20 reads, and the smallest margin at these limits is 0.015. At an added 20 %, the step failed on 5 of 5 reads of run 41985651921. The smallest margin is 0.067 on `grid` and 0.108 on `shape`. `radial` at an added 11 % stayed under its limit on 5 of 5, with a smallest margin of 0.002.
+
+#### What the gate holds
+
+`Speed gate OK` states that no module has a slowdown over its limit. It does not state that a module is not slower. The limits are 1.10 to 1.23, `bounds` has 1.25, and the gain rows `build` and `avoid` have 0.98 and 0.89 on the models of `GAIN_MODELS`. The gate catches an added 15 % or more on `grid` and `shape`. It passes `radial` at an added 11 % by design.
+
+A limit set from the cost of today holds the cost of today. The target of 1.10 for each module is not proven, and the item BOUNDSCOST owes it.
+
+The second pair clause has no flip at this time. The step `The gate fails a known cost` holds the median clause only. The flip of the second pair clause is due on 2026-11-12. A fault in 2 rounds that leaves the median under its limit must fail. A clean copy must pass in the same job.
+
+`emitModule` is a tool of a build. A caller on a request path keeps the printed module. This table gives the median of 5 reads of run 41985651921, against the base 8ae233b. The Module cost jobs had the models 8573C, 9V74 and 7763, so this table has no read on 9V45. The rows `build` and `build-no-avoid` read the modules in one process.
+
+| Module | Base ms | Branch ms | Ratio | Median limit | Second pair limit |
+| --- | --- | --- | --- | --- | --- |
+| `grid` | 37.89 | 39.84 | 1.051 | 1.18 | 1.22 |
+| `radial` | 56.00 | 57.44 | 1.044 | 1.18 | 1.21 |
+| `layers` | 110.94 | 112.43 | 1.008 | 1.10 | 1.15 |
+| `tree` | 125.44 | 123.63 | 0.986 | 1.15 | 1.20 |
+| `shape` | 72.79 | 79.42 | 1.088 | 1.19 | 1.24 |
+| `place` | 17.49 | 18.88 | 1.080 | 1.23 | 1.22 |
+| `measure` | 36.11 | 39.99 | 1.108 | 1.22 | 1.22 |
+| `straight` | 27.61 | 29.19 | 1.060 | 1.16 | 1.21 |
+| `orthogonal` | 33.64 | 36.81 | 1.094 | 1.22 | 1.23 |
+| `avoid` | 206.09 | 172.48 | 0.833 | 0.89 | 1.09 |
+| `direction` | 15.65 | 15.88 | 1.038 | 1.14 | 1.16 |
+| `label` | 24.51 | 26.14 | 1.061 | 1.13 | 1.25 |
+| `obstacles` | 40.24 | 44.95 | 1.082 | 1.18 | 1.25 |
+| `overlap` | 61.18 | 64.99 | 1.062 | 1.19 | 1.24 |
+| `bounds` | 25.97 | 29.83 | 1.149 | 1.25 | prints only |
+| `between` | 32.23 | 35.26 | 1.068 | 1.19 | 1.22 |
+| `build` | 463.74 | 428.00 | 0.929 | 0.98 | 1.19 |
+| `build-no-avoid` | 310.20 | 318.80 | 1.016 | 1.16 | 1.25 |
 
 #### The limit of the places of a program (COMPILE.PLACES)
 

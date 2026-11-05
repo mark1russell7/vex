@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -17,9 +18,14 @@ function repoRoot(): string {
   return dir;
 }
 
+/** The name of the configuration of the tests of a package. */
+const CONFIG = "vitest.config.ts";
+
 /** The part of `tools/mutation/layout.ts` that this test reads. */
 interface Layout {
   readonly unresolvedImports: (root: string) => readonly string[];
+  readonly missingPackages: (root: string) => readonly string[];
+  readonly missingSetups: (root: string) => readonly string[];
 }
 
 describe("the copy of the mutation lane", () => {
@@ -29,5 +35,33 @@ describe("the copy of the mutation lane", () => {
     const root = repoRoot();
     const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.ts")).href)) as Layout;
     expect(layout.unresolvedImports(root)).toEqual([]);
+  });
+
+  // The printer imports `acorn` and `astring`, and on 2026-11-05 the lane did not have these packages. Each test file of the printer
+  // did not load, so the lane read 69.13 %, and that figure was no reading.
+  it("V-090: each import of a package by a file of the copy finds a package of the lane", async () => {
+    const root = repoRoot();
+    const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.ts")).href)) as Layout;
+    expect(layout.missingPackages(root)).toEqual([]);
+  });
+
+  // The configuration of the compiler loads `module-fault.setup.ts`, and on 2026-11-05 the lane did not load it. So the
+  // tests of a module printed other code in the lane than in CI, and one test failed at the dry run of Stryker.
+  it("V-091: each setup file of a package with tests in the copy is a setup file of the lane", async () => {
+    const root = repoRoot();
+    const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.ts")).href)) as Layout;
+    expect(layout.missingSetups(root)).toEqual([]);
+  });
+
+  it("V-091: the check names a setup file that the lane does not load", async () => {
+    const root = repoRoot();
+    const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.ts")).href)) as Layout;
+    const other = mkdtempSync(join(tmpdir(), "vex-lane-"));
+    mkdirSync(join(other, "packages", "compiler"), { recursive: true });
+    const config = join(other, "packages", "compiler", CONFIG);
+    writeFileSync(config, 'export default { test: { setupFiles: ["../testkit/src/fc-setup.ts", "./src/not-in-the-lane.ts"] } };\n');
+    const found = layout.missingSetups(other);
+    rmSync(other, { recursive: true });
+    expect(found).toEqual([`packages/compiler/${CONFIG}: compiler/not-in-the-lane.ts`]);
   });
 });

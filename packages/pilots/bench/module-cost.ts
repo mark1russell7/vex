@@ -23,15 +23,18 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { placesRead } from "../../compiler/src/unshared.ts";
-import { envLine, firstOfRound, measureIsolated } from "../../core/bench/measure.ts";
+import { env, envLine, firstOfRound, measureIsolated } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
-import { AA_CAP, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, falseFails, isLoud, limitOf, moduleCostFaults, readingOf, runAaSecond, type ModuleTimes } from "./module-cost-limits.ts";
+import { AA_CAP, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, isLoud, limitOf, medianLimit, moduleCostFaults, readingOf, runAaSecond, type ModuleTimes } from "./module-cost-limits.ts";
 
 /** The fresh processes of each arm on each module. */
 const ROUNDS = 7;
 
 /** The most reads that the gate takes when a read does not decide. */
 const MAX_READS = 3;
+
+/** The machine of this run. Its model picks the limit of a row with a gain, and the version of Node.js goes in the report of each gain. */
+const machine = env();
 
 /** One row of the gate: its name, its input to the child, and the result of `placesRead` on its program. */
 interface Row {
@@ -49,13 +52,15 @@ function list(ms: readonly number[]): string {
 function printRead(times: readonly ModuleTimes[], word: string | undefined, prefix: string): readonly string[] {
   const runSecond = runAaSecond(times);
   return times.flatMap((row) => {
-    const faults = moduleCostFaults(row, runSecond);
+    const faults = moduleCostFaults(row, runSecond, machine.cpu);
     const limit = limitOf(row.module, row.shares);
+    const lines = `${medianLimit(limit, machine.cpu).toFixed(3)}/${limit.second?.toFixed(3) ?? "report"}`;
     const r = readingOf(row);
     console.info(`${prefix}times module=${row.module} base=${list(row.base)} branch=${list(row.branch)} aa=${list(row.aa)}`);
     console.info(
-      `${prefix}${word ?? (faults.length === 0 ? "ok" : "FAIL")} module ${row.module} shares=${String(row.shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} secondPair=${r.secondPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} aaSecond=${r.aaSecond.toFixed(3)} runAaSecond=${runSecond.toFixed(3)} limit=${limit.median.toFixed(3)}/${limit.second.toFixed(3)}`,
+      `${prefix}${word ?? (faults.length === 0 ? "ok" : "FAIL")} module ${row.module} shares=${String(row.shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} secondPair=${r.secondPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} aaSecond=${r.aaSecond.toFixed(3)} runAaSecond=${runSecond.toFixed(3)} limit=${lines}${ceilingOnly(limit, machine.cpu) ? ` ${CEILING_ONLY}` : ""}`,
     );
+    if (limit.ceiling !== undefined) console.info(`${prefix}gain ${row.module} against ${GAIN_BASE} on ${machine.cpu}, Node.js ${machine.node}: ${ceilingOnly(limit, machine.cpu) ? CEILING_ONLY : "gain read"}`);
     return faults;
   });
 }
@@ -103,7 +108,7 @@ for (let read = 0; read < MAX_READS && !decided; read++) {
   const faults = printRead(times, decided ? undefined : "undecided", prefix);
   if (decided) {
     if (testsTheGate) {
-      const missed = catchFaults(times, runAaSecond(times));
+      const missed = catchFaults(times, runAaSecond(times), machine.cpu);
       for (const fault of faults) console.info(`catch fault ${fault}`);
       for (const miss of missed) console.error(`FAIL catch ${miss}`);
       if (missed.length > 0) process.exitCode = 1;
@@ -111,8 +116,8 @@ for (let read = 0; read < MAX_READS && !decided; read++) {
     } else {
       for (const fault of faults) console.error(`FAIL ${fault}`);
       if (faults.length > 0) process.exitCode = 1;
-      const noise = falseFails(times);
-      const under = noise.filter((module) => limitOf(module, true).median < 1);
+      const noise = falseFails(times, machine.cpu);
+      const under = noise.filter((module) => medianLimit(limitOf(module, true), machine.cpu) < 1);
       console.info(`false-fail ${String(noise.length)} of ${String(times.length)} rows of the A/A arm, ${String(under.length)} of them with a limit under 1 that an A/A row cannot meet: ${noise.join(",")}`);
     }
   } else {

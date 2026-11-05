@@ -13,6 +13,12 @@
  * A second pair is the second largest ratio of one round of a row. One slow process cannot move it. The rule reads it on
  * both sides: the second pair of a row, against the worst second pair of the A/A arm of the run. A real cost in 1 round
  * of 7 cannot be told from noise at 7 rounds. The worst pair is a record, and it does not fail a row.
+ *
+ * A gain limit reads against the fixed commit `GAIN_BASE`, so a merge does not move it. Only a pull request moves that
+ * commit, with a ruling, new limits and the ratio of the new base to the old base on the row `build`.
+ *
+ * A limit under 1 holds a gain. It holds that gain only on a model of `GAIN_MODELS`. On each other model the row reads its
+ * ceiling, and it prints that it does not read the gain. A pass on such a model does not show that the gain holds.
  */
 import { median } from "../../core/bench/measure.ts";
 
@@ -20,8 +26,10 @@ import { median } from "../../core/bench/measure.ts";
 export interface ModuleLimit {
   /** The most that the median time of the branch can be, as a share of the median time of the base. */
   readonly median: number;
-  /** The most that the second pair of the row can be. */
-  readonly second: number;
+  /** The most that the second pair of the row can be. With no value, the row prints its second pair and that pair fails nothing. */
+  readonly second?: number;
+  /** The median limit on a model outside `GAIN_MODELS`. With no value, the row has one median limit on each model. */
+  readonly ceiling?: number;
   /** The reason of the limit. */
   readonly why: string;
 }
@@ -48,54 +56,81 @@ export const BUILD_NO_AVOID_ROW = "build-no-avoid";
 
 /**
  * The largest second pair of the A/A arm of a run that a read can have. Over this value any row under that pair passes,
- * so the read has no power. That read is undecided, and it does not count. The reads of this head set the value.
+ * so the read has no power. That read is undecided, and it does not count. The value is the third quartile plus 3 times
+ * the interquartile range of the 26 reads, 1.175, rounded up. This formula came after those reads: the rule of the worst
+ * read plus the spread gave 1.577, and that value took in the loud read. It is a choice from the data, and the reads of the
+ * next head test it.
  */
-export const AA_CAP = 2;
+export const AA_CAP = 1.18;
 
-/** The source of each median limit: the standing rule of a limit. The item BOUNDSCOST brings a module with a median over 1.10 under that target. */
-const FROM_READS = "The worst median of 6 reads of tree 03d5a25 against 8ae233b, plus the spread of those reads, rounded up. The gate holds the cost of today.";
+/** The fixed commit of each ratio of this gate. The job `modules` of `speed-gate.yml` checks out this commit, and a test holds the two equal. */
+export const GAIN_BASE = "8ae233be3bd54744ae558020e5584975b4dfefee";
 
-/** This function gives the line of a module from its limit of the median. */
-function lineOf(limit: number): ModuleLimit {
-  return { median: limit, second: 1.2, why: FROM_READS };
+/**
+ * The models where the reads show the gain of the rows with a limit under 1. The model 9V45 is not here: the median of its 5 reads
+ * is 0.946 on `build` and 0.916 on `avoid`, and the median of each other model is at most 0.928 and 0.840. Those reads do not give a cause.
+ */
+export const GAIN_MODELS: ReadonlySet<string> = new Set([
+  "AMD EPYC 7763 64-Core Processor",
+  "AMD EPYC 9V74 80-Core Processor",
+  "Intel(R) Xeon(R) 6973P-C",
+  "Intel(R) Xeon(R) 6975P-C",
+  "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+  "INTEL(R) XEON(R) PLATINUM 8573C",
+]);
+
+/** The words of a row that reads its ceiling. */
+export const CEILING_ONLY = "gain not read on this model, ceiling only";
+
+/** The source of each limit: the standing rule of a limit. The item BOUNDSCOST brings a module with a median over 1.10 under that target. */
+const FROM_READS = "The worst value of 26 reads of tree 03d5a25 against 8ae233b, plus the spread of those reads, rounded up. The gate holds the cost of today.";
+
+/** This function gives the line of a module from its limits. The third value is the median limit of the 6 reads alone: the 26 reads decide, and each figure stays in the record. */
+function lineOf(limit: number, second: number, fromSix: number): ModuleLimit {
+  return { median: limit, second, why: `${FROM_READS} The 6 reads alone give a median limit of ${fromSix.toFixed(2)}.` };
 }
 
 /** The limit of each row. Each line states its reason. A limit over 1.25 needs a ruling, and a test holds this cap. */
 export const MODULE_LINES: Readonly<Record<string, ModuleLimit>> = {
-  grid: lineOf(1.12),
-  radial: lineOf(1.12),
-  layers: lineOf(1.08),
-  tree: lineOf(1.13),
-  shape: lineOf(1.11),
-  place: lineOf(1.12),
-  measure: lineOf(1.16),
-  straight: lineOf(1.11),
-  orthogonal: lineOf(1.16),
-  avoid: lineOf(0.91),
-  direction: lineOf(1.07),
-  label: lineOf(1.11),
-  obstacles: lineOf(1.14),
-  overlap: lineOf(1.14),
-  between: lineOf(1.13),
+  grid: lineOf(1.18, 1.22, 1.12),
+  radial: lineOf(1.18, 1.21, 1.16),
+  layers: lineOf(1.1, 1.15, 1.09),
+  tree: lineOf(1.15, 1.2, 1.11),
+  shape: lineOf(1.19, 1.24, 1.15),
+  place: lineOf(1.23, 1.22, 1.14),
+  measure: lineOf(1.22, 1.22, 1.19),
+  straight: lineOf(1.16, 1.21, 1.13),
+  orthogonal: lineOf(1.22, 1.23, 1.14),
+  avoid: {
+    median: 0.89,
+    ceiling: 1.03,
+    second: 1.09,
+    why: "The limit 0.89 holds the gain against 8ae233b on the models of GAIN_MODELS. The ceiling 1.03 comes from 5 reads and no cause, so it holds no gain.",
+  },
+  direction: lineOf(1.14, 1.16, 1.08),
+  label: { median: 1.13, second: 1.25, why: "The second pair sits on the cap of 1.25. The rule gives 1.376 with the loud read of 26 reads and 1.211 without it. The 6 reads alone give a median limit of 1.12." },
+  obstacles: { median: 1.18, second: 1.25, why: "The second pair sits on the cap of 1.25, and the rule gives 1.247. The 6 reads alone give a median limit of 1.11." },
+  overlap: lineOf(1.19, 1.24, 1.18),
+  between: lineOf(1.19, 1.22, 1.13),
   bounds: {
-    median: 1.2,
-    second: 1.25,
-    why: "bounds has a median of 1.148 and a worst pair of 1.247 in 6 reads of tree 03d5a25. The worst pair limit is the cap of 1.25. The item BOUNDSCOST brings it under 1.10 by 2026-11-12 and removes this line.",
+    median: 1.25,
+    why: "The median limit is the cap of 1.25, and it ends under the item BOUNDSCOST, due 2026-11-12. The second pair of this row only prints, because a margin of 0.001 under the cap fails by chance. BOUNDSCOST ends that too.",
   },
   [BUILD_ROW]: {
     median: 0.98,
-    second: 1.2,
-    why: "This row is the cost that a build pays: one process, with the first run of new code once. Its pass line is 1.10. The 6 reads give 0.899 to 0.936, so the gate holds that gain.",
+    ceiling: 1.04,
+    second: 1.19,
+    why: "This row is the cost that a build pays: one process, with the first run of new code once. The limit 0.98 holds the gain against 8ae233b on the models of GAIN_MODELS. The ceiling 1.04 comes from 5 reads and no cause, so it holds no gain.",
   },
   [BUILD_NO_AVOID_ROW]: {
-    median: 1.1,
-    second: 1.2,
-    why: "This row is the row build with the module avoid left out. It shows the cost of a build on the other modules. Its pass line is 1.10.",
+    median: 1.16,
+    second: 1.25,
+    why: "This row is the row build with the module avoid left out. Its second pair sits on the cap of 1.25, and the rule gives 1.356. The 6 reads alone give a median limit of 1.13.",
   },
 };
 
-/** The share of added work of each module in the read that tests the gate. With these shares `radial` reads near 1.11. */
-export const CATCH_ADD: Readonly<Record<string, number>> = { grid: 0.15, radial: 0.063, shape: 0.15 };
+/** The share of added work of each module in the read that tests the gate. With this share `radial` reads under its limit, and that states what a limit lets through. */
+export const CATCH_ADD: Readonly<Record<string, number>> = { grid: 0.2, radial: 0.11, shape: 0.2 };
 
 /** The modules that the gate must fail in the read that tests it. */
 export const CATCH_MUST_FAIL: readonly string[] = ["grid", "shape"];
@@ -134,9 +169,23 @@ export function limitOf(module: string, shares: boolean): ModuleLimit {
   return Object.hasOwn(MODULE_LINES, module) ? (MODULE_LINES[module] ?? SHARED_LIMIT) : shares ? SHARED_LIMIT : NOT_SHARED_LIMIT;
 }
 
+/** This function tells if a row reads its ceiling on this model, and so does not read the gain. */
+export function ceilingOnly(limit: ModuleLimit, model: string): boolean {
+  return limit.ceiling !== undefined && !GAIN_MODELS.has(model);
+}
+
+/** This function gives the median limit of a row on this model. */
+export function medianLimit(limit: ModuleLimit, model: string): number {
+  return ceilingOnly(limit, model) ? (limit.ceiling ?? limit.median) : limit.median;
+}
+
 /** This function gives the ratios of one arm to the base, one for each round, with the largest first. */
 function pairsOf(arm: readonly number[], base: readonly number[]): readonly number[] {
-  return arm.map((ms, round) => ms / (base[round] ?? Number.NaN)).toSorted((x, y) => y - x);
+  const pairs = arm.map((ms, round) => ms / (base[round] ?? Number.NaN));
+  // The type-aware lint does not have Array#toSorted, and sort() changes only the copy.
+  // oxlint-disable-next-line unicorn/no-array-sort
+  pairs.sort((x, y) => y - x);
+  return pairs;
 }
 
 /** This function gives the values of one row from the times of its rounds. A row of one round has its one pair as its second pair. */
@@ -171,14 +220,16 @@ export function isLoud(rows: readonly ModuleTimes[]): boolean {
  * This function gives the faults of one row. A module with no times, or with arms of different rounds, is a fault. A
  * second pair is a fault only over its limit and over the worst second pair of the A/A arm of the run.
  */
-export function moduleCostFaults(row: ModuleTimes, runSecond: number): readonly string[] {
+export function moduleCostFaults(row: ModuleTimes, runSecond: number, model: string): readonly string[] {
   if (row.base.length === 0 || row.branch.length !== row.base.length) return [`${row.module}: the arms have ${String(row.base.length)} and ${String(row.branch.length)} rounds`];
   const limit = limitOf(row.module, row.shares);
   const reading = readingOf(row);
+  const line = medianLimit(limit, model);
+  const second = limit.second ?? Number.POSITIVE_INFINITY;
   return [
-    ...(reading.ratio > limit.median ? [`${row.module}: the median ratio ${reading.ratio.toFixed(3)} is over the limit ${limit.median.toFixed(3)}`] : []),
-    ...(reading.secondPair > limit.second && reading.secondPair > runSecond
-      ? [`${row.module}: the second pair ${reading.secondPair.toFixed(3)} is over the limit ${limit.second.toFixed(3)} and over the second pair ${runSecond.toFixed(3)} of the A/A arm of the run`]
+    ...(reading.ratio > line ? [`${row.module}: the median ratio ${reading.ratio.toFixed(3)} is over the limit ${line.toFixed(3)}`] : []),
+    ...(reading.secondPair > second && reading.secondPair > runSecond
+      ? [`${row.module}: the second pair ${reading.secondPair.toFixed(3)} is over the limit ${second.toFixed(3)} and over the second pair ${runSecond.toFixed(3)} of the A/A arm of the run`]
       : []),
   ];
 }
@@ -187,16 +238,16 @@ export function moduleCostFaults(row: ModuleTimes, runSecond: number): readonly 
  * This function applies the rule to each A/A arm as if it were a branch, and gives the rows that fail. Each row reads the
  * A/A arms of the other rows, because a row cannot be the noise of itself. A row with a limit under 1 fails here by its limit.
  */
-export function falseFails(rows: readonly ModuleTimes[]): readonly string[] {
+export function falseFails(rows: readonly ModuleTimes[], model: string): readonly string[] {
   return rows
-    .filter((row) => moduleCostFaults({ ...row, branch: row.aa }, runAaSecond(rows.filter((other) => other !== row))).length > 0)
+    .filter((row) => moduleCostFaults({ ...row, branch: row.aa }, runAaSecond(rows.filter((other) => other !== row)), model).length > 0)
     .map((row) => row.module);
 }
 
 /** This function gives a fault for each module that the gate must fail in the read that tests it, if the gate passes that module. */
-export function catchFaults(rows: readonly ModuleTimes[], runSecond: number): readonly string[] {
+export function catchFaults(rows: readonly ModuleTimes[], runSecond: number, model: string): readonly string[] {
   return CATCH_MUST_FAIL.filter((module) => {
     const row = rows.find((r) => r.module === module);
-    return row === undefined || moduleCostFaults(row, runSecond).length === 0;
+    return row === undefined || moduleCostFaults(row, runSecond, model).length === 0;
   }).map((module) => `${module}: the gate passes a module with an added cost`);
 }

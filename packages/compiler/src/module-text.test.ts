@@ -223,6 +223,18 @@ describe("V-079: a text pass does not change a text of the program", () => {
     expect(decls.get("B")).toBe("const B = (x) => /catch {/.test(x) || /'/.test(x);");
   });
 
+  it("V-079 COMPILE.MODULE.FAULT: the two guards of a text pass decide which line goes to the tokenizer", () => {
+    const narrowed = (line: string): string => keepFaults({ decls: new Map(), lines: [line] }, new Set()).lines.join("");
+    // A line with no match does not go to the tokenizer, and this line stops the tokenizer.
+    expect(narrowed('"abc')).toBe('"abc');
+    // A line with no character that starts a text does not go to the tokenizer, and this line stops the tokenizer.
+    expect(narrowed("} catch { @")).toBe("} catch ($f) { FK($f); @");
+    // A line with a match goes on. The match in the text stays, and the match in the code changes.
+    expect(narrowed('f("catch {"); } catch { g(); }')).toBe('f("catch {"); } catch ($f) { FK($f); g(); }');
+    // A line with a match and no character that starts a text keeps its code too.
+    expect(narrowed("} catch {")).toBe("} catch ($f) { FK($f);");
+  });
+
   it.each(Object.keys(SHAPES) as (keyof typeof SHAPES)[])("V-079 COMPILE.MODULE.FAULT: a catch in a literal and in a key of the program %s reaches the pass", (name) => {
     const shape = SHAPES[name];
     expect(catchHits(shape("catch {"))).toBeGreaterThan(catchHits(shape("x")));

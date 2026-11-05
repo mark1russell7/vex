@@ -110,6 +110,11 @@ describe("the specification is executable", () => {
     expect(missing).toEqual([]);
   });
 
+  it("V-079, V-081, V-084, V-085 and V-088: a row that went to main with the status pending has the status test", () => {
+    const pending = [...read("spec/regressions.md").matchAll(/^\| (V-\d{3}) \| pending \|/gm)].map((m) => m[1]);
+    expect(pending.filter((id) => ["V-079", "V-081", "V-084", "V-085", "V-088"].includes(id ?? ""))).toEqual([]);
+  });
+
   it("V-021: @mark1russell7/vex imports no domain package and no legacy code", () => {
     const sources = files(join(repo, "packages", "core", "src"), (f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
     const bad = sources.filter((f) => /from\s+["']@vex\/(domains|legacy|testkit)["']/.test(readFileSync(f, "utf8"))).map((f) => relative(repo, f));

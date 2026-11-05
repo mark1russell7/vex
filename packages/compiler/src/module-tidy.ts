@@ -38,7 +38,6 @@ const TEXT_START = /["'`/]/;
 
 /** This function gives a line of code with spaces at the place of each text. Each other character keeps its offset. A line with no text needs no tokens. */
 function codeOf(line: string): string {
-  // Stryker disable next-line ConditionalExpression: the result is the same with no guard, and the guard saves the tokens.
   if (!TEXT_START.test(line)) return line;
   let out = "";
   let at = 0;
@@ -55,7 +54,6 @@ function codeOf(line: string): string {
  * keeps its characters. `find` must have the flag `g`. A line with no match needs no tokens.
  */
 function rewritten(line: string, find: RegExp, write: (match: RegExpExecArray) => string): string {
-  // Stryker disable next-line ConditionalExpression: the result is the same with no guard, and the guard saves the tokens.
   if (line.search(find) < 0) return line;
   let out = "";
   let at = 0;

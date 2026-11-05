@@ -7,6 +7,10 @@ on:
   # Each pull request starts this workflow, so its summary check is always there. The job changes skips the
   # work when the pull request changes no file of the gate (CI.md of the template, "A gate with paths").
   pull_request:
+  # Each week the job modules reads main once, with its catch. That read adds to the count of each model and to the
+  # record of the version of Node.js on each read. The other gates do not start: the nightly measures main each day.
+  schedule:
+    - cron: "41 5 * * 3"
   workflow_dispatch:
     inputs:
       reps:
@@ -54,7 +58,16 @@ jobs:
     # npm that they import (`GATE_NPM_PACKAGES` in `packages/testkit/src/gate-inputs.ts`).
     outputs:
       match: ${{ steps.changes.outputs.match == 'true' || steps.inputs.outputs.same == 'false' }}
+      module_gate: ${{ steps.module_gate.outputs.match }}
     steps:
+      # The catch of the job modules reads on a pull request that changes the files of that gate.
+      - id: module_gate
+        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
+        with:
+          paths: |
+            packages/core/bench/measure.ts
+            packages/pilots/bench/module-cost*.ts
+            .github/workflows/speed-gate.yml
       - id: changes
         uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
         with:
@@ -98,7 +111,7 @@ jobs:
 
   gates:
     needs: changes
-    if: needs.changes.outputs.match == 'true'
+    if: needs.changes.outputs.match == 'true' && github.event_name != 'schedule'
     name: Speed gates ${{ matrix.rep }}
     runs-on: ubuntu-latest
     # Each limit comes from at least 5 runs: the worst value times 1.1 (the fleet rule of 2026-10-30).
@@ -155,7 +168,7 @@ jobs:
   # the limits were read against. A fixed base also finds a cost that grows over many pull requests.
   modules:
     needs: changes
-    if: needs.changes.outputs.match == 'true' && !inputs.case
+    if: (needs.changes.outputs.match == 'true' || github.event_name == 'schedule') && !inputs.case
     name: Module cost ${{ matrix.rep }}
     runs-on: ubuntu-latest
     strategy:
@@ -192,8 +205,12 @@ jobs:
       - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --turn "$((REP - 1))" | tee module-cost.txt
         env:
           REP: ${{ matrix.rep }}
+      # This step holds the median clause of the rule. It does not hold the second pair clause: a cost in each round moves
+      # the median first. A pull request reads it only with a change of the gate, because a miss by noise must not block
+      # each pull request. A dispatch and the weekly run read it in each rep. At an added 15 %, 20 of 20 reads failed each
+      # module, and the smallest margin at these limits is 0.015. This step adds 20 %: docs/COMPILER.md has that count.
       - name: The gate fails a known cost
-        if: ${{ !cancelled() && matrix.rep == 1 }}
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.module_gate == 'true') }}
         run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch | tee -a module-cost.txt
       - if: ${{ !cancelled() }}
         run: |
@@ -201,9 +218,16 @@ jobs:
             echo "### The time of a print of each module (ratios against $BASE: lower is better)"
             echo
             echo '```'
-            grep -E "^(runner|order|ok|FAIL|undecided|UNDECIDED|false-fail|catch (order|ok|FAIL|fault|undecided|UNDECIDED))" module-cost.txt
+            grep -E "^(runner|order|ok|FAIL|undecided|UNDECIDED|false-fail|gain|catch (order|ok|FAIL|fault|undecided|UNDECIDED))" module-cost.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      # The reads of each model add up over weeks, so the record stays for the longest time that the repository gives.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: module-cost-${{ matrix.rep }}
+          path: module-cost.txt
+          retention-days: 90
 
   speed-gate-ok:
     name: Speed gate OK

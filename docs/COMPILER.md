@@ -238,13 +238,25 @@ The gate reads each module alone, with no average over the modules. A module has
 
 A read has no power if the worst second pair of its A/A arm is over the cap `AA_CAP`. Such a read prints `UNDECIDED`. It is not a pass, and it does not count. The gate takes another read, up to 3 reads, and it fails if no read decides.
 
-Each row has its own limits, with a cap of 1.25. A limit is the worst of the reads against the base, plus the spread of those reads, rounded up. These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. A limit from the cost of today holds the cost of today, and the reads do not prove 1.10 for each module.
+Each row has its own limits, with a cap of 1.25. A limit is the worst of 26 reads against the base, plus the spread of those reads, rounded up. These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. A limit from the cost of today holds the cost of today, and the reads do not prove 1.10 for each module.
 
 A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays. The row `build-no-avoid` leaves out `avoid`, because the total of `build` does not show that each module is cheap.
 
 Each read prints the first row of each round and the times of each row. It also prints the count of false fails: the rule on each A/A arm as a branch, against the A/A arms of the other rows. A row with a limit under 1 fails that count by its limit, so the line states those rows.
 
-The step `The gate fails a known cost` tests the gate on each pull request. The branch arm adds 15 % of work in `grid` and `shape`, and the step fails if the gate passes either module. The same read adds 6.3 % in `radial`, which reads near 1.11 on a limit of 1.12, and it prints that row as a record.
+These rows do not follow that rule:
+
+- The row `bounds` has the median limit 1.25, the cap. Its second pair only prints, because a margin of 0.001 under the cap fails by chance. The item BOUNDSCOST ends both.
+- The rows `label` and `obstacles` have a second pair limit on the cap.
+- The rows `build` and `avoid` have a limit under 1, so they hold a gain against the fixed commit 8ae233b.
+
+A limit under 1 holds the gain only on a CPU model of `GAIN_MODELS`. The median of the 5 reads on the model 9V45 is 0.946 on `build` and 0.916 on `avoid`. The median of each other model is at most 0.928 and 0.840. Those reads do not give a cause. So on 9V45 and on a model with no reads, the row uses a ceiling and prints `gain not read on this model, ceiling only`. A pass on such a model does not show that the gain holds. Each gain row also prints the fixed commit, the CPU model and the version of Node.js.
+
+The cap `AA_CAP` is 1.18: the third quartile of the 26 reads plus 3 times their interquartile range, rounded up. This formula came after those reads. The rule of the worst read plus the spread gave 1.577, and that value took in the loud read. So `AA_CAP` is a choice from the data, and later reads test it.
+
+The step `The gate fails a known cost` tests the gate. The branch arm adds 20 % of work in `grid` and `shape`, and the step fails if the gate passes either module. The same read adds 11 % in `radial`, which stays under its limit, and it prints that row as a record. The step holds the median clause, and it does not hold the second pair clause. A cost in each round moves the median first.
+
+A pull request reads this step only if it changes a file of the gate. A miss by noise must not block each pull request. A dispatch and the weekly run read it in each rep. At an added 15 %, the gate failed each module on 20 of 20 reads, and the smallest margin at these limits is 0.015. The count at an added 20 % comes from the reads of the head that merges this gate.
 
 #### The limit of the places of a program (COMPILE.PLACES)
 

@@ -39,6 +39,8 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | PLACESSPREAD | Find the cause of the spread of the rows of the places gate. | compiler | P3 | later | KEYSCOPE |
 | SHARE49 | Find the cause of the share job that stopped after 49 minutes on 11-04. The cause stays open. | compiler | P3 | later | KEYSCOPE |
 | BOUNDSCOST | Bring the print of each module over 1.10 of the base under 1.10 and remove its line in the gate, by 2026-11-12. Find the cause of the 1.5 ms of `bounds` outside `emitModule`. | compiler | P1 | in progress | KEYSCOPE |
+| MODELGAIN | Find why the gain of `build` and `avoid` does not read on the CPU model 9V45, by 2026-11-19. Compute the limits again at 20 reads of that model. | compiler | P2 | later | KEYSCOPE |
+| ROUNDCOST | Let the bench add a cost in chosen rounds, as the control of the second pair clause. | compiler | P2 | later | KEYSCOPE |
 | D12GAIN | Find why tier 2 of the base is faster at `shared plain d12` only, by 2026-11-12. Keep the gain on the branch if it is real. | compiler | P2 | later | KEYSCOPE |
 | GRADIENT | The derivative of a program against a variable, as a transform of the program. | core | P3 | later: #270 | |
 | DFSOP | A kernel op for a depth-first search, with the order of ties in the spec. | domains | P2 | later | |

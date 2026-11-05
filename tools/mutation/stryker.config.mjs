@@ -9,7 +9,9 @@ import { readdirSync } from "node:fs";
 const ALL = ["core", "domains", "testkit", "compiler"];
 const PARTS = ["core.kernel", "core.base", "compiler.module", "compiler.rest"];
 const packages = process.env.VEX_MUTATE?.split(",").filter((p) => p !== "") ?? ALL;
-const unknown = packages.filter((p) => !ALL.includes(p) && !PARTS.includes(p));
+// A part "domains.<file>" mutates one module of the domains, so that a dispatch can read one module alone.
+const DOMAIN_FILE = /^domains\.(\w+)$/;
+const unknown = packages.filter((p) => !ALL.includes(p) && !PARTS.includes(p) && !DOMAIN_FILE.test(p));
 if (unknown.length > 0) throw new Error(`VEX_MUTATE names a package that the lane does not have: ${unknown.join(", ")}`);
 
 // The modules of the kernel of coeval in the core (docs/REVIEW.md, decision D13). prepare.mjs copied the core to work/.
@@ -27,6 +29,8 @@ const coreFiles = (kernel) =>
     .map((f) => `work/core/${f}`);
 /** @type {(p: string) => string[]} */
 const filesOf = (p) => {
+  const domainFile = DOMAIN_FILE.exec(p)?.[1];
+  if (domainFile !== undefined) return [`work/domains/${domainFile}.ts`];
   if (p === "core.kernel" || p === "core.base") return coreFiles(p === "core.kernel");
   if (p === "compiler.module") return ["work/compiler/module.ts"];
   // A pattern with "!" removes files from all the patterns before it, so this part names its files one by one.
@@ -55,4 +59,7 @@ export default {
   jsonReporter: { fileName: "../../reports/mutation/mutation.json" },
   thresholds: { high: 98, low: 95, break: null },
   concurrency: 4,
+  // The clock limit of one mutant is the net time of the first run, times 1.5, plus this value. A static mutant loads each
+  // module again, and the net time leaves that out. A dispatch sets VEX_TIMEOUT_MS to read if the clock decides a mutant.
+  timeoutMS: Number(process.env.VEX_TIMEOUT_MS || 5000),
 };

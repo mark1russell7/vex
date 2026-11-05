@@ -12,6 +12,9 @@ on:
         description: The packages of the mutation lane, as a JSON list
         # The whole compiler takes more than the time-out of a job, so the lane has it in two parts.
         default: '["core.kernel", "core.base", "domains", "testkit", "compiler.module", "compiler.rest"]'
+      timeout_ms:
+        description: The added clock limit of one mutant in milliseconds. Empty keeps the default of the lane.
+        default: ""
 
 permissions: {}
 
@@ -79,6 +82,7 @@ jobs:
       - run: pnpm --filter @vex/mutation run mutation
         env:
           VEX_MUTATE: ${{ matrix.package }}
+          VEX_TIMEOUT_MS: ${{ inputs.timeout_ms }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

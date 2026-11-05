@@ -20,6 +20,8 @@ The job `mutation load check flip` of the nightly workflow shows that this check
 
 The test `V-090` of `mutation-lane.test.ts` runs in CI on each pull request. It fails when a copied file imports a package that the lane does not have.
 
+The test `V-091` of that file also runs in CI. It fails when the configuration of a package with tests in the copy has a setup file that is not in `SETUP_FILES` of `layout.ts`. A test of the lane must read what the same test reads in CI.
+
 ## The nightly job
 
 The nightly job has one runner for each package, and one runner for each part of the core. Each runner has a time limit of 150 minutes, and it keeps its report as the artifact `mutation-report-<package>`. On 2026-10-24, the kernel of coeval made the core run longer than 90 minutes on one runner, so the core got two parts.

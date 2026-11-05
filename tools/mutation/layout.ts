@@ -32,6 +32,12 @@ export const COPIES: readonly Copy[] = [
   { from: "packages/testkit/src", to: "testkit/src", tests: false },
 ];
 
+/**
+ * The setup files of the tests of the lane, as paths in `work/`. A test of the lane must read what the same test reads in
+ * CI. On 2026-11-05 the lane did not load `module-fault.setup.ts`, so each test of a module printed other code (V-091).
+ */
+export const SETUP_FILES: readonly string[] = ["testkit/fc-setup.ts", "compiler/module-fault.setup.ts"];
+
 /** A relative import or export of a module: `from "./x"`, `import "./x"` or `import("./x")`. */
 const IMPORT = /(?:\bfrom|\bimport\(?)\s*["'](\.{1,2}\/[^"']+)["']/gu;
 
@@ -89,6 +95,34 @@ export function missingPackages(root: string): string[] {
         const name = packageOf(m[1] ?? "");
         if (!name.startsWith("node:") && !has.has(name)) out.push(`${c.from}/${f.replaceAll("\\", "/")}: ${name}`);
       }
+    }
+  }
+  return out;
+}
+
+/** The name of the configuration of the tests of a package. */
+const CONFIG_FILE = "vitest.config.ts";
+
+/** The list of the setup files in the configuration of the tests of a package. */
+const SETUP_LIST = /setupFiles:\s*\[([^\]]*)\]/u;
+
+/** A path in quotes. */
+const QUOTED = /["']([^"']+)["']/gu;
+
+/**
+ * This function gives each setup file of a package with tests in the copy that the lane does not load, as
+ * `<configuration>: <path in work/>`. The setup files of the tests of a package hold for the lane too.
+ */
+export function missingSetups(root: string): string[] {
+  const out: string[] = [];
+  for (const c of COPIES.filter((copy) => copy.tests)) {
+    const folder = dirname(c.from);
+    const config = `${folder}/${CONFIG_FILE}`;
+    if (!existsSync(join(root, config))) continue;
+    const list = SETUP_LIST.exec(readFileSync(join(root, config), "utf8"))?.[1] ?? "";
+    for (const m of list.matchAll(QUOTED)) {
+      const file = relative(join(root, "packages"), resolve(root, folder, m[1] ?? "")).replaceAll("\\", "/").replace("/src/", "/");
+      if (!SETUP_FILES.includes(file)) out.push(`${config}: ${file}`);
     }
   }
   return out;

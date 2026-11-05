@@ -27,6 +27,10 @@ const CELLS = [
   ["cost-child.mjs", "module", "constant", "14", "json"],
   ["cost-child.mjs", "module", "plain", "14", "json"],
   ["ireko-child.mjs", "avoid"],
+  ["ireko-child.mjs", "bounds"],
+  ["ireko-child.mjs", "shape"],
+  ["ireko-child.mjs", "measure"],
+  ["ireko-child.mjs", "orthogonal"],
 ];
 
 const median = (xs) => {
@@ -148,7 +152,7 @@ function profiles(dir, cell) {
   };
   for (let round = 0; round < PROFILE_ROUNDS; round++) {
     const out = mkdtempSync(join(tmpdir(), "prof-"));
-    run(["--stack-size=4000", "--cpu-prof", `--cpu-prof-dir=${out}`, "--cpu-prof-interval=500", script(dir, cell[0]), ...cell.slice(1)]);
+    run(["--stack-size=4000", "--cpu-prof", `--cpu-prof-dir=${out}`, `--cpu-prof-interval=${cell[0] === "ireko-child.mjs" ? 100 : 500}`, script(dir, cell[0]), ...cell.slice(1)]);
     const one = read(join(out, readdirSync(out).find((f) => f.endsWith(".cpuprofile"))));
     add(self, one.self);
     add(inclusive, one.inclusive);

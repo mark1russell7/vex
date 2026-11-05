@@ -20,6 +20,7 @@ function repoRoot(): string {
 /** The part of `tools/mutation/layout.ts` that this test reads. */
 interface Layout {
   readonly unresolvedImports: (root: string) => readonly string[];
+  readonly missingPackages: (root: string) => readonly string[];
 }
 
 describe("the copy of the mutation lane", () => {
@@ -29,5 +30,13 @@ describe("the copy of the mutation lane", () => {
     const root = repoRoot();
     const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.ts")).href)) as Layout;
     expect(layout.unresolvedImports(root)).toEqual([]);
+  });
+
+  // The printer imports `acorn` and `astring`, and on 2026-11-05 the lane did not have these packages. Each test file of the printer
+  // did not load, so the lane read 69.13 %, and that figure was no reading.
+  it("V-090: each import of a package by a file of the copy finds a package of the lane", async () => {
+    const root = repoRoot();
+    const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.ts")).href)) as Layout;
+    expect(layout.missingPackages(root)).toEqual([]);
   });
 });

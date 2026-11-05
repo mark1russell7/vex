@@ -60,3 +60,36 @@ export function unresolvedImports(root: string): string[] {
   }
   return out;
 }
+
+/** A package that an alias of `vitest.config.ts` gives to the lane. */
+const ALIASED = new Set(["@mark1russell7/vex"]);
+
+/** An import of a value from a package. An import of a type goes away, and it needs no package at the load. */
+const PACKAGE_IMPORT = /^(?:import|export)\s+(?!type\b)(?:[^"';]*?\sfrom\s+)?["']([^."'][^"']*)["']/gmu;
+
+/** This function gives the name of the package of an import: `a/b` is `a`, and `@a/b/c` is `@a/b`. */
+const packageOf = (specifier: string): string => specifier.split("/").slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
+
+/**
+ * This function gives each import of a package by a file of a published package that the lane does not have, as
+ * `<file>: <package>`. The lane has the packages of `tools/mutation/package.json`, the built-in modules of Node.js and
+ * the aliases. A test loads only some files of the other copies, so `load-check.ts` reads those files.
+ */
+export function missingPackages(root: string): string[] {
+  const lane = JSON.parse(readFileSync(join(root, "tools", "mutation", "package.json"), "utf8")) as {
+    readonly dependencies: Readonly<Record<string, string>>;
+    readonly devDependencies: Readonly<Record<string, string>>;
+  };
+  const has = new Set([...Object.keys(lane.dependencies), ...Object.keys(lane.devDependencies), ...ALIASED]);
+  const out: string[] = [];
+  for (const c of COPIES.filter((copy) => copy.tests)) {
+    const files = readdirSync(join(root, c.from), { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
+    for (const f of files) {
+      for (const m of readFileSync(join(root, c.from, f), "utf8").matchAll(PACKAGE_IMPORT)) {
+        const name = packageOf(m[1] ?? "");
+        if (!name.startsWith("node:") && !has.has(name)) out.push(`${c.from}/${f.replaceAll("\\", "/")}: ${name}`);
+      }
+    }
+  }
+  return out;
+}

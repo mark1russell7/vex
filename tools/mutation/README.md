@@ -12,6 +12,14 @@ Two packages have parts, so that each runner stays in its time limit of 150 minu
 
 The core has two parts: `core.kernel` and `core.base`. `core.kernel` is the modules of the kernel of coeval: `kernel.ts`, `plan.ts`, `same.ts`, `document.ts`, `deps.ts` and `write.ts`. `core.base` is the other modules. Each part gets the gate of 95 %, so the core gets it too. `core` names the two parts in one run.
 
+## The load check
+
+A test file that does not load gives no failed test. Stryker then reports a score, or it stops with `No tests were executed`. The script `load-check.ts` collects each test file of the copy before Stryker starts. A file that does not load, or that holds no test, fails the lane with the words `No read`.
+
+The job `mutation load check flip` of the nightly workflow shows that this check can fail. An added file with a missing package fails the check, and the same copy without that file passes.
+
+The test `V-090` of `mutation-lane.test.ts` runs in CI on each pull request. It fails when a copied file imports a package that the lane does not have.
+
 ## The nightly job
 
 The nightly job has one runner for each package, and one runner for each part of the core. Each runner has a time limit of 150 minutes, and it keeps its report as the artifact `mutation-report-<package>`. On 2026-10-24, the kernel of coeval made the core run longer than 90 minutes on one runner, so the core got two parts.

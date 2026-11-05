@@ -1,5 +1,5 @@
 # Throwaway measure of a draft pull request: where the compile time of a program with no shared object goes, and the compile of the modules of ireko.
-# Tree 4e3c1af.
+# Tree 5184b0e.
 name: keyscope attrib
 on:
   push:

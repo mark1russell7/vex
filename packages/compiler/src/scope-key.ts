@@ -116,13 +116,26 @@ export class KeyTable {
   }
 }
 
+/** The text of -0 in a key. JSON gives 0 for -0, and -0 is not 0. */
+const NEGATIVE_ZERO = { "-0": 0 };
+
 /**
  * This function gives a text that is the same for two expressions with the same structure. -0 is not 0. A part with a
  * token gives the token, so the text does not depend on that part. A token is an object, and a literal of a module is
  * not, so a token is not the text of a literal.
  */
 export function canonical(e: Expr, token: (x: unknown) => object | undefined): string {
-  return JSON.stringify(e, (_name, x: unknown) => token(x) ?? (Object.is(x, -0) ? { "-0": 0 } : x));
+  return JSON.stringify(e, (_name, x: unknown) => token(x) ?? (Object.is(x, -0) ? NEGATIVE_ZERO : x));
+}
+
+/** The token function of a text with no tokens. */
+const NO_TOKEN = (): undefined => undefined;
+
+/** This function gives the text of a literal or of an extension. Only those parts hold data of the program, and a walk of that data finds each -0. */
+function leafText(e: ExprOf<"lit"> | ExprOf<"ext">): string {
+  // Stryker disable next-line ConditionalExpression: a walk gives the same text as the plain form, so this test only saves the walk.
+  if (e.tag === "lit" && typeof e.value !== "object" && !Object.is(e.value, -0)) return JSON.stringify(e);
+  return canonical(e, NO_TOKEN);
 }
 
 /** This function gives the result of a part that sees more names of a kind, and keeps the reads of that part with those names. */
@@ -135,13 +148,16 @@ function within<T>(at: At, kind: Bound["kind"], names: readonly string[], part: 
 
 /** This function gives the key data of an object that is not an expression, for example an axis or a record of names. */
 function record(x: object, at: At): unknown {
-  return Object.fromEntries(Object.entries(x).map(([name, part]) => [name, data(part, at)]));
+  // A copy keeps each own property, also a property with the name `__proto__`.
+  const out: Record<string, unknown> = { ...x };
+  for (const name of Object.keys(out)) out[name] = data(out[name], at);
+  return out;
 }
 
 /** This function gives the key data of a part of an expression. An array or a record keeps its form, and an expression gets its key data. */
 function data(x: unknown, at: At): unknown {
   if (Array.isArray(x)) return x.map((part) => data(part, at));
-  if (typeof x !== "object" || x === null) return x;
+  if (typeof x !== "object" || x === null) return Object.is(x, -0) ? NEGATIVE_ZERO : x;
   return typeof (x as { tag?: unknown }).tag === "string" ? node(x as Expr, at) : record(x, at);
 }
 
@@ -164,12 +180,12 @@ function loop(e: ExprOf<"fold"> | ExprOf<"iterate">, at: At): unknown {
   return { ...e, ...outer, init, ...inner };
 }
 
-/** This function gives the key data of the parts of an expression. The scope of each form is the scope of the interpreter. */
-function parts(e: Expr, at: At): unknown {
+/**
+ * This function gives the key data of the parts of an expression. The scope of each form is the scope of the interpreter.
+ * Each number of an expression goes through `data`, so the plain text of this result keeps each -0.
+ */
+function parts(e: Exclude<Expr, ExprOf<"lit"> | ExprOf<"ext">>, at: At): unknown {
   switch (e.tag) {
-    case "lit":
-    case "ext":
-      return e;
     case "var":
     case "last":
       return hole(e.tag, e.name, at);
@@ -197,7 +213,7 @@ function parts(e: Expr, at: At): unknown {
 /** This function gives the form of an expression from its walk. */
 function formOf(e: Expr, forms: Forms): Form {
   const own: At = { forms, reads: [] };
-  const structure = { "#": forms.table.numberOf(canonical(parts(e, own) as Expr, () => undefined)) };
+  const structure = { "#": forms.table.numberOf(e.tag === "lit" || e.tag === "ext" ? leafText(e) : JSON.stringify(parts(e, own))) };
   const [first, ...more] = own.reads;
   return { data: structure, reads: more.length === 0 ? first : { kind: "names", names: [], parts: own.reads } };
 }
@@ -206,8 +222,11 @@ function formOf(e: Expr, forms: Forms): Form {
 function node(e: Expr, at: At): unknown {
   const key = at.forms.keys.get(e);
   if (key !== undefined) return { "@": key.code };
-  const form = at.forms.known.get(e) ?? formOf(e, at.forms);
-  at.forms.known.set(e, form);
+  let form = at.forms.known.get(e);
+  if (form === undefined) {
+    form = formOf(e, at.forms);
+    at.forms.known.set(e, form);
+  }
   if (form.reads !== undefined) at.reads.push(form.reads);
   return form.data;
 }

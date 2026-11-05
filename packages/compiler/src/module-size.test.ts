@@ -327,6 +327,9 @@ describe("COMPILE.MODULE.SIZE.DEAD: code that no code reads", () => {
   it("COMPILE.MODULE.SIZE.DEAD: the pass removes a constant in each form, also through a chain of reads", () => {
     const t = "  const c1 = T(() => f());";
     expect(deadConstants([t, "  use(1);"])).toStrictEqual(["  use(1);"]);
+    // The end of a line and the start of the next line are two words.
+    expect(deadConstants(["  const c1 = [];", "x", "c1"])).toStrictEqual(["  const c1 = [];", "x", "c1"]);
+    expect(deadConstants(["  const c1 = [];", "c1", "x"])).toStrictEqual(["  const c1 = [];", "c1", "x"]);
     expect(deadConstants(["  const c1 = [];", "  use(1);"])).toStrictEqual(["  use(1);"]);
     expect(deadConstants([...cell("c1", "1"), "  use(1);"])).toStrictEqual(["  use(1);"]);
     expect(deadConstants(["  const c1 = L(() => {", "    const x = 1;", "    return x;", "  });", "  use(1);"])).toStrictEqual(["  use(1);"]);

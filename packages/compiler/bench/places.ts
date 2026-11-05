@@ -4,6 +4,9 @@
 //
 //   node bench/places.ts limit            prints the limit
 //   node bench/places.ts rows <limit>     measures the largest program of each shape, and 2 and 4 times its places
+//
+// The setting PLACES_FAULT gives each child more memory than the line of a row. The workflow reads the gate with it, so the
+// gate must fail on the measure (rule 8i).
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { Expr } from "@mark1russell7/vex";
@@ -27,13 +30,18 @@ function programOf(shape: string, depth: number): Expr {
   return make(depth);
 }
 
+/** The size of the fault in MB: it is over the line of 1,024 MB of a row. */
+const FAULT_MB = 1100;
+
 /** This function compiles one program, and it prints its record. */
 function child(mode: string, shape: string, depth: number): void {
+  // The fill touches each page, so the memory counts in the peak of the process.
+  const fault = process.env["PLACES_FAULT"] === undefined ? undefined : Buffer.alloc(FAULT_MB * 1024 * 1024, 1);
   const e = programOf(shape, depth);
   const start = performance.now();
   const r = mode === "module" ? emitModule(e, OPTIONS) : generate(e, OPTIONS);
   const ms = Math.round(performance.now() - start);
-  console.info(JSON.stringify({ ok: r.ok, ms, bytes: r.ok ? r.source.length : undefined, rssMB: Math.round(process.resourceUsage().maxRSS / 1024) }));
+  console.info(JSON.stringify({ ok: r.ok, ms, bytes: r.ok ? r.source.length : undefined, rssMB: Math.round(process.resourceUsage().maxRSS / 1024), fault: fault?.length }));
 }
 
 /** This function gives the row of one process, and it prints a line with the facts of the process. */

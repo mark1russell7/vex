@@ -4,13 +4,38 @@ The lane runs Stryker on the four published packages: `@mark1russell7/vex` (`cor
 
 ## The gate
 
-Each package must have a mutation score of 95 % or more. Stryker has one threshold for all files, so its own break is off. The script `scores.mjs` gives the score of each package, and it fails when a package is under 95 %.
+Each package must have a mutation score of 95 % or more. Stryker has one threshold for all files, so its own break is off. The script `lane-read.ts --gate` reads the reports of all parts of a full run and applies the line to each package.
 
-The variable `VEX_MUTATE` names the packages of a run, for example `compiler` or `core,domains`. Without it, a run mutates the four packages. Then `scores.mjs` applies the gate to the packages of the run only.
+- The score of the gate counts a time-out of the clock as not found. Each line also prints the score that counts it as found. It prints the stopped mutants, the hit limit and the disabled mutants, for each package and each file.
+- A part with no report is no read. A no read fails the gate, because a cancelled job gives no report.
+- `lane-read.ts --flip` shows that the gate can fail. A part with a score fall and a part with no report fail, and a clean copy passes. The weekly job starts it before the gate, and `gate-flip.yml` starts it for a change of the script.
 
-Two packages have parts, so that each runner stays in its time limit of 150 minutes. The core has `core.kernel` and `core.base`. The compiler has `compiler.module` (the file `module.ts`) and `compiler.rest` (the other files). The nightly job runs each part on its own runner, and each part must get 95 % or more.
+## The parts
 
-The core has two parts: `core.kernel` and `core.base`. `core.kernel` is the modules of the kernel of coeval: `kernel.ts`, `plan.ts`, `same.ts`, `document.ts`, `deps.ts` and `write.ts`. `core.base` is the other modules. Each part gets the gate of 95 %, so the core gets it too. `core` names the two parts in one run.
+Each job has one part, so that each job stays in its time limit of 150 minutes. The maximum of 3 jobs at one time holds over all parts of a run, because all parts are one matrix.
+
+| Part | Files |
+|---|---|
+| `core.kernel` | The modules of the kernel of coeval: `kernel.ts`, `plan.ts`, `same.ts`, `document.ts`, `deps.ts` and `write.ts` |
+| `core.base.1` to `core.base.4` | The other modules of the core, by size |
+| `domains.1` to `domains.3` | The modules of the domains, by size |
+| `testkit` | The test kit |
+| `compiler.module.1` and `compiler.module.2` | `module.ts`, by lines, with each end at the end of a method |
+| `compiler.rest.1` to `compiler.rest.4` | The other modules of the compiler, by size |
+
+`layout.ts` gives the parts. The variable `VEX_MUTATE` names the packages or the parts of a run. It also takes a whole group, for example `core.base`, or one module of the domains, for example `domains.schema`.
+
+The clock limit of one mutant is the net time of the first run, times 1.5, plus 120 s. `coverageAnalysis` is `perTest` on each part. Thus only a static mutant starts all tests. The lane does not ignore static mutants, because a survivor in a static mutant is a real survivor.
+
+## The weekly run and the nights
+
+The workflow `mutation-weekly.yml` reads each part on Saturday and holds the gate. The role `vex` reads a red run: `schedule-watch` of the fleet gives it to the row of that role.
+
+The nightly job reads only the files that changed on the main line in the last 25 hours. A changed test file also selects the source file of the same name. The nightly job is report only by design. It prints the score, the time-outs and the survivors of each file, and a score fails nothing.
+
+A survivor in a changed file shows on the next night. A fault with no change in its own file shows at the next weekly run, at most 7 days later (`LANE.DELAY`). A weaker test with another name is an example. A page with a score states the date of its run, and a score older than 7 days reads stale.
+
+A dispatch of `nightly.yml` can name parts in the input `packages`. A dispatch of `mutation-weekly.yml` reads each part.
 
 ## The load check
 
@@ -21,10 +46,6 @@ The job `mutation load check flip` of the nightly workflow shows that this check
 The test `V-090` of `mutation-lane.test.ts` runs in CI on each pull request. It fails when a copied file imports a package that the lane does not have.
 
 The test `V-091` of that file also runs in CI. It fails when the configuration of a package with tests in the copy has a setup file that is not in `SETUP_FILES` of `layout.ts`. A test of the lane must read what the same test reads in CI.
-
-## The nightly job
-
-The nightly job has one runner for each package, and one runner for each part of the core. Each runner has a time limit of 150 minutes, and it keeps its report as the artifact `mutation-report-<package>`. On 2026-10-24, the kernel of coeval made the core run longer than 90 minutes on one runner, so the core got two parts.
 
 ## Type checks
 
@@ -57,7 +78,7 @@ This machine has little memory, so a local run mutates one package at a time, wi
 cd tools/mutation
 node prepare.mjs
 VEX_MUTATE=domains npx stryker run stryker.config.mjs --concurrency 2
-node scores.mjs
+node lane-read.ts
 ```
 
 ## The disabled mutants

@@ -26,7 +26,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
 | NIGHTLY1103 | The Nightly is green again. A test file that does not load fails the lane, and the lane loads each setup file of a package (V-090, V-091). | quality | P1 | in progress: #293 | |
-| LANETIME | Each part of the lane finishes in its time limit. A time-out of the clock under load is no read. The report prints stopped mutants and time-outs apart. By 2026-11-12. | quality | P1 | in progress | |
+| LANETIME | Each part of the lane finishes in its time limit. The weekly run reads each part and holds the gate, and the nights read the changed files. The first full read is due by 2026-11-12. | quality | P1 | in progress | |
 | GATEFLIP | A flip test for each gate of a measure: an added fault fails the check, and a clean copy passes in the same job. By 2026-11-12. | quality | P1 | in progress: the speed gates of the core and the compiler are merged | |
 
 ## Next

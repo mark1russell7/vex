@@ -3,7 +3,7 @@
 // reports no test of the file, and Stryker sees no failed test, so each mutant that the file kills survives. On
 // 2026-11-03, three test files of the compiler imported "../../testkit/src/fc-timeout.ts", and the score of module.ts
 // fell to 93.34 % (V-072). Thus the function unresolvedImports finds each relative import that the copy breaks.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /** A copy of the lane. */
@@ -143,4 +143,156 @@ export function missingSetups(root: string): string[] {
     }
   }
   return out;
+}
+
+/** The four published packages of the lane. */
+export const PACKAGES: readonly string[] = ["core", "domains", "testkit", "compiler"];
+
+/** The modules of the kernel of coeval in the core (docs/REVIEW.md, decision D13). */
+const KERNEL: ReadonlySet<string> = new Set(["kernel.ts", "plan.ts", "same.ts", "document.ts", "deps.ts", "write.ts"]);
+
+/** The file that has its own parts, by lines: the printer of the standalone modules. */
+const MODULE_FILE = "module.ts";
+
+/** The files of the packages that hold no code of a package, as paths of a package folder. */
+const NOT_MUTATED: ReadonlySet<string> = new Set(["core/test-support.ts", "testkit/fc-setup.ts", "testkit/arbitraries.ts", "testkit/builder-model-arbitraries.ts", "testkit/sheet-arbitraries.ts"]);
+
+/**
+ * The count of the parts of each group of files that one runner does not finish in its time limit of 150 minutes. The count
+ * of a group holds a slowest part of 2 times its share under that limit. A dispatch can still name the group as one part.
+ */
+const PART_COUNTS: Readonly<Record<string, number>> = { "core.base": 4, domains: 3, "compiler.module": 2, "compiler.rest": 4 };
+
+/** A part with a number: `core.base.2`. */
+const NUMBERED = /^(.+)\.(\d+)$/u;
+
+/** A part that names one module of the domains, so that a dispatch can read that module alone. */
+const DOMAIN_FILE = /^domains\.([a-z][\w-]*)$/u;
+
+/** The closing line of a method of a class, or of a function at the top of a file. */
+const CLOSING_LINE = /^ {0,2}\}$/u;
+
+/** This function gives the numbered parts of a group. */
+function numbered(group: string): string[] {
+  return Array.from({ length: PART_COUNTS[group] ?? 0 }, (_unused, index) => `${group}.${index + 1}`);
+}
+
+/** This function gives each part of a full run of the lane, in the order of the jobs. */
+export function laneParts(): string[] {
+  return ["core.kernel", ...numbered("core.base"), ...numbered("domains"), "testkit", ...numbered("compiler.module"), ...numbered("compiler.rest")];
+}
+
+/** This function gives the package of a part: `core.base.2` is `core`. */
+export function packageOfPart(part: string): string {
+  return part.split(".")[0] ?? part;
+}
+
+/** This function gives the source files of a package that the lane mutates, as paths of its package folder. */
+function sourceFiles(root: string, name: string): string[] {
+  return readdirSync(join(root, "packages", name, "src"), { recursive: true, encoding: "utf8" })
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => file.endsWith(".ts") && !isTest(file) && file !== "index.ts" && !NOT_MUTATED.has(`${name}/${file}`))
+    .toSorted();
+}
+
+/**
+ * This function puts files into `count` parts of near the same size. It takes the largest file first and gives each file
+ * to the smallest part. Each input gives one result, so the plan and each job of a run read the same parts.
+ */
+export function splitBySize(files: readonly { readonly path: string; readonly size: number }[], count: number): string[][] {
+  const parts = Array.from({ length: count }, () => ({ size: 0, files: [] as string[] }));
+  const largestFirst = files.toSorted((a, b) => b.size - a.size || a.path.localeCompare(b.path));
+  for (const file of largestFirst) {
+    const smallest = parts.reduce((best, part) => (part.size < best.size ? part : best));
+    smallest.size += file.size;
+    smallest.files.push(file.path);
+  }
+  return parts.map((part) => part.files.toSorted());
+}
+
+/**
+ * This function gives the last line of each part of a text but the last, and the count of its lines. The end of a part is
+ * the closing line of a method near its share of the lines. A mutant of the body of a method thus stays in one part.
+ */
+export function partEnds(text: string, count: number): { readonly ends: number[]; readonly lines: number } {
+  const lines = text.split(/\r?\n/u);
+  const ends: number[] = [];
+  for (let part = 1; part < count; part += 1) {
+    const target = Math.round((part * lines.length) / count);
+    let found: number | undefined;
+    for (let away = 0; away < lines.length && found === undefined; away += 1) {
+      if (CLOSING_LINE.test(lines[target + away] ?? "")) found = target + away;
+      else if (CLOSING_LINE.test(lines[target - away] ?? "")) found = target - away;
+    }
+    if (found === undefined) throw new Error("The text has no closing line for the end of a part.");
+    ends.push(found + 1);
+  }
+  return { ends, lines: lines.length };
+}
+
+/** This function gives the paths of the lane of files of a package. */
+function inWork(name: string, files: readonly string[]): string[] {
+  return files.map((file) => `work/${name}/${file}`);
+}
+
+/** This function gives the files of a group of files, as paths of the lane. */
+function groupFiles(root: string, group: string): string[] {
+  if (PACKAGES.includes(group)) return inWork(group, sourceFiles(root, group));
+  if (group === "core.kernel") return inWork("core", sourceFiles(root, "core").filter((file) => KERNEL.has(file)));
+  if (group === "core.base") return inWork("core", sourceFiles(root, "core").filter((file) => !KERNEL.has(file)));
+  if (group === "compiler.module") return inWork("compiler", [MODULE_FILE]);
+  if (group === "compiler.rest") return inWork("compiler", sourceFiles(root, "compiler").filter((file) => file !== MODULE_FILE));
+  throw new Error(`The lane does not have the part ${group}.`);
+}
+
+/** This function gives the path in the repository of a path of the lane. */
+function sourcePath(root: string, path: string): string {
+  const [, name, file] = /^work\/([^/]+)\/(.+)$/u.exec(path) ?? [];
+  return join(root, "packages", name ?? "", "src", file ?? "");
+}
+
+/**
+ * This function gives the entries of the option `mutate` of Stryker for a part. A part is a package, a group, a numbered
+ * part of a group, or one module of the domains. An entry is a path of the lane. A part of `module.ts` adds a range of lines.
+ */
+export function mutateOf(root: string, part: string): string[] {
+  const [, group, number] = NUMBERED.exec(part) ?? [];
+  if (group !== undefined && number !== undefined) {
+    const count = PART_COUNTS[group];
+    const index = Number(number) - 1;
+    if (count === undefined || index < 0 || index >= count) throw new Error(`The lane does not have the part ${part}.`);
+    if (group === "compiler.module") {
+      const file = `work/compiler/${MODULE_FILE}`;
+      const { ends, lines } = partEnds(readFileSync(sourcePath(root, file), "utf8"), count);
+      return [`${file}:${(ends[index - 1] ?? 0) + 1}-${ends[index] ?? lines}`];
+    }
+    const sized = groupFiles(root, group).map((path) => ({ path, size: statSync(sourcePath(root, path)).size }));
+    return splitBySize(sized, count)[index] ?? [];
+  }
+  const domainFile = DOMAIN_FILE.exec(part)?.[1];
+  if (domainFile !== undefined) return [`work/domains/${domainFile}.ts`];
+  return groupFiles(root, part);
+}
+
+/** This function gives the path of the lane that a changed file of the repository selects, if it selects one. */
+function selectedBy(path: string): string | undefined {
+  const copy = COPIES.find((c) => c.tests && path.startsWith(`${c.from}/`));
+  if (copy === undefined) return undefined;
+  return `${copy.to}/${path.slice(copy.from.length + 1).replace(/\.test\.ts$/u, ".ts")}`;
+}
+
+/** This function keeps the entries of `mutate` whose file is in `files`. An entry can have a range of lines. */
+export function entriesIn(entries: readonly string[], files: readonly string[]): string[] {
+  return entries.filter((entry) => files.includes(entry.split(":")[0] ?? entry));
+}
+
+/**
+ * This function gives the parts and the files of a run over the changed files of the repository. A changed test file also
+ * selects the source file of the same name. A file with no such link waits for the next full run.
+ */
+export function changedParts(root: string, changed: readonly string[]): { readonly parts: string[]; readonly files: string[] } {
+  const selected = [...new Set(changed.map(selectedBy))].filter((file) => file !== undefined);
+  const parts = laneParts().filter((part) => entriesIn(mutateOf(root, part), selected).length > 0);
+  const known = new Set(parts.flatMap((part) => entriesIn(mutateOf(root, part), selected)).map((entry) => entry.split(":")[0] ?? entry));
+  return { parts, files: selected.filter((file) => known.has(file)).toSorted() };
 }

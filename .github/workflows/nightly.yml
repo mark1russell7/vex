@@ -1,7 +1,8 @@
 name: Nightly
 
-# The slow checks (docs/REVIEW.md §8.2 and §9.1): 10000 runs of each property, the mutation lane, the speed lane,
-# the next TypeScript and the links of the docs. Each job keeps its report as an artifact.
+# The slow checks (docs/REVIEW.md §8.2 and §9.1): 10000 runs of each property, the mutation lane on the changed files, the
+# speed lane, the next TypeScript and the links of the docs. Each job keeps its report as an artifact. The mutation jobs of
+# this workflow are report only by design: mutation-weekly.yml reads each file and holds the gate (LANE.DELAY).
 on:
   schedule:
     # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
@@ -9,9 +10,8 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: The packages of the mutation lane, as a JSON list
-        # The whole compiler takes more than the time-out of a job, so the lane has it in two parts.
-        default: '["core.kernel", "core.base", "domains", "testkit", "compiler.module", "compiler.rest"]'
+        description: The parts of the mutation lane, as a JSON list. Empty reads the files that changed in the last 25 hours.
+        default: ""
       timeout_ms:
         description: The added clock limit of one mutant in milliseconds. Empty keeps the default of the lane.
         default: ""
@@ -68,14 +68,39 @@ jobs:
       - run: node prepare.mjs && node load-check.ts --flip
         working-directory: tools/mutation
 
-  mutation:
-    name: mutation (${{ matrix.package }})
+  lane-plan:
+    name: mutation plan
     # The lane starts after the other jobs, so the workflow holds at most 3 runner slots (max-parallel below).
     needs: [properties, bench, typescript-next, links]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    # The lane mutates the four published packages, one package or one part of the core or the compiler on each
-    # runner (tools/mutation/stryker.config.mjs).
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+      changed: ${{ steps.plan.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The plan reads the commits of the last 25 hours.
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - run: node scripts/workflow-gate.ts
+      - id: plan
+        run: node tools/mutation/plan.ts
+        env:
+          VEX_PARTS: ${{ inputs.packages }}
+
+  mutation:
+    name: mutation (${{ matrix.package }})
+    needs: lane-plan
+    if: ${{ !cancelled() && needs.lane-plan.outputs.parts != '[]' && needs.lane-plan.outputs.parts != '' }}
+    runs-on: ubuntu-latest
+    # Each job has one part of the lane (tools/mutation/layout.ts).
     timeout-minutes: 150
     permissions:
       contents: read
@@ -84,7 +109,7 @@ jobs:
       # At most 3 jobs of the matrix at one time, so the gates and the releases of the fleet keep their slots.
       max-parallel: 3
       matrix:
-        package: ${{ fromJSON(inputs.packages || '["core.kernel", "core.base", "domains", "testkit", "compiler.module", "compiler.rest"]') }}
+        package: ${{ fromJSON(needs.lane-plan.outputs.parts) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,22 +120,11 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: node scripts/workflow-gate.ts
-      - run: pnpm install --frozen-lockfile
-      # Stryker with Vitest 4.1, in tools/mutation, until Stryker supports Vitest 5
-      # The number of the disabled mutants of each file. A new disable must also go into tools/mutation/disables.json.
-      - name: The disabled mutants
-        shell: bash
-        run: node tools/mutation/disables.mjs | tee -a "$GITHUB_STEP_SUMMARY"
-      - run: pnpm --filter @vex/mutation run mutation
-        env:
-          VEX_MUTATE: ${{ matrix.package }}
-          VEX_TIMEOUT_MS: ${{ inputs.timeout_ms }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
+      - uses: ./.github/actions/mutation-part
         with:
-          name: mutation-report-${{ matrix.package }}
-          path: reports/mutation/
-          if-no-files-found: ignore
+          part: ${{ matrix.package }}
+          changed: ${{ needs.lane-plan.outputs.changed }}
+          timeout-ms: ${{ inputs.timeout_ms }}
 
   bench:
     name: speed

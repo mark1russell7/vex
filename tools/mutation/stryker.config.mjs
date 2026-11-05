@@ -1,57 +1,20 @@
-// The configuration of Stryker for the lane. The variable VEX_MUTATE names the packages to mutate, for example
-// "compiler" or "core,domains". Without it, the lane mutates the four published packages. The nightly job runs one
-// package on each runner, so that each run stays in its time limit. The core has two parts for two runners:
-// "core.kernel" (the modules of the kernel of coeval) and "core.base" (the other modules). "core" is the two parts.
-// The compiler also has two parts: "compiler.module" (module.ts, the printer of the standalone modules) and
-// "compiler.rest" (the other modules). On 2026-10-29 the whole compiler took more than 150 minutes on one runner.
-import { readdirSync } from "node:fs";
+// The configuration of Stryker for the lane. The variable VEX_MUTATE names the packages or the parts to mutate, for
+// example "compiler" or "core.base.2". Without it, the lane mutates the four published packages. Each job of the lane has
+// one part, so that each job stays in its time limit (layout.ts has the parts, tools/mutation/README.md has the reason).
+// The variable VEX_CHANGED names the paths of the lane to read, with commas. A night reads only the changed files.
+import { fileURLToPath } from "node:url";
+import { entriesIn, mutateOf, PACKAGES } from "./layout.ts";
 
-const ALL = ["core", "domains", "testkit", "compiler"];
-const PARTS = ["core.kernel", "core.base", "compiler.module", "compiler.rest"];
-const packages = process.env.VEX_MUTATE?.split(",").filter((p) => p !== "") ?? ALL;
-// A part "domains.<file>" mutates one module of the domains, so that a dispatch can read one module alone.
-const DOMAIN_FILE = /^domains\.(\w+)$/;
-const unknown = packages.filter((p) => !ALL.includes(p) && !PARTS.includes(p) && !DOMAIN_FILE.test(p));
-if (unknown.length > 0) throw new Error(`VEX_MUTATE names a package that the lane does not have: ${unknown.join(", ")}`);
-
-// The modules of the kernel of coeval in the core (docs/REVIEW.md, decision D13). prepare.mjs copied the core to work/.
-const KERNEL = new Set(["kernel.ts", "plan.ts", "same.ts", "document.ts", "deps.ts", "write.ts"]);
-/** @type {() => string[]} */
-const compilerFiles = () =>
-  readdirSync(new URL("./work/compiler/", import.meta.url), { recursive: true })
-    .map((f) => String(f).replaceAll("\\", "/"))
-    .filter((f) => f.endsWith(".ts"))
-    .map((f) => `work/compiler/${f}`);
-/** @type {(kernel: boolean) => string[]} */
-const coreFiles = (kernel) =>
-  readdirSync(new URL("./work/core/", import.meta.url))
-    .filter((f) => f.endsWith(".ts") && KERNEL.has(f) === kernel)
-    .map((f) => `work/core/${f}`);
-/** @type {(p: string) => string[]} */
-const filesOf = (p) => {
-  const domainFile = DOMAIN_FILE.exec(p)?.[1];
-  if (domainFile !== undefined) return [`work/domains/${domainFile}.ts`];
-  if (p === "core.kernel" || p === "core.base") return coreFiles(p === "core.kernel");
-  if (p === "compiler.module") return ["work/compiler/module.ts"];
-  // A pattern with "!" removes files from all the patterns before it, so this part names its files one by one.
-  if (p === "compiler.rest") return compilerFiles().filter((f) => f !== "work/compiler/module.ts");
-  return [`work/${p}/**/*.ts`];
-};
+const root = fileURLToPath(new URL("../../", import.meta.url));
+const parts = process.env.VEX_MUTATE?.split(",").filter((p) => p !== "") ?? PACKAGES;
+const changed = process.env.VEX_CHANGED?.split(",").filter((p) => p !== "") ?? [];
+const entries = parts.flatMap((p) => mutateOf(root, p));
 
 export default {
   testRunner: "vitest",
   vitest: { configFile: "vitest.config.ts" },
   plugins: ["@stryker-mutator/vitest-runner"],
-  mutate: [
-    ...packages.flatMap(filesOf),
-    "!work/**/*.test.ts",
-    "!work/core/test-support.ts",
-    "!work/*/index.ts",
-    "!work/testkit/fc-setup.ts",
-    "!work/testkit/arbitraries.ts",
-    "!work/testkit/builder-model-arbitraries.ts",
-    "!work/testkit/sheet-arbitraries.ts",
-  ],
+  mutate: changed.length === 0 ? entries : entriesIn(entries, changed),
   coverageAnalysis: "perTest",
   disableTypeChecks: false,
   reporters: ["clear-text", "progress", "html", "json"],
@@ -60,6 +23,7 @@ export default {
   thresholds: { high: 98, low: 95, break: null },
   concurrency: 4,
   // The clock limit of one mutant is the net time of the first run, times 1.5, plus this value. A static mutant loads each
-  // module again, and the net time leaves that out. A dispatch sets VEX_TIMEOUT_MS to read if the clock decides a mutant.
-  timeoutMS: Number(process.env.VEX_TIMEOUT_MS || 5000),
+  // module again, and the net time leaves that out. At 5 s, the clock stopped 266 static mutants of the domains and hid
+  // survivors (2026-11-05), so this value is 120 s. A dispatch can set VEX_TIMEOUT_MS to read another value.
+  timeoutMS: Number(process.env.VEX_TIMEOUT_MS || 120000),
 };

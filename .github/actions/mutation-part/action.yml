@@ -1,0 +1,39 @@
+# One part of the mutation lane: the steps that the nightly job and the weekly job share (tools/mutation/README.md).
+name: Mutation part
+description: This action starts Stryker on one part of the lane, and it keeps the report as an artifact.
+
+inputs:
+  part:
+    description: The part of the lane.
+    required: true
+  changed:
+    description: The paths of the lane that this part reads, with commas. Empty reads each file of the part.
+    required: false
+    default: ""
+  timeout-ms:
+    description: The added clock limit of one mutant in milliseconds. Empty keeps the default of the lane.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - run: pnpm install --frozen-lockfile
+      shell: bash
+    # Stryker with Vitest 4.1, in tools/mutation, until Stryker supports Vitest 5
+    # The number of the disabled mutants of each file. A new disable must also go into tools/mutation/disables.json.
+    - name: The disabled mutants
+      shell: bash
+      run: node tools/mutation/disables.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+    - run: pnpm --filter @vex/mutation run mutation
+      shell: bash
+      env:
+        VEX_MUTATE: ${{ inputs.part }}
+        VEX_CHANGED: ${{ inputs.changed }}
+        VEX_TIMEOUT_MS: ${{ inputs.timeout-ms }}
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      if: always()
+      with:
+        name: mutation-report-${{ inputs.part }}
+        path: reports/mutation/
+        if-no-files-found: ignore

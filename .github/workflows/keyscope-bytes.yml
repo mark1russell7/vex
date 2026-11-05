@@ -44,15 +44,16 @@ jobs:
         run: |
           cp ../../tools/keyscope/bytes.test.ts.txt src/zz-bytes.test.ts
           cp ../../tools/keyscope/places.test.ts.txt src/zz-places.test.ts
-          # The pin and the tag can stop at a form that they do not print. Each arm must give rows, and an arm of "all" must give the 32 rows.
+          # The pin and the tag can stop at a form that they do not print. Each arm gives the 32 rows, a stop is its own row, and an arm of "all" has no stop.
           measure() {
             out="$RUNNER_TEMP/$1.txt"
             if BYTES_LABEL=$1 pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 > "$out" 2>&1; then state=passed; else state=failed; fi
             grep -E "BYTES |FAIL|Tests |Error" "$out" || echo "NO LINES $1"
             rows=$(grep -c "BYTES $1 " "$out") || rows=0
-            echo "LABEL $1 $state rows=$rows"
-            [ "$rows" -gt 0 ]
-            [ "$2" != all ] || [ "$rows" = 32 ]
+            stops=$(grep -c "BYTES $1 .* STOP " "$out") || stops=0
+            echo "LABEL $1 $state rows=$rows stops=$stops"
+            [ "$rows" = 32 ]
+            [ "$2" != all ] || [ "$stops" = 0 ]
           }
           pnpm exec vitest run src/zz-places.test.ts --maxWorkers=1 > "$RUNNER_TEMP/places.txt" 2>&1
           grep -E "PLACES|FAIL" "$RUNNER_TEMP/places.txt"

@@ -8,7 +8,14 @@ it("bytes", () => {
   for (const which of [...IREKO_COMMITTED, ...IREKO_NOT_COMMITTED]) {
     for (const faults of ["value", "throw"] as const) {
       const t0 = performance.now();
-      const text = irekoSource(which, faults);
+      let text: string;
+      try {
+        text = irekoSource(which, faults);
+      } catch (error) {
+        // A stop is its own row. It is not a row of equal bytes, and the next cell still runs.
+        console.error(`BYTES ${process.env["BYTES_LABEL"] ?? ""} ${which} ${faults} STOP ${String(error).slice(0, 120)}`);
+        continue;
+      }
       const ms = Math.round(performance.now() - t0);
       console.error(`BYTES ${process.env["BYTES_LABEL"] ?? ""} ${which} ${faults} ${String(text.length)} ${String(gzipSync(text).length)} ${createHash("sha256").update(text).digest("hex").slice(0, 12)} ${String(ms)}ms`);
     }

@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { envLine, measureIsolated } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
-import { BUILD_ROW, limitOf, moduleCostFaults, readingOf, worstIsNoise, type ModuleTimes } from "./module-cost-limits.ts";
+import { BUILD_ROW, limitOf, moduleCostFaults, readingOf, runAaWorst, worstIsNoise, type ModuleTimes } from "./module-cost-limits.ts";
 
 /** The fresh processes of each arm on each module. */
 const ROUNDS = 7;
@@ -39,14 +39,20 @@ const report = await measureIsolated({
   mode: "fresh",
 });
 
-for (const [at, { module, shares }] of rows.entries()) {
+const times: readonly ModuleTimes[] = rows.map(({ module, shares }, at) => {
   const ms = report.inputs[at]?.ms ?? {};
-  const row: ModuleTimes = { module, shares, base: ms["base"] ?? [], branch: ms["branch"] ?? [], aa: ms["base~aa"] ?? [] };
-  const faults = moduleCostFaults(row);
+  return { module, shares, base: ms["base"] ?? [], branch: ms["branch"] ?? [], aa: ms["base~aa"] ?? [] };
+});
+const runWorst = runAaWorst(times);
+
+for (const row of times) {
+  const { module, shares } = row;
+  const faults = moduleCostFaults(row, runWorst);
   const limit = limitOf(module, shares);
   const r = readingOf(row);
+  console.info(`times module=${module} base=${row.base.map((v) => v.toFixed(2)).join(",")} branch=${row.branch.map((v) => v.toFixed(2)).join(",")} aa=${row.aa.map((v) => v.toFixed(2)).join(",")}`);
   console.info(
-    `${faults.length === 0 ? "ok" : "FAIL"} module ${module} shares=${String(shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} worstNoise=${String(worstIsNoise(r, limit))} limit=${limit.median.toFixed(3)}/${limit.worst.toFixed(3)}`,
+    `${faults.length === 0 ? "ok" : "FAIL"} module ${module} shares=${String(shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} secondPair=${r.secondPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} runAaWorst=${runWorst.toFixed(3)} worstNoise=${String(worstIsNoise(r, limit, runWorst))} limit=${limit.median.toFixed(3)}/${limit.worst.toFixed(3)}`,
   );
   for (const fault of faults) console.error(`FAIL ${fault}`);
   if (faults.length > 0) process.exitCode = 1;

@@ -234,9 +234,11 @@ The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It print
 
 The gate reads each module alone, with no average over the modules. A module has a median limit and a limit for the worst pair. A worst pair is a fault only if it is also over the worst pair of the A/A arm of the same run. The row states that case as `worstNoise`. Each ratio has three decimals. The result of `placesRead` on the program of the module picks its class. The file `module-cost-limits.ts` holds the limits and their reasons.
 
-These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. The module `bounds` has its own line of 1.20 until the item BOUNDSCOST removes it.
+Each row has its own median limit: the worst of 6 reads against the base, plus the spread of those reads, rounded up. These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. A limit from the cost of today holds the cost of today, and the reads do not prove 1.10 for each module. The value 1.10 is the target. The item BOUNDSCOST brings each module with a median over 1.10 under that target. A limit over 1.25 needs a ruling, and a test holds this cap.
 
-A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays.
+A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays. Its pass line is 1.10. The 6 reads give 0.899 to 0.936, so its limit of 0.98 holds that gain.
+
+Each row also prints its second largest pair and the times of its rounds. One slow process cannot move the second pair. This value is a record, and it does not fail a row.
 
 #### The limit of the places of a program (COMPILE.PLACES)
 

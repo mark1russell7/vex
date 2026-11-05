@@ -5065,6 +5065,11 @@ function keyedPrint(options: ModuleOptions, print: (keys: KeyPrint) => Emitted):
  * function that takes the records and the variables and gives the value at each key. A module of a tree space takes
  * the parents too. The function is pure, so a build can use it. The program can be an expression or a document
  * (DOC.ENTRY).
+ *
+ * This function is a tool of a build. A print of one module of ireko takes 16 to 172 ms on a CI runner, at 0.833 to
+ * 1.149 times the fixed base of COMPILE.MODULE.COST. `docs/COMPILER.md` gives the ms and the ratio of each module. A
+ * limit of that gate holds the cost of today. The target of 1.10 for each module is not proven. A caller on a request
+ * path keeps the printed module, and it does not print for each request.
  */
 export function emitModule(source: Expr | Envelope, options: ModuleOptions): Emitted {
   return keyedPrint(options, (keys) => settledPrint((starts) => printProgram(source, options, keys, starts)));

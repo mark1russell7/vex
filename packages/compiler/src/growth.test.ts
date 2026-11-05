@@ -5,7 +5,7 @@
 import { MAX_NESTING, nestingOf } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it, vi } from "vitest";
-import { BYTES_LIMIT, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, sourceFaults, sourceLarge, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { BYTES_LIMIT, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, SOURCE_BYTES_LIMIT, SOURCE_TIME_LIMIT, sourceFaults, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 import type * as Module from "./module.ts";
 import { emitModule } from "./module.ts";
 import { MAX_PLACES, placesOf } from "./unshared.ts";
@@ -58,7 +58,7 @@ describe("COMPILE.GROWTH", () => {
 describe("COMPILE.SOURCE.SIZE", () => {
   it("COMPILE.SOURCE.SIZE: a limit of the module does not apply to the source", () => {
     const own: GrowthShape = { ...SHAPE, time: 2, bytes: 2, why: "a reason" };
-    expect(sourceFaults(own, row(100, 10, 1000), row(400, 40, 16_000))).toStrictEqual([`source of s has a bytes exponent of 2.00, and the limit is ${String(BYTES_LIMIT)}`]);
+    expect(sourceFaults(own, row(100, 10, 1000), row(400, 40, 16_000))).toStrictEqual([`source of s has a bytes exponent of 2.00, and the limit is ${String(SOURCE_BYTES_LIMIT)}`]);
   });
 
   it("COMPILE.SOURCE.SIZE: a limit of the source replaces the limit of the gate", () => {
@@ -71,8 +71,8 @@ describe("COMPILE.SOURCE.SIZE", () => {
     expect(sourceFaults(SHAPE, row(100, 10, 1000), row(400, 40, undefined))).toStrictEqual(["source of s has a size with no result"]);
   });
 
-  it("COMPILE.SOURCE.SIZE: a shape reads its larger size, or the larger size of its source", () => {
-    expect(sourceLarge(SHAPE)).toBe(SHAPE.large);
-    expect(sourceLarge({ ...SHAPE, source: { large: 1, why: "a reason" } })).toBe(1);
+  it("COMPILE.SOURCE.SIZE: a shape with no limit of its own reads the default limits of the source", () => {
+    expect(sourceFaults(SHAPE, row(100, 10, 1000), row(400, 10 * 4 ** 1.24, 1000 * 4 ** 1.03))).toStrictEqual([]);
+    expect(sourceFaults(SHAPE, row(100, 10, 1000), row(400, 10 * 4 ** 1.3, 1000 * 4 ** 1.1))).toStrictEqual([`source of s has a time exponent of 1.30, and the limit is ${String(SOURCE_TIME_LIMIT)}`, `source of s has a bytes exponent of 1.10, and the limit is ${String(SOURCE_BYTES_LIMIT)}`]);
   });
 });

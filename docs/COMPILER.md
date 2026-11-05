@@ -236,6 +236,28 @@ The lowering keeps a map of the functions of a scope, and `#mayExt` keeps one an
 
 The gate `bench/growth.ts` reads the time and the bytes of tier 2 for each shape. It starts `generate` and `load` in five fresh processes for each size. A shape with a limit of its own states the reason in `test/growth.ts`.
 
+The limits come from one CI read, run `42016811553`, on Node 26. A shape with no limit of its own has a time limit of 1.25 and a bytes limit of 1.04. The names of the locals get more digits with more places, so the bytes exponent of those shapes is 1.02 to 1.03. The text has one size for each program, so a bytes limit has no spread. A time limit is the read plus the spread 0.12 of the module gate, rounded up. The gate reads these limits again at 5 reads.
+
+| Shape | Levels | Places | Bytes | Time | Time exponent | Bytes exponent |
+|---|---|---|---|---|---|---|
+| `plain` | 14 | 32,767 | 35.2 MB | 1,783 ms | 0.90 | 0.90 |
+| `constant` | 13 | 32,767 | 28.7 MB | 1,728 ms | 0.98 | 1.03 |
+| `loop` | 13 | 32,765 | 23.5 MB | 1,316 ms | 0.96 | 1.02 |
+| `chain` | 499 | 999 | 0.76 MB | 105 ms | 1.03 | 1.02 |
+| `wide` | 480 | 30,721 | 32.5 MB | 4,405 ms | 1.32 | 0.92 |
+| `loopchain` | 165 | 661 | 0.41 MB | 56 ms | 0.92 | 1.03 |
+| `wideloop` | 160 | 10,561 | 8.3 MB | 603 ms | 1.19 | 1.02 |
+| `letchain` | 240 | 961 | 0.30 MB | 57 ms | 1.10 | 1.02 |
+| `letloop` | 240 | 1,443 | 0.82 MB | 116 ms | 0.99 | 1.02 |
+| `constlet` | 240 | 31,203 | 26.9 MB | 2,509 ms | 1.21 | 1.03 |
+| `readchain` | 480 | 1,923 | 0.72 MB | 90 ms | 0.94 | 1.02 |
+| `origin` | 166 | 665 | 4.8 MB | 436 ms | 1.71 | 1.86 |
+| `wideorigin` | 160 | 32,321 | 32.8 MB | 1,655 ms | 1.15 | 1.10 |
+
+Before this change, `chain` printed 23 MB at 499 levels and `constlet` printed 266 MB at 240 levels. The text of `origin` stays quadratic, because each memo prints a key tuple with one entry for each level around it. The exponent was 2.76. The bytes of `wide`, `wideloop` and `constlet` are linear, but their time exponents are over 1.1. The cause of that time is open. Each source row prints the time of the collector, so a read can separate the collector from the compile.
+
+The lowering runs on the call stack. A stack overflow gives tier 1, and the reason of `generate` states "the lowering threw an exception" (V-092). The default stack holds the largest size of each shape, and the gate fails a size with no source. A caller can have less stack than a fresh process. So the gate also prints the last level of `wide` with a source on half of the default stack.
+
 #### The time of a print of each module (COMPILE.MODULE.COST)
 
 The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the arms and the order of the modules turn at each round.

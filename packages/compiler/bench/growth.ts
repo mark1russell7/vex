@@ -212,10 +212,24 @@ function sourceGate(shape: GrowthShape): void {
   if (faults.length > 0) process.exitCode = 1;
 }
 
+/** This function reads how many processes give a source at each level near the last level with a source. Only the read branch of the depth holds it. */
+function depthSpread(flags: readonly string[]): void {
+  const shape = shapeOf(DEPTH_SHAPE);
+  const last = deepestSource(shape, flags);
+  console.info(`depth spread flags=${flags.join(" ")} last=${String(last)}`);
+  for (let levels = last - 2; levels <= last + 2; levels++) {
+    const sources = Array.from({ length: 20 }, () => sample(shape, levels, "source", flags)).filter((x) => x !== undefined).length;
+    console.info(`depth spread flags=${flags.join(" ")} levels=${String(levels)} sources=${String(sources)} of 20`);
+  }
+}
+
 const [command, ...rest] = process.argv.slice(2);
 if (command === "child") child(rest[0] ?? "", Number(rest[1]));
 else if (command === "source") sourceChild(rest[0] ?? "", Number(rest[1]));
 else if (command === "names") names(rest[0] ?? "", Number(rest[1]));
 else if (command === "gated") gated(rest[0] ?? "");
-else if (command === "gates") gates();
+else if (command === "depth") {
+  depthSpread([LESS_STACK]);
+  depthSpread([LESS_STACK, "--no-opt", "--no-maglev", "--no-sparkplug"]);
+} else if (command === "gates") gates();
 else gate(command === undefined ? GROWTH_SHAPES : [shapeOf(command)]);

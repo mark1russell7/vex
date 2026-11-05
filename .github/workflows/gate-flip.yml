@@ -1,59 +1,27 @@
-# The flip test of the gates of a measure (scripts/gate-flip.ts). An added cost must make a gate fail, and a clean copy
-# must pass, in one job. A gate that cannot fail holds no gain.
+# A read branch: the spread of the depth of the source at one commit. This branch does not merge.
 name: Gate flip
 
 on:
-  # Each pull request starts this workflow. The job changes skips the work when no file of a gate changes.
-  pull_request:
-  schedule:
-    # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
-    - cron: "56 6 * * 3"
   workflow_dispatch:
 
 permissions: {}
 
-# One run for each branch: a newer run stops the older one.
 concurrency:
   group: gate-flip-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      match: ${{ steps.changes.outputs.match }}
-    steps:
-      - id: changes
-        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
-        with:
-          paths: |
-            packages/core/bench/fault.ts
-            packages/core/bench/gate.ts
-            packages/core/bench/measure.ts
-            packages/core/bench/processes.ts
-            packages/compiler/bench/gate.ts
-            packages/compiler/bench/gate-processes.ts
-            packages/compiler/bench/growth.ts
-            packages/compiler/test/growth.ts
-            scripts/gate-flip.ts
-            .github/workflows/gate-flip.yml
-
-  flip:
-    needs: changes
-    if: needs.changes.outputs.match == 'true' || github.event_name != 'pull_request'
-    name: Flip of the speed gates
+  depth:
+    name: The spread of the depth, read ${{ matrix.read }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
-    # The shell bash sets pipefail, so a flip that fails fails its step, also with its output piped into tee.
-    defaults:
-      run:
-        shell: bash
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        read: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,13 +33,5 @@ jobs:
           cache: pnpm
       - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/gate-flip.ts 2>&1 | tee flip.txt
-      - if: ${{ !cancelled() }}
-        run: |
-          {
-            echo "### The flip of the speed gates"
-            echo
-            echo '```'
-            grep -E "^(ok|FAIL) the (speed|growth) gate" flip.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+      - run: grep -m1 'model name' /proc/cpuinfo
+      - run: node packages/compiler/bench/growth.ts depth 2>/dev/null

@@ -37,6 +37,8 @@ jobs:
             packages/core/bench/processes.ts
             packages/compiler/bench/gate.ts
             packages/compiler/bench/gate-processes.ts
+            packages/compiler/bench/growth.ts
+            packages/compiler/test/growth.ts
             scripts/gate-flip.ts
             .github/workflows/gate-flip.yml
 
@@ -70,6 +72,6 @@ jobs:
             echo "### The flip of the speed gates"
             echo
             echo '```'
-            grep -E "^(ok|FAIL) the speed gate" flip.txt
+            grep -E "^(ok|FAIL) the (speed|growth) gate" flip.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

@@ -3,8 +3,9 @@
  *
  *   node bench/module-cost.ts <the folder of a checkout of the base, with `module-cost-child.ts` in its bench folder> [--turn <n>] [--catch]
  *
- * Each arm starts a fresh process for each print. The order of the arms and the order of the modules turn at each round.
- * The flag `--turn` gives each read of a set a different first place. The line `order` names the first row of each round.
+ * Each arm starts a fresh process for each print. The order of the arms comes from `armOrder`, and the order of the modules
+ * turns at each round. The flag `--turn` gives each read of a set a different first place. The line `order` names the first
+ * row and the order of the arms of each round.
  *
  * The base is fixed, so the gate also finds a cost that grows over many pull requests. Only a pull request moves the
  * base, with a ruling on its reason and new limits from new reads. A new module has no time on the base, so the base
@@ -22,10 +23,11 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { armOrder, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { env, envLine, firstOfRound, measureIsolated } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
-import { AA_CAP, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, isLoud, limitOf, medianLimit, moduleCostFaults, readingOf, runAaSecond, type ModuleTimes } from "./module-cost-limits.ts";
+import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, readingOf, type ModuleTimes } from "./module-cost-limits.ts";
 
 /** The fresh processes of each arm on each module. */
 const ROUNDS = 7;
@@ -48,17 +50,22 @@ function list(ms: readonly number[]): string {
   return ms.map((v) => v.toFixed(2)).join(",");
 }
 
+/** The word of a row of the gate for each outcome of the home rule. */
+const WORDS = { within: "ok", beyond: "FAIL", "cannot decide": "undecided" } as const;
+
 /** This function prints the lines of one read and gives its faults. The prefix keeps a read that tests the gate out of the rows of the gate. */
-function printRead(times: readonly ModuleTimes[], word: string | undefined, prefix: string): readonly string[] {
-  const runSecond = runAaSecond(times);
+function printRead(times: readonly ModuleTimes[], verdict: TailLimitVerdict, prefix: string): readonly string[] {
+  const aaSecond = verdict.aaTail?.toFixed(3) ?? "none";
   return times.flatMap((row) => {
-    const faults = moduleCostFaults(row, runSecond, machine.cpu);
+    const read = verdict.cases.find((c) => c.case === row.module);
+    if (read === undefined) throw new Error(`module-cost: the verdict has no row ${row.module}.`);
+    const faults = moduleCostFaults(read, verdict.aaTail);
     const limit = limitOf(row.module, row.shares);
     const lines = `${medianLimit(limit, machine.cpu).toFixed(3)}/${limit.second?.toFixed(3) ?? "report"}`;
     const r = readingOf(row);
     console.info(`${prefix}times module=${row.module} base=${list(row.base)} branch=${list(row.branch)} aa=${list(row.aa)}`);
     console.info(
-      `${prefix}${word ?? (faults.length === 0 ? "ok" : "FAIL")} module ${row.module} shares=${String(row.shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} secondPair=${r.secondPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} aaSecond=${r.aaSecond.toFixed(3)} runAaSecond=${runSecond.toFixed(3)} limit=${lines}${ceilingOnly(limit, machine.cpu) ? ` ${CEILING_ONLY}` : ""}`,
+      `${prefix}${WORDS[read.outcome]} module ${row.module} shares=${String(row.shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} secondPair=${r.secondPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} aaSecond=${r.aaSecond.toFixed(3)} runAaSecond=${aaSecond} limit=${lines}${ceilingOnly(limit, machine.cpu) ? ` ${CEILING_ONLY}` : ""}`,
     );
     if (limit.ceiling !== undefined) console.info(`${prefix}gain ${row.module} against ${GAIN_BASE} on ${machine.cpu}, Node.js ${machine.node}: ${ceilingOnly(limit, machine.cpu) ? CEILING_ONLY : "gain read"}`);
     return faults;
@@ -86,7 +93,7 @@ console.info(envLine("fresh"));
 let decided = false;
 for (let read = 0; read < MAX_READS && !decided; read++) {
   const firstInput = Number(values.turn) + read;
-  console.info(`${prefix}order first=${Array.from({ length: ROUNDS }, (_round, round) => rows[firstOfRound(round, rows.length, ROUNDS, firstInput)]?.module).join(",")}`);
+  console.info(`${prefix}order first=${Array.from({ length: ROUNDS }, (_round, round) => rows[firstOfRound(round, rows.length, ROUNDS, firstInput)]?.module).join(",")} arms=${Array.from({ length: ROUNDS }, (_round, round) => armOrder(ARMS, round).join("/")).join(",")}`);
   // The reads run one at a time: two reads at one time change the times of each other.
   // oxlint-disable-next-line no-await-in-loop
   const report = await measureIsolated({
@@ -104,27 +111,27 @@ for (let read = 0; read < MAX_READS && !decided; read++) {
     const ms = report.inputs[at]?.ms ?? {};
     return { module, shares, base: ms["base"] ?? [], branch: ms["branch"] ?? [], aa: ms["base~aa"] ?? [] };
   });
-  decided = !isLoud(times);
-  const faults = printRead(times, decided ? undefined : "undecided", prefix);
+  const verdict = moduleVerdict(times, machine.cpu);
+  decided = verdict.outcome !== "cannot decide";
+  const faults = printRead(times, verdict, prefix);
   if (decided) {
     if (testsTheGate) {
-      const missed = catchFaults(times, runAaSecond(times), machine.cpu);
+      const missed = catchFaults(verdict);
       for (const fault of faults) console.info(`catch fault ${fault}`);
       for (const miss of missed) console.error(`FAIL catch ${miss}`);
       if (missed.length > 0) process.exitCode = 1;
-      else console.info("catch ok: the gate fails each module with the added cost");
+      else console.info(`catch ok: the gate fails ${CATCH_MUST_FAIL.join(" and ")} with the added cost`);
     } else {
       for (const fault of faults) console.error(`FAIL ${fault}`);
       if (faults.length > 0) process.exitCode = 1;
       const noise = falseFails(times, machine.cpu);
-      const under = noise.filter((module) => medianLimit(limitOf(module, true), machine.cpu) < 1);
-      console.info(`false-fail ${String(noise.length)} of ${String(times.length)} rows of the A/A arm, ${String(under.length)} of them with a limit under 1 that an A/A row cannot meet: ${noise.join(",")}`);
+      console.info(`false-fail ${String(noise.fails.length)} of ${String(times.length - noise.gains.length)} rows of the A/A arm: ${noise.fails.join(",")}. No A/A read of a gain: ${noise.gains.map((gain) => gain.case).join(",")}`);
     }
   } else {
-    console.info(`${prefix}UNDECIDED read ${String(read + 1)} of ${String(MAX_READS)}: the second pair ${runAaSecond(times).toFixed(3)} of the A/A arm is over the cap ${AA_CAP.toFixed(3)}, so this read does not count`);
+    console.info(`${prefix}UNDECIDED read ${String(read + 1)} of ${String(MAX_READS)}: ${verdict.reason}`);
   }
 }
 if (!decided) {
-  console.error(`FAIL ${prefix}no read of ${String(MAX_READS)} decided: each A/A arm is over the cap`);
+  console.error(`FAIL ${prefix}no read of ${String(MAX_READS)} decided`);
   process.exitCode = 1;
 }

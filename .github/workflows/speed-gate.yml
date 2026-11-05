@@ -189,14 +189,19 @@ jobs:
           cp packages/pilots/bench/module-cost-child.ts ../base/packages/pilots/bench/
           cd ../base
           pnpm install --frozen-lockfile --filter @vex/pilots...
-      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" | tee module-cost.txt
+      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --turn "$((REP - 1))" | tee module-cost.txt
+        env:
+          REP: ${{ matrix.rep }}
+      - name: The gate fails a known cost
+        if: ${{ !cancelled() && matrix.rep == 1 }}
+        run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch | tee -a module-cost.txt
       - if: ${{ !cancelled() }}
         run: |
           {
             echo "### The time of a print of each module (ratios against $BASE: lower is better)"
             echo
             echo '```'
-            grep -E "^(runner|ok|FAIL)" module-cost.txt
+            grep -E "^(runner|order|ok|FAIL|undecided|UNDECIDED|false-fail|catch (order|ok|FAIL|fault|undecided|UNDECIDED))" module-cost.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

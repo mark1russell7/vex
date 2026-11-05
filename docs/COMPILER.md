@@ -230,15 +230,21 @@ The limit of the time exponent is 1.1, and the shape `origin` has its own limit 
 
 #### The time of a print of each module (COMPILE.MODULE.COST)
 
-The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm.
+The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the arms and the order of the modules turn at each round.
 
-The gate reads each module alone, with no average over the modules. A module has a median limit and a limit for the worst pair. A worst pair is a fault only if it is also over the worst pair of the A/A arm of the same run. The row states that case as `worstNoise`. Each ratio has three decimals. The result of `placesRead` on the program of the module picks its class. The file `module-cost-limits.ts` holds the limits and their reasons.
+The workflow holds the base as a fixed commit, so the base does not move with main. Only a pull request moves it, with a ruling on its reason and new limits from new reads. A move hides each cost that came since the old base. So the pull request states the ratio of the new base to the old base on the row `build`.
 
-Each row has its own median limit: the worst of 6 reads against the base, plus the spread of those reads, rounded up. These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. A limit from the cost of today holds the cost of today, and the reads do not prove 1.10 for each module. The value 1.10 is the target. The item BOUNDSCOST brings each module with a median over 1.10 under that target. A limit over 1.25 needs a ruling, and a test holds this cap.
+The gate reads each module alone, with no average over the modules. A module has a median limit and a limit for its second pair. The second pair is the second largest ratio of one round, so one slow process cannot move it. A second pair is a fault only if it is also over the worst second pair of the A/A arm of the same run. The worst pair is a record. A real cost in 1 round of 7 cannot be told from noise at 7 rounds.
 
-A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays. Its pass line is 1.10. The 6 reads give 0.899 to 0.936, so its limit of 0.98 holds that gain.
+A read has no power if the worst second pair of its A/A arm is over the cap `AA_CAP`. Such a read prints `UNDECIDED`. It is not a pass, and it does not count. The gate takes another read, up to 3 reads, and it fails if no read decides.
 
-Each row also prints its second largest pair and the times of its rounds. One slow process cannot move the second pair. This value is a record, and it does not fail a row.
+Each row has its own limits, with a cap of 1.25. A limit is the worst of the reads against the base, plus the spread of those reads, rounded up. These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. A limit from the cost of today holds the cost of today, and the reads do not prove 1.10 for each module.
+
+A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays. The row `build-no-avoid` leaves out `avoid`, because the total of `build` does not show that each module is cheap.
+
+Each read prints the first row of each round and the times of each row. It also prints the count of false fails: the rule on each A/A arm as a branch, against the A/A arms of the other rows. A row with a limit under 1 fails that count by its limit, so the line states those rows.
+
+The step `The gate fails a known cost` tests the gate on each pull request. The branch arm adds 15 % of work in `grid` and `shape`, and the step fails if the gate passes either module. The same read adds 6.3 % in `radial`, which reads near 1.11 on a limit of 1.12, and it prints that row as a record.
 
 #### The limit of the places of a program (COMPILE.PLACES)
 

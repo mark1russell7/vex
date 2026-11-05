@@ -65,6 +65,8 @@ A standalone module copies the text of each op function of a domain. A mutated d
 
 The rule reads what the test declares. `printsModule` of `layout.ts` follows the relative imports of the test file. A test prints a module if those imports reach `module.ts`. An import of a type and a comment load no file, so the rule does not read them. A new test file needs no change: its imports classify it.
 
+The rule has one stated limit. The walk follows relative imports only, so an import of a package that reaches the printer stays outside the rule. `plainFaults` refuses an import of the compiler by its package name only outside the top folder of the compiler. No test file has such an import at this time, and no gate holds this limit.
+
 `plainFaults` of `layout.ts` refuses each file that the rule cannot classify, and the test `LANE.PLAIN` fails on a refusal in normal CI. Each row gives its own reason:
 
 | The file | The reason |

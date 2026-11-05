@@ -86,7 +86,9 @@ const PRINTER_FILE = "module.ts";
  * This function states if a test file of the compiler prints a module: its imports reach the file of the printer. A module
  * copies the text of each op function, and the counters of Stryker make that text read a name outside itself. So such a test
  * reads the copy of the domains that Stryker does not mutate. A rule on the name of the file missed `module-vec2.test.ts`
- * and 12 other files (2026-11-05). A file that this rule cannot read is a fault of `plainFaults`.
+ * and 12 other files (2026-11-05). A file that this rule cannot read is a fault of `plainFaults`. This walk follows relative
+ * imports only, so an import of a package that reaches the printer stays outside this rule. `plainFaults` refuses an import of
+ * the compiler by its package name only outside the folder of the rule. This limit is stated and has no gate.
  */
 export function printsModule(file: string): boolean {
   return reachedFiles(file).has(resolve(dirname(file), PRINTER_FILE));

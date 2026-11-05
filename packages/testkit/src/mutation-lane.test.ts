@@ -13,7 +13,9 @@ interface Layout {
   readonly unresolvedImports: (root: string) => readonly string[];
   readonly missingPackages: (root: string) => readonly string[];
   readonly missingSetups: (root: string) => readonly string[];
-  readonly printsModule: (text: string) => boolean;
+  readonly printsModule: (file: string) => boolean;
+  readonly plainFaults: (root: string) => readonly string[];
+  readonly plainFlip: (root: string) => { readonly lines: readonly string[]; readonly failed: number };
   readonly laneParts: () => readonly string[];
   readonly PACKAGES: readonly string[];
   readonly mutateOf: (root: string, part: string) => readonly string[];
@@ -102,18 +104,31 @@ describe("the copy of the mutation lane", () => {
 
   // A module copies the text of each op function, and the counters of Stryker stop that copy. On 2026-11-05 the rule read the
   // name of a file, so `module-vec2.test.ts` and 12 other files got the mutated domains, and the dry run of each part failed.
-  it("LANE.PLAIN: a test file that prints a module reads the copy of the domains that Stryker does not mutate", async () => {
+  it("LANE.PLAIN: a test file with an import that reaches the printer reads the copy of the domains that Stryker does not mutate", async () => {
     const layout = await loadLayout();
-    const vec2 = readFileSync(join(repoRoot(), "packages", "compiler", "src", "module-vec2.test.ts"), "utf8");
-    expect(layout.printsModule(vec2)).toBe(true);
-    expect(layout.printsModule('import { emitModule } from "./emit.ts";')).toBe(true);
-    expect(layout.printsModule('import { other } from "./module.ts";')).toBe(true);
+    const source = join(repoRoot(), "packages", "compiler", "src");
+    expect(layout.printsModule(join(source, "module-vec2.test.ts"))).toBe(true);
+    expect(layout.printsModule(join(source, "module-sheet.test.ts"))).toBe(true);
   });
 
-  it("LANE.PLAIN: a test file that does not print a module reads the mutated domains", async () => {
+  it("LANE.PLAIN: a test file with no import that reaches the printer reads the mutated domains", async () => {
     const layout = await loadLayout();
-    expect(layout.printsModule('import { compile } from "./compile.ts";')).toBe(false);
-    expect(layout.printsModule('import { submodule } from "./submodule.ts";')).toBe(false);
+    expect(layout.printsModule(join(repoRoot(), "packages", "compiler", "src", "sheet-order.test.ts"))).toBe(false);
+  });
+
+  it("LANE.PLAIN: the rule classifies each test file of the repository, and no test reads two copies of the domains", async () => {
+    const layout = await loadLayout();
+    expect(layout.plainFaults(repoRoot())).toEqual([]);
+  });
+
+  // A flip holds only its stated fault, so each row must give its own reason and no other fault.
+  it("LANE.PLAIN: the rule refuses each file that it cannot classify, for the stated reason", async () => {
+    const layout = await loadLayout();
+    const other = mkdtempSync(join(tmpdir(), "vex-lane-"));
+    const flip = layout.plainFlip(other);
+    rmSync(other, { recursive: true });
+    expect(flip.lines.length).toBe(6);
+    expect(flip.failed).toBe(0);
   });
 });
 

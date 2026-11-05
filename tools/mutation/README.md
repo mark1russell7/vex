@@ -59,7 +59,31 @@ Stryker adds `// @ts-nocheck` to each file of its sandbox by default. The lane t
 
 ## The modules of the compiler
 
-A standalone module copies the text of each op function of a domain. A mutated domain has the code of Stryker in that text, so the module refuses the op. Thus each test file of the compiler that names `emitModule` or imports `module.ts` gets `@mark1russell7/vex-domains` from the copy that Stryker does not mutate (`printsModule` of `layout.ts`). These tests stop no mutant of the domains. A dry run names each failed test, because `disableBail` is on for a dry run. On 2026-10-19, a test in `tiers.test.ts` emitted a module, and the dry run of the domains failed.
+A standalone module copies the text of each op function of a domain. A mutated domain has the code of Stryker in that text, so the module refuses the op. Thus each test file of the compiler that prints a module gets `@mark1russell7/vex-domains` from the copy that Stryker does not mutate. These tests stop no mutant of the domains. A dry run names each failed test, because `disableBail` is on for a dry run. On 2026-10-19, a test in `tiers.test.ts` emitted a module, and the dry run of the domains failed.
+
+### The rule of the two copies
+
+The rule reads what the test declares. `printsModule` of `layout.ts` follows the relative imports of the test file. A test prints a module if those imports reach `module.ts`. An import of a type and a comment load no file, so the rule does not read them. A new test file needs no change: its imports classify it.
+
+`plainFaults` of `layout.ts` refuses each file that the rule cannot classify, and the test `LANE.PLAIN` fails on a refusal in normal CI. Each row gives its own reason:
+
+| The file | The reason |
+|---|---|
+| A test of the compiler with a computed import that the list `COMPUTED_IMPORTS` does not name | The rule cannot read what the import loads. |
+| A test of the compiler that names `emitModule`, and its imports do not reach `module.ts` | The printer comes by another path. |
+| A test outside the top folder of the compiler that reaches the printer | The rule gives the plain copy only in that folder. |
+| A test that reads the pilots and does not print a module | The test reads two copies of the domains. |
+| A file that is not a test, outside the domains and the pilots, that imports the domains | A test that prints a module then reads two copies. |
+
+`COMPUTED_IMPORTS` names each permitted computed import and the file it loads. A name with no computed import is a fault too. The job `Flip of the gate of the mutation lane` injects each fault and reads its reason, and a clean copy gives no fault.
+
+### Classes across the two copies
+
+No test reads a class across the two copies. Each domain tests its class with `instanceof`, so a value from the other copy gives a different result. A test file loads one copy only: `plainFaults` holds this. Stryker does not set `isolate`, so the default of Vitest gives each test file its own context (a read of the source of the runner). Thus the lane does not read `instanceof` across the two copies, and its dry run says nothing about it.
+
+### The method changed for `domains`
+
+A score of `domains` before the first read of 2026-11-07 used another method. The 13 test files of `LANE.PLAIN` read the mutated copy then, and those tests can stop a mutant of the domains. The tests of these files stop no such mutant at this time. So the score can fall with no change in the code. Do not compare `domains` across this change without this mark. `lane-read.ts` prints the mark with each read.
 
 ## The files that the lane does not mutate
 

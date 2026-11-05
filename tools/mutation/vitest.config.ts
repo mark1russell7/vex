@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { printsModule, SETUP_FILES } from "./layout.ts";
@@ -24,7 +23,7 @@ export default defineConfig({
         if (source === "../../core/src/constructs.ts") return work("core/constructs.ts");
         if (source !== "@mark1russell7/vex-domains") return null;
         const from = (importer ?? "").replaceAll("\\", "/");
-        const plain = from.startsWith(pilots) || (/\/work\/compiler\/[^/]*\.test\.ts$/u.test(from) && printsModule(readFileSync(from, "utf8")));
+        const plain = from.startsWith(pilots) || (/\/work\/compiler\/[^/]*\.test\.ts$/u.test(from) && printsModule(from));
         return plain ? work("domains-plain/index.ts") : work("domains/index.ts");
       },
     },

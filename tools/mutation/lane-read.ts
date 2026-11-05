@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { laneParts, PACKAGES, packageOfPart } from "./layout.ts";
+import { laneParts, PACKAGES, packageOfPart, plainFlip } from "./layout.ts";
 
 /** A place in a file of a report. */
 interface Place {
@@ -284,14 +284,21 @@ function flip(script: string): number {
     console.info(`flip, ${c.name}: exit ${String(result.status)}, ${right ? "right" : "WRONG"}. ${line}`);
     if (!right) wrong += 1;
   }
-  return wrong;
+  const folder = mkdtempSync(join(tmpdir(), "vex-lane-flip-"));
+  const plain = plainFlip(folder);
+  rmSync(folder, { recursive: true });
+  for (const line of plain.lines) console.info(`flip, ${line}`);
+  return wrong + plain.failed;
 }
+
+/** The mark of the change of method for `domains`: a score of this read does not compare with an older score (rule 8h). */
+const DOMAINS_METHOD = "The method of `domains` changed for the read of 2026-11-07 (LANE.PLAIN): 13 test files read the plain copy, so an older score does not compare.";
 
 /** This function applies the gate to a folder, and it gives the exit code. */
 function gate(folder: string): number {
   const verdict = laneVerdict(readFolder(folder));
   const head = `The read of ${new Date().toISOString().slice(0, 10)} on ${process.env["GITHUB_SHA"] ?? "a local tree"}. A score holds for 7 days, and an older score is stale (LANE.DELAY).`;
-  for (const line of [head, ...verdict.lines]) console.info(line);
+  for (const line of [head, DOMAINS_METHOD, ...verdict.lines]) console.info(line);
   mkdirSync("reports", { recursive: true });
   writeFileSync(join("reports", "lane-read.json"), `${JSON.stringify({ date: new Date().toISOString(), sha: process.env["GITHUB_SHA"], packages: verdict.packages }, null, 2)}\n`);
   const summary = process.env["GITHUB_STEP_SUMMARY"];

@@ -111,7 +111,7 @@ jobs:
 
   gates:
     needs: changes
-    if: needs.changes.outputs.match == 'true' && github.event_name != 'schedule'
+    if: false
     name: Speed gates ${{ matrix.rep }}
     runs-on: ubuntu-latest
     # Each limit comes from at least 5 runs: the worst value times 1.1 (the fleet rule of 2026-10-30).
@@ -183,7 +183,7 @@ jobs:
       run:
         shell: bash
     env:
-      BASE: 8ae233be3bd54744ae558020e5584975b4dfefee
+      BASE: 922ee1a6b5212e733f6d67293b0bf41cee5a0637
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

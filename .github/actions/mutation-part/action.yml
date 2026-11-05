@@ -14,6 +14,10 @@ inputs:
     description: The added clock limit of one mutant in milliseconds. Empty keeps the default of the lane.
     required: false
     default: ""
+  dry-run:
+    description: The value 1 stops Stryker after its first test run, so the part gives no score.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -31,6 +35,7 @@ runs:
         VEX_MUTATE: ${{ inputs.part }}
         VEX_CHANGED: ${{ inputs.changed }}
         VEX_TIMEOUT_MS: ${{ inputs.timeout-ms }}
+        VEX_DRY_RUN: ${{ inputs.dry-run }}
     - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       if: always()
       with:

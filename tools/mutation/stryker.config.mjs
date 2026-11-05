@@ -2,6 +2,7 @@
 // example "compiler" or "core.base.2". Without it, the lane mutates the four published packages. Each job of the lane has
 // one part, so that each job stays in its time limit (layout.ts has the parts, tools/mutation/README.md has the reason).
 // The variable VEX_CHANGED names the paths of the lane to read, with commas. A night reads only the changed files.
+// The variable VEX_DRY_RUN with the value 1 stops Stryker after its first test run (lane-dry-run.yml).
 import { fileURLToPath } from "node:url";
 import { entriesIn, mutateOf, PACKAGES } from "./layout.ts";
 
@@ -16,6 +17,7 @@ export default {
   plugins: ["@stryker-mutator/vitest-runner"],
   mutate: changed.length === 0 ? entries : entriesIn(entries, changed),
   coverageAnalysis: "perTest",
+  dryRunOnly: process.env.VEX_DRY_RUN === "1",
   disableTypeChecks: false,
   reporters: ["clear-text", "progress", "html", "json"],
   htmlReporter: { fileName: "../../reports/mutation/index.html" },

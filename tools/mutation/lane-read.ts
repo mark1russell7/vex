@@ -32,6 +32,8 @@ export interface Mutant {
   readonly statusReason?: string;
   readonly mutatorName: string;
   readonly replacement?: string;
+  readonly static?: boolean;
+  readonly testsCompleted?: number;
   readonly location: { readonly start: Place; readonly end: Place };
 }
 
@@ -49,6 +51,12 @@ export interface Counts {
   disabled: number;
 }
 
+/** The cost of one kind of mutant: the count of the mutants that a score reads, and the tests that they completed. */
+export interface Cost {
+  mutants: number;
+  tests: number;
+}
+
 /** The read of one file. */
 export interface FileRead extends Counts {
   readonly file: string;
@@ -60,6 +68,8 @@ export interface PackageRead {
   readonly name: string;
   readonly counts: Counts;
   readonly files: readonly FileRead[];
+  readonly staticCost: Cost;
+  readonly otherCost: Cost;
 }
 
 /** The verdict of the gate on a full run. */
@@ -94,6 +104,12 @@ function count(c: Counts, m: Mutant): void {
   else if (m.status === "Ignored") c.disabled += 1;
 }
 
+/** This function adds one mutant to a cost. */
+function addCost(cost: Cost, m: Mutant): void {
+  cost.mutants += 1;
+  cost.tests += m.testsCompleted ?? 0;
+}
+
 /** This function gives the key of a mutant in its file. Two parts of a file can report the same mutant. */
 function mutantKey(m: Mutant): string {
   const { start, end } = m.location;
@@ -123,12 +139,16 @@ export function readReports(reports: readonly Report[]): PackageRead[] {
     }
   }
   const packages = new Map<string, FileRead[]>();
+  const costs = new Map<string, { readonly staticCost: Cost; readonly otherCost: Cost }>();
   for (const [file, mutants] of [...files].toSorted(([a], [b]) => a.localeCompare(b))) {
     const { name, pkg } = nameOf(file);
     const counts: Counts = { killed: 0, hitLimit: 0, clock: 0, survived: 0, disabled: 0 };
     const survivors: string[] = [];
+    const cost = costs.get(pkg) ?? { staticCost: { mutants: 0, tests: 0 }, otherCost: { mutants: 0, tests: 0 } };
+    costs.set(pkg, cost);
     for (const m of mutants.values()) {
       count(counts, m);
+      if (m.status !== "Ignored") addCost(m.static === true ? cost.staticCost : cost.otherCost, m);
       if (m.status === "Survived" || m.status === "NoCoverage") survivors.push(`${name}:${m.location.start.line} ${m.mutatorName}`);
     }
     packages.set(pkg, [...(packages.get(pkg) ?? []), { ...counts, file: name, survivors }]);
@@ -142,7 +162,7 @@ export function readReports(reports: readonly Report[]): PackageRead[] {
       counts.survived += f.survived;
       counts.disabled += f.disabled;
     }
-    return { name, counts, files: read };
+    return { name, counts, files: read, staticCost: costs.get(name)?.staticCost ?? { mutants: 0, tests: 0 }, otherCost: costs.get(name)?.otherCost ?? { mutants: 0, tests: 0 } };
   });
 }
 
@@ -153,6 +173,16 @@ export function packageLines(read: PackageRead): string[] {
     `${read.name}: ${gateScore(c).toFixed(2)} % (${c.killed + c.hitLimit} of ${valid(c)}: stopped ${c.killed}, hit limit ${c.hitLimit}, clock time-outs ${c.clock}, survived ${c.survived}, ${c.disabled} disabled by a comment). With the clock time-outs as found: ${scoreWithClock(c).toFixed(2)} %.`,
     ...read.files.map((f) => `  ${f.file}: ${gateScore(f).toFixed(2)} % (stopped ${f.killed}, hit limit ${f.hitLimit}, clock ${f.clock}, survived ${f.survived}, disabled ${f.disabled})`),
   ];
+}
+
+/**
+ * This function gives the line of the static mutants of a package. The report has no time for one mutant, so this line gives the tests that the mutants completed. It is not a time: a static mutant also loads each module again.
+ */
+export function staticLine(read: PackageRead): string {
+  const { staticCost: s, otherCost: o } = read;
+  const tests = s.tests + o.tests;
+  const share = tests === 0 ? 0 : (100 * s.tests) / tests;
+  return `${read.name} static mutants: ${String(s.mutants)} of ${String(s.mutants + o.mutants)}, with ${String(s.tests)} of ${String(tests)} completed tests (${share.toFixed(1)} %). Other mutants: ${String(o.mutants)}, with ${String(o.tests)} completed tests. This is a count of tests, not a time.`;
 }
 
 /** This function gives the survivors of a read, one line for each. */
@@ -177,7 +207,7 @@ export function laneVerdict(reports: ReadonlyMap<string, Report | undefined>): L
     const outcome = noReport.length > 0 ? "no read" : score < LINE ? "under the line" : "pass";
     packages.push({ name, outcome, score, scoreWithClock: scoreWithClock(counts) });
     if (outcome === "no read") lines.push(`${name}: no read. The part ${noReport.join(", ")} gave no report, so any figure of this package is not a score.`);
-    if (read !== undefined) lines.push(...packageLines(read));
+    if (read !== undefined) lines.push(...packageLines(read), staticLine(read));
     if (outcome === "under the line" && read !== undefined) lines.push(`${name}: under ${LINE} %.`, ...survivorLines(read));
   }
   return { failed: packages.some((p) => p.outcome !== "pass"), lines, packages };
@@ -274,12 +304,16 @@ function gate(folder: string): number {
 function oneJob(): number {
   const file = fileURLToPath(new URL("../../reports/mutation/mutation.json", import.meta.url));
   const changed = (process.env["VEX_CHANGED"] ?? "") !== "";
+  if (process.env["VEX_DRY_RUN"] === "1") {
+    console.info("The first test run of this part passed. A dry run gives no report and no score.");
+    return 0;
+  }
   if (!existsSync(file)) {
     console.info(changed ? "The changed files of this part have no mutant." : "This job has no report of Stryker.");
     return changed ? 0 : 1;
   }
   const reads = readReports([JSON.parse(readFileSync(file, "utf8")) as Report]);
-  for (const read of reads) console.info([...packageLines(read), ...survivorLines(read)].join("\n"));
+  for (const read of reads) console.info([...packageLines(read), staticLine(read), ...survivorLines(read)].join("\n"));
   if (changed) return 0;
   const named = process.env["VEX_MUTATE"]?.split(",").filter((p) => p !== "") ?? PACKAGES;
   const absent = [...new Set(named.map(packageOfPart))].filter((name) => (reads.find((r) => r.name === name)?.counts.killed ?? 0) === 0 && valid(reads.find((r) => r.name === name)?.counts ?? { killed: 0, hitLimit: 0, clock: 0, survived: 0, disabled: 0 }) === 0);

@@ -463,3 +463,4 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[LANE.GATE]** A full run reads each part of the lane, and each published package has a score of 95 % or more. A time-out of the clock counts as not found. A part with no report gives no read, and a no read fails the gate.
 - **[LANE.PARTS]** The parts of a package cover each file of the package once, and the parts of a file cover each line once. Each input gives the same parts.
 - **[LANE.DELAY]** The full run starts each week. A night reads only the changed files, and a score of a night fails nothing. A fault with no change in its own file shows at the next full run, at most 7 days later. A page with a score states the date of its run, and a score older than 7 days reads stale.
+- **[LANE.DRYRUN]** A change of the files of the lane starts the first test run of Stryker on each part. A part that fails this run fails the check, and it gives no score.

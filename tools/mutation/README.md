@@ -10,6 +10,8 @@ Each package must have a mutation score of 95 % or more. Stryker has one thresho
 - A part with no report is no read. A no read fails the gate, because a cancelled job gives no report.
 - `lane-read.ts --flip` shows that the gate can fail. A part with a score fall and a part with no report fail, and a clean copy passes. The weekly job starts it before the gate, and `gate-flip.yml` starts it for a change of the script.
 
+The read of each package also prints its static mutants: the count, and the tests that they completed. The report of Stryker has no time for one mutant, so this count is not a time. A static mutant also loads each module again, and the count leaves that out.
+
 ## The parts
 
 Each job has one part, so that each job stays in its time limit of 150 minutes. The maximum of 3 jobs at one time holds over all parts of a run, because all parts are one matrix.
@@ -36,6 +38,10 @@ The nightly job reads only the files that changed on the main line in the last 2
 A survivor in a changed file shows on the next night. A fault with no change in its own file shows at the next weekly run, at most 7 days later (`LANE.DELAY`). A weaker test with another name is an example. A page with a score states the date of its run, and a score older than 7 days reads stale.
 
 A dispatch of `nightly.yml` can name parts in the input `packages`. A dispatch of `mutation-weekly.yml` reads each part.
+
+## The dry run
+
+A part that fails its first test run gives no report, and the gate reads that as no read. The workflow `lane-dry-run.yml` starts this first test run on each part, for a change of the files of the lane (`LANE.DRYRUN`). This shows the fault before the merge. The dry run gives no score, and it does not show if a part stays in its time limit.
 
 ## The load check
 

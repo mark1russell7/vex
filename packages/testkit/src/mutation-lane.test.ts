@@ -56,6 +56,7 @@ interface LaneRead {
     readonly packages: readonly { readonly name: string; readonly outcome: string; readonly score: number; readonly scoreWithClock: number }[];
   };
   readonly flipCases: () => readonly { readonly name: string; readonly reports: ReadonlyMap<string, LaneReport | undefined>; readonly core: string }[];
+  readonly staticLine: (read: unknown) => string;
 }
 
 /** This function loads the script of the parts of the lane. */
@@ -196,6 +197,18 @@ describe("the parts of the mutation lane", () => {
     expect(weekly).toContain("max-parallel: 3");
     expect(night).not.toContain("lane-read.ts --gate");
   });
+
+  it("LANE.DRYRUN: a change of the lane starts the first test run of each part", () => {
+    const workflow = readFileSync(join(repoRoot(), ".github", "workflows", "lane-dry-run.yml"), "utf8");
+    const action = readFileSync(join(repoRoot(), ".github", "actions", "mutation-part", "action.yml"), "utf8");
+    const config = readFileSync(join(repoRoot(), "tools", "mutation", "stryker.config.mjs"), "utf8");
+    expect(workflow).toContain("plan.ts --full");
+    expect(workflow).toContain("tools/mutation/**");
+    expect(workflow).toContain("max-parallel: 3");
+    expect(workflow).toContain('dry-run: "1"');
+    expect(action).toContain("VEX_DRY_RUN: ${{ inputs.dry-run }}");
+    expect(config).toContain('dryRunOnly: process.env.VEX_DRY_RUN === "1"');
+  });
 });
 
 describe("the gate of the mutation lane", () => {
@@ -234,6 +247,20 @@ describe("the gate of the mutation lane", () => {
     expect(lines.join("\n")).toContain("10 disabled by a comment");
     expect(lines.join("\n")).toContain("core/core.kernel.ts: 100.00 %");
     expect(lines.join("\n")).toContain("survived: core/core.base.1.ts:11 Fixture");
+  });
+
+  it("LANE.GATE: the read prints the static mutants and their completed tests, and it does not call this a time", async () => {
+    const read = await loadRead();
+    const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } };
+    const mutant = (line: number, status: string, isStatic: boolean, testsCompleted: number): unknown => ({
+      status,
+      mutatorName: "Fixture",
+      static: isStatic,
+      testsCompleted,
+      location: { ...location, start: { line, column: 0 }, end: { line, column: 1 } },
+    });
+    const report = { files: { "work/core/a.ts": { mutants: [mutant(1, "Killed", true, 30), mutant(2, "Survived", false, 10), mutant(3, "Ignored", true, 500)] } } };
+    expect(read.staticLine(read.readReports([report])[0])).toBe("core static mutants: 1 of 2, with 30 of 40 completed tests (75.0 %). Other mutants: 1, with 10 completed tests. This is a count of tests, not a time.");
   });
 
   it("LANE.GATE: a part with a report of no mutants is no read", async () => {

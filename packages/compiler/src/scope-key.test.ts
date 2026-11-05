@@ -160,7 +160,9 @@ describe("V-078 KEY: a key holds the meaning of each read", () => {
       fc.property(shape, fc.array(someName, { minLength: 1, maxLength: 6 }), fc.array(someName, { minLength: 1, maxLength: 6 }), site, site, (s, reads, others, here, there) => {
         const a = filled(s, reads);
         const b = filled(s, others);
-        fc.pre(key(a, scopeOf(here)) === key(b, scopeOf(there)));
+        // Each run has its own table: one table for each run of a long derivation grows past the heap.
+        const table = new KeyTable();
+        fc.pre(keyText(a, scopeOf(here), table) === keyText(b, scopeOf(there), table));
         expect(value(a, here)).toStrictEqual(value(b, there));
       }),
     );

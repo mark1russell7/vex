@@ -48,17 +48,19 @@ function treeSize(exprs: readonly Expr[]): number | undefined {
  */
 function sharedPlaces(exprs: readonly Expr[]): number {
   const counts = new Map<Expr, number>();
-  const open = new Set<Expr>();
+  const open = new Map<Expr, readonly Expr[]>();
   const todo = [...exprs];
   for (let x = todo.at(-1); x !== undefined; x = todo.at(-1)) {
+    const parts = open.get(x);
     if (counts.has(x)) {
       todo.pop();
-    } else if (open.has(x)) {
+    } else if (parts !== undefined) {
       todo.pop();
-      counts.set(x, partsOf(x).reduce((sum, part) => sum + (counts.get(part) ?? Infinity), 1));
+      counts.set(x, parts.reduce((sum, part) => sum + (counts.get(part) ?? Infinity), 1));
     } else {
-      open.add(x);
-      todo.push(...partsOf(x).filter((part) => !counts.has(part)));
+      const own = partsOf(x);
+      open.set(x, own);
+      todo.push(...own.filter((part) => !counts.has(part)));
     }
   }
   return exprs.reduce((sum, e) => sum + (counts.get(e) as number), 0);
@@ -90,9 +92,14 @@ export const placesError = (exprs: readonly Expr[]): string | undefined => place
 function copied(x: unknown): unknown {
   if (Array.isArray(x)) return x.map(copied);
   if (typeof x !== "object" || x === null) return x;
-  const tag = (x as { tag?: unknown }).tag;
-  if (tag === "lit" || tag === "ext") return noted({ ...x }, x);
-  const out: unknown = Object.fromEntries(Object.entries(x).map(([name, part]) => [name, copied(part)]));
+  // A copy keeps each own property, also a property with the name `__proto__`.
+  const out: Record<string, unknown> = { ...x };
+  const tag = out["tag"];
+  if (tag === "lit" || tag === "ext") return noted(out, x);
+  for (const name of Object.keys(out)) {
+    const part = out[name];
+    if (typeof part === "object") out[name] = copied(part);
+  }
   return typeof tag === "string" ? noted(out, x) : out;
 }
 

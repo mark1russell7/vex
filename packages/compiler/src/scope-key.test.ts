@@ -26,6 +26,8 @@ const NOTHING: KeyScope = { keys: new Map(), env: new Map(), fns: new Map(), col
 const ITEMS = lit(vexList([{ key: "0", result: { ok: true, value: 1 } }]));
 
 const add = (a: Expr, b: Expr): Expr => app("add", a, b);
+/** This function gives a record with one own field of the name `__proto__`. */
+const named = (e: Expr): Expr => rec(JSON.parse(`{"__proto__":${JSON.stringify(e)}}`) as Readonly<Record<string, Expr>>);
 const eachOver = (list: Expr, body: Expr): Expr => each(axes.list(list), body, undefined, ["x"]);
 const foldOf = (init: Expr, step: Expr, result: Expr): Expr => fold(axes.all, { x: init }, { x: step }, result);
 const foldItems = (step: Expr, result: Expr): Expr => fold(axes.list(ITEMS), { s: lit(0) }, { s: step }, result, undefined, ["x"]);
@@ -366,6 +368,32 @@ describe("V-078 KEY: a key holds the meaning of each read", () => {
     const held = key(app("abs", node), { ...SCOPE, keys: new Map([[node, { code: "q0" }]]) });
     expect(held).toBe(key(app("abs", other), { ...SCOPE, keys: new Map([[other, { code: "q0" }]]) }));
     expect(held).not.toBe(key(app("abs", node)));
+  });
+
+  it("V-078: -0 is not 0 in each part of an expression that holds a number", () => {
+    expect(key(lit([-0]))).not.toBe(key(lit([0])));
+    expect(key(lit({ a: -0 }))).not.toBe(key(lit({ a: 0 })));
+    expect(key({ tag: "ext", kind: "k", data: -0 })).not.toBe(key({ tag: "ext", kind: "k", data: 0 }));
+    expect(key({ tag: "ext", kind: "k", data: [-0] })).not.toBe(key({ tag: "ext", kind: "k", data: [0] }));
+    expect(key(ref("n", [{ t: "offset", d: [-0] }]))).not.toBe(key(ref("n", [{ t: "offset", d: [0] }])));
+    expect(key(app("abs", lit(-0)))).not.toBe(key(app("abs", lit(0))));
+    expect(key(lit(-0))).toBe(key(lit(-0)));
+  });
+
+  it("V-078: a literal of a number, a text or a truth value has one key for each value", () => {
+    expect(key(lit(1))).toBe(key(lit(1)));
+    expect(key(lit(1))).not.toBe(key(lit(2)));
+    expect(key(lit(1))).not.toBe(key(lit("1")));
+    expect(key(lit(true))).not.toBe(key(lit("true")));
+    expect(key(lit(null))).not.toBe(key(lit("null")));
+    // An extension with the data of a literal is not that literal.
+    expect(key(lit(1))).not.toBe(key({ tag: "ext", kind: "k", data: 1 }));
+  });
+
+  it("V-078: a key reads a field with the name __proto__ as each other field", () => {
+    expect(key(named(lit(1)))).not.toBe(key(named(lit(2))));
+    expect(key(named(lit(1)))).not.toBe(key(rec({})));
+    expect(key(named(lit(1)))).toBe(key(named(lit(1))));
   });
 
   it("V-078: a literal keeps its value, -0 is not 0, and the parts of a record, a read and an extension keep their form", () => {

@@ -1,5 +1,5 @@
 # Throwaway measure of a draft pull request: the bytes of the sixteen ireko modules on each printer.
-# Head f04170b, tree 4e3c1af.
+# Head f04170b, tree 4e3c1af. Each arm measures, and an arm with no rows fails the job.
 name: keyscope bytes
 on:
   push:
@@ -44,24 +44,30 @@ jobs:
         run: |
           cp ../../tools/keyscope/bytes.test.ts.txt src/zz-bytes.test.ts
           cp ../../tools/keyscope/places.test.ts.txt src/zz-places.test.ts
-          # A label of an older printer can stop at a later module, so only the label branch fails the job.
+          # The pin and the tag can stop at a form that they do not print. Each arm must give rows, and an arm of "all" must give the 32 rows.
           measure() {
             out="$RUNNER_TEMP/$1.txt"
             if BYTES_LABEL=$1 pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 > "$out" 2>&1; then state=passed; else state=failed; fi
-            grep -E "BYTES|FAIL|Tests " "$out" || echo "NO LINES $1"
-            echo "LABEL $1 $state"
-            [ "$1" != branch ] || [ "$state" = passed ]
+            grep -E "^BYTES|FAIL|Tests |Error" "$out" || echo "NO LINES $1"
+            rows=$(grep -c "^BYTES " "$out") || rows=0
+            echo "LABEL $1 $state rows=$rows"
+            [ "$rows" -gt 0 ]
+            [ "$2" != all ] || [ "$rows" = 32 ]
           }
           pnpm exec vitest run src/zz-places.test.ts --maxWorkers=1 > "$RUNNER_TEMP/places.txt" 2>&1
           grep -E "PLACES|FAIL" "$RUNNER_TEMP/places.txt"
-          measure branch
+          measure branch all
           echo "COMMITTED start"
           if node scripts/module-bytes.ts ../../ireko-main > "$RUNNER_TEMP/committed.txt" 2>&1; then echo "COMMITTED equal"; else echo "COMMITTED differ"; fi
           tail -30 "$RUNNER_TEMP/committed.txt"
+          # The setup of the tests calls hooks that an older printer does not have, so each arm from here runs with no setup of the compiler.
+          sed -i 's#, "../compiler/test/module-fault.setup.ts"##' vitest.config.ts
+          if grep -q module-fault vitest.config.ts; then exit 1; fi
+          measure plain all
           git checkout "$(git merge-base HEAD origin/main)" -- ../compiler/src
-          measure base
+          measure base all
           git checkout 3a0019f -- ../compiler/src
-          measure old
+          measure old all
           git checkout ead65a70bde9f31b9fef4a8cc35cb69289167298 -- ../compiler/src
           measure pin
           git checkout "@mark1russell7/vex-compiler@0.17.2" -- ../compiler/src

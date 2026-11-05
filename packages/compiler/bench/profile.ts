@@ -41,6 +41,11 @@ export interface ProfileOptions {
    * can be in more than one group.
    */
   readonly groups: Readonly<Record<string, readonly string[]>>;
+  /**
+   * This value is the name of an arm for each sample with no arm, between the first and the last sample with an arm.
+   * The collector and `(program)` have no entry function above them, so only this arm holds their time.
+   */
+  readonly outside?: string;
   /** These values are more environment variables of the processes. */
   readonly env?: Readonly<Record<string, string>>;
 }
@@ -71,9 +76,10 @@ export function profileCommand(argv: readonly string[], o: ProfileOptions): Comm
     output.push(...out.stdout.split("\n").map((l) => `p${String(p)} ${l}`));
     if (out.status !== 0 && out.status !== 1) throw new Error(`profile: process ${String(p)} ended with ${String(out.status ?? out.signal)}: ${out.stderr.trim().split("\n").slice(-3).join(" | ")}`);
   }
-  const self = new Map<string, Map<string, number>>(o.arms.map((a) => [a, new Map()]));
-  for (const file of readdirSync(o.dir).filter((f) => f.startsWith(`${o.name}-p`) && f.endsWith(".cpuprofile"))) addSamples(JSON.parse(readFileSync(join(o.dir, file), "utf8")) as Profile, o.arms, self);
-  const arms = o.arms.map((arm): ArmTime => {
+  const names = o.outside === undefined ? o.arms : [...o.arms, o.outside];
+  const self = new Map<string, Map<string, number>>(names.map((a) => [a, new Map()]));
+  for (const file of readdirSync(o.dir).filter((f) => f.startsWith(`${o.name}-p`) && f.endsWith(".cpuprofile"))) addSamples(JSON.parse(readFileSync(join(o.dir, file), "utf8")) as Profile, o.arms, self, o.outside);
+  const arms = names.map((arm): ArmTime => {
     const byFunction = self.get(arm) ?? new Map<string, number>();
     const total = [...byFunction.values()].reduce((s, us) => s + us, 0);
     const byGroup = new Map(Object.entries(o.groups).map(([g, names]) => [g, [...byFunction].filter(([key]) => names.includes(key) || names.includes(key.slice(0, key.indexOf(" ")))).reduce((s, [, us]) => s + us, 0)]));
@@ -83,7 +89,7 @@ export function profileCommand(argv: readonly string[], o: ProfileOptions): Comm
 }
 
 /** This function adds the self time of each sample of `profile` to the function of the sample, under its arm. */
-function addSamples(profile: Profile, arms: readonly string[], self: Map<string, Map<string, number>>): void {
+function addSamples(profile: Profile, arms: readonly string[], self: Map<string, Map<string, number>>, outside?: string): void {
   const byId = new Map(profile.nodes.map((n) => [n.id, n]));
   const parent = new Map<number, number>();
   for (const n of profile.nodes) for (const c of n.children ?? []) parent.set(c, n.id);
@@ -97,8 +103,11 @@ function addSamples(profile: Profile, arms: readonly string[], self: Map<string,
     armOf.set(id, a);
     return a;
   };
+  const armed = profile.samples.map((id) => arm(id));
+  const first = armed.findIndex((a) => a !== undefined);
+  const last = armed.findLastIndex((a) => a !== undefined);
   for (const [i, id] of profile.samples.entries()) {
-    const a = arm(id);
+    const a = armed[i] ?? (i > first && i < last ? outside : undefined);
     const node = byId.get(id);
     if (a === undefined || node === undefined) continue;
     const f = node.callFrame;

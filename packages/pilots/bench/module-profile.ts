@@ -17,6 +17,8 @@ const TOP = 40;
 const INTERVAL = "100";
 /** The entry function of an arm. A sample in `emitModule` counts for that arm, and each other sample of the print counts for `irekoSource`. */
 const ARMS = ["emitModule", "irekoSource"];
+/** The arm of each other sample in the time of the print. The collector and `(program)` have no entry function above them. */
+const OUTSIDE = "outside";
 
 /** This function gives the self time of each part of a key of an arm, in µs. The key has the form `name file:line`. */
 function sumBy(arm: ArmTime | undefined, part: (key: string) => string): ReadonlyMap<string, number> {
@@ -26,10 +28,10 @@ function sumBy(arm: ArmTime | undefined, part: (key: string) => string): Readonl
 }
 
 /** This function gives the function name of a key. */
-const nameOf = (key: string): string => key.slice(0, key.indexOf(" "));
+const nameOf = (key: string): string => key.slice(0, key.lastIndexOf(" "));
 
 /** This function gives the file of a key, with no folder and no line. */
-const fileOf = (key: string): string => (key.slice(key.indexOf(" ") + 1).split(/[\\/]/u).at(-1) ?? "").replace(/:\d+$/u, "");
+const fileOf = (key: string): string => (key.slice(key.lastIndexOf(" ") + 1).split(/[\\/]/u).at(-1) ?? "").replace(/:\d+$/u, "");
 
 /** This function prints the rows of a sum of each tree, with the largest difference first. */
 function printRows(label: string, base: ReadonlyMap<string, number>, branch: ReadonlyMap<string, number>, processes: number): void {
@@ -43,7 +45,10 @@ function printRows(label: string, base: ReadonlyMap<string, number>, branch: Rea
 
 /** This function gives the time of each arm of a tree for each process. */
 function read(child: string, input: string, processes: number, dir: string, name: string): readonly ArmTime[] {
-  return profileCommand([`--cpu-prof-interval=${INTERVAL}`, child, "--input", input], { processes, dir, name, arms: ARMS, groups: {} }).arms;
+  const profile = profileCommand([`--cpu-prof-interval=${INTERVAL}`, child, "--input", input], { processes, dir, name, arms: ARMS, outside: OUTSIDE, groups: {} });
+  // The child prints its own time, so a read can compare the rows with the gap under the profile.
+  for (const line of profile.output) if (line.includes('"ms"')) console.info(`child ${name} ${line}`);
+  return profile.arms;
 }
 
 const [baseFolder, input, processText, dir] = process.argv.slice(2);
@@ -55,7 +60,7 @@ copyFileSync(here, baseChild);
 
 const base = read(baseChild, input, processes, dir, "base");
 const branch = read(here, input, processes, dir, "branch");
-for (const arm of ARMS) {
+for (const arm of [...ARMS, OUTSIDE]) {
   const b = base.find((x) => x.arm === arm);
   const t = branch.find((x) => x.arm === arm);
   console.info(`arm ${arm}: base ${((b?.total ?? 0) / processes / 1000).toFixed(3)} ms, branch ${((t?.total ?? 0) / processes / 1000).toFixed(3)} ms for each process`);

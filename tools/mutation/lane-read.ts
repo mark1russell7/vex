@@ -12,13 +12,18 @@
 // mutant that took too long, and this can come from the load of the runner, so it finds nothing for certain. The gate
 // counts a clock time-out as not found. Each line also prints the score that counts it as found.
 // A mutant with a disable comment does not count in the score, and a disable can raise a score. So each line prints the count of these mutants.
+//
+// A score can come from a part of the tests. On 2026-11-05 the lane read compiler.rest with 1029 of 1990 tests (V-090). So each
+// part prints its tests, and the gate reads two things (LANE.TESTS, LANE.FILES). With --last <file>, a part with a fall over
+// FALL_LINE against its last good read is no read. A test file on the disk that no part read is no read. A later full run
+// reads the file reports/lane-tests.json of this run. A part that fell or gave no report keeps its old count.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { laneParts, PACKAGES, packageOfPart } from "./layout.ts";
+import { laneParts, PACKAGES, packageOfPart, packageOfPath, unreadTests } from "./layout.ts";
 
 /** A place in a file of a report. */
 interface Place {
@@ -40,6 +45,26 @@ export interface Mutant {
 /** A report of Stryker. */
 export interface Report {
   readonly files: Readonly<Record<string, { readonly mutants: readonly Mutant[] }>>;
+  /** The tests of the first test run of this report, for each test file. */
+  readonly testFiles?: Readonly<Record<string, { readonly tests: readonly unknown[] }>>;
+}
+
+/** A fall of the tests of a part that a pull request makes on purpose. The entry holds while the last good read is `old`. */
+export interface PlannedFall {
+  readonly part: string;
+  readonly old: number;
+  readonly new: number;
+  readonly pr: string;
+}
+
+/** What the gate reads beside the reports. */
+export interface LaneChecks {
+  /** The tests of each part at the last good read. */
+  readonly lastTests?: Readonly<Record<string, number>>;
+  /** The falls that a pull request makes on purpose. */
+  readonly planned?: readonly PlannedFall[];
+  /** This function gives each test file on the disk that the parts did not read, as paths of the repository. */
+  readonly unread?: (read: ReadonlySet<string>) => readonly string[];
 }
 
 /** The counts of a file or a package. */
@@ -77,10 +102,38 @@ export interface LaneVerdict {
   readonly failed: boolean;
   readonly lines: readonly string[];
   readonly packages: readonly { readonly name: string; readonly outcome: "pass" | "under the line" | "no read"; readonly score: number; readonly scoreWithClock: number }[];
+  /** The tests of each part that the next full run compares with. */
+  readonly tests: Readonly<Record<string, number>>;
 }
 
 /** This value is the line of the gate, in percent. */
 const LINE = 95;
+
+/**
+ * The share of the tests of a part that can fall before the read is no read. This value is a first guess from very few
+ * falls: the largest with no fault was 7.1 % (compiler.module, 295 to 274, as tests moved) and the fault was 48.3 %. Read this
+ * line again after 4 Saturdays. Growth can hide a real fall: compiler.rest read 563, then 1029 with the fault, then 1990. A
+ * compare with the last good read passes that 1029. The load check holds that fault, and this line does not.
+ */
+export const FALL_LINE = 0.2;
+
+/** This function gives the count of the tests of a report. */
+export function testCount(report: Report): number {
+  return Object.values(report.testFiles ?? {}).reduce((sum, file) => sum + file.tests.length, 0);
+}
+
+/** This function gives the line of the tests of a part, beside the score. */
+export function testsLine(part: string, report: Report, last?: number): string {
+  const files = Object.keys(report.testFiles ?? {}).length;
+  return `${part} tests: ${String(testCount(report))} in ${String(files)} files${last === undefined ? ", with no earlier read" : `, and the last good read has ${String(last)}`}.`;
+}
+
+/** This function gives the share of a fall of the tests. It gives undefined for a planned fall or a fall under the line. */
+export function testFall(part: string, tests: number, last: number | undefined, planned: readonly PlannedFall[]): number | undefined {
+  if (last === undefined || last <= 0) return undefined;
+  const share = (last - tests) / last;
+  return share > FALL_LINE && !planned.some((p) => p.part === part && p.old === last) ? share : undefined;
+}
 
 /** This function gives the count of the mutants that a score reads. */
 const valid = (c: Counts): number => c.killed + c.hitLimit + c.clock + c.survived;
@@ -192,25 +245,48 @@ const survivorLines = (read: PackageRead): string[] => read.files.flatMap((f) =>
  * This function gives the verdict of the gate on a full run (LANE.GATE). The map has one entry for each part of the run, and
  * `undefined` is a part with no report. A package with such a part is no read, and a no read fails the gate.
  */
-export function laneVerdict(reports: ReadonlyMap<string, Report | undefined>): LaneVerdict {
+export function laneVerdict(reports: ReadonlyMap<string, Report | undefined>, checks: LaneChecks = {}): LaneVerdict {
   const present = [...reports.values()].filter((r) => r !== undefined);
   const empty = (r: Report | undefined): boolean => r === undefined || Object.values(r.files).every((f) => f.mutants.length === 0);
   const missing = [...reports].filter(([, r]) => empty(r)).map(([part]) => part);
   const reads = readReports(present);
   const lines: string[] = [];
+  const noReads = new Map<string, string[]>();
+  const tests: Record<string, number> = {};
+  const addNoRead = (name: string, text: string): void => {
+    noReads.set(name, [...(noReads.get(name) ?? []), text]);
+  };
+  for (const [part, report] of reports) {
+    const last = checks.lastTests?.[part];
+    const read = report === undefined || empty(report) ? undefined : testCount(report);
+    const fall = read === undefined ? undefined : testFall(part, read, last, checks.planned ?? []);
+    if (read !== undefined && fall !== undefined) addNoRead(packageOfPart(part), `${packageOfPart(part)}: no read: tests fell. The part ${part} read ${String(read)} tests, and the last good read has ${String(last)}: a fall of ${(100 * fall).toFixed(1)} %, over the line of ${String(100 * FALL_LINE)} %.`);
+    const kept = read === undefined || fall !== undefined ? last : read;
+    if (kept !== undefined) tests[part] = kept;
+  }
+  // A check by name needs a full set of parts. A part with no report is no read already.
+  if (missing.length === 0 && checks.unread !== undefined) {
+    const names = new Set(present.flatMap((r) => Object.keys(r.testFiles ?? {}).map((file) => file.replaceAll("\\", "/"))));
+    for (const file of checks.unread(names)) addNoRead(packageOfPath(file), `${packageOfPath(file)}: no read: file not read. No part read ${file}, and NOT_READ of layout.ts does not state why.`);
+  }
   const packages: { name: string; outcome: "pass" | "under the line" | "no read"; score: number; scoreWithClock: number }[] = [];
   for (const name of new Set([...reports.keys()].map(packageOfPart))) {
     const read = reads.find((r) => r.name === name);
     const counts = read?.counts ?? { killed: 0, hitLimit: 0, clock: 0, survived: 0, disabled: 0 };
     const score = gateScore(counts);
     const noReport = missing.filter((part) => packageOfPart(part) === name);
-    const outcome = noReport.length > 0 ? "no read" : score < LINE ? "under the line" : "pass";
+    const other = noReads.get(name) ?? [];
+    const outcome = noReport.length > 0 || other.length > 0 ? "no read" : score < LINE ? "under the line" : "pass";
     packages.push({ name, outcome, score, scoreWithClock: scoreWithClock(counts) });
-    if (outcome === "no read") lines.push(`${name}: no read. The part ${noReport.join(", ")} gave no report, so any figure of this package is not a score.`);
+    if (noReport.length > 0) lines.push(`${name}: no read. The part ${noReport.join(", ")} gave no report, so any figure of this package is not a score.`);
+    lines.push(...other);
     if (read !== undefined) lines.push(...packageLines(read), staticLine(read));
+    for (const [part, report] of reports) {
+      if (report !== undefined && packageOfPart(part) === name) lines.push(testsLine(part, report, checks.lastTests?.[part]));
+    }
     if (outcome === "under the line" && read !== undefined) lines.push(`${name}: under ${LINE} %.`, ...survivorLines(read));
   }
-  return { failed: packages.some((p) => p.outcome !== "pass"), lines, packages };
+  return { failed: packages.some((p) => p.outcome !== "pass"), lines, packages, tests };
 }
 
 /** This function reads the report of each part of a full run from a folder. */
@@ -228,10 +304,10 @@ function fixtureMutant(index: number, status: { readonly status: string; readonl
   return { ...status, mutatorName: "Fixture", location: { start: { line: index + 1, column: 0 }, end: { line: index + 1, column: 1 } } };
 }
 
-/** This function gives a report of one part with 100 mutants, of which `killed` are stopped and the rest have `other`. */
-export function fixtureReport(part: string, killed: number, other: { readonly status: string; readonly statusReason?: string }): Report {
+/** This function gives a report of one part with 100 mutants and `tests` tests. Of the mutants, `killed` are stopped and the rest have `other`. */
+export function fixtureReport(part: string, killed: number, other: { readonly status: string; readonly statusReason?: string }, tests = 100): Report {
   const mutants = Array.from({ length: 100 }, (_unused, index) => fixtureMutant(index, index < killed ? { status: "Killed" } : other));
-  return { files: { [`work/${packageOfPart(part)}/${part}.ts`]: { mutants } } };
+  return { files: { [`work/${packageOfPart(part)}/${part}.ts`]: { mutants } }, testFiles: { [`work/${packageOfPart(part)}/${part}.test.ts`]: { tests: Array.from({ length: tests }) } } };
 }
 
 /** The clean figure of each part of the flip: a score of 98 %. */
@@ -246,39 +322,70 @@ const SURVIVED = { status: "Survived" } as const;
 /** The status of a mutant that the clock stopped. */
 const CLOCK = { status: "Timeout", statusReason: "Timeout" } as const;
 
-/** One case of the flip: the reports of a run, and the outcome of the core that the gate must give. */
+/** One case of the flip: the reports of a run, the last good read of the tests, and the outcome of the core. */
 export interface FlipCase {
   readonly name: string;
   readonly reports: ReadonlyMap<string, Report | undefined>;
   readonly core: "pass" | "under the line" | "no read";
+  readonly word?: string;
+  readonly lastTests?: Readonly<Record<string, number>>;
 }
 
-/** This function gives the cases of the flip of the gate. The first part of the core changes in each case with a fault. */
-export function flipCases(): readonly FlipCase[] {
+/** The count of the tests of compiler.rest at the fault of 2026-11-05, and the count of the next read with no fault. */
+const FAULT_TESTS = 1029;
+const CLEAN_TESTS = 1990;
+
+/**
+ * This function gives the cases of the flip of the gate. The first part of the core changes in each case with a fault. The
+ * list names the test files that the parts must read, as paths of the lane. The case of the tests uses the real counts of
+ * compiler.rest. It shows that this rule can fail. It does not show that this rule finds V-090: at that time the last good
+ * read was 563, so a compare passed 1029. The load check holds that fault.
+ */
+export function flipCases(expected: readonly string[] = []): readonly FlipCase[] {
   const parts = laneParts();
-  const clean = (): Map<string, Report | undefined> => new Map(parts.map((part) => [part, fixtureReport(part, CLEAN, SURVIVED)]));
   const first = parts[0] ?? "";
+  const named = (part: string, files: readonly string[], tests: number): Report => {
+    const report = fixtureReport(part, CLEAN, SURVIVED, tests);
+    return part === first ? { ...report, testFiles: { ...report.testFiles, ...Object.fromEntries(files.map((file) => [file, { tests: [] }])) } } : report;
+  };
+  const clean = (): Map<string, Report | undefined> => new Map(parts.map((part) => [part, named(part, expected, CLEAN_TESTS)]));
+  const lastTests = Object.fromEntries(parts.map((part) => [part, CLEAN_TESTS]));
   return [
-    { name: "no fault", reports: clean(), core: "pass" },
-    { name: `a score fall in ${first}`, reports: clean().set(first, fixtureReport(first, FALLEN, SURVIVED)), core: "under the line" },
+    { name: "no fault", reports: clean(), core: "pass", lastTests },
+    { name: `a score fall in ${first}`, reports: clean().set(first, { ...clean().get(first), files: fixtureReport(first, FALLEN, SURVIVED).files }), core: "under the line" },
     { name: `no report of ${first}`, reports: clean().set(first, undefined), core: "no read" },
-    { name: `clock time-outs in ${first}`, reports: clean().set(first, fixtureReport(first, FALLEN, CLOCK)), core: "under the line" },
+    { name: `clock time-outs in ${first}`, reports: clean().set(first, { ...clean().get(first), files: fixtureReport(first, FALLEN, CLOCK).files }), core: "under the line" },
+    { name: `the tests of ${first} fell from ${String(CLEAN_TESTS)} to ${String(FAULT_TESTS)}`, reports: clean().set(first, named(first, expected, FAULT_TESTS)), core: "no read", word: "core: no read: tests fell", lastTests },
+    { name: "a test file that no part read", reports: clean().set(first, named(first, expected.slice(1), CLEAN_TESTS)), core: "no read", word: "no read: file not read", lastTests },
   ];
+}
+
+/** The root of the repository. */
+const REPO = fileURLToPath(new URL("../../", import.meta.url));
+
+/** This function gives each test file on the disk that the parts must read, as paths of the lane. */
+function expectedTests(): string[] {
+  return unreadTests(REPO, new Set()).map((file) => file.replace(/^packages\/([^/]+)\/src\//u, "work/$1/"));
 }
 
 /** This function starts the gate of this script on each case of the flip, each in a new process. It gives the count of wrong results. */
 function flip(script: string): number {
   let wrong = 0;
-  for (const c of flipCases()) {
+  const expected = expectedTests();
+  // A file that the flip drops must belong to the core, because the verdict of the flip reads the core.
+  const coreFirst = expected.toSorted((a, b) => Number(!a.startsWith("work/core/")) - Number(!b.startsWith("work/core/")));
+  for (const c of flipCases(coreFirst)) {
     const folder = mkdtempSync(join(tmpdir(), "vex-lane-flip-"));
+    const last = join(folder, "last-tests.json");
+    if (c.lastTests !== undefined) writeFileSync(last, JSON.stringify({ parts: c.lastTests }));
     for (const [part, report] of c.reports) {
       if (report === undefined) continue;
       mkdirSync(join(folder, `mutation-report-${part}`));
       writeFileSync(join(folder, `mutation-report-${part}`, "mutation.json"), JSON.stringify(report));
     }
-    const result = spawnSync(process.execPath, [script, "--gate", folder], { encoding: "utf8" });
+    const result = spawnSync(process.execPath, [script, "--gate", folder, "--last", last], { encoding: "utf8" });
     rmSync(folder, { recursive: true });
-    const word = c.core === "no read" ? "core: no read" : c.core === "under the line" ? `core: under ${LINE} %` : "core: ";
+    const word = c.word ?? (c.core === "no read" ? "core: no read" : c.core === "under the line" ? `core: under ${LINE} %` : "core: ");
     const right = result.status === (c.core === "pass" ? 0 : 1) && result.stdout.includes(word);
     const line = result.stdout.split("\n").find((l) => l.startsWith("core: ")) ?? "no line of the core";
     console.info(`flip, ${c.name}: exit ${String(result.status)}, ${right ? "right" : "WRONG"}. ${line}`);
@@ -287,13 +394,23 @@ function flip(script: string): number {
   return wrong;
 }
 
+/** This function reads the last good read of the tests. A first run has no such file. */
+function readLast(file: string | undefined): Readonly<Record<string, number>> | undefined {
+  if (file === undefined || !existsSync(file)) return undefined;
+  return (JSON.parse(readFileSync(file, "utf8")) as { readonly parts: Readonly<Record<string, number>> }).parts;
+}
+
 /** This function applies the gate to a folder, and it gives the exit code. */
-function gate(folder: string): number {
-  const verdict = laneVerdict(readFolder(folder));
+function gate(folder: string, lastFile: string | undefined): number {
+  const lastTests = readLast(lastFile);
+  const planned = JSON.parse(readFileSync(new URL("./planned-falls.json", import.meta.url), "utf8")) as readonly PlannedFall[];
+  const checks: LaneChecks = { planned, unread: (read) => unreadTests(REPO, read), ...(lastTests === undefined ? {} : { lastTests }) };
+  const verdict = laneVerdict(readFolder(folder), checks);
   const head = `The read of ${new Date().toISOString().slice(0, 10)} on ${process.env["GITHUB_SHA"] ?? "a local tree"}. A score holds for 7 days, and an older score is stale (LANE.DELAY).`;
   for (const line of [head, ...verdict.lines]) console.info(line);
   mkdirSync("reports", { recursive: true });
   writeFileSync(join("reports", "lane-read.json"), `${JSON.stringify({ date: new Date().toISOString(), sha: process.env["GITHUB_SHA"], packages: verdict.packages }, null, 2)}\n`);
+  writeFileSync(join("reports", "lane-tests.json"), `${JSON.stringify({ date: new Date().toISOString(), sha: process.env["GITHUB_SHA"], parts: verdict.tests }, null, 2)}\n`);
   const summary = process.env["GITHUB_STEP_SUMMARY"];
   if (summary !== undefined) appendFileSync(summary, `${[head, "", "```", ...verdict.lines, "```"].join("\n")}\n`);
   if (verdict.failed) console.error(`The gate failed: a package is under ${LINE} % or has no read.`);
@@ -312,8 +429,10 @@ function oneJob(): number {
     console.info(changed ? "The changed files of this part have no mutant." : "This job has no report of Stryker.");
     return changed ? 0 : 1;
   }
-  const reads = readReports([JSON.parse(readFileSync(file, "utf8")) as Report]);
+  const report = JSON.parse(readFileSync(file, "utf8")) as Report;
+  const reads = readReports([report]);
   for (const read of reads) console.info([...packageLines(read), staticLine(read), ...survivorLines(read)].join("\n"));
+  console.info(testsLine(process.env["VEX_MUTATE"] ?? "this part", report));
   if (changed) return 0;
   const named = process.env["VEX_MUTATE"]?.split(",").filter((p) => p !== "") ?? PACKAGES;
   const absent = [...new Set(named.map(packageOfPart))].filter((name) => (reads.find((r) => r.name === name)?.counts.killed ?? 0) === 0 && valid(reads.find((r) => r.name === name)?.counts ?? { killed: 0, hitLimit: 0, clock: 0, survived: 0, disabled: 0 }) === 0);
@@ -324,6 +443,6 @@ function oneJob(): number {
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const mode = process.argv[2];
   if (mode === "--flip") process.exitCode = flip(fileURLToPath(import.meta.url)) === 0 ? 0 : 1;
-  else if (mode === "--gate") process.exitCode = gate(process.argv[3] ?? "reports/parts");
+  else if (mode === "--gate") process.exitCode = gate(process.argv[3] ?? "reports/parts", process.argv[4] === "--last" ? process.argv[5] : undefined);
   else process.exitCode = oneJob();
 }

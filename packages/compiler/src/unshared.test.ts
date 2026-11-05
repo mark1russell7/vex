@@ -27,6 +27,21 @@ describe("V-080 UNSHARED: each place of a program has its own object", () => {
     expect(originalOf(e)).toBe(e);
   });
 
+  it("V-080: a copy keeps a field with the name __proto__ as an own field, with a copy of its value", () => {
+    const named = rec(JSON.parse('{"__proto__":{"tag":"lit","value":1},"m":{"tag":"lit","value":2}}') as Readonly<Record<string, Expr>>);
+    const copy = unshared(rec({ a: named, b: named })) as Extract<Expr, { tag: "rec" }>;
+    const first = copy.fields["a"] as Extract<Expr, { tag: "rec" }>;
+    expect(first).not.toBe(named);
+    expect(Object.getOwnPropertyDescriptor(first.fields, "__proto__")?.value).toStrictEqual(lit(1));
+    expect(Object.getPrototypeOf(first.fields)).toBe(Object.prototype);
+    expect(Object.keys(first.fields)).toStrictEqual(["__proto__", "m"]);
+    const field = lit(1);
+    const [one, two] = unsharedAll([field, field]) as readonly [Expr, Expr];
+    expect(one).toStrictEqual(field);
+    expect(one).not.toBe(two);
+    expect(originalOf(one)).toBe(field);
+  });
+
   it("V-080: a program with no shared object needs one walk", () => {
     let walked = 0;
     const seen = (e: Expr): Expr =>

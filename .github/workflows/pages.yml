@@ -39,6 +39,7 @@ jobs:
       id-token: write
     with:
       # The test report (the living spec page shows the status of the tests of each requirement), then the site
+      github-token: true
       build: |
         pnpm --filter @vex/site run report
         pnpm --filter @vex/site run build

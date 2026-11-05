@@ -77,8 +77,15 @@ const WORD = /[A-Za-z_$][\w$]*/g;
 /** This function gives the words of a text. */
 export const wordsOf = (text: string): readonly string[] => text.match(WORD) ?? [];
 
-/** This function gives the count of a word in some lines. */
-const countOf = (lines: readonly string[], name: string): number => lines.reduce((sum, x) => sum + wordsOf(x).filter((w) => w === name).length, 0);
+/** This function gives the count of a word in some lines. A line without the text of the word needs no walk. */
+function countOf(lines: readonly string[], name: string): number {
+  let sum = 0;
+  for (const x of lines) {
+    // Stryker disable next-line ConditionalExpression: a line without the text has no such word, so this test only saves the walk.
+    if (x.includes(name)) sum += wordsOf(x).filter((w) => w === name).length;
+  }
+  return sum;
+}
 
 /** This function gives the number of spaces at the start of a line. */
 const indentOf = (line: string): number => line.length - line.trimStart().length;
@@ -154,6 +161,8 @@ function writesOf(lines: readonly string[]): ReadonlyMap<string, readonly number
 
 /** This function tells if a line declares a name, also as a parameter of a function. */
 function binds(line: string, name: string): boolean {
+  // Stryker disable next-line ConditionalExpression: a line without the name has no declaration of it, so this test only saves the pattern.
+  if (!line.includes(name)) return false;
   const word = `(?<![\\w$])${name}(?![\\w$])`;
   return new RegExp(`\\b(?:const|let)\\s+(?:[^;=]*,\\s*|\\[[^\\]]*)?${word}|\\([^()]*${word}[^()]*\\)\\s*=>|${word}\\s*=>|\\bfunction\\b[^(]*\\([^)]*${word}`).test(line);
 }
@@ -192,7 +201,11 @@ export function aliases(lines: readonly string[]): readonly string[] {
     // Each read of the alias must be in its block, and no line of that block can give either name another meaning. The
     // printer prints the steps of a stopped walk two times, so a nested block can declare the alias again (V-073).
     if (countOf(out, alias) !== 1 + countOf(block, alias) || block.some((x) => binds(x, name) || binds(x, alias)) || !keeps(out, writes.get(name) ?? [], name, i, end)) continue;
-    for (let k = i + 1; k < end; k++) out[k] = renamed(out[k] as string, alias, name);
+    for (let k = i + 1; k < end; k++) {
+      const x = out[k] as string;
+      // Stryker disable next-line ConditionalExpression: a line without the alias stays as it is, so this test only saves the pattern.
+      if (x.includes(alias)) out[k] = renamed(x, alias, name);
+    }
     gone.add(i);
   }
   return out.filter((_, i) => !gone.has(i));
@@ -272,7 +285,7 @@ function constantAt(lines: readonly string[], at: number): { readonly name: stri
 /** This function gives the count of each word of some lines. */
 function wordCounts(lines: readonly string[]): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const x of lines) for (const w of wordsOf(x)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  for (const w of wordsOf(lines.join("\n"))) counts.set(w, (counts.get(w) ?? 0) + 1);
   return counts;
 }
 

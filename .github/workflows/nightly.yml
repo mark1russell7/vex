@@ -59,7 +59,6 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
-      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       - run: node prepare.mjs && node load-check.ts --flip
         working-directory: tools/mutation

@@ -10,9 +10,11 @@
  * row `build` prints all the modules with a shared object in one process, as a real build does. The row
  * `build-no-avoid` leaves out the module `avoid`, because the total of `build` does not show that each module is cheap.
  *
- * A second pair is the second largest ratio of one round of a row. One slow process cannot move it. The rule reads it on
- * both sides: the second pair of a row, against the worst second pair of the A/A arm of the run. A real cost in 1 round
- * of 7 cannot be told from noise at 7 rounds. The worst pair is a record, and it does not fail a row.
+ * The rule is `tailLimitVerdict` of `@mark1russell7/rigor-bench`, and this file has only the limits and the words of a row.
+ * The median of a row is the median of the ratios of its rounds. A second pair is the second largest ratio of one round of
+ * a row. One slow process cannot move it. The rule reads it on both sides: the second pair of a row, against the worst
+ * second pair of the A/A arm of the run. A real cost in 1 round of 7 cannot be told from noise at 7 rounds. The worst pair
+ * is a record, and it does not fail a row.
  *
  * A gain limit reads against the fixed commit `GAIN_BASE`, so a merge does not move it. Only a pull request moves that
  * commit. That pull request has a ruling, new limits and the ratio of the new base to the old base on the row `build`.
@@ -20,11 +22,12 @@
  * A limit under 1 holds a gain. It holds that gain only on a model of `GAIN_MODELS`. On each other model the row reads its
  * ceiling, and it prints that it does not read the gain. A pass on such a model does not show that the gain holds.
  */
+import { armOrder, type CaseTailLimit, caseRatios, caseTails, type PairedTime, tailFalseFails, type TailFalseFails, type TailLimit, tailLimitVerdict, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
 import { median } from "../../core/bench/measure.ts";
 
 /** The limits of one module against the base commit, as ratios of times in one run. Lower is faster. */
 export interface ModuleLimit {
-  /** The most that the median time of the branch can be, as a share of the median time of the base. */
+  /** The most that the median of the ratios of the rounds of the branch to the base can be. */
   readonly median: number;
   /** The most that the second pair of the row can be. With no value, the row prints its second pair and that pair fails nothing. */
   readonly second?: number;
@@ -136,6 +139,18 @@ export const CATCH_ADD: Readonly<Record<string, number>> = { grid: 0.2, radial: 
 /** The modules that the gate must fail in the read that tests it. */
 export const CATCH_MUST_FAIL: readonly string[] = ["grid", "shape"];
 
+/**
+ * The added work of each module in the read that tests the second pair clause. The cost goes in the first
+ * `ROUND_ADD_STARTS` rounds of a read only. So the median stays under its limit, and the clause must fail alone.
+ */
+export const ROUND_ADD: Readonly<Record<string, number>> = { grid: 0.4, shape: 0.4 };
+
+/** The count of rounds with the added work in the read that tests the second pair clause. */
+export const ROUND_ADD_STARTS = 2;
+
+/** The arms of a read, in the order that `measureIsolated` gives them. The order of a round comes from `armOrder`, and a test holds the two equal. */
+export const ARMS: readonly string[] = ["base", "branch", "base~aa"];
+
 /** The raw times of one module in one run, in ms, with one time for each round. */
 export interface ModuleTimes {
   readonly module: string;
@@ -151,9 +166,9 @@ export interface ModuleTimes {
 export interface ModuleReading {
   readonly baseMs: number;
   readonly branchMs: number;
-  /** The median time of the branch over the median time of the base. */
+  /** The median of the ratios of the rounds of the branch to the base. */
   readonly ratio: number;
-  /** The median time of the second copy of the base over the median time of the base. */
+  /** The median of the ratios of the rounds of the second copy of the base to the base. */
   readonly aa: number;
   /** The largest ratio of one round. */
   readonly worstPair: number;
@@ -180,75 +195,95 @@ export function medianLimit(limit: ModuleLimit, model: string): number {
   return ceilingOnly(limit, model) ? (limit.ceiling ?? limit.median) : limit.median;
 }
 
-/** This function gives the ratios of one arm to the base, one for each round, with the largest first. */
-function pairsOf(arm: readonly number[], base: readonly number[]): readonly number[] {
-  const pairs = arm.map((ms, round) => ms / (base[round] ?? Number.NaN));
-  // The type-aware lint does not have Array#toSorted, and sort() changes only the copy.
-  // oxlint-disable-next-line unicorn/no-array-sort
-  pairs.sort((x, y) => y - x);
-  return pairs;
+/** This function gives the limits of a row for the home rule. A row with no second limit only prints its second pair, so its limit is the largest number. */
+export function tailLimitOf(module: string, shares: boolean, model: string): TailLimit {
+  const limit = limitOf(module, shares);
+  return { median: medianLimit(limit, model), tail: limit.second ?? Number.MAX_VALUE };
 }
 
-/** This function gives the values of one row from the times of its rounds. A row of one round has its one pair as its second pair. */
+/**
+ * This function gives the paired records of one side of a read, with the order that the arms started in. A module with no
+ * times, or with arms of different rounds, has no read, so the function throws and the gate fails.
+ */
+export function recordsOf(rows: readonly ModuleTimes[], side: "branch" | "aa"): readonly PairedTime[] {
+  const arm = side === "branch" ? "branch" : "base~aa";
+  return rows.flatMap((row) => {
+    const times = row[side];
+    if (row.base.length === 0 || times.length !== row.base.length) throw new RangeError(`${row.module}: the arms have ${String(row.base.length)} and ${String(times.length)} rounds`);
+    return row.base.map((a, round): PairedTime => {
+      const order = armOrder(ARMS, round);
+      return { case: row.module, round, first: order.indexOf("base") < order.indexOf(arm) ? "a" : "b", a, b: times[round] ?? Number.NaN };
+    });
+  });
+}
+
+/**
+ * This function gives the count of the rounds of one side of a row for each order, as base first and then arm first. An odd
+ * count of rounds cannot give equal counts, so the gate prints them beside each verdict.
+ */
+export function orderCount(row: ModuleTimes, side: "branch" | "aa"): string {
+  const records = recordsOf([row], side);
+  const baseFirst = records.filter((r) => r.first === "a").length;
+  return `${String(baseFirst)}:${String(records.length - baseFirst)}`;
+}
+
+/** This function gives the value at one rank of the ratios of the only case of the records. */
+function tailOf(records: readonly PairedTime[], rank: number): number {
+  return caseTails(records, rank)[0]?.tail ?? Number.NaN;
+}
+
+/** This function gives the values of one row from the times of its rounds. The rule of the second pair needs 5 rounds or more. */
 export function readingOf(row: ModuleTimes): ModuleReading {
-  const baseMs = median(row.base);
-  const branchMs = median(row.branch);
-  const pairs = pairsOf(row.branch, row.base);
-  const aaPairs = pairsOf(row.aa, row.base);
+  const pairs = recordsOf([row], "branch");
+  const aaPairs = recordsOf([row], "aa");
   return {
-    baseMs,
-    branchMs,
-    ratio: branchMs / baseMs,
-    aa: median(row.aa) / baseMs,
-    worstPair: pairs[0] ?? Number.NaN,
-    secondPair: pairs[1] ?? pairs[0] ?? Number.NaN,
-    aaWorst: aaPairs[0] ?? Number.NaN,
-    aaSecond: aaPairs[1] ?? aaPairs[0] ?? Number.NaN,
+    baseMs: median(row.base),
+    branchMs: median(row.branch),
+    ratio: caseRatios(pairs)[0]?.ratio ?? Number.NaN,
+    aa: caseRatios(aaPairs)[0]?.ratio ?? Number.NaN,
+    worstPair: tailOf(pairs, 1),
+    secondPair: tailOf(pairs, 2),
+    aaWorst: tailOf(aaPairs, 1),
+    aaSecond: tailOf(aaPairs, 2),
   };
 }
 
-/** This function gives the worst second pair of the A/A arm over all the rows of one run. That value is the noise of a second pair. */
-export function runAaSecond(rows: readonly ModuleTimes[]): number {
-  return Math.max(...rows.map((row) => readingOf(row).aaSecond));
-}
-
-/** This function tells if the A/A arm of a run is over the cap, so that the read has no power. */
-export function isLoud(rows: readonly ModuleTimes[]): boolean {
-  return runAaSecond(rows) > AA_CAP;
-}
-
 /**
- * This function gives the faults of one row. A module with no times, or with arms of different rounds, is a fault. A
- * second pair is a fault only over its limit and over the worst second pair of the A/A arm of the run.
+ * This function gives the verdict of the home rule on one read. A row is `beyond` if its median is over its limit. A row is
+ * also `beyond` if its second pair is over its limit and over the worst A/A second pair of the run. A read with
+ * the A/A pair over `AA_CAP` does not decide. The read that tests the gate has 3 rows, so the smallest count of A/A rows comes from the read.
  */
-export function moduleCostFaults(row: ModuleTimes, runSecond: number, model: string): readonly string[] {
-  if (row.base.length === 0 || row.branch.length !== row.base.length) return [`${row.module}: the arms have ${String(row.base.length)} and ${String(row.branch.length)} rounds`];
-  const limit = limitOf(row.module, row.shares);
-  const reading = readingOf(row);
-  const line = medianLimit(limit, model);
-  const second = limit.second ?? Number.POSITIVE_INFINITY;
+export function moduleVerdict(rows: readonly ModuleTimes[], model: string): TailLimitVerdict {
+  return tailLimitVerdict(recordsOf(rows, "branch"), recordsOf(rows, "aa"), {
+    limit: (module) => tailLimitOf(module, rows.find((row) => row.module === module)?.shares ?? true, model),
+    aaCap: AA_CAP,
+    minimum: Math.min(5, rows.length),
+    expected: rows.map((row) => row.module),
+  });
+}
+
+/** This function gives the words of each fault of one row of a verdict. Each ratio has three decimals, so that no row rounds on to its line. */
+export function moduleCostFaults(row: CaseTailLimit, aaTail: number | undefined): readonly string[] {
   return [
-    ...(reading.ratio > line ? [`${row.module}: the median ratio ${reading.ratio.toFixed(3)} is over the limit ${line.toFixed(3)}`] : []),
-    ...(reading.secondPair > second && reading.secondPair > runSecond
-      ? [`${row.module}: the second pair ${reading.secondPair.toFixed(3)} is over the limit ${second.toFixed(3)} and over the second pair ${runSecond.toFixed(3)} of the A/A arm of the run`]
-      : []),
+    ...(row.overMedian ? [`${row.case}: the median ratio ${(row.ratio ?? Number.NaN).toFixed(3)} is over the limit ${row.limit.median.toFixed(3)}`] : []),
+    ...(row.overTail ? [`${row.case}: the second pair ${(row.tail ?? Number.NaN).toFixed(3)} is over the limit ${row.limit.tail.toFixed(3)} and over the second pair ${(aaTail ?? Number.NaN).toFixed(3)} of the A/A arm of the run`] : []),
   ];
 }
 
-/**
- * This function applies the rule to each A/A arm as if it were a branch, and gives the rows that fail. Each row reads the
- * A/A arms of the other rows, because a row cannot be the noise of itself. A row with a limit under 1 fails here by its limit.
- */
-export function falseFails(rows: readonly ModuleTimes[], model: string): readonly string[] {
-  return rows
-    .filter((row) => moduleCostFaults({ ...row, branch: row.aa }, runAaSecond(rows.filter((other) => other !== row)), model).length > 0)
-    .map((row) => row.module);
+/** This function applies the home rule to each A/A arm as if it were a branch. A row with a limit under 1 has no read there, and it goes in `gains`. */
+export function falseFails(rows: readonly ModuleTimes[], model: string): TailFalseFails {
+  return tailFalseFails(recordsOf(rows, "aa"), { limit: (module) => tailLimitOf(module, rows.find((row) => row.module === module)?.shares ?? true, model) });
 }
 
-/** This function gives a fault for each module that the gate must fail in the read that tests it, if the gate passes that module. */
-export function catchFaults(rows: readonly ModuleTimes[], runSecond: number, model: string): readonly string[] {
-  return CATCH_MUST_FAIL.filter((module) => {
-    const row = rows.find((r) => r.module === module);
-    return row === undefined || moduleCostFaults(row, runSecond, model).length === 0;
-  }).map((module) => `${module}: the gate passes a module with an added cost`);
+/** This function gives a line for each module where the second pair clause did not fail alone in the read that tests that clause. */
+export function roundFaults(verdict: TailLimitVerdict): readonly string[] {
+  return Object.keys(ROUND_ADD).flatMap((module) => {
+    const row = verdict.cases.find((read) => read.case === module);
+    return row?.outcome === "beyond" && row.overTail && !row.overMedian ? [] : [`${module}: the second pair clause did not fail alone with a cost in ${String(ROUND_ADD_STARTS)} rounds: ${row?.outcome ?? "no row"}, median ${(row?.ratio ?? Number.NaN).toFixed(3)}, second pair ${(row?.tail ?? Number.NaN).toFixed(3)}`];
+  });
+}
+
+/** This function gives a line for each module that the gate must fail and passes in the read that tests the median clause. */
+export function catchFaults(verdict: TailLimitVerdict): readonly string[] {
+  return CATCH_MUST_FAIL.filter((module) => verdict.cases.find((row) => row.case === module)?.outcome !== "beyond").map((module) => `${module}: the gate passes a module with an added cost`);
 }

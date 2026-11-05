@@ -5,7 +5,7 @@
  */
 
 /** The packages from npm that the code of the speed gates imports. `gate-paths.test.ts` proves that the list is full. */
-export const GATE_NPM_PACKAGES: readonly string[] = ["@mark1russell7/coeval", "@mark1russell7/optional", "acorn", "astring"];
+export const GATE_NPM_PACKAGES: readonly string[] = ["@mark1russell7/coeval", "@mark1russell7/optional", "@mark1russell7/rigor-bench", "acorn", "astring"];
 
 /** This function gives the name of a key of the `packages` section of a lock file: `'@a/b@1.0.0':` gives `@a/b`. */
 function nameOf(key: string): string {

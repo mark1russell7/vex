@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@mark1russell7/cue": "github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7",
+    "@mark1russell7/rigor-bench": "^0.2.17",
     "@mark1russell7/vex-compiler": "workspace:*",
     "@mark1russell7/vex-mcp": "workspace:*",
     "@mark1russell7/vex-testkit": "workspace:*",

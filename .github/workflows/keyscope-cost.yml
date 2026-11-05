@@ -1,5 +1,5 @@
 # Throwaway measure of a draft pull request: the compile cost of the branch against its base, and the walk alone.
-# Head f04170b, tree 4e3c1af.
+# Head 91f30f4, tree 5184b0e.
 name: keyscope cost
 on:
   push:

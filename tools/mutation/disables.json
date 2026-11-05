@@ -97,6 +97,10 @@
   },
   {
     "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: with no locals the scan below finds no read, so this return only saves the scan"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
     "comment": "// Stryker disable next-line all: see the comment above"
   },
   {

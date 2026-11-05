@@ -124,6 +124,8 @@ interface Pack {
   /** True when a column of the function that the printer prints has a pack too, with a variable in that function. */
   readonly calls: boolean;
   readonly cols: Map<string, string>;
+  /** The value locals that the second print makes. Each one is a local of its loop until a line of the run declares it. */
+  readonly locals: Set<string>;
   /** The count of the calls that the second print puts at their place. A count over `INLINES` stops the print. */
   inlines: number;
 }
@@ -2422,7 +2424,9 @@ class Printer {
 
   /** This method gives a new name for the code. */
   fresh(prefix: string): string {
-    return `${prefix}${this.#names++}`;
+    const name = `${prefix}${this.#names++}`;
+    if (prefix === "b") this.#pack?.locals.add(name);
+    return name;
   }
 
   /** This method tells if code reads a lazy constant of the run, or calls a printed function that has a loop. */
@@ -2467,7 +2471,7 @@ class Printer {
     const hit = key === undefined ? undefined : this.#constants.get(key);
     if (hit !== undefined) return hit;
     // A pack is a local of the loop of a second print, so a constant of the run cannot read it (V-077).
-    if (this.#readsPack([c.v.code, ...c.s])) throw new NoPack();
+    this.#leavePack([c.v.code, ...c.s]);
     const name = this.fresh("c");
     const deferred = lazy || this.#defers(c);
     if (deferred) {
@@ -2670,10 +2674,21 @@ class Printer {
     return work;
   }
 
-  /** This method tells if some lines read a pack of the second print that the printer prints. */
-  #readsPack(lines: readonly string[]): boolean {
+  /**
+   * This method stops the second print when some lines for the run read a local of its loop (V-077, V-094). That
+   * local is a pack, or a value local that the lines do not declare. Else the declared locals go to the run too.
+   */
+  #leavePack(lines: readonly string[]): void {
+    const pack = this.#pack;
+    if (pack === undefined) return;
     const text = lines.join("\n");
-    return [...(this.#pack?.cols.values() ?? [])].some((local) => text.includes(`${local}[`));
+    if ([...pack.cols.values()].some((local) => text.includes(`${local}[`))) throw new NoPack();
+    // Stryker disable next-line ConditionalExpression: with no locals the scan below finds no read, so this return only saves the scan
+    if (pack.locals.size === 0) return;
+    const declared = new Set([...text.matchAll(/\b(?:const|let) (b\d+)\b/gu)].map((m) => m[1]));
+    // A call at its place keeps an argument in a local, and a read of that argument has no levels (V-094).
+    if ([...text.matchAll(/\bb\d+\b/gu)].some(([name]) => pack.locals.has(name) && !declared.has(name))) throw new NoPack();
+    for (const name of declared) pack.locals.delete(name as string);
   }
 
   /**
@@ -2681,7 +2696,7 @@ class Printer {
    * cannot read it (V-077, V-084). Then the second print stops, and the loop keeps its first print.
    */
   #intoRun(lines: readonly string[]): void {
-    if (this.#readsPack(lines)) throw new NoPack();
+    this.#leavePack(lines);
     this.run.push(...lines);
   }
 
@@ -3762,7 +3777,7 @@ class Printer {
     if (this.#pack !== undefined || !PACK_OPS.has(op) || step !== undefined || body.v.kind !== "number") return undefined;
     if (!this.#packable(target.body, inner.fns, new Set()) || !this.#reaches(body)) return undefined;
     const j = inner.focus as string;
-    const pack: Pack = { foci: new Set([j]), calls: false, cols: new Map(), inlines: 0 };
+    const pack: Pack = { foci: new Set([j]), calls: false, cols: new Map(), locals: new Set(), inlines: 0 };
     const scopes = this.#scopes.length;
     const outer = this.#inside;
     this.#pack = pack;
@@ -4571,7 +4586,7 @@ class Printer {
     const read = first.s.join("\n");
     const columns = [...this.#runColumns.keys(), ...[...this.#callColumns].flatMap(([name, c]) => (c.scope === scope ? [name] : []))];
     if (!columns.some((name) => read.includes(`${name}(`))) return undefined;
-    const pack: Pack = { foci: new Set([t.j]), calls: true, cols: new Map(), inlines: 0 };
+    const pack: Pack = { foci: new Set([t.j]), calls: true, cols: new Map(), locals: new Set(), inlines: 0 };
     const scopes = this.#scopes.length;
     const outer = this.#inside;
     this.#pack = pack;

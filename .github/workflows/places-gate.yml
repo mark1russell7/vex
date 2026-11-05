@@ -68,6 +68,13 @@ jobs:
           sed -i 's/MAX_PLACES: number = .*/MAX_PLACES: number = 2 ** 60;/' packages/compiler/src/unshared.ts
           grep -q 'MAX_PLACES: number = 2 \*\* 60;' packages/compiler/src/unshared.ts
       - run: node packages/compiler/bench/places.ts rows "${{ steps.limit.outputs.places }}" 2>&1 | tee rows.txt
+      # The flip of the gate (rule 8i). With more memory than the line in each child, the gate must fail on the measure.
+      - run: |
+          if PLACES_FAULT=1 node packages/compiler/bench/places.ts rows "${{ steps.limit.outputs.places }}" > fault.txt 2>&1; then
+            echo "The gate passed with the fault."
+            exit 1
+          fi
+          grep -E "^FAIL .* goes over " fault.txt
       - if: ${{ !cancelled() }}
         run: |
           {

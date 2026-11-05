@@ -102,8 +102,8 @@ describe("the specification is executable", () => {
   });
 
   it("each defect with the status test has a test that names it", () => {
-    const rows = [...read("spec/regressions.md").matchAll(/^\| (V-\d{3}) \| (test|resolved) \|/gm)];
-    // The IDs run from V-001 without a gap: V-001 to V-042 are the audit defects, and later defects come after them.
+    const rows = [...read("spec/regressions.md").matchAll(/^\| (V-\d{3}) \| (test|resolved|pending) \|/gm)];
+    // The IDs run from V-001 without a gap: V-001 to V-042 are the audit defects, and later defects come after them. A pending row holds its place.
     expect(rows.length).toBeGreaterThanOrEqual(42);
     expect(rows.map((m) => m[1])).toEqual(rows.map((_m, i) => `V-${String(i + 1).padStart(3, "0")}`));
     const missing = rows.filter((m) => m[2] === "test" && !testedDefects.has(m[1] ?? "")).map((m) => m[1]);

@@ -55,9 +55,10 @@ jobs:
             git checkout -q "$c" -- ../compiler/src
             echo "STEP $c $(git log -1 --format=%s "$c" | cut -c1-90)"
             out="$RUNNER_TEMP/$c.txt"
-            BYTES_LABEL=$c timeout 240 pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 > "$out" 2>&1 || true
+            if BYTES_LABEL=$c timeout 240 pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 > "$out" 2>&1; then state=passed; else state=failed; fi
             rows=$(grep -c "BYTES $c " "$out") || rows=0
-            if [ "$rows" = 0 ]; then norows=$((norows + 1)); echo "NOROWS $c"; grep -E "Error" "$out" | head -2 | cut -c1-140; else grep -E "BYTES $c " "$out" | cut -c1-140; fi
+            echo "STATE $c $state rows=$rows"
+            if [ "$rows" = 0 ]; then norows=$((norows + 1)); echo "NOROWS $c $state"; grep -E "Error" "$out" | head -2 | cut -c1-140; else grep -E "BYTES $c " "$out" | cut -c1-140; fi
             last="$rows"
           done
           echo "NOROWS_TOTAL $norows"

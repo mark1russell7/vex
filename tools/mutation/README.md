@@ -59,7 +59,7 @@ Stryker adds `// @ts-nocheck` to each file of its sandbox by default. The lane t
 
 ## The modules of the compiler
 
-A standalone module copies the text of each op function of a domain. A mutated domain has the code of Stryker in that text, so the module refuses the op. Thus only `compiler/module.test.ts` gets `@mark1russell7/vex-domains` from the copy that Stryker does not mutate (`vitest.config.ts`). Put each test that emits a module with ops of the domains in that file. On 2026-10-19, a test in `tiers.test.ts` emitted a module, and the dry run of the domains failed.
+A standalone module copies the text of each op function of a domain. A mutated domain has the code of Stryker in that text, so the module refuses the op. Thus each test file of the compiler that names `emitModule` or imports `module.ts` gets `@mark1russell7/vex-domains` from the copy that Stryker does not mutate (`printsModule` of `layout.ts`). These tests stop no mutant of the domains. A dry run names each failed test, because `disableBail` is on for a dry run. On 2026-10-19, a test in `tiers.test.ts` emitted a module, and the dry run of the domains failed.
 
 ## The files that the lane does not mutate
 

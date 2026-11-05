@@ -18,6 +18,8 @@ export default {
   mutate: changed.length === 0 ? entries : entriesIn(entries, changed),
   coverageAnalysis: "perTest",
   dryRunOnly: process.env.VEX_DRY_RUN === "1",
+  // A dry run names each failed test. With the bail of Stryker, it names only the first.
+  disableBail: process.env.VEX_DRY_RUN === "1",
   disableTypeChecks: false,
   // The file tsconfig.json of this folder is for the lint only. Stryker rewrites a tsconfig.json of its sandbox with the
   // JavaScript API of TypeScript, and TypeScript 7 has no such API. So this file stays out of the sandbox.

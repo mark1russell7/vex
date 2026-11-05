@@ -1,22 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-
-/**
- * This function gives the root of the repository: the first folder above this file that holds `pnpm-workspace.yaml`.
- * The mutation lane runs a copy of this file in `tools/mutation/.stryker-tmp`.
- */
-function repoRoot(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  while (!existsSync(join(dir, "pnpm-workspace.yaml"))) {
-    const up = dirname(dir);
-    if (up === dir) throw new Error("The folders above this file do not hold pnpm-workspace.yaml.");
-    dir = up;
-  }
-  return dir;
-}
+import { repoRoot } from "./repo-root.ts";
 
 /** The name of the configuration of the tests of a package. */
 const CONFIG = "vitest.config.ts";
@@ -26,6 +13,7 @@ interface Layout {
   readonly unresolvedImports: (root: string) => readonly string[];
   readonly missingPackages: (root: string) => readonly string[];
   readonly missingSetups: (root: string) => readonly string[];
+  readonly printsModule: (text: string) => boolean;
   readonly laneParts: () => readonly string[];
   readonly PACKAGES: readonly string[];
   readonly mutateOf: (root: string, part: string) => readonly string[];
@@ -110,6 +98,22 @@ describe("the copy of the mutation lane", () => {
     const found = layout.missingSetups(other);
     rmSync(other, { recursive: true });
     expect(found).toEqual([`packages/compiler/${CONFIG}: compiler/not-in-the-lane.ts`]);
+  });
+
+  // A module copies the text of each op function, and the counters of Stryker stop that copy. On 2026-11-05 the rule read the
+  // name of a file, so `module-vec2.test.ts` and 12 other files got the mutated domains, and the dry run of each part failed.
+  it("LANE.PLAIN: a test file that prints a module reads the copy of the domains that Stryker does not mutate", async () => {
+    const layout = await loadLayout();
+    const vec2 = readFileSync(join(repoRoot(), "packages", "compiler", "src", "module-vec2.test.ts"), "utf8");
+    expect(layout.printsModule(vec2)).toBe(true);
+    expect(layout.printsModule('import { emitModule } from "./emit.ts";')).toBe(true);
+    expect(layout.printsModule('import { other } from "./module.ts";')).toBe(true);
+  });
+
+  it("LANE.PLAIN: a test file that does not print a module reads the mutated domains", async () => {
+    const layout = await loadLayout();
+    expect(layout.printsModule('import { compile } from "./compile.ts";')).toBe(false);
+    expect(layout.printsModule('import { submodule } from "./submodule.ts";')).toBe(false);
   });
 });
 

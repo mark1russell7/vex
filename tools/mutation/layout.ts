@@ -49,6 +49,18 @@ const IMPORT = /(?:\bfrom|\bimport\(?)\s*["'](\.{1,2}\/[^"']+)["']/gu;
 
 const isTest = (path: string): boolean => path.endsWith(".test.ts");
 
+/** The marks of a test file that prints a module: the name of the printer, or an import of the file of the printer. */
+const PRINTS_A_MODULE = /\bemitModule\b|\/module\.ts"/u;
+
+/**
+ * This function states if the text of a test file prints a module. A module copies the text of each op function, and the
+ * counters of Stryker make that text read a name outside itself. So such a test reads the copy of the domains that Stryker
+ * does not mutate. A rule on the name of the file missed `module-vec2.test.ts` and 12 other files (2026-11-05).
+ */
+export function printsModule(text: string): boolean {
+  return PRINTS_A_MODULE.test(text);
+}
+
 /** This function gives the text of a file in the copy, with the change of its imports. */
 export function textInCopy(copy: Copy, text: string): string {
   return copy.imports === undefined ? text : text.replaceAll(copy.imports[0], copy.imports[1]);
@@ -155,7 +167,7 @@ const KERNEL: ReadonlySet<string> = new Set(["kernel.ts", "plan.ts", "same.ts", 
 const MODULE_FILE = "module.ts";
 
 /** The files of the packages that hold no code of a package, as paths of a package folder. */
-const NOT_MUTATED: ReadonlySet<string> = new Set(["core/test-support.ts", "testkit/fc-setup.ts", "testkit/arbitraries.ts", "testkit/builder-model-arbitraries.ts", "testkit/sheet-arbitraries.ts"]);
+const NOT_MUTATED: ReadonlySet<string> = new Set(["core/test-support.ts", "testkit/fc-setup.ts", "testkit/repo-root.ts", "testkit/arbitraries.ts", "testkit/builder-model-arbitraries.ts", "testkit/sheet-arbitraries.ts"]);
 
 /**
  * The count of the parts of each group of files that one runner does not finish in its time limit of 150 minutes. The count

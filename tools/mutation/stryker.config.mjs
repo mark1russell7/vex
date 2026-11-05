@@ -17,6 +17,9 @@ export default {
   plugins: ["@stryker-mutator/vitest-runner"],
   mutate: changed.length === 0 ? entries : entriesIn(entries, changed),
   coverageAnalysis: "perTest",
+  // The first run of the parts of the core took 3:23 to 4:09 in run 42075551015, and core.base.1 passed the default of
+  // 5 minutes. The limit is 15 minutes, more than 3 times the slowest first run that passed.
+  dryRunTimeoutMinutes: 15,
   dryRunOnly: process.env.VEX_DRY_RUN === "1",
   // A dry run names each failed test. With the bail of Stryker, it names only the first.
   disableBail: process.env.VEX_DRY_RUN === "1",

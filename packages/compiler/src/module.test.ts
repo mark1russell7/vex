@@ -157,8 +157,8 @@ function fnOf(src: string, outside?: unknown): (...a: never[]) => unknown {
 
 /** This function gives the reason for a program that calls one op of a domain, with the function of that op from a source. */
 function reasonOfPick(src: string): string {
-  const fn = fnOf(src, 1) as (x: object) => object;
-  const box = defineDomain({ name: "Box", is: (u: unknown): u is object => typeof u === "object" && u !== null, samples: () => [[1]], ops: { pick: { fn, params: ["domain"], returns: "domain" } } });
+  const pick = fnOf(src, 1) as (x: object) => object;
+  const box = defineDomain({ name: "Box", is: (u: unknown): u is object => typeof u === "object" && u !== null, samples: () => [[1]], ops: { pick: { fn: pick, params: ["domain"], returns: "domain" } } });
   return reasonOf(op("pick", ref("o")), { domains: [NumDomain, box], schema: { fields: { o: "domain:Box" } } });
 }
 

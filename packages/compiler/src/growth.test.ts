@@ -5,13 +5,13 @@
 import { MAX_NESTING, nestingOf } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it, vi } from "vitest";
-import { BYTES_LIMIT, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, SOURCE_BYTES_LIMIT, SOURCE_TIME_LIMIT, sourceFaults, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { BYTES_LIMIT, bytesFlipReadsRed, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, SOURCE_TIME_LIMIT, sourceVerdict, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 import type * as Module from "./module.ts";
 import { emitModule } from "./module.ts";
 import { MAX_PLACES, placesOf } from "./unshared.ts";
 
 const OPTIONS = { domains: [NumDomain, BoolDomain, TextDomain], schema: { fields: { n: "number" } } } as const;
-const SHAPE: GrowthShape = { name: "s", make: () => ({ tag: "lit", value: 0 }), small: 1, large: 2 };
+const SHAPE: GrowthShape = { name: "s", make: () => ({ tag: "lit", value: 0 }), small: 1, large: 2, source: { bytes: 1.04 } };
 const row = (places: number, ms: number | undefined, bytes: number | undefined): GrowthRow => ({ shape: "s", levels: places, places, ms, bytes });
 
 describe("COMPILE.GROWTH", () => {
@@ -58,21 +58,38 @@ describe("COMPILE.GROWTH", () => {
 describe("COMPILE.SOURCE.SIZE", () => {
   it("COMPILE.SOURCE.SIZE: a limit of the module does not apply to the source", () => {
     const own: GrowthShape = { ...SHAPE, time: 2, bytes: 2, why: "a reason" };
-    expect(sourceFaults(own, row(100, 10, 1000), row(400, 40, 16_000))).toStrictEqual([`source of s has a bytes exponent of 2.00, and the limit is ${String(SOURCE_BYTES_LIMIT)}`]);
+    expect(sourceVerdict(own, row(100, 10, 1000), row(400, 40, 16_000)).faults).toStrictEqual(["source of s has a bytes exponent of 2.000, and the limit is 1.04"]);
   });
 
-  it("COMPILE.SOURCE.SIZE: a limit of the source replaces the limit of the gate", () => {
-    const own: GrowthShape = { ...SHAPE, source: { time: 2, bytes: 2, why: "a reason" } };
-    expect(sourceFaults(own, row(100, 10, 1000), row(400, 160, 16_000))).toStrictEqual([]);
-    expect(sourceFaults(own, row(100, 10, 1000), row(400, 170, 16_000))).toStrictEqual(["source of s has a time exponent of 2.04, and the limit is 2"]);
+  it("COMPILE.SOURCE.SIZE: a time over its limit is report only, and it does not fail the gate", () => {
+    expect(sourceVerdict(SHAPE, row(100, 10, 1000), row(400, 10 * 4 ** 1.3, 4000))).toStrictEqual({ faults: [], notes: [`source of s has a time exponent of 1.30, and the limit is ${String(SOURCE_TIME_LIMIT)}`] });
+    const own: GrowthShape = { ...SHAPE, source: { bytes: 1.04, time: 2, why: "a reason" } };
+    expect(sourceVerdict(own, row(100, 10, 1000), row(400, 160, 4000))).toStrictEqual({ faults: [], notes: [] });
+    expect(sourceVerdict(own, row(100, 10, 1000), row(400, 170, 4000)).notes).toStrictEqual(["source of s has a time exponent of 2.04, and the limit is 2"]);
   });
 
   it("COMPILE.SOURCE.SIZE: a size with no source is a fault", () => {
-    expect(sourceFaults(SHAPE, row(100, 10, 1000), row(400, 40, undefined))).toStrictEqual(["source of s has a size with no result"]);
+    expect(sourceVerdict(SHAPE, row(100, 10, 1000), row(400, 40, undefined))).toStrictEqual({ faults: ["source of s has a size with no result"], notes: [] });
   });
 
-  it("COMPILE.SOURCE.SIZE: a shape with no limit of its own reads the default limits of the source", () => {
-    expect(sourceFaults(SHAPE, row(100, 10, 1000), row(400, 10 * 4 ** 1.24, 1000 * 4 ** 1.03))).toStrictEqual([]);
-    expect(sourceFaults(SHAPE, row(100, 10, 1000), row(400, 10 * 4 ** 1.3, 1000 * 4 ** 1.1))).toStrictEqual([`source of s has a time exponent of 1.30, and the limit is ${String(SOURCE_TIME_LIMIT)}`, `source of s has a bytes exponent of 1.10, and the limit is ${String(SOURCE_BYTES_LIMIT)}`]);
+  it("COMPILE.SOURCE.SIZE: a row with different bytes in its processes is report only on its bytes, and it names the shape", () => {
+    const differs: GrowthRow = { ...row(400, 40, 16_000), sameBytes: false };
+    expect(sourceVerdict(SHAPE, row(100, 10, 1000), differs)).toStrictEqual({ faults: [], notes: ["source of s has different bytes in its processes, so its bytes are report only"] });
+    expect(sourceVerdict(SHAPE, { ...row(100, 10, 1000), sameBytes: false }, row(400, 40, 16_000)).faults).toStrictEqual([]);
+    expect(sourceVerdict(SHAPE, { ...row(100, 10, 1000), sameBytes: true }, { ...row(400, 40, 16_000), sameBytes: true }).faults).toHaveLength(1);
+  });
+
+  it("COMPILE.SOURCE.SIZE: the flip of a row reads red only if the limit finds 5 % more bytes", () => {
+    const tight: GrowthShape = { ...SHAPE, source: { bytes: 1.01 } };
+    const loose: GrowthShape = { ...SHAPE, source: { bytes: 1.1 } };
+    expect(bytesFlipReadsRed(tight, row(100, 10, 1000), row(400, 40, 4000))).toBe(true);
+    expect(bytesFlipReadsRed(loose, row(100, 10, 1000), row(400, 40, 4000))).toBe(false);
+    expect(bytesFlipReadsRed(loose, row(100, 10, 1000), row(400, 40, undefined))).toBe(true);
+    expect(bytesFlipReadsRed(loose, row(100, 10, 1000), { ...row(400, 40, 4000), sameBytes: false })).toBe(true);
+  });
+
+  it.each(GROWTH_SHAPES.map((s) => [s.name, s] as const))("COMPILE.SOURCE.SIZE: a time limit of %s states the reason", (_name, shape) => {
+    expect(shape.source.time === undefined || shape.source.why !== undefined).toBe(true);
+    expect(shape.source.bytes).toBeGreaterThan(0.5);
   });
 });

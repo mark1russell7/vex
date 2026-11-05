@@ -234,27 +234,33 @@ Tier 2 gives a string of JavaScript to `new Function`. A line of that string has
 
 The lowering keeps a map of the functions of a scope, and `#mayExt` keeps one answer for each map. A let with no function keeps the map, so those answers stay. A let that binds a function makes a new map, so a chain of those lets walks its expression again at each catch.
 
-The gate `bench/growth.ts` reads the time and the bytes of tier 2 for each shape. It starts `generate` and `load` in five fresh processes for each size. A shape with a limit of its own states the reason in `test/growth.ts`.
+The gate `bench/growth.ts` reads the time and the bytes of tier 2 for each shape. It starts `generate` and `load` in five fresh processes for each size.
 
-The limits come from one CI read, run `42016811553`, on Node 26. A shape with no limit of its own has a time limit of 1.25 and a bytes limit of 1.04. The names of the locals get more digits with more places, so the bytes exponent of those shapes is 1.02 to 1.03. The text has one size for each program, so a bytes limit has no spread. A time limit is the read plus the spread 0.12 of the module gate, rounded up. The gate reads these limits again at 5 reads.
+**The bytes hold.** A row prints the count of processes with its bytes. The bytes limit of a shape is the exponent of CI run `42021404905`, with 2.5 % more bytes at the large size, rounded up. So the limit is 2.50 % to 2.71 % over that read at the large size. The gate also reads each row with 5 % more bytes at the large size, and it fails if the limit does not find that. The script `scripts/gate-flip.ts` starts the same fault in a child, and a clean copy passes. A row with different bytes in its processes is report only on its bytes, and the gate names that row. The exponent reads a slope: the same rise at both sizes does not move it.
 
-| Shape | Levels | Places | Bytes | Time | Time exponent | Bytes exponent |
-|---|---|---|---|---|---|---|
-| `plain` | 14 | 32,767 | 35.2 MB | 1,783 ms | 0.90 | 0.90 |
-| `constant` | 13 | 32,767 | 28.7 MB | 1,728 ms | 0.98 | 1.03 |
-| `loop` | 13 | 32,765 | 23.5 MB | 1,316 ms | 0.96 | 1.02 |
-| `chain` | 499 | 999 | 0.76 MB | 105 ms | 1.03 | 1.02 |
-| `wide` | 480 | 30,721 | 32.5 MB | 4,405 ms | 1.32 | 0.92 |
-| `loopchain` | 165 | 661 | 0.41 MB | 56 ms | 0.92 | 1.03 |
-| `wideloop` | 160 | 10,561 | 8.3 MB | 603 ms | 1.19 | 1.02 |
-| `letchain` | 240 | 961 | 0.30 MB | 57 ms | 1.10 | 1.02 |
-| `letloop` | 240 | 1,443 | 0.82 MB | 116 ms | 0.99 | 1.02 |
-| `constlet` | 240 | 31,203 | 26.9 MB | 2,509 ms | 1.21 | 1.03 |
-| `readchain` | 480 | 1,923 | 0.72 MB | 90 ms | 0.94 | 1.02 |
-| `origin` | 166 | 665 | 4.8 MB | 436 ms | 1.71 | 1.86 |
-| `wideorigin` | 160 | 32,321 | 32.8 MB | 1,655 ms | 1.15 | 1.10 |
+**The time is report only.** A time exponent over its limit prints a line and fails nothing. The cause of that time is open, so this section does not call the time of tier 2 fixed. A size with no source still fails the gate.
 
-Before this change, `chain` printed 23 MB at 499 levels and `constlet` printed 266 MB at 240 levels. The text of `origin` stays quadratic, because each memo prints a key tuple with one entry for each level around it. The exponent was 2.76. The bytes of `wide`, `wideloop` and `constlet` are linear, but their time exponents are over 1.1. The cause of that time is open. Each source row prints the time of the collector, so a read can separate the collector from the compile.
+Two CI reads, run `42016811553` and run `42021404905`, both on Node 26, give the table. The time and the bytes are the second read.
+
+| Shape | Levels | Places | Bytes | Time | Time exponents | Bytes exponent | Bytes limit |
+|---|---|---|---|---|---|---|---|
+| `plain` | 14 | 32,767 | 35.2 MB | 2,020 ms | 0.90, 0.88 | 0.899 | 0.911 |
+| `constant` | 13 | 32,767 | 28.7 MB | 1,925 ms | 0.98, 0.97 | 1.026 | 1.039 |
+| `loop` | 13 | 32,765 | 23.5 MB | 1,449 ms | 0.96, 0.93 | 1.025 | 1.037 |
+| `chain` | 499 | 999 | 0.76 MB | 120 ms | 1.03, 0.96 | 1.022 | 1.034 |
+| `wide` | 480 | 30,721 | 32.5 MB | 4,494 ms | 1.32, 1.25 | 0.922 | 0.934 |
+| `loopchain` | 165 | 661 | 0.41 MB | 69 ms | 0.92, 0.83 | 1.034 | 1.052 |
+| `wideloop` | 160 | 10,561 | 8.3 MB | 682 ms | 1.19, 1.15 | 1.024 | 1.042 |
+| `letchain` | 240 | 961 | 0.30 MB | 67 ms | 1.10, 0.98 | 1.019 | 1.038 |
+| `letloop` | 240 | 1,443 | 0.82 MB | 141 ms | 0.99, 0.96 | 1.017 | 1.035 |
+| `constlet` | 240 | 31,203 | 26.9 MB | 2,832 ms | 1.21, 1.21 | 1.031 | 1.049 |
+| `readchain` | 480 | 1,923 | 0.72 MB | 112 ms | 0.94, 0.92 | 1.022 | 1.041 |
+| `origin` | 166 | 665 | 4.8 MB | 505 ms | 1.71, 1.65 | 1.859 | 1.877 |
+| `wideorigin` | 160 | 32,321 | 32.8 MB | 1,910 ms | 1.15, 1.13 | 1.097 | 1.115 |
+
+Before this change, `chain` printed 23 MB at 499 levels and `constlet` printed 266 MB at 240 levels. The text of `origin` stays quadratic, because each memo prints a key tuple with one entry for each level around it. The exponent was 2.76.
+
+The bytes of `wide`, `wideloop` and `constlet` are linear, but their time exponents are over 1.1 in both reads. The collector is not the cause. One job gives 1.25 for `wide` and 1.20 for `constlet` without the time of the collector. The collector is 11.8 % of the time of `wide` at 480 levels and 29.0 % of the time of `plain` at depth 14.
 
 The lowering runs on the call stack. A stack overflow gives tier 1, and the reason of `generate` states "the lowering threw an exception" (V-092). The default stack holds the largest size of each shape, and the gate fails a size with no source. A caller can have less stack than a fresh process. So the gate also prints the last level of `wide` with a source on half of the default stack.
 

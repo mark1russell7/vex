@@ -23,6 +23,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | CATCHFAULT | A print-time refusal of a fault that a catch can hide. The runtime check is dropped, and #278 is closed. | compiler | P1 | later: after 0.18.0 | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 8 merged, the size of the printer is #242 | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
+| V-089 | The time of the source of tier 2 grows faster than the places on `wide`, `wideloop` and `constlet`, with linear bytes. The collector is not the cause. The gate reads this time as report only. | compiler | P1 | later | |
 | V-092 | A stack overflow in the lowering of tier 2 gives tier 1 with no message to the caller. The gate prints the depth on half of the default stack. | compiler | P2 | later | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
 | NIGHTLY1103 | The Nightly is green again. A test file that does not load fails the lane, and the lane loads each setup file of a package (V-090, V-091). | quality | P1 | in progress: #293 | |

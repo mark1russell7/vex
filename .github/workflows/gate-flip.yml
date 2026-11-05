@@ -47,6 +47,7 @@ jobs:
             packages/testkit/src/workflow-faults.ts
             scripts/name-run.ts
             scripts/workflow-gate.ts
+            vitest.config.ts
             scripts/gate-flip.ts
             .github/workflows/gate-flip.yml
 

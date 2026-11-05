@@ -863,7 +863,7 @@ Decision D13 of coeval says that the languages evaluate through the kernel. The 
 | P0 Migrate | Done | Commit `890e6a3`. CI is green on Node 22, 24 and 26. |
 | P1 Kernel | Done | Commit `0357f95` |
 | P2 Surface | Done | Commits `749a3e1` and `1c9a17a`. `@vex/legacy` is gone. |
-| P3 Assurance | Done, with the changes of §14.2 | Commits `7e76f54`, `84234e8`, `b815206` and `26d9b7f`. The mutation score is 99.0 %. |
+| P3 Assurance | Done, with the changes of §14.2 | Commits `7e76f54`, `84234e8`, `b815206` and `26d9b7f`. The mutation score is 99.0 %. Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A re-read follows the lane PR. |
 | P4 Site | Done | Commits `89161c6`, `a1c7cfe` and `643aaa8`. The site is live at [mark1russell7.github.io/vex](https://mark1russell7.github.io/vex/). |
 | P5 Interop | Done, except the items of the owner (§14.4) | Commits `b815206` (build, release), `d3be6d7` (sheets, pilot) and `6eff59c` (`compile`) |
 

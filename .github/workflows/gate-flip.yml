@@ -39,13 +39,18 @@ jobs:
             packages/compiler/bench/gate-processes.ts
             packages/compiler/bench/growth.ts
             packages/compiler/test/growth.ts
+            packages/pilots/scripts/module-bytes.ts
+            packages/testkit/src/fc-budget.ts
+            packages/testkit/src/workflow-faults.ts
+            scripts/name-run.ts
+            scripts/workflow-gate.ts
             scripts/gate-flip.ts
             .github/workflows/gate-flip.yml
 
   flip:
     needs: changes
     if: needs.changes.outputs.match == 'true' || github.event_name != 'pull_request'
-    name: Flip of the speed gates
+    name: Flip of the gates
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -69,9 +74,9 @@ jobs:
       - if: ${{ !cancelled() }}
         run: |
           {
-            echo "### The flip of the speed gates"
+            echo "### The flip of the gates"
             echo
             echo '```'
-            grep -E "^(ok|FAIL) the (speed|growth) gate" flip.txt
+            grep -E "^(ok|FAIL) the " flip.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

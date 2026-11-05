@@ -22,8 +22,11 @@
  *
  * The flag `--rounds` tests the second pair clause. The branch arm does added work in the modules of `ROUND_ADD`, in the
  * first rounds of a read only. So the median stays under its limit, and the clause must fail alone.
+ *
+ * The flag `--record` adds one JSON line for each row of each read to a file. Each line names its kind and if its read
+ * decided. A read of a cost uses this record and `gateRecords`, and not the log, because the log also shows the rows with added work.
  */
-import { mkdtempSync } from "node:fs";
+import { appendFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +35,7 @@ import { armOrder, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { env, envLine, firstOfRound, measureIsolated } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
-import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundFaults, type ModuleTimes } from "./module-cost-limits.ts";
+import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundFaults, type ModuleTimes, readKind, recordLines } from "./module-cost-limits.ts";
 
 /** The fresh processes of each arm on each module. */
 const ROUNDS = 7;
@@ -77,12 +80,13 @@ function printRead(times: readonly ModuleTimes[], verdict: TailLimitVerdict, pre
   });
 }
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { turn: { type: "string", default: "0" }, catch: { type: "boolean", default: false }, rounds: { type: "boolean", default: false } } });
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { turn: { type: "string", default: "0" }, catch: { type: "boolean", default: false }, rounds: { type: "boolean", default: false }, record: { type: "string" } } });
 const [baseFolder] = positionals;
 if (baseFolder === undefined) throw new Error("module-cost: give the folder of a checkout of the base.");
 const testsTheRounds = values.rounds;
 const testsTheGate = values.catch || testsTheRounds;
-const prefix = testsTheRounds ? "rounds " : testsTheGate ? "catch " : "";
+const kind = readKind(values);
+const prefix = kind === "gate" ? "" : `${kind} `;
 const added = testsTheRounds ? ROUND_ADD : CATCH_ADD;
 
 const moduleRows: readonly Row[] = IREKO_MODULES.map((module) => ({ module, input: module as string, shares: placesRead(irekoExprs(module)).shares }));
@@ -122,6 +126,9 @@ for (let read = 0; read < MAX_READS && !decided; read++) {
   const verdict = moduleVerdict(times, machine.cpu);
   decided = verdict.outcome !== "cannot decide";
   const faults = printRead(times, verdict, prefix);
+  if (values.record !== undefined) {
+    appendFileSync(values.record, recordLines({ kind, read, decided, cpu: machine.cpu, node: machine.node, commit: process.env["GITHUB_SHA"] ?? "unknown", baseCommit: process.env["BASE"] ?? "unknown" }, times));
+  }
   if (decided) {
     if (testsTheRounds) {
       const missed = roundFaults(verdict);

@@ -162,6 +162,30 @@ export interface ModuleTimes {
   readonly aa: readonly number[];
 }
 
+/**
+ * The kinds of a read. A read of the kind `catch` or `rounds` tests the gate. Its branch arm does added work, so its
+ * rows state no cost of the code. The log of a job shows all kinds, so a read of a cost uses the record and not the log.
+ */
+export const READ_KINDS = ["gate", "catch", "rounds"] as const;
+
+/** The kind of one read. */
+export type ReadKind = (typeof READ_KINDS)[number];
+
+/** One line of the record of the gate: the times of one module in one read. */
+export interface ModuleRecord extends ModuleTimes {
+  readonly kind: ReadKind;
+  /** The number of the read in its step, from 0. */
+  readonly read: number;
+  /** This value is true when the home rule decided this read. A read that did not decide does not count. */
+  readonly decided: boolean;
+  readonly cpu: string;
+  readonly node: string;
+  /** The commit that the job checked out. */
+  readonly commit: string;
+  /** The commit of the base arm. */
+  readonly baseCommit: string;
+}
+
 /** The values of one row of the gate. */
 export interface ModuleReading {
   readonly baseMs: number;
@@ -178,6 +202,33 @@ export interface ModuleReading {
   readonly aaWorst: number;
   /** The second largest ratio of one round of the second copy of the base on this row. */
   readonly aaSecond: number;
+}
+
+/** This function gives the kind of a read from the flags of the gate. */
+export function readKind(flags: { readonly catch: boolean; readonly rounds: boolean }): ReadKind {
+  if (flags.rounds) return "rounds";
+  return flags.catch ? "catch" : "gate";
+}
+
+/** This function gives the lines of the record for one read, with one line for each row and a new line after each. */
+export function recordLines(read: Omit<ModuleRecord, keyof ModuleTimes>, rows: readonly ModuleTimes[]): string {
+  return rows.map((row) => `${JSON.stringify({ ...read, ...row })}\n`).join("");
+}
+
+/** This function gives one line of a record. A line with no known kind is a fault, so a change of the form cannot pass as a read. */
+function parseRecord(line: string): ModuleRecord {
+  const record = JSON.parse(line) as ModuleRecord;
+  if (!READ_KINDS.includes(record.kind)) throw new Error(`module-cost: a record has no known kind: ${line}`);
+  return record;
+}
+
+/** This function gives the rows of the gate in the text of a record: only the kind `gate`, and only a read that decided. */
+export function gateRecords(text: string): readonly ModuleRecord[] {
+  return text
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => parseRecord(line))
+    .filter((record) => record.kind === "gate" && record.decided);
 }
 
 /** This function gives the limit of a module. A line of the module comes first, and then the class that its program gives. */

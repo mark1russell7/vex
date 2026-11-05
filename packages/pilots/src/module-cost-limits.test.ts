@@ -7,7 +7,7 @@ import { armOrder } from "@mark1russell7/rigor-bench";
 import { describe, expect, it } from "vitest";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { measureIsolated } from "../../core/bench/measure.ts";
-import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundFaults, SHARED_LIMIT, type ModuleTimes } from "../bench/module-cost-limits.ts";
+import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundFaults, SHARED_LIMIT, type ModuleTimes, gateRecords, readKind, recordLines } from "../bench/module-cost-limits.ts";
 import { IREKO_MODULES, irekoExprs } from "./ireko-modules.ts";
 
 /** A model where the reads show the gain. */
@@ -251,6 +251,37 @@ describe("COMPILE.MODULE.COST", () => {
   it("COMPILE.MODULE.COST: the fixed commit of the limits is the commit that the job of the gate checks out", () => {
     const workflow = readFileSync(new URL("../../../.github/workflows/speed-gate.yml", import.meta.url), "utf8");
     expect(workflow).toContain(`BASE: ${GAIN_BASE}`);
+  });
+
+  it("COMPILE.MODULE.RECORD: a read of the gate takes only the decided rows of the kind gate", () => {
+    const read = { read: 0, cpu: HELD, node: "v26", commit: "a", baseCommit: "b" };
+    const text = [
+      recordLines({ ...read, kind: "gate", decided: false }, [row(1.5, "loud")]),
+      recordLines({ ...read, kind: "gate", decided: true }, [row(1, "kept")]),
+      recordLines({ ...read, kind: "catch", decided: true }, [row(1.2, "added")]),
+      recordLines({ ...read, kind: "rounds", decided: true }, [row(1.4, "added")]),
+    ].join("");
+    expect(text.trimEnd().split("\n")).toHaveLength(4);
+    expect(gateRecords(text).map((r) => r.module)).toEqual(["kept"]);
+    expect(gateRecords(text)[0]).toMatchObject({ kind: "gate", decided: true, read: 0, cpu: HELD, commit: "a", baseCommit: "b", base: row(1).base });
+  });
+
+  it("COMPILE.MODULE.RECORD: a line with no known kind is a fault", () => {
+    expect(() => gateRecords(`${JSON.stringify(row(1))}\n`)).toThrow("a record has no known kind");
+  });
+
+  it("COMPILE.MODULE.RECORD: the flags of a step give the kind of its read", () => {
+    expect(readKind({ catch: false, rounds: false })).toBe("gate");
+    expect(readKind({ catch: true, rounds: false })).toBe("catch");
+    expect(readKind({ catch: false, rounds: true })).toBe("rounds");
+  });
+
+  it("COMPILE.MODULE.RECORD: each step of the gate writes the record, and the job saves it", () => {
+    const workflow = readFileSync(new URL("../../../.github/workflows/speed-gate.yml", import.meta.url), "utf8");
+    const steps = workflow.split("\n").filter((line) => line.includes("run module-cost "));
+    expect(steps).toHaveLength(3);
+    expect(steps.filter((line) => line.includes('--record "$PWD/module-cost.jsonl"'))).toHaveLength(3);
+    expect(workflow).toMatch(/module-cost\.txt\n\s+module-cost\.jsonl\n/);
   });
 
   it("COMPILE.MODULE.COST: no times, or arms with different rounds, are a fault", () => {

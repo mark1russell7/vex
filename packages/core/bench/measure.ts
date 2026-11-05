@@ -4,7 +4,7 @@
  * comparison alternate on each input, and a copy of the base (the A/A arm) gives the noise floor.
  *
  * - Mode `process`: one process. In each round, the arms run in turn on each input, and odd rounds reverse the order.
- * - Mode `fresh`: a new process for each arm in each round. The order of the arms and the order of the inputs turn at each round.
+ * - Mode `fresh`: a new process for each arm in each round. The order of the arms mirrors at each odd round and turns at each even round, and the order of the inputs turns at each round.
  *
  * Each copy of the helper keeps this interface until it moves to the gates package of rigor. No copy imports a type
  * of its repository.
@@ -288,16 +288,18 @@ export function firstOfRound(round: number, inputs: number, repeats: number, fro
 }
 
 /**
- * This function measures with a new process for each arm in each round. The order of the arms turns by one place at
- * each round, and the order of the inputs turns by `firstOfRound`. The times stay by input and by round.
+ * This function measures with a new process for each arm in each round. The order of the arms comes from `armOrder` of
+ * `@mark1russell7/rigor-bench`, and the order of the inputs turns by `firstOfRound`. The times stay by input and by round.
  */
 async function inFresh<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): Promise<PairedReport> {
   const warmup = options.warmup ?? 1;
   const start = options.startChild ?? child;
   const times = options.inputs.map(() => new Map<string, number[]>(arms.map((a) => [a.id, []])));
   const rss = options.inputs.map(() => new Map<string, number[]>(arms.map((a) => [a.id, []])));
+  // Only this parent loads the home of the order, so the load of a child of a gate does not change.
+  const { armOrder } = await import("@mark1russell7/rigor-bench");
   for (let round = 0; round < options.repeats; round++) {
-    const order = arms.map((_a, k) => arms[(k + round) % arms.length]).filter((a) => a !== undefined);
+    const order = armOrder(arms, round);
     // Each input takes all of its arms before the next input, so no whole pass lies between two arms of one input.
     const entries = [...options.inputs.entries()];
     const first = firstOfRound(round, entries.length, options.repeats, options.firstInput);

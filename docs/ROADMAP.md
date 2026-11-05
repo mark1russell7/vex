@@ -39,6 +39,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
 | PLACESSPREAD | Find the cause of the spread of the rows of the places gate. | compiler | P3 | later | |
+| WEEKLYGATE | The Weekly gate reads a run count at a fixed time budget, so it also measures the speed of the runner. Measure the runs that catch a stated fault in a property, and read if the budget reaches them on the slowest CPU model, by 2026-11-21. Add the flip and the cost of the budget stops. | testkit | P2 | later | 0.18.0 |
 | SHARE49 | Find the cause of the share job that stopped after 49 minutes on 11-04. The cause stays open. | compiler | P3 | later | |
 | BOUNDSCOST | Bring the print of each module over 1.10 of the base under 1.10 and remove its line in the gate, by 2026-11-12. Find the cause of the 1.5 ms of `bounds` outside `emitModule`. Find why `layers` went from 5 of 5 reads over its A/A arm to 0 of 5. | compiler | P1 | in progress | |
 | MODELGAIN | Find why the gain of `build` and `avoid` does not read on the CPU model 9V45, by 2026-11-19. Compute the limits again at 20 reads of that model. | compiler | P2 | later | |

@@ -60,15 +60,15 @@ function printRead(times: readonly ModuleTimes[], word: string | undefined, pref
   });
 }
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { turn: { type: "string", default: "0" }, catch: { type: "boolean", default: false } } });
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { turn: { type: "string", default: "0" }, catch: { type: "boolean", default: false }, "catch-full": { type: "boolean", default: false } } });
 const [baseFolder] = positionals;
 if (baseFolder === undefined) throw new Error("module-cost: give the folder of a checkout of the base.");
-const testsTheGate = values.catch;
+const testsTheGate = values.catch || values["catch-full"];
 const prefix = testsTheGate ? "catch " : "";
 
 const moduleRows: readonly Row[] = IREKO_MODULES.map((module) => ({ module, input: module as string, shares: placesRead(irekoExprs(module)).shares }));
 const shared = moduleRows.filter((r) => r.shares).map((r) => r.module);
-const rows: readonly Row[] = testsTheGate
+const rows: readonly Row[] = values.catch
   ? moduleRows.filter((r) => Object.hasOwn(CATCH_ADD, r.module))
   : [
       ...moduleRows,

@@ -1,168 +1,80 @@
-# The two speed gates on a pull request that changes the code they measure: Vex against the hand-written loops
-# (packages/core/bench/gate.ts) and the generated code against the same loops (packages/compiler/bench/gate.ts).
-# Timing runs in CI, not on a shared machine. The nightly runs the same gates each day.
+# Throwaway measure on a side branch of H1, not for main: the miss rate of the step "The gate fails a known cost".
+# Each job of `repeat` is a separate runner that does what the job Module cost does on a pull request: one full read, and
+# then the step. Each job of `full` takes one full read with the added cost, and that needs the flag --catch-full of this
+# branch only. The tree of packages/compiler/src and each other file of the bench are those of H1.
 name: Speed gate
 
 on:
-  # Each pull request starts this workflow, so its summary check is always there. The job changes skips the
-  # work when the pull request changes no file of the gate (CI.md of the template, "A gate with paths").
-  pull_request:
   workflow_dispatch:
-    inputs:
-      reps:
-        description: The number of runs on separate runners, for the derivation of the limits (at most 3 at one time)
-        type: choice
-        options: ["1", "5"]
-        default: "1"
-      ablate:
-        description: With true, the gate of the compiler also measures the ablation variants of the nested radial case (RADIALGAP)
-        type: boolean
-        default: false
-      limit_walk:
-        description: With true, the gate of the compiler also measures the walk of a data limit against a count at each key (LIMITCOST, the cases 6 and 7 without ablate)
-        type: boolean
-        default: false
-      case:
-        description: The cases of the compiler gate, from 0, separated by commas (5 is shapes). With a case, the core gate does not run. Empty runs all
-        type: string
-        default: ""
-      node_flags:
-        description: More flags of Node.js for each process of the compiler gate, for example --max-semi-space-size=64
-        type: string
-        default: ""
-      gc:
-        description: With true, each process of the compiler gate counts the garbage collections of each arm (GATEGC)
-        type: boolean
-        default: false
 
 permissions: {}
 
-# One run for each branch and settings: a newer run stops the older one. Each job holds at most 3 runner slots.
-# The settings of a dispatch are in the group, so two dispatches with different settings run one after the other.
 concurrency:
-  group: speed-gate-${{ github.ref }}-${{ inputs.case }}-${{ inputs.node_flags }}-${{ inputs.gc }}
-  cancel-in-progress: true
+  group: keyscope-catch
+  cancel-in-progress: false
 
 jobs:
-  changes:
+  repeat:
+    name: Catch ${{ matrix.rep }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    # The gates start for a change of their code, or for a change of `pnpm-lock.yaml` that changes a package from
-    # npm that they import (`GATE_NPM_PACKAGES` in `packages/testkit/src/gate-inputs.ts`).
-    outputs:
-      match: ${{ steps.changes.outputs.match == 'true' || steps.inputs.outputs.same == 'false' }}
-    steps:
-      - id: changes
-        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
-        with:
-          # The gates measure the source, never a test, so a pull request that changes only tests skips them. The
-          # bench uses `test-support.ts`, so it stays in. The nightly measures main each day.
-          paths: |
-            packages/core/src/**
-            packages/core/bench/**
-            packages/compiler/src/**
-            packages/compiler/bench/**
-            packages/compiler/test/growth.ts
-            packages/domains/src/**
-            packages/pilots/src/ireko-*.ts
-            packages/pilots/bench/module-cost*.ts
-            .github/workflows/speed-gate.yml
-            !packages/*/src/**/*.test.ts
-            !packages/*/src/__golden__/**
-      - id: lock
-        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
-        with:
-          paths: pnpm-lock.yaml
-      # Only the lock file changed: the gates start only when a package of the gates has a new version or integrity.
-      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 26
-      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
-        run: node scripts/workflow-gate.ts
-      - id: inputs
-        if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git show "$BASE:pnpm-lock.yaml" > "$RUNNER_TEMP/base-lock.yaml"
-          node scripts/gate-inputs.ts "$RUNNER_TEMP/base-lock.yaml" pnpm-lock.yaml >> "$GITHUB_OUTPUT"
-
-  gates:
-    needs: changes
-    if: needs.changes.outputs.match == 'true'
-    name: Speed gates ${{ matrix.rep }}
-    runs-on: ubuntu-latest
-    # Each limit comes from at least 5 runs: the worst value times 1.1 (the fleet rule of 2026-10-30).
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
-        rep: ${{ fromJSON(inputs.reps == '5' && '[1, 2, 3, 4, 5]' || '[1]') }}
+        rep: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     timeout-minutes: 15
     permissions:
       contents: read
-    # The shell bash sets pipefail, so a gate that fails fails its step, also with its output piped into tee.
     defaults:
       run:
         shell: bash
+    env:
+      BASE: 8ae233be3bd54744ae558020e5584975b4dfefee
+      H1: acaa48408651412290f58ecd6f4b1ebc28bfc24a
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: pnpm
       - run: node scripts/workflow-gate.ts
-      - run: pnpm install --frozen-lockfile
-      # A dispatch with the input case measures only these cases of the compiler gate, so the core gate does not run.
-      - if: ${{ !inputs.case }}
-        run: pnpm --filter @mark1russell7/vex run bench:gate | tee gates.txt
-      # The gate of the compiler runs also when the first gate fails, and the summary keeps the lines of both.
-      # A pull request has no inputs, so each of these settings is empty or 0, and the gate runs as before.
-      - if: ${{ !cancelled() }}
-        env:
-          GATE_ABLATE: ${{ inputs.ablate && '1' || '0' }}
-          GATE_LIMIT_WALK: ${{ inputs.limit_walk && '1' || '0' }}
-          GATE_CASE: ${{ inputs.case }}
-          GATE_NODE_FLAGS: ${{ inputs.node_flags }}
-          GATE_GC: ${{ inputs.gc && '1' || '0' }}
-        run: pnpm --filter @mark1russell7/vex-compiler run bench:gate | tee -a gates.txt
-      # The gate of the growth reads exponents, so it has no limit for each CPU model (COMPILE.GROWTH).
-      - if: ${{ !cancelled() && !inputs.case }}
-        run: pnpm --filter @mark1russell7/vex-compiler run bench:growth | tee -a gates.txt
-      - if: ${{ !cancelled() }}
+      - name: The same tree as H1
         run: |
-          {
-            echo "### Speed gates (time ratios: lower is better)"
-            echo
-            echo '```'
-            grep -E "^(runner|flags|ok|FAIL|gc)" gates.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "TREE side $(git rev-parse HEAD) $(git rev-parse HEAD:packages/compiler/src)"
+          echo "TREE h1 $H1 $(git rev-parse "$H1:packages/compiler/src")"
+          test "$(git rev-parse HEAD:packages/compiler/src)" = "$(git rev-parse "$H1:packages/compiler/src")"
+      - run: pnpm install --frozen-lockfile --filter @vex/pilots...
+      - name: The base
+        run: |
+          git worktree add -q ../base "$BASE"
+          cp packages/pilots/bench/module-cost-child.ts ../base/packages/pilots/bench/
+          cd ../base
+          pnpm install --frozen-lockfile --filter @vex/pilots...
+      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --turn "$((REP - 1))" | tee module-cost.txt
+        env:
+          REP: ${{ matrix.rep }}
+      - name: The gate fails a known cost
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch | tee -a module-cost.txt
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: catch-${{ matrix.rep }}
+          path: module-cost.txt
+          retention-days: 30
 
-  # The time of a print of each module of ireko against a fixed base (COMPILE.MODULE.COST). The base is the commit that
-  # the limits were read against. A fixed base also finds a cost that grows over many pull requests.
-  modules:
-    needs: changes
-    if: needs.changes.outputs.match == 'true' && !inputs.case
-    name: Module cost ${{ matrix.rep }}
+  full:
+    name: Full read with the cost ${{ matrix.rep }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
-        rep: ${{ fromJSON(inputs.reps == '5' && '[1, 2, 3, 4, 5]' || '[1]') }}
+        rep: [1, 2, 3]
     timeout-minutes: 15
     permissions:
       contents: read
@@ -189,30 +101,12 @@ jobs:
           cp packages/pilots/bench/module-cost-child.ts ../base/packages/pilots/bench/
           cd ../base
           pnpm install --frozen-lockfile --filter @vex/pilots...
-      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --turn "$((REP - 1))" | tee module-cost.txt
+      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch-full --turn "$((REP - 1))" | tee module-cost.txt
         env:
           REP: ${{ matrix.rep }}
-      - name: The gate fails a known cost
-        if: ${{ !cancelled() && matrix.rep == 1 }}
-        run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch | tee -a module-cost.txt
       - if: ${{ !cancelled() }}
-        run: |
-          {
-            echo "### The time of a print of each module (ratios against $BASE: lower is better)"
-            echo
-            echo '```'
-            grep -E "^(runner|order|ok|FAIL|undecided|UNDECIDED|false-fail|catch (order|ok|FAIL|fault|undecided|UNDECIDED))" module-cost.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  speed-gate-ok:
-    name: Speed gate OK
-    if: always()
-    needs: [changes, gates, modules]
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions: {}
-    steps:
-      - uses: mark1russell7/template/.github/actions/gate-summary@f48f29fe5b00772951e0910a90fbbe312343338c # main
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          needs: ${{ toJSON(needs) }}
+          name: full-${{ matrix.rep }}
+          path: module-cost.txt
+          retention-days: 30

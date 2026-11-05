@@ -142,6 +142,7 @@ function read(file) {
 const middle = (lists) => new Map([...lists].map(([k, xs]) => [k, median([...xs, ...Array(PROFILE_ROUNDS - xs.length).fill(0)])]));
 
 function profiles(dir, cell) {
+  const walls = [];
   const self = new Map();
   const inclusive = new Map();
   const add = (into, from) => {

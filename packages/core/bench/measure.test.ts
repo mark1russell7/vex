@@ -1,7 +1,7 @@
 // The tests of the measure helper against the decided points of the interface paired-time/1. A fake clock and a fake
 // start of a child give exact times, so no test depends on the speed of the machine.
 import { afterEach, describe, expect, it } from "vitest";
-import { context, env, measureIsolated, type Arm, type ChildResult } from "./measure.ts";
+import { context, env, firstOfRound, measureIsolated, type Arm, type ChildResult } from "./measure.ts";
 
 /** This function gives arms whose timed run takes the given time on a fake clock. */
 function fakeArms(costs: Readonly<Record<string, number>>): { arms: Arm<number>[]; clock: () => number } {
@@ -80,6 +80,48 @@ describe("measureIsolated, mode fresh", () => {
   it("omits peakRss when no child gives one", async () => {
     const r = await measureIsolated({ arms, inputs: [{ id: "one" }], repeats: 1, mode: "fresh", startChild: async () => ({ ms: 1 }) });
     expect(r.inputs[0]).not.toHaveProperty("peakRss");
+  });
+
+  it("turns the order of the inputs at each round, and keeps the times of each input in the order of the rounds", async () => {
+    const starts: string[] = [];
+    let clock = 0;
+    const r = await measureIsolated({
+      arms,
+      aa: false,
+      inputs: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      repeats: 3,
+      mode: "fresh",
+      startChild: async (command, input) => {
+        if (command[0] === "hand") starts.push(input);
+        clock++;
+        return { ms: command[0] === "hand" ? starts.length : clock };
+      },
+    });
+    expect(starts).toEqual(["a", "b", "c", "b", "c", "a", "c", "a", "b"]);
+    expect(r.inputs.map((i) => i.ms["hand"])).toEqual([[1, 6, 8], [2, 4, 9], [3, 5, 7]]);
+  });
+
+  it("starts the turn at the place of the option firstInput", async () => {
+    const starts: string[] = [];
+    await measureIsolated({
+      arms,
+      aa: false,
+      inputs: [{ id: "a" }, { id: "b" }],
+      repeats: 1,
+      firstInput: 1,
+      mode: "fresh",
+      startChild: async (command, input) => {
+        if (command[0] === "hand") starts.push(input);
+        return { ms: 1 };
+      },
+    });
+    expect(starts).toEqual(["b", "a"]);
+  });
+
+  it("spreads the first places over the inputs, with a step of 1 or more", () => {
+    expect([0, 1, 2, 3, 4, 5, 6].map((round) => firstOfRound(round, 18, 7))).toEqual([0, 2, 4, 6, 8, 10, 12]);
+    expect([0, 1, 2].map((round) => firstOfRound(round, 2, 3))).toEqual([0, 1, 0]);
+    expect(firstOfRound(6, 18, 7, 7)).toBe(1);
   });
 
   it("rejects the promise for a bad option", async () => {

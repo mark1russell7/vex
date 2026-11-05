@@ -319,12 +319,9 @@ describe("COMPILE.MODULE.SIZE.DEAD: code that no code reads", () => {
     expect(sourceOf(emitModule(op("count", NOTHING), { ...OPTIONS, fuse: false }))).toContain("function FI");
   });
 
-  it("COMPILE.MODULE.SIZE.DEAD: a name of the run keeps the refusal of each name of the printer", () => {
-    for (const e of [op("count", NOTHING), op("count", op("fill", lit(0), n)), orElse(NOTHING)]) {
-      const refused = emitModule(e, { ...OPTIONS, name: "FI" });
-      expect(refused.ok).toBe(false);
-      expect(refused).toStrictEqual(emitModule(e, { ...OPTIONS, name: "FI", fuse: false }));
-    }
+  it("COMPILE.MODULE.SIZE.DEAD: a name of a helper that the pass removed is a good name of the run", () => {
+    expect(sourceOf(emitModule(op("count", NOTHING), { ...OPTIONS, name: "FI" }))).toContain("export function FI(records, vars) {");
+    expect(sourceOf(emitModule(op("count", NOTHING), { ...OPTIONS, name: "FI", fuse: false }))).toMatch(/export \{ run\$0 as FI \};/);
   });
 
   it("COMPILE.MODULE.SIZE.DEAD: the pass removes a constant in each form, also through a chain of reads", () => {
@@ -335,6 +332,23 @@ describe("COMPILE.MODULE.SIZE.DEAD: code that no code reads", () => {
     expect(deadConstants(["  const c1 = L(() => {", "    const x = 1;", "    return x;", "  });", "  use(1);"])).toStrictEqual(["  use(1);"]);
     expect(deadConstants(["  let c1;", "  try {", "    c1 = 1;", "  } catch {", "    c1 = E;", "  }", "  use(1);"])).toStrictEqual(["  use(1);"]);
     expect(deadConstants([t, "  const c2 = T(() => G(c1));", "  use(1);"])).toStrictEqual(["  use(1);"]);
+  });
+
+  it("COMPILE.MODULE.SIZE.DEAD: the pass removes a column and its pack at each depth, also through a chain of reads", () => {
+    const column = ["    const col1 = Q((j1) => {", "      const f = (k) => {", "        return k;", "      };", "      return f(R[o1]);", "    });"];
+    expect(deadConstants(["  const fn2 = (p1) => {", ...column, "    return 0;", "  };"])).toStrictEqual(["  const fn2 = (p1) => {", "    return 0;", "  };"]);
+    expect(deadConstants(["  let PK1;", "  use(1);"])).toStrictEqual(["  use(1);"]);
+    expect(deadConstants(["  let PK1;", "  const col1 = Q((j) => {", "    return PK1 || 1;", "  });", "  const col2 = Q((j) => {", "    return col1(j);", "  });", "  use(1);"])).toStrictEqual(["  use(1);"]);
+  });
+
+  it("COMPILE.MODULE.SIZE.DEAD: the pass keeps a column or a pack that a line reads", () => {
+    const kept: readonly (readonly string[])[] = [
+      ["  const col1 = Q((j) => {", "    return j;", "  });", "  use(col1(0));"],
+      ["  let PK1;", "  use(PK1);"],
+      // The pack of a column that a line reads.
+      ["  let PK1;", "  const col1 = Q((j) => {", "    return PK1;", "  });", "  use(col1(0));"],
+    ];
+    for (const lines of kept) expect(deadConstants(lines)).toStrictEqual(lines);
   });
 
   it("COMPILE.MODULE.SIZE.DEAD: the pass keeps a constant that a line reads, and each other statement", () => {

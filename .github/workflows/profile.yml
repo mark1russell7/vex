@@ -58,6 +58,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       - env:
           GATE_CASE: ${{ inputs.case }}
@@ -103,6 +104,7 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
+      - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       - env:
           GATE_CASE: ${{ inputs.case }}

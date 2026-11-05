@@ -13,9 +13,9 @@
 // counts a clock time-out as not found. Each line also prints the score that counts it as found.
 // A mutant with a disable comment does not count in the score, and a disable can raise a score. So each line prints the count of these mutants.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { laneParts, PACKAGES, packageOfPart } from "./layout.ts";
@@ -321,7 +321,7 @@ function oneJob(): number {
   return absent.length > 0 ? 1 : 0;
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const mode = process.argv[2];
   if (mode === "--flip") process.exitCode = flip(fileURLToPath(import.meta.url)) === 0 ? 0 : 1;
   else if (mode === "--gate") process.exitCode = gate(process.argv[3] ?? "reports/parts");

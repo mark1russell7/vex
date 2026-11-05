@@ -228,6 +228,14 @@ A test of the shapes prints the largest size with no gate, because the gate of t
 
 The limit of the time exponent is 1.1, and the shape `origin` has its own limit of 1.25. Five reads of CI (run 41912930573) give these limits: the worst read of the shapes plus the largest spread of a shape, 0.12. The worst read is 0.98 for `wideorigin` and 1.13 for `origin`. The time of `origin` follows its text.
 
+#### The time of a print of each module (COMPILE.MODULE.COST)
+
+The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 3a0019f. Each print has a fresh process, and each arm has 7 rounds with an A/A arm.
+
+The gate reads each module alone, with no average over the modules. A module has a median limit of 1.10 and a limit of 1.20 for the worst pair. The result of `placesRead` on the program of the module picks its class. The file `module-cost-limits.ts` holds the limits and their reasons.
+
+These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. The module `bounds` has its own line of 1.20 until the item BOUNDSCOST removes it.
+
 #### The limit of the places of a program (COMPILE.PLACES)
 
 A place is a node at one position of the tree of a program. A program can use one object at many places, so a small object can have an exponential count of places. The compile takes time at each place, and tier 2 prints code at each place. The count comes first, and its walk visits each object once, so the refusal takes little time at each depth.

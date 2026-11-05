@@ -7,7 +7,7 @@ on:
   # Each pull request starts this workflow. The job changes skips the work when no file of the compile changes.
   pull_request:
   schedule:
-    - cron: "41 5 * * 2"
+    - cron: "52 5 * * 2"
   workflow_dispatch:
 
 permissions: {}

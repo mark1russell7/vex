@@ -2,7 +2,8 @@
  * The input of each standalone module of ireko (docs/COMPILER.md §13.3). The script `scripts/ireko-module.ts` and the
  * value tests read these rows, so a test prints the module of a build from the same input.
  */
-import { emitModule, emitSheetModule, functionText, type Emitted } from "@mark1russell7/vex-compiler/module";
+import type { Expr } from "@mark1russell7/vex";
+import { emitModule, emitSheetModule, functionText, type Emitted, type ModuleOptions, type SheetModuleOptions } from "@mark1russell7/vex-compiler/module";
 import { BETWEEN_DOMAINS, BETWEEN_PROGRAM, BETWEEN_SCHEMA, BOUNDS_DOMAINS, BOUNDS_PROGRAM, BOUNDS_SCHEMA, OVERLAP_DOMAINS, OVERLAP_PROGRAM, OVERLAP_SCHEMA } from "./ireko-audit.ts";
 import { GRID_DOMAINS, GRID_PROGRAM, GRID_SCHEMA } from "./ireko-grid.ts";
 import { LAYERS_DOMAINS, LAYERS_PROGRAM, LAYERS_SCHEMA } from "./ireko-layers.ts";
@@ -29,10 +30,21 @@ import { TREE_DOMAINS, TREE_PROGRAM, TREE_SCHEMA } from "./ireko-tree.ts";
 /** The value of the option `faults` of a module (COMPILE.MODULE.FAULT). */
 export type Faults = "value" | "throw";
 
-/** A row of the table: the name of the function of the module, and the print of the module. */
+/** A row of the table: the name of the function of the module, the expressions of the module, and the print of the module. */
 interface IrekoRow {
   readonly name: string;
+  readonly exprs: readonly Expr[];
   readonly print: (faults: Faults) => Emitted;
+}
+
+/** This function gives the row of a module of one program. Its expressions and its print come from one value. */
+function moduleRow(name: string, program: Expr, options: Omit<ModuleOptions, "name" | "faults">): IrekoRow {
+  return { name, exprs: [program], print: (faults) => emitModule(program, { ...options, name, faults }) };
+}
+
+/** This function gives the row of a module of a sheet. Its expressions and its print come from one value. */
+function sheetRow(name: string, columns: ReadonlyMap<string, Expr>, options: Omit<SheetModuleOptions, "name" | "faults">): IrekoRow {
+  return { name, exprs: [...columns.values()], print: (faults) => emitSheetModule(columns, { ...options, name, faults }) };
 }
 
 /** The name of a module of ireko. */
@@ -40,22 +52,22 @@ export type IrekoModule = "grid" | "radial" | "layers" | "tree" | "shape" | "pla
 
 /** The rows of the modules. Each print has the options of a build. */
 const ROWS: Readonly<Record<IrekoModule, IrekoRow>> = {
-  grid: { name: "gridOf", print: (faults) => emitModule(GRID_PROGRAM, { domains: GRID_DOMAINS, schema: GRID_SCHEMA, name: "gridOf", faults }) },
-  radial: { name: "radialOf", print: (faults) => emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radialOf", faults }) },
-  layers: { name: "layersOf", print: (faults) => emitModule(LAYERS_PROGRAM, { domains: LAYERS_DOMAINS, schema: LAYERS_SCHEMA, name: "layersOf", lists: "plain", faults }) },
-  tree: { name: "treeOf", print: (faults) => emitModule(TREE_PROGRAM, { domains: TREE_DOMAINS, schema: TREE_SCHEMA, name: "treeOf", lists: "plain", faults }) },
-  shape: { name: "nodeShape", print: (faults) => emitModule(NODE_SHAPE, { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults }) },
-  place: { name: "placeOf", print: (faults) => emitSheetModule(PLACE_COLUMNS, { domains: PLACE_DOMAINS, schema: PLACE_SCHEMA, kinds: PLACE_KINDS, space: "tree", name: "placeOf", faults }) },
-  measure: { name: "measureOf", print: (faults) => emitSheetModule(MEASURE_COLUMNS, { domains: MEASURE_DOMAINS, schema: MEASURE_SCHEMA, kinds: MEASURE_KINDS, space: "tree", name: "measureOf", faults }) },
-  straight: { name: "straightOf", print: (faults) => emitModule(STRAIGHT_PROGRAM, { domains: ROUTE_DOMAINS, schema: ROUTER_SCHEMA, name: "straightOf", lists: "plain", faults }) },
-  orthogonal: { name: "orthogonalOf", print: (faults) => emitModule(ORTHOGONAL_PROGRAM, { domains: ROUTE_DOMAINS, schema: ROUTER_SCHEMA, name: "orthogonalOf", lists: "plain", faults }) },
-  avoid: { name: "avoidOf", print: (faults) => emitModule(AVOID_PROGRAM, { domains: ROUTE_DOMAINS, schema: AVOID_SCHEMA, name: "avoidOf", lists: "plain", faults }) },
-  direction: { name: "directionOf", print: (faults) => emitModule(EDGE_DIRECTION_PROGRAM, { domains: ROUTE_DOMAINS, schema: EDGE_DIRECTION_SCHEMA, name: "directionOf", faults }) },
-  label: { name: "labelBoxOf", print: (faults) => emitModule(LABEL_BOX_PROGRAM, { domains: ROUTE_DOMAINS, schema: LABEL_BOX_SCHEMA, name: "labelBoxOf", lists: "plain", faults }) },
-  obstacles: { name: "obstaclesOf", print: (faults) => emitModule(OBSTACLES_PROGRAM, { domains: ROUTE_DOMAINS, schema: OBSTACLES_SCHEMA, name: "obstaclesOf", lists: "plain", faults }) },
-  overlap: { name: "overlapsOf", print: (faults) => emitModule(OVERLAP_PROGRAM, { domains: OVERLAP_DOMAINS, schema: OVERLAP_SCHEMA, name: "overlapsOf", lists: "plain", faults }) },
-  bounds: { name: "boundsOf", print: (faults) => emitModule(BOUNDS_PROGRAM, { domains: BOUNDS_DOMAINS, schema: BOUNDS_SCHEMA, name: "boundsOf", lists: "plain", faults }) },
-  between: { name: "betweenOf", print: (faults) => emitModule(BETWEEN_PROGRAM, { domains: BETWEEN_DOMAINS, schema: BETWEEN_SCHEMA, name: "betweenOf", lists: "plain", faults }) },
+  grid: moduleRow("gridOf", GRID_PROGRAM, { domains: GRID_DOMAINS, schema: GRID_SCHEMA }),
+  radial: moduleRow("radialOf", RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA }),
+  layers: moduleRow("layersOf", LAYERS_PROGRAM, { domains: LAYERS_DOMAINS, schema: LAYERS_SCHEMA, lists: "plain" }),
+  tree: moduleRow("treeOf", TREE_PROGRAM, { domains: TREE_DOMAINS, schema: TREE_SCHEMA, lists: "plain" }),
+  shape: moduleRow("nodeShape", NODE_SHAPE, { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA }),
+  place: sheetRow("placeOf", PLACE_COLUMNS, { domains: PLACE_DOMAINS, schema: PLACE_SCHEMA, kinds: PLACE_KINDS, space: "tree" }),
+  measure: sheetRow("measureOf", MEASURE_COLUMNS, { domains: MEASURE_DOMAINS, schema: MEASURE_SCHEMA, kinds: MEASURE_KINDS, space: "tree" }),
+  straight: moduleRow("straightOf", STRAIGHT_PROGRAM, { domains: ROUTE_DOMAINS, schema: ROUTER_SCHEMA, lists: "plain" }),
+  orthogonal: moduleRow("orthogonalOf", ORTHOGONAL_PROGRAM, { domains: ROUTE_DOMAINS, schema: ROUTER_SCHEMA, lists: "plain" }),
+  avoid: moduleRow("avoidOf", AVOID_PROGRAM, { domains: ROUTE_DOMAINS, schema: AVOID_SCHEMA, lists: "plain" }),
+  direction: moduleRow("directionOf", EDGE_DIRECTION_PROGRAM, { domains: ROUTE_DOMAINS, schema: EDGE_DIRECTION_SCHEMA }),
+  label: moduleRow("labelBoxOf", LABEL_BOX_PROGRAM, { domains: ROUTE_DOMAINS, schema: LABEL_BOX_SCHEMA, lists: "plain" }),
+  obstacles: moduleRow("obstaclesOf", OBSTACLES_PROGRAM, { domains: ROUTE_DOMAINS, schema: OBSTACLES_SCHEMA, lists: "plain" }),
+  overlap: moduleRow("overlapsOf", OVERLAP_PROGRAM, { domains: OVERLAP_DOMAINS, schema: OVERLAP_SCHEMA, lists: "plain" }),
+  bounds: moduleRow("boundsOf", BOUNDS_PROGRAM, { domains: BOUNDS_DOMAINS, schema: BOUNDS_SCHEMA, lists: "plain" }),
+  between: moduleRow("betweenOf", BETWEEN_PROGRAM, { domains: BETWEEN_DOMAINS, schema: BETWEEN_SCHEMA, lists: "plain" }),
 };
 
 /** The path of each committed file in the repository of ireko. */
@@ -76,6 +88,14 @@ export const IREKO_NOT_COMMITTED: readonly IrekoModule[] = ["layers", "tree", "s
 /** This function tells if a text is the name of a module of ireko. */
 export function isIrekoModule(text: string): text is IrekoModule {
   return Object.hasOwn(ROWS, text);
+}
+
+/** The name of each module of the table. */
+export const IREKO_MODULES: readonly IrekoModule[] = Object.keys(ROWS).filter(isIrekoModule);
+
+/** This function gives the expressions of a module of ireko, as its print reads them. */
+export function irekoExprs(which: IrekoModule): readonly Expr[] {
+  return ROWS[which].exprs;
 }
 
 /** This function gives the text of a module of ireko. A build takes `value`, and a value test takes `throw`. */

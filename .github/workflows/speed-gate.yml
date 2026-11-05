@@ -37,7 +37,7 @@ on:
 
 permissions: {}
 
-# One run for each branch and settings: a newer run stops the older one. The workflow holds at most 3 runner slots.
+# One run for each branch and settings: a newer run stops the older one. Each job holds at most 3 runner slots.
 # The settings of a dispatch are in the group, so two dispatches with different settings run one after the other.
 concurrency:
   group: speed-gate-${{ github.ref }}-${{ inputs.case }}-${{ inputs.node_flags }}-${{ inputs.gc }}
@@ -68,6 +68,7 @@ jobs:
             packages/compiler/test/growth.ts
             packages/domains/src/**
             packages/pilots/src/ireko-*.ts
+            packages/pilots/bench/module-cost*.ts
             .github/workflows/speed-gate.yml
             !packages/*/src/**/*.test.ts
             !packages/*/src/__golden__/**
@@ -150,10 +151,59 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # The time of a print of each module of ireko against a fixed base (COMPILE.MODULE.COST). The base is the commit that
+  # the limits were read against. A fixed base also finds a cost that grows over many pull requests.
+  modules:
+    needs: changes
+    if: needs.changes.outputs.match == 'true' && !inputs.case
+    name: Module cost ${{ matrix.rep }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        rep: ${{ fromJSON(inputs.reps == '5' && '[1, 2, 3, 4, 5]' || '[1]') }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      BASE: 3a0019ffb4a3ff87866a87ae9131d23bda6a62c0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: node scripts/workflow-gate.ts
+      - run: pnpm install --frozen-lockfile --filter @vex/pilots...
+      - name: The base
+        run: |
+          git worktree add -q ../base "$BASE"
+          cp packages/pilots/bench/module-cost-child.ts ../base/packages/pilots/bench/
+          cd ../base
+          pnpm install --frozen-lockfile --filter @vex/pilots...
+      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" | tee module-cost.txt
+      - if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### The time of a print of each module (ratios against $BASE: lower is better)"
+            echo
+            echo '```'
+            grep -E "^(runner|ok|FAIL)" module-cost.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   speed-gate-ok:
     name: Speed gate OK
     if: always()
-    needs: [changes, gates]
+    needs: [changes, gates, modules]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}

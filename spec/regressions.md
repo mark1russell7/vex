@@ -2,6 +2,21 @@
 
 Each defect of the audits ([`docs/archive/2026-07/BUGS.md`](../docs/archive/2026-07/BUGS.md)) has a row. A defect that the work finds later gets the next ID. A row with the status `test` has a test that names the ID. A row with the status `resolved` names the change that removed the defect. The test `spec-coverage.test.ts` checks each `test` row.
 
+## The version on npm
+
+Version 0.17.2 on npm has each defect of this list, until the release of 0.18.0. A fix on `main` does not reach a user of 0.17.2. A row with the status `test` does not state that a user has the fix. The release of 0.18.0 removes this section.
+
+| ID | A user of 0.17.2 sees | Fix |
+|---|---|---|
+| V-070 | A module keeps a value where the interpreter gives `#CALC!` or `#NUM!`. | On `main` |
+| V-088 | A module gives a value past 500 levels of nesting, where the interpreter gives `#VALUE!`. A program of 16,000 levels gives a `RangeError` from `emitModule`. | On `main` |
+| V-078 | A module gives the value of another name when two names of a key have one variable. | Pull request 280 |
+| V-080 | A module and tier 2 give a wrong value when a program uses one object at two places and a let hides a name. | Pull request 280 |
+| V-081, second form | A column that nothing calls reads a variable with no declaration. A probe gave the value of the interpreter. | Pull request 280 |
+| V-086 | With `fuse: false`, a column that nothing calls reads a parameter with no declaration. CI run 41945193470 gave the value of the interpreter. | Pull request 280 |
+
+## The rows
+
 | ID | Status | Evidence |
 |---|---|---|
 | V-001 | test | The others axis exists (`@mark1russell7/vex` builder tests) |

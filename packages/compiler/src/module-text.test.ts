@@ -32,6 +32,7 @@ const RECORDS = [
 const VARS = { a: 2 };
 
 const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
+const narrowed = (line: string): string => keepFaults({ decls: new Map(), lines: [line] }, new Set()).lines.join("");
 const n = ref("n");
 const w = ref("w");
 const SUM = op("sum", each(axes.all, n));
@@ -224,7 +225,6 @@ describe("V-079: a text pass does not change a text of the program", () => {
   });
 
   it("V-079 COMPILE.MODULE.FAULT: the two guards of a text pass decide which line goes to the tokenizer", () => {
-    const narrowed = (line: string): string => keepFaults({ decls: new Map(), lines: [line] }, new Set()).lines.join("");
     // A line with no match does not go to the tokenizer, and this line stops the tokenizer.
     expect(narrowed('"abc')).toBe('"abc');
     // A line with no character that starts a text does not go to the tokenizer, and this line stops the tokenizer.

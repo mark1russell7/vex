@@ -15,7 +15,7 @@
  * of 7 cannot be told from noise at 7 rounds. The worst pair is a record, and it does not fail a row.
  *
  * A gain limit reads against the fixed commit `GAIN_BASE`, so a merge does not move it. Only a pull request moves that
- * commit, with a ruling, new limits and the ratio of the new base to the old base on the row `build`.
+ * commit. That pull request has a ruling, new limits and the ratio of the new base to the old base on the row `build`.
  *
  * A limit under 1 holds a gain. It holds that gain only on a model of `GAIN_MODELS`. On each other model the row reads its
  * ceiling, and it prints that it does not read the gain. A pass on such a model does not show that the gain holds.
@@ -67,8 +67,9 @@ export const AA_CAP = 1.18;
 export const GAIN_BASE = "8ae233be3bd54744ae558020e5584975b4dfefee";
 
 /**
- * The models where the reads show the gain of the rows with a limit under 1. The model 9V45 is not here: the median of its 5 reads
- * is 0.946 on `build` and 0.916 on `avoid`, and the median of each other model is at most 0.928 and 0.840. Those reads do not give a cause.
+ * The models where the reads show the gain of the rows with a limit under 1. The model 9V45 is not here. The median of its
+ * 5 reads is 0.946 on `build` and 0.916 on `avoid`. The median of each other model is at most 0.928 on `build` and 0.840 on
+ * `avoid`. Those reads do not give a cause.
  */
 export const GAIN_MODELS: ReadonlySet<string> = new Set([
   "AMD EPYC 7763 64-Core Processor",

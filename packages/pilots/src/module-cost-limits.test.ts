@@ -24,6 +24,11 @@ function loudAt(second: number): ModuleTimes {
   return { ...row([100, 100, 100]), aa: [100, 100 * second, 100 * second] };
 }
 
+/** This function gives a row whose median is 1 and whose second pair is 1.9. */
+function tail(module: string): ModuleTimes {
+  return { module, shares: true, base: [100, 100, 100, 100, 100], branch: [100, 100, 100, 190, 190], aa: [100, 100, 100, 100, 100] };
+}
+
 describe("COMPILE.MODULE.COST", () => {
   it("COMPILE.MODULE.COST: the table has 16 modules, and only direction and label have no shared object", () => {
     expect(IREKO_MODULES).toHaveLength(16);
@@ -131,7 +136,6 @@ describe("COMPILE.MODULE.COST", () => {
   });
 
   it("COMPILE.MODULE.COST: a line with no limit of the second pair fails nothing on that pair, and each other line fails on it", () => {
-    const tail = (module: string): ModuleTimes => ({ module, shares: true, base: [100, 100, 100, 100, 100], branch: [100, 100, 100, 190, 190], aa: [100, 100, 100, 100, 100] });
     expect(limitOf("bounds", true).second).toBeUndefined();
     expect(moduleCostFaults(tail("bounds"), 1, HELD)).toEqual([]);
     expect(Object.keys(MODULE_LINES).filter((module) => moduleCostFaults(tail(module), 1, HELD).length === 0)).toEqual(["bounds"]);

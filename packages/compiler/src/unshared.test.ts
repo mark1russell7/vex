@@ -3,7 +3,7 @@ import { app, axes, type AnyDomain, each, ext, fold, iterate, let_, lit, MAX_NES
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { emitModule, emitSheetModule, listFactsOf, type ModuleOptions } from "./module.ts";
-import { originalOf, unshared, unsharedAll } from "./unshared.ts";
+import { originalOf, placesRead, unshared, unsharedAll } from "./unshared.ts";
 
 const DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain];
 const OPTIONS: ModuleOptions = { domains: DOMAINS, schema: { fields: { n: "number" } } };
@@ -25,6 +25,32 @@ describe("V-080 UNSHARED: each place of a program has its own object", () => {
     const exprs = [e, lit(2)];
     expect(unsharedAll(exprs)).toBe(exprs);
     expect(originalOf(e)).toBe(e);
+  });
+
+  it("V-080: a program with no shared object needs one walk", () => {
+    let walked = 0;
+    const seen = (e: Expr): Expr =>
+      new Proxy(e, {
+        get(target, name, receiver): unknown {
+          if (name === "tag") walked++;
+          return Reflect.get(target, name, receiver) as unknown;
+        },
+      });
+    const exprs = [seen(add(seen(ref("n")), seen(lit(1))))];
+    const read = placesRead(exprs);
+    const once = walked;
+    expect(read).toEqual({ error: undefined, shares: false });
+    expect(once).toBeGreaterThan(0);
+    expect(unsharedAll(exprs, read.shares)).toBe(exprs);
+    expect(walked).toBe(once);
+  });
+
+  it("V-080: one walk finds a shared object", () => {
+    const x = ref("n");
+    expect(placesRead([add(x, x)])).toEqual({ error: undefined, shares: true });
+    expect(placesRead([x, x]).shares).toBe(true);
+    const shared = add(x, x);
+    expect(unsharedAll([shared], true)[0]).not.toBe(shared);
   });
 
   it("V-080: a program from JSON has no shared objects", () => {

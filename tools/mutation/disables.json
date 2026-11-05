@@ -29,6 +29,14 @@
   },
   {
     "file": "packages/compiler/src/module-tidy.ts",
+    "comment": "// Stryker disable next-line Regex: `rewritten` calls `codeOf` on a line with a match, so a form that finds other characters also finds that line."
+  },
+  {
+    "file": "packages/compiler/src/module-tidy.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: the result is the same with no guard, and the guard saves the tokens."
+  },
+  {
+    "file": "packages/compiler/src/module-tidy.ts",
     "comment": "// Stryker disable next-line ConditionalExpression: the result is the same with no guard, and the guard saves the tokens."
   },
   {

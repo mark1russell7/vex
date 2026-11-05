@@ -30,11 +30,23 @@ function partsOf(x: Expr): readonly Expr[] {
   }
 }
 
+/** This function gives the count of the objects of the expressions when each object has one place. Otherwise it gives `undefined`. */
+function treeSize(exprs: readonly Expr[]): number | undefined {
+  const seen = new Set<Expr>();
+  const todo = [...exprs];
+  for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
+    if (seen.has(x)) return undefined;
+    seen.add(x);
+    todo.push(...partsOf(x));
+  }
+  return seen.size;
+}
+
 /**
- * This function gives the number of places of the expressions, with a walk that visits each object once. So it takes
- * the time of the objects, not of the places. An object that holds itself has no end, and its count is infinite.
+ * This function gives the number of places of expressions with a shared object, with a walk that visits each object once.
+ * So it takes the time of the objects, not of the places. An object that holds itself has no end, and its count is infinite.
  */
-export function placesOf(exprs: readonly Expr[]): number {
+function sharedPlaces(exprs: readonly Expr[]): number {
   const counts = new Map<Expr, number>();
   const open = new Set<Expr>();
   const todo = [...exprs];
@@ -52,23 +64,27 @@ export function placesOf(exprs: readonly Expr[]): number {
   return exprs.reduce((sum, e) => sum + (counts.get(e) as number), 0);
 }
 
-/** This function gives the reason that a compile refuses the expressions, or `undefined` (COMPILE.PLACES). */
-export function placesError(exprs: readonly Expr[]): string | undefined {
-  const places = placesOf(exprs);
-  return places > MAX_PLACES ? `COMPILE.PLACES: the program has ${String(places)} places, and the limit is ${String(MAX_PLACES)}` : undefined;
+/** This function gives the number of places of the expressions. */
+export const placesOf = (exprs: readonly Expr[]): number => treeSize(exprs) ?? sharedPlaces(exprs);
+
+/** The result of one walk of a program: the reason that a compile refuses it (COMPILE.PLACES), and if two places hold one object. */
+export interface PlacesRead {
+  readonly error: string | undefined;
+  readonly shares: boolean;
 }
 
-/** This function tells if two places of the expressions hold one object. */
-function sharesNode(exprs: readonly Expr[]): boolean {
-  const seen = new Set<Expr>();
-  const todo = [...exprs];
-  for (let x = todo.pop(); x !== undefined; x = todo.pop()) {
-    if (seen.has(x)) return true;
-    seen.add(x);
-    todo.push(...children(x));
-  }
-  return false;
+/** This function gives the result of one walk of the expressions. So a program with no shared object needs no second walk. */
+export function placesRead(exprs: readonly Expr[]): PlacesRead {
+  const size = treeSize(exprs);
+  const places = size ?? sharedPlaces(exprs);
+  return {
+    error: places > MAX_PLACES ? `COMPILE.PLACES: the program has ${String(places)} places, and the limit is ${String(MAX_PLACES)}` : undefined,
+    shares: size === undefined,
+  };
 }
+
+/** This function gives the reason that a compile refuses the expressions, or `undefined` (COMPILE.PLACES). */
+export const placesError = (exprs: readonly Expr[]): string | undefined => placesRead(exprs).error;
 
 /** This function gives a copy of a part of an expression, with a new object for each place. A value of a literal and the data of an extension are not nodes, so they stay. */
 function copied(x: unknown): unknown {
@@ -88,14 +104,15 @@ function noted(copy: unknown, original: unknown): unknown {
 
 /**
  * This function gives the expressions with one object at each place. Expressions without a shared object stay the same
- * objects. So does an expression that is nested too deep: the printer and the lowering refuse it.
+ * objects. So does an expression that is nested too deep: the printer and the lowering refuse it. A caller with the
+ * result of `placesRead` gives its `shares`, and this function makes no walk.
  */
-export function unsharedAll(exprs: readonly Expr[]): readonly Expr[] {
-  return !sharesNode(exprs) || exprs.some((e) => nestingOf(e) > MAX_NESTING) ? exprs : (exprs.map(copied) as readonly Expr[]);
+export function unsharedAll(exprs: readonly Expr[], shares: boolean = treeSize(exprs) === undefined): readonly Expr[] {
+  return !shares || exprs.some((e) => nestingOf(e) > MAX_NESTING) ? exprs : (exprs.map(copied) as readonly Expr[]);
 }
 
 /** This function gives the expression with one object at each place, as `unsharedAll` does. */
-export const unshared = (e: Expr): Expr => unsharedAll([e])[0] as Expr;
+export const unshared = (e: Expr, shares?: boolean): Expr => unsharedAll([e], shares)[0] as Expr;
 
 /** This function gives the original of a copy, and an expression that is not a copy gives itself. */
 export const originalOf = (e: Expr): Expr => ORIGINALS.get(e) ?? e;

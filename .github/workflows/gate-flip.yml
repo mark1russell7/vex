@@ -16,9 +16,15 @@ jobs:
       max-parallel: 3
       matrix:
         include:
-          - { name: v093, rep: 1, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: v093, rep: 2, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: v093, rep: 3, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: fix, rep: 1, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: fix, rep: 2, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: fix, rep: 3, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: nowalk, rep: 1, tree: e37f0f077bcd99c692b061d94c6c043f0a162189, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: nowalk, rep: 2, tree: e37f0f077bcd99c692b061d94c6c043f0a162189, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: nowalk, rep: 3, tree: e37f0f077bcd99c692b061d94c6c043f0a162189, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: oldform, rep: 1, tree: 95f067e8246a2ec6fb3dbb1e1223e62318ec1666, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: oldform, rep: 2, tree: 95f067e8246a2ec6fb3dbb1e1223e62318ec1666, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: oldform, rep: 3, tree: 95f067e8246a2ec6fb3dbb1e1223e62318ec1666, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
     timeout-minutes: 15
     defaults:
       run:

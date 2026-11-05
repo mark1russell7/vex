@@ -942,7 +942,7 @@ The owner made these decisions on 2026-10-16:
 | C5 Later | Cell reads in the generated code (§7.4), other back ends, recalculation (§7.5) | A decision of the owner |
 | C6 Fusion (planned) | The fusion of list ops in modules (§7.6): one loop for a chain, lists without error items, one envelope for each run | P17 passes with the option `fuse` on and off, and the module of the shapes of ireko is at 1.4 times the hand code or less |
 
-A separate item: the mutation score of the test kit was 95.47 %, near the gate of 95 %. Tests for its survivors gave it 99.5 % (2026-10-15).
+A separate item: the mutation score of the test kit was 95.47 %, near the gate of 95 %. Tests for its survivors gave it 99.5 % (2026-10-15). Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A re-read follows the lane PR.
 
 ## 13. Record
 
@@ -955,7 +955,7 @@ The tests:
 - P17 compares `tiered` with `evaluate` on three generators: the whole grammar, the chains of the builder, and list ops over axes. Tier 2 gave approximately 97 %, 85 % and 90 % of the values. The gate of the share is 50 %.
 - The work put ten defects into the lowering, one at a time. P17 found each of them.
 - The unit tests alone cover each statement and each branch of the package. The golden files hold the source of five programs.
-- The mutation score is 100 % (997 mutants). Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A new read of the lane is in progress, and it gives the final figure. Seven comments disable 30 equivalent mutants, each with its reason. Two tests count the reads of the host, so they find a cache that does not operate.
+- The mutation score is 100 % (997 mutants). Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A re-read follows the lane PR. Seven comments disable 30 equivalent mutants, each with its reason. Two tests count the reads of the host, so they find a cache that does not operate.
 
 The speed, measured by `bench/gate.ts` on one machine:
 
@@ -1027,7 +1027,7 @@ The gate measures the share of each value in the total. The run at each of 1000 
 
 Phase C2 adds three tests. A property gives many runs of one program on the same spaces. A test counts the calls in a node of the memo. A test gives the nodes of the memo for each kind of expression.
 
-The mutation score of the compiler is 100 % of 1364 mutants. Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A new read of the lane is in progress, and it gives the final figure. Comments disable 68 equivalent mutants, each with its reason. Most of them are labels of a `case` that gives the same value as a missing case.
+The mutation score of the compiler is 100 % of 1364 mutants. Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A re-read follows the lane PR. Comments disable 68 equivalent mutants, each with its reason. Most of them are labels of a `case` that gives the same value as a missing case.
 
 #### Aggregates by group: the keys of the memo
 

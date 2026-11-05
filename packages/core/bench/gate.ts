@@ -11,6 +11,7 @@
  * A PR that makes a ratio better sets its limit lower in the same PR.
  * Start: node packages/core/bench/gate.ts
  */
+import { withFault } from "./fault.ts";
 import { envLine, paired } from "./measure.ts";
 import { LIFE, NEAREST } from "./programs.ts";
 
@@ -23,7 +24,7 @@ console.info(envLine("process"));
 let failed = false;
 for (const { program, limit } of LIMITS) {
   // The arms alternate in this process, with the order reversed in odd rounds, and a copy of the loops gives the noise floor (measure.ts).
-  const { ratio, a: v, b: h, noise } = paired(program.vex, program.hand, { ms: 60 });
+  const { ratio, a: v, b: h, noise } = paired(withFault(program.vex), program.hand, { ms: 60 });
   const ok = ratio <= limit;
   failed ||= !ok;
   console.info(`${ok ? "ok  " : "FAIL"} ${program.title}: vex ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, Vex/hand time ${ratio.toFixed(1)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);

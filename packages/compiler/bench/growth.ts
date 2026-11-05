@@ -83,8 +83,7 @@ function gated(name: string): void {
 function gates(): void {
   for (const shape of GROWTH_SHAPES) {
     const r = spawnSync(process.execPath, [STACK, fileURLToPath(import.meta.url), "gated", shape.name], { timeout: 5 * LIMIT_MS, killSignal: "SIGKILL", encoding: "utf8" });
-    const line = r.status === 0 ? r.stdout.trim().split("
-").at(-1) : undefined;
+    const line = r.status === 0 ? r.stdout.trim().split("\n").at(-1) : undefined;
     const record = line === undefined ? undefined : (JSON.parse(line) as { readonly keyFaults: number; readonly nameFaults: number; readonly same: boolean });
     const held = record?.keyFaults === 0 && record.nameFaults === 0 && record.same;
     console.info(`${held ? "ok" : "FAIL"} gates ${shape.name} levels=${String(shape.large)} places=${String(placesOf([programOf(shape, shape.large)]))} ${line ?? `exit ${String(r.status)} ${r.stderr.slice(0, 200)}`}`);

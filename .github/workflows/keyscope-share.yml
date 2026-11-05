@@ -1,5 +1,5 @@
 # Throwaway measure of a draft pull request: the share of generated programs that reach the bad state of V-077 (on the printer of the branch).
-# Head 91f30f4, tree 5184b0e.
+# Head 6997e90, tree 03d5a25.
 name: keyscope share
 on:
   push:

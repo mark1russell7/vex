@@ -11,7 +11,7 @@ const IREKO_ROUNDS = 7;
 const PROFILE_ROUNDS = 7;
 const GROWTH_ROUNDS = 7;
 // The names of the frames in the rows: the walk of KEYSCOPE, the key of V-078, the token pass of V-079, and the larger passes.
-const NAMED = ["generate", "link", "load", "printJs", "tiered", "placesRead", "placesError", "unsharedAll", "#constKey", "keyText", "formsOf", "formOf", "meanings", "factsOf", "keysOf", "canonical", "rewritten", "narrowCatches", "keepFaults", "tidy", "inlineOps", "deadConstants", "onceCells", "memoNodes", "printProgram", "emitModule"];
+const NAMED = ["irekoSource", "print", "generate", "link", "load", "printJs", "tiered", "placesRead", "placesError", "unsharedAll", "#constKey", "keyText", "formsOf", "formOf", "meanings", "factsOf", "keysOf", "canonical", "rewritten", "narrowCatches", "keepFaults", "tidy", "inlineOps", "deadConstants", "onceCells", "memoNodes", "printProgram", "emitModule"];
 const GROWTH = [
   ["plain", [10, 11, 12, 13, 14, 15]],
   ["constant", [10, 11, 12, 13, 14, 15]],
@@ -27,6 +27,7 @@ const CELLS = [
   ["cost-child.mjs", "tier2", "plain", "12", "json"],
   ["ireko-child.mjs", "direction"],
   ["ireko-child.mjs", "label"],
+  ["ireko-child.mjs", "bounds"],
 ];
 
 const median = (xs) => {
@@ -148,13 +149,13 @@ function profiles(dir, cell) {
   };
   for (let round = 0; round < PROFILE_ROUNDS; round++) {
     const out = mkdtempSync(join(tmpdir(), "prof-"));
-    run(["--stack-size=4000", "--cpu-prof", `--cpu-prof-dir=${out}`, `--cpu-prof-interval=${cell[0] === "ireko-child.mjs" ? 100 : 500}`, script(dir, cell[0]), ...cell.slice(1)]);
+    walls.push(run(["--stack-size=4000", "--cpu-prof", `--cpu-prof-dir=${out}`, `--cpu-prof-interval=${cell[0] === "ireko-child.mjs" ? 100 : 500}`, script(dir, cell[0]), ...cell.slice(1)]).ms);
     const one = read(join(out, readdirSync(out).find((f) => f.endsWith(".cpuprofile"))));
     add(self, one.self);
     add(inclusive, one.inclusive);
     rmSync(out, { recursive: true });
   }
-  return { self: middle(self), inclusive: middle(inclusive) };
+  return { self: middle(self), inclusive: middle(inclusive), wall: median(walls) };
 }
 
 function compare(label, kind, branch, base) {
@@ -171,6 +172,7 @@ for (const cell of CELLS) {
     const sum = (m) => [...m].filter(([k]) => k.split(" ")[0] === name).reduce((a, [, v]) => a + v, 0);
     console.info(`NAMED ${label} ${name} branch=${f2(sum(branch.inclusive))} base=${f2(sum(base.inclusive))} gap=${f2(sum(branch.inclusive) - sum(base.inclusive))}`);
   }
+  console.info(`WALL ${label} under profile branch=${f2(branch.wall)} base=${f2(base.wall)} gap=${f2(branch.wall - base.wall)}`);
   compare(label, "self", branch.self, base.self);
   compare(label, "inclusive", branch.inclusive, base.inclusive);
 }

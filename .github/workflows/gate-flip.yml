@@ -1,77 +1,50 @@
-# The flip test of the gates of a measure (scripts/gate-flip.ts). An added cost must make a gate fail, and a clean copy
-# must pass, in one job. A gate that cannot fail holds no gain.
+# A read branch: two paired reads of the time of a print of each module, each with its base in the same job. This file does not merge.
 name: Gate flip
 
 on:
-  # Each pull request starts this workflow. The job changes skips the work when no file of a gate changes.
-  pull_request:
-  schedule:
-    # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
-    - cron: "56 6 * * 3"
   workflow_dispatch:
 
-permissions: {}
-
-# One run for each branch: a newer run stops the older one.
-concurrency:
-  group: gate-flip-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: read
 
 jobs:
-  changes:
+  pair:
+    name: Pair ${{ matrix.name }} ${{ matrix.rep }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      match: ${{ steps.changes.outputs.match }}
-    steps:
-      - id: changes
-        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
-        with:
-          paths: |
-            packages/core/bench/fault.ts
-            packages/core/bench/gate.ts
-            packages/core/bench/measure.ts
-            packages/core/bench/processes.ts
-            packages/compiler/bench/gate.ts
-            packages/compiler/bench/gate-processes.ts
-            packages/compiler/bench/growth.ts
-            packages/compiler/test/growth.ts
-            scripts/gate-flip.ts
-            .github/workflows/gate-flip.yml
-
-  flip:
-    needs: changes
-    if: needs.changes.outputs.match == 'true' || github.event_name != 'pull_request'
-    name: Flip of the speed gates
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    # The shell bash sets pipefail, so a flip that fails fails its step, also with its output piped into tee.
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - { name: cut, rep: 1, tree: 0b6811e916efddc45350e03a521528592b990a2a, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: v089, rep: 1, tree: ec40c2b986d0f8cb15d70b54e2781946aac3e62b, base: cde8b8ff35a81bca9aca35ce4b385f7dcdb9920e }
+          - { name: cut, rep: 2, tree: 0b6811e916efddc45350e03a521528592b990a2a, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: v089, rep: 2, tree: ec40c2b986d0f8cb15d70b54e2781946aac3e62b, base: cde8b8ff35a81bca9aca35ce4b385f7dcdb9920e }
+          - { name: cut, rep: 3, tree: 0b6811e916efddc45350e03a521528592b990a2a, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: v089, rep: 3, tree: ec40c2b986d0f8cb15d70b54e2781946aac3e62b, base: cde8b8ff35a81bca9aca35ce4b385f7dcdb9920e }
+    timeout-minutes: 15
     defaults:
       run:
         shell: bash
+    env:
+      BASE: ${{ matrix.base }}
+      REP: ${{ matrix.rep }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ matrix.tree }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: pnpm
-      - run: node scripts/workflow-gate.ts
-      - run: pnpm install --frozen-lockfile
-      - run: node scripts/gate-flip.ts 2>&1 | tee flip.txt
-      - if: ${{ !cancelled() }}
+      - run: pnpm install --frozen-lockfile --filter @vex/pilots...
+      - name: The base
         run: |
-          {
-            echo "### The flip of the speed gates"
-            echo
-            echo '```'
-            grep -E "^(ok|FAIL) the (speed|growth) gate" flip.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          git worktree add -q ../base "$BASE"
+          cp packages/pilots/bench/module-cost-child.ts ../base/packages/pilots/bench/
+          cd ../base
+          pnpm install --frozen-lockfile --filter @vex/pilots...
+      - run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --turn "$((REP - 1))"

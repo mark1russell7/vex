@@ -32,6 +32,18 @@
     "comment": "// Stryker disable next-line Regex: `rewritten` calls `codeOf` on a line with a match, so a form that finds other characters also finds that line."
   },
   {
+    "file": "packages/compiler/src/module-tidy.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a line without the text has no such word, so this test only saves the walk."
+  },
+  {
+    "file": "packages/compiler/src/module-tidy.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a line without the name has no declaration of it, so this test only saves the pattern."
+  },
+  {
+    "file": "packages/compiler/src/module-tidy.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a line without the alias stays as it is, so this test only saves the pattern."
+  },
+  {
     "file": "packages/compiler/src/module.ts",
     "comment": "// Stryker disable next-line OptionalChaining: each caller gives an argument."
   },
@@ -82,6 +94,10 @@
   {
     "file": "packages/compiler/src/module.ts",
     "comment": "// Stryker disable next-line ConditionalExpression: a node that is not a call has no field fn, so the map gives undefined"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: with no locals the scan below finds no read, so this return only saves the scan"
   },
   {
     "file": "packages/compiler/src/module.ts",
@@ -194,6 +210,10 @@
   {
     "file": "packages/compiler/src/runtime.ts",
     "comment": "// Stryker disable next-line StringLiteral: the program catches the exception, so no one reads its message"
+  },
+  {
+    "file": "packages/compiler/src/scope-key.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a walk gives the same text as the plain form, so this test only saves the walk."
   },
   {
     "file": "packages/core/src/builder.ts",

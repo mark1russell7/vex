@@ -1932,6 +1932,40 @@ describe("COMPILE.MODULE: random programs", () => {
     expectSame(make(sourceOf(small, { ...OPTIONS, faults: "value" })), small, rs, { a: 0, t: "x" });
   });
 
+  describe("V-094 COMPILE.MODULE: a call in the step of a fold over all the records", () => {
+    // The Weekly derivation of 2026-11-05 found these programs. The argument -1 of the call is not a plain name.
+    const window = app("sum", each(axes.window(-1, 0), lit(0)));
+    const step = app("add", app("max", app("divide", ref("n"), lit(2)), app("abs", app("add", lit(0), app("multiply", ref("n"), lit(3))))), call("g", ref("n", [{ t: "origin" }]), lit(-1)));
+    const withTest = (test: Expr): Expr => let_({ g: fn(["x", "u"], app("if", test, window, lit(0))) }, fold(axes.all, { s: lit(0) }, { s: step }, v("s")));
+    // The second print kept -1 in a local of its loop, and the run read that local out of the loop.
+    const loud = withTest(app("gt", v("u"), lit(0)));
+    // A test with a loop has its read in the try of a key, so the free name gave an error of Vex with no throw.
+    const quiet = withTest(app("gt", app("add", v("u"), app("sum", each(axes.all, lit(0)))), lit(0)));
+
+    it("a module reads each argument in the scope of its declaration", () => {
+      for (const e of [loud, quiet]) for (const options of [OPTIONS, { ...OPTIONS, faults: "value" as const }]) expect(nameFaults(sourceOf(e, options))).toStrictEqual([]);
+    });
+
+    it("a module gives the value of the interpreter at each key, also when the read is in the try of a key", () => {
+      for (const e of [loud, quiet]) {
+        expectSame(make(sourceOf(e)), e);
+        expectSame(make(sourceOf(e, { ...OPTIONS, faults: "value" })), e, RECORDS, VARS, { ...OPTIONS, faults: "value" });
+      }
+    });
+
+    it("the two checks fail on a copy of the module with a free name in the try of a key", () => {
+      // The faults at `value` catch each error in the try of a key, as in a build of a user. The tests print with `throw`.
+      const source = sourceOf(quiet, { ...OPTIONS, faults: "value" });
+      // The fault copy puts a name with no declaration in the place of the argument -1, as the defect did.
+      const fault = source.replace(/(fn\d+\(R\[o\]\["n"\], )-1(, j1\))/u, "$1b99$2");
+      expect(fault).not.toBe(source);
+      expect(nameFaults(fault).some((line) => line.includes("the name b99 has no declaration"))).toBe(true);
+      expect(() => {
+        expectSame(make(fault), quiet, RECORDS, VARS, { ...OPTIONS, faults: "value" });
+      }).toThrow(/to strictly equal/u);
+    });
+  });
+
   it("P17 COMPILE.MODULE: a loop in the step of a fold gives the value of the interpreter when its name hides the name of the fold", () => {
     // The sum has no read of the fold, so the printer moves it out of the loop. Its inner fold hides the name s of the step.
     const hidden = fc.tuple(program.num, program.num, program.num).map(([first, test, seed]) => shadowed(hard(first), hard(test), seed));

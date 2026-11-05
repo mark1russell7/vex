@@ -22,6 +22,11 @@ on:
         description: Collect the records with no minimum of runs (a counterexample still fails)
         type: boolean
         default: false
+      package:
+        description: The one package to run, or all the packages
+        type: choice
+        options: ["all", "@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@vex/pilots", "@vex/formula", "@vex/sheet-app", "@vex/site"]
+        default: "all"
 
 permissions: {}
 
@@ -42,7 +47,8 @@ jobs:
       # At most 3 jobs of the matrix at one time, so the gates and the releases of the fleet keep their slots.
       max-parallel: 3
       matrix:
-        package: ["@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@vex/pilots", "@vex/formula", "@vex/sheet-app", "@vex/site"]
+        # A scheduled run has no inputs, so it runs all the packages.
+        package: ${{ fromJSON((inputs.package == '' || inputs.package == 'all' || inputs.package == null) && '["@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@vex/pilots", "@vex/formula", "@vex/sheet-app", "@vex/site"]' || format('["{0}"]', inputs.package)) }}
         rep: ${{ fromJSON(inputs.reps == '5' && '[1, 2, 3, 4, 5]' || '[1]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,7 +61,8 @@ jobs:
           cache: pnpm
       - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter "${{ matrix.package }}" run test
+      # The log has the heap after each test that ends. A test that loses its worker has no line.
+      - run: pnpm --filter "${{ matrix.package }}" run test --logHeapUsage --reporter=verbose --reporter=github-actions
         env:
           FC_NUM_RUNS: "1000000"
           FC_TIME_LIMIT_MS: "600000"

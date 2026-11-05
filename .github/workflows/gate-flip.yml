@@ -1,4 +1,4 @@
-# A read branch: two paired reads of the time of a print of each module, each with its base in the same job. This file does not merge.
+# A read branch: a paired read of the time of a print of each module for V-093, with its base in the same job. This file does not merge.
 name: Gate flip
 
 on:
@@ -16,12 +16,9 @@ jobs:
       max-parallel: 3
       matrix:
         include:
-          - { name: cut, rep: 1, tree: 0b6811e916efddc45350e03a521528592b990a2a, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: v089, rep: 1, tree: ec40c2b986d0f8cb15d70b54e2781946aac3e62b, base: cde8b8ff35a81bca9aca35ce4b385f7dcdb9920e }
-          - { name: cut, rep: 2, tree: 0b6811e916efddc45350e03a521528592b990a2a, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: v089, rep: 2, tree: ec40c2b986d0f8cb15d70b54e2781946aac3e62b, base: cde8b8ff35a81bca9aca35ce4b385f7dcdb9920e }
-          - { name: cut, rep: 3, tree: 0b6811e916efddc45350e03a521528592b990a2a, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: v089, rep: 3, tree: ec40c2b986d0f8cb15d70b54e2781946aac3e62b, base: cde8b8ff35a81bca9aca35ce4b385f7dcdb9920e }
+          - { name: v093, rep: 1, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: v093, rep: 2, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: v093, rep: 3, tree: 576f4c8375346119f36771de5203993071a41d82, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
     timeout-minutes: 15
     defaults:
       run:

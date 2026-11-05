@@ -7,6 +7,10 @@ const API = "https://api.github.com";
 const DAY_MS = 86_400_000;
 /** The release of this package gives the date of the lag. The four main packages have one version. */
 const RELEASE_TAG = "@mark1russell7/vex-compiler@";
+/** The things that the count of passed runs in a row does not read. */
+const IN_A_ROW_NOT_COUNTED = "a run by hand, and a run that has not ended. A cancelled run ends the count";
+/** The things that the count of passed runs of the window does not read. */
+const WINDOW_NOT_COUNTED = "a run by hand, a run that has not ended, and a scheduled run before the last 30";
 
 /** One measure of the file. */
 export interface SiteMeasure {
@@ -54,6 +58,26 @@ export function greenRun(conclusions: readonly (string | null)[]): number {
   return failed === -1 ? ended.length : failed;
 }
 
+/** One scheduled run, as GitHub gives it. */
+export interface ScheduledRun {
+  readonly conclusion: string | null;
+  readonly created_at: string;
+}
+
+/**
+ * This function gives the count of passed runs of a window, and a unit that names the window. The unit has the count of
+ * ended runs, the date of the oldest run and the date of the last passed run. Thus a 0 tells its size. A run with no
+ * conclusion has not ended, so it does not count. The list has the newest run first.
+ */
+export function greenWindow(runs: readonly ScheduledRun[]): { readonly value: number; readonly unit: string } {
+  const ended = runs.filter((x) => x.conclusion !== null && x.conclusion !== "");
+  const green = ended.filter((x) => x.conclusion === "success");
+  const oldest = ended.at(-1);
+  if (oldest === undefined) return { value: 0, unit: "of 0 scheduled runs" };
+  const last = green[0]?.created_at.slice(0, 10) ?? "none in the window";
+  return { value: green.length, unit: `of ${String(ended.length)} scheduled runs since ${oldest.created_at.slice(0, 10)}, last green ${last}` };
+}
+
 /** This function gives the age of a commit in days, with two decimals. With no commit, main is not ahead of npm, and the age is 0. */
 export function lagDays(oldest: string | undefined, now: number): number {
   return oldest === undefined ? 0 : Number(((now - Date.parse(oldest)) / DAY_MS).toFixed(2));
@@ -72,11 +96,14 @@ async function read(get: Get, token: string, path: string): Promise<ReadResponse
   return response;
 }
 
-/** This function gives the count of passed scheduled runs of a workflow. */
-async function scheduledGreenRun(get: Get, token: string, workflow: string): Promise<number> {
-  const response = await read(get, token, `actions/workflows/${workflow}/runs?event=schedule&per_page=30`);
-  const { workflow_runs: runs } = (await response.json()) as { workflow_runs: readonly { conclusion: string | null }[] };
-  return greenRun(runs.map((run) => run.conclusion));
+/** This function gives two measures of the scheduled runs of a workflow. They are the passed runs in a row and the passed runs of the last 30. */
+async function scheduledRuns(get: Get, token: string, name: string, at: string): Promise<readonly SiteMeasure[]> {
+  const response = await read(get, token, `actions/workflows/${name}.yml/runs?event=schedule&per_page=30`);
+  const { workflow_runs: runs } = (await response.json()) as { workflow_runs: readonly ScheduledRun[] };
+  return [
+    { id: `${name}-green-run`, value: greenRun(runs.map((run) => run.conclusion)), unit: "runs in a row", at, notCounted: IN_A_ROW_NOT_COUNTED },
+    { id: `${name}-green-in-window`, ...greenWindow(runs), at, notCounted: WINDOW_NOT_COUNTED },
+  ];
 }
 
 /** This function gives the age in days of the oldest commit of main after the latest release. The last page of the list holds that commit. */
@@ -91,10 +118,10 @@ async function npmLag(get: Get, token: string, now: number): Promise<number> {
   return lagDays(commits.at(-1)?.commit.committer.date, now);
 }
 
-/** This function gives one measure, or one fault. A failed read gives no measure, so a reader sees an old reading and not a false number. */
-async function measureOf(id: string, unit: string, at: string, value: () => Promise<number>): Promise<SiteMeasure | string> {
+/** This function gives the measures of one read, or one fault. A failed read gives no measure, so a reader sees an old reading and not a false number. */
+async function measuresOf(id: string, measures: () => Promise<readonly SiteMeasure[]>): Promise<readonly SiteMeasure[] | string> {
   try {
-    return { id, value: await value(), unit, at };
+    return await measures();
   } catch (error) {
     return `${id}: ${error instanceof Error ? error.message : String(error)}`;
   }
@@ -108,9 +135,9 @@ export async function gitHubMeasures(get: Get, token: string | undefined, now: n
   if (token === undefined || token === "") return { measures: [], faults: ["no token, so the file has no measure of the runs or of the release"] };
   const at = new Date(now).toISOString().replace(/\.\d+Z$/u, "Z");
   const results = await Promise.all([
-    measureOf("weekly-green-run", "runs", at, () => scheduledGreenRun(get, token, "weekly.yml")),
-    measureOf("nightly-green-run", "runs", at, () => scheduledGreenRun(get, token, "nightly.yml")),
-    measureOf("npm-lag-days", "days", at, () => npmLag(get, token, now)),
+    measuresOf("weekly-green-run", () => scheduledRuns(get, token, "weekly", at)),
+    measuresOf("nightly-green-run", () => scheduledRuns(get, token, "nightly", at)),
+    measuresOf("npm-lag-days", async () => [{ id: "npm-lag-days", value: await npmLag(get, token, now), unit: "days", at }]),
   ]);
-  return { measures: results.filter((x) => typeof x !== "string"), faults: results.filter((x) => typeof x === "string") };
+  return { measures: results.filter((x) => typeof x !== "string").flat(), faults: results.filter((x) => typeof x === "string") };
 }

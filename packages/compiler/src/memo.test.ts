@@ -1,5 +1,5 @@
-import { app, axes, each, let_, lit, ref, v, type Addr, type Expr } from "@mark1russell7/vex";
-import fc from "fast-check";
+import { app, axes, each, let_, lit, rec, ref, v, type Addr, type Expr } from "@mark1russell7/vex";
+import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { isFusedOp } from "./facts.ts";
 import { plainMemoNodes } from "../test/plain-memo.ts";
@@ -50,7 +50,7 @@ const programs: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => {
       fc.tuple(fc.constantFrom("add", "sum", "max"), fc.array(e, { minLength: 1, maxLength: 2 })).map(([op, args]) => app(op, ...args)),
       fc.tuple(name, e, e).map(([x, bound, body]) => let_({ [x]: bound }, body)),
       fc.tuple(e, moves(e), fc.option(e, { nil: undefined })).map(([body, at, test]) => each(test === undefined ? axes.all : axes.where(axes.all, test), body, at)),
-      fc.tuple(e, e).map(([a, b]) => ({ tag: "rec", fields: { a, b } }) as Expr),
+      fc.tuple(e, e).map(([a, b]) => rec({ a, b })),
     ),
   };
 }).e;

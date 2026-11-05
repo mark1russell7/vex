@@ -26,7 +26,7 @@ export function keyWatch(): KeyWatch {
   const tables = new Map<KeyTable, Seen>();
   const faults: string[] = [];
   const probe = (e: Expr, scope: KeyScope, key: string, table: KeyTable): void => {
-    const seen = tables.get(table) ?? { plainOf: new Map(), keyOf: new Map() };
+    const seen: Seen = tables.get(table) ?? { plainOf: new Map(), keyOf: new Map() };
     tables.set(table, seen);
     const plain = createHash("sha1").update(plainKey(e, scope)).digest("base64");
     const hadPlain = seen.plainOf.get(key) ?? plain;

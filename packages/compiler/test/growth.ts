@@ -10,8 +10,11 @@ const n = ref("n");
 const SUM = app("sum", each(axes.all, n));
 const ORIGIN = ref("n", [{ t: "origin" }]);
 
-/** The most exponent of the time of a shape. The value comes from the worst of 5 runs of CI with their spread. */
-export const TIME_LIMIT = 1.3;
+/**
+ * The most exponent of the time of a shape. CI run 41912930573 gave 5 reads of each shape. The worst read is 0.98 (wideorigin), and
+ * the largest spread of a shape is 0.12 (constlet). The sum is this limit.
+ */
+export const TIME_LIMIT = 1.1;
 /** The most exponent of the bytes of a shape with no limit of its own. The text of a module has one size, so this limit has no spread. */
 export const BYTES_LIMIT = 1;
 
@@ -68,8 +71,9 @@ export const GROWTH_SHAPES: readonly GrowthShape[] = [
     make: (levels) => repeat(n, levels, (e) => app("sum", each(axes.all, app("add", e, ORIGIN)))),
     small: 41,
     large: 166,
+    time: 1.25,
     bytes: 1.72,
-    why: "Each node of the memo prints a key list with one entry for each level around it. So the text is quadratic in the levels: 22,850 bytes at 41 levels, 248,611 at 166, the largest legal size.",
+    why: "Each node of the memo prints a key list with one entry for each level around it. So the text is quadratic in the levels: 22,850 bytes at 41 levels, 248,611 at 166, the largest legal size. The time follows the text: the worst of 5 reads is 1.13, and the largest spread of a shape is 0.12.",
   },
   {
     name: "wideorigin",

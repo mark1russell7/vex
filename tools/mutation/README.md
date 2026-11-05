@@ -12,6 +12,24 @@ Each package must have a mutation score of 95 % or more. Stryker has one thresho
 
 The read of each package also prints its static mutants: the count, and the tests that they completed. The report of Stryker has no time for one mutant, so this count is not a time. A static mutant also loads each module again, and the count leaves that out.
 
+## The tests of a part
+
+A score can come from a part of the tests, so the read prints the tests of each part beside its score (`LANE.TESTS`). The count comes from the field `testFiles` of the report. A part reads the test files that reach its mutated files, so this count depends on these files. A compare holds only for a full part. A night prints its count and compares nothing.
+
+The weekly job saves the file `lane-tests.json` as the artifact `lane-tests`, and the next weekly job reads the newest such artifact of the main line. A part that fell or that gave no report keeps its old count. The repository holds no count.
+
+A fall of more than 20 % reads `no read: tests fell`, and the gate fails. A pull request that removes tests on purpose adds an entry to `planned-falls.json`. The entry names the part, the old count, the new count and the pull request. An entry holds only while the last good read equals its old count.
+
+**The 20 % is a first guess from very few falls.** The largest fall with no fault is 7.1 %: `compiler.module` went from 295 to 274 when tests moved to another file. The fall of V-090 is 48.3 %. Read the line again after 4 Saturdays, and bring each fall between 7 % and 20 % to the strategist.
+
+**Growth can hide a real fall.** The `compiler.rest` read had 563 tests, then 1029 with the fault of V-090, then 1990 with no fault. A compare with the last good read passes the 1029. So the flip with the real counts shows that the rule can fail. It does not show that the rule finds V-090. The load check holds that fault.
+
+## The test files of a part
+
+A check by name does not depend on growth (`LANE.FILES`). The load check asks Vitest for the test files that the runner of Stryker selects for the mutated files of all parts. A test file on the disk that this selection leaves out fails the check. The check prints `no read: file not read`. The list `NOT_READ` of `layout.ts` states why a file is an exception, and an entry that is not true fails the check too.
+
+The gate reads the same question from the reports of a full run. It compares the test files on the disk with the field `testFiles` of all parts. A dry run gives no report. So the load check holds this question on each pull request, and the gate holds it on each weekly run.
+
 ## The parts
 
 Each job has one part, so that each job stays in its time limit of 150 minutes. The maximum of 3 jobs at one time holds over all parts of a run, because all parts are one matrix.
@@ -43,11 +61,13 @@ A dispatch of `nightly.yml` can name parts in the input `packages`. A dispatch o
 
 A part that fails its first test run gives no report, and the gate reads that as no read. The workflow `lane-dry-run.yml` starts this first test run on each part, for a change of the files of the lane (`LANE.DRYRUN`). This shows the fault before the merge. The dry run gives no score, and it does not show if a part stays in its time limit.
 
+The flip of this check is a real failed job. On 2026-11-05 the dry run of `compiler.module` read V-090 in [job 127041253282](https://github.com/mark1russell7/vex/actions/runs/41962557467/job/127041253282). The parts of the same check on the fixed tree are the clean copy. This check reads only the dry run. It does not read a score.
+
 ## The load check
 
 A test file that does not load gives no failed test. Stryker then reports a score, or it stops with `No tests were executed`. The script `load-check.ts` collects each test file of the copy before Stryker starts. A file that does not load, or that holds no test, fails the lane with the words `No read`.
 
-The job `mutation load check flip` of the nightly workflow shows that this check can fail. An added file with a missing package fails the check, and the same copy without that file passes.
+The job `mutation load check flip` of the nightly workflow shows that this check can fail. An added file with a missing package fails the check. A test file on the disk that does not reach the copy fails it. A test file in the copy that no part selects also fails it. The same copy without these files passes.
 
 The test `V-090` of `mutation-lane.test.ts` runs in CI on each pull request. It fails when a copied file imports a package that the lane does not have.
 

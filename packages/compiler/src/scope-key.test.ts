@@ -1,6 +1,6 @@
 /**
- * The rule of the key of a constant and of a column: two expressions with one key at their places have one value under
- * the interpreter. The names of the programs collide on purpose with the codes of the variables.
+ * This file tests the rule of the key of a constant and of a column. Two expressions with one key at their places have
+ * one value under the interpreter. The names of the programs collide on purpose with the codes of the variables.
  */
 import { app, axes, call, each, evaluate, fix, fn, fold, iterate, last, let_, lit, rec, ref, space, v, vexList, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
@@ -109,6 +109,49 @@ const X = v("x");
 const Y = v("y");
 const atOne = (body: Expr): Expr => let_({ x: lit(1) }, body);
 
+/** This probe changes a map of the memo after a read of its keys. */
+function changeKeys(_e: Expr, scope: KeyScope): void {
+  (scope.keys as Map<Expr, { code: string }>).set(X, { code: "v0" });
+}
+
+/** This function gives the count of the reads of the nodes, for a key at each level of a chain. Each level has new maps. */
+function walkOfChain(levels: number): number {
+  let count = 0;
+  const seen = (e: Expr): Expr =>
+    new Proxy(e, {
+      get(target, name, receiver): unknown {
+        if (name === "tag") count++;
+        return Reflect.get(target, name, receiver) as unknown;
+      },
+    });
+  const table = new KeyTable();
+  let e = seen(X);
+  for (let i = 0; i < levels; i++) {
+    e = seen(add(e, X));
+    keyText(e, { keys: new Map(), env: new Map(SCOPE.env), fns: new Map(SCOPE.fns), columns: new Map(SCOPE.columns) }, table);
+  }
+  return count;
+}
+
+/** This function gives the count of the reads of the nodes, for a key at each level of a let chain. Each level has a new name. */
+function walkOfLets(levels: number): number {
+  let count = 0;
+  const seen = (e: Expr): Expr =>
+    new Proxy(e, {
+      get(target, name, receiver): unknown {
+        if (name === "tag") count++;
+        return Reflect.get(target, name, receiver) as unknown;
+      },
+    });
+  const table = new KeyTable();
+  let e = seen(X);
+  for (let i = 0; i < levels; i++) {
+    e = seen(let_({ [`x${String(i)}`]: seen(lit(i)) }, seen(add(e, seen(v(`x${String(i)}`))))));
+    keyText(e, { ...NOTHING, env: new Map([...SCOPE.env, [`x${String(i)}`, { code: `c${String(i)}` }]]) }, table);
+  }
+  return count;
+}
+
 describe("V-078 KEY: a key holds the meaning of each read", () => {
   it("V-078 P17 KEY: two expressions with one key at their places have one value", () => {
     fc.assert(
@@ -125,10 +168,9 @@ describe("V-078 KEY: a key holds the meaning of each read", () => {
     fc.assert(
       fc.property(fc.array(fc.tuple(shape, fc.array(someName, { minLength: 1, maxLength: 6 }), site), { minLength: 2, maxLength: 6 }), (cases) => {
         const table = new KeyTable();
-        const scopes = cases.map(([, , at]) => scopeOf(at));
-        const programs = cases.map(([s, reads]) => filled(s, reads));
-        const keys = programs.map((e, i) => keyText(e, scopes[i] as KeyScope, table));
-        const plain = programs.map((e, i) => plainKey(e, scopes[i] as KeyScope));
+        const sites = cases.map(([s, reads, at]) => ({ e: filled(s, reads), scope: scopeOf(at) }));
+        const keys = sites.map(({ e, scope }) => keyText(e, scope, table));
+        const plain = sites.map(({ e, scope }) => plainKey(e, scope));
         const pairs = keys.flatMap((a, i) => keys.map((b, j) => [a === b, plain[i] === plain[j]]));
         expect(pairs.filter(([sameKey, samePlain]) => sameKey !== samePlain)).toStrictEqual([]);
       }),
@@ -165,10 +207,7 @@ describe("V-078 KEY: a key holds the meaning of each read", () => {
 
   it("KEY: a print gives a refusal with a reason for a change of a map of the memo after a read", () => {
     const options = { domains: DOMAINS, schema: { fields: { n: "number" } } } as const;
-    const change = (_e: Expr, scope: KeyScope): void => {
-      (scope.keys as Map<Expr, { code: string }>).set(X, { code: "v0" });
-    };
-    expect(withKeyProbe(change, () => emitModule(app("sum", each(axes.all, ref("n"))), options))).toStrictEqual({ ok: false, reason: "a map of the memo changed after a read of its keys" });
+    expect(withKeyProbe(changeKeys, () => emitModule(app("sum", each(axes.all, ref("n"))), options))).toStrictEqual({ ok: false, reason: "a map of the memo changed after a read of its keys" });
   });
 
   it("KEY: a map of the memo with a read in two tables stays sealed", () => {
@@ -204,45 +243,11 @@ describe("V-078 KEY: a key holds the meaning of each read", () => {
   });
 
   it("KEY: the walk of the keys of a chain grows with the chain, also with new maps at each level", () => {
-    const walk = (levels: number): number => {
-      let count = 0;
-      const seen = (e: Expr): Expr =>
-        new Proxy(e, {
-          get(target, name, receiver): unknown {
-            if (name === "tag") count++;
-            return Reflect.get(target, name, receiver) as unknown;
-          },
-        });
-      const table = new KeyTable();
-      let e = seen(X);
-      for (let i = 0; i < levels; i++) {
-        e = seen(add(e, X));
-        keyText(e, { keys: new Map(), env: new Map(SCOPE.env), fns: new Map(SCOPE.fns), columns: new Map(SCOPE.columns) }, table);
-      }
-      return count;
-    };
-    expect(walk(800) / walk(400)).toBeLessThan(2.2);
+    expect(walkOfChain(800) / walkOfChain(400)).toBeLessThan(2.2);
   });
 
   it("KEY: a let chain walks each node once, also with a new key at each level", () => {
-    const walk = (levels: number): number => {
-      let count = 0;
-      const seen = (e: Expr): Expr =>
-        new Proxy(e, {
-          get(target, name, receiver): unknown {
-            if (name === "tag") count++;
-            return Reflect.get(target, name, receiver) as unknown;
-          },
-        });
-      const table = new KeyTable();
-      let e = seen(X);
-      for (let i = 0; i < levels; i++) {
-        e = seen(let_({ [`x${String(i)}`]: seen(lit(i)) }, seen(add(e, seen(v(`x${String(i)}`))))));
-        keyText(e, { ...NOTHING, env: new Map([...SCOPE.env, [`x${String(i)}`, { code: `c${String(i)}` }]]) }, table);
-      }
-      return count;
-    };
-    expect(walk(800) / walk(400)).toBeLessThan(2.2);
+    expect(walkOfLets(800) / walkOfLets(400)).toBeLessThan(2.2);
   });
 
   it("KEY: two scopes with the same content give one key", () => {

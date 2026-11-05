@@ -224,6 +224,8 @@ The gate `bench/growth.ts` runs in the speed gate. It compiles 13 shapes at two 
 
 The key lists of `origin` are a limit of the output. Each node of the memo prints a list with one entry for each level around it. So the text of the shape `origin` is quadratic in its levels. The largest legal program has 166 levels and 248,611 bytes. A smaller text needs a change of the bytes of each module. The shapes `origin` and `wideorigin` have their own limits of bytes in `test/growth.ts`, at their measured slopes, so a worse text fails.
 
+The limit of the time exponent is 1.1, and the shape `origin` has its own limit of 1.25. Five reads of CI (run 41912930573) give these limits: the worst read of the shapes plus the largest spread of a shape, 0.12. The worst read is 0.98 for `wideorigin` and 1.13 for `origin`. The time of `origin` follows its text.
+
 #### The limit of the places of a program (COMPILE.PLACES)
 
 A place is a node at one position of the tree of a program. A program can use one object at many places, so a small object can have an exponential count of places. The compile takes time at each place, and tier 2 prints code at each place. The count comes first, and its walk visits each object once, so the refusal takes little time at each depth.

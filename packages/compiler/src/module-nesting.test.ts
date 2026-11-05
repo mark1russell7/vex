@@ -4,7 +4,7 @@
  */
 import { app, axes, each, evaluate, let_, MAX_NESTING, nestingError, nestingOf, ref, space, v, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
-import fc from "fast-check";
+import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { emitModule, emitSheetModule, type ModuleOptions } from "./module.ts";
 import { tiered } from "./tiers.ts";
@@ -40,7 +40,7 @@ function nearLimit(steps: readonly number[], loops: readonly number[], target: n
   let e: Expr = n;
   steps.forEach((step, level) => {
     if (nestingOf(e) >= target) return;
-    e = loops.includes(level) ? app("sum", each(axes.all, app("add", e, n))) : (STEPS[step] as (typeof STEPS)[number])(e, level);
+    e = loops.includes(level) ? app("sum", each(axes.all, app("add", e, n))) : (STEPS.at(step)?.(e, level) ?? e);
   });
   return e;
 }

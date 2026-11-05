@@ -84,7 +84,7 @@ function all(xs: readonly (Keys | undefined)[]): Keys | undefined {
   const known = xs.filter((x) => x !== undefined);
   if (known.length < xs.length) return undefined;
   const some = known.filter((x) => x.length > 0);
-  return some.length === 1 ? (some[0] as Keys) : some;
+  return some.length === 1 ? some[0] : some;
 }
 
 /** This function adds each key of a list to `out`, in the order of the parts. */

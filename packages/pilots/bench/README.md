@@ -3,6 +3,7 @@
 The pilot EXAMPLE.SCHEMA gives the schema of a collection from sample documents. The target is 5 ms or less for one sample of 20 documents of 30 fields. The speed job of the nightly workflow starts two scripts:
 
 - `schema-speed.ts` measures the warm interpreter. Each case runs 40 times after 10 runs, and the script gives the median.
+- `module-cost.ts` is the gate of the time of a print of each module of ireko against a fixed base commit (COMPILE.MODULE.COST). The speed gate runs it.
 - `schema-cold.ts` measures the first sample in 10 new processes. It gives the median and the range of each part: `import`, `compile`, `first` and `second`.
 
 The job puts the numbers into the artifact `bench-report`, in `bench.txt`, `schema-speed.json` and `schema-cold.json`.

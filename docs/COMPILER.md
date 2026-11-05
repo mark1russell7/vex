@@ -214,13 +214,100 @@ The parser is a runtime dependency, because the option `domains` takes a domain 
 
 The test `packages/pilots/src/runner-text.test.ts` prints each module of ireko with Node, with `tsx` and in Vitest, and compares the bytes. The test also has the case `(a && b) || c`, because a formatter keeps these parentheses and `tsx` removes them.
 
+#### The growth of a print (COMPILE.GROWTH)
+
+A key of a place holds what each read of an expression means at that place. A table in `scope-key.ts` walks each expression once. It keeps the form of the expression: the number of its structure and a shared list of its reads. A key at a new place reads that list, so its cost is linear in the reads and the binders of the expression.
+
+A form depends on the map `keys` of the nodes of the memo, so the table keeps the forms for each content of that map. The table seals such a map at its first read. A change after that read is a refusal with a reason, and it does not give a wrong key. The other maps of a scope have no copy in the table, because each key reads them as they stand. The tests of `scope-key.test.ts` change a map after a read and show both results.
+
+The gate `bench/growth.ts` runs in the speed gate. It compiles 13 shapes at two legal sizes, each in five fresh processes, as programs from JSON. It reads the exponent of the median time and of the bytes against the places. An exponent does not depend on the CPU model. A ratio at one size does not find a return to a quadratic pass.
+
+The key lists of `origin` are a limit of the output. Each node of the memo prints a list with one entry for each level around it. So the text of the shape `origin` is quadratic in its levels. The largest legal program has 166 levels and 248,611 bytes. A smaller text needs a change of the bytes of each module. The shapes `origin` and `wideorigin` have their own limits of bytes in `test/growth.ts`, at their measured slopes, so a worse text fails.
+
+A test of the shapes prints the largest size with no gate, because the gate of the keys takes most of its time there. The workflow `growth-gates.yml` holds that size each week and in each pull request. The gate of the keys and the gate of names read each shape. A row gives the time of each part.
+
+The limit of the time exponent is 1.1, and the shape `origin` has its own limit of 1.25. Five reads of CI (run 41912930573) give these limits: the worst read of the shapes plus the largest spread of a shape, 0.12. The worst read is 0.98 for `wideorigin` and 1.13 for `origin`. The time of `origin` follows its text.
+
+#### The time of a print of each module (COMPILE.MODULE.COST)
+
+The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the arms and the order of the modules turn at each round.
+
+The workflow holds the base as a fixed commit, so the base does not move with main. Only a pull request moves it, with a ruling on its reason and new limits from new reads. A move hides each cost that came since the old base. So the pull request states the ratio of the new base to the old base on the row `build`.
+
+The gate reads each module alone, with no average over the modules. A module has a median limit and a limit for its second pair. The second pair is the second largest ratio of one round, so one slow process cannot move it. A second pair is a fault only if it is also over the worst second pair of the A/A arm of the same run. The worst pair is a record. A real cost in 1 round of 7 cannot be told from noise at 7 rounds.
+
+A read has no power if the worst second pair of its A/A arm is over the cap `AA_CAP`. Such a read prints `UNDECIDED`. It is not a pass, and it does not count. The gate takes another read, up to 3 reads, and it fails if no read decides.
+
+Each row has its own limits, with a cap of 1.25. A limit is the worst of 26 reads against the base, plus the spread of those reads, rounded up. These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. A limit from the cost of today holds the cost of today, and the reads do not prove 1.10 for each module.
+
+A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays. The row `build-no-avoid` leaves out `avoid`, because the total of `build` does not show that each module is cheap.
+
+Each read prints the first row of each round and the times of each row. It also prints the count of false fails: the rule on each A/A arm as a branch, against the A/A arms of the other rows. A row with a limit under 1 fails that count by its limit, so the line states those rows.
+
+These rows do not follow that rule:
+
+- The row `bounds` has the median limit 1.25, the cap. Its second pair only prints, because a margin of 0.001 under the cap fails by chance. The item BOUNDSCOST ends both.
+- The rows `label` and `obstacles` have a second pair limit on the cap.
+- The rows `build` and `avoid` have a limit under 1, so they hold a gain against the fixed commit 8ae233b.
+
+A limit under 1 holds the gain only on a CPU model of `GAIN_MODELS`. The median of the 5 reads on the model 9V45 is 0.946 on `build` and 0.916 on `avoid`. The median of each other model is at most 0.928 and 0.840. Those reads do not give a cause. So on 9V45 and on a model with no reads, the row uses a ceiling and prints `gain not read on this model, ceiling only`. A pass on such a model does not show that the gain holds. Each gain row also prints the fixed commit, the CPU model and the version of Node.js.
+
+The cap `AA_CAP` is 1.18: the third quartile of the 26 reads plus 3 times their interquartile range, rounded up. This formula came after those reads. The rule of the worst read plus the spread gave 1.577, and that value took in the loud read. So `AA_CAP` is a choice from the data, and later reads test it.
+
+The step `The gate fails a known cost` tests the gate. The branch arm adds 20 % of work in `grid` and `shape`, and the step fails if the gate passes either module. The same read adds 11 % in `radial`, which stays under its limit, and it prints that row as a record. The step holds the median clause, and it does not hold the second pair clause. A cost in each round moves the median first.
+
+A pull request reads this step only if it changes a file of the gate. A miss by noise must not block each pull request. A dispatch and the weekly run read it in each rep. At an added 15 %, the gate failed each module on 20 of 20 reads, and the smallest margin at these limits is 0.015. The count at an added 20 % comes from the reads of the head that merges this gate.
+
+#### The limit of the places of a program (COMPILE.PLACES)
+
+A place is a node at one position of the tree of a program. A program can use one object at many places, so a small object can have an exponential count of places. The compile takes time at each place, and tier 2 prints code at each place. The count comes first, and its walk visits each object once, so the refusal takes little time at each depth.
+
+A module and tier 2 refuse a program with more than 32,768 places. The interpreter runs such a program, and `tiered` gives tier 1. This is a stated difference: a module refuses a program that the interpreter runs.
+
+The limit comes from a measure of doubling programs on a CI runner, with a heap of 2,048 MB. The rule counts places, because the limit counts places. The largest program of each shape under the limit stays under 1,024 MB, half of the heap. At 4 times the places, at least one shape goes over that line.
+
+This table gives the worst sample of five fresh processes, with the limit removed. Each program has its count of places.
+
+| Shape | Places | Tier 2 memory | Tier 2 compile | Module memory | Module compile |
+| --- | --- | --- | --- | --- | --- |
+| plain, depth 14 | 32,767 | 560 MB | 938 ms | 154 MB | 291 ms |
+| constant, depth 13 | 32,767 | 566 MB | 922 ms | 195 MB | 565 ms |
+| loop, depth 13 | 32,765 | 489 MB | 812 ms | 194 MB | 930 ms |
+| plain, depth 16 | 131,071 | 1,661 MB | 4,154 ms | 243 MB | 1,058 ms |
+| constant, depth 15 | 131,071 | 1,699 MB | 3,996 ms | 283 MB | 2,242 ms |
+| loop, depth 15 | 131,069 | 1,469 MB | 3,094 ms | 327 MB | 3,958 ms |
+
+The largest module of `ireko` has 2,138 places, so the limit is 15 times that program.
+
+The workflow `places-gate.yml` holds the rule. It removes the limit and compiles each row in five fresh processes. It fails if the largest program of a shape under the limit goes over the line. It also fails if each row at 4 times the places stays under the line.
+
+A row at 2 times the places is a record only, because a program there can fall on each side of the line. So the gate does not find a limit that is one doubling too low. That limit refuses more programs, so it is safe. The gate also checks with `placesOf` that each row is the largest program of its shape, so a change of the count fails the gate.
+
+This table gives the lowest and the highest worst sample of three runs, each of five fresh processes, on the commits `758319b`, `46fc20d` and `4f9bace`. The spread of a row is the difference. The margin is the distance from the nearest value to the line of 1,024 MB.
+
+| Row | Part of the gate | Readings | Spread | Margin |
+| --- | --- | --- | --- | --- |
+| plain, depth 14 | under the line | 552 to 562 MB | 10 MB | 462 MB |
+| constant, depth 13 | under the line | 557 to 566 MB | 9 MB | 458 MB |
+| loop, depth 13 | under the line | 486 to 491 MB | 5 MB | 533 MB |
+| plain, depth 16 | over the line | 1,584 to 1,661 MB | 77 MB | 560 MB |
+| constant, depth 15 | over the line | 1,675 to 1,699 MB | 24 MB | 651 MB |
+| loop, depth 15 | over the line | 1,459 to 1,473 MB | 14 MB | 435 MB |
+| plain, depth 15 | record | 893 to 930 MB | 37 MB | 94 MB |
+| constant, depth 14 | record | 920 to 1,065 MB | 145 MB | none |
+| loop, depth 14 | record | 790 to 881 MB | 91 MB | 143 MB |
+
+Each row of the gate keeps a margin of at least 3 times the widest spread of the gate rows. The cause of the spread is not known.
+
+The row of constant depth 14 sits at the line, and the noise of the row is wider than the margin. Its last reading of 1,006 MB is 18 MB under the line, which is 1.8 %. One reading of this row decides nothing. If this row becomes a gate, it needs a median of repeats, not one reading.
+
 #### The faults of a module (COMPILE.MODULE.FAULT)
 
 A catch of a module holds an exception of a function of a domain, because the interpreter gives an error for it. The same catch also holds a fault of the printed code. Then a defect of the printer is a value, and only a differential test finds it.
 
 The start of an exception tells the two cases, not its class. A `TypeError` of an op is an error of Vex, and a `TypeError` of the printed code is a fault. With `faults` at `throw`, each copy of a function of a domain has the wrapper `FW`. Each other catch calls `FK`, which rethrows each value that is not the error of Vex.
 
-Each test of the compiler and of the pilots that compares values runs with `throw`. The file `packages/compiler/src/module-fault.setup.ts` sets the option. A test of the text of a module sets `value`.
+Each test of the compiler and of the pilots that compares values runs with `throw`. The file `packages/compiler/test/module-fault.setup.ts` sets the option. A test of the text of a module sets `value`.
 
 The file `packages/pilots/src/ireko-modules.ts` holds the input of each module of ireko. The script `scripts/ireko-module.ts` and the value tests read the same rows, so a value test prints the module of a build with `throw`. The rows of the five committed modules are `measure`, `place`, `shape`, `grid` and `radial`. The rows `layers` and `tree` have no committed file at this time, and their value tests use the table too.
 
@@ -1666,6 +1753,7 @@ The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its l
 | COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
 | COMPILE.MODULE.FAULT | With `faults` at `throw`, a fault of the printed code leaves the run | Each copy of a function of a domain has a wrapper that gives the error of Vex for each exception. Each other catch rethrows each value that is not the error of Vex. No op prints at its call. |
 | COMPILE.MODULE.BYTES | A committed module equals its print | The workflow `module-bytes.yml` prints each module from a pinned commit and compares the bytes. |
+| COMPILE.PLACES | A compile refuses a program with more than 32,768 places | The count visits each object once, before each other walk. The interpreter runs such a program, and `tiered` gives tier 1. |
 | COMPILE.MODULE.TEXT | The text of a copied function does not depend on the runner | The compiler parses the text and prints the tree. A text that is not one expression stays as it is. |
 | COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |
 | COMPILE.MODULE.SIZE.DEAD | A helper, an op or a constant of the run that no code reads is not printed | A constant has a form that catches each failure. |
@@ -1677,7 +1765,7 @@ The reasons for the limits are these:
 - A lazy cell that a key loop reads stays, because each key must read one shared object (COMPILE.MODULE.FUSE.OUT). `G` stays, because the value of the cell can be `E`.
 - A parameter can have two reads. A name as the argument has no effect and cannot fail, so the number of reads and their order stay the same.
 - The pass counts the words of a line with no parser. A word in a text counts too. This count is too large at most, so it can only stop a rule.
-- The names that a module declares come from the printer before the pass. So the option `name` keeps each refusal.
+- The check of the option `name` reads the code after the pass. So a name of a helper that the pass removed keeps the short form of the export.
 
 | Bytes, after minify and gzip level 9 | Before | After |
 |---|---|---|

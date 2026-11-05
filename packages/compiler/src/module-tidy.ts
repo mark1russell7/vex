@@ -8,7 +8,7 @@
  * count that is too high only stops a rule. A rule that writes code reads the tokens of the code (`rewritten`), so it
  * does not change a text.
  */
-import { tokenizer, tokTypes } from "acorn";
+import { type Token, tokenizer, tokTypes } from "acorn";
 
 
 /** The parts of a module for the pass. */
@@ -32,8 +32,13 @@ export interface Tidied {
 /** The tokens that hold a text of the code: a string, a part of a template and a regular expression. */
 const TEXT_TOKENS: ReadonlySet<unknown> = new Set([tokTypes.string, tokTypes.template, tokTypes.regexp]);
 
-/** This function gives a line of code with spaces at the place of each text. Each other character keeps its offset. */
+/** A text of the code starts with one of these characters. A comment starts with the slash too. */
+// Stryker disable next-line Regex: `rewritten` calls `codeOf` on a line with a match, so a form that finds other characters also finds that line.
+const TEXT_START = /["'`/]/;
+
+/** This function gives a line of code with spaces at the place of each text. Each other character keeps its offset. A line with no text needs no tokens. */
 function codeOf(line: string): string {
+  if (!TEXT_START.test(line)) return line;
   let out = "";
   let at = 0;
   for (const token of tokenizer(line, { ecmaVersion: "latest" })) {
@@ -49,7 +54,6 @@ function codeOf(line: string): string {
  * keeps its characters. `find` must have the flag `g`. A line with no match needs no tokens.
  */
 function rewritten(line: string, find: RegExp, write: (match: RegExpExecArray) => string): string {
-  // Stryker disable next-line ConditionalExpression: the result is the same with no guard, and the guard saves the tokens.
   if (line.search(find) < 0) return line;
   let out = "";
   let at = 0;
@@ -60,11 +64,18 @@ function rewritten(line: string, find: RegExp, write: (match: RegExpExecArray) =
   return out + line.slice(at);
 }
 
+/** This function gives the names in code. A word in a comment or in a text is not a name. */
+export function namesOfCode(code: string): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const token of tokenizer(code, { ecmaVersion: "latest", sourceType: "module" })) if (token.type === tokTypes.name) names.add((token as Token & { readonly value: string }).value);
+  return names;
+}
+
 /** The words of a text. */
 const WORD = /[A-Za-z_$][\w$]*/g;
 
 /** This function gives the words of a text. */
-const wordsOf = (text: string): readonly string[] => text.match(WORD) ?? [];
+export const wordsOf = (text: string): readonly string[] => text.match(WORD) ?? [];
 
 /** This function gives the count of a word in some lines. */
 const countOf = (lines: readonly string[], name: string): number => lines.reduce((sum, x) => sum + wordsOf(x).filter((w) => w === name).length, 0);
@@ -237,29 +248,50 @@ const CONSTANT = /^ {2}const (c\d+) = (?:T\(\(\) => .*\)|\[\]);$/;
 /** The first line of a constant of the run with a `try`, with its name. */
 const HELD = /^ {2}let (c\d+);$/;
 
-/** This function gives the name of the constant at the line `at` and its last line, or `undefined` for another line. */
+/** The first line of a column at each depth, with its indent and its name. A column does not run until a read calls it. */
+const COLUMN = /^( *)const (col\d+) = Q\(\(\w+\) => \{$/;
+
+/** The variable of the pack of a column at each depth, with its name. */
+const PACK = /^ *let (PK\d+);$/;
+
+/** This function gives the name of the declaration at the line `at` and its last line, or `undefined` for another line. */
 function constantAt(lines: readonly string[], at: number): { readonly name: string; readonly last: number } | undefined {
   const line = lines[at] as string;
   const one = CONSTANT.exec(line)?.[1];
   if (one !== undefined) return { name: one, last: at };
   const lazy = CELL.exec(line)?.[1];
   if (lazy !== undefined) return { name: lazy, last: lines.indexOf("  });", at) };
+  const column = COLUMN.exec(line);
+  if (column !== null) return { name: column[2] as string, last: lines.indexOf(`${column[1] as string}});`, at) };
+  const pack = PACK.exec(line)?.[1];
+  if (pack !== undefined) return { name: pack, last: at };
   const held = HELD.exec(line)?.[1];
   return held === undefined || lines[at + 1] !== "  try {" ? undefined : { name: held, last: lines.indexOf("  }", at) };
 }
 
+/** This function gives the count of each word of some lines. */
+function wordCounts(lines: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const x of lines) for (const w of wordsOf(x)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  return counts;
+}
+
 /**
  * This function removes each constant of the run that no code reads (COMPILE.MODULE.SIZE.DEAD). The code of a constant
- * has no effect, and the constant holds each failure of that code. A lazy cell with no read does not run.
+ * has no effect, and the constant holds each failure of that code. A lazy cell with no read does not run. A print that
+ * the printer drops leaves its columns and their packs, in the run and in a function, so the pass removes these too. The
+ * parameters of a function come from the code that it keeps, so such a column can read a name with no declaration.
  */
 export function deadConstants(lines: readonly string[]): readonly string[] {
   let out = lines;
+  const counts = wordCounts(lines);
   for (let i = 0; i < out.length; i++) {
     const c = constantAt(out, i);
     if (c === undefined) continue;
-    const rest = [...out.slice(0, i), ...out.slice(c.last + 1)];
-    if (countOf(rest, c.name) > 0) continue;
-    out = rest;
+    const own = wordCounts(out.slice(i, c.last + 1));
+    if (counts.get(c.name) !== own.get(c.name)) continue;
+    out = [...out.slice(0, i), ...out.slice(c.last + 1)];
+    for (const [word, count] of own) counts.set(word, (counts.get(word) as number) - count);
     i = -1;
   }
   return out;

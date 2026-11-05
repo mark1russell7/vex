@@ -44,7 +44,6 @@ export default {
     "!work/core/test-support.ts",
     "!work/*/index.ts",
     "!work/testkit/fc-setup.ts",
-    "!work/compiler/module-fault.setup.ts",
     "!work/testkit/arbitraries.ts",
     "!work/testkit/builder-model-arbitraries.ts",
     "!work/testkit/sheet-arbitraries.ts",

@@ -5,8 +5,9 @@
  */
 import { app, axes, call, defineDomain, each, evaluate, fn, fold, isVexList, let_, lit, rec, ref, space, v, vexList, type AnyDomain, type Expr, type ListItem, type VexList } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, XYDomain } from "@mark1russell7/vex-domains";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { factsOf } from "./facts.ts";
+import type * as Module from "./module.ts";
 import { emitModule, type ModuleOptions } from "./module.ts";
 
 type Run = (records: unknown, vars: unknown) => readonly unknown[];
@@ -186,7 +187,13 @@ describe("COMPILE.MODULE.LIST.ARG: a list as an argument of an op or of a call",
     expect(facts.staticSite("add", ["domain:XY", undefined], lists)).toBeUndefined();
   });
 
-  it("COMPILE.MODULE.LIST.ARG: a copy of an op takes samples of each list: no items, values of the kind of the items, and an error item", () => {
+  it("COMPILE.MODULE.LIST.ARG: a copy of an op takes samples of each list: no items, values of the kind of the items, and an error item", async () => {
+    // A read that no sample reaches stays in the text of the copy, so these prints do not go through the gate of the names.
+    const { emitModule: print } = await vi.importActual<typeof Module>("./module.ts");
+    const refused = (e: Expr, o: ModuleOptions): string => {
+      const m = print(e, o);
+      return m.ok ? "" : m.reason;
+    };
     const outside = { k: 1 };
     const peek = (test: string): ((a: number, l: VexList) => number) => {
       // The op reads a name outside itself only for one sample, so only that sample finds it.
@@ -208,15 +215,15 @@ describe("COMPILE.MODULE.LIST.ARG: a list as an argument of an op or of a call",
     }) as AnyDomain;
     const options: ModuleOptions = { ...OPTIONS, domains: [NumDomain, BoolDomain, TextDomain, Leaky] };
     const texts = each(axes.all, ref("id"));
-    expect(reasonOf(op("none", n, ns), options)).toBe(leaks("none"));
-    expect(reasonOf(op("error", n, ns), options)).toBe(leaks("error"));
-    expect(reasonOf(op("text", n, texts), options)).toBe(leaks("text"));
-    expect(reasonOf(op("text", n, ns), options)).toBe("");
+    expect(refused(op("none", n, ns), options)).toBe(leaks("none"));
+    expect(refused(op("error", n, ns), options)).toBe(leaks("error"));
+    expect(refused(op("text", n, texts), options)).toBe(leaks("text"));
+    expect(refused(op("text", n, ns), options)).toBe("");
     // A list without a kind of its items has numbers as samples, and a list of lists has lists.
-    expect(reasonOf(op("number", n, MIXED), options)).toBe(leaks("number"));
-    expect(reasonOf(op("number", n, texts), options)).toBe("");
-    expect(reasonOf(op("list", n, nested), options)).toBe(leaks("list"));
-    expect(reasonOf(op("list", n, ns), options)).toBe("");
+    expect(refused(op("number", n, MIXED), options)).toBe(leaks("number"));
+    expect(refused(op("number", n, texts), options)).toBe("");
+    expect(refused(op("list", n, nested), options)).toBe(leaks("list"));
+    expect(refused(op("list", n, ns), options)).toBe("");
   });
 });
 

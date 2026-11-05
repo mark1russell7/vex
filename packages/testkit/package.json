@@ -38,6 +38,7 @@
     "!src/test-support.ts",
     "!src/fc-setup.ts",
     "!src/gate-inputs.ts",
+    "!src/workflow-faults.ts",
     "!src/fc-timeout.ts"
   ],
   "publishConfig": {

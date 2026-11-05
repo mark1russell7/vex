@@ -37,8 +37,9 @@ export default defineConfig({
   },
   test: {
     include: ["work/**/*.test.ts"],
-    // The spec coverage test reads the spec by a path from packages/core, so it does not run here.
-    exclude: ["work/core/spec-coverage.test.ts"],
+    // The spec coverage test reads the spec by a path from packages/core, so it does not run here. The test of the gate
+    // of the names reads work/test, and Stryker does not mutate that folder. So that test stops no mutant.
+    exclude: ["work/core/spec-coverage.test.ts", "work/compiler/names-gate.test.ts"],
     setupFiles: SETUP_FILES.map((file) => work(file)),
     // The counters of Stryker make a property test slower. The P17 tests of 1500 runs passed the limit of 5 s on 11-04.
     testTimeout: 60_000,

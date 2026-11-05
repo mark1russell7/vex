@@ -14,6 +14,8 @@ export interface Copy {
   readonly to: string;
   /** With true, the copy keeps the test files. */
   readonly tests: boolean;
+  /** The start of a relative import that the copy changes, and its new start. */
+  readonly imports?: readonly [string, string];
 }
 
 /**
@@ -30,18 +32,27 @@ export const COPIES: readonly Copy[] = [
   { from: "packages/pilots/src", to: "pilots/src", tests: false },
   // The tests of the compiler read propertyTimeout by the path "../../testkit/src/fc-timeout.ts".
   { from: "packages/testkit/src", to: "testkit/src", tests: false },
+  // The tests of the compiler read the gate of the names by the path "../test/names.ts". Stryker does not mutate this copy.
+  // The files of that folder read the compiler by the path "../src/". The setup file mocks "../src/module.ts", and a mock
+  // holds only for the file that a test imports. So in the lane, these files read the compiler of the tests (V-091).
+  { from: "packages/compiler/test", to: "work/test", tests: false, imports: ['"../src/', '"../compiler/'] },
 ];
 
 /**
  * The setup files of the tests of the lane, as paths in `work/`. A test of the lane must read what the same test reads in
  * CI. On 2026-11-05 the lane did not load `module-fault.setup.ts`, so each test of a module printed other code (V-091).
  */
-export const SETUP_FILES: readonly string[] = ["testkit/fc-setup.ts", "compiler/module-fault.setup.ts"];
+export const SETUP_FILES: readonly string[] = ["testkit/fc-setup.ts", "test/module-fault.setup.ts"];
 
 /** A relative import or export of a module: `from "./x"`, `import "./x"` or `import("./x")`. */
 const IMPORT = /(?:\bfrom|\bimport\(?)\s*["'](\.{1,2}\/[^"']+)["']/gu;
 
 const isTest = (path: string): boolean => path.endsWith(".test.ts");
+
+/** This function gives the text of a file in the copy, with the change of its imports. */
+export function textInCopy(copy: Copy, text: string): string {
+  return copy.imports === undefined ? text : text.replaceAll(copy.imports[0], copy.imports[1]);
+}
 
 /**
  * This function gives each relative import of a copied file that finds no file in the copy, as `<file>: <import>`.
@@ -58,7 +69,7 @@ export function unresolvedImports(root: string): string[] {
   for (const c of COPIES) {
     const files = readdirSync(join(root, c.from), { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts") && (c.tests || !isTest(f)));
     for (const f of files) {
-      for (const m of readFileSync(join(root, c.from, f), "utf8").matchAll(IMPORT)) {
+      for (const m of textInCopy(c, readFileSync(join(root, c.from, f), "utf8")).matchAll(IMPORT)) {
         const target = m[1] ?? "";
         if (!inCopy(resolve(dirname(join(lane, c.to, f)), target))) out.push(`${c.from}/${f.replaceAll("\\", "/")}: ${target}`);
       }
@@ -109,6 +120,12 @@ const SETUP_LIST = /setupFiles:\s*\[([^\]]*)\]/u;
 /** A path in quotes. */
 const QUOTED = /["']([^"']+)["']/gu;
 
+/** This function gives the path in `work/` of a file of the repository, or the path of the file when no copy holds it. */
+function pathInLane(file: string): string {
+  const copy = COPIES.find((c) => file.startsWith(`${c.from}/`) && c.to.startsWith("work/"));
+  return copy === undefined ? file : `${copy.to.slice("work/".length)}/${file.slice(copy.from.length + 1)}`;
+}
+
 /**
  * This function gives each setup file of a package with tests in the copy that the lane does not load, as
  * `<configuration>: <path in work/>`. The setup files of the tests of a package hold for the lane too.
@@ -121,7 +138,7 @@ export function missingSetups(root: string): string[] {
     if (!existsSync(join(root, config))) continue;
     const list = SETUP_LIST.exec(readFileSync(join(root, config), "utf8"))?.[1] ?? "";
     for (const m of list.matchAll(QUOTED)) {
-      const file = relative(join(root, "packages"), resolve(root, folder, m[1] ?? "")).replaceAll("\\", "/").replace("/src/", "/");
+      const file = pathInLane(relative(root, resolve(root, folder, m[1] ?? "")).replaceAll("\\", "/"));
       if (!SETUP_FILES.includes(file)) out.push(`${config}: ${file}`);
     }
   }

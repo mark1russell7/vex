@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
     "fallback-share": "node bench/fallback-share.ts",
+    "module-cost": "node bench/module-cost.ts",
     "share-record": "node bench/share-record.ts"
   },
   "devDependencies": {

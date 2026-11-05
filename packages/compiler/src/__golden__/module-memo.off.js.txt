@@ -205,7 +205,7 @@ export function run(records, vars) {
     for (let j39 = 0; j39 < n; j39++) {
       let x42;
       try {
-        if (!((R[j39]["n"]) < (G(q36)))) continue;
+        if (!((R[j39]["n"]) < (G(q37)))) continue;
         if (!((R[j39]["w"]) > (G(q36)))) continue;
         x42 = R[j39]["w"];
       } catch {

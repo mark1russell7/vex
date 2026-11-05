@@ -30,6 +30,10 @@ A check by name does not depend on growth (`LANE.FILES`). The load check asks Vi
 
 The gate reads the same question from the reports of a full run. It compares the test files on the disk with the field `testFiles` of all parts. A dry run gives no report. So the load check holds this question on each pull request, and the gate holds it on each weekly run.
 
+These are two reads of one question, and they can differ. The load check saves its selection, and each job copies it beside its report as `load-selection.json`. A file in one read and not in the other reads `no read: the two reads differ`. The gate does not pick one of the reads.
+
+A walk of the imports has a limit. A test can reach a mutated file only by a computed dynamic import, a spawned process or a read of a file. That test is outside the selection. The runner of Stryker uses the same selection, so that test stops no mutant of that file. The words `file not read` are true of the lane. They do not state that the test does not reach the file. The flip of the load check has one row for a computed path and one row for a literal path. It prints the result of each.
+
 ## The parts
 
 Each job has one part, so that each job stays in its time limit of 150 minutes. The maximum of 3 jobs at one time holds over all parts of a run, because all parts are one matrix.
@@ -67,7 +71,7 @@ The flip of this check is a real failed job. On 2026-11-05 the dry run of `compi
 
 A test file that does not load gives no failed test. Stryker then reports a score, or it stops with `No tests were executed`. The script `load-check.ts` collects each test file of the copy before Stryker starts. A file that does not load, or that holds no test, fails the lane with the words `No read`.
 
-The job `mutation load check flip` of the nightly workflow shows that this check can fail. An added file with a missing package fails the check. A test file on the disk that does not reach the copy fails it. A test file in the copy that no part selects also fails it. The same copy without these files passes.
+The job `mutation load check flip` of the nightly workflow shows that this check can fail. An added file with a missing package fails the check. A test file on the disk that does not reach the copy fails it. A test file in the copy that no part selects also fails it. A test file whose only path to a mutated file is a computed dynamic import also fails it. The same copy without these files passes.
 
 The test `V-090` of `mutation-lane.test.ts` runs in CI on each pull request. It fails when a copied file imports a package that the lane does not have.
 

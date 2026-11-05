@@ -18,12 +18,12 @@
 // FALL_LINE against its last good read is no read. A test file on the disk that no part read is no read. A later full run
 // reads the file reports/lane-tests.json of this run. A part that fell or gave no report keeps its old count.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { laneParts, PACKAGES, packageOfPart, packageOfPath, unreadTests } from "./layout.ts";
+import { laneParts, PACKAGES, packageOfPart, packageOfPath, SELECTION_FILE, unreadTests } from "./layout.ts";
 
 /** A place in a file of a report. */
 interface Place {
@@ -65,6 +65,8 @@ export interface LaneChecks {
   readonly planned?: readonly PlannedFall[];
   /** This function gives each test file on the disk that the parts did not read, as paths of the repository. */
   readonly unread?: (read: ReadonlySet<string>) => readonly string[];
+  /** The test files that the load check selected, as paths of the lane. An empty list states that no part saved the selection. */
+  readonly selection?: readonly string[] | undefined;
 }
 
 /** The counts of a file or a package. */
@@ -242,6 +244,17 @@ export function staticLine(read: PackageRead): string {
 const survivorLines = (read: PackageRead): string[] => read.files.flatMap((f) => f.survivors.map((s) => `  survived: ${s}`));
 
 /**
+ * This function compares two reads of one question: the selection of the load check and the test files of the reports. It
+ * gives the package and the text of each difference. A difference is a finding, and the gate does not pick one of the reads.
+ */
+function readsDiffer(selection: readonly string[], names: ReadonlySet<string>): readonly (readonly [string, string])[] {
+  const selected = new Set(selection);
+  const onlySelected = selection.filter((file) => !names.has(file)).map((file) => [packageOfPath(file), `${packageOfPath(file)}: no read: the two reads differ. The load check selects ${file}, and no report of the run read it.`] as const);
+  const onlyRead = [...names].filter((file) => !selected.has(file)).map((file) => [packageOfPath(file), `${packageOfPath(file)}: no read: the two reads differ. A report of the run read ${file}, and the load check does not select it.`] as const);
+  return [...onlySelected, ...onlyRead];
+}
+
+/**
  * This function gives the verdict of the gate on a full run (LANE.GATE). The map has one entry for each part of the run, and
  * `undefined` is a part with no report. A package with such a part is no read, and a no read fails the gate.
  */
@@ -265,9 +278,14 @@ export function laneVerdict(reports: ReadonlyMap<string, Report | undefined>, ch
     if (kept !== undefined) tests[part] = kept;
   }
   // A check by name needs a full set of parts. A part with no report is no read already.
-  if (missing.length === 0 && checks.unread !== undefined) {
+  if (missing.length === 0) {
     const names = new Set(present.flatMap((r) => Object.keys(r.testFiles ?? {}).map((file) => file.replaceAll("\\", "/"))));
-    for (const file of checks.unread(names)) addNoRead(packageOfPath(file), `${packageOfPath(file)}: no read: file not read. No part read ${file}, and NOT_READ of layout.ts does not state why.`);
+    for (const file of checks.unread?.(names) ?? []) addNoRead(packageOfPath(file), `${packageOfPath(file)}: no read: file not read. No part read ${file}, and NOT_READ of layout.ts does not state why.`);
+    if (checks.selection?.length === 0) {
+      for (const name of new Set([...reports.keys()].map(packageOfPart))) addNoRead(name, `${name}: no read: no selection. No part saved the selection of the load check, so the two reads of the test files have no compare.`);
+    } else if (checks.selection !== undefined) {
+      for (const [name, text] of readsDiffer(checks.selection, names)) addNoRead(name, text);
+    }
   }
   const packages: { name: string; outcome: "pass" | "under the line" | "no read"; score: number; scoreWithClock: number }[] = [];
   for (const name of new Set([...reports.keys()].map(packageOfPart))) {
@@ -297,6 +315,12 @@ function readFolder(folder: string): Map<string, Report | undefined> {
     reports.set(part, existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Report) : undefined);
   }
   return reports;
+}
+
+/** This function reads the selections of the load check that the parts of a full run saved, as one list. */
+function readSelection(folder: string): readonly string[] {
+  const files = laneParts().map((part) => join(folder, `mutation-report-${part}`, "load-selection.json")).filter((file) => existsSync(file));
+  return [...new Set(files.flatMap((file) => JSON.parse(readFileSync(file, "utf8")) as readonly string[]))];
 }
 
 /** This function gives a mutant of a fixture, on its own line. */
@@ -329,7 +353,12 @@ export interface FlipCase {
   readonly core: "pass" | "under the line" | "no read";
   readonly word?: string;
   readonly lastTests?: Readonly<Record<string, number>>;
+  /** The selection of the load check that this case reads. An empty list is a run that saved no selection. */
+  readonly selection: readonly string[];
 }
+
+/** A test file of the flip that one of the two reads holds and the other does not. */
+const ONE_READ = "work/core/one-read-flip.test.ts";
 
 /** The count of the tests of compiler.rest at the fault of 2026-11-05, and the count of the next read with no fault. */
 const FAULT_TESTS = 1029;
@@ -350,13 +379,19 @@ export function flipCases(expected: readonly string[] = []): readonly FlipCase[]
   };
   const clean = (): Map<string, Report | undefined> => new Map(parts.map((part) => [part, named(part, expected, CLEAN_TESTS)]));
   const lastTests = Object.fromEntries(parts.map((part) => [part, CLEAN_TESTS]));
+  const selection = [...clean().values()].flatMap((report) => Object.keys(report?.testFiles ?? {}));
+  const firstReport = clean().get(first);
+  const readsMore = firstReport === undefined ? undefined : { ...firstReport, testFiles: { ...firstReport.testFiles, [ONE_READ]: { tests: [] } } };
   return [
-    { name: "no fault", reports: clean(), core: "pass", lastTests },
-    { name: `a score fall in ${first}`, reports: clean().set(first, { ...clean().get(first), files: fixtureReport(first, FALLEN, SURVIVED).files }), core: "under the line" },
-    { name: `no report of ${first}`, reports: clean().set(first, undefined), core: "no read" },
-    { name: `clock time-outs in ${first}`, reports: clean().set(first, { ...clean().get(first), files: fixtureReport(first, FALLEN, CLOCK).files }), core: "under the line" },
-    { name: `the tests of ${first} fell from ${String(CLEAN_TESTS)} to ${String(FAULT_TESTS)}`, reports: clean().set(first, named(first, expected, FAULT_TESTS)), core: "no read", word: "core: no read: tests fell", lastTests },
-    { name: "a test file that no part read", reports: clean().set(first, named(first, expected.slice(1), CLEAN_TESTS)), core: "no read", word: "no read: file not read", lastTests },
+    { name: "no fault", reports: clean(), core: "pass", lastTests, selection },
+    { name: `a score fall in ${first}`, reports: clean().set(first, { ...clean().get(first), files: fixtureReport(first, FALLEN, SURVIVED).files }), core: "under the line", selection },
+    { name: `no report of ${first}`, reports: clean().set(first, undefined), core: "no read", selection },
+    { name: `clock time-outs in ${first}`, reports: clean().set(first, { ...clean().get(first), files: fixtureReport(first, FALLEN, CLOCK).files }), core: "under the line", selection },
+    { name: `the tests of ${first} fell from ${String(CLEAN_TESTS)} to ${String(FAULT_TESTS)}`, reports: clean().set(first, named(first, expected, FAULT_TESTS)), core: "no read", word: "core: no read: tests fell", lastTests, selection },
+    { name: "a test file that no part read", reports: clean().set(first, named(first, expected.slice(1), CLEAN_TESTS)), core: "no read", word: "no read: file not read", lastTests, selection },
+    { name: "a report reads a file that the load check does not select", reports: clean().set(first, readsMore), core: "no read", word: "A report of the run read", lastTests, selection },
+    { name: "the load check selects a file that no report read", reports: clean(), core: "no read", word: "The load check selects", lastTests, selection: [...selection, ONE_READ] },
+    { name: "no part saved the selection", reports: clean(), core: "no read", word: "no read: no selection", lastTests, selection: [] },
   ];
 }
 
@@ -382,6 +417,7 @@ function flip(script: string): number {
       if (report === undefined) continue;
       mkdirSync(join(folder, `mutation-report-${part}`));
       writeFileSync(join(folder, `mutation-report-${part}`, "mutation.json"), JSON.stringify(report));
+      if (c.selection.length > 0) writeFileSync(join(folder, `mutation-report-${part}`, "load-selection.json"), JSON.stringify(c.selection));
     }
     const result = spawnSync(process.execPath, [script, "--gate", folder, "--last", last], { encoding: "utf8" });
     rmSync(folder, { recursive: true });
@@ -404,7 +440,7 @@ function readLast(file: string | undefined): Readonly<Record<string, number>> | 
 function gate(folder: string, lastFile: string | undefined): number {
   const lastTests = readLast(lastFile);
   const planned = JSON.parse(readFileSync(new URL("./planned-falls.json", import.meta.url), "utf8")) as readonly PlannedFall[];
-  const checks: LaneChecks = { planned, unread: (read) => unreadTests(REPO, read), ...(lastTests === undefined ? {} : { lastTests }) };
+  const checks: LaneChecks = { planned, unread: (read) => unreadTests(REPO, read), selection: readSelection(folder), ...(lastTests === undefined ? {} : { lastTests }) };
   const verdict = laneVerdict(readFolder(folder), checks);
   const head = `The read of ${new Date().toISOString().slice(0, 10)} on ${process.env["GITHUB_SHA"] ?? "a local tree"}. A score holds for 7 days, and an older score is stale (LANE.DELAY).`;
   for (const line of [head, ...verdict.lines]) console.info(line);
@@ -429,6 +465,9 @@ function oneJob(): number {
     console.info(changed ? "The changed files of this part have no mutant." : "This job has no report of Stryker.");
     return changed ? 0 : 1;
   }
+  // The selection goes beside the report, so the gate of a full run can compare the two reads.
+  const selection = fileURLToPath(new URL(`./${SELECTION_FILE}`, import.meta.url));
+  if (existsSync(selection)) copyFileSync(selection, file.replace(/mutation\.json$/u, "load-selection.json"));
   const report = JSON.parse(readFileSync(file, "utf8")) as Report;
   const reads = readReports([report]);
   for (const read of reads) console.info([...packageLines(read), staticLine(read), ...survivorLines(read)].join("\n"));

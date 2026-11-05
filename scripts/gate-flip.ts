@@ -2,7 +2,7 @@
  * The flip test of the speed gates (rule 8i of the fleet). A gate of a measure holds a gain only if it can fail. This
  * script reads each gate two times in one job: on a clean copy, and with a known cost in the measured arm
  * (`packages/core/bench/fault.ts`). The clean read must pass. The read with the fault must fail on each of its cases, and
- * it must fail on the measure, so a crash does not count.
+ * it must fail on the measure, so a crash does not count. The growth gate has two faults of its own: `GROWTH_FAULT` and `GROWTH_BYTES_FAULT`.
  *
  * The script starts the entry of each gate, the file that CI starts, so the flip reads the exit code that CI reads.
  * Start: node scripts/gate-flip.ts
@@ -17,8 +17,8 @@ const FAULT_TIMES = "4";
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 /** This function starts a file of the repository with more settings, and gives its exit code and its text. */
-function start(file: string, env: Readonly<Record<string, string>>): { readonly code: number | null; readonly text: string } {
-  const run = spawnSync(process.execPath, [file], { cwd: root, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, ...env } });
+function start(file: string, env: Readonly<Record<string, string>>, args: readonly string[] = []): { readonly code: number | null; readonly text: string } {
+  const run = spawnSync(process.execPath, [file, ...args], { cwd: root, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, ...env } });
   return { code: run.status, text: `${run.stdout}${run.stderr}` };
 }
 
@@ -34,15 +34,31 @@ function failedCases(text: string): number {
   return text.split("\n").filter((line) => line.startsWith("FAIL ")).length;
 }
 
-const GATES: readonly { readonly name: string; readonly file: string; readonly env: Readonly<Record<string, string>>; readonly cases: number }[] = [
-  { name: "the speed gate of the core", file: "packages/core/bench/gate.ts", env: {}, cases: 2 },
-  { name: "the speed gate of the compiler", file: "packages/compiler/bench/gate-processes.ts", env: { GATE_CASE: compilerCases() }, cases: 2 },
+/** A gate of the flip. `fault` gives the setting of its fault. `cases` is the count of the lines of a read with the fault that start with `FAIL `. */
+interface FlipGate {
+  readonly name: string;
+  readonly file: string;
+  readonly env: Readonly<Record<string, string>>;
+  readonly args?: readonly string[];
+  readonly fault: Readonly<Record<string, string>>;
+  readonly cases: number;
+}
+
+const COST: Readonly<Record<string, string>> = { GATE_FAULT_TIMES: FAULT_TIMES };
+
+const GATES: readonly FlipGate[] = [
+  { name: "the speed gate of the core", file: "packages/core/bench/gate.ts", env: {}, fault: COST, cases: 2 },
+  { name: "the speed gate of the compiler", file: "packages/compiler/bench/gate-processes.ts", env: { GATE_CASE: compilerCases() }, fault: COST, cases: 2 },
+  // The fault gives a quadratic time and quadratic bytes. The module fails a row, a time clause and a bytes clause. The source fails a row and a bytes clause, because its time is report only.
+  { name: "the growth gate of the compiler", file: "packages/compiler/bench/growth.ts", env: {}, args: ["chain"], fault: { GROWTH_FAULT: "1" }, cases: 5 },
+  // The fault gives 5 % more bytes at the large size of the source, with no other change. The source fails a row and a bytes clause.
+  { name: "the growth gate of the bytes of the source", file: "packages/compiler/bench/growth.ts", env: {}, args: ["chain"], fault: { GROWTH_BYTES_FAULT: "1.05" }, cases: 2 },
 ];
 
 let held = true;
 for (const gate of GATES) {
-  const clean = start(gate.file, gate.env);
-  const injected = start(gate.file, { ...gate.env, GATE_FAULT_TIMES: FAULT_TIMES });
+  const clean = start(gate.file, gate.env, gate.args);
+  const injected = start(gate.file, { ...gate.env, ...gate.fault }, gate.args);
   const red = injected.code === 1 && failedCases(injected.text) === gate.cases;
   const green = clean.code === 0 && failedCases(clean.text) === 0;
   console.info(`${red && green ? "ok" : "FAIL"} ${gate.name}: clean exit ${String(clean.code)}, with the fault exit ${String(injected.code)}, ${String(failedCases(injected.text))} of ${String(gate.cases)} cases failed`);

@@ -5,6 +5,8 @@
 import { app, axes, each, ext, fold, index, iterate, key, let_, lit, offset, rec, ref, space, v, vex, type CompileOptions, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, Vec2, Vec2Domain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
+import { factsOf } from "./facts.ts";
+import { printJs } from "./js.ts";
 import { generate, type GenerateOptions } from "./tiers.ts";
 
 // The programs of the speed lane (packages/core/bench/programs.ts). Their IR does not depend on the domain.
@@ -21,7 +23,7 @@ const LIFE = vex(Vec2Domain)
 
 const sourceOf = (e: Expr, options?: GenerateOptions): string => {
   const g = generate(e, options);
-  return g.ok ? g.source : `no source: ${g.reason}\n`;
+  return g.ok ? printJs(g.program, factsOf(options ?? {}), true) : `no source: ${g.reason}\n`;
 };
 
 /**

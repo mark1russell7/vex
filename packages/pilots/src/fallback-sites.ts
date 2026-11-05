@@ -81,21 +81,21 @@ function opLocals(program: LoopProgram): Map<number, string> {
   return ops;
 }
 
-/** This function gives the number of spaces at the start of a line. */
-const indentOf = (line: string): number => line.length - line.trimStart().length;
-
-/** This function gives the innermost block or loop of the body that contains the line at `at`. */
+/**
+ * This function gives the innermost block or loop of the body that contains the line at `at`. It counts the braces, because
+ * the source of tier 2 has no indent (V-089).
+ */
 function contextOf(lines: readonly string[], at: number, body: number): string {
-  let indent = indentOf(lines[at] ?? "");
+  let closed = 0;
   for (let i = at - 1; i >= body; i--) {
-    const line = lines[i] ?? "";
-    const ind = indentOf(line);
-    if (ind >= indent || line.trim() === "") continue;
-    indent = ind;
-    const head = line.trim();
-    if (/^L\d+: \{$/.test(head)) return "in a block that ends at an error (ifError, a binding of let, or a memo)";
-    if (/^L\d+: for \(;;\) \{$/.test(head)) return "in the loop of iterate";
-    if (/^L\d+: for \(/.test(head)) return "in an item of a list op";
+    const head = (lines[i] ?? "").replace(/\s*\/\/ .*$/, "");
+    if (head.endsWith("{")) {
+      if (closed > 0) closed--;
+      else if (/^L\d+: \{$/.test(head)) return "in a block that ends at an error (ifError, a binding of let, or a memo)";
+      else if (/^L\d+: for \(;;\) \{$/.test(head)) return "in the loop of iterate";
+      else if (/^L\d+: for \(/.test(head)) return "in an item of a list op";
+    }
+    if (head.startsWith("}")) closed++;
   }
   return TOP;
 }
@@ -120,8 +120,8 @@ export function siteProbe(expr: Expr, options: GenerateOptions = {}): SiteProbe 
   const out = lines.map((line, i) => {
     if (i < body) return line.replace("const ext_ = R.ext;", "const ext_ = P_.ext(R.ext);");
     // The catch of the program: an exception stops it.
-    if (line === "  } catch {" && lines[i + 1] === `    ${RETURN_F}`) return "  } catch (e) {";
-    if (line === `    ${RETURN_F}` && lines[i - 1] === "  } catch {") return "    return P_.thrown(e);";
+    if (line === "} catch {" && lines[i + 1] === RETURN_F) return "} catch (e) {";
+    if (line === RETURN_F && lines[i - 1] === "} catch {") return "return P_.thrown(e);";
     const comment = /\/\/ (.*)$/.exec(line)?.[1];
     const read = /\bl(\d+) !== F\b/.exec(line)?.[1];
     const stop = (): string => {
@@ -135,7 +135,7 @@ export function siteProbe(expr: Expr, options: GenerateOptions = {}): SiteProbe 
     if (RAISE.test(line)) return line.replace(RAISE, `return P_.stop(${stop()});`);
     if (line.includes(RETURN_F)) return line.replaceAll(RETURN_F, `return P_.stop(${stop()});`);
     // A check that ends a block or skips an item does not stop the program. The probe notes it.
-    const check = comment === undefined ? null : /^(\s*if \(!\(.*?\)\)) (break L\d+;|continue L\d+;|\{ if \()/.exec(line);
+    const check = comment === undefined ? null : /^(if \(!\(.*?\)\)) (break L\d+;|continue L\d+;|\{ if \()/.exec(line);
     if (check === null) return line;
     const head = check[1] as string;
     return `${head.slice(0, -1)} && P_.note(${stop()}))${line.slice(head.length)}`;

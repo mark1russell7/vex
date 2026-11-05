@@ -42,6 +42,17 @@ function readChain(levels: number): Expr {
   return let_({ [name(1)]: SUM }, e);
 }
 
+/**
+ * The limits of the source of tier 2 for a shape with a limit of its own (COMPILE.SOURCE.SIZE). `large` replaces the larger
+ * size of the shape when the lowering has no stack for that size, and `why` gives the reason.
+ */
+export interface SourceLimits {
+  readonly time?: number;
+  readonly bytes?: number;
+  readonly large?: number;
+  readonly why: string;
+}
+
 /** A shape of the gate. `time` and `bytes` are the limits of a shape with a limit of its own, with the reason in `why`. */
 export interface GrowthShape {
   readonly name: string;
@@ -51,6 +62,7 @@ export interface GrowthShape {
   readonly time?: number;
   readonly bytes?: number;
   readonly why?: string;
+  readonly source?: SourceLimits;
 }
 
 /** The shapes. Each shape that made a compile quadratic or worse is here, with the shape of the doubling programs. */
@@ -103,6 +115,9 @@ export interface GrowthExponents {
   readonly bytes: number;
 }
 
+/** This function gives the larger size of a shape for the source of tier 2. */
+export const sourceLarge = (shape: GrowthShape): number => shape.source?.large ?? shape.large;
+
 /** This function gives the exponents of a shape from its two rows. */
 export const exponentsOf = (small: GrowthRow, large: GrowthRow): GrowthExponents | undefined =>
   small.ms === undefined || large.ms === undefined || small.bytes === undefined || large.bytes === undefined
@@ -119,4 +134,11 @@ export function growthFaults(shape: GrowthShape, small: GrowthRow, large: Growth
     ...(found.time > time ? [`${shape.name} has a time exponent of ${found.time.toFixed(2)}, and the limit is ${String(time)}`] : []),
     ...(found.bytes > bytes ? [`${shape.name} has a bytes exponent of ${found.bytes.toFixed(2)}, and the limit is ${String(bytes)}`] : []),
   ];
+}
+
+/** This function gives the faults of the source of tier 2 of a shape (COMPILE.SOURCE.SIZE): the rule of the gate, with the limits of the source. */
+export function sourceFaults(shape: GrowthShape, small: GrowthRow, large: GrowthRow): readonly string[] {
+  const { time, bytes } = shape.source ?? {};
+  const limits = { ...(time === undefined ? {} : { time }), ...(bytes === undefined ? {} : { bytes }) };
+  return growthFaults({ name: `source of ${shape.name}`, make: shape.make, small: shape.small, large: shape.large, ...limits }, small, large);
 }

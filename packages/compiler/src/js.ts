@@ -28,8 +28,13 @@ function kindCheck(kind: ParamKind | undefined, a: string, d: string): readonly 
 
 const name = (n: number): string => `l${n}`;
 
-/** This function prints the source of a program. The body gives the function of the program. */
-export function printJs(p: LoopProgram, facts: Facts): string {
+/**
+ * This function prints the source of a program. The body gives the function of the program. The source of a compile has
+ * no indent, so its size stays linear in the block nesting (COMPILE.SOURCE.SIZE). With `indented`, each line shows its
+ * block. The golden files read that form, and the two forms differ only in the spaces at the start of a line.
+ */
+export function printJs(p: LoopProgram, facts: Facts, indented = true): string {
+  const deeper = (indent: string): string => (indented ? `${indent}  ` : indent);
   const used = new Set<RuntimeFn>();
   const constants = new Set<number>();
   const sites = new Map<string, string>();
@@ -284,10 +289,10 @@ export function printJs(p: LoopProgram, facts: Facts): string {
         return;
       case "if":
         lines.push(`${indent}if (${expr(s.cond)}) {`);
-        stmts(s.yes, `${indent}  `);
+        stmts(s.yes, deeper(indent));
         if (s.no.length > 0) {
           lines.push(`${indent}} else {`);
-          stmts(s.no, `${indent}  `);
+          stmts(s.no, deeper(indent));
         }
         lines.push(`${indent}}`);
         return;
@@ -296,18 +301,18 @@ export function printJs(p: LoopProgram, facts: Facts): string {
         lines.push(`${indent}${a} = ${expr(s.over)};`);
         lines.push(`${indent}L${s.label}: for (${i} = 0; ${i} < ${a}.length; ${i}++) {`);
         lines.push(`${indent}  ${name(s.item)} = ${a}[${i}];`);
-        stmts(s.body, `${indent}  `);
+        stmts(s.body, deeper(indent));
         lines.push(`${indent}}`);
         return;
       }
       case "block":
         lines.push(`${indent}L${s.label}: {`);
-        stmts(s.body, `${indent}  `);
+        stmts(s.body, deeper(indent));
         lines.push(`${indent}}`);
         return;
       case "repeat":
         lines.push(`${indent}L${s.label}: for (;;) {`);
-        stmts(s.body, `${indent}  `);
+        stmts(s.body, deeper(indent));
         lines.push(`${indent}}`);
         return;
       case "break":
@@ -342,5 +347,6 @@ export function printJs(p: LoopProgram, facts: Facts): string {
     `  try {`,
   ];
   const tail = [`  } catch {`, `    return F;`, `  }`, `};`, ``];
-  return [...head, ...lines, ...tail].join("\n");
+  const text = [...head, ...lines, ...tail];
+  return (indented ? text : text.map((line) => line.trimStart())).join("\n");
 }

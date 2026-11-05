@@ -26,6 +26,8 @@ const NOTHING: KeyScope = { keys: new Map(), env: new Map(), fns: new Map(), col
 const ITEMS = lit(vexList([{ key: "0", result: { ok: true, value: 1 } }]));
 
 const add = (a: Expr, b: Expr): Expr => app("add", a, b);
+/** This function gives a record with one own field of the name `__proto__`. */
+const named = (e: Expr): Expr => rec(JSON.parse(`{"__proto__":${JSON.stringify(e)}}`) as Readonly<Record<string, Expr>>);
 const eachOver = (list: Expr, body: Expr): Expr => each(axes.list(list), body, undefined, ["x"]);
 const foldOf = (init: Expr, step: Expr, result: Expr): Expr => fold(axes.all, { x: init }, { x: step }, result);
 const foldItems = (step: Expr, result: Expr): Expr => fold(axes.list(ITEMS), { s: lit(0) }, { s: step }, result, undefined, ["x"]);
@@ -389,7 +391,6 @@ describe("V-078 KEY: a key holds the meaning of each read", () => {
   });
 
   it("V-078: a key reads a field with the name __proto__ as each other field", () => {
-    const named = (e: Expr): Expr => rec(JSON.parse(`{"__proto__":${JSON.stringify(e)}}`) as Readonly<Record<string, Expr>>);
     expect(key(named(lit(1)))).not.toBe(key(named(lit(2))));
     expect(key(named(lit(1)))).not.toBe(key(rec({})));
     expect(key(named(lit(1)))).toBe(key(named(lit(1))));

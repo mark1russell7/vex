@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { laneParts, PACKAGES, packageOfPart, packageOfPath, plainFlip, SELECTION_FILE, unreadTests } from "./layout.ts";
+import { laneParts, PACKAGES, packageOfPart, packageOfPath, plainFlip, RUNNER_FILE, SELECTION_FILE, unreadTests } from "./layout.ts";
 
 /** A place in a file of a report. */
 interface Place {
@@ -317,6 +317,15 @@ function readFolder(folder: string): Map<string, Report | undefined> {
   return reports;
 }
 
+/** This function gives each runner that the load checks of the parts recorded, as sorted text. */
+function readRunners(folder: string): readonly string[] {
+  const files = laneParts().map((part) => join(folder, `mutation-report-${part}`, "load-runner.json")).filter((file) => existsSync(file));
+  return [...new Set(files.map((file) => {
+    const runner = JSON.parse(readFileSync(file, "utf8")) as { readonly version: string; readonly path: string };
+    return `${runner.version} from ${runner.path}`;
+  }))].toSorted();
+}
+
 /** This function reads the selections of the load check that the parts of a full run saved, as one list. */
 function readSelection(folder: string): readonly string[] {
   const files = laneParts().map((part) => join(folder, `mutation-report-${part}`, "load-selection.json")).filter((file) => existsSync(file));
@@ -453,7 +462,9 @@ function gate(folder: string, lastFile: string | undefined): number {
   for (const line of [head, DOMAINS_METHOD, ...verdict.lines]) console.info(line);
   mkdirSync("reports", { recursive: true });
   writeFileSync(join("reports", "lane-read.json"), `${JSON.stringify({ date: new Date().toISOString(), sha: process.env["GITHUB_SHA"], packages: verdict.packages }, null, 2)}\n`);
-  writeFileSync(join("reports", "lane-tests.json"), `${JSON.stringify({ date: new Date().toISOString(), sha: process.env["GITHUB_SHA"], parts: verdict.tests }, null, 2)}\n`);
+  const runners = readRunners(folder);
+  console.info(`The runner of the lane: ${runners.length === 0 ? "no record" : runners.join(", ")}.`);
+  writeFileSync(join("reports", "lane-tests.json"), `${JSON.stringify({ date: new Date().toISOString(), sha: process.env["GITHUB_SHA"], runners, parts: verdict.tests }, null, 2)}\n`);
   const summary = process.env["GITHUB_STEP_SUMMARY"];
   if (summary !== undefined) appendFileSync(summary, `${[head, "", "```", ...verdict.lines, "```"].join("\n")}\n`);
   if (verdict.failed) console.error(`The gate failed: a package is under ${LINE} % or has no read.`);
@@ -475,6 +486,8 @@ function oneJob(): number {
   // The selection goes beside the report, so the gate of a full run can compare the two reads.
   const selection = fileURLToPath(new URL(`./${SELECTION_FILE}`, import.meta.url));
   if (existsSync(selection)) copyFileSync(selection, file.replace(/mutation\.json$/u, "load-selection.json"));
+  const runner = fileURLToPath(new URL(`./${RUNNER_FILE}`, import.meta.url));
+  if (existsSync(runner)) copyFileSync(runner, file.replace(/mutation\.json$/u, "load-runner.json"));
   const report = JSON.parse(readFileSync(file, "utf8")) as Report;
   const reads = readReports([report]);
   for (const read of reads) console.info([...packageLines(read), staticLine(read), ...survivorLines(read)].join("\n"));

@@ -11,16 +11,26 @@
 // the mutated files, and Vitest keeps a test file when its imports reach one of them. This script asks Vitest the same
 // question for the mutated files of all parts. Each test file on the disk that this selection leaves out fails the check,
 // unless NOT_READ of layout.ts states why. The flip adds such a file in each of the two places.
+//
+// Two rows read two faults, because no form of `collect` reads both. The form that starts a file reads a load fault in the
+// errors of the module. It reads a file with no test as a module with no children. A flip row reads the reason text, so a
+// red that comes from another fault does not pass it.
 import { spawnSync } from "node:child_process";
-import { rmSync, writeFileSync } from "node:fs";
+import { realpathSync, rmSync, writeFileSync } from "node:fs";
 import { relative } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { createVitest } from "vitest/node";
-import { laneParts, mutateOf, NOT_READ, SELECTION_FILE, staleEntries, testFilesOnDisk, unreadTests } from "./layout.ts";
+import { createVitest, version } from "vitest/node";
+import { COLLECT_OPTIONS, laneParts, mutateOf, NOT_READ, RUNNER_FILE, SELECTION_FILE, staleEntries, testFilesOnDisk, unreadTests } from "./layout.ts";
 
 /** This is the test file with a load fault that the flip adds to the copy. */
 const FLIP_FILE = "work/compiler/load-check-flip.test.ts";
+
+/** This file has no test name. A flip row reaches the missing package through this file. */
+const FLIP_HELPER = "work/compiler/load-check-flip-helper.ts";
+
+/** The name of the missing package in the flip rows. */
+const MISSING = "vex-load-check-no-such-package";
 
 /** This is the name of the test file with no load fault that the flip adds. */
 const FLIP_NAME = "load-check-names-flip.test.ts";
@@ -54,7 +64,9 @@ function nameFaults(selected: readonly string[], collected: number): string[] {
 /** This function gives each test file of the lane that does not load or holds no test, and each fault of the check by name. */
 async function loadFaults(): Promise<string[]> {
   const vitest = await createVitest("test", { config: "vitest.config.ts", watch: false });
-  const { testModules, unhandledErrors } = await vitest.collect();
+  const start = performance.now();
+  const { testModules, unhandledErrors } = await vitest.collect(undefined, COLLECT_OPTIONS);
+  const seconds = ((performance.now() - start) / 1000).toFixed(1);
   const faults: string[] = testModules.flatMap((m) => {
     const errors = m.errors().map((e) => e.message);
     if (errors.length > 0) return [`${m.moduleId}: ${errors.join(" ")}`];
@@ -62,7 +74,12 @@ async function loadFaults(): Promise<string[]> {
   });
   faults.push(...unhandledErrors.map((e) => `an error outside a test file: ${String(e)}`));
   if (testModules.length === 0) faults.push("the lane found no test file");
-  console.info(`The load check read ${testModules.length} test files, with ${faults.length} faults.`);
+  console.info(`The load check read ${testModules.length} test files in ${seconds} s, with ${faults.length} faults.`);
+  // The walk of the imports can stop at a file that does not load, and that stop can hide the reason. So a load fault ends the check here.
+  if (faults.length > 0) {
+    await vitest.close();
+    return faults;
+  }
   // These calls are the calls of the runner of Stryker: it sets this option, and Vitest then reads the imports of each test file.
   vitest.config.related = [...new Set(laneParts().flatMap((part) => mutateOf(root, part)).map((entry) => entry.split(":")[0] ?? entry))].map((file) => `${here}${file}`.replaceAll("\\", "/"));
   const selected = (await vitest.getRelevantTestSpecifications()).map((s) => relative(here, s.moduleId).replaceAll("\\", "/")).toSorted();
@@ -79,14 +96,15 @@ function checkInProcess(): { readonly code: number | null; readonly text: string
   return { code: run.status, text: `${run.stdout}${run.stderr}` };
 }
 
-/** This function writes files, reads the check, and removes the files. It gives true when the check fails and names the word. */
-function faultIsRed(name: string, files: readonly string[], text: string, word: string): boolean {
-  for (const file of files) writeFileSync(file, text);
+/** This function writes files, reads the check, and removes the files. It gives true when the check fails and one line of its text names each word. */
+function faultIsRed(name: string, files: readonly (readonly [string, string])[], words: readonly string[]): boolean {
+  for (const [file, text] of files) writeFileSync(file, text);
   const injected = checkInProcess();
-  for (const file of files) rmSync(file);
-  const red = injected.code === 1 && injected.text.includes(word);
-  console.info(`flip, ${name}: the exit code is ${String(injected.code)}.`);
-  if (!red) console.error(`The check did not fail on the fault:\n${injected.text}`);
+  for (const [file] of files) rmSync(file);
+  const line = injected.text.split("\n").find((row) => words.every((word) => row.includes(word)));
+  const red = injected.code === 1 && line !== undefined;
+  console.info(`flip, ${name}: the exit code is ${String(injected.code)}. The reason: ${line?.slice(0, 200) ?? "not found"}`);
+  if (!red) console.error(`The check did not fail on the fault with its reason:\n${injected.text}`);
   return red;
 }
 
@@ -102,11 +120,22 @@ function printLiteral(files: readonly string[], word: string): void {
 function flip(): boolean {
   const inCopy = `${here}work/compiler/${FLIP_NAME}`;
   const onDisk = `${root}packages/compiler/src/${FLIP_NAME}`;
+  const flipFile = `${here}${FLIP_FILE}`;
+  const notRead = [`file not read: packages/compiler/src/${FLIP_NAME}`];
   const reds = [
-    faultIsRed("a test file that does not load", [`${here}${FLIP_FILE}`], 'import "vex-load-check-no-such-package";\n', "load-check-flip.test.ts"),
-    faultIsRed("a test file on the disk that does not reach the copy", [onDisk], FLIP_TEXT, `file not read: packages/compiler/src/${FLIP_NAME}`),
-    faultIsRed("a test file in the copy that no part selects", [onDisk, inCopy], FLIP_TEXT, `file not read: packages/compiler/src/${FLIP_NAME}`),
-    faultIsRed("a dynamic import by a computed path", [onDisk, inCopy], FLIP_COMPUTED, `file not read: packages/compiler/src/${FLIP_NAME}`),
+    faultIsRed("a missing package, direct", [[flipFile, `import "${MISSING}";\n${FLIP_TEXT}`]], ["load-check-flip.test.ts", MISSING]),
+    faultIsRed(
+      "a missing package through an imported file",
+      [
+        [flipFile, `import "./load-check-flip-helper.ts";\n${FLIP_TEXT}`],
+        [`${here}${FLIP_HELPER}`, `import "${MISSING}";\n`],
+      ],
+      ["load-check-flip.test.ts", MISSING],
+    ),
+    faultIsRed("a test file with no test", [[flipFile, "export {};\n"]], ["load-check-flip.test.ts", "the file holds no test"]),
+    faultIsRed("a test file on the disk that does not reach the copy", [[onDisk, FLIP_TEXT]], notRead),
+    faultIsRed("a test file in the copy that no part selects", [[onDisk, FLIP_TEXT], [inCopy, FLIP_TEXT]], notRead),
+    faultIsRed("a dynamic import by a computed path", [[onDisk, FLIP_COMPUTED], [inCopy, FLIP_COMPUTED]], notRead),
   ];
   printLiteral([onDisk, inCopy], `file not read: packages/compiler/src/${FLIP_NAME}`);
   const clean = checkInProcess();
@@ -114,6 +143,11 @@ function flip(): boolean {
   if (clean.code !== 0) console.error(`The check failed on the clean copy:\n${clean.text}`);
   return reds.every(Boolean) && clean.code === 0;
 }
+
+// Each read that names a behaviour of the runner states its version, from the folder that starts it.
+const runner = { version, path: realpathSync(fileURLToPath(import.meta.resolve("vitest/node"))) };
+console.info(`The version of the runner is ${runner.version}, from ${runner.path}.`);
+writeFileSync(`${here}${RUNNER_FILE}`, `${JSON.stringify(runner, null, 2)}\n`);
 
 if (process.argv.includes("--flip")) {
   if (!flip()) process.exitCode = 1;

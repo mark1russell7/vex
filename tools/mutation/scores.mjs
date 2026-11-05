@@ -5,6 +5,7 @@
 // A time-out has two kinds. The hit limit stops a mutant with an endless loop, and this finds a mutant. The clock stops a
 // mutant that took too long, and this can come from the load of the runner, so it finds nothing for certain. Each line
 // prints the two kinds apart from the killed mutants, and the score with no clock time-out.
+// A mutant with a disable comment does not count in the score, and a disable can raise a score. So each line prints the count of these mutants.
 // A missing report, or a report without mutants of a package of the run, fails the script.
 import { readFileSync } from "node:fs";
 import process from "node:process";
@@ -12,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 /** @typedef {{ status: string, statusReason?: string, mutatorName: string, location: { start: { line: number } } }} Mutant */
 /** @typedef {{ files: Record<string, { mutants: Mutant[] }> }} Report */
-/** @typedef {{ detected: number, valid: number, killed: number, hitLimit: number, clock: number, survived: string[] }} Total */
+/** @typedef {{ detected: number, valid: number, killed: number, hitLimit: number, clock: number, disabled: number, survived: string[] }} Total */
 
 const BREAK = 95;
 // The packages with the gate: the four published packages.
@@ -22,12 +23,13 @@ const report = /** @type {Report} */ (JSON.parse(readFileSync(fileURLToPath(new 
 const totals = new Map();
 for (const [file, data] of Object.entries(report.files)) {
   const pkg = /work[\\/](\w+)[\\/]/.exec(file)?.[1] ?? "other";
-  const t = totals.get(pkg) ?? { detected: 0, valid: 0, killed: 0, hitLimit: 0, clock: 0, survived: [] };
+  const t = totals.get(pkg) ?? { detected: 0, valid: 0, killed: 0, hitLimit: 0, clock: 0, disabled: 0, survived: [] };
   for (const m of data.mutants) {
     if (m.status === "Killed" || m.status === "Timeout") t.detected++;
     if (m.status === "Killed") t.killed++;
     if (m.status === "Timeout" && m.statusReason?.startsWith("Hit limit") === true) t.hitLimit++;
     if (m.status === "Timeout" && m.statusReason?.startsWith("Hit limit") !== true) t.clock++;
+    if (m.status === "Ignored") t.disabled++;
     if (m.status === "Killed" || m.status === "Timeout" || m.status === "Survived" || m.status === "NoCoverage") t.valid++;
     if (m.status === "Survived" || m.status === "NoCoverage") t.survived.push(`${file.replace(/.*work[\\/]/, "")}:${m.location.start.line} ${m.mutatorName}`);
   }
@@ -47,7 +49,7 @@ for (const pkg of new Set(expected)) {
 for (const [pkg, t] of totals) {
   const score = t.valid === 0 ? 100 : (100 * t.detected) / t.valid;
   const gated = GATED.has(pkg);
-  console.info(`${pkg}: ${score.toFixed(2)} % (${t.detected} of ${t.valid}, ${t.survived.length} survived)${gated ? "" : ", no gate"}`);
+  console.info(`${pkg}: ${score.toFixed(2)} % (${t.detected} of ${t.valid}, ${t.survived.length} survived, ${t.disabled} disabled by a comment)${gated ? "" : ", no gate"}`);
   const read = t.valid - t.clock;
   const noClock = read === 0 ? 0 : (100 * (t.killed + t.hitLimit)) / read;
   console.info(`${pkg}: killed ${t.killed}, time-out by the hit limit ${t.hitLimit}, time-out by the clock ${t.clock}, score with no clock time-out ${noClock.toFixed(2)} % of ${read}`);

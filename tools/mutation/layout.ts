@@ -327,6 +327,15 @@ export function staleEntries(root: string, read: ReadonlySet<string>): string[] 
 /** The file in which the load check saves its selection, as a path in this folder. Each job of the lane copies it beside its report. */
 export const SELECTION_FILE = "work/lane-selection.json";
 
+/** The load check writes the version of its runner and the folder that gives it to this file, for the record of the run. */
+export const RUNNER_FILE = "work/lane-runner.json";
+
+/**
+ * The load check gives this option to `collect` of the runner. Under Vitest 5 the default form parses a file and does not
+ * start it, so it does not see a missing package. The script `load-run-flip.ts` reads this option on that version.
+ */
+export const COLLECT_OPTIONS: { readonly staticParse: false } = { staticParse: false };
+
 /** This function gives the path of the lane that a changed file of the repository selects, if it selects one. */
 function selectedBy(path: string): string | undefined {
   const copy = COPIES.find((c) => c.tests && path.startsWith(`${c.from}/`));

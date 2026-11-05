@@ -71,7 +71,11 @@ The flip of this check is a real failed job. On 2026-11-05 the dry run of `compi
 
 A test file that does not load gives no failed test. Stryker then reports a score, or it stops with `No tests were executed`. The script `load-check.ts` collects each test file of the copy before Stryker starts. A file that does not load, or that holds no test, fails the lane with the words `No read`.
 
-The job `mutation load check flip` of the nightly workflow shows that this check can fail. An added file with a missing package fails the check. A test file on the disk that does not reach the copy fails it. A test file in the copy that no part selects also fails it. A test file whose only path to a mutated file is a computed dynamic import also fails it. The same copy without these files passes.
+The job `mutation load check flip` of the nightly workflow shows that this check can fail. The job `Flip of the load check of the mutation lane` of `gate-flip.yml` does the same on a pull request. Each row reads the reason text, so a red for another fault does not pass. A missing package fails the check, direct and through an imported file. A file with no test fails it with its own reason. A test file on the disk that does not reach the copy fails it. A test file in the copy that no part selects also fails it. A test file whose only path to a mutated file is a computed dynamic import also fails it. The same copy without these files passes.
+
+The check starts each test file with the option `COLLECT_OPTIONS` of `layout.ts`. No form of `collect` reads both faults. The form that starts a file reads a load fault. A file with no test then has no children, so the check reads that as a second row.
+
+Under Vitest 5 the default form only parses a file. The lane is on 4.1.12, where the default form starts a file, so the option has no effect here. The script `load-run-flip.ts` reads the option on Vitest 5, and it fails if the option goes missing. Each read prints the version of the runner and its folder.
 
 The test `V-090` of `mutation-lane.test.ts` runs in CI on each pull request. It fails when a copied file imports a package that the lane does not have.
 

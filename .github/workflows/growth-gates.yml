@@ -1,0 +1,77 @@
+# The gates of a test at the largest size of each shape of COMPILE.GROWTH. A test of the shapes prints the largest size with
+# no gate, because the gate of the keys takes most of its time there. This job holds that size: the gate of the keys and the
+# gate of names read each shape, and the row gives the time of each part.
+name: Growth gates
+
+on:
+  # Each pull request starts this workflow. The job changes skips the work when no file of the compile changes.
+  pull_request:
+  schedule:
+    - cron: "52 5 * * 2"
+  workflow_dispatch:
+
+permissions: {}
+
+# One run for each branch: a newer run stops the older one.
+concurrency:
+  group: growth-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      match: ${{ steps.changes.outputs.match }}
+    steps:
+      - id: changes
+        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
+        with:
+          paths: |
+            packages/core/src/**
+            packages/compiler/src/**
+            packages/compiler/bench/growth.ts
+            packages/compiler/test/growth.ts
+            packages/compiler/test/key-gate.ts
+            packages/compiler/test/plain-key.ts
+            packages/compiler/test/names.ts
+            .github/workflows/growth-gates.yml
+            !packages/*/src/**/*.test.ts
+            !packages/*/src/__golden__/**
+
+  rows:
+    needs: changes
+    if: needs.changes.outputs.match == 'true' || github.event_name != 'pull_request'
+    name: Gates at the largest size
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # The shell bash sets pipefail, so a gate that fails fails its step, also with its output piped into tee.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: node scripts/workflow-gate.ts
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @mark1russell7/vex-compiler run bench:growth:gates 2>&1 | tee rows.txt
+      - if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### The gates at the largest size of each shape"
+            echo
+            echo '```'
+            grep -E "^(ok|FAIL) gates" rows.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

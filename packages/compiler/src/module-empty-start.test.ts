@@ -2,7 +2,7 @@
  * Names of loops that start with the empty list in a standalone module (COMPILE.MODULE.LOOP.EMPTY). The empty literal has
  * no kind of items, so the steps of the loop decide that kind. A program that no part decides stays refused.
  */
-import { app, axes, each, evaluate, fold, isVexList, iterate, let_, lit, ref, rec, SheetRun, space, v, vexList, type Expr } from "@mark1russell7/vex";
+import { app, axes, call, each, evaluate, fn, fold, isVexList, iterate, let_, lit, ref, rec, SheetRun, space, v, vexList, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -152,9 +152,14 @@ describe("COMPILE.MODULE.LOOP.EMPTY: a loop name that starts with the empty list
     expect(sourceOf(sorted(fold(axes.all, { out: one(lit(1)) }, { out: grown }, out)))).toContain("run");
   });
 
-  it("COMPILE.MODULE.LOOP.EMPTY: the checks of the steps prove a kind, so one step in two kinds stays refused", () => {
+  it("COMPILE.MODULE.LOOP.EMPTY: one object at two places has the kind of each place (P17)", () => {
     const looped = sweep(op("append", out, one(v("x"))));
-    const e = rec({ a: let_({ x: lit(1) }, sorted(looped)), b: let_({ x: lit("a") }, looped) });
+    expectSame(rec({ a: let_({ x: lit(1) }, sorted(looped)), b: let_({ x: lit("a") }, looped) }));
+  });
+
+  it("COMPILE.MODULE.LOOP.EMPTY: the checks of the steps prove a kind, so one function in two kinds stays refused", () => {
+    const looped = sweep(op("append", out, one(v("x"))));
+    const e = let_({ h: fn(["x"], looped) }, rec({ a: sorted(call("h", lit(1))), b: call("h", lit("a")) }));
     expect(reasonOf(e)).toBe(FIT_REASON);
   });
 

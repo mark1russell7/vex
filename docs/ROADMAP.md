@@ -21,7 +21,7 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
 | KEYSCOPE | A shared constant of a module follows the scopes of its names, so two expressions with one text and different bindings keep different values (V-078, V-080). | compiler | P0 | in progress | |
-| CATCHFAULT | A catch of a module does not hide a compiler fault. The measures of the size and the time come first. | compiler | P1 | in progress: #278 | |
+| CATCHFAULT | A print-time refusal of a fault that a catch can hide. The runtime check is dropped, and #278 is closed. | compiler | P1 | later: after 0.18.0 | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 8 merged, the size of the printer is #242 | |
 | ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
 | TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
@@ -36,6 +36,12 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
+| PLACESSPREAD | Find the cause of the spread of the rows of the places gate. | compiler | P3 | later | KEYSCOPE |
+| SHARE49 | Find the cause of the share job that stopped after 49 minutes on 11-04. The cause stays open. | compiler | P3 | later | KEYSCOPE |
+| BOUNDSCOST | Bring the print of each module over 1.10 of the base under 1.10 and remove its line in the gate, by 2026-11-12. Find the cause of the 1.5 ms of `bounds` outside `emitModule`. | compiler | P1 | in progress | KEYSCOPE |
+| MODELGAIN | Find why the gain of `build` and `avoid` does not read on the CPU model 9V45, by 2026-11-19. Compute the limits again at 20 reads of that model. | compiler | P2 | later | KEYSCOPE |
+| ROUNDCOST | Let the bench add a cost in chosen rounds, as the control of the second pair clause. | compiler | P2 | later | KEYSCOPE |
+| D12GAIN | Find why tier 2 of the base is faster at `shared plain d12` only, by 2026-11-12. Keep the gain on the branch if it is real. | compiler | P2 | later | KEYSCOPE |
 | GRADIENT | The derivative of a program against a variable, as a transform of the program. | core | P3 | later: #270 | |
 | DFSOP | A kernel op for a depth-first search, with the order of ties in the spec. | domains | P2 | later | |
 | ASTAROP | A kernel op for the A* search, with the order of ties in the spec. It gives the `avoid` router of ireko after 0.18.0. Its prediction has a target ratio over the same 4000 seeded edges, with hand code and an A/A arm. | domains | P2 | later | 0.18.0 |

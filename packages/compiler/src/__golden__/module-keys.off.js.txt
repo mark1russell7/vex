@@ -134,7 +134,7 @@ export function run(records, vars) {
     for (let j22 = 0; j22 < n; j22++) {
       let x25;
       try {
-        if (!((R[j22]["n"]) === (G(q19)))) continue;
+        if (!((R[j22]["n"]) === (G(q20)))) continue;
         x25 = k_number((R[j22]["w"]) + (G(q19)));
       } catch {
         continue;
@@ -148,7 +148,7 @@ export function run(records, vars) {
     for (let j29 = 0; j29 < n; j29++) {
       let x32;
       try {
-        if (!((R[j29]["n"]) === (G(q26)))) continue;
+        if (!((R[j29]["n"]) === (G(q27)))) continue;
         if (!((R[j29]["w"]) > (G(q26)))) continue;
         x32 = R[j29]["n"];
       } catch {

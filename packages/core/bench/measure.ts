@@ -4,7 +4,7 @@
  * comparison alternate on each input, and a copy of the base (the A/A arm) gives the noise floor.
  *
  * - Mode `process`: one process. In each round, the arms run in turn on each input, and odd rounds reverse the order.
- * - Mode `fresh`: a new process for each arm in each round, and the order turns by one place at each round.
+ * - Mode `fresh`: a new process for each arm in each round. The order of the arms and the order of the inputs turn at each round.
  *
  * Each copy of the helper keeps this interface until it moves to the gates package of rigor. No copy imports a type
  * of its repository.
@@ -41,6 +41,8 @@ export interface PairedOptions<I> {
   readonly mode: Mode;
   /** With `true` (the default), a second copy of the base with the id `<base>~aa` gives the noise floor. */
   readonly aa?: boolean;
+  /** For mode `fresh`: the place of the input that comes first in the first round. A set of reads gives a different place to each read. The default is 0. */
+  readonly firstInput?: number;
   /** For tests, mode `process`: the clock in ms. The default is `performance.now`. */
   readonly clock?: () => number;
   /** For tests, mode `fresh`: the start of one child. The default starts the command as a process. */
@@ -277,7 +279,18 @@ function inProcess<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): Paire
   return reportOf(options, arms, times, undefined);
 }
 
-/** This function measures with a new process for each arm in each round. The order turns by one place at each round. */
+/**
+ * This function gives the place of the input that comes first in a round of mode `fresh`. The steps spread the first
+ * places over the inputs, so a cost of the first place does not stay on one input.
+ */
+export function firstOfRound(round: number, inputs: number, repeats: number, from = 0): number {
+  return (from + round * Math.max(1, Math.floor(inputs / repeats))) % inputs;
+}
+
+/**
+ * This function measures with a new process for each arm in each round. The order of the arms turns by one place at
+ * each round, and the order of the inputs turns by `firstOfRound`. The times stay by input and by round.
+ */
 async function inFresh<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): Promise<PairedReport> {
   const warmup = options.warmup ?? 1;
   const start = options.startChild ?? child;
@@ -286,7 +299,9 @@ async function inFresh<I>(options: PairedOptions<I>, arms: readonly Arm<I>[]): P
   for (let round = 0; round < options.repeats; round++) {
     const order = arms.map((_a, k) => arms[(k + round) % arms.length]).filter((a) => a !== undefined);
     // Each input takes all of its arms before the next input, so no whole pass lies between two arms of one input.
-    for (const [i, input] of options.inputs.entries()) {
+    const entries = [...options.inputs.entries()];
+    const first = firstOfRound(round, entries.length, options.repeats, options.firstInput);
+    for (const [i, input] of [...entries.slice(first), ...entries.slice(0, first)]) {
       for (const arm of order) {
         // The children run one at a time: two children at one time change the times of each other.
         // oxlint-disable-next-line no-await-in-loop

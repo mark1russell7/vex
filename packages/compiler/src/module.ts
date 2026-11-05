@@ -35,8 +35,10 @@ import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type C
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { functionText } from "./fn-text.ts";
 import { memoNodes } from "./memo.ts";
-import { keepFaults, tidy, type Tidied } from "./module-tidy.ts";
+import { deadConstants, keepFaults, namesOfCode, tidy, type Tidied, wordsOf } from "./module-tidy.ts";
+import { canonical, type KeyScope, KeyTable, keyText, NotStandalone } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
+import { originalOf, placesRead, unsharedAll } from "./unshared.ts";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {
@@ -44,8 +46,8 @@ export interface ModuleOptions {
   /** The kinds of the fields of the records and of the variables. A module reads only the names of its schema. */
   readonly schema: Schema;
   /**
-   * The name of the function that the module exports. The default is `run`. A reserved word, a name that the module
-   * declares and a global that a module reads (`MODULE_GLOBALS`) are not names of the run (V-060).
+   * The name of the function that the module exports. The default is `run`. A reserved word, `VEX_ERROR` and
+   * `VexContractError` are not names of the run (V-060). Each other name hides nothing from the code (COMPILE.MODULE.NAME).
    */
   readonly name?: string;
   /**
@@ -106,8 +108,6 @@ export type { ListKind } from "./facts.ts";
 /** The source of a standalone module, or the reason that the program cannot be one. */
 export type Emitted = { readonly ok: true; readonly source: string } | { readonly ok: false; readonly reason: string };
 
-/** The error of a construct that a standalone module does not have. */
-class NotStandalone extends Error {}
 
 /**
  * The error that stops the second print of a fast sum (`#packed`) or of the steps of a fold (`#packedSteps`). Then the
@@ -190,6 +190,8 @@ interface ListInfo {
 interface EmptyStarts {
   /** The kinds of the items that the steps give, by the expression of the step of each name. */
   readonly found: Map<Expr, Pick<ListInfo, "item" | "inner">>;
+  /** The expressions of a program with one object at each place. The prints use one set of copies, so `found` holds for each print. */
+  readonly copies: Map<object, readonly Expr[]>;
   /** True for a print that only looks for these kinds. There, each name without a kind counts as an empty list. */
   readonly seek: boolean;
 }
@@ -1890,15 +1892,6 @@ function literal(value: unknown): Value {
   throw new NotStandalone("a literal is not a number, a text, a boolean or null");
 }
 
-/**
- * This function gives a text that is the same for two expressions with the same structure. -0 is not 0. A part with a
- * token gives the token, so the text does not depend on that part. A token is an object, and a literal of a module is
- * not, so a token is not the text of a literal.
- */
-function canonical(e: Expr, token: (x: unknown) => object | undefined): string {
-  return JSON.stringify(e, (_name, x: unknown) => token(x) ?? (Object.is(x, -0) ? { "-0": 0 } : x));
-}
-
 /** The values of each kind that `copied` gives to a function and to its copy. */
 const SAMPLES: Readonly<Record<PrimitiveKind, readonly unknown[]>> = {
   number: [0, 1, -1, 2.5, -0, 1e300, -7],
@@ -2100,15 +2093,27 @@ const RESERVED: ReadonlySet<string> = new Set(
   "await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield arguments eval".split(" "),
 );
 
-/**
- * This function gives the reason that a name cannot be the name of the run, or `undefined` for a good name (V-060). A
- * reserved word does not parse, and a second declaration of a name of the module does not parse. The function of the
- * run with the name of a global of `MODULE_GLOBALS` hides that global from the code of the module.
- */
-function nameReason(name: string, declared: ReadonlySet<string>): string | undefined {
+/** The names that each module exports. A run with such a name is a second export, and the module does not parse. */
+const MODULE_EXPORTS: ReadonlySet<string> = new Set(["VEX_ERROR", "VexContractError"]);
+
+/** The comment of the class of a contract error in each module. */
+const ERROR_NOTE = "/** The error of a run whose input does not keep the schema of the program. */";
+
+/** This function gives the reason that a name cannot be the name of the run, or `undefined` for a good name (V-060). */
+function nameReason(name: string): string | undefined {
   if (RESERVED.has(name)) return `the name "${name}" is a reserved word of JavaScript`;
-  if (MODULE_GLOBALS.has(name)) return `the name "${name}" is a global that a module reads`;
-  return declared.has(name) ? `the name "${name}" is a name of the module` : undefined;
+  return MODULE_EXPORTS.has(name) ? `the name "${name}" is a name of the module` : undefined;
+}
+
+/**
+ * This function gives the name of the function of the run (COMPILE.MODULE.NAME). A function with a name of the code hides
+ * that name from the code. Thus the run of such a module has an internal name that the code does not have.
+ */
+function innerName(name: string, code: ReadonlySet<string>): string {
+  if (!code.has(name)) return name;
+  let at = 0;
+  while (code.has(`run$${String(at)}`)) at += 1;
+  return `run$${String(at)}`;
 }
 
 class Printer {
@@ -2174,6 +2179,7 @@ class Printer {
   readonly #called = new Set<string>();
   /** The key of the expression of each code that is a constant of the run, and the read of each hoisted constant by key. */
   readonly #keyOf = new WeakMap<Code, string>();
+  readonly #keyTable = new KeyTable();
   readonly #constants = new Map<string, Code>();
   /** The columns of the run, by the structure of their expression. */
   readonly #columns = new Map<string, string>();
@@ -2196,7 +2202,7 @@ class Printer {
   readonly #scopes: CallScope[] = [];
   /** The work of the body of each bound function, by the number of its binding. */
   readonly #fnWork = new Map<number, number>();
-  /** The expressions whose code is a constant of the run. */
+  /** The expressions whose code is a constant of the run. Each entry is the original of a copy, so a second place of a shared list has the fact too. */
   readonly #constant = new WeakSet<Expr>();
   /** The expressions at a place that takes a list: a binding, the head of a list op and the list of an axis. */
   readonly #wantList = new WeakSet<Expr>();
@@ -2239,8 +2245,12 @@ class Printer {
   listFacts(): ReadonlyMap<Expr, ListFacts> {
     const out = new Map<Expr, ListFacts>();
     // A part that the code reads again holds the array of the node, so the node is not fresh. Each node of a list is a
-    // node of the program, but a node without a count gets the safe count.
-    for (const [e, f] of this.#noted) out.set(e, this.#shared.has(e) ? { ...f, fresh: false, reads: Infinity } : { ...f, reads: this.#reads.get(e) ?? Infinity });
+    // node of the program, but a node without a count gets the safe count. The copies of a shared object give one fact.
+    for (const [e, f] of this.#noted) {
+      const fact = this.#shared.has(e) ? { ...f, fresh: false, reads: Infinity } : { ...f, reads: this.#reads.get(e) ?? Infinity };
+      const old = out.get(originalOf(e));
+      out.set(originalOf(e), old === undefined ? fact : bothPlaces(old, fact));
+    }
     return out;
   }
 
@@ -2501,7 +2511,7 @@ class Printer {
     if (c.v.deps.size === 0) {
       // A constant of the run with the structure of an earlier one is that constant.
       this.#keyOf.set(c, this.#constKey(e, ctx));
-      this.#constant.add(e);
+      this.#constant.add(originalOf(e));
     }
     // A list is a value only at a place that takes a list: a result, a binding, an argument, a field and the body of a
     // function take one. A condition, an argument of and or of or, and a key of get take no list.
@@ -2639,7 +2649,7 @@ class Printer {
    * adds the work of the body of its function, because the body evaluates at each call.
    */
   #work(e: Expr, fns: ReadonlyMap<string, BoundFn>): number {
-    if (this.#memo.has(e) || this.#constant.has(e)) return 1;
+    if (this.#memo.has(e) || this.#constant.has(originalOf(e))) return 1;
     // Stryker disable next-line ConditionalExpression: a node that is not a call has no field fn, so the map gives undefined
     const body = e.tag === "call" ? this.#bodyWork(fns.get(e.fn)) : 0;
     return children(e).reduce((sum, x) => sum + this.#work(x, fns), 1 + body);
@@ -3946,7 +3956,7 @@ class Printer {
    * nodes do not fuse. Options that are not a literal give the reason of `flat`, so they do not fuse either.
    */
   #fusedStrict(e: ExprOf<"each">, rest: readonly Expr[], ctx: Ctx): boolean | undefined {
-    if (!this.#fuse || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e) || !this.#bodyList(e, ctx)) return undefined;
+    if (!this.#fuse || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(originalOf(e)) || !this.#bodyList(e, ctx)) return undefined;
     try {
       return this.#strict("flat", rest);
     } catch {
@@ -4018,7 +4028,7 @@ class Printer {
 
   /** This method gives the node `e` when a fused loop can print it as a stage, and undefined when the loop reads its array. */
   #stageOf(e: Expr, ctx: Ctx): ExprOf<"app"> | undefined {
-    return e.tag === "app" && !this.#memo.has(e) && !ctx.keys.has(e) && !this.#constant.has(e) && (this.#work(e, ctx.fns) < COLUMN_WORK || !readsFocus(e)) ? e : undefined;
+    return e.tag === "app" && !this.#memo.has(e) && !ctx.keys.has(e) && !this.#constant.has(originalOf(e)) && (this.#work(e, ctx.fns) < COLUMN_WORK || !readsFocus(e)) ? e : undefined;
   }
 
   /**
@@ -4026,7 +4036,7 @@ class Printer {
    * not. A node of the memo, a key of a column and a constant of the run keep their arrays, because other parts read them.
    */
   #link(e: Expr, ctx: Ctx): boolean | undefined {
-    if (e.tag !== "app" || e.op !== "append" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e)) return undefined;
+    if (e.tag !== "app" || e.op !== "append" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(originalOf(e))) return undefined;
     return this.#appendStrict(e, ctx);
   }
 
@@ -4037,7 +4047,7 @@ class Printer {
    * loops, so they need no test of a stage.
    */
   #pushes(e: Expr, ctx: Ctx): boolean {
-    if (e.tag !== "app" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(e)) return false;
+    if (e.tag !== "app" || this.#memo.has(e) || ctx.keys.has(e) || this.#constant.has(originalOf(e))) return false;
     const [head, ...rest] = e.args;
     if (e.op === "flat") return head?.tag === "each" && this.#fusedStrict(head, rest, ctx) !== undefined;
     if (e.op === "append") return this.#link(e, ctx) !== undefined && e.args.slice(0, 2).some((x) => this.#pushes(x, ctx));
@@ -4817,21 +4827,31 @@ class Printer {
     for (const [name, form] of this.#forms) if (form !== undefined && !this.#called.has(name)) this.top.delete(name);
   }
 
-  /**
-   * This method gives a text that is the same for two expressions with the same structure and the same reads. A name
-   * that the expression does not bind gives its variable in the code, and a key of the memo gives its variable too.
-   */
+  /** This method gives the key of an expression at the place of `ctx`. Two expressions with one key have one value. */
   #constKey(e: Expr, ctx: Ctx): string {
-    // A name gives its variable for each read, also for a read of a name that the expression binds. The variable depends
-    // only on the name, so two expressions with the same text have the same value.
-    return canonical(e, (x) => {
-      const key = ctx.keys.get(x as Expr);
-      if (key !== undefined) return { "@": key.code };
-      const node = x as Expr | undefined;
-      if (node?.tag === "var") return { $: ctx.env.get(node.name)?.code ?? node.name };
-      // A call gives the number of the binding of its function, so two functions with one name give two keys.
-      return node?.tag === "call" ? { "()": node.fn, of: ctx.fns.get(node.fn)?.id ?? null, args: node.args } : undefined;
-    });
+    const key = keyText(e, ctx, this.#keyTable);
+    keyProbe?.(e, ctx, key, this.#keyTable);
+    return key;
+  }
+}
+
+/** The function that sees each key of a constant or a column. */
+export type KeyProbe = (e: Expr, scope: KeyScope, key: string, table: KeyTable) => void;
+
+/** The function that a test of the keys gives, or undefined when no such test runs. */
+let keyProbe: KeyProbe | undefined;
+
+/** This function gives the result of `emit`, and `probe` sees each key of its printers, after each outer probe. The tests of the keys use it. The probe does not change the printed code. */
+export function withKeyProbe<T>(probe: KeyProbe, emit: () => T): T {
+  const outer = keyProbe;
+  keyProbe = (e, scope, key, table): void => {
+    outer?.(e, scope, key, table);
+    probe(e, scope, key, table);
+  };
+  try {
+    return emit();
+  } finally {
+    keyProbe = outer;
   }
 }
 
@@ -4953,13 +4973,11 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
   if (p.into) p.use("GI");
   if (p.runKeys) p.use("KC");
   [...p.helpers].toSorted().forEach(add);
-  // The names that this module declares at its top: the constants, the helpers and the declarations of the printer.
-  const declared = new Set<string>(["VexContractError", "VEX_ERROR", "E", ...(p.memos ? ["Z"] : []), ...(helpers.has("S") ? ["N", "W"] : []), ...helpers, ...p.top.keys()]);
-  const bad = nameReason(name, declared);
+  const bad = nameReason(name);
   if (bad !== undefined) return { ok: false, reason: bad };
   const textOf = (h: Helper): string => (h === "S" ? helperS(p.features) : flat && (h === "LI" || h === "LA") ? FLAT_LIST_HELPERS[h] : HELPERS[h]);
+  const params = `(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`;
   const start = [
-    `export function ${name}(records, vars${tree ? ", parents" : graph ? ", edges" : ""}${p.runKeys ? ", keys" : ""}) {`,
     '  if (!Array.isArray(records)) C("the records are not an array");',
     "  const R = records;",
     "  const n = R.length;",
@@ -4976,12 +4994,12 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     ...[...p.vars].filter(([v]) => !isListVar(v)).map(([v, code]) => `  const ${code} = vars[${JSON.stringify(v)}];`),
   ];
   const all: Tidied = { decls: new Map<string, string>([...[...helpers].map((h) => [h as string, textOf(h)] as const), ...p.top]), lines: [...ind(p.run), ...ind(body)] };
-  // The text with fuse false stays the form of the version before this pass (COMPILE.MODULE.FUSE.OFF).
-  const small = options.fuse === false ? all : tidy({ ...all, kept: start.join("\n"), globals: MODULE_GLOBALS }, options.faults);
+  // The text with fuse false stays the form of the version before this pass (COMPILE.MODULE.FUSE.OFF). A dropped print still goes, because it can read a name with no declaration (V-086).
+  const small = options.fuse === false ? { ...all, lines: deadConstants(all.lines) } : tidy({ ...all, kept: start.join("\n"), globals: MODULE_GLOBALS }, options.faults);
   const { decls, lines: statements } = options.faults === "throw" ? keepFaults(small, p.copies) : small;
-  const lines = [
+  const textWith = (head: string, tail: readonly string[]): string => [
     "// Generated by @mark1russell7/vex-compiler from a Vex program. Do not edit.",
-    "/** The error of a run whose input does not keep the schema of the program. */",
+    ERROR_NOTE,
     "export class VexContractError extends Error {}",
     "/** The value of a key where the program gives an error of Vex. */",
     "export const VEX_ERROR = Object.freeze({ vexError: true });",
@@ -4990,12 +5008,18 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
     // The values of an item of a node that keeps its items: excluded by a later test, and of the wrong kind.
     ...(decls.has("S") ? ["const N = {}, W = {};"] : []),
     ...decls.values(),
+    `${head}${params}`,
     ...start,
     ...statements,
     "}",
+    ...tail,
     "",
-  ];
-  return { ok: true, source: lines.join("\n") };
+  ].join("\n");
+  // The check reads each line of the module, with the copies of the ops. The function of the run has no name in that text.
+  const code = textWith("function", []);
+  // The parse of the names takes time, so it starts only for a name that is a word of the code. The fixed note holds the word `run`.
+  const inner = wordsOf(code.replace(ERROR_NOTE, "")).includes(name) ? innerName(name, namesOfCode(code)) : name;
+  return { ok: true, source: inner === name ? textWith(`export function ${name}`, []) : textWith(`function ${inner}`, [`export { ${inner} as ${name} };`]) };
 }
 
 /**
@@ -5006,13 +5030,24 @@ function printModule(p: Printer, options: ModuleOptions, run: Run, body: readonl
  */
 function settledPrint(print: (starts: EmptyStarts) => Emitted): Emitted {
   const found: EmptyStarts["found"] = new Map();
-  const first = print({ found, seek: false });
+  const copies: EmptyStarts["copies"] = new Map();
+  const first = print({ found, copies, seek: false });
   if (first.ok) return first;
   for (let size = -1; size !== found.size; ) {
     size = found.size;
-    print({ found, seek: true });
+    print({ found, copies, seek: true });
   }
-  return print({ found, seek: false });
+  return print({ found, copies, seek: false });
+}
+
+/** This function gives the facts of a node from the facts of two of its places. */
+const bothPlaces = (a: ListFacts, b: ListFacts): ListFacts => ({ clean: a.clean && b.clean, fresh: a.fresh && b.fresh, inner: b.inner.map((x, i) => x && a.inner[i] === true), reads: Math.max(a.reads, b.reads) });
+
+/** This function gives the expressions of a program with one object at each place, the same copies for each print of the program. */
+function copiesOf(program: object, exprs: readonly Expr[], starts: EmptyStarts, shares: boolean): readonly Expr[] {
+  const copies = starts.copies.get(program) ?? unsharedAll(exprs, shares);
+  starts.copies.set(program, copies);
+  return copies;
 }
 
 /**
@@ -5043,16 +5078,20 @@ function printProgram(source: Expr | Envelope, options: ModuleOptions, keys: Key
   const read = isDocument(source) ? fromDocument(source, options.domains) : { ok: true as const, value: source };
   if (!read.ok) return { ok: false, reason: read.error.message };
   const expr = read.value;
+  // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
+  const places = placesRead([expr]);
+  if (places.error !== undefined) return { ok: false, reason: places.error };
   // EVAL.SHAPE: a module of an expression that is not valid has no use, so the printer gives the reason.
   const shape = shapeError(expr);
   if (shape !== undefined) return { ok: false, reason: shape };
   // COMPILE.MODULE.NESTING, LOOP.SIZE, STEP.MAX: a module refuses the programs that the interpreter refuses.
   const size = nestingError(expr) ?? sizeError(expr, options) ?? stepError(expr, options) ?? monotoneError(expr, options);
   if (size !== undefined) return { ok: false, reason: size };
-  const p = new Printer(expr, options, keys, starts);
+  const plain = copiesOf(expr, [expr], starts, places.shares)[0] as Expr;
+  const p = new Printer(plain, options, keys, starts);
   let value: Code;
   try {
-    value = p.root(expr);
+    value = p.root(plain);
     p.finish();
   } catch (thrown) {
     return reasonOf(thrown);
@@ -5119,6 +5158,9 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   const cells: CellFormulas = options.cells ?? new Map();
   // A formula of a cell has a position as its key at the time of the build, and the keys of a run come later.
   if (options.keys === true && cells.size > 0) return { ok: false, reason: 'the option "keys" with formulas of cells' };
+  // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
+  const places = placesRead([...columns.values(), ...[...cells.values()].flatMap((own) => [...own.values()])]);
+  if (places.error !== undefined) return { ok: false, reason: places.error };
   const names = [...new Set([...columns.keys(), ...cells.keys()])];
   const order = columnOrder(columns, cells);
   // The formulas in the order of the columns. A key of a cell that is not the text of a position is not a key of the
@@ -5145,14 +5187,15 @@ function printSheet(columns: ReadonlyMap<string, Expr>, options: SheetModuleOpti
   // A sheet whose reads all read finished cells needs no search: each cell is the value of its formula
   // (COMPILE.MODULE.SHEET.DIRECT). A sheet with formulas of cells always has the search.
   const direct = formulas.every((f) => f.key === undefined) && order.every((c) => readsFinished(columns, order, c, run.tree));
-  const p = new Printer(rec(Object.fromEntries(formulas.map((f, i) => [`f${String(i)}`, f.expr]))), options, keyPrint, starts, { columns: index, kinds, lists, direct });
+  const plain = copiesOf(columns, formulas.map((f) => f.expr), starts, places.shares);
+  const p = new Printer(rec(Object.fromEntries(plain.map((expr, i) => [`f${String(i)}`, expr]))), options, keyPrint, starts, { columns: index, kinds, lists, direct });
   const fns: string[] = [];
   const decls: string[] = [];
   // The statements that put the value of each formula into the array of its column at the key `o`, for a direct fill.
   const blocks = new Map<string, readonly string[]>();
   try {
-    for (const f of formulas) {
-      const code = p.root(f.expr);
+    for (const [i, f] of formulas.entries()) {
+      const code = p.root(plain[i] as Expr);
       const { kind, list } = code.v;
       // The first formula of a column without a kind of the options gives the kind of the column. Each other formula
       // must give a value of that kind, or a list that fits the lists of the column (COMPILE.MODULE.SHEET.LIST).

@@ -61,6 +61,7 @@ import {
   type LoopProgram,
   type LStmt,
 } from "./loop.ts";
+import { placesRead, unshared } from "./unshared.ts";
 
 /** The error of an expression that the compiler cannot lower. Then the program operates in tier 1. */
 export class Unsupported extends Error {}
@@ -164,16 +165,20 @@ const join = (a: PrimitiveKind | undefined, b: PrimitiveKind | undefined): Primi
  * lower. The facts of the options decide the op of a site whose values have known kinds (KIND.STATIC).
  */
 export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {}): LoopProgram {
+  // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
+  const places = placesRead([expr]);
+  if (places.error !== undefined) throw new Unsupported(places.error);
   // EVAL.SHAPE and EVAL.NESTING: tier 1 gives the error of a program that is not valid or that is nested too deep.
   const shape = shapeError(expr);
   if (shape !== undefined) throw new Unsupported(shape);
   const deep = nestingError(expr);
   if (deep !== undefined) throw new Unsupported(deep);
-  const l = new Lowerer(memoNodes(expr, isFusedOp), facts, schema);
+  const plain = unshared(expr, places.shares);
+  const l = new Lowerer(memoNodes(plain, isFusedOp), facts, schema);
   const b = block(RETURN);
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)), columns: new Map(), slot: undefined };
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space", l.site(b, top, { t: "key" }));
-  const value = l.expr(expr, top, [], b);
+  const value = l.expr(plain, top, [], b);
   b.stmts.push({ t: "return", value });
   return { body: b.stmts, locals: l.locals, constants: l.constants };
 }

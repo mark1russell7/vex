@@ -32,6 +32,7 @@ const RECORDS = [
 const VARS = { a: 2 };
 
 const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
+const narrowed = (line: string): string => keepFaults({ decls: new Map(), lines: [line] }, new Set()).lines.join("");
 const n = ref("n");
 const w = ref("w");
 const SUM = op("sum", each(axes.all, n));
@@ -101,10 +102,17 @@ function sourceOf(e: Expr, options: ModuleOptions): string | undefined {
   return m.ok ? m.source : undefined;
 }
 
-/** This function gives each text that a pass looks for in the module of a program. Each name is a name of that module. */
+/**
+ * This function gives each text that a pass looks for in the module of a program. Each name is a name of that module.
+ * The tidy pass removes a cell with no read, so the print does not show its name: this list has each number up to the
+ * largest number of a cell in the print, and the number after it.
+ */
 function textsOf(shape: Shape): readonly string[] {
   const source = sourceOf(shape("x"), { ...OPTIONS, fuse: false, faults: "value" }) ?? "";
-  return [...FIXED_TEXTS, ...new Set(source.match(PASS_NAME) ?? [])].flatMap((x) => (FIXED_TEXTS.includes(x) ? [x] : NAME_FORMS.map((form) => form(x))));
+  const shown = source.match(PASS_NAME) ?? [];
+  const cells = shown.flatMap((x) => (/^c\d+$/.test(x) ?[Number(x.slice(1))] : []));
+  const removed = Array.from({ length: Math.max(0, ...cells) + 2 }, (_, i) => `c${String(i)}`);
+  return [...FIXED_TEXTS, ...new Set([...shown, ...removed])].flatMap((x) => (FIXED_TEXTS.includes(x) ? [x] : NAME_FORMS.map((form) => form(x))));
 }
 
 /** This function makes the module of a source with `new Function`, as a build loads it. */
@@ -183,8 +191,9 @@ function inlined(decl: string, line: string): { readonly left: boolean; readonly
 
 describe("V-079: a text pass does not change a text of the program", () => {
   it("V-079 P17: a text that holds the read of a lazy cell keeps its value, with faults at value", () => {
-    // The printer gives this name to the cell, so the test shows the case while the name stays.
-    expect(sourceOf(SHAPES.unreadCall("x"), { ...OPTIONS, fuse: false, faults: "value" })).toContain("const c6 = L(");
+    // The printer gives this name to the cell. The tidy pass removes a cell with no read, and a text with its name counts
+    // as a read, so this print shows the name. The test shows the case while the name stays.
+    expect(sourceOf(SHAPES.unreadCall("c6"), { ...OPTIONS, fuse: false, faults: "value" })).toContain("const c6 = L(");
     const e = SHAPES.unreadCall("G(c6())");
     for (const faults of ["value", "throw"] as const) {
       const { got, want } = resultsOf(e, { ...OPTIONS, faults });
@@ -213,6 +222,17 @@ describe("V-079: a text pass does not change a text of the program", () => {
     expect(lines).toStrictEqual(['  } catch ($f) { FK($f); use("catch {", 1); try { x(); } catch ($f) { FK($f); y("a"); }', 'catch ($f) { FK($f); use("a"); }']);
     expect(decls.get("A")).toBe('const A = () => { try { f("catch {"); } catch ($f) { FK($f); g(); } };');
     expect(decls.get("B")).toBe("const B = (x) => /catch {/.test(x) || /'/.test(x);");
+  });
+
+  it("V-079 COMPILE.MODULE.FAULT: the two guards of a text pass decide which line goes to the tokenizer", () => {
+    // A line with no match does not go to the tokenizer, and this line stops the tokenizer.
+    expect(narrowed('"abc')).toBe('"abc');
+    // A line with no character that starts a text does not go to the tokenizer, and this line stops the tokenizer.
+    expect(narrowed("} catch { @")).toBe("} catch ($f) { FK($f); @");
+    // A line with a match goes on. The match in the text stays, and the match in the code changes.
+    expect(narrowed('f("catch {"); } catch { g(); }')).toBe('f("catch {"); } catch ($f) { FK($f); g(); }');
+    // A line with a match and no character that starts a text keeps its code too.
+    expect(narrowed("} catch {")).toBe("} catch ($f) { FK($f);");
   });
 
   it.each(Object.keys(SHAPES) as (keyof typeof SHAPES)[])("V-079 COMPILE.MODULE.FAULT: a catch in a literal and in a key of the program %s reaches the pass", (name) => {

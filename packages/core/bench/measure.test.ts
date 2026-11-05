@@ -1,5 +1,6 @@
 // The tests of the measure helper against the decided points of the interface paired-time/1. A fake clock and a fake
 // start of a child give exact times, so no test depends on the speed of the machine.
+import { armOrder } from "@mark1russell7/rigor-bench";
 import { afterEach, describe, expect, it } from "vitest";
 import { context, env, firstOfRound, measureIsolated, type Arm, type ChildResult } from "./measure.ts";
 
@@ -80,6 +81,22 @@ describe("measureIsolated, mode fresh", () => {
   it("omits peakRss when no child gives one", async () => {
     const r = await measureIsolated({ arms, inputs: [{ id: "one" }], repeats: 1, mode: "fresh", startChild: async () => ({ ms: 1 }) });
     expect(r.inputs[0]).not.toHaveProperty("peakRss");
+  });
+
+  it("starts the arms of a fresh process in the order of the rounds", async () => {
+    const starts: unknown[] = [];
+    await measureIsolated({
+      arms,
+      inputs: [{ id: "one" }],
+      repeats: 3,
+      mode: "fresh",
+      startChild: async (command) => {
+        starts.push(command[0]);
+        return { ms: 1 };
+      },
+    });
+    const ids = [...arms.map((arm) => arm.command?.[0]), arms[0]?.command?.[0]];
+    expect(starts).toEqual([0, 1, 2].flatMap((round) => armOrder(ids, round)));
   });
 
   it("turns the order of the inputs at each round, and keeps the times of each input in the order of the rounds", async () => {

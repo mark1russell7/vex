@@ -230,11 +230,11 @@ The limit of the time exponent is 1.1, and the shape `origin` has its own limit 
 
 #### The time of a print of each module (COMPILE.MODULE.COST)
 
-The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the arms and the order of the modules turn at each round.
+The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the modules turns at each round. The order of the arms comes from `armOrder` of `@mark1russell7/rigor-bench`. Each odd round is the reverse of the round before it. Each even round turns the arms by one more place. So each pair of arms has each order within 1 over the rounds.
 
 The workflow holds the base as a fixed commit, so the base does not move with main. Only a pull request moves it, with a ruling on its reason and new limits from new reads. A move hides each cost that came since the old base. So the pull request states the ratio of the new base to the old base on the row `build`.
 
-The gate reads each module alone, with no average over the modules. A module has a median limit and a limit for its second pair. The second pair is the second largest ratio of one round, so one slow process cannot move it. A second pair is a fault only if it is also over the worst second pair of the A/A arm of the same run. The worst pair is a record. A real cost in 1 round of 7 cannot be told from noise at 7 rounds.
+The gate reads each module alone, with no average over the modules. The rule is `tailLimitVerdict` of `@mark1russell7/rigor-bench`. A module has a median limit and a limit for its second pair. The median is the median of the ratios of the rounds, not a ratio of two medians. The second pair is the second largest ratio of one round, so one slow process cannot move it. A second pair is a fault only if it is also over the worst second pair of the A/A arm of the same run. The worst pair is a record. A real cost in 1 round of 7 cannot be told from noise at 7 rounds.
 
 A read has no power if the worst second pair of its A/A arm is over the cap `AA_CAP`. Such a read prints `UNDECIDED`. It is not a pass, and it does not count. The gate takes another read, up to 3 reads, and it fails if no read decides.
 
@@ -242,7 +242,7 @@ Each row has its own limits, with a cap of 1.25. A limit is the worst of 26 read
 
 A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays. The row `build-no-avoid` leaves out `avoid`, because the total of `build` does not show that each module is cheap.
 
-Each read prints the first row of each round and the times of each row. It also prints the count of false fails: the rule on each A/A arm as a branch, against the A/A arms of the other rows. A row with a limit under 1 fails that count by its limit, so the line states those rows.
+Each read prints the first row of each round and the times of each row. It also prints the count of false fails: the rule on each A/A arm as a branch, against the A/A arms of the other rows. An A/A pair shows no gain, so a row with a limit under 1 has no read there. The line names those rows.
 
 These rows do not follow that rule:
 
@@ -264,7 +264,7 @@ A pull request reads this step only if it changes a file of the gate. A miss by 
 
 A limit set from the cost of today holds the cost of today. The target of 1.10 for each module is not proven, and the item BOUNDSCOST owes it.
 
-The second pair clause has no flip at this time. The step `The gate fails a known cost` holds the median clause only. The flip of the second pair clause is due on 2026-11-12. A fault in 2 rounds that leaves the median under its limit must fail. A clean copy must pass in the same job.
+The step `The gate fails a known cost` holds the median clause only. The step `The gate fails a cost in 2 rounds` holds the second pair clause. The branch arm adds 40 % of work in `grid` and `shape` in 2 of the 7 rounds. So the median stays under its limit, and the step fails if the second pair clause does not fail each module alone. The read of the gate in the same job is the clean copy.
 
 `emitModule` is a tool of a build. A caller on a request path keeps the printed module. This table gives the median of 5 reads of run 41985651921, against the base 8ae233b. The Module cost jobs had the models 8573C, 9V74 and 7763, so this table has no read on 9V45. The rows `build` and `build-no-avoid` read the modules in one process.
 

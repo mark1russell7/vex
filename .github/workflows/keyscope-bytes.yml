@@ -48,8 +48,8 @@ jobs:
           measure() {
             out="$RUNNER_TEMP/$1.txt"
             if BYTES_LABEL=$1 pnpm exec vitest run src/zz-bytes.test.ts --maxWorkers=1 > "$out" 2>&1; then state=passed; else state=failed; fi
-            grep -E "^BYTES|FAIL|Tests |Error" "$out" || echo "NO LINES $1"
-            rows=$(grep -c "^BYTES " "$out") || rows=0
+            grep -E "BYTES |FAIL|Tests |Error" "$out" || echo "NO LINES $1"
+            rows=$(grep -c "BYTES $1 " "$out") || rows=0
             echo "LABEL $1 $state rows=$rows"
             [ "$rows" -gt 0 ]
             [ "$2" != all ] || [ "$rows" = 32 ]

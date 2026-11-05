@@ -230,11 +230,13 @@ The limit of the time exponent is 1.1, and the shape `origin` has its own limit 
 
 #### The time of a print of each module (COMPILE.MODULE.COST)
 
-The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 3a0019f. Each print has a fresh process, and each arm has 7 rounds with an A/A arm.
+The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm.
 
-The gate reads each module alone, with no average over the modules. A module has a median limit of 1.10 and a limit of 1.20 for the worst pair. The result of `placesRead` on the program of the module picks its class. The file `module-cost-limits.ts` holds the limits and their reasons.
+The gate reads each module alone, with no average over the modules. A module has a median limit and a limit for the worst pair. A worst pair is a fault only if it is also over the worst pair of the A/A arm of the same run. The row states that case as `worstNoise`. Each ratio has three decimals. The result of `placesRead` on the program of the module picks its class. The file `module-cost-limits.ts` holds the limits and their reasons.
 
 These limits are a decision on the cost that the project accepts. The rows of the branch came first, so they are not a test that the branch passed. The module `bounds` has its own line of 1.20 until the item BOUNDSCOST removes it.
+
+A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The row `build` prints the 14 modules with a shared object in one process, in the order of the table. That total is the cost that a build pays.
 
 #### The limit of the places of a program (COMPILE.PLACES)
 

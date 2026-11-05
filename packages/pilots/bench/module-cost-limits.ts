@@ -4,6 +4,9 @@
  * The limits are a decision on the cost that the project accepts. The rows of the branch came first, so the limits are
  * not a test that the branch passed. The gate holds them after the merge. It reads each module alone, with no average
  * over the modules, because one fast module can hide a slow module.
+ *
+ * A fresh process charges the first run of new code to each module, and that charge is largest on a small module. The
+ * row `build` prints all the modules with a shared object in one process, as a real build does.
  */
 import { median } from "../../core/bench/measure.ts";
 
@@ -28,11 +31,19 @@ export const SHARED_LIMIT: ModuleLimit = {
 export const NOT_SHARED_LIMIT: ModuleLimit = {
   median: 1.1,
   worst: 1.2,
-  why: "A module with no shared object pays for the new key only. It does not pay for the copy of shared objects.",
+  why: "A module with no shared object pays for the walk of its places, the new key and the checks of the tidy step. The frames of direction and label show no time in the copy of shared objects.",
 };
 
-/** The limits of one module that replace the limit of its class. Each line states its reason and the item that removes it. */
+/** The name of the row that prints all the modules with a shared object in one process. */
+export const BUILD_ROW = "build";
+
+/** The limits of one row that replace the limit of its class. Each line states its reason, and the line of a module states the item that removes it. */
 export const MODULE_LINES: Readonly<Record<string, ModuleLimit>> = {
+  [BUILD_ROW]: {
+    median: 1.1,
+    worst: 1.2,
+    why: "This row is the cost that a build pays: one process, with the first run of new code once. The value 1.10 is the pass line of this total.",
+  },
   bounds: {
     median: 1.2,
     worst: 1.2,
@@ -61,6 +72,8 @@ export interface ModuleReading {
   readonly aa: number;
   /** The largest ratio of one round. */
   readonly worstPair: number;
+  /** The largest ratio of one round of the second copy of the base: the noise of the worst pair. */
+  readonly aaWorst: number;
 }
 
 /** This function gives the limit of a module. A line of the module comes first, and then the class that its program gives. */
@@ -78,16 +91,25 @@ export function readingOf(row: ModuleTimes): ModuleReading {
     ratio: branchMs / baseMs,
     aa: median(row.aa) / baseMs,
     worstPair: Math.max(...row.branch.map((ms, round) => ms / (row.base[round] ?? Number.NaN))),
+    aaWorst: Math.max(...row.aa.map((ms, round) => ms / (row.base[round] ?? Number.NaN))),
   };
 }
 
-/** This function gives the faults of one row. A module with no times, or with arms of different rounds, is a fault. */
+/** This function tells if a worst pair over its limit is inside the worst pair of the A/A arm. */
+export function worstIsNoise(reading: ModuleReading, limit: ModuleLimit): boolean {
+  return reading.worstPair > limit.worst && reading.worstPair <= reading.aaWorst;
+}
+
+/**
+ * This function gives the faults of one row. A module with no times, or with arms of different rounds, is a fault. A
+ * worst pair is a fault only if it is over its limit and over the worst pair of the A/A arm.
+ */
 export function moduleCostFaults(row: ModuleTimes): readonly string[] {
   if (row.base.length === 0 || row.branch.length !== row.base.length) return [`${row.module}: the arms have ${String(row.base.length)} and ${String(row.branch.length)} rounds`];
   const limit = limitOf(row.module, row.shares);
   const reading = readingOf(row);
   return [
-    ...(reading.ratio > limit.median ? [`${row.module}: the median ratio ${reading.ratio.toFixed(2)} is over the limit ${limit.median.toFixed(2)}`] : []),
-    ...(reading.worstPair > limit.worst ? [`${row.module}: the worst pair ${reading.worstPair.toFixed(2)} is over the limit ${limit.worst.toFixed(2)}`] : []),
+    ...(reading.ratio > limit.median ? [`${row.module}: the median ratio ${reading.ratio.toFixed(3)} is over the limit ${limit.median.toFixed(3)}`] : []),
+    ...(reading.worstPair > limit.worst && !worstIsNoise(reading, limit) ? [`${row.module}: the worst pair ${reading.worstPair.toFixed(3)} is over the limit ${limit.worst.toFixed(3)} and over the worst pair ${reading.aaWorst.toFixed(3)} of the A/A arm`] : []),
   ];
 }

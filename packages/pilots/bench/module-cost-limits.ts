@@ -139,6 +139,15 @@ export const CATCH_ADD: Readonly<Record<string, number>> = { grid: 0.2, radial: 
 /** The modules that the gate must fail in the read that tests it. */
 export const CATCH_MUST_FAIL: readonly string[] = ["grid", "shape"];
 
+/**
+ * The added work of each module in the read that tests the second pair clause. The cost goes in the first
+ * `ROUND_ADD_STARTS` rounds of a read only. So the median stays under its limit, and the clause must fail alone.
+ */
+export const ROUND_ADD: Readonly<Record<string, number>> = { grid: 0.4, shape: 0.4 };
+
+/** The count of rounds with the added work in the read that tests the second pair clause. */
+export const ROUND_ADD_STARTS = 2;
+
 /** The arms of a read, in the order that `measureIsolated` gives them. The order of a round comes from `armOrder`, and a test holds the two equal. */
 export const ARMS: readonly string[] = ["base", "branch", "base~aa"];
 
@@ -208,6 +217,16 @@ export function recordsOf(rows: readonly ModuleTimes[], side: "branch" | "aa"): 
   });
 }
 
+/**
+ * This function gives the count of the rounds of one side of a row for each order, as base first and then arm first. An odd
+ * count of rounds cannot give equal counts, so the gate prints them beside each verdict.
+ */
+export function orderCount(row: ModuleTimes, side: "branch" | "aa"): string {
+  const records = recordsOf([row], side);
+  const baseFirst = records.filter((r) => r.first === "a").length;
+  return `${String(baseFirst)}:${String(records.length - baseFirst)}`;
+}
+
 /** This function gives the value at one rank of the ratios of the only case of the records. */
 function tailOf(records: readonly PairedTime[], rank: number): number {
   return caseTails(records, rank)[0]?.tail ?? Number.NaN;
@@ -230,9 +249,9 @@ export function readingOf(row: ModuleTimes): ModuleReading {
 }
 
 /**
- * This function gives the verdict of the home rule on one read. A row is `beyond` if its median is over its limit, or if
- * its second pair is over its limit and over the worst second pair of the A/A arm of the run. A read with that pair over
- * `AA_CAP` is `cannot decide`. The read that tests the gate has 3 rows, so the smallest count of A/A rows comes from the read.
+ * This function gives the verdict of the home rule on one read. A row is `beyond` if its median is over its limit. A row is
+ * also `beyond` if its second pair is over its limit and over the worst A/A second pair of the run. A read with
+ * the A/A pair over `AA_CAP` does not decide. The read that tests the gate has 3 rows, so the smallest count of A/A rows comes from the read.
  */
 export function moduleVerdict(rows: readonly ModuleTimes[], model: string): TailLimitVerdict {
   return tailLimitVerdict(recordsOf(rows, "branch"), recordsOf(rows, "aa"), {
@@ -256,7 +275,15 @@ export function falseFails(rows: readonly ModuleTimes[], model: string): TailFal
   return tailFalseFails(recordsOf(rows, "aa"), { limit: (module) => tailLimitOf(module, rows.find((row) => row.module === module)?.shares ?? true, model) });
 }
 
-/** This function gives a fault for each module that the gate must fail in the read that tests it, if the gate passes that module. */
+/** This function gives a line for each module where the second pair clause did not fail alone in the read that tests that clause. */
+export function roundFaults(verdict: TailLimitVerdict): readonly string[] {
+  return Object.keys(ROUND_ADD).flatMap((module) => {
+    const row = verdict.cases.find((read) => read.case === module);
+    return row?.outcome === "beyond" && row.overTail && !row.overMedian ? [] : [`${module}: the second pair clause did not fail alone with a cost in ${String(ROUND_ADD_STARTS)} rounds: ${row?.outcome ?? "no row"}, median ${(row?.ratio ?? Number.NaN).toFixed(3)}, second pair ${(row?.tail ?? Number.NaN).toFixed(3)}`];
+  });
+}
+
+/** This function gives a line for each module that the gate must fail and passes in the read that tests the median clause. */
 export function catchFaults(verdict: TailLimitVerdict): readonly string[] {
   return CATCH_MUST_FAIL.filter((module) => verdict.cases.find((row) => row.case === module)?.outcome !== "beyond").map((module) => `${module}: the gate passes a module with an added cost`);
 }

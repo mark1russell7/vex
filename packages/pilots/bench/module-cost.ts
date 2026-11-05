@@ -19,7 +19,12 @@
  *
  * The flag `--catch` tests the gate. The branch arm does added work in the modules of `CATCH_ADD`, and the gate must fail
  * the modules of `CATCH_MUST_FAIL`. A failed row is then the expected result, and a row that does not fail is the fault.
+ *
+ * The flag `--rounds` tests the second pair clause. The branch arm does added work in the modules of `ROUND_ADD`, in the
+ * first rounds of a read only. So the median stays under its limit, and the clause must fail alone.
  */
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -27,7 +32,7 @@ import { armOrder, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { env, envLine, firstOfRound, measureIsolated } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
-import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, readingOf, type ModuleTimes } from "./module-cost-limits.ts";
+import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundFaults, type ModuleTimes } from "./module-cost-limits.ts";
 
 /** The fresh processes of each arm on each module. */
 const ROUNDS = 7;
@@ -65,29 +70,31 @@ function printRead(times: readonly ModuleTimes[], verdict: TailLimitVerdict, pre
     const r = readingOf(row);
     console.info(`${prefix}times module=${row.module} base=${list(row.base)} branch=${list(row.branch)} aa=${list(row.aa)}`);
     console.info(
-      `${prefix}${WORDS[read.outcome]} module ${row.module} shares=${String(row.shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} secondPair=${r.secondPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} aaSecond=${r.aaSecond.toFixed(3)} runAaSecond=${aaSecond} limit=${lines}${ceilingOnly(limit, machine.cpu) ? ` ${CEILING_ONLY}` : ""}`,
+      `${prefix}${WORDS[read.outcome]} module ${row.module} shares=${String(row.shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} secondPair=${r.secondPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} aaSecond=${r.aaSecond.toFixed(3)} runAaSecond=${aaSecond} orderBranch=${orderCount(row, "branch")} orderAa=${orderCount(row, "aa")} limit=${lines}${ceilingOnly(limit, machine.cpu) ? ` ${CEILING_ONLY}` : ""}`,
     );
     if (limit.ceiling !== undefined) console.info(`${prefix}gain ${row.module} against ${GAIN_BASE} on ${machine.cpu}, Node.js ${machine.node}: ${ceilingOnly(limit, machine.cpu) ? CEILING_ONLY : "gain read"}`);
     return faults;
   });
 }
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { turn: { type: "string", default: "0" }, catch: { type: "boolean", default: false } } });
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { turn: { type: "string", default: "0" }, catch: { type: "boolean", default: false }, rounds: { type: "boolean", default: false } } });
 const [baseFolder] = positionals;
 if (baseFolder === undefined) throw new Error("module-cost: give the folder of a checkout of the base.");
-const testsTheGate = values.catch;
-const prefix = testsTheGate ? "catch " : "";
+const testsTheRounds = values.rounds;
+const testsTheGate = values.catch || testsTheRounds;
+const prefix = testsTheRounds ? "rounds " : testsTheGate ? "catch " : "";
+const added = testsTheRounds ? ROUND_ADD : CATCH_ADD;
 
 const moduleRows: readonly Row[] = IREKO_MODULES.map((module) => ({ module, input: module as string, shares: placesRead(irekoExprs(module)).shares }));
 const shared = moduleRows.filter((r) => r.shares).map((r) => r.module);
 const rows: readonly Row[] = testsTheGate
-  ? moduleRows.filter((r) => Object.hasOwn(CATCH_ADD, r.module))
+  ? moduleRows.filter((r) => Object.hasOwn(added, r.module))
   : [
       ...moduleRows,
       { module: BUILD_ROW, input: shared.join(","), shares: true },
       { module: BUILD_NO_AVOID_ROW, input: shared.filter((m) => m !== "avoid").join(","), shares: true },
     ];
-const add = testsTheGate ? ["--add", Object.entries(CATCH_ADD).map(([module, share]) => `${module}:${String(share)}`).join(",")] : [];
+const add = testsTheGate ? ["--add", Object.entries(added).map(([module, share]) => `${module}:${String(share)}`).join(",")] : [];
 
 console.info(envLine("fresh"));
 let decided = false;
@@ -99,7 +106,8 @@ for (let read = 0; read < MAX_READS && !decided; read++) {
   const report = await measureIsolated({
     arms: [
       { id: "base", command: [process.execPath, join(baseFolder, "packages/pilots/bench/module-cost-child.ts")] },
-      { id: "branch", command: [process.execPath, fileURLToPath(new URL("module-cost-child.ts", import.meta.url)), ...add] },
+      // Each read counts the rounds of the added work again, in its own folder.
+      { id: "branch", command: [process.execPath, fileURLToPath(new URL("module-cost-child.ts", import.meta.url)), ...add, ...(testsTheRounds ? ["--add-first", `${String(ROUND_ADD_STARTS)}:${mkdtempSync(join(tmpdir(), "module-cost-"))}`] : [])] },
     ],
     inputs: rows.map((r) => ({ id: r.input })),
     repeats: ROUNDS,
@@ -115,7 +123,13 @@ for (let read = 0; read < MAX_READS && !decided; read++) {
   decided = verdict.outcome !== "cannot decide";
   const faults = printRead(times, verdict, prefix);
   if (decided) {
-    if (testsTheGate) {
+    if (testsTheRounds) {
+      const missed = roundFaults(verdict);
+      for (const fault of faults) console.info(`rounds fault ${fault}`);
+      for (const miss of missed) console.error(`FAIL rounds ${miss}`);
+      if (missed.length > 0) process.exitCode = 1;
+      else console.info(`rounds ok: the second pair clause alone fails ${Object.keys(ROUND_ADD).join(" and ")} with a cost in ${String(ROUND_ADD_STARTS)} rounds`);
+    } else if (testsTheGate) {
       const missed = catchFaults(verdict);
       for (const fault of faults) console.info(`catch fault ${fault}`);
       for (const miss of missed) console.error(`FAIL catch ${miss}`);

@@ -7,7 +7,7 @@ import { armOrder } from "@mark1russell7/rigor-bench";
 import { describe, expect, it } from "vitest";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { measureIsolated } from "../../core/bench/measure.ts";
-import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, NOT_SHARED_LIMIT, readingOf, recordsOf, SHARED_LIMIT, type ModuleTimes } from "../bench/module-cost-limits.ts";
+import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundFaults, SHARED_LIMIT, type ModuleTimes } from "../bench/module-cost-limits.ts";
 import { IREKO_MODULES, irekoExprs } from "./ireko-modules.ts";
 
 /** A model where the reads show the gain. */
@@ -21,7 +21,7 @@ function row(ratio: number, module = "next", shares = true): ModuleTimes {
   return { module, shares, base: Array.from({ length: 7 }, () => 100), branch: Array.from({ length: 7 }, () => 100 * ratio), aa: Array.from({ length: 7 }, () => 100) };
 }
 
-/** This function gives a row of 7 rounds with a ratio of 1, and with the given ratio in the 2 last rounds of the branch. */
+/** This function gives a row of 7 rounds with a ratio of 1. The 2 last rounds of the branch have the given ratio. */
 function tail(second: number, module = "next"): ModuleTimes {
   return { ...row(1, module), branch: [100, 100, 100, 100, 100, 100 * second, 100 * second] };
 }
@@ -36,6 +36,16 @@ function faultsOf(rows: readonly ModuleTimes[], model = HELD): readonly string[]
   const verdict = moduleVerdict(rows, model);
   const first = verdict.cases[0];
   return first === undefined ? [] : moduleCostFaults(first, verdict.aaTail);
+}
+
+/** This function gives the count of the rounds in which the base starts before an arm. */
+function firsts(arm: string): number {
+  return Array.from({ length: 7 }, (_round, round) => armOrder(ARMS, round)).filter((order) => order.indexOf("base") < order.indexOf(arm)).length;
+}
+
+/** This function gives a module with a cost in its second pair only. */
+function alone(module: string): ModuleTimes {
+  return { ...tail(1.3), module };
 }
 
 describe("COMPILE.MODULE.COST", () => {
@@ -113,8 +123,19 @@ describe("COMPILE.MODULE.COST", () => {
   });
 
   it("COMPILE.MODULE.COST: the order of the arms comes from armOrder, so each pair of the gate turns evenly", () => {
-    const firsts = (arm: string): number => Array.from({ length: 7 }, (_round, round) => armOrder(ARMS, round)).filter((order) => order.indexOf("base") < order.indexOf(arm)).length;
     expect([firsts("branch"), firsts("base~aa")]).toEqual([4, 4]);
+  });
+
+  it("COMPILE.MODULE.COST: the read of the rounds passes only when the second pair clause fails each module alone", () => {
+    const modules = Object.keys(ROUND_ADD);
+    expect(roundFaults(moduleVerdict(modules.map(alone), HELD))).toEqual([]);
+    const [first = "", second = ""] = modules;
+    expect(roundFaults(moduleVerdict([alone(first), row(1, second)], HELD))).toEqual([`${second}: the second pair clause did not fail alone with a cost in 2 rounds: within, median 1.000, second pair 1.000`]);
+    expect(roundFaults(moduleVerdict([alone(first), row(1.5, second)], HELD))[0]).toContain(`${second}: the second pair clause did not fail alone`);
+  });
+
+  it("COMPILE.MODULE.COST: a row prints the count of each order of each pair, because 7 rounds cannot give equal counts", () => {
+    expect([orderCount(row(1), "branch"), orderCount(row(1), "aa")]).toEqual(["4:3", "4:3"]);
   });
 
   it("COMPILE.MODULE.COST: a value under the limit passes, and a value over the limit fails", () => {

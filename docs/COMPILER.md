@@ -230,7 +230,7 @@ The limit of the time exponent is 1.1, and the shape `origin` has its own limit 
 
 #### The time of a print of each module (COMPILE.MODULE.COST)
 
-The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the modules turns at each round. The order of the arms comes from `armOrder` of `@mark1russell7/rigor-bench`: each odd round is the reverse of the round before it, and each even round turns the arms by one more place. So each pair of arms has each order within 1 over the rounds.
+The gate `packages/pilots/bench/module-cost.ts` runs in the speed gate. It prints each of the 16 modules of ireko on the branch and on a fixed base commit, 8ae233b. Each print has a fresh process, and each arm has 7 rounds with an A/A arm. The order of the modules turns at each round. The order of the arms comes from `armOrder` of `@mark1russell7/rigor-bench`. Each odd round is the reverse of the round before it. Each even round turns the arms by one more place. So each pair of arms has each order within 1 over the rounds.
 
 The workflow holds the base as a fixed commit, so the base does not move with main. Only a pull request moves it, with a ruling on its reason and new limits from new reads. A move hides each cost that came since the old base. So the pull request states the ratio of the new base to the old base on the row `build`.
 
@@ -264,7 +264,7 @@ A pull request reads this step only if it changes a file of the gate. A miss by 
 
 A limit set from the cost of today holds the cost of today. The target of 1.10 for each module is not proven, and the item BOUNDSCOST owes it.
 
-The second pair clause has no flip at this time. The step `The gate fails a known cost` holds the median clause only. The flip of the second pair clause is due on 2026-11-12. A fault in 2 rounds that leaves the median under its limit must fail. A clean copy must pass in the same job.
+The step `The gate fails a known cost` holds the median clause only. The step `The gate fails a cost in 2 rounds` holds the second pair clause. The branch arm adds 40 % of work in `grid` and `shape` in 2 of the 7 rounds. So the median stays under its limit, and the step fails if the second pair clause does not fail each module alone. The read of the gate in the same job is the clean copy.
 
 `emitModule` is a tool of a build. A caller on a request path keeps the printed module. This table gives the median of 5 reads of run 41985651921, against the base 8ae233b. The Module cost jobs had the models 8573C, 9V74 and 7763, so this table has no read on 9V45. The rows `build` and `build-no-avoid` read the modules in one process.
 

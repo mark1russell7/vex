@@ -577,18 +577,19 @@ class Lowerer {
    */
   #bind(e: ExprOf<"let">, s: Scope, path: readonly number[], b: Block): Pick<Scope, "env" | "fns"> {
     const env = new Map(s.env);
-    const fns = new Map(s.fns);
+    // A let with no function keeps the map of functions, so the answers of `#mayExt` for that map stay (V-089).
+    const fns = Object.values(e.bind).some((x) => x.tag === "fn") ? new Map(s.fns) : undefined;
     Object.entries(e.bind).forEach(([name, x], i) => {
       // A function evaluates at each call. A binding sees the scope of the let, so a function cannot call itself.
       // A value hides a function of its name, because a read looks at the values first.
       if (x.tag === "fn") {
-        fns.set(name, { fn: x, path: [...path, i], scope: s });
+        fns?.set(name, { fn: x, path: [...path, i], scope: s });
         env.delete(name);
       } else {
         env.set(name, this.#attempt(b, (inner) => this.expr(x, s, [...path, i], inner)));
       }
     });
-    return { env, fns };
+    return { env, fns: fns ?? s.fns };
   }
 
   /**

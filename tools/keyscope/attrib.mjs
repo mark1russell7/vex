@@ -11,7 +11,7 @@ const IREKO_ROUNDS = 7;
 const PROFILE_ROUNDS = 7;
 const GROWTH_ROUNDS = 7;
 // The names of the frames in the rows: the walk of KEYSCOPE, the key of V-078, the token pass of V-079, and the larger passes.
-const NAMED = ["placesError", "unsharedAll", "#constKey", "keyText", "formsOf", "formOf", "meanings", "factsOf", "keysOf", "canonical", "rewritten", "narrowCatches", "keepFaults", "tidy", "inlineOps", "deadConstants", "onceCells", "memoNodes", "printProgram", "emitModule"];
+const NAMED = ["generate", "link", "load", "printJs", "tiered", "placesRead", "placesError", "unsharedAll", "#constKey", "keyText", "formsOf", "formOf", "meanings", "factsOf", "keysOf", "canonical", "rewritten", "narrowCatches", "keepFaults", "tidy", "inlineOps", "deadConstants", "onceCells", "memoNodes", "printProgram", "emitModule"];
 const GROWTH = [
   ["plain", [10, 11, 12, 13, 14, 15]],
   ["constant", [10, 11, 12, 13, 14, 15]],
@@ -23,14 +23,10 @@ const LIMIT_MS = 120_000;
 const HEAP = "--max-old-space-size=2048";
 const MODULES = ["grid", "radial", "layers", "tree", "shape", "place", "measure", "straight", "orthogonal", "avoid", "direction", "label", "obstacles", "overlap", "bounds", "between"];
 const CELLS = [
-  ["cost-child.mjs", "module", "loop", "14", "json"],
-  ["cost-child.mjs", "module", "constant", "14", "json"],
-  ["cost-child.mjs", "module", "plain", "14", "json"],
-  ["ireko-child.mjs", "avoid"],
-  ["ireko-child.mjs", "bounds"],
-  ["ireko-child.mjs", "shape"],
-  ["ireko-child.mjs", "measure"],
-  ["ireko-child.mjs", "orthogonal"],
+  ["cost-child.mjs", "tier2", "plain", "12", "shared"],
+  ["cost-child.mjs", "tier2", "plain", "12", "json"],
+  ["ireko-child.mjs", "direction"],
+  ["ireko-child.mjs", "label"],
 ];
 
 const median = (xs) => {

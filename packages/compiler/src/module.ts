@@ -31,6 +31,7 @@
  * starts the search of `SheetRun`. Thus each cell on a cycle gives the error of Vex. A cell can hold a list, and a
  * formula reads it with the list ops (COMPILE.MODULE.SHEET.LIST).
  */
+import "@mark1russell7/coeval";
 import { addrExprs, type AnyDomain, app, type Axis, axisExprs, CELL_KIND, type CellFormulas, children, columnOrder, type Envelope, evaluate, type Expr, type ExprOf, fromDocument, isCellRef, isDocument, isFieldName, isListOp, isVexList, type ItemNames, joinKind, limitAxis, listOf, lit, MAX_ITERATIONS, monotoneError, type Move, moveExpr, type Names, nestingError, nestingOf, type PrimitiveKind, readsOf, rec, shapeError, sizeError, space as spaces, splitLimit, stepError, vexList, type VexList, type VexStep } from "@mark1russell7/vex";
 import { factsOf, kindOfDomain, primitiveOf, type Facts, type Kind, type ListKind, type Schema } from "./facts.ts";
 import { functionText } from "./fn-text.ts";

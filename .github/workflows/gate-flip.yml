@@ -16,18 +16,12 @@ jobs:
       max-parallel: 3
       matrix:
         include:
-          - { name: import, rep: 1, tree: 95f067e8246a2ec6fb3dbb1e1223e62318ec1666, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: import, rep: 2, tree: 95f067e8246a2ec6fb3dbb1e1223e62318ec1666, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: import, rep: 3, tree: 95f067e8246a2ec6fb3dbb1e1223e62318ec1666, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: comment, rep: 1, tree: 5eee80e50bb604c0efae7ec8e172b57b37f6c4d6, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: comment, rep: 2, tree: 5eee80e50bb604c0efae7ec8e172b57b37f6c4d6, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: comment, rep: 3, tree: 5eee80e50bb604c0efae7ec8e172b57b37f6c4d6, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: bare, rep: 1, tree: ec8afb9700eefd04407b524f5bc2a75c5fb78b2d, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: bare, rep: 2, tree: ec8afb9700eefd04407b524f5bc2a75c5fb78b2d, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: bare, rep: 3, tree: ec8afb9700eefd04407b524f5bc2a75c5fb78b2d, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: late, rep: 1, tree: 38d24b499e6bc730aa6304d00870ec985121ac29, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: late, rep: 2, tree: 38d24b499e6bc730aa6304d00870ec985121ac29, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
-          - { name: late, rep: 3, tree: 38d24b499e6bc730aa6304d00870ec985121ac29, base: ec40c2b986d0f8cb15d70b54e2781946aac3e62b }
+          - { name: fix, rep: 1, tree: ce0e3980d756a6e2bb253e6ff03afa22e1e3ea17, base: 22c9a24258bea69dbc7e19f277fe334e14e6a6e1 }
+          - { name: fix, rep: 2, tree: ce0e3980d756a6e2bb253e6ff03afa22e1e3ea17, base: 22c9a24258bea69dbc7e19f277fe334e14e6a6e1 }
+          - { name: fix, rep: 3, tree: ce0e3980d756a6e2bb253e6ff03afa22e1e3ea17, base: 22c9a24258bea69dbc7e19f277fe334e14e6a6e1 }
+          - { name: latefix, rep: 1, tree: cdf123e705830434921eec98b3b6077896ebbd55, base: 22c9a24258bea69dbc7e19f277fe334e14e6a6e1 }
+          - { name: latefix, rep: 2, tree: cdf123e705830434921eec98b3b6077896ebbd55, base: 22c9a24258bea69dbc7e19f277fe334e14e6a6e1 }
+          - { name: latefix, rep: 3, tree: cdf123e705830434921eec98b3b6077896ebbd55, base: 22c9a24258bea69dbc7e19f277fe334e14e6a6e1 }
     timeout-minutes: 15
     defaults:
       run:

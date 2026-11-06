@@ -9,11 +9,14 @@
  * `FC_RECORD_ONLY`, no minimum applies. `FC_RECORD_FILE` gets one record for each property, and
  * `scripts/weekly-summary.ts` counts these records for the job summary.
  * A counterexample is a failure, as without a budget.
+ *
+ * Before each run of each property, the setup clears the records of each spy (V-095). A spy keeps each argument and
+ * each result of each call, and Vitest clears them only between tests. So one million runs filled the heap of a worker.
  */
 import { appendFileSync, readFileSync } from "node:fs";
 import { cpus } from "node:os";
 import * as fc from "fast-check";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 import { ungatedNote, verdict, type Gates, type RunRecord } from "./fc-budget.ts";
 
 const seed = Number(process.env["FC_SEED"] ?? Math.floor(Math.random() * 2 ** 31));
@@ -54,4 +57,10 @@ fc.configureGlobal({
   numRuns,
   ...(limit === undefined ? {} : { interruptAfterTimeLimit: limit, markInterruptAsFailure: false, reporter: budgetReporter(limit) }),
 });
+// A spy keeps each call. This hook clears the records before each run, so the heap of a run does not grow with the count of runs (V-095).
+fc.installGlobalPlugin(
+  fc.beforeEach(() => {
+    vi.clearAllMocks();
+  }),
+);
 console.info(`fast-check seed ${seed}, ${numRuns} runs${limit === undefined ? "" : `, at most ${String(limit)} ms for each property`} (set FC_SEED to repeat)`);

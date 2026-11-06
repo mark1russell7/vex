@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 22 names
+## . (build/index.d.ts): names
 
 type ErrorSite: build/index.d.ts#ErrorSite
 FALLBACK: build/index.d.ts#FALLBACK
@@ -20,7 +20,7 @@ type PrimOp: build/index.d.ts#PrimOp
 type Runtime: build/index.d.ts#Runtime
 type RuntimeFn: build/index.d.ts#RuntimeFn
 type RuntimeOptions: build/index.d.ts#RuntimeOptions
-type Schema: build/facts-3ZtCfd0v.d.ts#Schema
+type Schema: build/facts.chunk.d.ts#Schema
 type Tier2: build/index.d.ts#Tier2
 type TierStats: build/index.d.ts#TierStats
 type TieredProgram: build/index.d.ts#TieredProgram
@@ -29,10 +29,10 @@ generate: build/index.d.ts#generate
 load: build/index.d.ts#load
 tiered: build/index.d.ts#tiered
 
-## ./module (build/module-entry.d.ts): 7 names
+## ./module (build/module-entry.d.ts): names
 
 type Emitted: build/module-entry.d.ts#Emitted
-type ListKind: build/facts-3ZtCfd0v.d.ts#ListKind
+type ListKind: build/facts.chunk.d.ts#ListKind
 type ModuleOptions: build/module-entry.d.ts#ModuleOptions
 type SheetModuleOptions: build/module-entry.d.ts#SheetModuleOptions
 emitModule: build/module-entry.d.ts#emitModule
@@ -41,13 +41,13 @@ functionText: build/module-entry.d.ts#functionText
 
 ## Declarations
 
-### build/facts-3ZtCfd0v.d.ts#ListKind
+### build/facts.chunk.d.ts#ListKind
 interface ListKind {
   readonly list: Kind | ListKind;
   readonly texts?: boolean;
 }
 
-### build/facts-3ZtCfd0v.d.ts#Schema
+### build/facts.chunk.d.ts#Schema
 interface Schema {
   readonly fields?: Readonly<Record<string, Kind | ListKind>>;
   readonly vars?: Readonly<Record<string, Kind | ListKind>>;

@@ -459,3 +459,11 @@ These requirements apply to `@mark1russell7/vex-compiler`.
 - **[EXAMPLE.OFFSETS]** The reduction with `add` of the offsets from the origin to the others is the sum of the offsets.
 - **[EXAMPLE.TREE]** In a tree of people, the salary of a person plus the sum over `descendants` is the cost of the team of that person. The `count` over `ancestors` is the depth of the person.
 - **[EXAMPLE.SCHEMA]** A program of `JsonDomain` finds the schema of up to 20 JSON documents. It gives one record for each field path, in the order that the paths first occur. A record has the path, the distinct kinds and the count of the documents with the path. The program goes into an object that is not empty at a depth under 3, and it does not go into an array.
+
+## 12. The mutation lane
+
+- **[LANE.GATE]** A full run reads each part of the lane, and each published package has a score of 95 % or more. A time-out of the clock counts as not found. A part with no report gives no read, and a no read fails the gate.
+- **[LANE.PARTS]** The parts of a package cover each file of the package once, and the parts of a file cover each line once. Each input gives the same parts.
+- **[LANE.DELAY]** The full run starts each week. A night reads only the changed files, and a score of a night fails nothing. A fault with no change in its own file shows at the next full run, at most 7 days later. A page with a score states the date of its run, and a score older than 7 days reads stale.
+- **[LANE.DRYRUN]** A change of the files of the lane starts the first test run of Stryker on each part. A part that fails this run fails the check, and it gives no score.
+- **[LANE.PLAIN]** A test file of the compiler with imports that reach the printer reads the copy of the domains that Stryker does not mutate. Each other test file of the compiler reads the mutated copy. The lane refuses a file that this rule cannot classify, and a test that reads two copies.

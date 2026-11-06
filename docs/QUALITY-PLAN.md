@@ -15,7 +15,7 @@ The exit criteria of the plan:
 | Each requirement ID of the spec | An example test and a property test |
 | Each member of the builder | Generated chains that combine it with each other member |
 | Each use case of §5 | A pilot with a reference, and a page or a doc example |
-| Mutation score of each published package | 98 % or more |
+| Mutation score of each published package | 98 % or more. A score states the date of its run, and a score older than 7 days reads stale (`LANE.DELAY`) |
 | Property runs | One million runs of each property with no failure |
 | Browsers | Chromium, Firefox and WebKit, in the light and the dark theme |
 | Discovery rate | No new defect in four weeks of nightly runs and use-case work |

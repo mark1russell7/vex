@@ -1,23 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PROPERTY_BUDGET_MS, propertyTimeout, SETUP_MARGIN_MS } from "./fc-timeout.ts";
-
-/**
- * This function gives the root of the repository: the first folder above this file that holds `pnpm-workspace.yaml`.
- * The mutation lane runs a copy of this file in `tools/mutation/.stryker-tmp`. A fixed number of steps up does not find
- * the root from that copy.
- */
-function repoRoot(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  while (!existsSync(join(dir, "pnpm-workspace.yaml"))) {
-    const up = dirname(dir);
-    if (up === dir) throw new Error("The folders above this file do not hold pnpm-workspace.yaml.");
-    dir = up;
-  }
-  return dir;
-}
+import { repoRoot } from "./repo-root.ts";
 
 const root = repoRoot();
 

@@ -21,6 +21,7 @@ export interface JsonFieldSchema {
 /** These are the domains of `SCHEMA_PROGRAM`. `JsonDomain` is last, so `eq`, `concat` and `gt` go to the domains of numbers and texts. */
 export const SCHEMA_DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, JsonDomain];
 
+// Stryker disable next-line ArrayDeclaration: the added item is a text with no field, so its row is an error, and flat skips an error item (LIST.BUILD), so the list gives no notes, as the empty list does
 const EMPTY = lit(vexList([]));
 /** A loop over the items of a list, with the names of the item and of its position (AXIS.LIST.ITEM). */
 const loop = (list: Expr, as: ItemNames, body: Expr): Expr => each(axes.list(list), body, undefined, as);

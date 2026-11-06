@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { SETUP_FILES } from "./layout.ts";
+import { printsModule, SETUP_FILES } from "./layout.ts";
 
 const work = (p: string): string => fileURLToPath(new URL(`./work/${p}`, import.meta.url));
 // Stryker runs this folder in a copy (.stryker-tmp/sandbox-*), so the paths come from the folder of this file.
@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [
     {
       // This plugin gives "@mark1russell7/vex-domains" to each test. A standalone module copies the text of each op
-      // function, so the tests of the modules (module.test.ts, module-fuse.test.ts and the others) get the copy that
+      // function, so each test of the compiler that prints a module (printsModule of layout.ts) gets the copy that
       // Stryker does not mutate (prepare.mjs). The copy of the pilots gives its domains to those tests (SHAPE_DOMAINS of
       // module-fuse.test.ts), so it gets that copy too.
       name: "vex-domains",
@@ -23,7 +23,7 @@ export default defineConfig({
         if (source === "../../core/src/constructs.ts") return work("core/constructs.ts");
         if (source !== "@mark1russell7/vex-domains") return null;
         const from = (importer ?? "").replaceAll("\\", "/");
-        const plain = /\/work\/compiler\/module(-[a-z]+)*\.test\.ts$/.test(from) || from.startsWith(pilots);
+        const plain = from.startsWith(pilots) || (/\/work\/compiler\/[^/]*\.test\.ts$/u.test(from) && printsModule(from));
         return plain ? work("domains-plain/index.ts") : work("domains/index.ts");
       },
     },

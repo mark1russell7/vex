@@ -5,9 +5,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { repoRoot } from "./repo-root.ts";
 import { listFaults, NO_RECORD, workflowFaults } from "./workflow-faults.ts";
-
-const ROOT = resolve(import.meta.dirname, "../../..");
 
 /** This function gives a workflow with one job and the lines `steps`. */
 const job = (steps: readonly string[], jobLines: readonly string[] = [], head: readonly string[] = []): string =>
@@ -73,7 +72,7 @@ describe("the check that a workflow does not hide a failed test", () => {
   });
 
   it("finds no fault in the workflows of this repository", () => {
-    const dir = resolve(ROOT, ".github/workflows");
+    const dir = resolve(repoRoot(), ".github/workflows");
     const texts = new Map(readdirSync(dir).map((f) => [f, readFileSync(resolve(dir, f), "utf8")]));
     const faults = [...texts].flatMap(([f, text]) => workflowFaults(text, f).map((x) => `${f}: ${x}`));
     expect(faults).toStrictEqual([]);

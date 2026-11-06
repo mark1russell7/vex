@@ -1,0 +1,83 @@
+name: Mutation dry run
+
+# The first test run of Stryker on each part of the lane (LANE.DRYRUN, tools/mutation/README.md). A part that fails this run
+# gives no report, and on Saturday the gate reads that as no read. So a change of the lane shows this fault before the merge.
+on:
+  # Each pull request starts this workflow. The job changes skips the work when no file of the lane changes.
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+# One run for each branch: a newer run stops the older one.
+concurrency:
+  group: lane-dry-run-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      match: ${{ steps.changes.outputs.match }}
+    steps:
+      - id: changes
+        uses: mark1russell7/template/.github/actions/changes@f48f29fe5b00772951e0910a90fbbe312343338c # main
+        with:
+          paths: |
+            tools/mutation/**
+            packages/compiler/test/*.setup.ts
+            .github/actions/mutation-part/**
+            .github/workflows/lane-dry-run.yml
+
+  lane-plan:
+    name: mutation plan
+    needs: changes
+    if: needs.changes.outputs.match == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - run: node scripts/workflow-gate.ts
+      - id: plan
+        run: node tools/mutation/plan.ts --full
+
+  dry-run:
+    name: dry run (${{ matrix.part }})
+    needs: lane-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # All parts of the run are this one matrix, so the run holds at most 3 slots.
+      max-parallel: 3
+      matrix:
+        part: ${{ fromJSON(needs.lane-plan.outputs.parts) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: node scripts/workflow-gate.ts
+      - uses: ./.github/actions/mutation-part
+        with:
+          part: ${{ matrix.part }}
+          dry-run: "1"

@@ -6,7 +6,7 @@
   "description": "The mutation lane: Stryker with Vitest 4.1 until Stryker supports Vitest 5 (docs/REVIEW.md §8.6).",
   "type": "module",
   "scripts": {
-    "mutation": "node prepare.mjs && node load-check.ts && stryker run stryker.config.mjs && node scores.mjs"
+    "mutation": "node prepare.mjs && node load-check.ts && stryker run stryker.config.mjs && node lane-read.ts"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",

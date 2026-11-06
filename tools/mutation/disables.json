@@ -481,6 +481,10 @@
   },
   {
     "file": "packages/domains/src/schema.ts",
+    "comment": "// Stryker disable next-line ArrayDeclaration: the added item is a text with no field, so its row is an error, and flat skips an error item (LIST.BUILD), so the list gives no notes, as the empty list does"
+  },
+  {
+    "file": "packages/domains/src/schema.ts",
     "comment": "// Stryker disable next-line BooleanLiteral: flat skips an error item (LIST.BUILD), so a document without a kind gives no notes with true too"
   },
   {

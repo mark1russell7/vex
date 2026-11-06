@@ -28,8 +28,8 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 | NIGHTLY1103 | The Nightly is green again. A test file that does not load fails the lane, and the lane loads each setup file of a package (V-090, V-091). | quality | P1 | in progress: #293 | |
 | LANETIME | Each part of the lane finishes in its time limit. The weekly run reads each part and holds the gate, and the nights read the changed files. The first full read is due by 2026-11-12. | quality | P1 | in progress | |
 | SHAPETREESWAP | The tree strategy of ireko runs on the Vex tree module in the entry `ireko/shapes`. The draft is ireko #73, and its entry is 2.05 kB over its limit. | ireko | P1 | blocked | TREESPEED |
-| TREESPEED | The Vex tree module runs at the speed of the hand tree of ireko. At this time, it takes 1.08 to 2.76 times the hand time. The 95 % interval of each ratio must hold 1.0. | compiler | P1 | in progress: a profile in CI is next | |
-| V-094 | A loop local that holds an argument that is not a plain name goes out of its scope, and the module has a fault of a name. | compiler | P1 | in progress: #308 merged, the proof is the Weekly | |
+| TREESPEED | The Vex tree module runs at the speed of the hand tree of ireko. After #313, it takes 1.07 to 1.80 times the hand time. The 95 % interval of each ratio must hold 1.0. | compiler | P1 | in progress: the count of the open list, then the copy in the merge sweep | |
+| V-094 | A loop local that holds an argument that is not a plain name goes out of its scope, and the module has a fault of a name. | compiler | P1 | in progress: #308 merged. The Weekly lost 4 of 5 jobs to the heap of the test spies (V-095, #314). The proof is the next Weekly | |
 | V-093 | The check of a copy does not see `Infinity`, `NaN` or `undefined` inside data. One import line of the fix costs 2 to 6 % on two rows, and its cause is open. | compiler | P2 | in progress: #303 | |
 | GATEFLIP | A flip test for each gate of a measure: an added fault fails the check, and a clean copy passes in the same job. By 2026-11-12. | quality | P1 | in progress: the speed gates of the core and the compiler are merged | |
 

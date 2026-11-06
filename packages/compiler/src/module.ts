@@ -39,6 +39,7 @@ import { deadConstants, keepFaults, namesOfCode, tidy, type Tidied, wordsOf } fr
 import { canonical, type KeyScope, KeyTable, keyText, NotStandalone } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 import { originalOf, placesRead, unsharedAll } from "./unshared.ts";
+import { sameValue } from "@mark1russell7/coeval";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {

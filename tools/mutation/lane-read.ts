@@ -288,7 +288,8 @@ export function laneVerdict(reports: ReadonlyMap<string, Report | undefined>, ch
     }
   }
   const packages: { name: string; outcome: "pass" | "under the line" | "no read"; score: number; scoreWithClock: number }[] = [];
-  for (const name of new Set([...reports.keys()].map(packageOfPart))) {
+  // A package with a no read and no part in this run still gets its line, so no no read is lost.
+  for (const name of new Set([...[...reports.keys()].map(packageOfPart), ...noReads.keys()])) {
     const read = reads.find((r) => r.name === name);
     const counts = read?.counts ?? { killed: 0, hitLimit: 0, clock: 0, survived: 0, disabled: 0 };
     const score = gateScore(counts);

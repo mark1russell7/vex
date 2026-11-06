@@ -9,7 +9,7 @@ import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { propertyTimeout } from "../../testkit/src/fc-timeout.ts";
 import { emitModule, type ModuleOptions } from "./module.ts";
-import { aliases, inlineOps, keepFaults, onceCells } from "./module-tidy.ts";
+import { aliases, inlineOps, keepFaults, onceCells, tidy } from "./module-tidy.ts";
 
 vi.mock("./module-tidy.ts", { spy: true });
 
@@ -189,6 +189,27 @@ function inlined(decl: string, line: string): { readonly left: boolean; readonly
   return { left: decls.has("op_1"), line: lines.join(" ") };
 }
 
+/**
+ * This function gives the property with a hook that clears the records of the spies before each run (V-095). A spy keeps
+ * each argument and each result of each call. Without the hook, one million runs filled the heap of the worker.
+ */
+function clearedEachRun<T extends unknown[]>(property: fc.IPropertyWithHooks<T>): fc.IPropertyWithHooks<T> {
+  return property.beforeEach((previous) => {
+    previous();
+    vi.clearAllMocks();
+  });
+}
+
+/** The property of random programs with a text that a pass looks for. Each run compares the module with the interpreter. */
+const RANDOM_TEXTS = clearedEachRun(
+  fc.property(fc.constantFrom(...ALL_SHAPES), fc.nat(), fc.constantFrom("", " ", "x"), (shape, i, around) => {
+    const texts = textsOf(shape);
+    const e = shape(`${around}${texts[i % texts.length]}${around}`);
+    fc.pre(emitModule(e, OPTIONS).ok);
+    expectSame(e);
+  }),
+);
+
 describe("V-079: a text pass does not change a text of the program", () => {
   it("V-079 P17: a text that holds the read of a lazy cell keeps its value, with faults at value", () => {
     // The printer gives this name to the cell. The tidy pass removes a cell with no read, and a text with its name counts
@@ -286,13 +307,16 @@ describe("V-079: a text pass does not change a text of the program", () => {
   });
 
   it("V-079 P17: a random program with a text that a pass looks for gives the value of the interpreter", { timeout: propertyTimeout(60_000) }, () => {
-    fc.assert(
-      fc.property(fc.constantFrom(...ALL_SHAPES), fc.nat(), fc.constantFrom("", " ", "x"), (shape, i, around) => {
-        const texts = textsOf(shape);
-        const e = shape(`${around}${texts[i % texts.length]}${around}`);
-        fc.pre(emitModule(e, OPTIONS).ok);
-        expectSame(e);
-      }),
-    );
+    fc.assert(RANDOM_TEXTS);
+    // The records hold only the last run (V-095), also after one million runs.
+    expect(vi.mocked(tidy).mock.calls.length).toBeLessThanOrEqual(3);
+  });
+
+  it("V-095: a run of the random property starts with no record of the spies of the passes", () => {
+    fc.assert(RANDOM_TEXTS, { numRuns: 20 });
+    // One run prints at most 3 modules with the tidy pass: the check of fc.pre and the two prints with fuse in expectSame.
+    // Without the hook, the records hold the calls of each run, so 60 or more.
+    expect(vi.mocked(tidy).mock.calls.length).toBeGreaterThan(0);
+    expect(vi.mocked(tidy).mock.calls.length).toBeLessThanOrEqual(3);
   });
 });

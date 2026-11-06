@@ -25,6 +25,10 @@ concurrency:
   group: nightly-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   properties:
     name: properties (10000 runs)

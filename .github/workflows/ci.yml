@@ -15,6 +15,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # The checks of each Node.js version: the shared CI of mark1russell7 (reusable-ci.yml of
   # mark1russell7/template, its CI.md)
@@ -85,7 +89,7 @@ jobs:
   # The only check that a pull request must pass
   ci-ok:
     name: CI OK
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [ci, site, package]
     runs-on: ubuntu-latest
     timeout-minutes: 2

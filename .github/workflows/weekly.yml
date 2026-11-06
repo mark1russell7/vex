@@ -39,8 +39,10 @@ on:
 permissions: {}
 
 # The event name is in the key: a dispatch with other inputs never cancels or holds a scheduled run (fleet rule of 2026-11-02).
+# Each input is also in the key. A group keeps one pending run, and a new pending run cancels it. With the event alone,
+# the dispatch of a 5-rep record cancelled the pending repeat of one seed (run 42180256166, 2026-11-06).
 concurrency:
-  group: weekly-${{ github.event_name }}-${{ github.ref }}
+  group: weekly-${{ github.event_name }}-${{ github.ref }}-${{ inputs.package }}-${{ inputs.reps }}-${{ inputs.record_only }}-${{ inputs.seed }}-${{ inputs.file }}
   cancel-in-progress: false
 
 jobs:

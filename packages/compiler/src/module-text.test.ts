@@ -190,25 +190,15 @@ function inlined(decl: string, line: string): { readonly left: boolean; readonly
 }
 
 /**
- * This function gives the property with a hook that clears the records of the spies before each run (V-095). A spy keeps
- * each argument and each result of each call. Without the hook, one million runs filled the heap of the worker.
+ * The property of random programs with a text that a pass looks for. Each run compares the module with the interpreter.
+ * The setup `fc-setup.ts` clears the records of the spies before each run (V-095).
  */
-function clearedEachRun<T extends unknown[]>(property: fc.IPropertyWithHooks<T>): fc.IPropertyWithHooks<T> {
-  return property.beforeEach((previous) => {
-    previous();
-    vi.clearAllMocks();
-  });
-}
-
-/** The property of random programs with a text that a pass looks for. Each run compares the module with the interpreter. */
-const RANDOM_TEXTS = clearedEachRun(
-  fc.property(fc.constantFrom(...ALL_SHAPES), fc.nat(), fc.constantFrom("", " ", "x"), (shape, i, around) => {
-    const texts = textsOf(shape);
-    const e = shape(`${around}${texts[i % texts.length]}${around}`);
-    fc.pre(emitModule(e, OPTIONS).ok);
-    expectSame(e);
-  }),
-);
+const RANDOM_TEXTS = fc.property(fc.constantFrom(...ALL_SHAPES), fc.nat(), fc.constantFrom("", " ", "x"), (shape, i, around) => {
+  const texts = textsOf(shape);
+  const e = shape(`${around}${texts[i % texts.length]}${around}`);
+  fc.pre(emitModule(e, OPTIONS).ok);
+  expectSame(e);
+});
 
 describe("V-079: a text pass does not change a text of the program", () => {
   it("V-079 P17: a text that holds the read of a lazy cell keeps its value, with faults at value", () => {
@@ -315,7 +305,7 @@ describe("V-079: a text pass does not change a text of the program", () => {
   it("V-095: a run of the random property starts with no record of the spies of the passes", () => {
     fc.assert(RANDOM_TEXTS, { numRuns: 20 });
     // One run prints at most 3 modules with the tidy pass: the check of fc.pre and the two prints with fuse in expectSame.
-    // Without the hook, the records hold the calls of each run, so 60 or more.
+    // Without the hook of the setup, the records hold the calls of each run, so 60 or more.
     expect(vi.mocked(tidy).mock.calls.length).toBeGreaterThan(0);
     expect(vi.mocked(tidy).mock.calls.length).toBeLessThanOrEqual(3);
   });

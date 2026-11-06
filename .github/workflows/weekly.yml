@@ -1,7 +1,7 @@
 name: Weekly
 
 # The long run of phase D (docs/QUALITY-PLAN.md §8): at most one million runs of each property, each week. Each package
-# has its own job, so a slow package does not stop the others. The setup prints the seed. To repeat a failure, set FC_SEED.
+# has its own job, so a slow package does not stop the others. The setup prints the seed. To repeat a failure, dispatch with the inputs seed and file.
 # Each property has a time budget of 10 minutes (FC_TIME_LIMIT_MS), inside the test time-out of 15 minutes. Before the
 # budget, the slow properties hit the time-out, so the run was red with no counterexample (2026-10-18 to 2026-11-01).
 # A property that reaches the budget fails under its minimum of runs in spec/weekly-runs.json: from 5 green runs, the lower
@@ -27,6 +27,14 @@ on:
         type: choice
         options: ["all", "@mark1russell7/vex-testkit", "@mark1russell7/vex-compiler", "@vex/pilots", "@vex/formula", "@vex/sheet-app", "@vex/site"]
         default: "all"
+      seed:
+        description: The seed of fast-check for each test file (FC_SEED), to repeat a run. Empty gives a new seed to each file
+        type: string
+        default: ""
+      file:
+        description: The one test file of the package to run, for example src/module.test.ts. Empty runs each file
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -62,8 +70,18 @@ jobs:
       - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       # The log has the heap after each test that ends. A test that loses its worker has no line.
-      - run: pnpm --filter "${{ matrix.package }}" run test --logHeapUsage --reporter=verbose --reporter=github-actions
+      # The inputs go through the environment, not into the script. An empty FC_SEED is the seed 0, so the step sets
+      # FC_SEED only for a seed of the input.
+      - run: |
+          if [[ -n "$SEED" && ! "$SEED" =~ ^[0-9]+$ ]]; then echo "The seed '$SEED' is not a whole number." >&2; exit 1; fi
+          if [[ -n "$FILE" && ! "$FILE" =~ ^src/[A-Za-z0-9._/-]+\.test\.tsx?$ ]]; then echo "The file '$FILE' is not a test file under src." >&2; exit 1; fi
+          if [[ -n "$SEED" ]]; then export FC_SEED="$SEED"; fi
+          pnpm --filter "$PACKAGE" run test --logHeapUsage --reporter=verbose --reporter=github-actions ${FILE:+"$FILE"}
+        shell: bash
         env:
+          SEED: ${{ inputs.seed }}
+          FILE: ${{ inputs.file }}
+          PACKAGE: ${{ matrix.package }}
           FC_NUM_RUNS: "1000000"
           FC_TIME_LIMIT_MS: "600000"
           FC_MIN_RUNS_FILE: ${{ github.workspace }}/spec/weekly-runs.json

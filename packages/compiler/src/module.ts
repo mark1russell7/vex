@@ -1702,18 +1702,47 @@ const LOOPS = new WeakMap<Expr, boolean>();
  * It puts the append nodes of the form into `out`. The form is a read of the name,
  * `append(form, X)`, `if(c, form, form)` or a let with the form as its body. No other part of the form reads the name:
  * not `X`, not `c` and not a binding of a let.
+ *
+ * A let can also bind a form to a new name (COMPILE.MODULE.APPEND.LET). Then no other binding reads the name, and the
+ * body does not read the old list. The body can read the new name in each way. Such a let goes into `lets`, because the
+ * value of the step can then be another list.
  */
-function ownForm(e: Expr, name: string, out: Expr[]): boolean {
+function ownForm(e: Expr, name: string, out: Expr[], lets: Expr[]): boolean {
   const free = (x: Expr): boolean => !namesOf(x).has(name);
   if (e.tag === "var") return e.name === name;
-  if (e.tag === "let") return Object.values(e.bind).every(free) && ownForm(e.body, name, out);
+  if (e.tag === "let") {
+    const held = Object.entries(e.bind).filter(([, x]) => !free(x));
+    if (held.length === 0) return ownForm(e.body, name, out, lets);
+    const [bind, x] = held[0] as [string, Expr];
+    // A binding of the name itself hides the old list in the body, so the body can read the name.
+    if (held.length > 1 || (bind !== name && !free(e.body)) || !ownForm(x, name, out, lets)) return false;
+    lets.push(e);
+    return true;
+  }
   if (e.tag !== "app" || e.args.length === 0) return false;
   const [head, ...rest] = e.args as [Expr, ...Expr[]];
   // An if without three arguments gives a reason (#if), so the form does not check the count.
-  if (e.op === "if") return free(head) && rest.every((x) => ownForm(x, name, out));
-  if (e.op !== "append" || !rest.every(free) || !ownForm(head, name, out)) return false;
+  if (e.op === "if") return free(head) && rest.every((x) => ownForm(x, name, out, lets));
+  if (e.op !== "append" || !rest.every(free) || !ownForm(head, name, out, lets)) return false;
   out.push(e);
   return true;
+}
+
+/** The list ops whose value is a number or an item of the list, so the value cannot hold the array of the list. */
+const READ_OPS: ReadonlySet<string> = new Set(["count", "nth", "first"]);
+
+/**
+ * This function tells if each read of the name `name` in `e` only reads its list (COMPILE.MODULE.APPEND.READ). Such a
+ * read is the list of `count`, `nth` or `first`, or the list of the axis `list` of a fold. These values are numbers,
+ * items or the names of the fold, so they cannot hold the array of the list. A function that reads the name does not
+ * read it.
+ */
+function readsOnly(e: Expr, name: string): boolean {
+  const reads = (x: Expr | undefined): boolean => x?.tag === "var" && x.name === name;
+  if (reads(e) || (e.tag === "fn" && namesOf(e).has(name))) return false;
+  if (e.tag === "app" && READ_OPS.has(e.op) && reads(e.args[0])) return e.args.slice(1).every((x) => readsOnly(x, name));
+  const list = e.tag === "fold" && e.axis.t === "list" && reads(e.axis.list) ? e.axis.list : undefined;
+  return children(e).every((x) => x === list || readsOnly(x, name));
 }
 
 /**
@@ -4394,20 +4423,26 @@ class Printer {
   /**
    * This method gives the statements of one step of a loop: each new value first, and then each name gets its value.
    * `owners` has each name that appends to its own list (COMPILE.MODULE.APPEND.OWN). Each such name has the form of
-   * `ownForm`, and no step of another name and no `until` reads it. The tests of a fold read only the names outside the
-   * fold, so they cannot read it. A name in `adopt` has a first list that its appends can take (COMPILE.MODULE.FUSE.ADOPT).
+   * `ownForm`, and no `until` reads it. The tests of a fold read only the names outside the fold, so they cannot read it.
+   * A name in `adopt` has a first list that its appends can take (COMPILE.MODULE.FUSE.ADOPT).
+   *
+   * A step of another name can read it only before the step of the name, and only by `readsOnly`
+   * (COMPILE.MODULE.APPEND.READ). The steps print in their order, so such a read ends before the first push.
    */
   #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>, adopt: ReadonlySet<string>, until?: Expr): LoopStep {
     const owners: Owner[] = [];
     const nodes: Expr[] = [];
     const steps = Object.entries(step);
-    for (const [name, x] of steps) {
+    for (const [i, [name, x]] of steps.entries()) {
       const own: Expr[] = [];
-      const others = [...steps.filter(([k]) => k !== name).map(([, y]) => y), ...(until === undefined ? [] : [until])];
-      if (!ownForm(x, name, own) || others.some((y) => namesOf(y).has(name))) continue;
+      const lets: Expr[] = [];
+      const read = (y: Expr): boolean => namesOf(y).has(name);
+      const others = steps.filter(([k, y], j) => k !== name && read(y) && !(j < i && readsOnly(y, name)));
+      if (!ownForm(x, name, own, lets) || others.length > 0 || (until !== undefined && read(until))) continue;
       // The variable starts with the first list, and each value of the step is that list or the value of an append that
-      // pushes into it. Thus each append of the name gets the array of the variable (COMPILE.MODULE.FUSE.ADOPT).
-      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined, adopt: adopt.has(name), sure: adopt.has(name) && !shadows(x, name) };
+      // pushes into it. Thus each append of the name gets the array of the variable (COMPILE.MODULE.FUSE.ADOPT). The body
+      // of a let of COMPILE.MODULE.APPEND.LET can give another list.
+      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined, adopt: adopt.has(name), sure: adopt.has(name) && lets.length === 0 && !shadows(x, name) };
       for (const node of own) this.#own.set(node, owner);
       owners.push(owner);
       nodes.push(...own);

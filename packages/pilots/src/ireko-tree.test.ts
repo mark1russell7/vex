@@ -4,7 +4,7 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { treeInput as input, treeLong, treeWild } from "./inputs.ts";
 import type { Band } from "./ireko-band.ts";
-import { irekoRun } from "./ireko-modules.ts";
+import { irekoRun, irekoSource } from "./ireko-modules.ts";
 import { mergeBands } from "./ireko-shapes.ts";
 import { PACK_MERGED, PACK_MOST, TREE_DOMAINS, TREE_PROGRAM, treeOutput, treeRun, type TreeChild, type TreeInput, type TreeOptions, type TreeOutput, type TreeValue } from "./ireko-tree.ts";
 
@@ -244,6 +244,14 @@ describe("the ireko tree pilot", () => {
       expect({ name, output: arrangeWith((r) => interpreted.run(r), i) }).toEqual(expected);
       expect({ name, output: arrangeWith((r) => generated.run(r), i) }).toEqual(expected);
     }
+  });
+
+  it("COMPILE.MODULE.APPEND.LET COMPILE.MODULE.APPEND.READ: each print of the function pack appends the moved bands into the packed list of its loop", () => {
+    // The step of the place reads the packed list first. The step of the packed list binds the append to a new name.
+    // Thus the append pushes into the array of the loop, and no append copies the packed list.
+    const source = irekoSource("tree", "value");
+    expect(source.match(/\(w\d+ = AO\(l\d+, L\d+, false, w\d+\)\)/g)).toHaveLength(2);
+    expect(source).not.toMatch(/\bAP\(l\d+/);
   });
 
   it("COMPILE.MODULE: the merge of a long row gives the layout of ireko with the same bits", () => {

@@ -252,6 +252,135 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
   });
 });
 
+/** A fold over all records with the names `r` and `acc`. The step of `r` comes first, so it reads the list before the append. */
+const readFirst = (reader: Expr, init: Expr, step: Expr, result: Expr = rec({ acc, r: v("r") })): Expr => fold(axes.all, { r: lit(0), acc: init }, { r: reader, acc: step }, result);
+/** The sum of the list of the name by a fold over the axis `list`. */
+const sumOf = (l: Expr): Expr => fold(axes.list(l), { s: lit(0) }, { s: op("add", v("s"), v("x")) }, v("s"), undefined, ["x"]);
+/** The readers of the list of `acc` that COMPILE.MODULE.APPEND.READ takes: each value is a number. */
+const READERS: readonly Expr[] = [op("count", acc), guard(op("first", acc)), guard(op("nth", acc, lit(1))), sumOf(acc), op("add", op("count", acc, strict), sumOf(acc))];
+/** A body of a let of COMPILE.MODULE.APPEND.LET that gives a shorter list for a long list. */
+const shorter = (all: Expr): Expr => op("if", op("gt", op("count", all), lit(3)), op("take", all, lit(2)), all);
+/** The bodies of a let of COMPILE.MODULE.APPEND.LET over the new name `all`. Some bodies give another list. */
+const bodies = (all: Expr): readonly Expr[] => [
+  all,
+  shorter(all),
+  op("if", op("gt", op("count", all), lit(2)), each(axes.list(all), op("multiply", v("y"), lit(2)), undefined, ["y"]), all),
+  op("if", op("gt", op("count", all), lit(5)), NONE, op("append", all, one(lit(9)))),
+  op("if", op("gt", op("count", all), lit(2)), op("take", all, op("divide", lit(1), w)), all),
+];
+
+describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps append to the list of the name", () => {
+  it("COMPILE.MODULE.APPEND.LET: a let binds the append to a new name, and the step appends into the list of the name (P17)", () => {
+    const forms: Record<string, Expr> = {
+      ...Object.fromEntries(bodies(v("all")).map((body, i) => [`body${String(i)}`, folded(NONE, let_({ all: op("append", acc, one(n)) }, body))])),
+      ...Object.fromEntries(bodies(acc).map((body, i) => [`same${String(i)}`, folded(LIT, let_({ acc: op("append", acc, one(n)) }, body))])),
+      branch: folded(NONE, op("if", b, acc, let_({ y: n, all: op("append", op("append", acc, one(w)), LIT) }, op("if", op("gt", op("count", v("all")), lit(4)), op("take", v("all"), lit(1)), v("all"))))),
+      errors: folded(inv, let_({ all: op("append", acc, BAD) }, op("if", op("gt", op("count", v("all")), lit(6)), op("take", v("all"), lit(3)), v("all")))),
+      strict: folded(NONE, let_({ all: op("append", acc, one(op("divide", lit(1), w)), strict) }, op("if", b, v("all"), op("take", v("all"), lit(2))))),
+      iterated: iterate(5, { acc: NONE }, { acc: let_({ all: op("append", acc, one(n)) }, op("if", op("gt", op("count", v("all")), lit(2)), op("take", v("all"), lit(1)), v("all"))) }, acc),
+    };
+    for (const [name, e] of Object.entries(forms)) {
+      for (const fuse of [true, false]) for (const records of [RECORDS, MANY, []]) expect({ name, fuse, owns: owns(expectSame(e, records, fuse)) }).toStrictEqual({ name, fuse, owns: true });
+    }
+    // The body of the let can give another list, so a push of one item keeps the check l === w (COMPILE.MODULE.FUSE.ADOPT).
+    const source = sourceOf(folded(NONE, let_({ all: op("append", acc, one(n)) }, shorter(v("all")))));
+    expect(source).toMatch(/\(l\d+ === (w\d+) \? \(\1\.push\(/);
+    expect(source).not.toMatch(/\(l\d+\.push\(\[0, .*?\]\), w\d+\)/);
+  });
+
+  it("COMPILE.MODULE.APPEND.LET: a let whose body or second binding reads the old list keeps the copy of each append", () => {
+    const fallBacks: Record<string, Expr> = {
+      bodyReads: folded(NONE, let_({ all: op("append", acc, one(n)) }, op("if", op("gt", op("count", acc), lit(1)), v("all"), acc))),
+      twoBindings: folded(NONE, let_({ all: op("append", acc, one(n)), c: op("count", acc) }, op("append", v("all"), one(v("c"))))),
+      notAForm: folded(NONE, let_({ all: op("take", acc, lit(2)) }, op("append", v("all"), one(n)))),
+      inX: folded(NONE, let_({ all: op("append", acc, one(op("count", acc))) }, v("all"))),
+    };
+    for (const [name, e] of Object.entries(fallBacks)) {
+      for (const records of [RECORDS, MANY]) expect({ name, owns: owns(expectSame(e, records)) }).toStrictEqual({ name, owns: false });
+    }
+  });
+
+  it("COMPILE.MODULE.APPEND.READ: a step before the step of the name reads the list by count, nth, first or a fold, and the step appends into the list (P17)", () => {
+    const steps = [op("append", acc, one(n)), op("if", b, op("append", acc, LIT), acc), let_({ all: op("append", acc, one(w)) }, op("if", op("gt", op("count", v("all")), lit(4)), op("take", v("all"), lit(2)), v("all")))];
+    for (const [i, reader] of READERS.entries()) {
+      for (const [j, step] of steps.entries()) {
+        for (const init of [NONE, LIT, inv]) {
+          const e = readFirst(reader, init, step);
+          for (const fuse of [true, false]) for (const records of [RECORDS, MANY, []]) expect({ i, j, fuse, owns: owns(expectSame(e, records, fuse)) }).toStrictEqual({ i, j, fuse, owns: true });
+        }
+      }
+    }
+    const iterated = iterate(4, { r: lit(0), acc: LIT }, { r: op("add", v("r"), sumOf(acc)), acc: op("append", acc, one(v("r"))) }, rec({ acc, r: v("r") }));
+    expect(owns(expectSame(iterated))).toBe(true);
+  });
+
+  it("COMPILE.MODULE.APPEND.READ: a step after the step of the name, or a read that can hold the list, keeps the copy of each append", () => {
+    const step = op("append", acc, one(n));
+    const fallBacks: Record<string, Expr> = {
+      after: fold(axes.all, { acc: NONE, r: lit(0) }, { acc: step, r: op("count", acc) }, rec({ acc, r: v("r") })),
+      holds: fold(axes.all, { r: NONE, acc: NONE }, { r: acc, acc: step }, rec({ acc, r: v("r") })),
+      take: fold(axes.all, { r: NONE, acc: NONE }, { r: op("take", acc, lit(1)), acc: step }, rec({ acc, r: v("r") })),
+      each: fold(axes.all, { r: NONE, acc: NONE }, { r: each(axes.list(acc), v("y"), undefined, ["y"]), acc: step }, rec({ acc, r: v("r") })),
+      foldInit: readFirst(fold(axes.list(acc), { s: acc }, { s: v("s") }, op("count", v("s")), undefined, ["x"]), NONE, step),
+      fn: readFirst(let_({ f: fn(["z"], op("add", v("z"), op("count", acc))) }, call("f", lit(1))), NONE, step),
+      reverse: readFirst(fold(axes.reverse(axes.list(acc)), { s: lit(0) }, { s: op("add", v("s"), v("x")) }, v("s"), undefined, ["x"]), NONE, step),
+    };
+    for (const [name, e] of Object.entries(fallBacks)) {
+      for (const records of [RECORDS, MANY]) expect({ name, owns: owns(expectSame(e, records)) }).toStrictEqual({ name, owns: false });
+    }
+  });
+
+  it("COMPILE.MODULE.APPEND.LET COMPILE.MODULE.APPEND.READ: a pack of places reads its list in one step and appends to it in a let of another step", () => {
+    // The shape of `pack` of the tree pilot: the place reads the packed list, and a long list becomes a shorter list.
+    const packed = v("packed");
+    const e = fold(
+      axes.all,
+      { place: lit(0), places: NONE, packed: NONE },
+      {
+        place: op("add", sumOf(packed), op("count", packed)),
+        places: op("append", v("places"), one(v("place"))),
+        packed: op("if", b, packed, let_({ all: op("append", packed, one(n)) }, op("if", op("gt", op("count", v("all")), lit(3)), each(axes.list(op("take", v("all"), lit(2))), v("y"), undefined, ["y"]), v("all")))),
+      },
+      rec({ places: v("places"), packed }),
+    );
+    const many = Array.from({ length: 40 }, (_x, i) => ({ ...(MANY[i % MANY.length] as object), id: String(i) }));
+    for (const fuse of [true, false]) for (const records of [RECORDS, MANY, many]) expectSame(e, records, fuse);
+    // Both names append in place, and no append copies the packed list at each step.
+    const source = sourceOf(e);
+    expect(source.match(/\(w\d+ = AOC?\(l\d+, /g)).toHaveLength(1);
+    expect(source).not.toMatch(/\bAP\(l\d+/);
+  });
+
+  it("COMPILE.MODULE.APPEND.LET COMPILE.MODULE.APPEND.READ P17: random readers and lets of the step give the values of the interpreter", () => {
+    const X = [one(n), one(op("divide", lit(1), w)), LIT, BAD, inv];
+    const steps = fc.letrec<{ step: Expr }>((tie) => ({
+      step: fc.oneof(
+        { maxDepth: 3, depthSize: "small" },
+        fc.constant(acc),
+        { arbitrary: fc.tuple(tie("step"), fc.constantFrom(...X), fc.boolean()).map(([h, x, s]) => op("append", h, x, ...(s ? [strict] : []))), weight: 3 },
+        fc.tuple(fc.constantFrom(b, op("gt", n, lit(0))), tie("step"), tie("step")).map(([c, yes, no]) => op("if", c, yes, no)),
+        { arbitrary: fc.tuple(tie("step"), fc.constantFrom(...bodies(v("all")).map((_x, i) => (all: Expr) => bodies(all).at(i) ?? all)), fc.boolean()).map(([x, body, same]) => (same ? let_({ acc: x }, body(acc)) : let_({ all: x }, body(v("all"))))), weight: 2 },
+      ),
+    })).step;
+    const readers = fc.constantFrom(lit(0), ...READERS);
+    const loops = fc.tuple(fc.boolean(), fc.constantFrom(NONE, LIT, BAD, inv, xs), readers, steps).map(([isFold, init, reader, step]) =>
+      isFold ? readFirst(reader, init, step) : iterate(3, { r: lit(0), acc: init }, { r: reader, acc: step }, rec({ acc, r: v("r") })),
+    );
+    let modules = 0;
+    let runs = 0;
+    fc.assert(
+      fc.property(loops, fc.constantFrom(RECORDS, MANY), (e, records) => {
+        runs++;
+        if (!emitModule(e, OPTIONS).ok) return;
+        modules++;
+        expectSame(e, records);
+        expectSame(e, records, false);
+      }),
+    );
+    expect(modules).toBeGreaterThan(runs / 2);
+  });
+});
+
 describe("COMPILE.MODULE.NTH.INDEX: count and first read the items with values of the list", () => {
   it("COMPILE.MODULE.NTH.INDEX: count and first give the values of the interpreter, also with strict and error items", () => {
     const e = rec({

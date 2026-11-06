@@ -577,7 +577,7 @@ The clean form does not move a part of the code. Thus each part evaluates in the
 
 The variable `w` of a name of a loop holds the array of the last append (COMPILE.MODULE.APPEND.OWN). `AO` pushes into its list only when the list is `w`. Each other list gets a copy. Step 6 changes only the first value of `w` and the appends that use it:
 
-- The step of the name has the form of COMPILE.MODULE.APPEND.OWN, so no other part of the loop reads the name.
+- The step of the name has the form of COMPILE.MODULE.APPEND.OWN, so no other part of the loop reads the name after the push (COMPILE.MODULE.APPEND.READ).
 - The first list of the name must be clean and fresh. Then `w` starts with that list, and the first append pushes into it. Each other first list starts `w` with `null`, as before.
 - These lists are not fresh: a read of a name, a literal, a constant of the run and a node of the memo. A column, a cell, the value of a call and a list of the input are not fresh too. A list that can hold error items is not clean.
 - After the loop, an append of the result can push into `w`. The result is a read of the name, an `append` of such a form, an `if` of two such forms or a `let`.
@@ -586,7 +586,7 @@ The variable `w` of a name of a loop holds the array of the last append (COMPILE
 - An `ifError` of the result is not a form. Thus its fallback reads the list without the items of the failed append.
 - The check `l !== w` stays at run time. It covers a loop with no step and a first list that is not fresh.
 
-With these rules, only `AO` holds the array of `w`. An error of a step stops the loop, so no part reads the array after the error. The value of the loop is not fresh, so the next op does not change the array.
+With these rules, no other part holds the array of `w` at a push. An error of a step stops the loop, so no part reads the array after the error. The value of the loop is not fresh, so the next op does not change the array.
 
 Step 6 also removes the list of one item of an append into `w`. These rules apply to the direct push:
 
@@ -1478,12 +1478,52 @@ A step of a name of a loop can append to the list of the name. The module then a
 - `append(step, X)`, also with the option `strict`
 - `if(c, step, step)`
 - a `let` with such a step as its body
+- a `let` that binds such a step to a new name (COMPILE.MODULE.APPEND.LET)
 
-No other part of the loop can read the name. These parts are `X`, `c`, the bindings of a `let`, the steps of the other names and the test `until` of `iterate`. The tests of a fold read only the names outside the fold. Another step gives the old helper `AP`, which copies the two lists.
+No other part of the loop can read the name. These parts are `X`, `c`, the bindings of a `let`, the steps of the other names and the test `until` of `iterate`. COMPILE.MODULE.APPEND.READ gives the one exception. The tests of a fold read only the names outside the fold. Another step gives the old helper `AP`, which copies the two lists.
 
 The helper `AO` gets the array `w` of the last append of the name in this run of the loop. When the list is not `w`, `AO` is `AP`: the first append copies the list, and the copy has no error items. When the list is `w`, `AO` adds the items with values of `X` to it. `V` checks `X` before the first push, so an error item of `X` with `strict` does not change the array. The variable `w` starts at `null` before each run of the loop. Thus a list literal, a list of the input and the list of an earlier run do not change.
 
 Each step gives the values and the errors of `AP`. An error item of the first list is not in the copy, or with `strict` it is the error of the first append. An error of a step is the error of the loop, so a loop does not continue after an append that fails. No part reads `w` during the loop. Thus `nth`, `count`, `first` and `get` cannot keep a stale view of it. A function of the program can share a node with a step. The module then uses `AP` in the body of the function, because the name in that body is another name.
+
+#### A let of the append (COMPILE.MODULE.APPEND.LET)
+
+The function `pack` of the tree pilot keeps its packed bands in a fold. Its step appends the new bands, and a long list then becomes a shorter list:
+
+```
+packed: if(c, packed, let({ all: append(packed, X) }, if(gt(count(all), 256), merge(all), all)))
+```
+
+The body reads the new name `all` two times, so the form of COMPILE.MODULE.APPEND.OWN did not hold, and each step copied the list with `AP`. The CPU profile of a row of 1000 children had 573 ms in `AP`.
+
+A `let` of a step can bind a form of the name to a new name. These rules apply:
+
+- One binding reads the name, and that binding is a form of the name. The other bindings do not read the name.
+- The body does not read the old list. A binding of the name itself hides the old list, so then the body can read the name.
+- The body can read the new name in each way. It reads the array of the push, which holds the items of the interpreter.
+- The value of the body can be another list. Thus such a step is not `sure`, and a push of one item keeps the check `l === w`.
+
+An array that the body gives to another part stays safe. The loop pushes into `w` only when the list of the name is `w`. After a value that is another list, the next append copies, and `w` gets the copy. Thus an old array of `w` gets no push after this step.
+
+An error of the body after the push is the error of the step. An error of a step is the error of the loop, so no part reads the array after it.
+
+#### Reads before the step (COMPILE.MODULE.APPEND.READ)
+
+The step `place` of `pack` reads the packed bands in a fold over the axis `list`, before the step `packed` appends to them. A step of another name can read the name when two rules hold:
+
+- The step comes before the step of the name in the order of the steps. The printer prints the steps in this order, and each step finishes before the next step starts. Thus each read ends before the push of the same step of the loop.
+- Each read of the name is the list of `count`, `nth` or `first`, or the list of the axis `list` of a fold. These values are numbers, items or the names of the fold, so no value holds the array. A function that reads the name, a `reverse` or `where` axis, an `each` and each other read keep the copy.
+
+The value of `count`, `nth` and `first` can keep a view of the array of the list (COMPILE.MODULE.NTH.INDEX). The array of `w` has no error items, so its view is the array itself. Thus a later push changes the view too, and no view is stale. A step after the step of the name, a read in `until` and a read in the same step keep the copy.
+
+The module of the tree pilot then appends the moved bands in place in both prints of `pack`:
+
+| Line of the module | Before | After |
+|---|---|---|
+| The array of the loop | none | `let w101 = l58;` |
+| The append of the moved bands | `b101 = AP(l58, L99, false);` | `b102 = (w101 = AO(l58, L99, false, w101));` |
+
+The merge of a long row gives another list, so the next append after a merge copies the list one time. The sweep of the merge still copies its open bands at each start event. Its steps `emit` and `seg` read the count of the old list after the step `open`, so COMPILE.MODULE.APPEND.READ does not apply.
 
 #### Bands (COMPILE.MODULE.BAND)
 

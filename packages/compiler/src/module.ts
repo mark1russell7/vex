@@ -246,6 +246,18 @@ interface Pushed {
 }
 
 /**
+ * The code of a list of `fill` that a loop or `count` reads only as a range (COMPILE.MODULE.FILL.RANGE). The module
+ * makes no array for it. The count checks the arguments, as `FI` does. Each item has the key of its position and the
+ * value `item`, a name or a literal. The statements come before the count, and `count.safe` covers them too.
+ */
+interface Range {
+  readonly s: readonly string[];
+  readonly count: Value;
+  readonly item: string;
+  readonly info: ListInfo;
+}
+
+/**
  * A part of a fused loop before the decision about the constants of the run (COMPILE.MODULE.FUSE). Its function `s`
  * gives its statements. With `settle`, a part that is a constant of the run evaluates once, before the loop over the keys.
  */
@@ -271,6 +283,9 @@ const readsCells = (e: Expr): boolean => e.tag === "ext" || e.tag === "call" || 
 /** This function tells if an expression is the literal 1. */
 // Stryker disable next-line OptionalChaining: each caller gives an argument.
 const isOne = (e: Expr | undefined): boolean => e?.tag === "lit" && e.value === 1;
+
+/** The code of a literal number, text or boolean. A read of such code at each item gives one value (COMPILE.MODULE.FILL.RANGE). */
+const LITERAL_CODE = /^(?:\d+(?:\.\d+)?(?:e[+-]?\d+)?|true|false|"(?:[^"\\]|\\.)*")$/;
 
 /** This function tells if an expression reads nothing of a run: it has only literals and ops. */
 const isClosed = (e: Expr): boolean => e.tag === "lit" || (e.tag === "app" && e.args.every((x) => isClosed(x)));
@@ -474,7 +489,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "LI" | "LA" | "LP" | "LS" | "KC" | "KP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "FN" | "TN" | "LI" | "LA" | "LP" | "LS" | "KC" | "KP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
@@ -621,6 +636,10 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
     "  return o;",
     "}",
   ].join("\n"),
+  // A range of fill (COMPILE.MODULE.FILL.RANGE). FN gives the count of the items of `fill(n, v)` with the check of FI.
+  // TN gives the count of `take` of a range with the check of TK. A sum with 0 changes -0 to 0, as the length does.
+  FN: "function FN(n, v) { return Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined ? n + 0 : F(); }",
+  TN: "function TN(n, k) { return Number.isSafeInteger(k) && k >= 0 ? Math.min(n, k + 0) : F(); }",
   // A list of a field of the input (COMPILE.MODULE.LIST.INPUT): the array of a `vex.list` whose items have lists to the
   // depth `h`, and values that pass the test `t`. The shape is the shape of `isVexList`. An error item holds the sentinel.
   // An input that is not such a list, or an error item of `#DEPTH!`, gives undefined, so the check of the run fails.
@@ -1259,7 +1278,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   // Only the helpers of the list ops use V, and each of them needs F too, so the need of V only completes the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
   V: ["F"],
-  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], VW: [], NT: ["VW", "F"], CT: ["VW", "F"], FS: ["VW", "F"], FI: ["F"], LI: [], LA: [], LP: [],
+  SB: ["V", "F"], SK: ["V", "F"], TK: ["V", "F"], VW: [], NT: ["VW", "F"], CT: ["VW", "F"], FS: ["VW", "F"], FI: ["F"], FN: ["F"], TN: ["F"], LI: [], LA: [], LP: [],
   DR: ["V", "F"], AP: ["V"], AO: ["AP", "V"], WO: ["V"], FL: ["V"], GT: ["F"], IX: ["V", "F"], SN: ["V", "F"],
   // Each module has C, and each move uses F (#move), so these needs only complete the list.
   // Stryker disable next-line ArrayDeclaration: see the comment above
@@ -3333,6 +3352,48 @@ class Printer {
   }
 
   /**
+   * This method gives the range of a list that a loop or `count` reads, or undefined (COMPILE.MODULE.FILL.RANGE). The
+   * list is `fill(n, v)` or `take(range, k)`, with no other argument. The option `fuse` must be true, and no domain can
+   * have the op `fill`. Each other list keeps its array. So does a node with a name, a node of the memo and a column.
+   */
+  #range(e: Expr, ctx: Ctx): Range | undefined {
+    if (!this.#fuse || e.tag !== "app" || e.args.length !== 2 || !this.#facts.own("fill") || ctx.keys.has(e) || this.#memo.has(e) || this.#columned.has(e)) return undefined;
+    const [head, second] = e.args as readonly [Expr, Expr];
+    if (e.op === "take") {
+      const range = this.#range(head, ctx);
+      if (range === undefined) return undefined;
+      // TK checks its count after its list, so an error of the range comes first.
+      this.#wantList.add(second);
+      const [n, k] = this.#inOrder([{ s: [], v: range.count }, this.expr(second, ctx)], true) as readonly [Code, Code];
+      const count: Value = { code: `${this.use("TN")}(${n.v.code}, ${k.v.code})`, kind: "number", safe: false, deps: depsOf(n, k) };
+      return { s: [...range.s, ...stmtsOf(n, k)], count, item: range.item, info: range.info };
+    }
+    // The empty fill has its own code (COMPILE.MODULE.SIZE.FILL).
+    if (e.op !== "fill" || (head.tag === "lit" && head.value === 0)) return undefined;
+    for (const x of e.args) this.#wantList.add(x);
+    const raw = e.args.map((x) => this.expr(x, ctx));
+    const deps = depsOf(...raw);
+    // The interpreter evaluates each argument, also after an error, as for FI.
+    const [n, v] = this.#inOrder(this.#settle(raw, deps, e.args), true) as readonly [Code, Code];
+    const s = stmtsOf(n, v);
+    let number = n.v.code;
+    let item = v.v.code;
+    // Each item reads the value, so a value that is not a literal evaluates once, after the count.
+    if (!LITERAL_CODE.test(item)) {
+      if (!n.v.safe) {
+        number = this.fresh("b");
+        s.push(`const ${number} = ${n.v.code};`);
+      }
+      item = this.fresh("b");
+      s.push(`const ${item} = ${v.v.code};`);
+    }
+    // A literal count that FI takes needs no check, when the value cannot fail.
+    const fixed = head.tag === "lit" && typeof head.value === "number" && Number.isSafeInteger(head.value) && head.value > 0 && head.value <= 100000 && v.v.safe;
+    const count: Value = fixed ? { code: String(head.value), kind: "number", safe: true, deps, plain: true } : { code: `${this.use("FN")}(${number}, ${item})`, kind: "number", safe: false, deps };
+    return { s, count, item, info: { item: v.v.kind, inner: heldList(v.v.list), texts: true, clean: true, fresh: false } };
+  }
+
+  /**
    * This method gives the code of a value outside the list ops: a list is a `vex.list`, as in the interpreter
    * (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD). An error item has the error `VEX_ERROR`.
    */
@@ -3586,6 +3647,17 @@ class Printer {
     // error item is an item that fails.
     if (base.t === "list") {
       if (at.length > 0) throw new NotStandalone('the axis "list" with an address');
+      // A range of fill is a loop over its count, with no array (COMPILE.MODULE.FILL.RANGE). The key is the position.
+      const range = this.#range(base.list, ctx);
+      if (range !== undefined) {
+        const a = this.fresh("A");
+        const q = this.fresh("q");
+        const parts = forParts(q, "0", a, reverse);
+        const s = [...range.s, `const ${a} = ${range.count.code};`];
+        const named = as === undefined ? undefined : this.#itemNames(as, range.info, range.item, () => a, reverse);
+        if (named !== undefined) s.push(...named.s);
+        return { s, j, head: forHead(q, parts), parts, key: [`const ${j} = ${q};`], check: [...(named?.check ?? [])], checkSafe: true, skip: undefined, fixed: false, start: range.count.deps, startSafe: range.count.safe, tests, inner, texts: true, items: named?.items ?? NO_NAMES, item: named?.level };
+      }
       const list = this.#hoist(this.#listOf(base.list, ctx), hasLoop(base.list));
       // A key of a literal or of fill is not the position of a record. Such a focus is a key of a list of the code only.
       const texts = (list.v.list as ListInfo).texts === true;
@@ -3600,7 +3672,9 @@ class Printer {
       const clean = this.#clean(list.v.list);
       const check = clean ? [] : [`if (${a}[${q}][1] === E) ${this.use("F")}();`];
       const s = [...list.s, `const ${a} = ${list.v.code};`];
-      const named = as === undefined ? undefined : this.#itemNames(as, list.v.list as ListInfo, `${a}[${q}][1]`, a, reverse);
+      // The count of a clean list is its length (COMPILE.MODULE.FUSE.CLEAN).
+      const count = (): string => (clean ? `${a}.length` : `${this.use("CT")}(${a}, false)`);
+      const named = as === undefined ? undefined : this.#itemNames(as, list.v.list as ListInfo, `${a}[${q}][1]`, count, reverse);
       if (named !== undefined) {
         s.push(...named.s);
         check.push(...named.check);
@@ -3661,7 +3735,7 @@ class Printer {
    * `nth` does (AXIS.LIST.INDEX). In the reverse order, it counts down from the number of these items. The names have a
    * level of their own. Thus a part that reads them stays in the loop, and a key of a literal can still be a target.
    */
-  #itemNames(as: ItemNames, info: ListInfo, value: string, a: string, reverse: boolean): { readonly s: readonly string[]; readonly check: readonly string[]; readonly items: ReadonlyMap<string, Name>; readonly level: number } {
+  #itemNames(as: ItemNames, info: ListInfo, value: string, count: () => string, reverse: boolean): { readonly s: readonly string[]; readonly check: readonly string[]; readonly items: ReadonlyMap<string, Name>; readonly level: number } {
     // A search cannot know the items of a name that starts empty. The part gives an empty list (COMPILE.MODULE.LOOP.EMPTY).
     if (this.#starts.seek && info.empty === true) throw new NotStandalone("a search reads the items of an empty list");
     // Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code
@@ -3676,9 +3750,7 @@ class Printer {
       const i = this.fresh("i");
       const z = this.fresh("z");
       // The check before the index throws for an error item, so the count skips it.
-      // The count of a clean list is its length (COMPILE.MODULE.FUSE.CLEAN).
-      const count = this.#clean(info) ? `${a}.length` : `${this.use("CT")}(${a}, false)`;
-      s.push(`let ${z} = ${reverse ? count : "0"};`);
+      s.push(`let ${z} = ${reverse ? count() : "0"};`);
       check.push(`const ${i} = ${reverse ? `--${z}` : `${z}++`};`);
       items.set(index, { code: i, kind: "number", lazy: false, deps });
     }
@@ -4348,6 +4420,9 @@ class Printer {
 
   /** This method prints a list op over a list that is not an each: a loop over its array, and nth (LIST.NTH). */
   #overList(op: string, head: Expr, rest: readonly Expr[], ctx: Ctx): Code {
+    // The count of a range of fill is the checked count, with no array (COMPILE.MODULE.FILL.RANGE).
+    const range = op === "count" && rest.length === 0 ? this.#range(head, ctx) : undefined;
+    if (range !== undefined) return { s: range.s, v: { ...range.count, list: undefined } };
     const list = this.#listOf(head, ctx);
     // A missing position is the literal null, which is not a whole number, so nth gives its error.
     const exprs = [head, ...(op === "nth" ? [rest[0] ?? lit(null)] : [])];

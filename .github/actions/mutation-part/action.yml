@@ -18,6 +18,10 @@ inputs:
     description: The value 1 stops Stryker after its first test run, so the part gives no score.
     required: false
     default: ""
+  stop-minutes:
+    description: The minutes after which the part stops itself, under the limit of its job, so that the costs reach the artifact. Empty never stops it.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -29,9 +33,20 @@ runs:
     - name: The disabled mutants
       shell: bash
       run: node tools/mutation/disables.mjs | tee -a "$GITHUB_STEP_SUMMARY"
-    - run: pnpm --filter @vex/mutation run mutation
+    # A job that reaches its limit skips each step after it, the upload too. So the part stops itself first, and it fails
+    # with the costs of the mutants that ended (tools/mutation/lane-cost.ts, LANE.COST).
+    - run: |
+        if [[ -n "$STOP_MINUTES" && ! "$STOP_MINUTES" =~ ^[0-9]+$ ]]; then echo "The minutes '$STOP_MINUTES' are not a whole number." >&2; exit 1; fi
+        if [[ -z "$STOP_MINUTES" ]]; then exec pnpm --filter @vex/mutation run mutation; fi
+        status=0
+        timeout --signal=TERM --kill-after=2m "${STOP_MINUTES}m" pnpm --filter @vex/mutation run mutation || status=$?
+        if [[ $status -eq 124 || $status -eq 137 ]]; then
+          echo "The part $VEX_MUTATE reached its stop of $STOP_MINUTES minutes, so it gives no score. The artifact keeps the cost of each mutant that ended." | tee -a "$GITHUB_STEP_SUMMARY" >&2
+        fi
+        exit $status
       shell: bash
       env:
+        STOP_MINUTES: ${{ inputs.stop-minutes }}
         VEX_MUTATE: ${{ inputs.part }}
         VEX_CHANGED: ${{ inputs.changed }}
         VEX_TIMEOUT_MS: ${{ inputs.timeout-ms }}

@@ -14,7 +14,8 @@ const entries = parts.flatMap((p) => mutateOf(root, p));
 export default {
   testRunner: "vitest",
   vitest: { configFile: "vitest.config.ts" },
-  plugins: ["@stryker-mutator/vitest-runner"],
+  // The reporter lane-cost writes the plan of the part and the cost of each mutant that ended (lane-cost.ts, LANE.COST).
+  plugins: ["@stryker-mutator/vitest-runner", "./lane-cost.ts"],
   mutate: changed.length === 0 ? entries : entriesIn(entries, changed),
   coverageAnalysis: "perTest",
   // The first run of the parts of the core took 3:23 to 4:09 in run 42075551015, and core.base.1 passed the default of
@@ -27,7 +28,7 @@ export default {
   // The file tsconfig.json of this folder is for the lint only. Stryker rewrites a tsconfig.json of its sandbox with the
   // JavaScript API of TypeScript, and TypeScript 7 has no such API. So this file stays out of the sandbox.
   ignorePatterns: ["/tsconfig.json"],
-  reporters: ["clear-text", "progress", "html", "json"],
+  reporters: ["clear-text", "progress", "html", "json", "lane-cost"],
   htmlReporter: { fileName: "../../reports/mutation/index.html" },
   jsonReporter: { fileName: "../../reports/mutation/mutation.json" },
   thresholds: { high: 98, low: 95, break: null },

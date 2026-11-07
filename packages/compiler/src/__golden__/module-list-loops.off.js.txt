@@ -30,12 +30,16 @@ function GT(l, k, s) {
   let x = l.ix;
   if (x === undefined) {
     x = new Map();
-    for (const [q, v] of l) {
-      const t = `${q}`;
+    x.n = 0;
+    l.ix = x;
+  }
+  if (x.n !== l.length) {
+    for (let i = x.n; i < l.length; i++) {
+      const [q, v] = l[i], t = `${q}`;
       if (v === E) x.set(E, E);
       else if (!x.has(t)) x.set(t, v);
     }
-    l.ix = x;
+    x.n = l.length;
   }
   return (s && x.has(E)) || typeof k !== "string" || !x.has(k) ? F() : x.get(k);
 }

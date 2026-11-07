@@ -722,17 +722,23 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   // The index of the keys of a list (LIST.GET): the value of the first item of each key. The array keeps its index, so a
   // step that reads each key of a list of n items costs O(n). The key E marks an error item, for strict.
+  // The array of a loop gets a push after a read (COMPILE.MODULE.APPEND.LET), so `n` counts the items in the index.
+  // A push only adds items at the end, so the index adds only the new items. No other change of an array has a read before it.
   GT: [
     "function GT(l, k, s) {",
     "  let x = l.ix;",
     "  if (x === undefined) {",
     "    x = new Map();",
-    "    for (const [q, v] of l) {",
-    "      const t = `${q}`;",
+    "    x.n = 0;",
+    "    l.ix = x;",
+    "  }",
+    "  if (x.n !== l.length) {",
+    "    for (let i = x.n; i < l.length; i++) {",
+    "      const [q, v] = l[i], t = `${q}`;",
     "      if (v === E) x.set(E, E);",
     "      else if (!x.has(t)) x.set(t, v);",
     "    }",
-    "    l.ix = x;",
+    "    x.n = l.length;",
     "  }",
     '  return (s && x.has(E)) || typeof k !== "string" || !x.has(k) ? F() : x.get(k);',
     "}",
@@ -884,10 +890,12 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   LP: "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
   // A list in an argument of an op or in a field of a record (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD): a frozen
   // `vex.list`, as the interpreter gives. The array keeps it, so each later read of the list gives the same object.
+  // The array of a loop gets a push after a read (COMPILE.MODULE.APPEND.LET). A push only adds items, so an object with
+  // another count of items is old, and LV makes a new object.
   LV: [
     "function LV(l, h) {",
     "  let o = l.vl;",
-    "  if (o === undefined) {",
+    "  if (o === undefined || o.items.length !== l.length) {",
     '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LV(v, h - 1) : v } }))) });',
     "    l.vl = o;",
     "  }",
@@ -992,7 +1000,7 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   LVC: [
     "function LVC(l, h) {",
     "  let o = l.vl;",
-    "  if (o === undefined) {",
+    "  if (o === undefined || o.items.length !== l.length) {",
     '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LVC(v, h - 1) : v } }))) });',
     "    l.vl = o;",
     "  }",

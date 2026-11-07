@@ -8,6 +8,7 @@ function AIC(l, x, w) { if (l !== w) { const o = []; for (let i = 0; i < l.lengt
 function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
 function G(x) { return x === E ? F() : x; }
+function KS(l, n) { l.length = n; if (l.ix !== undefined) l.ix = undefined; if (l.vl !== undefined) l.vl = undefined; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
 function LI(x, t) {
   if (typeof x !== "object" || x === null || x.kind !== "vex.list" || !Array.isArray(x.items)) return undefined;
@@ -187,7 +188,7 @@ export function nodeShape(records, vars) {
       let l54 = false;
       let l55 = k_domain_Band(op_2_0(0, 0, 0, 0));
       let l56 = [];
-      let w87 = l51;
+      let w84 = l51;
       let w77 = l56;
       const A58 = G(b48);
       for (let q59 = 0; q59 < A58.length; q59++) {
@@ -213,31 +214,31 @@ export function nodeShape(records, vars) {
         const t75 = (l54 || l52);
         const t76 = (l52 ? ((l54 && op_3_12(l55, l53)) ? k_domain_Band(op_3_13(l55, l53)) : l53) : l55);
         const t78 = ((l52 && (l54 && (!((l54 && op_3_12(l55, l53)))))) ? (l56.push([0, l55]), w77) : l56);
-        let b86;
+        let b87;
         try {
-          let t85;
+          let t86;
           if ((l49 && (!(op_3_7(y60, l50))))) {
-            const o83 = [];
+            const o83 = l51 === w84 ? l51 : [];
+            let n85 = 0;
             for (let q81 = 0; q81 < l51.length; q81++) {
               const y82 = l51[q81][1];
-              const m84 = o83.length;
               try {
                 if ((y82.to > y60.from)) {
-                  o83.push([0, y82]);
+                  o83[n85++] = l51[q81][0] === 0 ? l51[q81] : [0, y82];
                 }
               } catch {
-                o83.length = m84;
               }
             }
-            t85 = o83;
+            KS(o83, n85);
+            t86 = o83;
           } else {
-            t85 = l51;
+            t86 = l51;
           }
-          b86 = t85;
+          b87 = t86;
         } catch {
-          b86 = E;
+          b87 = E;
         }
-        const t88 = (op_3_2(y60) ? (w87 = AIC(G(b86), [0, y60], w87)) : G(b86));
+        const t88 = (op_3_2(y60) ? (w84 = AIC(G(b87), [0, y60], w84)) : G(b87));
         l49 = t61;
         l50 = t62;
         l52 = t63;

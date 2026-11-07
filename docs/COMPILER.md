@@ -1604,20 +1604,53 @@ The copy of another list has the same cost as the copy of `AOC`. The push into `
 
 The sweep of the shape module then prints `(w87 = AIC(G(b86), [0, y60], w87))`, and the module has no `FI`. The tree module prints `(w173 = AIC(G(b172), [0, y146], w173))`.
 
+#### A filter of the list in place (COMPILE.MODULE.APPEND.KEEP)
+
+The sweep of the shape module binds `base` to the open list or to a filter of it. Before this rule, the filter pushed each kept band into a new array. Then `AIC` copied that array, because it was not `w`. Each filter thus made two arrays.
+
+With `fuse`, a branch of another list of COMPILE.MODULE.APPEND.OTHER can be a filter of the name. These conditions apply:
+
+- The branch is `flat` over an `each` over the axis `list` of the name, with no `where` and no `reverse`.
+- The body of the `each` does not read the name.
+- Each value of the body has at most one item. The body is `fill(0, x)`, `fill(1, x)`, a literal of at most one item or an `if` of such lists. `fill` is the op of the language.
+
+The output of the filter is the array of its list when that array is `w`. Each other list gets a new array, as before. The loop puts each kept item at the position `n`, and `n` then increases. Each item puts at most one item, at its end, so a put does not come before the read of the item at its position. `KS` sets the length to `n` after the loop.
+
+These rules keep the values of the interpreter:
+
+- An item of `fill(1, y)` keeps its pair when its key is 0, because the pair `[0, y]` is the same. Each other item gets a new pair.
+- A value that can fail increments `n` after the put. Thus an item that fails puts no item, and the filter needs no undo.
+- With `strict`, an error item fails the filter. The step then fails, and no part reads `w` again.
+- `KS` removes the caches of `GT` and `LV` on the array, because a push brings back the count of items.
+- The output is not fresh, and no fused loop around it can push into it.
+
+The tests of `module-append-other.test.ts` compare each form with the interpreter, with `fuse` on and off. The filter keeps none, some or each item. The forms have error items, `strict`, a filter of another list and a read of the old list after the filter. With `fuse` false, the module keeps the print of the version before fusion (COMPILE.MODULE.FUSE.OFF).
+
+The sweep of the shape module then filters its open bands in place:
+
+| Line of the module | Before | After |
+|---|---|---|
+| The output of the filter | `const o93 = [];` | `const o93 = l61 === w94 ? l61 : [];` and `let n95 = 0;` |
+| The kept band | `o93.push([0, y92]);` | `o93[n95++] = l61[q91][0] === 0 ? l61[q91] : [0, y92];` |
+| The undo of an item | `const m94 = o93.length;` and `o93.length = m94;` | none |
+| The end of the filter | none | `KS(o93, n95);` |
+
+The append after the filter is `(w94 = AIC(G(b97), [0, y70], w94))`. With this rule, it pushes into `w94` with no copy. The tree module prints `const o157 = l125 === w158 ? l125 : [];` for its open bands.
+
 #### The caches of a module
 
 A cache keeps a value on an object. If the object changes after the cache, a read of the cache can give an old value (V-096). This table lists each cache of a module and of the compiler, and the reason that it stays right. The line numbers are of `packages/compiler/src/module.ts`, unless the row names another file.
 
 | Cache | Key | Changes of the key | Reason that the cache stays right |
 |---|---|---|---|
-| `GT`: `l.ix`, the index of `get` (line 722) | the array of a list | a push into `w` (`AO`, `AOC` and the push of one item) | The index keeps its count of items, and it adds only the new items. The tests `V-096` and the P17 of `module-lists.test.ts` read it. |
-| `LV`, `LVC`: `l.vl`, the `vex.list` of an argument or a field (lines 890, 993) | the array of a list, and each inner array | a push into `w` | The object has the count of its items. Another count makes a new object. No list holds `w` as an item during the loop (COMPILE.MODULE.APPEND.READ), so an inner array gets no push. The same two tests read it. |
-| `VW`: `l.vw`, the items with values (line 603) | the array of a list | a push into `w` | `w` has no error items, because `V` removes them before a push. Thus its view is the array itself, and a push changes the view too. |
-| `SBI`, `SKI`: a sort in place (line 4340) | a fresh array | the sort | A sort in place gets only a fresh array. No other part holds that array, so it has no cache. Each read of a name clears the fact `fresh` (`heldList`, line 210). |
-| The undo of a fused `each`: `o.length = m` (line 4149) | the array `o` of the `each` | the undo and the next pushes | The code reads `o` only after its loop. Thus no cache is on `o` when the undo shrinks it. |
-| `DO`, `LC`, `LCP`: the cells of a sheet (lines 876, 1004, 1006) | a column of a sheet | the change after the fill | These helpers run after the fill, and no cache is on a column. `SN` and `SNC` change a copy (lines 631, 983). |
+| `GT`: `l.ix`, the index of `get` (line 727) | the array of a list | a push into `w` (`AO`, `AOC` and the push of one item), and a filter in place (`KS`) | The index keeps its count of items, and it adds only the new items. `KS` removes the index. The tests `V-096` and the P17 of `module-lists.test.ts` read it. |
+| `LV`, `LVC`: `l.vl`, the `vex.list` of an argument or a field (lines 895, 1003) | the array of a list, and each inner array | a push into `w`, and a filter in place (`KS`) | The object has the count of its items. Another count makes a new object. `KS` removes the object. No list holds `w` as an item during the loop (COMPILE.MODULE.APPEND.READ), so an inner array gets no push. The same two tests read it. |
+| `VW`: `l.vw`, the items with values (line 603) | the array of a list | a push into `w`, and a filter in place (`KS`) | `w` has no error items, because `V` removes them before a push, and a filter puts only items with values. Thus its view is the array itself, and a push or a filter changes the view too. |
+| `SBI`, `SKI`: a sort in place (line 4486) | a fresh array | the sort | A sort in place gets only a fresh array. No other part holds that array, so it has no cache. Each read of a name clears the fact `fresh` (`heldList`, line 210). |
+| The undo of a fused `each`: `o.length = m` (line 4263) | the array `o` of the `each` | the undo and the next pushes | The code reads `o` only after its loop. Thus no cache is on `o` when the undo shrinks it. A filter in place has no undo (COMPILE.MODULE.APPEND.KEEP). |
+| `DO`, `LC`, `LCP`: the cells of a sheet (lines 881, 1014, 1016) | a column of a sheet | the change after the fill | These helpers run after the fill, and no cache is on a column. `SN` and `SNC` change a copy (lines 627, 990). |
 | `L`, `Q` (`m[j]`), `M`, `M1`, `S`, `PF` and the columns of a call | a key, a node or a list of the run | none | Each run makes its tables again. A memo node is not in a loop or in a function (`memo.ts`, line 314). Thus no key is `w`, and only `w` gets a push after its op. |
-| `LOOPS` (line 1730), `ORIGINALS` (`unshared.ts`, line 9) and the maps of the printer | a node of the program | none | The compiler does not write to a node. `LOOPS` stays from one call to the next. It keeps the rule of the cache of the interpreter (`core/src/evaluate.ts`, line 238): a program does not change after a call. |
+| `LOOPS` (line 1740), `ORIGINALS` (`unshared.ts`, line 9) and the maps of the printer | a node of the program | none | The compiler does not write to a node. `LOOPS` stays from one call to the next. It keeps the rule of the cache of the interpreter (`core/src/evaluate.ts`, line 238): a program does not change after a call. |
 | The maps of tier 2 (`runtime.ts`, lines 423, 448 and 508) | a space | none | A space does not change (COMPILE.MEMO). |
 | The index of `get` of the interpreter (`core/src/evaluate.ts`, line 331) | a `vex.list` | none | `vexList` freezes the list and its items (`core/src/list.ts`, line 18). |
 

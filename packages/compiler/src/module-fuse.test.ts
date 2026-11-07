@@ -578,7 +578,9 @@ describe("COMPILE.MODULE.FUSE: flat over an each is one loop", () => {
     // The fused chains: the two lists of the bands of the children, UNSORTED, the three sides and the bands that stay.
     expect(source.match(/ = o\d+;$|\(o\d+\)|concat\(o\d+\)|^\s+\w+ = o\d+\.concat/gm)?.length).toBeGreaterThanOrEqual(5);
     expect(source).not.toMatch(/\bFL\(/);
-    expect(source.match(/\.length = m\d+;/g)?.length).toBe(7);
+    expect(source.match(/\.length = m\d+;/g)?.length).toBe(6);
+    // The filter of the open bands moves the kept bands down in the array of the loop (COMPILE.MODULE.APPEND.KEEP).
+    expect(source).toMatch(/const (o\d+) = (l\d+) === (w\d+) \? \2 : \[\];\n\s*let (n\d+) = 0;[\s\S]*?\1\[\4\+\+\] = \2\[q\d+\]\[0\] === 0 \? \2\[q\d+\] : \[0, y\d+\];[\s\S]*?KS\(\1, \4\);[\s\S]*?\(\3 = AIC\(/);
   });
 });
 

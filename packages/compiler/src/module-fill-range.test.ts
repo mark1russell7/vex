@@ -3,7 +3,7 @@
  * can read the list of `fill(n, v)` only as a range. Then the module makes no array of pairs. It loops over the count,
  * which has the check of `FI`. The values and the errors stay those of the interpreter (P17).
  */
-import { app, axes, each, evaluate, fold, isVexList, let_, lit, ref, space, v, vexList, type Expr } from "@mark1russell7/vex";
+import { app, axes, defineDomain, each, evaluate, fold, isVexList, let_, lit, ref, space, v, vexList, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -17,6 +17,13 @@ interface Loaded {
 
 const SCHEMA = { fields: { id: "string", n: "number", w: "number", b: "boolean" }, vars: { a: "number" } } as const;
 const DOMAINS = [NumDomain, BoolDomain, TextDomain];
+/** A domain of numbers with the op `fill`. The op of a domain comes first, so `fill` gives a number. */
+const FillOps = defineDomain({
+  name: "FillOps",
+  is: (u: unknown): u is number => typeof u === "number",
+  primitive: "number",
+  ops: { fill: { fn: (a: number, b: number): number => a * 10 + b, params: ["number"], returns: "number" } },
+});
 const OPTIONS: ModuleOptions = { domains: DOMAINS, schema: SCHEMA };
 const VARS = { a: 2 };
 /** The records of the tests. A negative `n` is a bad count, and a zero `w` gives an error of `divide`. */
@@ -54,12 +61,19 @@ function asModule(value: unknown, error: unknown): unknown {
 function expectSame(e: Expr, records: readonly unknown[] = RECORDS): string {
   const s = space.array(records);
   const results = s.keys.map((origin) => evaluate(e, { space: s, origin, vars: VARS, domains: DOMAINS }));
-  const sources = [sourceOf(e), sourceOf(e, false)];
-  for (const source of sources) {
+  const fused = sourceOf(e);
+  for (const source of [fused, sourceOf(e, false)]) {
     const loaded = make(source);
     expect(loaded.run(structuredClone(records), VARS)).toStrictEqual(results.map((r) => (r.ok ? asModule(r.value, loaded.VEX_ERROR) : loaded.VEX_ERROR)));
   }
-  return sources[0] as string;
+  return fused;
+}
+
+/** This function gives the item at a position of an array, and fails the test when the array has no such item. */
+function at<T>(items: readonly T[], i: number): T {
+  const item = items[i];
+  if (item === undefined) throw new Error(`no item at ${i}`);
+  return item;
 }
 
 const op = (name: string, ...args: Expr[]): Expr => app(name, ...args);
@@ -100,10 +114,41 @@ describe("COMPILE.MODULE.FILL.RANGE: a range of fill in a module", () => {
     ];
     for (const e of programs) expect(filled(expectSame(e))).toBe(false);
     // The pack of the tree pilot: the loop reads the count of FN, not an array of pairs.
-    const pack = sourceOf(programs[0] as Expr);
-    expect(pack).toMatch(/const (A\d+) = FN\(k_number\(\(2\) \* \(n\)\), 0\);\n\s*let z\d+ = 0;\n\s*for \(let (q\d+) = 0; \2 < \1; \2\+\+\) \{/);
+    const pack = sourceOf(at(programs, 0));
+    // The count is a constant of the run, so it evaluates once, before the fold.
+    expect(pack).toMatch(/const (c\d+) = T\(\(\) => k_number\(\(2\) \* \(n\)\)\);[^]*const (A\d+) = FN\(G\(\1\), 0\);\n\s*let z\d+ = 0;\n\s*for \(let (q\d+) = 0; \3 < \2; \3\+\+\) \{/);
     // A literal count that FI takes, with a value that cannot fail, needs no check.
-    expect(sourceOf(programs[1] as Expr)).toContain(`= TN(4, R[o]["n"]);`);
+    expect(sourceOf(at(programs, 1))).toContain(`= TN(4, R[o]["n"]);`);
+    for (const count of [lit(1), lit(100_000)]) expect(ranged(expectSame(op("count", fill(count, w)), RECORDS.slice(0, 1)))).toBe(false);
+  });
+
+  it("COMPILE.MODULE.FILL.RANGE: the code of the range reads a literal value at each item and keeps each other value in a name", () => {
+    // A number, a text and a boolean are their own code.
+    expect(expectSame(op("count", fill(n, lit(1))))).toContain(`= FN(R[o]["n"], 1);`);
+    expect(expectSame(op("count", fill(n, lit("t"))))).toContain(`= FN(R[o]["n"], "t");`);
+    expect(expectSame(op("count", fill(n, lit(true))))).toContain(`= FN(R[o]["n"], true);`);
+    // Each other value evaluates once, after the count.
+    expect(expectSame(op("count", fill(n, w)))).toMatch(/const (b\d+) = R\[o\]\["n"\];\n\s*const (b\d+) = R\[o\]\["w"\];\n\s*out\[o\] = FN\(\1, \2\);/);
+    // The loop over a literal count reads the name of the value.
+    expect(expectSame(over(fill(lit(2), w), op("add", v("s"), v("x"))))).toMatch(/const (b\d+) = R\[o\]\["w"\];[^]*= k_number\(\(l\d+\) \+ \(\1\)\)/);
+    // The empty fill keeps its own code (COMPILE.MODULE.SIZE.FILL).
+    expect(ranged(expectSame(op("count", fill(lit(0), lit(1)))))).toBe(false);
+  });
+
+  it("COMPILE.MODULE.FILL.RANGE: a part of a range that is a constant of the run evaluates once, before the loop over the keys", () => {
+    // The sum over the records is a constant of the run, and the fold reads the origin at each key.
+    const sum = op("sum", ns);
+    const programs = [
+      over(fill(lit(3), sum), op("add", v("s"), op("add", v("x"), atOrigin("w")))),
+      over(fill(sum, lit(1)), op("add", v("s"), atOrigin("w"))),
+      over(take(fill(n, lit(1)), sum), op("add", v("s"), atOrigin("w"))),
+    ];
+    for (const e of programs) {
+      const source = expectSame(e);
+      expect(ranged(source)).toBe(true);
+      // The loop over the keys has no loop over the records.
+      expect(at(source.split("const out = new Array"), 1).match(/ < n;/g)).toHaveLength(1);
+    }
   });
 
   it("COMPILE.MODULE.FILL.RANGE: a bad count, a count past the limit and an error of the value give the error of FI (P17)", () => {
@@ -112,14 +157,35 @@ describe("COMPILE.MODULE.FILL.RANGE: a range of fill in a module", () => {
       // The empty fill of -0 has its own code (COMPILE.MODULE.SIZE.FILL), so it needs no check.
       for (const e of [op("count", fill(count, lit(1))), over(fill(count, lit(1)), op("add", v("s"), v("i"))), op("count", take(fill(lit(3), lit(1)), count))]) {
         const source = expectSame(guard(e));
-        expect(filled(source), source).toBe(false);
-        expect(ranged(source) || Object.is((count as { value?: unknown }).value, -0), source).toBe(true);
+        expect(filled(source)).toBe(false);
+        expect(ranged(source) || Object.is((count as { value?: unknown }).value, -0)).toBe(true);
       }
     }
     // An error of the value is the error of fill, also with the count 0. A loop over no items reads no value.
     for (const value of [op("divide", lit(1), w), op("divide", lit(1), lit(0))]) {
-      for (const count of [lit(0), lit(2), n]) expectSame(guard(over(fill(count, value), op("add", v("s"), v("i")))));
+      for (const count of [lit(0), lit(2), n]) {
+        for (const e of [op("count", fill(count, value)), over(fill(count, value), op("add", v("s"), v("i"))), op("count", take(fill(count, value), lit(1)))]) expectSame(guard(e));
+      }
     }
+    // The statements of a range can fail, also with a literal count. A branch, a name, a sum and ifError keep the error at its place.
+    for (const value of [op("divide", lit(1), w), op("divide", lit(1), lit(0))]) {
+      for (const x of [op("count", fill(lit(2), value)), over(fill(lit(2), value), op("add", v("s"), v("i")))]) {
+        const places = [
+          op("if", b, lit(5), x),
+          op("if", b, x, lit(5)),
+          op("and", b, op("gt", x, lit(0))),
+          op("or", b, op("gt", x, lit(0))),
+          let_({ q: x }, op("if", b, lit(3), v("q"))),
+          guard(op("add", x, n)),
+          op("sum", each(axes.all, x)),
+          op("sum", each(axes.all, op("if", b, x, lit(1)))),
+        ];
+        for (const e of places) expectSame(e);
+      }
+    }
+    // A count of -0 from a record gives the count 0, as the length of the list does.
+    const zero = [{ id: "z", n: -0, w: -0, b: true }];
+    for (const e of [op("count", fill(n, lit(1))), op("count", take(fill(lit(3), lit(1)), n)), op("count", take(fill(n, w), n)), over(fill(n, w), op("add", v("s"), v("x")))]) expectSame(e, zero);
     // The largest count, at one record: the interpreter makes 100000 items.
     expectSame(op("count", take(fill(lit(100_000), n), lit(100_000))), RECORDS.slice(0, 1));
     expectSame(guard(op("count", take(fill(lit(100_001), n), lit(1)))), RECORDS.slice(0, 1));
@@ -136,11 +202,24 @@ describe("COMPILE.MODULE.FILL.RANGE: a range of fill in a module", () => {
       // take of a list that is not a range, and fill with an argument after the value.
       op("count", take(op("sortBy", fill(lit(3), n)), lit(2))),
       op("count", op("fill", lit(2), n, lit(5))),
+      // count with an option keeps the check of its option.
+      op("count", fill(n, lit(1)), lit({ strict: true })),
+      // Another list op with two lists.
+      op("count", op("append", fill(lit(1), n), fill(lit(2), w))),
+      // A key of a node of the memo: the sum over the records reads the count of the list at the origin.
+      op("sum", each(axes.where(axes.all, op("eq", n, op("count", take(fill(atOrigin("n"), lit(1)), n)))), w)),
     ];
     for (const [i, e] of kept.entries()) {
       const source = expectSame(guard(e, i === 3));
-      expect(filled(source), source).toBe(true);
+      expect(filled(source)).toBe(true);
     }
+    // A node that is not a literal is not a literal count, also with an extra field "value".
+    const field = { ...n, value: 2 } as Expr;
+    expect(ranged(expectSame(op("count", fill(field, lit(1)))))).toBe(true);
+    expect(expectSame(op("count", fill(lit(3), { ...w, value: "t" } as Expr)))).toMatch(/const (b\d+) = R\[o\]\["w"\];\n\s*out\[o\] = 3;/);
+    // A domain with the op fill comes first, so fill gives a number, and take of that number gives a reason.
+    const own = emitModule(op("count", take(fill(lit(2), lit(1)), lit(1))), { ...OPTIONS, domains: [...DOMAINS, FillOps] });
+    expect(own.ok ? own.source : own.reason).toBe("a list op on a value that is not a list");
     // With fuse false, each fill keeps FI (COMPILE.MODULE.FUSE.OFF).
     const off = sourceOf(op("count", fill(n, lit(1))), false);
     expect(filled(off)).toBe(true);
@@ -164,7 +243,7 @@ describe("COMPILE.MODULE.FILL.RANGE: a range of fill in a module", () => {
         map(r, v("i"), axes.reverse(axes.list(r))),
         op("count", map(r, lit(1), axes.where(axes.list(r), atOrigin("b")))),
       ];
-      return guard(forms[form] as Expr, form === 4);
+      return guard(at(forms, form), form === 4);
     });
     let ranges = 0;
     for (const e of fc.sample(program, { seed: 20261105, numRuns: 150 })) {

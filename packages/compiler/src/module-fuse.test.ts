@@ -125,13 +125,14 @@ describe("COMPILE.MODULE.FUSE.FACTS: the facts clean and fresh of each list", ()
   });
 
   it("COMPILE.MODULE.FUSE.FACTS LIST.FILL: the value of fill is clean and fresh, and its items keep the facts of the value", () => {
-    expect(short(op("count", one), one)).toStrictEqual({ clean: true, fresh: true, reads: 1 });
+    // A count of a fill makes no array (COMPILE.MODULE.FILL.RANGE), so these reads keep the list.
+    expect(short(op("sum", one), one)).toStrictEqual({ clean: true, fresh: true, reads: 1 });
     const lists = op("fill", lit(2), one);
-    const f = factOf(factsOf(op("count", lists)), lists);
+    const f = factOf(factsOf(op("count", op("drop", lists, lit(1)))), lists);
     // The items of fill share one array, so an item is not fresh, but it keeps the fact clean.
     expect(f).toStrictEqual({ clean: true, fresh: true, inner: [true], reads: 1 });
     const dirty = op("fill", lit(2), inv);
-    expect(factOf(factsOf(op("count", dirty)), dirty).inner).toStrictEqual([false]);
+    expect(factOf(factsOf(op("count", op("drop", dirty, lit(1)))), dirty).inner).toStrictEqual([false]);
   });
 
   it("COMPILE.MODULE.FUSE.FACTS LIST.LITERAL: a literal is clean only without error items, and it is never fresh", () => {
@@ -1041,7 +1042,8 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
       expectSame(e);
     }
     // A node of fill can be the list of an append and also a list at another place. That place keeps FI.
-    const shared = thrice(near, op("append", acc, atW), op("add", op("count", acc), op("count", atW)));
+    // The sum keeps the array, because a count of a fill makes no array (COMPILE.MODULE.FILL.RANGE).
+    const shared = thrice(near, op("append", acc, atW), op("add", op("count", acc), op("sum", atW)));
     expect(inPlace(printed(shared, true))).toBe(1);
     expect(printed(shared, true)).toContain("function FI(");
     expectSame(shared);

@@ -286,8 +286,11 @@ const readsCells = (e: Expr): boolean => e.tag === "ext" || e.tag === "call" || 
 // Stryker disable next-line OptionalChaining: each caller gives an argument.
 const isOne = (e: Expr | undefined): boolean => e?.tag === "lit" && e.value === 1;
 
-/** The code of a literal number, text or boolean. A read of such code at each item gives one value (COMPILE.MODULE.FILL.RANGE). */
-const LITERAL_CODE = /^(?:\d+(?:\.\d+)?(?:e[+-]?\d+)?|true|false|"(?:[^"\\]|\\.)*")$/;
+/** This function gives the value of a literal. For each other expression, it gives undefined, also for a node with an extra field `value`. */
+const literalOf = (e: Expr): unknown => (e.tag === "lit" ? e.value : undefined);
+
+/** The kinds of a literal whose code is its value. A read of such code at each item costs nothing (COMPILE.MODULE.FILL.RANGE). */
+const PLAIN_LITERALS: ReadonlySet<string> = new Set(["number", "string", "boolean"]);
 
 /** This function tells if an expression reads nothing of a run: it has only literals and ops. */
 const isClosed = (e: Expr): boolean => e.tag === "lit" || (e.tag === "app" && e.args.every((x) => isClosed(x)));
@@ -3375,43 +3378,43 @@ class Printer {
   /**
    * This method gives the range of a list that a loop or `count` reads, or undefined (COMPILE.MODULE.FILL.RANGE). The
    * list is `fill(n, v)` or `take(range, k)`, with no other argument. The option `fuse` must be true, and no domain can
-   * have the op `fill`. Each other list keeps its array. So does a node with a name, a node of the memo and a column.
+   * have the op `fill`. Each other list keeps its array. So does a key of a node of the memo, which has a name.
    */
   #range(e: Expr, ctx: Ctx): Range | undefined {
-    if (!this.#fuse || e.tag !== "app" || e.args.length !== 2 || !this.#facts.own("fill") || ctx.keys.has(e) || this.#memo.has(e) || this.#columned.has(e)) return undefined;
+    if (!this.#fuse || e.tag !== "app" || e.args.length !== 2 || !this.#facts.own("fill") || ctx.keys.has(e)) return undefined;
     const [head, second] = e.args as readonly [Expr, Expr];
     if (e.op === "take") {
       const range = this.#range(head, ctx);
       if (range === undefined) return undefined;
-      // TK checks its count after its list, so an error of the range comes first.
-      this.#wantList.add(second);
-      const [n, k] = this.#inOrder([{ s: [], v: range.count }, this.expr(second, ctx)], true) as readonly [Code, Code];
+      // TK checks its count after its list, so an error of the range comes first. A count that is a constant of the run
+      // evaluates once, as in TK.
+      const [n, k] = this.#inOrder([{ s: [], v: range.count }, this.#hoist(this.expr(second, ctx), hasLoop(second))], true) as readonly [Code, Code];
       const count: Value = { code: `${this.use("TN")}(${n.v.code}, ${k.v.code})`, kind: "number", safe: false, deps: depsOf(n, k) };
       return { s: [...range.s, ...stmtsOf(n, k)], count, item: range.item, info: range.info };
     }
+    const size = literalOf(head);
     // The empty fill has its own code (COMPILE.MODULE.SIZE.FILL).
-    if (e.op !== "fill" || (head.tag === "lit" && head.value === 0)) return undefined;
+    if (e.op !== "fill" || size === 0) return undefined;
     for (const x of e.args) this.#wantList.add(x);
-    const raw = e.args.map((x) => this.expr(x, ctx));
+    // The interpreter evaluates each argument, also after an error, as for FI. A loop at each key reads the range again,
+    // so each argument that is a constant of the run evaluates once, before the loop over the keys.
+    const raw = e.args.map((x) => this.#hoist(this.expr(x, ctx), hasLoop(x)));
     const deps = depsOf(...raw);
-    // The interpreter evaluates each argument, also after an error, as for FI.
-    const [n, v] = this.#inOrder(this.#settle(raw, deps, e.args), true) as readonly [Code, Code];
+    const [n, v] = this.#inOrder(raw, true) as readonly [Code, Code];
     const s = stmtsOf(n, v);
-    let number = n.v.code;
-    let item = v.v.code;
-    // Each item reads the value, so a value that is not a literal evaluates once, after the count.
-    if (!LITERAL_CODE.test(item)) {
-      if (!n.v.safe) {
-        number = this.fresh("b");
-        s.push(`const ${number} = ${n.v.code};`);
-      }
-      item = this.fresh("b");
-      s.push(`const ${item} = ${v.v.code};`);
-    }
+    const info: ListInfo = { item: v.v.kind, inner: heldList(v.v.list), texts: true, clean: true, fresh: false };
+    // Each item reads the value. Thus a value that is not a literal evaluates once, before the loop.
+    const plain = PLAIN_LITERALS.has(typeof literalOf(second));
+    const item = plain ? v.v.code : this.fresh("b");
     // A literal count that FI takes needs no check, when the value cannot fail.
-    const fixed = head.tag === "lit" && typeof head.value === "number" && Number.isSafeInteger(head.value) && head.value > 0 && head.value <= 100000 && v.v.safe;
-    const count: Value = fixed ? { code: String(head.value), kind: "number", safe: true, deps, plain: true } : { code: `${this.use("FN")}(${number}, ${item})`, kind: "number", safe: false, deps };
-    return { s, count, item, info: { item: v.v.kind, inner: heldList(v.v.list), texts: true, clean: true, fresh: false } };
+    if (Number.isSafeInteger(size) && (size as number) >= 1 && (size as number) <= 100000 && v.v.safe) {
+      if (!plain) s.push(`const ${item} = ${v.v.code};`);
+      return { s, count: { code: String(size), kind: "number", safe: true, deps, plain: true }, item, info };
+    }
+    // The count evaluates before the value, as in FI.
+    const number = plain ? n.v.code : this.fresh("b");
+    if (!plain) s.push(`const ${number} = ${n.v.code};`, `const ${item} = ${v.v.code};`);
+    return { s, count: { code: `${this.use("FN")}(${number}, ${item})`, kind: "number", safe: false, deps }, item, info };
   }
 
   /**
@@ -3771,7 +3774,8 @@ class Printer {
       const i = this.fresh("i");
       const z = this.fresh("z");
       // The check before the index throws for an error item, so the count skips it.
-      s.push(`let ${z} = ${reverse ? count() : "0"};`);
+      const total = count();
+      s.push(`let ${z} = ${reverse ? total : "0"};`);
       check.push(`const ${i} = ${reverse ? `--${z}` : `${z}++`};`);
       items.set(index, { code: i, kind: "number", lazy: false, deps });
     }

@@ -2,7 +2,7 @@
  * Lists in standalone modules (docs/COMPILER.md §8.3, design E, block 3). A module has the list ops that build a list,
  * `get`, `indexOf`, list literals, lists through a let and lists as the state of a loop (COMPILE.MODULE.LIST).
  */
-import { app, axes, each, evaluate, fold, iterate, let_, lit, rec, ref, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
+import { app, axes, call, defineDomain, each, evaluate, fn, fold, isVexList, iterate, let_, lit, rec, ref, space, v, vexList, type Expr, type ListItem, type VexList } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, XYDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
@@ -17,6 +17,15 @@ interface Loaded {
 
 const SCHEMA = { fields: { id: "string", n: "number", w: "number", b: "boolean" }, vars: { a: "number", k: "string" } } as const;
 const OPTIONS: ModuleOptions = { domains: [NumDomain, BoolDomain, TextDomain], schema: SCHEMA };
+/** This test domain has an op with a list argument, so a module gives a `vex.list` to a host function (COMPILE.MODULE.LIST.ARG). */
+const WeighDomain = defineDomain({
+  name: "Weigh",
+  is: (u: unknown): u is number => typeof u === "number",
+  primitive: "number",
+  fromScalar: (x: number): number => x,
+  ops: { weigh: { fn: (a: number, l: VexList): number => l.items.reduce((s, x) => s + (x.result.ok && typeof x.result.value === "number" ? x.result.value : -1), a), params: ["any"], returns: "number" } },
+});
+const LOOP_OPTIONS: ModuleOptions = { ...OPTIONS, domains: [NumDomain, BoolDomain, TextDomain, WeighDomain] };
 /** The field `id` names the key of a record, as in the force pilot. The key "x" is not in the space. */
 const RECORDS = [
   { id: "1", n: 3, w: 1, b: true },
@@ -48,13 +57,20 @@ function reasonOf(e: Expr, options: ModuleOptions = OPTIONS): string {
   return m.ok ? "" : m.reason;
 }
 
+/** This function gives a value of the interpreter in the form of a module: an error item has the error `VEX_ERROR`. */
+function asModule(value: unknown, error: unknown): unknown {
+  if (isVexList(value)) return { kind: "vex.list", items: value.items.map((x) => ({ key: x.key, result: x.result.ok ? { ok: true, value: asModule(x.result.value, error) } : { ok: false, error } })) };
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(Object.entries(value).map(([k, x]) => [k, asModule(x, error)]));
+}
+
 /** This function compares the values of a module with the interpreter at each key. */
-function expectSame(m: Loaded, e: Expr, records: readonly unknown[] = RECORDS, vars: Readonly<Record<string, unknown>> = VARS): void {
+function expectSame(m: Loaded, e: Expr, records: readonly unknown[] = RECORDS, vars: Readonly<Record<string, unknown>> = VARS, options: ModuleOptions = OPTIONS): void {
   const got = m.run(structuredClone(records), vars);
   const s = space.array(records);
   const expected = s.keys.map((origin) => {
-    const r = evaluate(e, { space: s, origin, vars, domains: OPTIONS.domains ?? [] });
-    return r.ok ? r.value : m.VEX_ERROR;
+    const r = evaluate(e, { space: s, origin, vars, domains: options.domains ?? [] });
+    return r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR;
   });
   expect(got).toStrictEqual(expected);
 }
@@ -459,15 +475,70 @@ describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: prope
     fc.constant((l: Expr) => let_({ xs: l }, fold(axes.all, { st: v("xs") }, { st: op("without", v("st"), each(axes.window(0, 0), n)) }, op("count", v("st"))))),
     fc.integer({ min: 0, max: 3 }).map((k) => (l: Expr) => let_({ xs: l }, op("get", iterate(k, { p: v("xs") }, { p: op("append", each(axes.all, op("get", v("p"), ref("id"))), v("p")) }, v("p")), id))),
   );
-  const programs = fc.tuple(list, uses).map(([l, use]) => use(l));
+  // A list that grows in place while the loop reads it (COMPILE.MODULE.APPEND.OWN, COMPILE.MODULE.APPEND.LET). The step
+  // pushes into the array of the name, also after a let gave that array to its body. Each read of the body can keep a
+  // cache on the array: `get` keeps its index, and an argument, a field or a call keeps its `vex.list` (V-096).
+  const acc = v("acc");
+  const one = (x: Expr): Expr => op("fill", lit(1), x);
+  const NONE = op("fill", lit(0), lit(0));
+  // The new items. In a fold, a later item can bring a new key, so `get` of that key needs the new items of the index.
+  const later = op("if", op("gt", n, lit(0)), lit(vexList([item("c", 5)])), LIT);
+  const more = fc.constantFrom<Expr>(one(n), one(w), one(op("divide", lit(1), w)), each(axes.window(0, 0), n), each(axes.window(-1, 0), op("divide", n, w)), LIT, BAD, later);
+  // A first list that is fresh and clean gives its array to the loop (COMPILE.MODULE.FUSE.ADOPT).
+  // An empty literal has no kind of item, so a module refuses a test of its items. NONE is an empty list of numbers.
+  const starts = fc.oneof(fc.constantFrom<Expr>(NONE, one(n), op("append", ns, LIT)), base.filter((x) => x !== EMPTY));
+  // The reads of the list. `get`, an argument and a call keep a cache on the array. The other reads keep none.
+  const reader: fc.Arbitrary<(l: Expr) => Expr> = fc.oneof(
+    { arbitrary: fc.tuple(fc.constantFrom<Expr>(id, v("k"), lit("a"), lit("c"), lit("0")), opts).map(([k, s]) => (l: Expr) => guard(op("get", l, k, ...s))), weight: 2 },
+    { arbitrary: fc.constant((l: Expr) => op("weigh", lit(0), l)), weight: 3 },
+    { arbitrary: fc.constant((l: Expr) => call("f", l)), weight: 2 },
+    fc.constantFrom<(l: Expr) => Expr>(
+      (l) => op("weigh", lit(0), each(axes.list(l), v("y"), undefined, ["y"])),
+      (l) => guard(op("nth", l, lit(1))),
+      (l) => op("count", l),
+      (l) => guard(fold(axes.list(l), { s: lit(0) }, { s: op("add", v("s"), v("x")) }, v("s"), undefined, ["x"])),
+    ),
+  );
+  // The body of a let: a test of a read, and another list or the list itself.
+  const other = fc.constantFrom<(l: Expr) => Expr>((l) => op("take", l, lit(1)), (l) => op("drop", l, lit(1)), () => NONE, (l) => op("append", l, one(lit(9))));
+  const body = fc.tuple(reader, fc.integer({ min: -1, max: 6 }), other, fc.boolean()).map(([r, t, o, flip]) => (l: Expr) => (flip ? op("if", op("gt", r(l), lit(t)), l, o(l)) : op("if", op("gt", r(l), lit(t)), o(l), l)));
+  const growSteps = fc.letrec<{ step: Expr }>((tie) => ({
+    step: fc.oneof(
+      { maxDepth: 3, depthSize: "small" },
+      fc.constant(acc),
+      { arbitrary: fc.tuple(tie("step"), more, fc.boolean()).map(([h, x, s]) => op("append", h, x, ...(s ? [strict] : []))), weight: 3 },
+      fc.tuple(fc.constantFrom(ref("b"), op("gt", n, lit(0))), tie("step"), tie("step")).map(([c, yes, no]) => op("if", c, yes, no)),
+      tie("step").map((x) => op("sortBy", x)),
+      // The new item reads the list, so the module copies the list (COMPILE.MODULE.APPEND.OWN). A wrong read gives a wrong item.
+      { arbitrary: fc.tuple(tie("step"), reader, fc.boolean()).map(([x, r, own]) => (own ? let_({ acc: x }, op("append", acc, one(r(acc)))) : let_({ all: x }, op("append", v("all"), one(r(v("all"))))))), weight: 3 },
+      { arbitrary: fc.tuple(tie("step"), body, fc.boolean()).map(([x, f, own]) => (own ? let_({ acc: x }, f(acc)) : let_({ all: x }, f(v("all"))))), weight: 3 },
+    ),
+  })).step;
+  // The shape of V-096 at the top of a step: a let binds a push into the array of the name, and its body reads the array.
+  const grown = fc.tuple(growSteps, more, body, fc.boolean()).map(([x, m, f, own]) => (own ? let_({ acc: op("append", x, m) }, f(acc)) : let_({ all: op("append", x, m) }, f(v("all")))));
+  // A push after the read of the body: the next step and the result read the array after this push.
+  const tops = fc.oneof(growSteps, { arbitrary: grown, weight: 2 }, { arbitrary: fc.tuple(grown, more).map(([g, m]) => op("append", g, m)), weight: 2 });
+  // The result reads the list after the loop, also in a field of a record (COMPILE.MODULE.LIST.FIELD). The function f
+  // reads its parameter with an argument and with `get`.
+  const results = fc.oneof(reader, fc.constantFrom<(l: Expr) => Expr>((l) => l, (l) => rec({ l, c: op("count", l) })));
+  const f = fn(["q"], op("add", op("weigh", lit(0), v("q")), guard(op("get", v("q"), lit("1")))));
+  // The name r reads the list before the step of acc (COMPILE.MODULE.APPEND.READ), and that step can push the old value
+  // of r. Most such reads make the module copy the list for each push, so the name r is rare.
+  const growing = fc.tuple(fc.boolean(), starts, tops, fc.oneof({ arbitrary: fc.constant(undefined), weight: 4 }, reader), fc.boolean(), results).map(([isFold, init, step, before, feed, after]) => {
+    const first = before === undefined ? { acc: init } : { r: lit(0), acc: init };
+    const next = before === undefined ? { acc: step } : { r: before(acc), acc: feed ? op("append", step, one(v("r"))) : step };
+    const result = before === undefined ? after(acc) : rec({ a: after(acc), r: v("r") });
+    return let_({ f }, isFold ? fold(axes.all, first, next, result) : iterate(3, first, next, result));
+  });
+  const programs = fc.oneof({ arbitrary: fc.tuple(list, uses).map(([l, use]) => use(l)), weight: 2 }, { arbitrary: growing, weight: 1 });
 
   it("P17 COMPILE.MODULE.LIST LOOP.LIST: a module with the list ops of design E gives the value of the interpreter at each key", () => {
     fc.assert(
       fc.property(programs, records, fc.constantFrom("0", "1", "a", "x"), fc.boolean(), (e, rs, k, fuse) => {
-        const options = { ...OPTIONS, fuse };
+        const options = { ...LOOP_OPTIONS, fuse };
         // `setNth` on an empty list can start a list of text. Then the number of the step does not fit, and a module refuses the loop.
         fc.pre(reasonOf(e, options) !== NO_FIT);
-        expectSame(make(sourceOf(e, options)), e, rs, { a: 1, k });
+        expectSame(make(sourceOf(e, options)), e, rs, { a: 1, k }, options);
       }),
     );
   });

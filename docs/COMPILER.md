@@ -1531,6 +1531,27 @@ The module of the tree pilot then appends the moved bands in place in both print
 
 The merge of a long row gives another list, so the next append after a merge copies the list one time. The sweep of the merge still copies its open bands at each start event. Its steps `emit` and `seg` read the count of the old list after the step `open`, so COMPILE.MODULE.APPEND.READ does not apply.
 
+#### The caches of a module
+
+A cache keeps a value on an object. If the object changes after the cache, a read of the cache can give an old value (V-096). This table lists each cache of a module and of the compiler, and the reason that it stays right. The line numbers are of `packages/compiler/src/module.ts`, unless the row names another file.
+
+| Cache | Key | Changes of the key | Reason that the cache stays right |
+|---|---|---|---|
+| `GT`: `l.ix`, the index of `get` (line 722) | the array of a list | a push into `w` (`AO`, `AOC` and the push of one item) | The index keeps its count of items, and it adds only the new items. The tests `V-096` and the P17 of `module-lists.test.ts` read it. |
+| `LV`, `LVC`: `l.vl`, the `vex.list` of an argument or a field (lines 890, 993) | the array of a list, and each inner array | a push into `w` | The object has the count of its items. Another count makes a new object. No list holds `w` as an item during the loop (COMPILE.MODULE.APPEND.READ), so an inner array gets no push. The same two tests read it. |
+| `VW`: `l.vw`, the items with values (line 603) | the array of a list | a push into `w` | `w` has no error items, because `V` removes them before a push. Thus its view is the array itself, and a push changes the view too. |
+| `SBI`, `SKI`: a sort in place (line 4340) | a fresh array | the sort | A sort in place gets only a fresh array. No other part holds that array, so it has no cache. Each read of a name clears the fact `fresh` (`heldList`, line 210). |
+| The undo of a fused `each`: `o.length = m` (line 4149) | the array `o` of the `each` | the undo and the next pushes | The code reads `o` only after its loop. Thus no cache is on `o` when the undo shrinks it. |
+| `DO`, `LC`, `LCP`: the cells of a sheet (lines 876, 1004, 1006) | a column of a sheet | the change after the fill | These helpers run after the fill, and no cache is on a column. `SN` and `SNC` change a copy (lines 631, 983). |
+| `L`, `Q` (`m[j]`), `M`, `M1`, `S`, `PF` and the columns of a call | a key, a node or a list of the run | none | Each run makes its tables again. A memo node is not in a loop or in a function (`memo.ts`, line 314). Thus no key is `w`, and only `w` gets a push after its op. |
+| `LOOPS` (line 1730), `ORIGINALS` (`unshared.ts`, line 9) and the maps of the printer | a node of the program | none | The compiler does not write to a node. `LOOPS` stays from one call to the next. It keeps the rule of the cache of the interpreter (`core/src/evaluate.ts`, line 238): a program does not change after a call. |
+| The maps of tier 2 (`runtime.ts`, lines 423, 448 and 508) | a space | none | A space does not change (COMPILE.MEMO). |
+| The index of `get` of the interpreter (`core/src/evaluate.ts`, line 331) | a `vex.list` | none | `vexList` freezes the list and its items (`core/src/list.ts`, line 18). |
+
+The P17 of `module-lists.test.ts` makes loops whose list grows in place while a step reads it. A step pushes into the list, and a `let` gives the new list to a body. The body reads the list in each form: `get`, an argument, a call, `nth`, `count`, an `each` and a fold. Then it gives the list or another list. The result of the loop reads the list again, also in a field.
+
+Without the fix of V-096, this property fails for each of the seeds 1 to 10 at 200 runs. The property without these loops passes for each of these seeds, and for 10000 runs at the seed 1.
+
 #### A range of fill (COMPILE.MODULE.FILL.RANGE)
 
 The functions `pack` and `merge` of the tree pilot make a list with `fill` only for its positions. `pack` folds over the positions of `fill(2 * n, 0)`, and `merge` loops over `take` of a `fill`. Before this rule, `FI` made an array of pairs for each such list, and the loop then read only the length of that array.

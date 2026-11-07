@@ -168,13 +168,10 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
   it("COMPILE.MODULE.APPEND.OWN: a step that another part of the loop reads keeps the copy of each append", () => {
     const fallBacks: Record<string, Expr> = {
       otherName: fold(axes.all, { acc: NONE, c: NONE }, { acc: op("append", acc, one(n)), c: acc }, rec({ acc, c: v("c") })),
-      otherCount: fold(axes.all, { acc: NONE, c: lit(0) }, { acc: op("append", acc, one(n)), c: op("count", acc) }, v("c")),
       inX: folded(LIT, op("append", acc, one(op("count", acc)))),
       inTest: folded(NONE, op("if", op("gt", op("count", acc), lit(1)), acc, op("append", acc, one(n)))),
       inBind: folded(NONE, let_({ y: op("count", acc) }, op("append", acc, one(v("y"))))),
       until: iterate(6, { acc: NONE }, { acc: op("append", acc, one(n)) }, acc, op("gt", op("count", acc), lit(2))),
-      otherLeaf: fold(axes.all, { acc: NONE, c: LIT }, { acc: op("if", b, op("append", acc, one(n)), v("c")), c: v("c") }, acc),
-      literalLeaf: folded(NONE, op("if", b, op("append", acc, one(n)), LIT)),
       inIfError: folded(NONE, op("ifError", op("append", acc, one(op("divide", lit(1), w))), acc)),
       shadow: folded(LIT, let_({ acc: NONE }, op("append", acc, one(n)))),
     };
@@ -185,6 +182,10 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
         expect(source).not.toContain("let undefined");
       }
     }
+    // A count after the step and a branch of another list or of a literal keep the copy with fuse false. With fuse, they append in place
+    // (COMPILE.MODULE.APPEND.LATE and COMPILE.MODULE.APPEND.OTHER).
+    const wide = [fold(axes.all, { acc: NONE, c: lit(0) }, { acc: op("append", acc, one(n)), c: op("count", acc) }, v("c")), fold(axes.all, { acc: NONE, c: LIT }, { acc: op("if", b, op("append", acc, one(n)), v("c")), c: v("c") }, acc), folded(NONE, op("if", b, op("append", acc, one(n)), LIT))];
+    for (const e of wide) for (const fuse of [true, false]) expect(owns(expectSame(e, RECORDS, fuse))).toBe(fuse);
     // LOOP.SIZE: a step that appends the list to itself doubles it at each step, so the module refuses it.
     expect(() => sourceOf(iterate(3, { acc: LIT }, { acc: op("append", acc, acc) }, acc))).toThrow("(LOOP.SIZE)");
     // The name `acc` appends to its own list, and the name `c` reads only itself, so `acc` still appends in place.
@@ -317,7 +318,6 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
   it("COMPILE.MODULE.APPEND.READ: a step after the step of the name, or a read that can hold the list, keeps the copy of each append", () => {
     const step = op("append", acc, one(n));
     const fallBacks: Record<string, Expr> = {
-      after: fold(axes.all, { acc: NONE, r: lit(0) }, { acc: step, r: op("count", acc) }, rec({ acc, r: v("r") })),
       holds: fold(axes.all, { r: NONE, acc: NONE }, { r: acc, acc: step }, rec({ acc, r: v("r") })),
       take: fold(axes.all, { r: NONE, acc: NONE }, { r: op("take", acc, lit(1)), acc: step }, rec({ acc, r: v("r") })),
       each: fold(axes.all, { r: NONE, acc: NONE }, { r: each(axes.list(acc), v("y"), undefined, ["y"]), acc: step }, rec({ acc, r: v("r") })),
@@ -328,6 +328,9 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
     for (const [name, e] of Object.entries(fallBacks)) {
       for (const records of [RECORDS, MANY]) expect({ name, owns: owns(expectSame(e, records)) }).toStrictEqual({ name, owns: false });
     }
+    // A count after the step keeps the copy with fuse false. With fuse, the step prints last (COMPILE.MODULE.APPEND.LATE).
+    const after = fold(axes.all, { acc: NONE, r: lit(0) }, { acc: step, r: op("count", acc) }, rec({ acc, r: v("r") }));
+    for (const fuse of [true, false]) expect(owns(expectSame(after, RECORDS, fuse))).toBe(fuse);
   });
 
   it("COMPILE.MODULE.APPEND.LET COMPILE.MODULE.APPEND.READ: a pack of places reads its list in one step and appends to it in a let of another step", () => {

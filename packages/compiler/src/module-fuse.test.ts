@@ -866,11 +866,10 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
   });
 
   it("COMPILE.MODULE.FUSE.ADOPT COMPILE.MODULE.APPEND.OWN: a name that another part of the loop reads has no array of its own", () => {
-    // The step of c reads acc, the test reads acc, and the step of acc reads its list in a binding, as open in NODE_SHAPE.
+    // The step of c reads acc, the test reads acc, and the item of the append reads acc.
     const readers: Record<string, Expr> = {
       otherName: fold(axes.window(-1, 1), { acc: one, c: one }, { acc: op("append", acc, one), c: acc }, rec({ acc, c: v("c") })),
       until: thrice(one, op("append", acc, one), acc, op("gt", op("count", acc), lit(2))),
-      binding: thrice(one, let_({ base: op("if", ref("b"), op("drop", acc, lit(1)), acc) }, op("append", v("base"), one))),
       inX: thrice(one, op("append", acc, op("fill", lit(1), op("count", acc)))),
     };
     for (const [name, e] of Object.entries(readers)) {
@@ -878,6 +877,12 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
       expect({ name, owned: owned(source), adopts: adopts(source) }).toStrictEqual({ name, owned: 0, adopts: false });
       expectSame(e);
     }
+    // The step of acc binds its list or a drop of it, as open in NODE_SHAPE. With fuse, the append checks its array
+    // (COMPILE.MODULE.APPEND.OTHER).
+    const binding = thrice(one, let_({ base: op("if", ref("b"), op("drop", acc, lit(1)), acc) }, op("append", v("base"), one)));
+    expect({ owned: owned(printed(binding, true)), adopts: adopts(printed(binding, true)) }).toStrictEqual({ owned: 1, adopts: true });
+    expect(owned(printed(binding, false))).toBe(0);
+    expectSame(binding);
   });
 
   it("COMPILE.MODULE.FUSE.ADOPT: the last append of the result pushes into the array of the loop, also through a let that binds the list", () => {
@@ -997,18 +1002,20 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
     }
   });
 
-  it("COMPILE.MODULE.FUSE.ADOPT: the accumulators of NODE_SHAPE take their first lists, and the open bands keep their copy", () => {
+  it("COMPILE.MODULE.FUSE.ADOPT: the accumulators of NODE_SHAPE take their first lists, and the open bands append into their array", () => {
     const node = { domains: SHAPE_DOMAINS, schema: NODE_SCHEMA, name: "nodeShape", faults: "value" } as const;
     const on = sourceOf(emitModule(NODE_SHAPE, node));
-    // The names out of the sweep and acc of the pairs start with fill(0), so both take their first lists. The step of
-    // open reads its list in a binding, so open has no array of its own.
-    expect(on.match(/let w\d+ = l\d+;/g)?.length).toBe(2);
+    // The names out and open of the sweep and acc of the pairs start with fill(0), so they take their first lists. The
+    // step of open binds its list or a filter of it (COMPILE.MODULE.APPEND.OTHER).
+    expect(on.match(/let w\d+ = l\d+;/g)?.length).toBe(3);
     expect(on).not.toMatch(/let w\d+ = null;/);
     // Two steps and three appends of the results push in place. Each one pushes its one item, with no AOC and no FI.
-    expect(owned(on)).toBe(5);
+    // The append of open goes through AOC and FI, because its list can be the filter.
+    expect(owned(on)).toBe(6);
     expect(inPlace(on)).toBe(5);
     expect(checked(on)).toBe(0);
-    expect(on).not.toMatch(/AOC?\(|FI\(1, /);
+    expect(on.match(/\(w\d+ = AOC\(G\(b\d+\), FI\(1, /g)?.length).toBe(1);
+    expect(on.match(/FI\(1, /g)?.length).toBe(1);
     const off = sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false }));
     expect(off.match(/let w\d+ = null;/g)?.length).toBe(2);
     expect(owned(off)).toBe(2);

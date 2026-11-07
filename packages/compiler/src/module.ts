@@ -1730,26 +1730,50 @@ const LOOPS = new WeakMap<Expr, boolean>();
  * A let can also bind a form to a new name (COMPILE.MODULE.APPEND.LET). Then no other binding reads the name, and the
  * body does not read the old list. The body can read the new name in each way. Such a let goes into `lets`, because the
  * value of the step can then be another list.
+ *
+ * With `wide`, one branch of an `if` can be another list (COMPILE.MODULE.APPEND.OTHER). The body of such a let can
+ * then be a form of the new name.
  */
-function ownForm(e: Expr, name: string, out: Expr[], lets: Expr[]): boolean {
+function ownForm(e: Expr, name: string, out: Expr[], lets: Expr[], wide = false): boolean {
   const free = (x: Expr): boolean => !namesOf(x).has(name);
   if (e.tag === "var") return e.name === name;
   if (e.tag === "let") {
     const held = Object.entries(e.bind).filter(([, x]) => !free(x));
-    if (held.length === 0) return ownForm(e.body, name, out, lets);
+    if (held.length === 0) return ownForm(e.body, name, out, lets, wide);
     const [bind, x] = held[0] as [string, Expr];
     // A binding of the name itself hides the old list in the body, so the body can read the name.
-    if (held.length > 1 || (bind !== name && !free(e.body)) || !ownForm(x, name, out, lets)) return false;
+    if (held.length > 1 || (bind !== name && !free(e.body)) || !ownForm(x, name, out, lets, wide)) return false;
     lets.push(e);
+    // The body can append to the new name (COMPILE.MODULE.APPEND.OTHER). Then these appends push into the array too.
+    if (wide && bind !== name) {
+      const relay: Expr[] = [];
+      if (ownForm(e.body, bind, relay, lets, wide)) out.push(...relay);
+    }
     return true;
   }
   if (e.tag !== "app" || e.args.length === 0) return false;
   const [head, ...rest] = e.args as [Expr, ...Expr[]];
   // An if without three arguments gives a reason (#if), so the form does not check the count.
-  if (e.op === "if") return free(head) && rest.every((x) => ownForm(x, name, out, lets));
-  if (e.op !== "append" || !rest.every(free) || !ownForm(head, name, out, lets)) return false;
+  if (e.op === "if") {
+    if (!free(head)) return false;
+    const forms = rest.map((x) => ownForm(x, name, out, lets, wide));
+    // One branch must be a form, so the step reads the name. The other branch can be another list.
+    return forms.every(Boolean) || (forms.some(Boolean) && otherList(e, lets, wide));
+  }
+  if (e.op !== "append" || !rest.every(free) || !ownForm(head, name, out, lets, wide)) return false;
   out.push(e);
   return true;
+}
+
+/**
+ * This function tells if the branch `x` of the `if` node `e` of a form is another list (COMPILE.MODULE.APPEND.OTHER).
+ * Such a branch evaluates before each push of the step, so it can read the name in each way. Its value can be another
+ * list, so the `if` goes into `lets`. The printer gives each place of the program an object of its own (`unsharedAll`).
+ * Thus an append of the form is not also an append in such a branch.
+ */
+function otherList(e: Expr, lets: Expr[], wide: boolean): boolean {
+  if (wide) lets.push(e);
+  return wide;
 }
 
 /** The list ops whose value is a number or an item of the list, so the value cannot hold the array of the list. */
@@ -4528,27 +4552,60 @@ class Printer {
    *
    * A step of another name can read it only before the step of the name, and only by `readsOnly`
    * (COMPILE.MODULE.APPEND.READ). The steps print in their order, so such a read ends before the first push.
+   *
+   * A step that is not such a form can be a wide form of `ownForm` with an append (COMPILE.MODULE.APPEND.OTHER). Each
+   * step of another name that reads it must read it by `readsOnly`. A step of the name that such a read follows prints
+   * after the other steps (COMPILE.MODULE.APPEND.LATE). The order must keep each read of each owner before its step.
+   * These wide forms apply only with fuse.
    */
   #loopStep(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>, adopt: ReadonlySet<string>, until?: Expr): LoopStep {
     const owners: Owner[] = [];
     const nodes: Expr[] = [];
     const steps = Object.entries(step);
+    const keys = steps.map(([k]) => k);
+    const found = new Map<string, { readonly own: readonly Expr[]; readonly lets: readonly Expr[] }>();
+    const wide: { readonly name: string; readonly own: readonly Expr[]; readonly lets: readonly Expr[]; readonly late: boolean }[] = [];
     for (const [i, [name, x]] of steps.entries()) {
       const own: Expr[] = [];
       const lets: Expr[] = [];
       const read = (y: Expr): boolean => namesOf(y).has(name);
+      if (until !== undefined && read(until)) continue;
       const others = steps.filter(([k, y], j) => k !== name && read(y) && !(j < i && readsOnly(y, name)));
-      if (!ownForm(x, name, own, lets) || others.length > 0 || (until !== undefined && read(until))) continue;
+      if (ownForm(x, name, own, lets) && others.length === 0) {
+        found.set(name, { own, lets });
+        continue;
+      }
+      // The wide forms need fuse, so fuse false prints the module of the version before fusion (COMPILE.MODULE.FUSE.OFF).
+      if (!this.#fuse || !steps.every(([k, y]) => k === name || !read(y) || readsOnly(y, name))) continue;
+      const more: Expr[] = [];
+      const moreLets: Expr[] = [];
+      if (!ownForm(x, name, more, moreLets, true) || more.length === 0) continue;
+      wide.push({ name, own: more, lets: moreLets, late: steps.some(([k, y], j) => j > i && k !== name && read(y)) });
+    }
+    // The steps of the late names print last, in their order. Each read of an owner must come before its step.
+    const orderOf = (late: readonly string[]): readonly string[] => [...keys.filter((k) => !late.includes(k)), ...late];
+    const keepsReads = (names: readonly string[], order: readonly string[]): boolean =>
+      names.every((n) => steps.every(([k, y]) => k === n || !namesOf(y).has(n) || order.indexOf(k) < order.indexOf(n)));
+    let late: readonly string[] = [];
+    for (const w of wide) {
+      const next = w.late ? [...late, w.name] : late;
+      if (!keepsReads([...found.keys(), w.name], orderOf(next))) continue;
+      found.set(w.name, w);
+      late = next;
+    }
+    for (const [name, x] of steps) {
+      const f = found.get(name);
+      if (f === undefined) continue;
       // The variable starts with the first list, and each value of the step is that list or the value of an append that
       // pushes into it. Thus each append of the name gets the array of the variable (COMPILE.MODULE.FUSE.ADOPT). The body
       // of a let of COMPILE.MODULE.APPEND.LET can give another list.
-      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined, adopt: adopt.has(name), sure: adopt.has(name) && lets.length === 0 && !shadows(x, name) };
-      for (const node of own) this.#own.set(node, owner);
+      const owner: Owner = { name, read: vars.get(name) as Name, w: undefined, adopt: adopt.has(name), sure: adopt.has(name) && f.lets.length === 0 && !shadows(x, name) };
+      for (const node of f.own) this.#own.set(node, owner);
       owners.push(owner);
-      nodes.push(...own);
+      nodes.push(...f.own);
     }
     try {
-      return { ...this.#steps(step, inner, vars), owners };
+      return { ...this.#steps(step, inner, vars, orderOf(late)), owners };
     } finally {
       for (const node of nodes) this.#own.delete(node);
     }
@@ -4594,14 +4651,16 @@ class Printer {
 
   /**
    * This method gives the statements of one step of a loop, without the variables of COMPILE.MODULE.APPEND.OWN. It also
-   * gives the statements of each name alone, for the rest of a fold after its exit (`#foldExit`).
+   * gives the statements of each name alone, for the rest of a fold after its exit (`#foldExit`). The steps print in the
+   * order of `order` (COMPILE.MODULE.APPEND.LATE).
    */
-  #steps(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>): { readonly s: string[]; readonly deps: ReadonlySet<number>; readonly parts: readonly StepPart[] } {
+  #steps(step: Names, inner: Ctx, vars: ReadonlyMap<string, Name>, order: readonly string[]): { readonly s: string[]; readonly deps: ReadonlySet<number>; readonly parts: readonly StepPart[] } {
     const s: string[] = [];
     const sets: string[] = [];
     const parts: StepPart[] = [];
     const deps = new Set<number>();
-    for (const [name, x] of Object.entries(step)) {
+    for (const name of order) {
+      const x = step[name] as Expr;
       this.#wantList.add(x);
       const c = this.#hoist(this.expr(x, inner), hasLoop(x));
       const v = vars.get(name) as Name;

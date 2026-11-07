@@ -427,6 +427,7 @@ export const NOT_READ: Readonly<Record<string, string>> = {
   "packages/core/src/spec-coverage.test.ts": "This test reads the spec by a path from packages/core, so it does not start in the copy.",
   "packages/compiler/src/names-gate.test.ts": "This test reads work/test, and Stryker does not mutate that folder. So this test stops no mutant.",
   "packages/testkit/src/mutation-lane.test.ts": "This test reads the files of the lane in tools/mutation, and Stryker does not mutate them. So this test stops no mutant.",
+  "packages/testkit/src/fc-setup.test.ts": "This test reads the setup fc-setup.ts, and the lane does not mutate it (NOT_MUTATED). So this test stops no mutant.",
   "packages/core/bench/measure.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
   "packages/core/bench/processes.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
   "packages/compiler/bench/ablation.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",

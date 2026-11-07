@@ -4105,6 +4105,8 @@ class Printer {
    * fails, a body that fails and an error item of the axis list give the error sentinel as the value.
    */
   #eachList(e: ExprOf<"each">, ctx: Ctx): Code {
+    const alias = this.#sameList(e, ctx);
+    if (alias !== undefined) return alias;
     const at = e.at ?? [];
     const { s, j, head, key, check, checkSafe, skip, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(e.axis, at, ctx, e.as);
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
@@ -4127,6 +4129,28 @@ class Printer {
     // Only the catch of an item puts the sentinel into the list, so a safe item gives a clean list.
     const facts: ListInfo = { item: body.v.kind, inner: heldList(body.v.list), texts, clean: safeItem };
     return { s: [...s, `const ${list} = [];`, head, ...ind(loop), "}"], v: { code: list, kind: undefined, safe: startSafe, deps, list: facts } };
+  }
+
+  /**
+   * This method gives the code of an each that gives its list again (COMPILE.MODULE.EACH.SAME), and undefined for each
+   * other each. The axis is `list`, with no `where`, no `reverse` and no address. The body is a read of the name of the
+   * item. Such an each gives the key and the value of each item, and an error item stays an error item. Thus its value
+   * is the array of its list, with no copy. The option `fuse` must be true.
+   *
+   * The value is not fresh, because the list holds the same array. Thus no op changes the array in place: an append
+   * copies it, and `sortBy` sorts a copy.
+   */
+  #sameList(e: ExprOf<"each">, ctx: Ctx): Code | undefined {
+    // The check of the document refuses two names `as` that are the same name, so the body reads the value of the item.
+    if (!this.#fuse || e.axis.t !== "list" || (e.at ?? []).length > 0 || e.body.tag !== "var" || e.body.name !== e.as?.[0]) return undefined;
+    const list = this.#hoist(this.#listOf(e.axis.list, ctx), hasLoop(e.axis.list));
+    const info = list.v.list as ListInfo;
+    // A search cannot know the items of a name that starts empty, as for each other read of the items (#itemNames).
+    if (this.#starts.seek && info.empty === true) throw new NotStandalone("a search reads the items of an empty list");
+    // The facts are the facts of the each of the loop: its items keep the facts of the items of the list. A list of
+    // lists holds each list of its items, so the facts of an item are not fresh.
+    const facts: ListInfo = { item: info.item, inner: info.inner, texts: info.texts === true, clean: this.#clean(info) };
+    return { s: list.s, v: { ...list.v, list: facts } };
   }
 
   /**

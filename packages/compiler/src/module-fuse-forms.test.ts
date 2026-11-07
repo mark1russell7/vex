@@ -176,7 +176,7 @@ describe("COMPILE.MODULE.FUSE.FACTS: the counts of the reads", () => {
     // The address of a reference evaluates once.
     expect(reads(ref("n", [index(op("count", ys))]))).toBe(1);
     const list = one();
-    expect(factOf(ref("n", [index(op("count", list))]), list).reads).toBe(1);
+    expect(factOf(ref("n", [index(op("sum", list))]), list).reads).toBe(1);
   });
 
   it("COMPILE.MODULE.FUSE.FACTS: a read in a step of a fold or of an iterate has no bound", () => {
@@ -208,7 +208,7 @@ describe("COMPILE.MODULE.FUSE.FACTS: the counts of the reads", () => {
       const facts = factsOf(() => emitModule(loop, OPTIONS));
       expect([facts.get(a)?.reads, facts.get(b)?.reads]).toStrictEqual([Infinity, 1]);
     }
-    expect(factOf(op("sum", each(axes.all, op("count", a))), a).reads).toBe(1);
+    expect(factOf(op("sum", each(axes.all, op("sum", a))), a).reads).toBe(1);
     expect(factOf(rec({ l: a }), a).reads).toBe(1);
   });
 

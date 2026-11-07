@@ -66,6 +66,8 @@ jobs:
         with:
           part: ${{ matrix.part }}
           timeout-ms: ${{ inputs.timeout_ms }}
+          # 10 minutes under the limit of the job, for the upload of the costs (LANE.COST).
+          stop-minutes: 140
 
   lane-read:
     name: The gate of the lane

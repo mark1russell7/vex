@@ -419,6 +419,70 @@ export function mutateOf(root: string, part: string): string[] {
   return groupFiles(root, part);
 }
 
+/**
+ * The test files of the four packages that no part of the lane reads, as paths of the repository, each with its reason. The
+ * load check and the gate fail on a test file that no part reads and that this list does not name (LANE.FILES).
+ */
+export const NOT_READ: Readonly<Record<string, string>> = {
+  "packages/core/src/spec-coverage.test.ts": "This test reads the spec by a path from packages/core, so it does not start in the copy.",
+  "packages/compiler/src/names-gate.test.ts": "This test reads work/test, and Stryker does not mutate that folder. So this test stops no mutant.",
+  "packages/testkit/src/mutation-lane.test.ts": "This test reads the files of the lane in tools/mutation, and Stryker does not mutate them. So this test stops no mutant.",
+  "packages/testkit/src/fc-setup.test.ts": "This test reads the setup fc-setup.ts, and the lane does not mutate it (NOT_MUTATED). So this test stops no mutant.",
+  "packages/core/bench/measure.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
+  "packages/core/bench/processes.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
+  "packages/compiler/bench/ablation.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
+  "packages/compiler/bench/alloc.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
+  "packages/compiler/bench/alloc-limit.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
+  "packages/compiler/bench/limit-walk.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
+};
+
+/** The folders of a package that hold no test file of the package. */
+const NOT_SOURCE: ReadonlySet<string> = new Set(["node_modules", "dist", "coverage"]);
+
+/** This function gives each test file in a folder, as paths of that folder. */
+function testsIn(folder: string): string[] {
+  return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.isDirectory()) return NOT_SOURCE.has(entry.name) ? [] : testsIn(join(folder, entry.name)).map((file) => `${entry.name}/${file}`);
+    return isTest(entry.name) ? [entry.name] : [];
+  });
+}
+
+/** This function gives each test file of the four packages on the disk, as paths of the repository. */
+export function testFilesOnDisk(root: string): string[] {
+  return PACKAGES.flatMap((name) => testsIn(join(root, "packages", name)).map((file) => `packages/${name}/${file}`)).toSorted();
+}
+
+/** This function gives the package of a path of the repository: `packages/core/src/a.ts` is `core`. */
+export function packageOfPath(path: string): string {
+  return path.split("/")[1] ?? path;
+}
+
+/**
+ * This function gives each test file on the disk that no part reads and that `NOT_READ` does not name, as paths of the
+ * repository. The set holds the test files that the parts read, as paths of the lane.
+ */
+export function unreadTests(root: string, read: ReadonlySet<string>): string[] {
+  return testFilesOnDisk(root).filter((file) => !read.has(`work/${pathInLane(file)}`) && NOT_READ[file] === undefined);
+}
+
+/** This function gives each entry of `NOT_READ` that is not true: its file is not on the disk, or a part reads its file. */
+export function staleEntries(root: string, read: ReadonlySet<string>): string[] {
+  const onDisk = new Set(testFilesOnDisk(root));
+  return Object.keys(NOT_READ).filter((file) => !onDisk.has(file) || read.has(`work/${pathInLane(file)}`));
+}
+
+/** The file in which the load check saves its selection, as a path in this folder. Each job of the lane copies it beside its report. */
+export const SELECTION_FILE = "work/lane-selection.json";
+
+/** The load check writes the version of its runner and the folder that gives it to this file, for the record of the run. */
+export const RUNNER_FILE = "work/lane-runner.json";
+
+/**
+ * The load check gives this option to `collect` of the runner. Under Vitest 5 the default form parses a file and does not
+ * start it, so it does not see a missing package. The script `load-run-flip.ts` reads this option on that version.
+ */
+export const COLLECT_OPTIONS: { readonly staticParse: false } = { staticParse: false };
+
 /** This function gives the path of the lane that a changed file of the repository selects, if it selects one. */
 function selectedBy(path: string): string | undefined {
   const copy = COPIES.find((c) => c.tests && path.startsWith(`${c.from}/`));

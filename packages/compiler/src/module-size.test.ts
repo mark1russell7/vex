@@ -117,8 +117,8 @@ describe("COMPILE.MODULE.SIZE.FILL: a fill with no items", () => {
 
   it("COMPILE.MODULE.SIZE.FILL: a value that can fail keeps FI and its error", () => {
     for (const e of [op("count", FAILS), op("count", FAILS_AT_KEY), op("ifError", op("count", FAILS), lit(-1)), op("append", FAILS, NOTHING)]) expect(expectSame(e)).toContain("FI(0, ");
-    // A count that is not the literal 0 keeps FI, with the error of a count that is not valid.
-    for (const e of [op("count", op("fill", n, lit(1))), op("count", op("fill", lit(-1), lit(1))), op("count", op("fill", lit(2), lit(1)))]) expect(expectSame(e)).toContain("FI(");
+    // A count that is not the literal 0 keeps FI, with the error of a count that is not valid. A sum reads the array, because a count makes none (COMPILE.MODULE.FILL.RANGE).
+    for (const e of [op("sum", op("fill", n, lit(1))), op("sum", op("fill", lit(-1), lit(1))), op("sum", op("fill", lit(2), lit(1)))]) expect(expectSame(e)).toContain("FI(");
     // A second option is not a form of this rule.
     expect(emitModule(op("count", op("fill", lit(0), lit(1), lit(2))), OPTIONS).ok).toBe(emitModule(op("count", op("fill", lit(0), lit(1), lit(2))), { ...OPTIONS, fuse: false }).ok);
   });

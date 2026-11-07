@@ -254,6 +254,15 @@ describe("the ireko tree pilot", () => {
     expect(source).not.toMatch(/\bAP\(l\d+/);
   });
 
+  it("COMPILE.MODULE.FILL.RANGE: the pack and the merge loop over the counts of their ranges of fill, with no array", () => {
+    // Each print of pack loops over the positions of a fill of 2n items. Each print of the merge loops over a take of a fill.
+    const source = irekoSource("tree", "value");
+    expect(source.match(/= FN\(k_number\(\(2\) \* /g)).toHaveLength(2);
+    expect(source.match(/= TN\(\d+, /g)).toHaveLength(2);
+    // Only the lists of one item keep FI, because an append reads them.
+    expect(source.match(/(?<!function )\bFI\((?!1, )/g)).toBeNull();
+  });
+
   it("COMPILE.MODULE: the merge of a long row gives the layout of ireko with the same bits", () => {
     fc.assert(
       fc.property(treeLong, (i) => {

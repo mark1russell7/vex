@@ -1,4 +1,4 @@
-# Roadmap
+in progress: #300 merged, and a whole run of the parts of the core and the domains is in CI
 
 This file is the list of the open items of Vex. The Status page of the site reads its tables, and the tracker of the fleet copies them. The plan and its reasons are in [`REVIEW.md`](./REVIEW.md) §11.
 
@@ -22,12 +22,15 @@ Mark chose a ladder of steps with a setting. The study is on the tracker of the 
 |---|---|---|---|---|---|
 | CATCHFAULT | A print-time refusal of a fault that a catch can hide. The runtime check is dropped, and #278 is closed. | compiler | P1 | later: after 0.18.0 | |
 | COMPILE-FUSE | The compiler joins each chain of list ops into one loop, with no lists between the ops. | compiler | P1 | in progress: steps 1 to 8 merged, the size of the printer is #242 | |
-| ENGINE | The passes of the ireko engine (measure, shapes, place) as Vex modules. | ireko | P1 | in progress: place and measure merged | |
+| ENGINE | The passes of the ireko engine as Vex modules: place, measure, shapes, layers, tree, audit and route. | ireko | P1 | in progress: place and measure merged | |
 | V-089 | The time of the source of tier 2 grows faster than the places on `wide`, `wideloop` and `constlet`, with linear bytes. The collector is not the cause. The gate reads this time as report only. | compiler | P1 | in progress | |
 | V-092 | A stack overflow in the lowering of tier 2 gives tier 1 with no message to the caller. The gate prints the depth on half of the default stack. | compiler | P2 | later | |
-| TREEALLOC | The generated tree code allocates less for each node, so V8 has no site to tenure. The measure is the bytes and objects for each node, with a limit and no timing. | compiler | P1 | in progress: the measure is next | |
 | NIGHTLY1103 | The Nightly is green again. A test file that does not load fails the lane, and the lane loads each setup file of a package (V-090, V-091). | quality | P1 | in progress: #293 | |
 | LANETIME | Each part of the lane finishes in its time limit. The weekly run reads each part and holds the gate, and the nights read the changed files. The first full read is due by 2026-11-12. | quality | P1 | in progress | |
+| SHAPETREESWAP | The tree strategy of ireko runs on the Vex tree module in the entry `ireko/shapes`. The draft is ireko #73, and its entry is 2.05 kB over its limit. | ireko | P1 | blocked | TREESPEED |
+| TREESPEED | The Vex tree module runs at the speed of the hand tree of ireko. After #313, it takes 1.07 to 1.80 times the hand time. The 95 % interval of each ratio must hold 1.0. | compiler | P1 | in progress: the count of the open list, then the copy in the merge sweep | |
+| V-094 | A loop local that holds an argument that is not a plain name goes out of its scope, and the module has a fault of a name. | compiler | P1 | in progress: #308 merged. The Weekly lost 4 of 5 jobs to the heap of the test spies (V-095, #314). The proof is the next Weekly | |
+| V-093 | The check of a copy does not see `Infinity`, `NaN` or `undefined` inside data. One import line of the fix costs 2 to 6 % on two rows, and its cause is open. | compiler | P2 | in progress: #303 | |
 | GATEFLIP | A flip test for each gate of a measure: an added fault fails the check, and a clean copy passes in the same job. By 2026-11-12. | quality | P1 | in progress: the speed gates of the core and the compiler are merged | |
 
 ## Next

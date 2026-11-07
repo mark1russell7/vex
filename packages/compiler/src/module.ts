@@ -39,6 +39,8 @@ import { deadConstants, keepFaults, namesOfCode, tidy, type Tidied, wordsOf } fr
 import { canonical, type KeyScope, KeyTable, keyText, NotStandalone } from "./scope-key.ts";
 import { keyOrderOf, readsFinished } from "./sheet-order.ts";
 import { originalOf, placesRead, unsharedAll } from "./unshared.ts";
+// This import is the last one. Before the import of `@mark1russell7/vex`, it cost 2 to 6 % on two rows of the module bench (V-093).
+import { sameValue } from "@mark1russell7/coeval";
 
 /** The options of a standalone module. */
 export interface ModuleOptions {
@@ -1954,14 +1956,33 @@ function samples(each: readonly (readonly unknown[])[]): readonly (readonly unkn
   return each.reduce<readonly (readonly unknown[])[]>((acc, values) => acc.flatMap((xs) => values.map((x) => [...xs, x])), [[]]);
 }
 
-/** This function gives the text of plain data, with -0 apart from 0. */
-const dataText = (x: unknown): string => canonical(x as Expr, () => undefined);
+/** This function tells if a value is an object. A function is not one here. */
+const isObject = (x: unknown): x is object => typeof x === "object" && x !== null;
 
-/** This function tells if two values are the same: the same primitive, or plain data with the same structure. */
+/** This function gives the parts of a value of a class: the items of a `Map` or of a `Set`, or else the own fields. */
+const partsOfInstance = (x: object): unknown => (x instanceof Map || x instanceof Set ? [...x] : { ...x });
+
+/**
+ * This function is the rule of `same` for two objects. Two objects with different prototypes differ. Two values of a
+ * class compare by their parts. The rules of `sameValue` compare each list and each plain record.
+ */
+function sameObjects(a: unknown, b: unknown): boolean | undefined {
+  if (!isObject(a) || !isObject(b)) return undefined;
+  const proto: unknown = Object.getPrototypeOf(a);
+  if (proto !== Object.getPrototypeOf(b)) return false;
+  if (proto === null || proto === Object.prototype || Array.isArray(a)) return undefined;
+  return sameValue(partsOfInstance(a), partsOfInstance(b), sameObjects);
+}
+
+/**
+ * This function tells if two values are the same. The walk of `sameValue` sees each leaf with `Object.is`, so
+ * `Infinity`, `NaN` and `undefined` differ from `null`, and `-0` differs from `0` (V-093). The JSON text sees the order of
+ * the fields and the result of a `toJSON` function. A value that has no JSON text compares by the walk only.
+ */
 function same(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
-  if (typeof a !== "object" || a === null || typeof b !== "object" || b === null || Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
-  return dataText(a) === dataText(b);
+  if (!isObject(a) || !isObject(b)) return false;
+  return call(() => JSON.stringify(a)).value === call(() => JSON.stringify(b)).value && sameValue(a, b, sameObjects);
 }
 
 /** This function gives the value of a call, or that it threw. */

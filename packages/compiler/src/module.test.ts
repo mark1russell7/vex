@@ -155,6 +155,13 @@ function fnOf(src: string, outside?: unknown): (...a: never[]) => unknown {
   return new Function("OUTSIDE", `return (${src});`)(outside) as (...a: never[]) => unknown;
 }
 
+/** This function gives the reason for a program that calls one op of a domain, with the function of that op from a source. */
+function reasonOfPick(src: string): string {
+  const pick = fnOf(src, 1) as (x: object) => object;
+  const box = defineDomain({ name: "Box", is: (u: unknown): u is object => typeof u === "object" && u !== null, samples: () => [[1]], ops: { pick: { fn: pick, params: ["domain"], returns: "domain" } } });
+  return reasonOf(op("pick", ref("o")), { domains: [NumDomain, box], schema: { fields: { o: "domain:Box" } } });
+}
+
 /** This function makes a domain of one primitive kind, with the ops of some sources and their kinds of result. */
 function domainOf(name: string, primitive: PrimitiveKind, ops: Readonly<Record<string, readonly [string, PrimitiveKind]>>, valid?: string): AnyDomain {
   return defineDomain({
@@ -811,6 +818,52 @@ describe("COMPILE.MODULE: the text of a module", () => {
       const other = defineDomain({ ...Interval, ops: { ...Interval.ops, grow: { fn: fnOf(src, 1) as (i: Span, d: number) => Span, params: ["number"], returns: "domain" } } });
       expect(reasonOf(op("span", op("grow", iv, ref("n"))), { ...options, domains: [NumDomain, other] })).toBe('the op "grow" of the domain Interval reads a name outside itself, so a module cannot copy it');
     }
+  });
+
+  it("V-093: the check of a copy sees each difference inside data, and it accepts the same data", () => {
+    const refused = 'the op "pick" of the domain Box reads a name outside itself, so a module cannot copy it';
+    // Each pair differs, so the check refuses the copy. OUTSIDE is a name of the original only, so the copy gives the second
+    // value. Each pair of this first group has one JSON text, so only the walk tells them apart.
+    const differ: readonly (readonly [string, string])[] = [
+      ["[Infinity]", "[null]"],
+      ["[-Infinity]", "[null]"],
+      ["[NaN]", "[null]"],
+      ["[undefined]", "[null]"],
+      ["({ a: undefined })", "({})"],
+      ["new Map([[1, 2]])", "new Map([[1, 3]])"],
+      ["new Set([1])", "new Set([2])"],
+      ["Object.assign(new Error('x'), { a: Infinity })", "Object.assign(new Error('x'), { a: null })"],
+      ["[-0]", "[0]"],
+      ["[{ a: Object.create(null) }]", "[{ a: {} }]"],
+      // These values have no JSON text, so only the walk tells them apart.
+      ["[1n]", "[2n]"],
+      ["(() => { const c = [1]; c.push(c); return c; })()", "(() => { const c = [2]; c.push(c); return c; })()"],
+      // Only the JSON text tells these pairs apart, because the walk ignores the order of the fields and sees no field of
+      // a date or of a number object.
+      ["({ a: 1, b: 2 })", "({ b: 2, a: 1 })"],
+      ["new Date(0)", "new Date(1)"],
+      ["Object(1)", "Object(2)"],
+      // The control: both forms tell this pair apart.
+      ["[1]", "[2]"],
+    ];
+    for (const [original, inCopy] of differ) expect({ original, reason: reasonOfPick(`(_x) => (typeof OUTSIDE === 'undefined' ? ${inCopy} : ${original})`) }).toEqual({ original, reason: refused });
+    // The function and the copy give the same data here, so the check accepts the copy. This source reads no outside name,
+    // because the gate of the names reads each printed module of this file.
+    const equal = [
+      "[Infinity]",
+      "[NaN]",
+      "[undefined]",
+      "[-0]",
+      "({ a: undefined })",
+      "new Map([[1, 2]])",
+      "new Set([1])",
+      "Object.assign(new Error('x'), { a: Infinity })",
+      "new Date(0)",
+      "[1n]",
+      "[Object.create(null)]",
+      "(() => { const c = [1]; c.push(c); return c; })()",
+    ];
+    for (const value of equal) expect({ value, reason: reasonOfPick(`(_x) => (${value})`) }).toEqual({ value, reason: "" });
   });
 
   it("V-062 REC.FIELDS: a record of a module has a field __proto__ as an own field, as the interpreter does", () => {

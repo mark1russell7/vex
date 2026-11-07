@@ -1,5 +1,66 @@
 # @mark1russell7/vex
 
+## 0.18.0
+
+### Minor Changes
+
+- 51d1343: Vex takes `@mark1russell7/coeval` 0.20.1 in place of 0.17. The behavior of Vex does not change. Vex does not use the functions that the breaking changes of coeval 0.18, 0.19 and 0.20 change. These are `conforms`, `encodeValue`, `factsOf`, the attributes of trees and the cells of a host.
+  
+  The declarations of Vex refer to the types of coeval, for example `Envelope`. A project that also takes coeval 0.17 gets two copies of the kernel. Thus the change counts as a breaking change.
+- 0f69b68: The limit of `iterate` can come from the size of the data. `dataLimit(axis)` gives the number of targets of an axis, and the axis `list` gives the count of a list. The builder also takes a list chain. The interpreter, tier 2 and standalone modules give one value, and a limit that is not valid gives `#NUM!` of the kind `limit`.
+  
+  A program with a data limit is of step B, so `maxStep: "A"` refuses it. A limit that is a number stays at step A.
+  
+  The field `limit` of the type of an `iterate` node has a wider type, so code that reads it as a number must change. This is why the version raises MINOR.
+- f5e4496: A program can calculate a fixed point. The node `fix(name, join, init, step)` makes a column with a value for each row, and `last(name)` reads the last round. The rounds repeat the step until no row changes. The joins `or` and `max` move a row up, and `and` and `min` move a row down.
+  
+  A check proves that each step moves one way, from the kinds of the ops. A step without a proof gives an error with a reason before a run. The function `monotoneError` gives this reason. An op states its direction in the new field `monotone`, and a function of the host does the same. A column of `n` rows makes `n + 1` rounds at most, and a column that still changes gives `#NUM!`. `explain` shows each round. The testkit has `arbFixExpr` and `arbFixGraph`.
+  
+  A program with `fix` is of step B, so `maxStep: "A"` refuses it. The interpreter and the reference tier have the construct.
+  
+  The type `Expr` has two new tags, so a `switch` that covers each tag must change. This is why the version raises MINOR.
+- 968b9a5: Vex takes `@mark1russell7/coeval` 0.21.0 in place of 0.20.1. The behavior of Vex does not change. Vex does not use `typeFromSchema`, and a reference to a name in a document of Vex has one step. Thus the breaking changes of coeval 0.21.0 do not reach Vex.
+  
+  The declarations of Vex refer to the types of coeval, for example `Envelope`. A project that also takes coeval 0.20 gets two copies of the kernel. Thus the change counts as a breaking change.
+- 1d3b047: The release train: the ranges of @mark1russell7/coeval, @procedures/client, @procedures/mcp-server change to a version outside the old range.
+- 49c267e: A new check refuses a step of `fold` or `iterate` that uses the old lists or texts of its loop more than one time (LOOP.SIZE). For example, a step with `append(xs, xs)` doubles the list at each step. `compile`, tier 2, `emitModule` and `vex_check` refuse it.
+  
+  Each op that can give a list or a text has a size rule as data (LOOP.SIZE.OPS). A domain with `size: "fixed"` gives each op a rule. A function of the host gets a rule with its property `size`. An op without a rule cannot hold a value of the loop. The new exports are `sizeError` and `ruleOf`.
+
+### Patch Changes
+
+- a0daad1: Tier 2 gives a list op on an array with the code of the interpreter, so such a run needs no fallback to tier 1. `errors` of an array with a hole stays in tier 1, because its values have the position of the call. `listOps` has the new function `array` (COMPILE.LIST.ARRAY, LIST.OPS).
+- 925c7e8: Tier 2 gives the result of the interpreter for an empty `reduce` in a context that catches an error. Tier 1 gives the identity of the op, also in `ifError`, in an item of a list op and in a test of `where`. A failed test of a data limit does not hide `#DEPTH!` of a later test (V-071, COMPILE.FALLBACK).
+- b74101c: Each published package has the MIT license file in its own folder. Thus npm packs the license with each package. The code does not change.
+- e3e577c: The generated code of `@mark1russell7/vex-compiler` gives the error result of a program itself, with `#ARGS` too. It keeps a small record of each failure, and a materialize step builds the error with the error texts of the core. The core exports these texts as `errorText`, `errorAt` and `noKeyError`. A run that tier 2 ends with an error does not count as a fallback. The tiers give the same results as before. The compile of a program with a chain of functions does not take exponential time in a context that catches an error (V-068).
+- e6532fa: A chain has the method `fix(name, join, init, step)`. It makes a fixed-point column, as `iterate` makes a loop. The step gets a chain of the last round, so a program of the builder has no read of `last` outside a column. The join gives the kind of the chain, and the core exports the type `FixValue`.
+- d430c51: Tier 2 and the standalone modules lower a fixed point. A program with `fix` runs in tier 2 with the result of tier 1. This includes each error value of a row and the failure at the round limit. `emitModule` and `emitSheetModule` make a module of such a program, in place of a refusal.
+  
+  The core exports `fixRounds`, `fixValueError`, `joinKind` and `worstRow` for the compiler. The testkit has `arbFixProgram`, the generator of the test of the tiers.
+  
+  A module refuses a column at a key of a literal or of `fill`, because a module has no record at such a key.
+- 74f129f: The step of a fold of the builder can hold a list chain with its own index, also a chain from outside the fold. Before, over an axis that is not a list, such a fold threw a `TypeError` (V-065).
+- f6413f1: `InsetsDomain` keeps the four sides of an inset as plain data, and the op `insets` of `NumDomain` makes a value. A number lifts to four sides, also in a module. A domain can declare `fields`, so two domains of plain objects can share a module.
+  
+  The new op `insets` of `NumDomain` comes before a host function of that name, so `vex-domains` raises MINOR before 1.0.0. The default list of `vex-mcp` has the new domain, so a record with exactly the four sides goes to it before `NumRecordDomain`. An unclear change counts as breaking, so `vex-mcp` raises MINOR too.
+- 2a41f1a: A module counts a data limit that reads no key one time for each run. Thus a walk that stops early does not pay for a count at each key. The values and the errors do not change (COMPILE.MODULE.LIMIT.ONCE).
+- 0bc2ad8: The new list op `setNth(list, i, value)` gives a list with a new value at one position (LIST.SETNTH). The item keeps its key. The op works in the interpreter, in tier 2 and in a standalone module, and a list chain has `setNth(i, value)`. Its size rule counts the list and the value one time each (LOOP.SIZE.SETNTH).
+- 4ab792d: The generated code of `@mark1russell7/vex-compiler` takes `each`, `fold` and a data limit over the axis `list`, also with `reverse`, `where`, an address and `as` (COMPILE.LIST.AXIS). Tier 1 still evaluates that axis over a list with an error item. The core exports `asList`, the list of a value (LIST.ARRAY). The rule is PATCH before 1.0.0: this is a new feature that keeps each result.
+- 4c98dff: The generated code of `@mark1russell7/vex-compiler` takes the list ops on list values, list literals and `fill`. A program with `get`, `nth`, `append`, `take`, `sortBy` and the other list ops is in tier 2. It gives the results of the interpreter (COMPILE.LIST.VALUE). The core exports `listOps`, the list ops of `compile` for the values of a host (LIST.OPS). The rule is PATCH before 1.0.0: this is a new feature that keeps each result.
+- 747987a: `cell(column, at)` and `r.cell(column, at)` of a sheet take computed moves, so a formula over an array can read the last key. A read with a computed move gives the same result in the interpreter, in tier 2 and in a standalone module. This is also true on a cycle that only the values make (`SHEET.CELL.COMPUTED`, `COMPILE.MODULE.SHEET.COMPUTED`).
+  
+  A module reads a cell in the expression of a move before a move that can fail, as the interpreter does. Before this change, such a module could miss a cycle.
+  
+  The random sheets of the test kit have reads at a computed position. Before 1.0.0, a new feature raises PATCH.
+- fd057c7: A standalone module gives the error of the interpreter for an op result that is `undefined`, `null` or a number that is not finite. This rule applies to each declaration `returns` (V-070, COMPILE.MODULE.RESULT). Version 0.17.2 gives a value in these cases, and the interpreter gives an error. A project on 0.17.2 with a module of an op that can give such a result has wrong values. Print the module again with this version.
+- bd4ec21: The kernel exports `readsOf`, `columnOrder`, `isCellRef` and the type `Direction`. `SheetRun` and the module of the compiler use these functions in place of two copies. The results and the errors do not change.
+- 54ef960: LOOP.SIZE accepts more steps that do not grow by a factor. A bound is the largest of some sums, so `if` and `ifError` give the larger value (LOOP.SIZE.BRANCH). A fold that copies a list item by item is valid (LOOP.SIZE.COPY). A record from the fields of one item and `take` with a literal limit have the bound of one item (LOOP.SIZE.PART). Each program that the check accepted before stays accepted, and each step that doubles a value stays refused.
+- aceaa11: The language has steps A, B and C (STEP.LADDER). The checker gives the lowest step of a program, with the reason (STEP.LOWEST). Each construct is of step A today, so each program is of step A.
+  
+  The new host option `maxStep` sets the highest step that the host accepts. The default is B. `compile`, tier 2, `emitModule`, `emitSheetModule` and the tools refuse a program above it, and the reason names the needed step (STEP.MAX). `vex_check` gives the step and the reason. `vex_explain` gives the step on the first line. The new exports are `programStep`, `stepError`, `VEX_STEPS`, `VEX_STEP_NAMES`, `CONSTRUCT_STEPS`, `DEFAULT_MAX_STEP` and the types `VexStep`, `StepOptions` and `ProgramStep`.
+- 7aac6ae: `TextDomain` has the op `codePoints`: the code points of a text as a list of numbers, in each tier (TEXT.CODEPOINTS). The new kind `list:number` of `returns` declares an op of a domain with a list as its result (KIND.RETURNS.LIST). A module takes that op as a list (COMPILE.MODULE.LIST.OP).
+- 5078ec8: A standalone module can hold a program over `Vec2` values (COMPILE.MODULE.FORM). A domain can give a `moduleForm`, the parts that a module copies in place of its own. In a module, a vector is plain `{ x, y }` data, the `toJSON` of a `Vec2`. The interpreter and `tiered` do not change.
+
 ## 0.17.2
 
 No changes in this release.

@@ -1,7 +1,63 @@
 {
   "schema": "weekly-runs/1",
-  "derivation": "No records yet. The dispatch of the weekly with reps 5 and record_only gives the records, and scripts/weekly-minimums.ts derives the minimums from them.",
-  "sources": [],
-  "minimums": {},
-  "ungated": {}
+  "derivation": "For each property over 5 green runs of the weekly: the lower of the worst number of runs divided by 1.1, and the worst number minus the spread of the runs that the budget stopped, rounded down (rule 1e10f489). A property with a spread as large as its worst number is not gated: ungated names it.",
+  "sources": [
+    "42182350664-rep1",
+    "42182350664-rep2",
+    "42182350664-rep3",
+    "42182350664-rep4",
+    "42182350664-rep5"
+  ],
+  "minimums": {
+    "@mark1russell7/vex-compiler > COMPILE.LIST.VALUE COMPILE.TIERED: the op get of a domain in tier 2, the domain is last > a random vector, also with NaN and infinite parts, gives the result of tier 1": 826705,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps append to the list of the name > COMPILE.MODULE.APPEND.LET COMPILE.MODULE.APPEND.READ P17: random readers and lets of the step give the values of the interpreter": 14721,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name > COMPILE.MODULE.APPEND.OWN P17: random steps that append to the list of the name give the values of the interpreter": 15180,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE.LIST P17: random programs with lists > P17 COMPILE.MODULE.LIST LOOP.LIST: a module with the list ops of design E gives the value of the interpreter at each key": 32479,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE.LOOP.EMPTY: a loop name that starts with the empty list > COMPILE.MODULE.LOOP.EMPTY: the module gives the interpreter's sorted values for each set of records (P17)": 3762,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE.SHEET P17: random sheets > P17 COMPILE.MODULE.SHEET: a module of a random sheet of the test kit gives the results of SheetRun, with each budget of the stack": 5293,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE.SIZE: the pass and P17 > COMPILE.MODULE.SIZE P17: a random program with these forms gives the value of the interpreter at each key": 5065,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE FN.CALL: a module with functions gives the value of the interpreter at each key": 26261,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE LIST.VALUE: a module with lists gives the value of the interpreter at each key": 75236,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE.GRAPH COMPILE.MODULE.REDUCE: a module of a graph space gives the value of the interpreter at each key, or VEX_ERROR": 103321,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE.TREE.ALLOC: a module gives the value of the interpreter in a tree of each shape, in each key order": 98058,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE.TREE: a module of a tree space gives the value of the interpreter at each key, or VEX_ERROR": 107975,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE: a loop in the step of a fold gives the value of the interpreter when its name hides the name of the fold": 32086,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE: a module gives the value of the interpreter at each key, or VEX_ERROR": 99370,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE: a module gives the value of the interpreter when each depth uses the names of the outer depths": 21383,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE: a node of the memo that keeps its items gives the value of the interpreter at each key": 64756,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > P17 COMPILE.MODULE: two nodes that keep their items share the helper, with the parts of each node": 26381,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > V-080 P17 COMPILE.MODULE: one object at two places gives the value of the interpreter in a module and in tier 2": 17000,
+    "@mark1russell7/vex-compiler > COMPILE.MODULE: random programs > V-081 V-086 COMPILE.MODULE: a module of each combination of the modes has no read of a name without a declaration": 41304,
+    "@mark1russell7/vex-compiler > P17 V-076: random lists of lists > P17 V-076 COMPILE.MODULE.LIST.NESTED COMPILE.MODULE.LIST.VAR: a module over an item of a list of lists gives the value of the interpreter at each key": 9106,
+    "@mark1russell7/vex-compiler > P17: each failing part in each context > V-071 P17 COMPILE.FALLBACK: a tiered program gives the result of the interpreter, with a schema": 124415,
+    "@mark1russell7/vex-compiler > P17: each failing part in each context > V-071 P17 COMPILE.FALLBACK: a tiered program gives the result of the interpreter, with one identity": 138737,
+    "@mark1russell7/vex-compiler > P17: each failing part in each context > V-071 P17 COMPILE.FALLBACK: a tiered program gives the result of the interpreter, with two identities": 120169,
+    "@mark1russell7/vex-compiler > SHEET.COMPILE: a sheet run with the compiler > SHEET.COMPILE P17: a run with tiered gives the results of the reference, with each budget of the stack": 13041,
+    "@mark1russell7/vex-compiler > SHEET.COMPILE: a sheet run with the compiler > SHEET.COMPILE SHEET.TABLES: a run of two tables with tiered gives the results of the reference": 43379,
+    "@mark1russell7/vex-compiler > TEXT.CODEPOINTS: the op codePoints > TEXT.CODEPOINTS P17: on generated texts, the tiers give the value of the interpreter": 93087,
+    "@mark1russell7/vex-compiler > V-078 KEY: a key holds the meaning of each read > V-078 P17 KEY: two expressions with one key at their places have one value": 585495,
+    "@mark1russell7/vex-compiler > V-079: a text pass does not change a text of the program > V-079 P17: a random program with a text that a pass looks for gives the value of the interpreter": 12792,
+    "@mark1russell7/vex-compiler > V-084 COMPILE.MODULE.PAIRS COMPILE.MODULE.SCAN: a scan in the steps of a fold reads no pack of the loop of the fold > V-084 P17 COMPILE.MODULE.SCAN: each mix of columns in a step and in a scan gives the value of the interpreter": 1063,
+    "@mark1russell7/vex-compiler > V-085 COMPILE.MODULE.SCAN FN.CALL: a call passes only the names that its function reads > V-085 P17 FN.CALL: each mix of reads of the origin and of the focus in a function gives the value of the interpreter": 77648,
+    "@mark1russell7/vex-compiler > a data limit in a module (ITERATE.LIMIT.DATA) > P17 ITERATE.LIMIT.DATA COMPILE.MODULE: a module of a random program with a data limit gives the value of the interpreter": 77080,
+    "@mark1russell7/vex-compiler > each op of Vec2Domain in tier 1, tier 2 and a module (P17 COMPILE.MODULE.FORM) > P17 COMPILE.MODULE.FORM: random chains of ops on random vectors": 115472,
+    "@mark1russell7/vex-compiler > the steps in the tiers and the modules > P17 STEP.VALUE: on programs of the whole grammar, each step that accepts a program gives the same value in each tier": 64584,
+    "@mark1russell7/vex-compiler > the tiers > P17 COMPILE.MEMO: one program at each key of each space, twice, gives the result of the interpreter at each key": 56185,
+    "@mark1russell7/vex-compiler > the tiers > P17 COMPILE.TIERED EVAL.REFERENCE: on programs of the whole grammar, a tiered program gives the result of the interpreter and of the kernel": 54059,
+    "@mark1russell7/vex-compiler > the tiers > P17 COMPILE.TIERED: on list ops over an axis, a tiered program gives the result of the interpreter": 228023,
+    "@mark1russell7/vex-compiler > the tiers > P17 KIND.STATIC: with the domains of primitive types first and a schema, a tiered program gives the result of the interpreter": 264504,
+    "@mark1russell7/vex-compiler > the tiers > P17 VEC2.COMPOSE VEC2.SELECT: a program with the frame ops of Vec2 gives the result of the interpreter in tier 2": 864402
+  },
+  "ungated": {
+    "@mark1russell7/vex-compiler > COMPILE.MODULE.NAME: the name of the run hides nothing > V-082 COMPILE.MODULE.NAME: no language global as the name of the run hides that global from an op": {
+      "reason": "not gated (noise > worst)",
+      "worst": 348142,
+      "spread": 402954
+    },
+    "@mark1russell7/vex-compiler > the tiers > P17 COMPILE.TIERED: on the programs of the builder, a tiered program gives the result of the interpreter": {
+      "reason": "not gated (noise > worst)",
+      "worst": 68720,
+      "spread": 117626
+    }
+  }
 }

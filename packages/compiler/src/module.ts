@@ -494,13 +494,13 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "FN" | "TN" | "LI" | "LA" | "LP" | "LS" | "KC" | "KP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "FN" | "TN" | "LI" | "LA" | "LP" | "LS" | "KC" | "KP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA" | "AI" | "AW";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
  * lists that the facts prove clean. Thus it has no scan of `V`, no `VW` and no test of the sentinel.
  */
-type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "WOC" | "FLC" | "IXC" | "NTC" | "SNC" | "FSC" | "LOC" | "LSC" | "LVC" | "LPC";
+type CleanHelper = "SBC" | "SKC" | "TKC" | "DRC" | "AOC" | "AIC" | "AWC" | "WOC" | "FLC" | "IXC" | "NTC" | "SNC" | "FSC" | "LOC" | "LSC" | "LVC" | "LPC";
 
 /** The helpers of the list ops that build a list (LIST.BUILD), of `get` (LIST.GET) and of `indexOf` (LIST.INDEXOF). */
 type BuildHelper = "DR" | "AP" | "AO" | "WO" | "FL" | "GT" | "IX" | "SN";
@@ -701,6 +701,11 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // Each other list gets the copy of AP. V(o, s) throws before the first push, so an error does not change l. The loop
   // reads n items, so it ends also if a is l.
   AO: "function AO(l, o, s, w) { if (l !== w) return AP(l, o, s); const a = V(o, s), n = a.length; for (let i = 0; i < n; i++) l.push(a[i]); return l; }",
+  // The target of an append of an owner that pushes the items of its second list (COMPILE.MODULE.APPEND.PUSH). The
+  // array w is the target. Each other list gets a copy without its error items, and with s an error item is an error.
+  // AI pushes the one item x of fill(1, x) into the target. The code of x evaluates before the call, as in the interpreter.
+  AW: "function AW(l, s, w) { if (l === w) return l; const a = V(l, s), o = []; for (let i = 0; i < a.length; i++) o.push(a[i]); return o; }",
+  AI: "function AI(l, x, s, w) { const o = AW(l, s, w); o.push(x); return o; }",
   WO: [
     "function WO(l, o, s) {",
     "  const a = V(l, s), g = new Map();",
@@ -717,17 +722,23 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   ].join("\n"),
   // The index of the keys of a list (LIST.GET): the value of the first item of each key. The array keeps its index, so a
   // step that reads each key of a list of n items costs O(n). The key E marks an error item, for strict.
+  // The array of a loop gets a push after a read (COMPILE.MODULE.APPEND.LET), so `n` counts the items in the index.
+  // A push only adds items at the end, so the index adds only the new items. No other change of an array has a read before it.
   GT: [
     "function GT(l, k, s) {",
     "  let x = l.ix;",
     "  if (x === undefined) {",
     "    x = new Map();",
-    "    for (const [q, v] of l) {",
-    "      const t = `${q}`;",
+    "    x.n = 0;",
+    "    l.ix = x;",
+    "  }",
+    "  if (x.n !== l.length) {",
+    "    for (let i = x.n; i < l.length; i++) {",
+    "      const [q, v] = l[i], t = `${q}`;",
     "      if (v === E) x.set(E, E);",
     "      else if (!x.has(t)) x.set(t, v);",
     "    }",
-    "    l.ix = x;",
+    "    x.n = l.length;",
     "  }",
     '  return (s && x.has(E)) || typeof k !== "string" || !x.has(k) ? F() : x.get(k);',
     "}",
@@ -879,10 +890,12 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   LP: "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
   // A list in an argument of an op or in a field of a record (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD): a frozen
   // `vex.list`, as the interpreter gives. The array keeps it, so each later read of the list gives the same object.
+  // The array of a loop gets a push after a read (COMPILE.MODULE.APPEND.LET). A push only adds items, so an object with
+  // another count of items is old, and LV makes a new object.
   LV: [
     "function LV(l, h) {",
     "  let o = l.vl;",
-    "  if (o === undefined) {",
+    "  if (o === undefined || o.items.length !== l.length) {",
     '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LV(v, h - 1) : v } }))) });',
     "    l.vl = o;",
     "  }",
@@ -952,6 +965,8 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   TKC: "function TKC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(0, n) : F(); }",
   DRC: "function DRC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(n) : F(); }",
   // The loop reads n items, so it ends also if o is l.
+  AWC: "function AWC(l, w) { if (l === w) return l; const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); return o; }",
+  AIC: "function AIC(l, x, w) { if (l !== w) { const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); l = o; } l.push(x); return l; }",
   AOC: "function AOC(l, o, w) { if (l !== w) return l.concat(o); const n = o.length; for (let i = 0; i < n; i++) l.push(o[i]); return l; }",
   WOC: [
     "function WOC(l, o) {",
@@ -985,7 +1000,7 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   LVC: [
     "function LVC(l, h) {",
     "  let o = l.vl;",
-    "  if (o === undefined) {",
+    "  if (o === undefined || o.items.length !== l.length) {",
     '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LVC(v, h - 1) : v } }))) });',
     "    l.vl = o;",
     "  }",
@@ -1292,7 +1307,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   GI: [], RB: [],
   KC: ["C"], KP: ["F"], SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
   SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], SNC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
-  SBI: ["F"], SKI: ["F"], QA: [],
+  SBI: ["F"], SKI: ["F"], QA: [], AW: ["V"], AI: ["AW"], AWC: [], AIC: [],
 };
 
 /**
@@ -4438,6 +4453,10 @@ class Printer {
     const strict = this.#strict(op, rest.slice(exprs.length - 1));
     // A function of the program can share a node with the step, but its body has its own names (FN.BIND).
     const owned = owner !== undefined && ctx.env.get(owner.name) === owner.read;
+    // With fuse, an append of an owner pushes the items of a list that a fused loop pushes, with no array of that list
+    // (COMPILE.MODULE.APPEND.PUSH). The one item of `fill(1, x)` goes through `#ones` below.
+    const pushed = op === "append" && owned && this.#fuse ? this.#ownPush(list, exprs[1] as Expr, strict, ctx, owner) : undefined;
+    if (pushed !== undefined) return pushed;
     // With fuse, an append of an owner can push the one item of `fill(1, x)` (COMPILE.MODULE.FUSE.ADOPT). Only `#fill`
     // reads the mark of the node. An error of a print stops the module, so the mark needs no `finally`.
     const right = owned && this.#fuse ? exprs[1] : undefined;
@@ -4449,11 +4468,10 @@ class Printer {
     const parts = this.#inOrder(this.#settle(raw, deps, exprs), true);
     const w = owned ? (owner.w ??= this.fresh("w")) : undefined;
     // The item is the item of the list of the append only if no other part holds the value of fill. The list of a sure
-    // owner is the array of w. A read of the name can be another list, so a check selects the push.
+    // owner is the array of w. Each other list can be another array, so AI or AIC selects the push or a copy with the push.
     const item = one !== undefined && (parts[1] as Code).v === one.v ? one.item : undefined;
-    const push = item === undefined ? undefined : (owner as Owner).sure ? "sure" : (parts[0] as Code).v.code === (owner as Owner).read.code ? "check" : undefined;
-    if (one !== undefined && push !== "sure") this.use("FI");
-    const code = this.#buildCode(op, parts, strict, w, push === undefined ? undefined : { item: item as string, sure: push === "sure" });
+    if (one !== undefined && item === undefined) this.use("FI");
+    const code = this.#buildCode(op, parts, strict, w, item === undefined ? undefined : { item, sure: (owner as Owner).sure });
     const value = (kind: Kind | undefined, facts: ListInfo | undefined): Code => ({ s: stmtsOf(...parts), v: { code, kind, safe: false, deps, list: facts } });
     if (op === "get") return value(info.item, info.inner);
     if (op === "indexOf") return value("number", undefined);
@@ -4465,6 +4483,32 @@ class Printer {
     if (info.empty === true) return built(info);
     if (info.inner === undefined) throw new NotStandalone('"flat" over a list whose items are not lists');
     return built(info.inner);
+  }
+
+  /**
+   * This method prints an append of an owner whose second list a fused loop pushes (COMPILE.MODULE.APPEND.PUSH). Such a
+   * list is an append chain, an `if` or a fused `flat` over an each (`#pushes`). The items go into the target, with no array
+   * of that list. The target is the array `w` when the first list is `w`. Each other first list gets one copy, as the
+   * fused chain of the version before COMPILE.MODULE.APPEND.OTHER does. `fill(1, x)` keeps the expression of AIC, and
+   * this method gives undefined for it.
+   *
+   * The second list does not read the name (`ownForm`), so no part of it reads the target. A push of a part that
+   * fails stops the step, and an error of a step is the error of the loop. Thus no part reads such a target after it.
+   * The target goes into `w` after the last push, so an error before it does not change `w`.
+   */
+  #ownPush(list: Code, right: Expr, strict: boolean, ctx: Ctx, owner: Owner): Code | undefined {
+    if ((right.tag === "app" && right.op === "fill") || !this.#pushes(right, ctx)) return undefined;
+    // In a sheet with a search, a part that reads a cell does not fuse, as in `#appendStrict`.
+    if (this.#sheet !== undefined && !this.#sheet.direct && readsCells(right)) return undefined;
+    const w = (owner.w ??= this.fresh("w"));
+    const o = this.fresh("o");
+    const info = list.v.list as ListInfo;
+    const target = owner.sure ? list.v.code : this.#clean(info) ? `${this.use("AWC")}(${list.v.code}, ${w})` : `${this.use("AW")}(${list.v.code}, ${String(strict)}, ${w})`;
+    const items = this.#push(right, ctx, o, strict);
+    const s = [...list.s, `const ${o} = ${target};`, ...items.s, ...(owner.sure ? [] : [`${w} = ${o};`])];
+    // The target has only items with values, and the loop holds it, so it is clean and not fresh.
+    const facts: ListInfo = { ...joinLists(info, items.list as ListInfo, "append"), clean: true, fresh: false };
+    return { s, v: { code: o, kind: undefined, safe: false, deps: new Set([...list.v.deps, ...items.deps]), list: facts } };
   }
 
   /**
@@ -4481,10 +4525,11 @@ class Printer {
     const clean = op === "flat" ? this.#clean(info) && (info.inner === undefined || this.#clean(info.inner)) : op !== "get" && this.#clean(info) && (o?.v.list === undefined || this.#clean(o.v.list));
     if (w !== undefined) {
       // A list that is the array of w gets the one item with a push (COMPILE.MODULE.FUSE.ADOPT). With `sure`, the list is
-      // that array. Else a check at run time selects the push or the append of AO. The check reads the variable of the list.
+      // that array. Else AI or AIC pushes the item into w, or into a copy of another list, with no list of fill
+      // (COMPILE.MODULE.APPEND.PUSH).
       if (push?.sure === true) return `(${l.v.code}.push(${push.item}), ${w})`;
-      const own = clean ? `(${w} = ${this.use("AOC")}(${[...codes, w].join(", ")}))` : `(${w} = ${this.use("AO")}(${[...codes, String(strict), w].join(", ")}))`;
-      return push === undefined ? own : `(${l.v.code} === ${w} ? (${w}.push(${push.item}), ${w}) : ${own})`;
+      if (push !== undefined) return clean ? `(${w} = ${this.use("AIC")}(${l.v.code}, ${push.item}, ${w}))` : `(${w} = ${this.use("AI")}(${l.v.code}, ${push.item}, ${String(strict)}, ${w}))`;
+      return clean ? `(${w} = ${this.use("AOC")}(${[...codes, w].join(", ")}))` : `(${w} = ${this.use("AO")}(${[...codes, String(strict), w].join(", ")}))`;
     }
     if (!clean) return `${this.use(BUILD_HELPERS[op] as BuildHelper)}(${[...codes, String(strict)].join(", ")})`;
     if (op === "append") return `${l.v.code}.concat(${(o as Code).v.code})`;

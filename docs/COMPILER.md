@@ -596,11 +596,11 @@ Step 6 also removes the list of one item of an append into `w`. These rules appl
 - Then the append prints `l.push([0, x])`, with the key 0 of the interpreter. It makes no list of `FI` and uses no `AOC`.
 - The code of `x` throws on an error, so the pushed item is not an error item at any time. An error of `x` stops the loop, as before.
 - The name must take its first list, and no `let` on the path of the form binds the name again. Then the list of each append is `w`.
-- When a `let` can bind the name to another list, or the first list is not fresh, the push gets the check `l === w`. When the check fails, `AOC` or `AO` copies the list, as before.
+- When a `let` can bind the name to another list, or the first list is not fresh, the push goes through `AIC` or `AI`. Each helper has the check `l === w`. When the check fails, the helper copies the list into a new array and pushes the item into the copy (COMPILE.MODULE.APPEND.PUSH).
 - A list of more than one item, a literal, a constant of the run and a list that a binding holds keep `AOC`. A literal of one item is a constant of the run, so it keeps `AOC` too.
-- `FI` is in the module only when a part prints it. A direct push with no check does not use `FI`.
+- `FI` is in the module only when a part prints it. A direct push, `AIC` and `AI` do not use `FI`.
 
-In `NODE_SHAPE`, the names `out` of the sweep and `acc` of the pairs start with `fill(0, x)`, so they take their first lists. Their steps push in place, and so do the three appends of their results. Each of these five appends pushes its item directly, as the hand edit of ireko does. The name `open` also takes its first list (COMPILE.MODULE.APPEND.OTHER). Its list can be a filter, so its one append uses `AOC` and `FI` with the check `l === w`.
+In `NODE_SHAPE`, the names `out` of the sweep and `acc` of the pairs start with `fill(0, x)`, so they take their first lists. Their steps push in place, and so do the three appends of their results. Each of these five appends pushes its item directly, as the hand edit of ireko does. The name `open` also takes its first list (COMPILE.MODULE.APPEND.OTHER). Its list can be a filter, so its one append uses `AIC` with the check `l === w`. `fill` makes no list for it.
 
 The chain of the cut points of the shapes module is an example. The program is `flat(each(list(p), if(sized(y), append(fill(1, y), fill(1, end(y))), empty)))`. Before the fusion, each band makes three arrays and three pairs, and `V` scans three lists:
 
@@ -1507,6 +1507,10 @@ A `let` of a step can bind a form of the name to a new name. These rules apply:
 
 An array that the body gives to another part stays safe. The loop pushes into `w` only when the list of the name is `w`. After a value that is another list, the next append copies, and `w` gets the copy. Thus an old array of `w` gets no push after this step.
 
+A read of the body can keep a cache on the array of `w` (V-096). These caches are the index of the keys of `get` (`GT`) and the `vex.list` of an argument or a field (`LV`, `LVC`). The body can then give `w` as its value, and a later step pushes into `w`. Before this fix, such a read gave the old items, and a fold could take a wrong branch.
+
+A push only adds items at the end of the array, so each cache keeps the count of the items that it read. `GT` adds the new items to its index. `LV` and `LVC` make a new object when the count differs. A push has no added cost, and each read of a cache has one more compare.
+
 An error of the body after the push is the error of the step. An error of a step is the error of the loop, so no part reads the array after it.
 
 #### Reads before the step (COMPILE.MODULE.APPEND.READ)
@@ -1538,7 +1542,7 @@ With `fuse`, a step of the name can have this wide form:
 - The step has at least one append of the form. The test of each `if` does not read the name.
 - Each step of another name reads the name only by the reads of COMPILE.MODULE.APPEND.READ.
 
-Each append of the form keeps the check `l === w`. A push goes into `w` only when the list of the append is `w`. A branch of another list gives an array that is not `w`, so its append copies it one time, and `w` gets the copy. A branch evaluates before each push of its step, so it reads the old array before a push changes it. No other part holds an array of `w`.
+Each append of the form keeps the check `l === w`. A push goes into `w` only when the list of the append is `w`. A branch of another list gives an array that is not `w`, so its append copies it one time, and `w` gets the copy. The items of the right list go into the array of the push, with no list between them (COMPILE.MODULE.APPEND.PUSH). A branch evaluates before each push of its step, so it reads the old array before a push changes it. No other part holds an array of `w`.
 
 #### Reads after the step (COMPILE.MODULE.APPEND.LATE)
 
@@ -1551,7 +1555,7 @@ The module of the tree pilot then appends the open bands in place:
 | Line of the module | Before | After |
 |---|---|---|
 | The array of the loop | none | `let w173 = l137;` |
-| The append at a start event | `const z158 = G(b156);` and a loop that copies each item into `o157` | `(w173 = AOC(G(b172), FI(1, y146), w173))` |
+| The append at a start event | `const z158 = G(b156);` and a loop that copies each item into `o157` | `(w173 = AIC(G(b172), [0, y146], w173))` |
 | The order of the steps | `open` before `emit` and `seg` | `emit`, `seg` and the other steps before `open` |
 
 With `fuse` false, the module keeps the print of the version before fusion (COMPILE.MODULE.FUSE.OFF).
@@ -1583,6 +1587,43 @@ The module of the tree pilot then reads the subtree with no copy:
 | Line of the module | Before | After |
 |---|---|---|
 | The subtree of an even step | `const A66 = NTC(G(p53), ...);` and a loop that copies each item into `L69` | `b65 = NTC(G(p53), ...);` |
+
+#### The items of the right list go into the array (COMPILE.MODULE.APPEND.PUSH)
+
+Before this rule, an append of COMPILE.MODULE.APPEND.OTHER made the right list as an array. Then `AOC` or `AO` copied the left list and that array into a third array. In the sweep of the shape module, `FI` made a list of one item at each start event. That list was garbage at once, and the gate of the shapes measured the cost.
+
+With `fuse`, an append into the array of a name makes no array for its right list when a fused loop can push its items. These rules apply:
+
+- The right list is `fill(1, x)` of COMPILE.MODULE.FUSE.ADOPT. Then the append pushes the item `[0, x]`. When the step is not `sure`, `AIC` or `AI` does the push.
+- Each other right list that the fused loop can push gets a target first. The target is `w` when the step is `sure`. Otherwise `AWC` or `AW` gives the target.
+- `AWC` and `AW` give `w` when the left list is `w`. For another list, they copy its items into a new array. `AW` reads the list through `V`, as `AP` does. With `strict`, an error item fails. Otherwise, the copy has no error items.
+- Then the loop of the right list pushes its items into the target, with the keys of the interpreter. The target becomes `w`.
+- In a sheet that searches, a right list that reads the cells keeps its array, as in COMPILE.MODULE.FUSE.ADOPT.
+
+The copy of another list has the same cost as the copy of `AOC`. The push into `w` makes no array. Thus the rule applies to each left list, also to a list that is not `w` at any time. `AIC` and `AWC` are the clean forms. `AI` and `AW` keep the check of `strict`.
+
+The sweep of the shape module then prints `(w87 = AIC(G(b86), [0, y60], w87))`, and the module has no `FI`. The tree module prints `(w173 = AIC(G(b172), [0, y146], w173))`.
+
+#### The caches of a module
+
+A cache keeps a value on an object. If the object changes after the cache, a read of the cache can give an old value (V-096). This table lists each cache of a module and of the compiler, and the reason that it stays right. The line numbers are of `packages/compiler/src/module.ts`, unless the row names another file.
+
+| Cache | Key | Changes of the key | Reason that the cache stays right |
+|---|---|---|---|
+| `GT`: `l.ix`, the index of `get` (line 722) | the array of a list | a push into `w` (`AO`, `AOC` and the push of one item) | The index keeps its count of items, and it adds only the new items. The tests `V-096` and the P17 of `module-lists.test.ts` read it. |
+| `LV`, `LVC`: `l.vl`, the `vex.list` of an argument or a field (lines 890, 993) | the array of a list, and each inner array | a push into `w` | The object has the count of its items. Another count makes a new object. No list holds `w` as an item during the loop (COMPILE.MODULE.APPEND.READ), so an inner array gets no push. The same two tests read it. |
+| `VW`: `l.vw`, the items with values (line 603) | the array of a list | a push into `w` | `w` has no error items, because `V` removes them before a push. Thus its view is the array itself, and a push changes the view too. |
+| `SBI`, `SKI`: a sort in place (line 4340) | a fresh array | the sort | A sort in place gets only a fresh array. No other part holds that array, so it has no cache. Each read of a name clears the fact `fresh` (`heldList`, line 210). |
+| The undo of a fused `each`: `o.length = m` (line 4149) | the array `o` of the `each` | the undo and the next pushes | The code reads `o` only after its loop. Thus no cache is on `o` when the undo shrinks it. |
+| `DO`, `LC`, `LCP`: the cells of a sheet (lines 876, 1004, 1006) | a column of a sheet | the change after the fill | These helpers run after the fill, and no cache is on a column. `SN` and `SNC` change a copy (lines 631, 983). |
+| `L`, `Q` (`m[j]`), `M`, `M1`, `S`, `PF` and the columns of a call | a key, a node or a list of the run | none | Each run makes its tables again. A memo node is not in a loop or in a function (`memo.ts`, line 314). Thus no key is `w`, and only `w` gets a push after its op. |
+| `LOOPS` (line 1730), `ORIGINALS` (`unshared.ts`, line 9) and the maps of the printer | a node of the program | none | The compiler does not write to a node. `LOOPS` stays from one call to the next. It keeps the rule of the cache of the interpreter (`core/src/evaluate.ts`, line 238): a program does not change after a call. |
+| The maps of tier 2 (`runtime.ts`, lines 423, 448 and 508) | a space | none | A space does not change (COMPILE.MEMO). |
+| The index of `get` of the interpreter (`core/src/evaluate.ts`, line 331) | a `vex.list` | none | `vexList` freezes the list and its items (`core/src/list.ts`, line 18). |
+
+The P17 of `module-lists.test.ts` makes loops whose list grows in place while a step reads it. A step pushes into the list, and a `let` gives the new list to a body. The body reads the list in each form: `get`, an argument, a call, `nth`, `count`, an `each` and a fold. Then it gives the list or another list. The result of the loop reads the list again, also in a field.
+
+Without the fix of V-096, this property fails for each of the seeds 1 to 10 at 200 runs. The property without these loops passes for each of these seeds, and for 10000 runs at the seed 1.
 
 #### A range of fill (COMPILE.MODULE.FILL.RANGE)
 
@@ -1630,7 +1671,7 @@ An infinite sort value gives `#NUM!` (CALL.RESULT). Thus the merge sorts only th
 The shapes pass of ireko gives shapes to ops, and a shape keeps two lists of bands. Before, a module gave the reason "a list is a value of the program" for a list in an argument of an op or in a field of a record. The interpreter has both, so the module has them too.
 
 - An argument of an op after its receiver can be a list (COMPILE.MODULE.LIST.ARG). The function of the op gets a `vex.list`, as in the interpreter. The keys are text, and the list and its items are frozen.
-- The helper `LV` makes the `vex.list` from the array of the list. The array keeps it, so a constant list costs one conversion for each run, not one for each key.
+- The helper `LV` makes the `vex.list` from the array of the list. The array keeps it, so a constant list costs one conversion for each run, not one for each key. The array of a loop can get a push after the read (COMPILE.MODULE.APPEND.LET). Thus an object with another count of items than the array is old.
 - The static site of the op takes the positions of the lists. A list fits a parameter `any`. A parameter of a primitive type gives the error of the interpreter. A parameter `domain` of a domain without a primitive type gives a reason, because its test `is` can accept a list.
 - The check of the copy of an op takes three samples of each list. The samples have no items, values of the kind of the items, or an error item. An op with a list has no inline form.
 - An argument of a call can be a list. The facts of the list are a part of the signature of the call, so each kind of list has its own function.

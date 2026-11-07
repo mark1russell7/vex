@@ -99,8 +99,11 @@ const OTHERS: readonly Expr[] = [kept(acc), op("take", acc, lit(2)), each(axes.l
 /** The readers of a later step: each value is a number (COMPILE.MODULE.APPEND.READ). */
 const READERS: readonly Expr[] = [op("count", acc), op("ifError", op("first", acc), lit(-1)), op("ifError", op("nth", acc, lit(1)), lit(-1)), sumOf(acc), op("add", op("count", acc, strict), sumOf(acc))];
 
-/** The count of the appends of the source into the array of a loop: an `AO` or `AOC` into `wN`, or a push into `wN`. */
-const owned = (source: string): number => (source.match(/\(w\d+ = AOC?\(|\.push\(\[0, .*?\]\), w\d+\)/g) ?? []).length;
+/**
+ * The count of the appends of the source into the array of a loop: an `AO`, `AOC`, `AI` or `AIC` into `wN`, a push into
+ * `wN`, or a target of the pushes of COMPILE.MODULE.APPEND.PUSH: `AW`, `AWC` or the list of the name.
+ */
+const owned = (source: string): number => (source.match(/\(w\d+ = A[OI]C?\(|\.push\(\[0, .*?\]\), w\d+\)|const o\d+ = (?:AWC?\(|l\d+;)/g) ?? []).length;
 /** The source copies a list into the output of a fused chain: a loop that pushes each item of an array. */
 const copies = (source: string): boolean => /for \(let i = 0; i < \w+\.length; i\+\+\) o\d+\.push\(\w+\[i\]\);/.test(source);
 
@@ -121,9 +124,11 @@ describe("COMPILE.MODULE.APPEND.OTHER: a branch of the step gives another list",
     for (const [name, e] of Object.entries(forms)) {
       for (const fuse of [true, false]) for (const records of [RECORDS, MANY, []]) expect({ name, fuse, owns: owned(expectSame(e, records, fuse)) > 0 }).toStrictEqual({ name, fuse, owns: fuse });
     }
-    // A branch can give another list, so an append keeps the check of its array (COMPILE.MODULE.FUSE.ADOPT).
+    // A branch can give another list, so an append keeps the check of its array (COMPILE.MODULE.FUSE.ADOPT). AIC pushes
+    // the one item, and fill makes no list (COMPILE.MODULE.APPEND.PUSH).
     const source = sourceOf(sweep);
-    expect(source).toMatch(/\(w\d+ = AOC\(/);
+    expect(source).toMatch(/\(w\d+ = AIC\(t\d+, \[0, /);
+    expect(source).not.toContain("FI(");
     expect(source).not.toMatch(/\(l\d+\.push\(\[0, .*?\]\), w\d+\)/);
     expect(copies(source)).toBe(false);
   });
@@ -219,5 +224,59 @@ describe("COMPILE.MODULE.APPEND.OTHER COMPILE.MODULE.APPEND.LATE P17: random ste
       }),
     );
     expect(modules).toBeGreaterThan(runs / 2);
+  });
+});
+
+describe("COMPILE.MODULE.APPEND.PUSH: an append of an owner pushes the items of a list that a fused loop pushes", () => {
+  it("COMPILE.MODULE.APPEND.PUSH: fill(1, x), a chain of append and an if put their items into the target, with no list of their own (P17)", () => {
+    const fails = one(op("divide", lit(1), w));
+    const rights: Record<string, Expr> = {
+      one: one(n),
+      fails,
+      chain: op("append", one(n), one(w)),
+      chainFails: op("append", one(n), fails),
+      // A node with more work can be a column of the run, so it keeps its array (#stageOf). This branch has less work.
+      branch: op("if", b, one(n), NONE),
+      window: op("flat", each(axes.window(-1, 1), one(n))),
+    };
+    for (const [name, x] of Object.entries(rights)) {
+      for (const s of [[], [strict]]) {
+        const add = (l: Expr): Expr => op("append", l, x, ...s);
+        const forms: Record<string, Expr> = {
+          own: folded(NONE, add(acc)),
+          other: folded(NONE, op("if", b, kept(acc), add(acc))),
+          relay: folded(NONE, let_({ base: op("if", b, kept(acc), acc) }, op("if", op("gt", n, lit(-1)), add(base), base))),
+          literal: folded(LIT, op("if", b, op("take", acc, lit(2)), add(acc))),
+          errors: folded(inv, let_({ base: op("if", b, op("take", acc, lit(1)), acc) }, add(base))),
+          bad: folded(BAD, add(acc)),
+          iterated: iterate(4, { acc: LIT }, { acc: let_({ base: op("if", op("gt", n, lit(0)), kept(acc), acc) }, add(base)) }, acc),
+        };
+        for (const [form, e] of Object.entries(forms)) {
+          for (const records of [RECORDS, MANY, []]) {
+            const source = expectSame(e, records);
+            // fill makes no list at the append, and no append copies its two lists with concat.
+            expect({ name, form, owns: owned(source) > 0, fill: source.includes("FI("), concat: source.includes(".concat(") }).toStrictEqual({ name, form, owns: true, fill: false, concat: false });
+            expectSame(e, records, false);
+          }
+        }
+      }
+    }
+  });
+
+  it("COMPILE.MODULE.APPEND.PUSH: a first list that is another array gets one copy, and the array of the loop gets each push", () => {
+    // The sweep of the shapes pilot: the filter is another list, so AIC copies it. The open list is the array w.
+    const sweep = folded(NONE, let_({ base: op("if", b, kept(acc), acc) }, op("if", op("gt", n, lit(-1)), op("append", base, one(n)), base)));
+    expect(sourceOf(sweep)).toMatch(/\(w\d+ = AIC\(t\d+, \[0, R\[j\d+\]\["n"\]\], w\d+\)\)/);
+    // A chain of two items prints its pushes into the target of AWC, and the target goes into w after the last push.
+    const chain = sourceOf(folded(NONE, op("if", b, kept(acc), op("append", acc, op("append", one(n), one(w))))));
+    expect(chain).toMatch(/const (o\d+) = AWC\(l\d+, (w\d+)\);\n\s*\1\.push\(\[0, R\[j\d+\]\["n"\]\]\);\n\s*\1\.push\(\[0, R\[j\d+\]\["w"\]\]\);\n\s*\2 = \1;/);
+    // A list with error items gets the copy of AW without them, or with strict the error.
+    const errors = sourceOf(folded(inv, op("if", b, op("take", acc, lit(1)), op("append", acc, one(n), strict))));
+    expect(errors).toMatch(/\(w\d+ = AI\(l\d+, \[0, R\[j\d+\]\["n"\]\], true, w\d+\)\)/);
+    for (const records of [RECORDS, MANY]) expectSame(folded(inv, op("if", b, op("take", acc, lit(1)), op("append", acc, one(n), strict))), records);
+    // The step of a name that takes its first list is sure, so its pushes need no target of AWC.
+    const sure = sourceOf(folded(NONE, op("append", acc, op("append", one(n), one(w)))));
+    expect(sure).not.toMatch(/AWC?\(/);
+    expect(sure).toMatch(/const (o\d+) = l\d+;\n\s*\1\.push\(\[0, /);
   });
 });

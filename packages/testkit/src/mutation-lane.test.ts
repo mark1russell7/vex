@@ -23,6 +23,10 @@ interface Layout {
   readonly partEnds: (text: string, count: number) => { readonly ends: readonly number[]; readonly lines: number };
   readonly entriesIn: (entries: readonly string[], files: readonly string[]) => readonly string[];
   readonly changedParts: (root: string, changed: readonly string[]) => { readonly parts: readonly string[]; readonly files: readonly string[] };
+  readonly NOT_READ: Readonly<Record<string, string>>;
+  readonly testFilesOnDisk: (root: string) => readonly string[];
+  readonly unreadTests: (root: string, read: ReadonlySet<string>) => readonly string[];
+  readonly staleEntries: (root: string, read: ReadonlySet<string>) => readonly string[];
 }
 
 /** The status of a mutant of a report. */
@@ -34,18 +38,31 @@ interface Status {
 /** A report of Stryker, as this test reads it. */
 interface LaneReport {
   readonly files: Readonly<Record<string, { readonly mutants: readonly unknown[] }>>;
+  readonly testFiles?: Readonly<Record<string, { readonly tests: readonly unknown[] }>>;
+}
+
+/** What the gate of the lane reads beside the reports. */
+interface Checks {
+  readonly lastTests?: Readonly<Record<string, number>> | undefined;
+  readonly planned?: readonly { readonly part: string; readonly old: number; readonly new: number; readonly pr: string }[];
+  readonly unread?: (read: ReadonlySet<string>) => readonly string[];
+  readonly selection?: readonly string[] | undefined;
 }
 
 /** The part of `tools/mutation/lane-read.ts` that this test reads. */
 interface LaneRead {
-  readonly fixtureReport: (part: string, killed: number, other: Status) => LaneReport;
+  readonly fixtureReport: (part: string, killed: number, other: Status, tests?: number) => LaneReport;
+  readonly FALL_LINE: number;
+  readonly testCount: (report: LaneReport) => number;
+  readonly testsLine: (part: string, report: LaneReport, last?: number) => string;
   readonly readReports: (reports: readonly LaneReport[]) => readonly { readonly name: string; readonly counts: { readonly killed: number; readonly hitLimit: number; readonly clock: number; readonly survived: number; readonly disabled: number } }[];
-  readonly laneVerdict: (reports: ReadonlyMap<string, LaneReport | undefined>) => {
+  readonly laneVerdict: (reports: ReadonlyMap<string, LaneReport | undefined>, checks?: Checks) => {
+    readonly tests: Readonly<Record<string, number>>;
     readonly failed: boolean;
     readonly lines: readonly string[];
     readonly packages: readonly { readonly name: string; readonly outcome: string; readonly score: number; readonly scoreWithClock: number }[];
   };
-  readonly flipCases: () => readonly { readonly name: string; readonly reports: ReadonlyMap<string, LaneReport | undefined>; readonly core: string }[];
+  readonly flipCases: (expected?: readonly string[]) => readonly { readonly name: string; readonly reports: ReadonlyMap<string, LaneReport | undefined>; readonly core: string; readonly lastTests?: Readonly<Record<string, number>>; readonly selection: readonly string[] }[];
   readonly staticLine: (read: unknown) => string;
 }
 
@@ -233,12 +250,22 @@ describe("the parts of the mutation lane", () => {
 describe("the gate of the mutation lane", () => {
   it("LANE.GATE: each case of the flip gives its outcome", async () => {
     const read = await loadRead();
-    const outcomes = read.flipCases().map((c) => [read.laneVerdict(c.reports).packages.find((p) => p.name === "core")?.outcome, read.laneVerdict(c.reports).failed]);
+    const file = "work/core/a.test.ts";
+    const unread = (names: ReadonlySet<string>): readonly string[] => (names.has(file) ? [] : ["packages/core/src/a.test.ts"]);
+    const outcomes = read.flipCases([file]).map((c) => {
+      const verdict = read.laneVerdict(c.reports, { lastTests: c.lastTests, unread, selection: c.selection });
+      return [verdict.packages.find((p) => p.name === "core")?.outcome, verdict.failed];
+    });
     expect(outcomes).toEqual([
       ["pass", false],
       ["under the line", true],
       ["no read", true],
       ["under the line", true],
+      ["no read", true],
+      ["no read", true],
+      ["no read", true],
+      ["no read", true],
+      ["no read", true],
     ]);
   });
 
@@ -280,6 +307,123 @@ describe("the gate of the mutation lane", () => {
     });
     const report = { files: { "work/core/a.ts": { mutants: [mutant(1, "Killed", true, 30), mutant(2, "Survived", false, 10), mutant(3, "Ignored", true, 500)] } } };
     expect(read.staticLine(read.readReports([report])[0])).toBe("core static mutants: 1 of 2, with 30 of 40 completed tests (75.0 %). Other mutants: 1, with 10 completed tests. This is a count of tests, not a time.");
+  });
+
+  it("LANE.TESTS: the real fall of compiler.rest reads as no read, and a copy with no fault passes", async () => {
+    const read = await loadRead();
+    const part = "compiler.rest.1";
+    const report = (tests: number): LaneReport => read.fixtureReport(part, 99, { status: "Survived" }, tests);
+    const fell = read.laneVerdict(new Map([[part, report(1029)]]), { lastTests: { [part]: 1990 } });
+    const clean = read.laneVerdict(new Map([[part, report(1990)]]), { lastTests: { [part]: 1990 } });
+    expect(fell.packages[0]?.outcome).toBe("no read");
+    expect(fell.lines.join("\n")).toContain("compiler: no read: tests fell. The part compiler.rest.1 read 1029 tests, and the last good read has 1990: a fall of 48.3 %");
+    expect(clean.packages[0]?.outcome).toBe("pass");
+  });
+
+  it("LANE.TESTS: a fall at the line passes, and a fall over the line is no read", async () => {
+    const read = await loadRead();
+    const part = "testkit";
+    const verdict = (tests: number): string | undefined => read.laneVerdict(new Map([[part, read.fixtureReport(part, 99, { status: "Survived" }, tests)]]), { lastTests: { [part]: 100 } }).packages[0]?.outcome;
+    expect(read.FALL_LINE).toBe(0.2);
+    expect(verdict(80)).toBe("pass");
+    expect(verdict(79)).toBe("no read");
+    expect(verdict(500)).toBe("pass");
+  });
+
+  it("LANE.TESTS: a part with a fall or with no report keeps its old count, and a good read saves its count", async () => {
+    const read = await loadRead();
+    const report = (part: string, tests: number): LaneReport => read.fixtureReport(part, 99, { status: "Survived" }, tests);
+    const { tests } = read.laneVerdict(new Map<string, LaneReport | undefined>([["testkit", report("testkit", 10)], ["core.kernel", undefined], ["domains.1", report("domains.1", 90)]]), { lastTests: { testkit: 100, "core.kernel": 50, "domains.1": 80 } });
+    expect(tests).toEqual({ testkit: 100, "core.kernel": 50, "domains.1": 90 });
+  });
+
+  it("LANE.TESTS: a planned fall holds only while the last good read is its old count", async () => {
+    const read = await loadRead();
+    const part = "testkit";
+    const reports = new Map([[part, read.fixtureReport(part, 99, { status: "Survived" }, 50)]]);
+    const planned = [{ part, old: 100, new: 50, pr: "#1" }];
+    expect(read.laneVerdict(reports, { lastTests: { [part]: 100 }, planned }).packages[0]?.outcome).toBe("pass");
+    expect(read.laneVerdict(reports, { lastTests: { [part]: 100 }, planned }).tests).toEqual({ [part]: 50 });
+    expect(read.laneVerdict(reports, { lastTests: { [part]: 90 }, planned }).packages[0]?.outcome).toBe("no read");
+  });
+
+  it("LANE.TESTS: the read prints the tests of a part beside its score", async () => {
+    const read = await loadRead();
+    const report = read.fixtureReport("testkit", 99, { status: "Survived" }, 7);
+    expect(read.testCount(report)).toBe(7);
+    expect(read.testsLine("testkit", report)).toBe("testkit tests: 7 in 1 files, with no earlier read.");
+    expect(read.testsLine("testkit", report, 9)).toBe("testkit tests: 7 in 1 files, and the last good read has 9.");
+    expect(read.laneVerdict(new Map([["testkit", report]]), { lastTests: { testkit: 9 } }).lines.join("\n")).toContain("testkit tests: 7 in 1 files, and the last good read has 9.");
+  });
+
+  it("LANE.FILES: a test file on the disk that no part read is no read", async () => {
+    const read = await loadRead();
+    const report = read.fixtureReport("testkit", 99, { status: "Survived" });
+    const clean = read.laneVerdict(new Map([["testkit", report]]), { unread: () => [] });
+    const found = read.laneVerdict(new Map([["testkit", report]]), { unread: (names) => (names.has("work/testkit/testkit.test.ts") ? ["packages/compiler/src/a.test.ts"] : []) });
+    expect(clean.failed).toBe(false);
+    expect(found.lines.join("\n")).toContain("compiler: no read: file not read. No part read packages/compiler/src/a.test.ts");
+  });
+
+  it("LANE.FILES: a difference of the two reads is no read, with its own text, on each side", async () => {
+    const read = await loadRead();
+    const report = read.fixtureReport("testkit", 99, { status: "Survived" });
+    const same = read.laneVerdict(new Map([["testkit", report]]), { selection: ["work/testkit/testkit.test.ts"] });
+    const more = read.laneVerdict(new Map([["testkit", report]]), { selection: ["work/testkit/testkit.test.ts", "work/compiler/a.test.ts"] });
+    const less = read.laneVerdict(new Map([["testkit", report]]), { selection: ["work/compiler/a.test.ts"] });
+    expect(same.failed).toBe(false);
+    expect(more.lines.join("\n")).toContain("compiler: no read: the two reads differ. The load check selects work/compiler/a.test.ts, and no report of the run read it.");
+    expect(less.lines.join("\n")).toContain("testkit: no read: the two reads differ. A report of the run read work/testkit/testkit.test.ts, and the load check does not select it.");
+    expect(less.packages.find((p) => p.name === "testkit")?.outcome).toBe("no read");
+  });
+
+  it("LANE.FILES: a full run that saved no selection is no read, and a run that does not ask for one reads as before", async () => {
+    const read = await loadRead();
+    const report = read.fixtureReport("testkit", 99, { status: "Survived" });
+    const none = read.laneVerdict(new Map([["testkit", report]]), { selection: [] });
+    expect(none.lines.join("\n")).toContain("testkit: no read: no selection.");
+    expect(none.failed).toBe(true);
+    expect(read.laneVerdict(new Map([["testkit", report]])).failed).toBe(false);
+  });
+
+  it("LANE.FILES: the load check saves its selection, and each job copies it beside its report", () => {
+    const check = readFileSync(join(repoRoot(), "tools", "mutation", "load-check.ts"), "utf8");
+    const lane = readFileSync(join(repoRoot(), "tools", "mutation", "lane-read.ts"), "utf8");
+    expect(check).toContain("writeFileSync(`${here}${SELECTION_FILE}`");
+    expect(lane).toContain('"load-selection.json"');
+  });
+
+  it("LANE.FILES: a run with a missing part does not read the files by name", async () => {
+    const read = await loadRead();
+    const verdict = read.laneVerdict(new Map([["testkit", undefined]]), { unread: () => ["packages/testkit/src/a.test.ts"] });
+    expect(verdict.lines.join("\n")).not.toContain("file not read");
+  });
+
+  it("LANE.FILES: the allow list states a reason for each file, and each of its files is on the disk", async () => {
+    const layout = await loadLayout();
+    const root = repoRoot();
+    const onDisk = layout.testFilesOnDisk(root);
+    expect(Object.keys(layout.NOT_READ).filter((file) => !onDisk.includes(file))).toEqual([]);
+    expect(Object.values(layout.NOT_READ).filter((reason) => reason.length < 20)).toEqual([]);
+  });
+
+  it("LANE.FILES: the check names a file that no part reads, and an entry of the allow list that is not true", async () => {
+    const layout = await loadLayout();
+    const root = repoRoot();
+    const onDisk = layout.testFilesOnDisk(root);
+    const lane = new Set(onDisk.map((file) => file.replace(/^packages\/([^/]+)\/src\//u, "work/$1/")));
+    expect(layout.unreadTests(root, lane)).toEqual([]);
+    lane.delete(lanePath("core", "evaluate.test.ts"));
+    expect(layout.unreadTests(root, lane)).toEqual(["packages/core/src/evaluate.test.ts"]);
+    expect(layout.staleEntries(root, new Set())).toEqual([]);
+    expect(layout.staleEntries(root, new Set([lanePath("core", "spec-coverage.test.ts")]))).toEqual(["packages/core/src/spec-coverage.test.ts"]);
+  });
+
+  it("LANE.TESTS: the weekly run reads the last good read and saves its own", () => {
+    const weekly = readFileSync(join(repoRoot(), ".github", "workflows", "mutation-weekly.yml"), "utf8");
+    expect(weekly).toContain("--last reports/last-tests/lane-tests.json");
+    expect(weekly).toContain("name: lane-tests");
+    expect(weekly).toContain("actions: read");
   });
 
   it("LANE.GATE: a part with a report of no mutants is no read", async () => {

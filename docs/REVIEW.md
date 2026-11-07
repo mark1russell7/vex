@@ -618,7 +618,7 @@ Each defect from V-001 to V-042 gets one test that names its ID. The July audit 
 
 ### 8.6 Known tool problems
 
-- Stryker 10 gives false scores near zero with Vitest 5 (stryker-js issue 6210). Run mutation tests from `tools/mutation` with Vitest 4.1.11 until the fix ships.
+- Stryker 10 gives false scores near zero with Vitest 5 (stryker-js issue 6210). Run mutation tests from `tools/mutation` with Vitest 4.1.12 until a read shows the fix. The issue closed on 2026-10-23, and Stryker 10.1 came out that day. The lane has not read that release.
 - The docs tools that need the TypeScript compiler API (twoslash, TypeDoc, `@typescript/vfs`, TSTyche) do not work on TS 7.0. TS 7.1, planned for 2026-11-24, adds an API. Pin TS 6.0.3 in those packages until then.
 - A `@ts-expect-error` line passes for any error, also a typo. For negative type tests, use TSTyche, which checks the error text.
 

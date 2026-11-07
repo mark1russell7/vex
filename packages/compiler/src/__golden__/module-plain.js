@@ -4,15 +4,9 @@ export class VexContractError extends Error {}
 /** The value of a key where the program gives an error of Vex. */
 export const VEX_ERROR = Object.freeze({ vexError: true });
 const E = {};
-function AOC(l, o, w) { if (l !== w) return l.concat(o); const n = o.length; for (let i = 0; i < n; i++) l.push(o[i]); return l; }
+function AIC(l, x, w) { if (l !== w) { const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); l = o; } l.push(x); return l; }
 function C(m) { throw new VexContractError(m); }
 function F() { throw E; }
-function FI(n, v) {
-  if (!(Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined)) F();
-  const o = [];
-  for (let i = 0; i < n; i++) o.push([i, v]);
-  return o;
-}
 function G(x) { return x === E ? F() : x; }
 function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }
 function LA(x, t) {
@@ -239,7 +233,7 @@ export function nodeShape(records, vars) {
         } catch {
           b86 = E;
         }
-        const t88 = (op_3_2(y60) ? (w87 = AOC(G(b86), FI(1, y60), w87)) : G(b86));
+        const t88 = (op_3_2(y60) ? (w87 = AIC(G(b86), [0, y60], w87)) : G(b86));
         l49 = t61;
         l50 = t62;
         l52 = t63;

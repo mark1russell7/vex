@@ -778,10 +778,13 @@ const adopts = (source: string): boolean => /let w\d+ = l\d+;/.test(source);
 const copies = (source: string): boolean => /let w\d+ = null;/.test(source);
 /** This function gives the count of the pushes of one item into the array of a name of a loop, with no check of the list. */
 const inPlace = (source: string): number => (source.match(/\.push\(\[0, .*?\]\), w\d+\)/g)?.length ?? 0) - (source.match(/\(w\d+\.push\(\[0, /g)?.length ?? 0);
-/** This function gives the count of the pushes of one item after the check `l === w`. Each check has a copy for another list. */
-const checked = (source: string): number => source.match(/\(l\d+ === (w\d+) \? \(\1\.push\(\[0, .*?\]\), \1\) : \(\1 = AOC?\(/g)?.length ?? 0;
+/**
+ * This function gives the count of the pushes of one item through `AI` or `AIC`. Each one pushes into `w`, or into one
+ * copy of another list (COMPILE.MODULE.APPEND.PUSH).
+ */
+const checked = (source: string): number => source.match(/\(w\d+ = AIC?\(/g)?.length ?? 0;
 /** This function gives the count of the appends into the array of a name of a loop, in the step and in the result. */
-const owned = (source: string): number => (source.match(/\(w\d+ = AOC?\(/g)?.length ?? 0) + inPlace(source);
+const owned = (source: string): number => (source.match(/\(w\d+ = AOC?\(/g)?.length ?? 0) + checked(source) + inPlace(source);
 /** This function gives an iteration of three steps with the one name `acc`. */
 const thrice = (init: Expr, step: Expr, result: Expr = acc, until?: Expr): Expr => iterate(3, { acc: init }, { acc: step }, result, until);
 /** This function gives a fold over a window with the one name `acc`. The window depends on the key, so the fold does too. */
@@ -832,10 +835,12 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
         expectSame(e);
       }
     }
-    // A literal is never fresh, so its first append copies it: one copy at each key.
+    // A literal is never fresh, so its first append copies it: one copy at each key. AIC copies it with a loop, so the
+    // module calls no concat (COMPILE.MODULE.APPEND.PUSH).
     const literal = thrice(lit(vexList([item("a", 1)])), op("append", acc, one));
     expect(copies(printed(literal, true))).toBe(true);
-    expect(concats(printed(literal, true))).toBe(RECORDS.length);
+    expect(checked(printed(literal, true))).toBe(1);
+    expect(concats(printed(literal, true))).toBe(0);
     expectSame(literal);
   });
 
@@ -901,8 +906,9 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
         const e = thrice(init, op("append", acc, one), result);
         const source = printed(e, true);
         expect({ name, owned: owned(source) }).toStrictEqual({ name, owned: 1 + count });
-        // A loop over a fresh first list copies no list. The literal gets one copy at each key.
-        expect({ name, concats: concats(source) }).toStrictEqual({ name, concats: init === one ? 0 : RECORDS.length });
+        // A loop over a fresh first list copies no list. The literal gets one copy at each key, from AIC with no concat.
+        expect({ name, concats: concats(source) }).toStrictEqual({ name, concats: 0 });
+        expect({ name, copies: copies(source) }).toStrictEqual({ name, copies: init !== one });
         expect(owned(printed(e, false))).toBe(1);
         expectSame(e);
       }
@@ -1010,12 +1016,13 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
     expect(on.match(/let w\d+ = l\d+;/g)?.length).toBe(3);
     expect(on).not.toMatch(/let w\d+ = null;/);
     // Two steps and three appends of the results push in place. Each one pushes its one item, with no AOC and no FI.
-    // The append of open goes through AOC and FI, because its list can be the filter.
+    // The append of open goes through AIC, because its list can be the filter. fill makes no list for it
+    // (COMPILE.MODULE.APPEND.PUSH).
     expect(owned(on)).toBe(6);
     expect(inPlace(on)).toBe(5);
-    expect(checked(on)).toBe(0);
-    expect(on.match(/\(w\d+ = AOC\(G\(b\d+\), FI\(1, /g)?.length).toBe(1);
-    expect(on.match(/FI\(1, /g)?.length).toBe(1);
+    expect(checked(on)).toBe(1);
+    expect(on.match(/\(w\d+ = AIC\(G\(b\d+\), \[0, /g)?.length).toBe(1);
+    expect(on).not.toContain("FI(");
     const off = sourceOf(emitModule(NODE_SHAPE, { ...node, fuse: false }));
     expect(off.match(/let w\d+ = null;/g)?.length).toBe(2);
     expect(owned(off)).toBe(2);
@@ -1074,9 +1081,10 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
     }
   });
 
-  it("COMPILE.MODULE.FUSE.ADOPT: a list that can be another array at run time gets the check l === w, and the copy of AOC or AO", () => {
+  it("COMPILE.MODULE.FUSE.ADOPT COMPILE.MODULE.APPEND.PUSH: a list that can be another array at run time gets AI or AIC, which copies another list", () => {
     // The first list is a literal or can hold error items, so the first append copies it. A let of the step can bind the
-    // name to another list. Then the step gives that list, and the next append copies it.
+    // name to another list. Then the step gives that list, and the next append copies it. A head that binds the name
+    // again is another list, so AIC copies it too.
     const cases: Record<string, readonly [Expr, number]> = {
       literal: [thrice(lit(vexList([item("a", 1)])), op("append", acc, atW)), 1],
       empty: [windowed(NONE, op("if", ref("b"), op("append", acc, atW), acc)), 1],
@@ -1084,8 +1092,8 @@ describe("COMPILE.MODULE.FUSE.ADOPT: an append takes a fresh first list as its o
       inputStrict: [op("ifError", thrice(xs, op("append", acc, atW, STRICT)), NONE), 1],
       errors: [thrice(inv, op("append", acc, atW)), 1],
       bad: [thrice(BAD, op("append", acc, fails)), 1],
-      shadowHead: [thrice(near, op("append", let_({ acc: two }, acc), atW)), 0],
-      shadowBody: [thrice(near, let_({ z: n }, op("append", let_({ acc: two }, acc), op("fill", lit(1), v("z"))))), 0],
+      shadowHead: [thrice(near, op("append", let_({ acc: two }, acc), atW)), 1],
+      shadowBody: [thrice(near, let_({ z: n }, op("append", let_({ acc: two }, acc), op("fill", lit(1), v("z"))))), 1],
       shadowBranch: [
         iterate(3, { i: lit(0), acc: near }, { i: op("add", v("i"), lit(1)), acc: op("if", op("eq", v("i"), lit(1)), let_({ acc: two }, op("append", acc, atW)), op("append", acc, op("fill", lit(1), n))) }, acc),
         1,

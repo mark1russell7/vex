@@ -126,9 +126,10 @@ function scanReads(body: () => void, measure: (l: readonly unknown[]) => number)
 
 /**
  * The source must have an append into the list of a name, or must not have one. `AOC` is its clean form. A direct push of
- * one item into the array `wN` is also such an append (COMPILE.MODULE.FUSE.ADOPT).
+ * one item into the array `wN` is also such an append (COMPILE.MODULE.FUSE.ADOPT). So are `AI`, `AIC`, `AW` and `AWC`
+ * (COMPILE.MODULE.APPEND.PUSH).
  */
-const owns = (source: string): boolean => /\bAOC?\(|\.push\(\[0, .*?\]\), w\d+\)/.test(source);
+const owns = (source: string): boolean => /\bA[OIW]C?\(|\.push\(\[0, .*?\]\), w\d+\)/.test(source);
 
 describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name", () => {
   it("COMPILE.MODULE.APPEND.OWN LOOP.LIST: the forms of the step append into the list of the name, with the values of the interpreter (P17)", () => {
@@ -283,9 +284,10 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
     for (const [name, e] of Object.entries(forms)) {
       for (const fuse of [true, false]) for (const records of [RECORDS, MANY, []]) expect({ name, fuse, owns: owns(expectSame(e, records, fuse)) }).toStrictEqual({ name, fuse, owns: true });
     }
-    // The body of the let can give another list, so a push of one item keeps the check l === w (COMPILE.MODULE.FUSE.ADOPT).
+    // The body of the let can give another list, so a push of one item keeps the check l === w of AIC
+    // (COMPILE.MODULE.FUSE.ADOPT, COMPILE.MODULE.APPEND.PUSH).
     const source = sourceOf(folded(NONE, let_({ all: op("append", acc, one(n)) }, shorter(v("all")))));
-    expect(source).toMatch(/\(l\d+ === (w\d+) \? \(\1\.push\(/);
+    expect(source).toMatch(/\(w\d+ = AIC\(l\d+, \[0, /);
     expect(source).not.toMatch(/\(l\d+\.push\(\[0, .*?\]\), w\d+\)/);
   });
 
@@ -350,7 +352,7 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
     for (const fuse of [true, false]) for (const records of [RECORDS, MANY, many]) expectSame(e, records, fuse);
     // Both names append in place, and no append copies the packed list at each step.
     const source = sourceOf(e);
-    expect(source.match(/\(w\d+ = AOC?\(l\d+, /g)).toHaveLength(1);
+    expect(source.match(/\(w\d+ = A[OI]C?\(l\d+, /g)).toHaveLength(1);
     expect(source).not.toMatch(/\bAP\(l\d+/);
   });
 

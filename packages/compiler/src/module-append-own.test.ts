@@ -3,7 +3,7 @@
  * its own list copies the list once and then adds to the copy. Thus a fold that appends costs O(n), not O(n squared).
  * Also, `count` and `first` read the items with values that `nth` keeps (COMPILE.MODULE.NTH.INDEX).
  */
-import { app, axes, call, each, evaluate, fn, fold, isVexList, iterate, let_, lit, rec, ref, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
+import { app, axes, call, defineDomain, each, evaluate, fn, fold, isVexList, iterate, let_, lit, rec, ref, space, v, vexList, type Expr, type ListItem, type VexList } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -16,7 +16,15 @@ interface Loaded {
 }
 
 const SCHEMA = { fields: { id: "string", n: "number", w: "number", b: "boolean", xs: { list: "number" } }, vars: { a: "number" } } as const;
-const OPTIONS: ModuleOptions = { domains: [NumDomain, BoolDomain, TextDomain], schema: SCHEMA };
+/** A domain whose op `weigh` takes a list after its receiver (COMPILE.MODULE.LIST.ARG). It adds the values of the items to the receiver. */
+const WeighDomain = defineDomain({
+  name: "Weigh",
+  is: (u: unknown): u is number => typeof u === "number",
+  primitive: "number",
+  fromScalar: (x: number): number => x,
+  ops: { weigh: { fn: (a: number, l: VexList): number => l.items.reduce((s, x) => s + (x.result.ok ? (x.result.value as number) : -1), a), params: ["any"], returns: "number" } },
+});
+const OPTIONS: ModuleOptions = { domains: [NumDomain, BoolDomain, TextDomain, WeighDomain], schema: SCHEMA };
 const VARS = { a: 1 };
 
 /** This function gives a good item of a list, as plain data. */
@@ -268,6 +276,9 @@ const bodies = (all: Expr): readonly Expr[] => [
   op("if", op("gt", op("count", all), lit(2)), each(axes.list(all), op("multiply", v("y"), lit(2)), undefined, ["y"]), all),
   op("if", op("gt", op("count", all), lit(5)), NONE, op("append", all, one(lit(9)))),
   op("if", op("gt", op("count", all), lit(2)), op("take", all, op("divide", lit(1), w)), all),
+  // These bodies read the new name again after a push (V-096): the index of `get`, and the `vex.list` of an argument.
+  op("if", op("gt", guard(op("get", all, lit("c"))), lit(3)), op("take", all, lit(1)), all),
+  op("if", op("gt", op("weigh", lit(0), all), lit(6)), op("take", all, lit(1)), all),
 ];
 
 describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps append to the list of the name", () => {
@@ -287,6 +298,26 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
     const source = sourceOf(folded(NONE, let_({ all: op("append", acc, one(n)) }, shorter(v("all")))));
     expect(source).toMatch(/\(l\d+ === (w\d+) \? \(\1\.push\(/);
     expect(source).not.toMatch(/\(l\d+\.push\(\[0, .*?\]\), w\d+\)/);
+  });
+
+  it("V-096 COMPILE.MODULE.APPEND.LET COMPILE.MODULE.LIST.ARG: a body that reads the new name before a later push reads the new items", () => {
+    // The body reads the array of the loop with `get` or as an argument, and a later step pushes into that array. The
+    // index of `get` and the `vex.list` of the argument then must not keep the old items.
+    const all = v("all");
+    const later = op("if", op("gt", n, lit(1)), lit(vexList([item("c", 5)])), lit(vexList([item("a", 1)])));
+    const short = (test: Expr): Expr => op("if", test, op("take", all, lit(1)), all);
+    const f = fn(["q"], op("if", op("gt", op("weigh", lit(0), v("q")), lit(1000)), NONE, v("q")));
+    const forms: Record<string, Expr> = {
+      get: folded(NONE, let_({ all: op("append", acc, later) }, short(op("gt", guard(op("get", all, lit("c"))), lit(4)))), op("count", acc)),
+      argument: folded(NONE, let_({ all: op("append", acc, one(lit(2))) }, short(op("gt", op("weigh", lit(0), all), lit(5)))), op("count", acc)),
+      same: folded(NONE, let_({ all: op("append", acc, one(lit(2))) }, let_({ z: each(axes.list(all), v("y"), undefined, ["y"]) }, short(op("gt", op("weigh", lit(0), v("z")), lit(5))))), op("count", acc)),
+      call: let_({ f }, folded(NONE, let_({ all: op("append", acc, one(n)) }, call("f", all)), rec({ l: acc, s: op("weigh", lit(0), acc) }))),
+      field: folded(NONE, let_({ all: op("append", acc, one(n)) }, op("if", op("gt", op("weigh", lit(0), all), lit(1000)), NONE, all)), rec({ l: acc })),
+      iterated: iterate(4, { acc: NONE }, { acc: let_({ all: op("append", acc, one(lit(2))) }, short(op("gt", op("weigh", lit(0), all), lit(5)))) }, acc),
+    };
+    for (const [name, e] of Object.entries(forms)) {
+      for (const fuse of [true, false]) for (const records of [RECORDS, MANY]) expect({ name, fuse, owns: owns(expectSame(e, records, fuse)) }).toStrictEqual({ name, fuse, owns: true });
+    }
   });
 
   it("COMPILE.MODULE.APPEND.LET: a let whose body or second binding reads the old list keeps the copy of each append", () => {

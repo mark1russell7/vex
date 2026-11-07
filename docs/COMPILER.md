@@ -1507,6 +1507,10 @@ A `let` of a step can bind a form of the name to a new name. These rules apply:
 
 An array that the body gives to another part stays safe. The loop pushes into `w` only when the list of the name is `w`. After a value that is another list, the next append copies, and `w` gets the copy. Thus an old array of `w` gets no push after this step.
 
+A read of the body can keep a cache on the array of `w` (V-096). These caches are the index of the keys of `get` (`GT`) and the `vex.list` of an argument or a field (`LV`, `LVC`). The body can then give `w` as its value, and a later step pushes into `w`. Before this fix, such a read gave the old items, and a fold could take a wrong branch.
+
+A push only adds items at the end of the array, so each cache keeps the count of the items that it read. `GT` adds the new items to its index. `LV` and `LVC` make a new object when the count differs. A push has no added cost, and each read of a cache has one more compare.
+
 An error of the body after the push is the error of the step. An error of a step is the error of the loop, so no part reads the array after it.
 
 #### Reads before the step (COMPILE.MODULE.APPEND.READ)
@@ -1630,7 +1634,7 @@ An infinite sort value gives `#NUM!` (CALL.RESULT). Thus the merge sorts only th
 The shapes pass of ireko gives shapes to ops, and a shape keeps two lists of bands. Before, a module gave the reason "a list is a value of the program" for a list in an argument of an op or in a field of a record. The interpreter has both, so the module has them too.
 
 - An argument of an op after its receiver can be a list (COMPILE.MODULE.LIST.ARG). The function of the op gets a `vex.list`, as in the interpreter. The keys are text, and the list and its items are frozen.
-- The helper `LV` makes the `vex.list` from the array of the list. The array keeps it, so a constant list costs one conversion for each run, not one for each key.
+- The helper `LV` makes the `vex.list` from the array of the list. The array keeps it, so a constant list costs one conversion for each run, not one for each key. The array of a loop can get a push after the read (COMPILE.MODULE.APPEND.LET). Thus an object with another count of items than the array is old.
 - The static site of the op takes the positions of the lists. A list fits a parameter `any`. A parameter of a primitive type gives the error of the interpreter. A parameter `domain` of a domain without a primitive type gives a reason, because its test `is` can accept a list.
 - The check of the copy of an op takes three samples of each list. The samples have no items, values of the kind of the items, or an error item. An op with a list has no inline form.
 - An argument of a call can be a list. The facts of the list are a part of the signature of the call, so each kind of list has its own function.

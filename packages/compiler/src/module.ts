@@ -494,7 +494,7 @@ interface Spec {
 }
 
 /** The name of a helper of the generated code. */
-type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "FN" | "TN" | "LI" | "LA" | "LP" | "LS" | "KC" | "KP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA" | "AI" | "AW";
+type Helper = "F" | "C" | "T" | "L" | "Q" | "G" | "B" | "U" | "X" | "I" | "K" | "M" | "M1" | "S" | "V" | "SB" | "SK" | "TK" | "VW" | "NT" | "CT" | "FS" | "FI" | "FN" | "TN" | "LI" | "LA" | "LP" | "LS" | "KC" | "KP" | BuildHelper | TreeHelper | GraphHelper | SheetHelper | CleanHelper | "SBI" | "SKI" | "PF" | "QA" | "AI" | "AW" | "KS";
 
 /**
  * The helpers of the clean form (COMPILE.MODULE.FUSE.CLEAN). Each one is the helper without the last letter `C`, for
@@ -967,6 +967,9 @@ const HELPERS: Readonly<Record<Exclude<Helper, "S">, string>> = {
   // The loop reads n items, so it ends also if o is l.
   AWC: "function AWC(l, w) { if (l === w) return l; const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); return o; }",
   AIC: "function AIC(l, x, w) { if (l !== w) { const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); l = o; } l.push(x); return l; }",
+  // The end of a filter of the array of a loop in place (COMPILE.MODULE.APPEND.KEEP): the array keeps its first n items.
+  // GT and LV count only the pushes of their array, so the filter removes their caches. VW of the array is the array.
+  KS: "function KS(l, n) { l.length = n; if (l.ix !== undefined) l.ix = undefined; if (l.vl !== undefined) l.vl = undefined; }",
   AOC: "function AOC(l, o, w) { if (l !== w) return l.concat(o); const n = o.length; for (let i = 0; i < n; i++) l.push(o[i]); return l; }",
   WOC: [
     "function WOC(l, o) {",
@@ -1307,7 +1310,7 @@ const NEEDS: Readonly<Record<Helper, readonly Helper[]>> = {
   GI: [], RB: [],
   KC: ["C"], KP: ["F"], SH: [], KO: [], DO: [], LO: [], LS: [], LC: ["LO"], LV: [], LCP: ["LP"],
   SBC: ["F"], SKC: ["F"], TKC: ["F"], DRC: ["F"], AOC: [], WOC: [], FLC: [], IXC: ["F"], NTC: ["F"], SNC: ["F"], FSC: ["F"], LOC: [], LSC: [], LVC: [], LPC: [],
-  SBI: ["F"], SKI: ["F"], QA: [], AW: ["V"], AI: ["AW"], AWC: [], AIC: [],
+  SBI: ["F"], SKI: ["F"], QA: [], AW: ["V"], AI: ["AW"], AWC: [], AIC: [], KS: [],
 };
 
 /**
@@ -1789,6 +1792,36 @@ function ownForm(e: Expr, name: string, out: Expr[], lets: Expr[], wide = false)
 function otherList(e: Expr, lets: Expr[], wide: boolean): boolean {
   if (wide) lets.push(e);
   return wide;
+}
+
+/**
+ * This function gives the filters of the list of the name `name` in the branches of the `if` nodes in `lets`
+ * (COMPILE.MODULE.APPEND.KEEP). These nodes are the branches of other lists of COMPILE.MODULE.APPEND.OTHER. A filter is
+ * `flat` over an each over the axis `list` of the name. The body of the each does not read the name, so it does
+ * not see the array while the filter changes it. The other nodes in `lets` are `let` nodes, and the test of an `if`
+ * does not read the name.
+ */
+function keepsOf(lets: readonly Expr[], name: string): readonly Expr[] {
+  const keeps = (e: Expr): boolean => {
+    const [each] = e.tag === "app" && e.op === "flat" ? e.args : [];
+    return each?.tag === "each" && each.axis.t === "list" && each.axis.list.tag === "var" && each.axis.list.name === name && !namesOf(each.body).has(name);
+  };
+  return lets.flatMap((e) => (e.tag === "app" ? e.args.filter(keeps) : []));
+}
+
+/**
+ * This function tells if each value of the list `e` has at most one item (COMPILE.MODULE.APPEND.KEEP). Such a list is
+ * `fill(0, x)`, `fill(1, x)`, a literal of at most one item or an `if` of such lists. `fill` must be the op of the
+ * language (`own`). A filter in place then puts at most one item for each item of its list, as the last statement of
+ * the item. Thus a put does not come before the read of the item at its position.
+ */
+function atMostOne(e: Expr, own: boolean): boolean {
+  if (e.tag === "lit") return isVexList(e.value) && e.value.items.length <= 1;
+  if (e.tag !== "app") return false;
+  // An if without three arguments gives a reason (#if), so the function does not check the count.
+  if (e.op === "if") return e.args.slice(1).every((x) => atMostOne(x, own));
+  const [count] = e.args.map(literalOf);
+  return own && e.op === "fill" && (count === 0 || count === 1);
 }
 
 /** The list ops whose value is a number or an item of the list, so the value cannot hold the array of the list. */
@@ -2281,6 +2314,17 @@ class Printer {
    * the item needs no `FI`.
    */
   readonly #ones = new Map<Expr | undefined, { readonly v: Value; readonly item: string } | undefined>();
+  /**
+   * The owner of each filter of its list in a branch of another list (COMPILE.MODULE.APPEND.KEEP). The step of the owner
+   * that the printer prints has these filters.
+   */
+  readonly #keeps = new Map<Expr, Owner>();
+  /**
+   * The outputs of the filters in place that the printer prints (COMPILE.MODULE.APPEND.KEEP). An item goes to the
+   * position `n` of its output, and `n` then increases. `pair` is the pair of the item of the list, and `item` is the
+   * code of its value. A pair with the key 0 is its own copy.
+   */
+  readonly #sinks = new Map<string, { readonly n: string; readonly pair: string; readonly item: string | undefined }>();
   readonly #structures = new Map<string, string>();
   readonly #kinds = new Map<string, Kind | undefined>();
   readonly #ops = new Map<string, number>();
@@ -3362,7 +3406,7 @@ class Printer {
     if (head !== undefined && op === "setNth" && this.#isList(head, ctx)) return this.#setNth(head, rest, ctx);
     // With fuse, flat over an each is one loop with one output (COMPILE.MODULE.FUSE).
     const strict = op === "flat" && head?.tag === "each" ? this.#fusedStrict(head, rest, ctx) : undefined;
-    if (strict !== undefined) return this.#flatEach(head as ExprOf<"each">, strict, ctx);
+    if (strict !== undefined) return this.#flatEach(head as ExprOf<"each">, strict, ctx, this.#keepOwner(e));
     // With fuse, a chain of append with a part that pushes its items is one output (COMPILE.MODULE.FUSE).
     const joined = op === "append" ? this.#appendStrict(e, ctx) : undefined;
     if (joined !== undefined && args.slice(0, 2).some((x) => this.#pushes(x, ctx))) return this.#appendChain(e, joined, ctx);
@@ -3699,6 +3743,8 @@ class Printer {
     /** The names `as` of the items, and their level. Only the body of an each and the steps of a fold read them. */
     readonly items: ReadonlyMap<string, Name>;
     readonly item: number | undefined;
+    /** The array of a loop over the array of a list, and the pair of the item in it (COMPILE.MODULE.APPEND.KEEP). */
+    readonly array?: { readonly a: string; readonly pair: string };
   } {
     const { base: outer, tests } = testsOf(axis);
     // The reverse order of an axis is a loop from its end (AXIS.REVERSE). The validation keeps a base axis inside.
@@ -3742,7 +3788,7 @@ class Printer {
         s.push(...named.s);
         check.push(...named.check);
       }
-      return { s, j, head, parts, key, check, checkSafe: clean, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level };
+      return { s, j, head, parts, key, check, checkSafe: clean, skip: undefined, fixed: false, start: list.v.deps, startSafe: list.v.safe, tests, inner, texts, items: named?.items ?? NO_NAMES, item: named?.level, array: { a, pair: `${a}[${q}]` } };
     }
     // The focus of each other axis is the position of a record, so a loop in a second print reads the packs there too.
     this.#pack?.foci.add(j);
@@ -4179,13 +4225,25 @@ class Printer {
    *   in the loop of an aggregate. Thus a flag holds the failure until the end of the loop.
    *
    * The output has only items with values, and no other part holds its array, so it is clean and fresh.
+   *
+   * With `owner`, the each is a filter of the list of the owner (COMPILE.MODULE.APPEND.KEEP). When the list is the array
+   * `w` of the owner, that array is the output. The loop then moves each kept item down in place, and `KS` sets the
+   * length. Each other list gets a new output. This output is not fresh, because the loop can hold it.
    */
-  #flatEach(e: ExprOf<"each">, strict: boolean, ctx: Ctx): Code {
-    const { s, j, head, key, check, checkSafe, skip, start, startSafe, tests, inner, texts, items, item: own } = this.#targetLoop(e.axis, e.at ?? [], ctx, e.as);
+  #flatEach(e: ExprOf<"each">, strict: boolean, ctx: Ctx, owner?: Owner): Code {
+    const { s, j, head, key, check, checkSafe, skip, start, startSafe, tests, inner, texts, items, item: own, array } = this.#targetLoop(e.axis, e.at ?? [], ctx, e.as);
     const testCodes = tests.map((t) => this.#hoist(this.expr(t, inner), hasLoop(t)));
     const o = this.fresh("o");
+    // The axis of a filter is the axis list of the name of the owner, so the loop goes over an array.
+    const place = owner !== undefined && array !== undefined ? { w: (owner.w ??= this.fresh("w")), n: this.fresh("n"), a: array.a } : undefined;
+    if (place !== undefined) this.#sinks.set(o, { n: place.n, pair: (array as { readonly pair: string }).pair, item: e.as === undefined ? undefined : items.get(e.as[0])?.code });
     // Only the body sees the names of the items (AXIS.LIST.SCOPE).
-    const body = this.#push(e.body, { ...inner, env: withNames(inner.env, items) }, o, strict);
+    let body: Pushed;
+    try {
+      body = this.#push(e.body, { ...inner, env: withNames(inner.env, items) }, o, strict);
+    } finally {
+      this.#sinks.delete(o);
+    }
     const parts = [body.deps, ...testCodes.map((x) => x.v.deps)];
     this.#readsNoTarget(texts, inner.level, parts);
     const deps = new Set([...start, ...parts.flatMap((d) => [...d])].filter((d) => d !== inner.level && d !== own));
@@ -4200,17 +4258,34 @@ class Printer {
     let loop: string[];
     if (safeItem) loop = [...lead, ...check, ...item];
     else {
-      const m = strict ? undefined : this.fresh("m");
-      const caught = flag !== undefined ? `${flag} = true;` : m === undefined ? `${this.use("F")}();` : `${o}.length = ${m};`;
+      // An item of a filter in place puts at most one item, at its end. Thus an item that fails puts no item.
+      const m = strict || place !== undefined ? undefined : this.fresh("m");
+      const caught = flag !== undefined ? [`${flag} = true;`] : strict ? [`${this.use("F")}();`] : m === undefined ? [] : [`${o}.length = ${m};`];
       // A check that cannot throw comes before the try.
       const [before, inside] = checkSafe ? [check, item] : [[], [...check, ...item]];
-      loop = [...lead, ...before, ...(m === undefined ? [] : [`const ${m} = ${o}.length;`]), "try {", ...ind(inside), "} catch {", `  ${caught}`, "}"];
+      loop = [...lead, ...before, ...(m === undefined ? [] : [`const ${m} = ${o}.length;`]), "try {", ...ind(inside), "} catch {", ...ind(caught), "}"];
     }
-    const out = [...s, `const ${o} = [];`, ...(flag === undefined ? [] : [`let ${flag} = false;`]), head, ...ind(loop), "}", ...(flag === undefined ? [] : [`if (${flag}) ${this.use("F")}();`])];
-    const facts: ListInfo = { ...(body.list as ListInfo), clean: true, fresh: true };
+    // The output of a filter in place is the array of the list only when that array is w (COMPILE.MODULE.APPEND.KEEP).
+    const first = place === undefined ? [`const ${o} = [];`] : [`const ${o} = ${place.a} === ${place.w} ? ${place.a} : [];`, `let ${place.n} = 0;`];
+    const last = place === undefined ? [] : [`${this.use("KS")}(${o}, ${place.n});`];
+    const out = [...s, ...first, ...(flag === undefined ? [] : [`let ${flag} = false;`]), head, ...ind(loop), "}", ...last, ...(flag === undefined ? [] : [`if (${flag}) ${this.use("F")}();`])];
+    const facts: ListInfo = { ...(body.list as ListInfo), clean: true, fresh: place === undefined };
     const c: Code = { s: out, v: { code: o, kind: undefined, safe: startSafe && (safeItem || !strict), deps, list: facts } };
-    this.#outputs.set(c, s.length);
+    // A fused loop around a filter in place cannot push into its output, because the output can be the array w.
+    // Stryker disable next-line ConditionalExpression: a filter in place is a branch of a step, and no fused loop pushes it
+    if (place === undefined) this.#outputs.set(c, s.length);
     return c;
+  }
+
+  /**
+   * This method gives the owner of the filter `e` when the filter compacts the array of the owner in place
+   * (COMPILE.MODULE.APPEND.KEEP). For each other node, it gives undefined. `#loopStep` finds the filter in a branch of
+   * another list. Each place of the program has an object of its own (`unsharedAll`), so the node is at that branch
+   * only. Each item of the body gives at most one item.
+   */
+  #keepOwner(e: ExprOf<"app">): Owner | undefined {
+    const owner = this.#keeps.get(e);
+    return owner !== undefined && atMostOne((e.args[0] as ExprOf<"each">).body, this.#facts.own("fill")) ? owner : undefined;
   }
 
   /**
@@ -4347,7 +4422,7 @@ class Printer {
       const list: ListInfo = { item: raw.v.kind, inner: heldList(raw.v.list), texts: true };
       const s = (settle: boolean): readonly string[] => {
         const value = settle ? this.#hoist(raw, hasLoop(x)) : raw;
-        return [...value.s, `${o}.push([0, ${value.v.code}]);`];
+        return [...value.s, this.#put(o, `[0, ${value.v.code}]`, value.v)];
       };
       return { s, deps: raw.v.deps, safe: raw.v.safe, list };
     }
@@ -4364,13 +4439,29 @@ class Printer {
     const s = (settle: boolean): readonly string[] => {
       const c = settle ? this.#hoist(raw, hasLoop(e)) : raw;
       // The output of a fused loop has only items with values, so the loop can push into `o` in place of its own output.
+      // A filter in place puts each item at its position, so it keeps the output of the part (COMPILE.MODULE.APPEND.KEEP).
       const at = this.#outputs.get(c);
-      if (at !== undefined) return c.s.map((x, i) => (i === at ? `const ${c.v.code} = ${o};` : x));
+      // Stryker disable next-line ConditionalExpression: atMostOne gives no fused loop in the body of a filter in place
+      if (at !== undefined && !this.#sinks.has(o)) return c.s.map((x, i) => (i === at ? `const ${c.v.code} = ${o};` : x));
       const z = this.fresh("z");
-      const each = clean ? `${o}.push(${z}[i]);` : strict ? `{ if (${z}[i][1] === E) ${this.use("F")}(); ${o}.push(${z}[i]); }` : `if (${z}[i][1] !== E) ${o}.push(${z}[i]);`;
+      const put = this.#put(o, `${z}[i]`);
+      const each = clean ? put : strict ? `{ if (${z}[i][1] === E) ${this.use("F")}(); ${put} }` : `if (${z}[i][1] !== E) ${put}`;
       return [...c.s, `const ${z} = ${c.v.code};`, `for (let i = 0; i < ${z}.length; i++) ${each}`];
     };
     return { s, deps: raw.v.deps, safe: raw.v.safe && (clean || !strict), list: raw.v.list };
+  }
+
+  /**
+   * This method gives the statement that puts the pair `pair` into the output `o` of a fused loop. `value` is the value
+   * of a pair of `fill`. A filter in place puts the pair at the next position of its output (COMPILE.MODULE.APPEND.KEEP).
+   * There the item of the list keeps its pair when its key is 0, the key of `fill`. Each other output gets a push.
+   */
+  #put(o: string, pair: string, value?: { readonly code: string; readonly safe: boolean }): string {
+    const sink = this.#sinks.get(o);
+    if (sink === undefined) return `${o}.push(${pair});`;
+    if (value !== undefined && value.code === sink.item) return `${o}[${sink.n}++] = ${sink.pair}[0] === 0 ? ${sink.pair} : ${pair};`;
+    // JavaScript increments n before it gets the value of the pair. Thus a value that can fail increments n after the put.
+    return value === undefined || value.safe ? `${o}[${sink.n}++] = ${pair};` : `${o}[${sink.n}] = ${pair}; ${sink.n}++;`;
   }
 
   /**
@@ -4672,11 +4763,19 @@ class Printer {
       for (const node of f.own) this.#own.set(node, owner);
       owners.push(owner);
       nodes.push(...f.own);
+      // A branch of another list can be a filter of the list of the name (COMPILE.MODULE.APPEND.KEEP).
+      for (const node of keepsOf(f.lets, name)) {
+        this.#keeps.set(node, owner);
+        nodes.push(node);
+      }
     }
     try {
       return { ...this.#steps(step, inner, vars, orderOf(late)), owners };
     } finally {
-      for (const node of nodes) this.#own.delete(node);
+      for (const node of nodes) {
+        this.#own.delete(node);
+        this.#keeps.delete(node);
+      }
     }
   }
 

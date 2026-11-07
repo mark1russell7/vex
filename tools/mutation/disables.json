@@ -149,6 +149,14 @@
   },
   {
     "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: a filter in place is a branch of a step, and no fused loop pushes it"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
+    "comment": "// Stryker disable next-line ConditionalExpression: atMostOne gives no fused loop in the body of a filter in place"
+  },
+  {
+    "file": "packages/compiler/src/module.ts",
     "comment": "// Stryker disable next-line UpdateOperator: a level of a loop is a name, so a count down gives other names, and the same code"
   },
   {

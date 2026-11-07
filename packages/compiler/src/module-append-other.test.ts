@@ -2,9 +2,10 @@
  * More steps that append to the list of their name in a standalone module (COMPILE.MODULE.APPEND.OTHER,
  * COMPILE.MODULE.APPEND.LATE). A branch of a step can give another list, and a `let` can give the list to a new name
  * that the body appends to. A step of another name can read the list after the step of the name. Then the module prints
- * the step of the name after that read. The values and the errors stay those of the interpreter (P17).
+ * the step of the name after that read. A filter of the list in a branch works in place (COMPILE.MODULE.APPEND.KEEP).
+ * The values and the errors stay those of the interpreter (P17).
  */
-import { app, axes, each, evaluate, fold, isVexList, iterate, let_, lit, rec, ref, space, v, vexList, type Expr, type ListItem } from "@mark1russell7/vex";
+import { app, axes, call, defineDomain, each, fn, evaluate, fold, isVexList, iterate, let_, lit, rec, ref, space, v, vexList, type Expr, type ListItem, type VexList } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -17,7 +18,15 @@ interface Loaded {
 }
 
 const SCHEMA = { fields: { id: "string", n: "number", w: "number", b: "boolean" }, vars: { a: "number" } } as const;
-const OPTIONS: ModuleOptions = { domains: [NumDomain, BoolDomain, TextDomain], schema: SCHEMA };
+/** A domain whose op `weigh` takes a list after its receiver (COMPILE.MODULE.LIST.ARG). It adds the values of the items to the receiver. */
+const WeighDomain = defineDomain({
+  name: "Weigh",
+  is: (u: unknown): u is number => typeof u === "number",
+  primitive: "number",
+  fromScalar: (x: number): number => x,
+  ops: { weigh: { fn: (a: number, l: VexList): number => l.items.reduce((s, x) => s + (x.result.ok ? (x.result.value as number) : -1), a), params: ["any"], returns: "number" } },
+});
+const OPTIONS: ModuleOptions = { domains: [NumDomain, BoolDomain, TextDomain, WeighDomain], schema: SCHEMA };
 const VARS = { a: 1 };
 
 /** The records of the tests. The record with `w` 0 gives an error of `divide`. */
@@ -264,7 +273,7 @@ describe("COMPILE.MODULE.APPEND.PUSH: an append of an owner pushes the items of 
   });
 
   it("COMPILE.MODULE.APPEND.PUSH: a first list that is another array gets one copy, and the array of the loop gets each push", () => {
-    // The sweep of the shapes pilot: the filter is another list, so AIC copies it. The open list is the array w.
+    // The sweep of the shapes pilot: the filter is the array w (COMPILE.MODULE.APPEND.KEEP), but AIC keeps its check of w.
     const sweep = folded(NONE, let_({ base: op("if", b, kept(acc), acc) }, op("if", op("gt", n, lit(-1)), op("append", base, one(n)), base)));
     expect(sourceOf(sweep)).toMatch(/\(w\d+ = AIC\(t\d+, \[0, R\[j\d+\]\["n"\]\], w\d+\)\)/);
     // A chain of two items prints its pushes into the target of AWC, and the target goes into w after the last push.
@@ -278,5 +287,108 @@ describe("COMPILE.MODULE.APPEND.PUSH: an append of an owner pushes the items of 
     const sure = sourceOf(folded(NONE, op("append", acc, op("append", one(n), one(w)))));
     expect(sure).not.toMatch(/AWC?\(/);
     expect(sure).toMatch(/const (o\d+) = l\d+;\n\s*\1\.push\(\[0, /);
+  });
+});
+
+/** This function gives a filter of the list `l`: an item `y` that passes `test` gives the list `body`, and each other item none. */
+const keep = (l: Expr, test: Expr, body: Expr = one(v("y")), ...s: Expr[]): Expr => op("flat", each(axes.list(l), op("if", test, body, NONE), undefined, ["y"]), ...s);
+const y = v("y");
+/** The tests of a filter: none of the items, some of them and each of them pass. */
+const PASS: Readonly<Record<"none" | "some" | "all", Expr>> = { none: op("gt", y, lit(99)), some: op("gt", y, lit(1)), all: op("gt", y, lit(-99)) };
+/** A filter in place: the output of the filter starts as the array of the loop, and KS sets its length after the loop. */
+const inPlace = (source: string): boolean => /const (o\d+) = (l\d+) === w\d+ \? \2 : \[\];/.test(source) && source.includes("KS(");
+
+describe("COMPILE.MODULE.APPEND.KEEP: a filter of the list of the name in a branch of the step works in place", () => {
+  it("COMPILE.MODULE.APPEND.KEEP: a filter that keeps none, some or each item moves the kept items down in the array of the loop (P17)", () => {
+    const bodies: Readonly<Record<string, Expr>> = {
+      // The item keeps its pair, because the key of fill is the key of the item.
+      item: one(y),
+      value: one(op("multiply", y, lit(2))),
+      fails: one(op("divide", lit(1), op("subtract", y, lit(2)))),
+      literal: lit(vexList([item("k", 7)])),
+      branch: op("if", op("gt", y, lit(3)), one(y), lit(vexList([item("k", 5)]))),
+    };
+    for (const [pass, test] of Object.entries(PASS)) {
+      for (const [name, body] of Object.entries(bodies)) {
+        for (const s of [[], [strict]]) {
+          const filter = keep(acc, test, body, ...s);
+          const forms: Record<string, Expr> = {
+            sweep: folded(NONE, let_({ base: op("if", b, filter, acc) }, op("if", op("gt", n, lit(-1)), op("append", base, one(n)), base))),
+            branch: folded(NONE, op("if", b, filter, op("append", acc, one(n)))),
+            errors: folded(inv, let_({ base: op("if", b, filter, acc) }, op("append", base, BAD))),
+            literal: folded(LIT, let_({ base: op("if", op("gt", n, lit(0)), filter, acc) }, op("append", base, one(n)))),
+            iterated: iterate(6, { acc: LIT }, { acc: let_({ base: op("if", op("gt", n, lit(0)), filter, acc) }, op("append", base, one(lit(4)))) }, acc),
+          };
+          for (const [form, e] of Object.entries(forms)) {
+            for (const records of [RECORDS, MANY, []]) {
+              expect({ pass, name, form, place: inPlace(expectSame(e, records)) }).toStrictEqual({ pass, name, form, place: true });
+              // With fuse false, the filter makes a new array (COMPILE.MODULE.FUSE.OFF).
+              expect({ pass, name, form, place: inPlace(expectSame(e, records, false)) }).toStrictEqual({ pass, name, form, place: false });
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("COMPILE.MODULE.APPEND.KEEP: the filter of the sweep puts the kept pair at the next position, with no undo and no copy", () => {
+    const sweep = folded(NONE, let_({ base: op("if", b, kept(acc), acc) }, op("if", op("gt", n, lit(-1)), op("append", base, one(n)), base)));
+    const source = sourceOf(sweep);
+    expect(source).toMatch(/const (o\d+) = (l\d+) === (w\d+) \? \2 : \[\];\n\s*let (n\d+) = 0;[\s\S]*?\1\[\4\+\+\] = \2\[q\d+\]\[0\] === 0 \? \2\[q\d+\] : \[0, y\d+\];[\s\S]*?KS\(\1, \4\);/);
+    expect(source).not.toMatch(/\.length = m\d+;/);
+    // A new value of the item gets a new pair. A value that can fail increments n after the put, as the old undo.
+    const value = (x: Expr): string => sourceOf(folded(NONE, op("if", b, keep(acc, PASS.some, one(x)), op("append", acc, one(n)))));
+    expect(value(op("multiply", y, lit(2)))).toMatch(/(o\d+)\[(n\d+)\] = \[0, k_number\(.*\]; \2\+\+;/);
+    expect(value(lit(5))).toMatch(/o\d+\[n\d+\+\+\] = \[0, 5\];/);
+    // The item of a literal list is a pair of its array, so the filter puts that pair.
+    const literal = sourceOf(folded(NONE, op("if", b, keep(acc, PASS.some, lit(vexList([item("k", 7)]))), op("append", acc, one(n)))));
+    expect(literal).toMatch(/(o\d+)\[(n\d+)\+\+\] = (c\d+)\[i\];/);
+    expect(literal).not.toMatch(/o\d+\.push\(c\d+\[i\]\)/);
+    // With fuse false, the print has no filter in place.
+    const off = sourceOf(sweep, false);
+    expect(off).not.toContain("KS(");
+    expect(off).not.toMatch(/=== w\d+ \?/);
+  });
+
+  it("COMPILE.MODULE.APPEND.KEEP: a filter of another list, a read of the old list in the step and a body of many items make a new array", () => {
+    const filter = kept(acc);
+    const forms: Record<string, Expr> = {
+      // The filter goes over another list, so its output is a new array.
+      other: folded(NONE, let_({ base: op("if", b, kept(op("take", acc, lit(3))), acc) }, op("append", base, one(n)))),
+      literal: folded(NONE, let_({ base: op("if", b, kept(LIT), acc) }, op("append", base, one(n)))),
+      // The step reads the old list after the filter, so the name is not an owner.
+      after: folded(NONE, op("append", op("if", b, filter, acc), one(op("count", acc)))),
+      body: folded(NONE, let_({ base: op("if", b, filter, acc) }, op("append", base, one(op("count", acc))))),
+      // The body of the filter reads the old list, or it is a list op with at most one item.
+      reads: folded(NONE, op("if", b, keep(acc, op("gt", y, op("count", acc))), op("append", acc, one(n)))),
+      take: folded(NONE, op("if", b, keep(acc, PASS.some, op("take", LIT, lit(1))), op("append", acc, one(n)))),
+      // A filter in a let of the step is not a branch of another list.
+      bound: folded(NONE, let_({ k: filter }, op("if", b, v("k"), op("append", acc, one(n))))),
+    };
+    for (const [name, e] of Object.entries(forms)) {
+      for (const records of [RECORDS, MANY, []]) expect({ name, place: inPlace(expectSame(e, records)) }).toStrictEqual({ name, place: false });
+    }
+    // A function with the parameter acc shares the node of the filter. Only the step puts the items in place.
+    const shared = let_({ f: fn(["acc"], filter) }, fold(axes.all, { acc: NONE }, { acc: op("if", b, filter, op("append", acc, one(n))) }, rec({ acc, f: call("f", LIT) })));
+    for (const records of [RECORDS, MANY]) expect(expectSame(shared, records).match(/KS\(o\d+/g)).toHaveLength(1);
+  });
+
+  it("COMPILE.MODULE.APPEND.KEEP V-096: a read of the array with get or in an argument before a filter in place reads the kept items", () => {
+    // A branch reads the array of the loop with the index of get or the vex.list of an argument. A later filter
+    // compacts the array, and a push brings back the count. KS removes the two caches, so the reads see the new items.
+    const all = v("all");
+    const later = op("if", op("gt", n, lit(1)), lit(vexList([item("c", 5)])), one(n));
+    const tests: Readonly<Record<string, Expr>> = {
+      get: op("gt", op("ifError", op("get", all, lit("c")), lit(-1)), lit(4)),
+      first: op("gt", op("ifError", op("get", all, lit("0")), lit(-1)), lit(2)),
+      argument: op("gt", op("weigh", lit(0), all), lit(6)),
+    };
+    const records = Array.from({ length: 30 }, (_x, i) => ({ id: String(i), n: (i * 7) % 5, w: 1, b: i % 3 === 2 }));
+    for (const [name, test] of Object.entries(tests)) {
+      const step = op("if", b, kept(acc), let_({ all: op("append", acc, later) }, op("if", test, op("take", all, lit(3)), all)));
+      const e = folded(NONE, step, rec({ l: acc, s: op("weigh", lit(0), acc) }));
+      for (const x of [RECORDS, MANY, records]) expect({ name, place: inPlace(expectSame(e, x)) }).toStrictEqual({ name, place: true });
+      expectSame(e, records, false);
+    }
   });
 });

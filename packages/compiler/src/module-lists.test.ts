@@ -502,12 +502,20 @@ describe("COMPILE.MODULE.LIST P17: random programs with lists", { timeout: prope
   // The body of a let: a test of a read, and another list or the list itself.
   const other = fc.constantFrom<(l: Expr) => Expr>((l) => op("take", l, lit(1)), (l) => op("drop", l, lit(1)), () => NONE, (l) => op("append", l, one(lit(9))));
   const body = fc.tuple(reader, fc.integer({ min: -1, max: 6 }), other, fc.boolean()).map(([r, t, o, flip]) => (l: Expr) => (flip ? op("if", op("gt", r(l), lit(t)), l, o(l)) : op("if", op("gt", r(l), lit(t)), o(l), l)));
+  // A filter of the list of the name. In a branch of the step, it moves the kept items down in the array of the loop
+  // (COMPILE.MODULE.APPEND.KEEP). Its test reads the item, and its body keeps the item or makes a new one. A module
+  // refuses a read of the record in an each over a list.
+  const y = v("y");
+  const kept = fc
+    .tuple(fc.integer({ min: -1, max: 6 }), fc.constantFrom<Expr>(one(y), one(op("divide", lit(1), op("subtract", y, lit(2)))), lit(vexList([item("k", 7)]))))
+    .map(([t, x]) => op("flat", each(axes.list(acc), op("if", op("ifError", op("gt", y, lit(t)), lit(false)), x, NONE), undefined, ["y"])));
   const growSteps = fc.letrec<{ step: Expr }>((tie) => ({
     step: fc.oneof(
       { maxDepth: 3, depthSize: "small" },
       fc.constant(acc),
       { arbitrary: fc.tuple(tie("step"), more, fc.boolean()).map(([h, x, s]) => op("append", h, x, ...(s ? [strict] : []))), weight: 3 },
       fc.tuple(fc.constantFrom(ref("b"), op("gt", n, lit(0))), tie("step"), tie("step")).map(([c, yes, no]) => op("if", c, yes, no)),
+      { arbitrary: fc.tuple(fc.constantFrom(ref("b"), op("gt", n, lit(0))), kept, tie("step"), fc.boolean()).map(([c, k, x, flip]) => (flip ? op("if", c, x, k) : op("if", c, k, x))), weight: 2 },
       tie("step").map((x) => op("sortBy", x)),
       // The new item reads the list, so the module copies the list (COMPILE.MODULE.APPEND.OWN). A wrong read gives a wrong item.
       { arbitrary: fc.tuple(tie("step"), reader, fc.boolean()).map(([x, r, own]) => (own ? let_({ acc: x }, op("append", acc, one(r(acc)))) : let_({ all: x }, op("append", v("all"), one(r(v("all"))))))), weight: 3 },

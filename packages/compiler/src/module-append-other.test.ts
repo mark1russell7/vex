@@ -46,8 +46,8 @@ function make(source: string): Loaded {
 }
 
 /** This function gives the source of a program, and fails the test for a program that cannot be a module. */
-function sourceOf(e: Expr, fuse = true): string {
-  const m = emitModule(e, { ...OPTIONS, fuse });
+function sourceOf(e: Expr, fuse = true, options: ModuleOptions = OPTIONS): string {
+  const m = emitModule(e, { ...options, fuse });
   if (!m.ok) throw new Error(m.reason);
   return m.source;
 }
@@ -63,12 +63,12 @@ function asModule(value: unknown, error: unknown): unknown {
  * This function compares the values of a module with the interpreter at each key (P17). It runs the module two times
  * on the same input, and the input must not change. It gives the source of the module.
  */
-function expectSame(e: Expr, records: readonly unknown[] = RECORDS, fuse = true): string {
-  const source = sourceOf(e, fuse);
+function expectSame(e: Expr, records: readonly unknown[] = RECORDS, fuse = true, options: ModuleOptions = OPTIONS): string {
+  const source = sourceOf(e, fuse, options);
   const m = make(source);
   const s = space.array(records);
   const expected = s.keys.map((origin) => {
-    const r = evaluate(e, { space: s, origin, vars: VARS, domains: OPTIONS.domains ?? [] });
+    const r = evaluate(e, { space: s, origin, vars: VARS, domains: options.domains ?? [] });
     return r.ok ? asModule(r.value, m.VEX_ERROR) : m.VEX_ERROR;
   });
   const input = structuredClone(records);
@@ -296,6 +296,24 @@ const y = v("y");
 /** The tests of a filter: none of the items, some of them and each of them pass. */
 const PASS: Readonly<Record<"none" | "some" | "all", Expr>> = { none: op("gt", y, lit(99)), some: op("gt", y, lit(1)), all: op("gt", y, lit(-99)) };
 /** A filter in place: the output of the filter starts as the array of the loop, and KS sets its length after the loop. */
+/**
+ * A domain with its own op `fill`. The op gives `count` items with the keys `k0`, `k1` and more. The value of each item
+ * is ten times the second argument. Its size rule gives the count from the literal number at the position 0.
+ */
+const KeyFill = defineDomain({
+  name: "KeyFill",
+  is: (u: unknown): u is number => typeof u === "number",
+  primitive: "number",
+  ops: {
+    fill: {
+      fn: (count: number, x: number): unknown => ({ kind: "vex.list", items: Array.from({ length: count }, (_z, i) => ({ key: `k${String(i)}`, result: { ok: true, value: x * 10 } })) }),
+      params: ["number"],
+      returns: "list:number",
+      size: { size: [0, 1], limit: 0 },
+    },
+  },
+});
+
 const inPlace = (source: string): boolean => /const (o\d+) = (l\d+) === w\d+ \? \2 : \[\];/.test(source) && source.includes("KS(");
 
 describe("COMPILE.MODULE.APPEND.KEEP: a filter of the list of the name in a branch of the step works in place", () => {
@@ -371,6 +389,16 @@ describe("COMPILE.MODULE.APPEND.KEEP: a filter of the list of the name in a bran
     // A function with the parameter acc shares the node of the filter. Only the step puts the items in place.
     const shared = let_({ f: fn(["acc"], filter) }, fold(axes.all, { acc: NONE }, { acc: op("if", b, filter, op("append", acc, one(n))) }, rec({ acc, f: call("f", LIT) })));
     for (const records of [RECORDS, MANY]) expect(expectSame(shared, records).match(/KS\(o\d+/g)).toHaveLength(1);
+  });
+
+  it("COMPILE.MODULE.APPEND.KEEP: a fill of a domain in the body of the filter makes a new array (P17)", () => {
+    // The module does not trust the size rule of a domain op, so only the fill of the language works in place.
+    const e = folded(NONE, op("if", b, kept(acc), op("append", acc, each(axes.window(0, 0), n))));
+    expect(inPlace(sourceOf(e))).toBe(true);
+    const options: ModuleOptions = { ...OPTIONS, domains: [...(OPTIONS.domains ?? []), KeyFill] };
+    for (const fuse of [true, false]) {
+      for (const records of [RECORDS, MANY, []]) expect(expectSame(e, records, fuse, options)).not.toContain("KS(");
+    }
   });
 
   it("COMPILE.MODULE.APPEND.KEEP V-096: a read of the array with get or in an argument before a filter in place reads the kept items", () => {

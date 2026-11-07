@@ -204,6 +204,8 @@ A repository can commit a printed module. The committed file then equals its pri
 
 A pin that stays in one place proves only that the files match an old compiler. A repository with committed modules has no dependency on the compiler, so a release does not move the pin. Thus a repository uses the workflow two times. The check of a pull request takes the pin, and its result depends only on that pull request. A daily run takes the word `latest` and prints from the last release. That run fails only when a release changes the output of a module, so a release with the same output gives no alarm. The repository then moves the pin and prints the files again.
 
+The file `packages/pilots/src/ireko-prints.json` keeps the sha256 of the build print of each module (COMPILE.MODULE.BYTES.HASH). A reader hashes the bytes of a committed file and compares the two hashes, with no run of Vex. A change of the compiler that changes a print must also write this file again with `node packages/pilots/scripts/ireko-prints.ts --write`. The test `ireko-prints.test.ts` fails until the file has the new hashes.
+
 #### The text of a copied function (COMPILE.MODULE.TEXT)
 
 A module copies the functions of its domains. JavaScript gives the text of a function, and that text depends on the program that loaded the function. A runner that only removes types keeps the spaces of the types and the parentheses of the source. A runner that compiles can drop parentheses, change a quote and add a call that names a function. Without a rule, two runners print two programs.
@@ -1911,6 +1913,7 @@ The ireko bundle must stay small, and `NODE_SHAPE` and `SHAPE_COLUMNS` are its l
 | COMPILE.MODULE.SIZE.INLINE | An op with one call prints its body at the call | Each argument is a name. The body is an expression that reads only its parameters and globals, and it has no assignment or function. |
 | COMPILE.MODULE.FAULT | With `faults` at `throw`, a fault of the printed code leaves the run | Each copy of a function of a domain has a wrapper that gives the error of Vex for each exception. Each other catch rethrows each value that is not the error of Vex. No op prints at its call. |
 | COMPILE.MODULE.BYTES | A committed module equals its print | The workflow `module-bytes.yml` prints each module from a pinned commit and compares the bytes. |
+| COMPILE.MODULE.BYTES.HASH | `ireko-prints.json` has the sha256 of the print of each module | A test hashes the build print of each module and compares the hashes with the file. |
 | COMPILE.PLACES | A compile refuses a program with more than 32,768 places | The count visits each object once, before each other walk. The interpreter runs such a program, and `tiered` gives tier 1. |
 | COMPILE.MODULE.TEXT | The text of a copied function does not depend on the runner | The compiler parses the text and prints the tree. A text that is not one expression stays as it is. |
 | COMPILE.MODULE.SIZE.FLAT | `LI` and `LA` have no argument for the depth | Each list field has the depth 0. |

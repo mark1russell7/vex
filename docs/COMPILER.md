@@ -596,11 +596,11 @@ Step 6 also removes the list of one item of an append into `w`. These rules appl
 - Then the append prints `l.push([0, x])`, with the key 0 of the interpreter. It makes no list of `FI` and uses no `AOC`.
 - The code of `x` throws on an error, so the pushed item is not an error item at any time. An error of `x` stops the loop, as before.
 - The name must take its first list, and no `let` on the path of the form binds the name again. Then the list of each append is `w`.
-- When a `let` can bind the name to another list, or the first list is not fresh, the push gets the check `l === w`. When the check fails, `AOC` or `AO` copies the list, as before.
+- When a `let` can bind the name to another list, or the first list is not fresh, the push goes through `AIC` or `AI`. Each helper has the check `l === w`. When the check fails, the helper copies the list into a new array and pushes the item into the copy (COMPILE.MODULE.APPEND.PUSH).
 - A list of more than one item, a literal, a constant of the run and a list that a binding holds keep `AOC`. A literal of one item is a constant of the run, so it keeps `AOC` too.
-- `FI` is in the module only when a part prints it. A direct push with no check does not use `FI`.
+- `FI` is in the module only when a part prints it. A direct push, `AIC` and `AI` do not use `FI`.
 
-In `NODE_SHAPE`, the names `out` of the sweep and `acc` of the pairs start with `fill(0, x)`, so they take their first lists. Their steps push in place, and so do the three appends of their results. The name `open` keeps its copy, because its step reads the list in a binding. Each of these five appends pushes its item directly, as the hand edit of ireko does. Thus the module has no `AOC`, and only `fill(0, x)` uses `FI`.
+In `NODE_SHAPE`, the names `out` of the sweep and `acc` of the pairs start with `fill(0, x)`, so they take their first lists. Their steps push in place, and so do the three appends of their results. Each of these five appends pushes its item directly, as the hand edit of ireko does. The name `open` also takes its first list (COMPILE.MODULE.APPEND.OTHER). Its list can be a filter, so its one append uses `AIC` with the check `l === w`. `fill` makes no list for it.
 
 The chain of the cut points of the shapes module is an example. The program is `flat(each(list(p), if(sized(y), append(fill(1, y), fill(1, end(y))), empty)))`. Before the fusion, each band makes three arrays and three pairs, and `V` scans three lists:
 
@@ -1520,7 +1520,7 @@ The step `place` of `pack` reads the packed bands in a fold over the axis `list`
 - The step comes before the step of the name in the order of the steps. The printer prints the steps in this order, and each step finishes before the next step starts. Thus each read ends before the push of the same step of the loop.
 - Each read of the name is the list of `count`, `nth` or `first`, or the list of the axis `list` of a fold. These values are numbers, items or the names of the fold, so no value holds the array. A function that reads the name, a `reverse` or `where` axis, an `each` and each other read keep the copy.
 
-The value of `count`, `nth` and `first` can keep a view of the array of the list (COMPILE.MODULE.NTH.INDEX). The array of `w` has no error items, so its view is the array itself. Thus a later push changes the view too, and no view is stale. A step after the step of the name, a read in `until` and a read in the same step keep the copy.
+The value of `count`, `nth` and `first` can keep a view of the array of the list (COMPILE.MODULE.NTH.INDEX). The array of `w` has no error items, so its view is the array itself. Thus a later push changes the view too, and no view is stale. A read in `until` and a read in the same step keep the copy. With `fuse`, COMPILE.MODULE.APPEND.LATE moves a step of the name after its readers.
 
 The module of the tree pilot then appends the moved bands in place in both prints of `pack`:
 
@@ -1529,7 +1529,52 @@ The module of the tree pilot then appends the moved bands in place in both print
 | The array of the loop | none | `let w101 = l58;` |
 | The append of the moved bands | `b101 = AP(l58, L99, false);` | `b102 = (w101 = AO(l58, L99, false, w101));` |
 
-The merge of a long row gives another list, so the next append after a merge copies the list one time. The sweep of the merge still copies its open bands at each start event. Its steps `emit` and `seg` read the count of the old list after the step `open`, so COMPILE.MODULE.APPEND.READ does not apply.
+The merge of a long row gives another list, so the next append after a merge copies the list one time.
+
+#### Another list in a branch (COMPILE.MODULE.APPEND.OTHER)
+
+The sweep of the merge keeps its open bands in the name `open`. At each band, the step binds `base` to the open list or to a filter of it. Then the step appends the band to `base` at a start event. The filter is another list, so COMPILE.MODULE.APPEND.LET does not apply. Before this rule, each start event copied the open list into a new array. A row of n bands then cost O(n squared).
+
+With `fuse`, a step of the name can have this wide form:
+
+- One branch of an `if` is a form of COMPILE.MODULE.APPEND.OWN. The other branch can be another list, and it can read the name in each way.
+- A `let` can bind such an `if` to a new name. Its body can then be a form of the new name, with its own branches of other lists.
+- The step has at least one append of the form. The test of each `if` does not read the name.
+- Each step of another name reads the name only by the reads of COMPILE.MODULE.APPEND.READ.
+
+Each append of the form keeps the check `l === w`. A push goes into `w` only when the list of the append is `w`. A branch of another list gives an array that is not `w`, so its append copies it one time, and `w` gets the copy. The items of the right list go into the array of the push, with no list between them (COMPILE.MODULE.APPEND.PUSH). A branch evaluates before each push of its step, so it reads the old array before a push changes it. No other part holds an array of `w`.
+
+#### Reads after the step (COMPILE.MODULE.APPEND.LATE)
+
+The steps `emit` and `seg` of the sweep read the count of the old open list. They come after the step `open`, so COMPILE.MODULE.APPEND.READ does not apply to them. Each step of a loop reads the old values of the names, so the order of the steps does not change the values. Thus with `fuse`, the printer prints the step of the name after the other steps. Each read of the old list then ends before the first push.
+
+The new order must keep each read of each other owner before the step of that owner. The printer adds the owners one at a time, in the order of the steps. An owner that breaks the order of an earlier owner keeps its copy. A read in `until` and each read that is not a read of COMPILE.MODULE.APPEND.READ also keep the copy.
+
+The module of the tree pilot then appends the open bands in place:
+
+| Line of the module | Before | After |
+|---|---|---|
+| The array of the loop | none | `let w173 = l137;` |
+| The append at a start event | `const z158 = G(b156);` and a loop that copies each item into `o157` | `(w173 = AIC(G(b172), [0, y146], w173))` |
+| The order of the steps | `open` before `emit` and `seg` | `emit`, `seg` and the other steps before `open` |
+
+With `fuse` false, the module keeps the print of the version before fusion (COMPILE.MODULE.FUSE.OFF).
+
+#### The items of the right list go into the array (COMPILE.MODULE.APPEND.PUSH)
+
+Before this rule, an append of COMPILE.MODULE.APPEND.OTHER made the right list as an array. Then `AOC` or `AO` copied the left list and that array into a third array. In the sweep of the shape module, `FI` made a list of one item at each start event. That list was garbage at once, and the gate of the shapes measured the cost.
+
+With `fuse`, an append into the array of a name makes no array for its right list when a fused loop can push its items. These rules apply:
+
+- The right list is `fill(1, x)` of COMPILE.MODULE.FUSE.ADOPT. Then the append pushes the item `[0, x]`. When the step is not `sure`, `AIC` or `AI` does the push.
+- Each other right list that the fused loop can push gets a target first. The target is `w` when the step is `sure`. Otherwise `AWC` or `AW` gives the target.
+- `AWC` and `AW` give `w` when the left list is `w`. For another list, they copy its items into a new array. `AW` reads the list through `V`, as `AP` does. With `strict`, an error item fails. Otherwise, the copy has no error items.
+- Then the loop of the right list pushes its items into the target, with the keys of the interpreter. The target becomes `w`.
+- In a sheet that searches, a right list that reads the cells keeps its array, as in COMPILE.MODULE.FUSE.ADOPT.
+
+The copy of another list has the same cost as the copy of `AOC`. The push into `w` makes no array. Thus the rule applies to each left list, also to a list that is not `w` at any time. `AIC` and `AWC` are the clean forms. `AI` and `AW` keep the check of `strict`.
+
+The sweep of the shape module then prints `(w87 = AIC(G(b86), [0, y60], w87))`, and the module has no `FI`. The tree module prints `(w173 = AIC(G(b172), [0, y146], w173))`.
 
 #### The caches of a module
 
@@ -1568,7 +1613,7 @@ The loop over a range counts from 0 to the count. The key of each item is its po
 
 The statements of the range can fail, so the count is safe only when they cannot fail. A part of the range can be a constant of the run. It evaluates once, before the loop over the keys, as the list of the axis `list` does.
 
-The module of the tree pilot then has no `FI` in `pack` and `merge`. The lists of one item keep `FI`, because an append reads them. The sweep of the merge still copies its open bands (COMPILE.MODULE.APPEND.READ).
+The module of the tree pilot then has no `FI` in `pack` and `merge`. The lists of one item keep `FI`, because an append reads them. The sweep of the merge appends its open bands in place (COMPILE.MODULE.APPEND.OTHER).
 
 #### Bands (COMPILE.MODULE.BAND)
 

@@ -134,9 +134,10 @@ function scanReads(body: () => void, measure: (l: readonly unknown[]) => number)
 
 /**
  * The source must have an append into the list of a name, or must not have one. `AOC` is its clean form. A direct push of
- * one item into the array `wN` is also such an append (COMPILE.MODULE.FUSE.ADOPT).
+ * one item into the array `wN` is also such an append (COMPILE.MODULE.FUSE.ADOPT). So are `AI`, `AIC`, `AW` and `AWC`
+ * (COMPILE.MODULE.APPEND.PUSH).
  */
-const owns = (source: string): boolean => /\bAOC?\(|\.push\(\[0, .*?\]\), w\d+\)/.test(source);
+const owns = (source: string): boolean => /\bA[OIW]C?\(|\.push\(\[0, .*?\]\), w\d+\)/.test(source);
 
 describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name", () => {
   it("COMPILE.MODULE.APPEND.OWN LOOP.LIST: the forms of the step append into the list of the name, with the values of the interpreter (P17)", () => {
@@ -176,13 +177,10 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
   it("COMPILE.MODULE.APPEND.OWN: a step that another part of the loop reads keeps the copy of each append", () => {
     const fallBacks: Record<string, Expr> = {
       otherName: fold(axes.all, { acc: NONE, c: NONE }, { acc: op("append", acc, one(n)), c: acc }, rec({ acc, c: v("c") })),
-      otherCount: fold(axes.all, { acc: NONE, c: lit(0) }, { acc: op("append", acc, one(n)), c: op("count", acc) }, v("c")),
       inX: folded(LIT, op("append", acc, one(op("count", acc)))),
       inTest: folded(NONE, op("if", op("gt", op("count", acc), lit(1)), acc, op("append", acc, one(n)))),
       inBind: folded(NONE, let_({ y: op("count", acc) }, op("append", acc, one(v("y"))))),
       until: iterate(6, { acc: NONE }, { acc: op("append", acc, one(n)) }, acc, op("gt", op("count", acc), lit(2))),
-      otherLeaf: fold(axes.all, { acc: NONE, c: LIT }, { acc: op("if", b, op("append", acc, one(n)), v("c")), c: v("c") }, acc),
-      literalLeaf: folded(NONE, op("if", b, op("append", acc, one(n)), LIT)),
       inIfError: folded(NONE, op("ifError", op("append", acc, one(op("divide", lit(1), w))), acc)),
       shadow: folded(LIT, let_({ acc: NONE }, op("append", acc, one(n)))),
     };
@@ -193,6 +191,10 @@ describe("COMPILE.MODULE.APPEND.OWN: a step that appends to the list of its name
         expect(source).not.toContain("let undefined");
       }
     }
+    // A count after the step and a branch of another list or of a literal keep the copy with fuse false. With fuse, they append in place
+    // (COMPILE.MODULE.APPEND.LATE and COMPILE.MODULE.APPEND.OTHER).
+    const wide = [fold(axes.all, { acc: NONE, c: lit(0) }, { acc: op("append", acc, one(n)), c: op("count", acc) }, v("c")), fold(axes.all, { acc: NONE, c: LIT }, { acc: op("if", b, op("append", acc, one(n)), v("c")), c: v("c") }, acc), folded(NONE, op("if", b, op("append", acc, one(n)), LIT))];
+    for (const e of wide) for (const fuse of [true, false]) expect(owns(expectSame(e, RECORDS, fuse))).toBe(fuse);
     // LOOP.SIZE: a step that appends the list to itself doubles it at each step, so the module refuses it.
     expect(() => sourceOf(iterate(3, { acc: LIT }, { acc: op("append", acc, acc) }, acc))).toThrow("(LOOP.SIZE)");
     // The name `acc` appends to its own list, and the name `c` reads only itself, so `acc` still appends in place.
@@ -293,9 +295,10 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
     for (const [name, e] of Object.entries(forms)) {
       for (const fuse of [true, false]) for (const records of [RECORDS, MANY, []]) expect({ name, fuse, owns: owns(expectSame(e, records, fuse)) }).toStrictEqual({ name, fuse, owns: true });
     }
-    // The body of the let can give another list, so a push of one item keeps the check l === w (COMPILE.MODULE.FUSE.ADOPT).
+    // The body of the let can give another list, so a push of one item keeps the check l === w of AIC
+    // (COMPILE.MODULE.FUSE.ADOPT, COMPILE.MODULE.APPEND.PUSH).
     const source = sourceOf(folded(NONE, let_({ all: op("append", acc, one(n)) }, shorter(v("all")))));
-    expect(source).toMatch(/\(l\d+ === (w\d+) \? \(\1\.push\(/);
+    expect(source).toMatch(/\(w\d+ = AIC\(l\d+, \[0, /);
     expect(source).not.toMatch(/\(l\d+\.push\(\[0, .*?\]\), w\d+\)/);
   });
 
@@ -348,7 +351,6 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
   it("COMPILE.MODULE.APPEND.READ: a step after the step of the name, or a read that can hold the list, keeps the copy of each append", () => {
     const step = op("append", acc, one(n));
     const fallBacks: Record<string, Expr> = {
-      after: fold(axes.all, { acc: NONE, r: lit(0) }, { acc: step, r: op("count", acc) }, rec({ acc, r: v("r") })),
       holds: fold(axes.all, { r: NONE, acc: NONE }, { r: acc, acc: step }, rec({ acc, r: v("r") })),
       take: fold(axes.all, { r: NONE, acc: NONE }, { r: op("take", acc, lit(1)), acc: step }, rec({ acc, r: v("r") })),
       each: fold(axes.all, { r: NONE, acc: NONE }, { r: each(axes.list(acc), v("y"), undefined, ["y"]), acc: step }, rec({ acc, r: v("r") })),
@@ -359,6 +361,9 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
     for (const [name, e] of Object.entries(fallBacks)) {
       for (const records of [RECORDS, MANY]) expect({ name, owns: owns(expectSame(e, records)) }).toStrictEqual({ name, owns: false });
     }
+    // A count after the step keeps the copy with fuse false. With fuse, the step prints last (COMPILE.MODULE.APPEND.LATE).
+    const after = fold(axes.all, { acc: NONE, r: lit(0) }, { acc: step, r: op("count", acc) }, rec({ acc, r: v("r") }));
+    for (const fuse of [true, false]) expect(owns(expectSame(after, RECORDS, fuse))).toBe(fuse);
   });
 
   it("COMPILE.MODULE.APPEND.LET COMPILE.MODULE.APPEND.READ: a pack of places reads its list in one step and appends to it in a let of another step", () => {
@@ -378,7 +383,7 @@ describe("COMPILE.MODULE.APPEND.LET and COMPILE.MODULE.APPEND.READ: more steps a
     for (const fuse of [true, false]) for (const records of [RECORDS, MANY, many]) expectSame(e, records, fuse);
     // Both names append in place, and no append copies the packed list at each step.
     const source = sourceOf(e);
-    expect(source.match(/\(w\d+ = AOC?\(l\d+, /g)).toHaveLength(1);
+    expect(source.match(/\(w\d+ = A[OI]C?\(l\d+, /g)).toHaveLength(1);
     expect(source).not.toMatch(/\bAP\(l\d+/);
   });
 

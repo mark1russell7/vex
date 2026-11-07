@@ -129,6 +129,8 @@ jobs:
           part: ${{ matrix.package }}
           changed: ${{ needs.lane-plan.outputs.changed }}
           timeout-ms: ${{ inputs.timeout_ms }}
+          # 10 minutes under the limit of the job, for the upload of the costs (LANE.COST).
+          stop-minutes: 140
 
   bench:
     name: speed

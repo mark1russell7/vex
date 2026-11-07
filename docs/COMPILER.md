@@ -1527,6 +1527,24 @@ The module of the tree pilot then appends the moved bands in place in both print
 
 The merge of a long row gives another list, so the next append after a merge copies the list one time. The sweep of the merge still copies its open bands at each start event. Its steps `emit` and `seg` read the count of the old list after the step `open`, so COMPILE.MODULE.APPEND.READ does not apply.
 
+#### A range of fill (COMPILE.MODULE.FILL.RANGE)
+
+The functions `pack` and `merge` of the tree pilot make a list with `fill` only for its positions. `pack` folds over the positions of `fill(2 * n, 0)`, and `merge` loops over `take` of a `fill`. Before this rule, `FI` made an array of pairs for each such list, and the loop then read only the length of that array.
+
+With `fuse`, the printer gives a range for such a list. A range is a count, and no array. These rules apply:
+
+- The list is `fill(n, v)` with two arguments, or `take(range, k)` with no option. The count `n` is not the literal 0, because COMPILE.MODULE.SIZE.FILL prints that list.
+- Only `count` with no option or the axis `list` of a loop reads the list. Each other place keeps `FI`. Examples are a name of a `let`, `sum`, `nth`, a value of the program and a key of a node of the memo.
+- No domain and no function of the host has the op `fill`.
+
+The helper `FN(n, v)` gives the count of `fill(n, v)` with the check of `FI`. The helper `TN(n, k)` gives the count of `take` with the check of `TK`. Each helper gives `F()` where its helper of the array gives `F()`. A sum with 0 changes -0 to 0, as the length of an array does. A literal count from 1 to 100000 with a value that cannot fail needs no check, so the code of the count is the literal.
+
+The loop over a range counts from 0 to the count. The key of each item is its position, and its value is `v`. A literal number, text or boolean is its own code. Each other value evaluates once into a name, after the count, as in `FI`.
+
+The statements of the range can fail, so the count is safe only when they cannot fail. A part of the range can be a constant of the run. It evaluates once, before the loop over the keys, as the list of the axis `list` does.
+
+The module of the tree pilot then has no `FI` in `pack` and `merge`. The lists of one item keep `FI`, because an append reads them. The sweep of the merge still copies its open bands (COMPILE.MODULE.APPEND.READ).
+
 #### Bands (COMPILE.MODULE.BAND)
 
 A shape of ireko is two lists of bands. `BandDomain` of the pilots holds one band as plain data: the four numbers `from`, `to`, `min` and `max`. Each op is a function that reads no name outside itself, so a module copies it (§8.2).

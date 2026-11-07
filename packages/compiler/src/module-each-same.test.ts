@@ -106,8 +106,11 @@ const folded = (init: Expr, step: Expr, result: Expr = acc): Expr => fold(axes.a
  * the loop of another list gives the item in a `try`.
  */
 const COPY = /const (y\d+) = A\d+\[q\d+\]\[1\];\n(?:\s*const i\d+ = z\d+\+\+;\n)?\s*(?:L\d+\.push\(\[j\d+, \1\]\);|x\d+ = \1;)/;
-/** The count of the appends of the source into the array of a loop: an `AO` or `AOC` into `wN`, or a push into `wN`. */
-const owned = (source: string): number => (source.match(/\(w\d+ = AOC?\(|\.push\(\[0, .*?\]\), w\d+\)/g) ?? []).length;
+/**
+ * The count of the appends of the source into the array of a loop: an `AO`, `AOC`, `AI` or `AIC` into `wN`, a push into
+ * `wN`, or a target of the pushes of COMPILE.MODULE.APPEND.PUSH: `AW`, `AWC` or the list of the name.
+ */
+const owned = (source: string): number => (source.match(/\(w\d+ = A[OI]C?\(|\.push\(\[0, .*?\]\), w\d+\)|const o\d+ = (?:AWC?\(|l\d+;)/g) ?? []).length;
 
 /** The programs of the rule. Each one has at least one each of the rule. */
 const FORMS: Readonly<Record<string, Expr>> = {

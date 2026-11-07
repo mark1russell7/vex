@@ -1560,6 +1560,34 @@ The module of the tree pilot then appends the open bands in place:
 
 With `fuse` false, the module keeps the print of the version before fusion (COMPILE.MODULE.FUSE.OFF).
 
+#### An each of the same list (COMPILE.MODULE.EACH.SAME)
+
+The tree pilot reads the subtree of a child as `items(nth(subtrees, floor(t / 2)))`. The function `items` of `ireko-layers.ts` is `each(list(l), $item)`. It tells the checker that the value is a list. Before this rule, each such read copied the list item by item into a new array. The tree module had four such loops, and the layers module had five.
+
+The interpreter gives each item of the axis `list` with its key and its value, and an error item stays an error item (AXIS.LIST.ITEM). Thus an `each` whose body is the name of the item gives its list again. With `fuse`, the printer then gives the array of the list as the value of the `each`. These conditions apply:
+
+- The axis is `list`, with no `where` and no `reverse`.
+- The `each` has no address. An address keeps its reason, as before.
+- The body is a read of the first name `as`. The check of the document refuses two names `as` that are the same name, so this read is the value of the item. A body that reads the index or another name keeps its loop.
+- A list that is an error gives the error, as the loop gives it.
+- In a search, the list of a name that starts empty gives the reason of each other read of its items (COMPILE.MODULE.LOOP.EMPTY).
+
+The facts of the value are the facts of the list. The value is clean only when the list is clean. The texts of the keys stay the texts of the list, so a loop over the keys of a literal keeps its reason.
+
+The value is not fresh, because another name can hold the same array. Thus no op changes the array in place:
+
+- `sortBy` sorts only a fresh list in place (COMPILE.MODULE.FUSE), so it sorts a copy.
+- An append into the list of a loop takes only a fresh first list (COMPILE.MODULE.FUSE.ADOPT). Each other first list starts `w` with `null`.
+- When the list is the array `w` of a loop, the `each` is a read of the name that is not a form of COMPILE.MODULE.APPEND.OWN. Such a read can occur only where COMPILE.MODULE.APPEND.OTHER and COMPILE.MODULE.APPEND.LET let the step read the name in each way. There the value is another list, so its append copies it one time, and `w` gets the copy. A read of the old array ends before the next push of the step.
+
+The tests of `module-each-same.test.ts` compare each form with the interpreter, with `fuse` on and off. They also start each module two times with the same input and check that the input does not change. With `fuse` false, the module keeps the copy (COMPILE.MODULE.FUSE.OFF).
+
+The module of the tree pilot then reads the subtree with no copy:
+
+| Line of the module | Before | After |
+|---|---|---|
+| The subtree of an even step | `const A66 = NTC(G(p53), ...);` and a loop that copies each item into `L69` | `b65 = NTC(G(p53), ...);` |
+
 #### The items of the right list go into the array (COMPILE.MODULE.APPEND.PUSH)
 
 Before this rule, an append of COMPILE.MODULE.APPEND.OTHER made the right list as an array. Then `AOC` or `AO` copied the left list and that array into a third array. In the sweep of the shape module, `FI` made a list of one item at each start event. That list was garbage at once, and the gate of the shapes measured the cost.

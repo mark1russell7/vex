@@ -2,7 +2,8 @@
 // example "compiler" or "core.base.2". Without it, the lane mutates the four published packages. Each job of the lane has
 // one part, so that each job stays in its time limit (layout.ts has the parts, tools/mutation/README.md has the reason).
 // The variable VEX_CHANGED names the paths of the lane to read, with commas. A night reads only the changed files.
-// The variable VEX_DRY_RUN with the value 1 stops Stryker after its first test run (lane-dry-run.yml).
+// The variable VEX_DRY_RUN with the value 1 stops Stryker after its first test run and its plan (lane-dry-run.yml). The
+// reporter lane-cost writes the plan and stops Stryker, so a dry run gives the planned cost of each line of the part.
 import { fileURLToPath } from "node:url";
 import { entriesIn, mutateOf, PACKAGES } from "./layout.ts";
 
@@ -21,7 +22,6 @@ export default {
   // The first run of the parts of the core took 3:23 to 4:09 in run 42075551015, and core.base.1 passed the default of
   // 5 minutes. The limit is 15 minutes, more than 3 times the slowest first run that passed.
   dryRunTimeoutMinutes: 15,
-  dryRunOnly: process.env.VEX_DRY_RUN === "1",
   // A dry run names each failed test. With the bail of Stryker, it names only the first.
   disableBail: process.env.VEX_DRY_RUN === "1",
   disableTypeChecks: false,

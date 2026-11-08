@@ -20,9 +20,10 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { COST_FILE, type CostLine, type FilePlan, PLAN_FILE, planLine, STOP_MINUTES, TARGET_MINUTES } from "./lane-cost.ts";
 import { laneParts, PACKAGES, packageOfPart, packageOfPath, plainFlip, RUNNER_FILE, SELECTION_FILE, unreadTests } from "./layout.ts";
 
 /** A place in a file of a report. */
@@ -67,6 +68,21 @@ export interface LaneChecks {
   readonly unread?: (read: ReadonlySet<string>) => readonly string[];
   /** The test files that the load check selected, as paths of the lane. An empty list states that no part saved the selection. */
   readonly selection?: readonly string[] | undefined;
+  /** The partial read of each part that reached its stop (LANE.PARTIAL). */
+  readonly partials?: Readonly<Record<string, PartialRead>>;
+}
+
+/** The read of the mutants that ended in a part that reached its stop. It is not a read of the part (LANE.PARTIAL). */
+export interface PartialRead {
+  readonly part: string;
+  readonly stopMinutes: number;
+  /** The mutants that ended before the stop. */
+  readonly ended: number;
+  /** The mutants of the plan of the part. */
+  readonly planned: number;
+  readonly counts: Counts;
+  readonly score: number;
+  readonly scoreWithClock: number;
 }
 
 /** The counts of a file or a package. */
@@ -150,8 +166,26 @@ export function scoreWithClock(c: Counts): number {
   return valid(c) === 0 ? 0 : (100 * (c.killed + c.hitLimit + c.clock)) / valid(c);
 }
 
+/**
+ * This function gives the partial read of a part that reached its stop, from the cost line of each mutant that ended and
+ * the count of the mutants of its plan. A time-out with no reason counts as a clock time-out (LANE.PARTIAL).
+ */
+export function partialRead(part: string, stopMinutes: number, lines: readonly Pick<CostLine, "status" | "reason">[], planned: number): PartialRead {
+  const counts: Counts = { killed: 0, hitLimit: 0, clock: 0, survived: 0, disabled: 0 };
+  for (const line of lines) count(counts, line.reason === null ? { status: line.status } : { status: line.status, statusReason: line.reason });
+  return { part, stopMinutes, ended: lines.length, planned, counts, score: gateScore(counts), scoreWithClock: scoreWithClock(counts) };
+}
+
+/** This function gives the text of a partial read, with its mark. */
+export function partialLine(p: PartialRead): string {
+  const c = p.counts;
+  const figures = `${p.score.toFixed(2)} % (${String(c.killed + c.hitLimit)} of ${String(valid(c))}: stopped ${String(c.killed)}, hit limit ${String(c.hitLimit)}, clock time-outs ${String(c.clock)}, survived ${String(c.survived)}, disabled ${String(c.disabled)})`;
+  const head = `PARTIAL: the part ${p.part} reached its stop of ${String(p.stopMinutes)} minutes. Of the ${String(p.planned)} mutants of its plan, ${String(p.ended)} ended, with the partial score ${figures}.`;
+  return `${head} The mutants that ended are not a random sample, so this is not a score of the part. The gate reads the part as no read (LANE.PARTIAL).`;
+}
+
 /** This function adds one mutant to the counts. */
-function count(c: Counts, m: Mutant): void {
+function count(c: Counts, m: Pick<Mutant, "status" | "statusReason">): void {
   if (m.status === "Killed") c.killed += 1;
   else if (m.status === "Timeout" && m.statusReason?.startsWith("Hit limit") === true) c.hitLimit += 1;
   else if (m.status === "Timeout") c.clock += 1;
@@ -298,6 +332,10 @@ export function laneVerdict(reports: ReadonlyMap<string, Report | undefined>, ch
     const outcome = noReport.length > 0 || other.length > 0 ? "no read" : score < LINE ? "under the line" : "pass";
     packages.push({ name, outcome, score, scoreWithClock: scoreWithClock(counts) });
     if (noReport.length > 0) lines.push(`${name}: no read. The part ${noReport.join(", ")} gave no report, so any figure of this package is not a score.`);
+    for (const part of noReport) {
+      const partial = checks.partials?.[part];
+      if (partial !== undefined) lines.push(partialLine(partial));
+    }
     lines.push(...other);
     if (read !== undefined) lines.push(...packageLines(read), staticLine(read));
     for (const [part, report] of reports) {
@@ -325,6 +363,16 @@ function readRunners(folder: string): readonly string[] {
     const runner = JSON.parse(readFileSync(file, "utf8")) as { readonly version: string; readonly path: string };
     return `${runner.version} from ${runner.path}`;
   }))].toSorted();
+}
+
+/** This function reads the partial read of each part of a full run that reached its stop. */
+function readPartials(folder: string): Record<string, PartialRead> {
+  const partials: Record<string, PartialRead> = {};
+  for (const part of laneParts()) {
+    const file = join(folder, `mutation-report-${part}`, PARTIAL_FILE);
+    if (existsSync(file)) partials[part] = JSON.parse(readFileSync(file, "utf8")) as PartialRead;
+  }
+  return partials;
 }
 
 /** This function reads the selections of the load check that the parts of a full run saved, as one list. */
@@ -457,7 +505,7 @@ function readLast(file: string | undefined): Readonly<Record<string, number>> | 
 function gate(folder: string, lastFile: string | undefined): number {
   const lastTests = readLast(lastFile);
   const planned = JSON.parse(readFileSync(new URL("./planned-falls.json", import.meta.url), "utf8")) as readonly PlannedFall[];
-  const checks: LaneChecks = { planned, unread: (read) => unreadTests(REPO, read), selection: readSelection(folder), ...(lastTests === undefined ? {} : { lastTests }) };
+  const checks: LaneChecks = { planned, unread: (read) => unreadTests(REPO, read), selection: readSelection(folder), partials: readPartials(folder), ...(lastTests === undefined ? {} : { lastTests }) };
   const verdict = laneVerdict(readFolder(folder), checks);
   const head = `The read of ${new Date().toISOString().slice(0, 10)} on ${process.env["GITHUB_SHA"] ?? "a local tree"}. A score holds for 7 days, and an older score is stale (LANE.DELAY).`;
   for (const line of [head, DOMAINS_METHOD, ...verdict.lines]) console.info(line);
@@ -472,12 +520,47 @@ function gate(folder: string, lastFile: string | undefined): number {
   return verdict.failed ? 1 : 0;
 }
 
+/** The file of the partial read of a part that reached its stop, in the folder of its report. */
+export const PARTIAL_FILE = "partial.json";
+
+/**
+ * This function writes and prints the partial read of a part that reached its stop, from the plan and the costs that the
+ * part wrote. It gives the exit code 1: a stop is no read, also with a partial score.
+ */
+function writePartial(part: string, stopMinutes: number): number {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const costs = join(root, COST_FILE);
+  const plan = join(root, PLAN_FILE);
+  if (!existsSync(costs) || !existsSync(plan)) {
+    console.info(`The part ${part} reached its stop of ${String(stopMinutes)} minutes before its plan, so it has no partial score.`);
+    return 1;
+  }
+  const lines = readFileSync(costs, "utf8").split("\n").filter((line) => line !== "").map((line) => JSON.parse(line) as CostLine);
+  const files = (JSON.parse(readFileSync(plan, "utf8")) as { readonly files: Readonly<Record<string, FilePlan>> }).files;
+  const read = partialRead(part, stopMinutes, lines, Object.values(files).reduce((n, row) => n + row.mutants, 0));
+  writeFileSync(join(dirname(plan), PARTIAL_FILE), `${JSON.stringify(read, null, 2)}\n`);
+  const text = partialLine(read);
+  console.info(text);
+  console.info(`::warning title=Partial score of ${part}::${text}`);
+  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  if (summary !== undefined) appendFileSync(summary, `${text}\n`);
+  return 1;
+}
+
 /** This function prints the report of one job of the lane, and it gives the exit code. A score does not fail a job. */
 function oneJob(): number {
   const file = fileURLToPath(new URL("../../reports/mutation/mutation.json", import.meta.url));
   const changed = (process.env["VEX_CHANGED"] ?? "") !== "";
   if (process.env["VEX_DRY_RUN"] === "1") {
-    console.info("The first test run of this part passed. A dry run gives no report and no score.");
+    console.info("The first test run of this part passed. A dry run gives the plan of the part, and no report and no score.");
+    const plan = fileURLToPath(new URL(`../../${PLAN_FILE}`, import.meta.url));
+    if (!existsSync(plan)) {
+      console.info("This part has no plan: Stryker found no mutant to run.");
+      return 0;
+    }
+    const line = planLine(process.env["VEX_MUTATE"] ?? "this part", (JSON.parse(readFileSync(plan, "utf8")) as { readonly files: Readonly<Record<string, FilePlan>> }).files);
+    console.info(line);
+    if (line.includes("OVER THE TARGET")) console.info(`::warning title=Mutation part over ${String(TARGET_MINUTES)} minutes::${line}`);
     return 0;
   }
   if (!existsSync(file)) {
@@ -503,6 +586,7 @@ function oneJob(): number {
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const mode = process.argv[2];
   if (mode === "--flip") process.exitCode = flip(fileURLToPath(import.meta.url)) === 0 ? 0 : 1;
+  else if (mode === "--partial") process.exitCode = writePartial(process.argv[3] ?? process.env["VEX_MUTATE"] ?? "this part", Number(process.argv[4] ?? STOP_MINUTES));
   else if (mode === "--gate") process.exitCode = gate(process.argv[3] ?? "reports/parts", process.argv[4] === "--last" ? process.argv[5] : undefined);
   else process.exitCode = oneJob();
 }

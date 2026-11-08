@@ -218,33 +218,39 @@ function failLabels(f: Fail): readonly number[] {
  */
 function flat(body: readonly LStmt[]): LStmt[] {
   const first = new Map<number, number>();
+  // The number of the last statement inside each statement, at the index of the number of the statement.
+  const ends: number[] = [0];
   let at = 0;
   const note = (xs: readonly LStmt[]): void => {
     for (const x of xs) {
-      at++;
+      const self = ++at;
       const labels = x.t === "break" ? [x.label] : x.t === "check" || x.t === "fail" ? failLabels(x.fail) : [];
-      for (const label of labels) if (!first.has(label)) first.set(label, at);
+      for (const label of labels) if (!first.has(label)) first.set(label, self);
       bodiesOf(x).forEach(note);
+      ends[self] = at;
     }
   };
   note(body);
   at = 0;
-  const walk = (xs: readonly LStmt[]): LStmt[] => xs.flatMap(one);
-  const one = (x: LStmt): LStmt[] => {
-    at++;
-    if (x.t === "if") return [{ ...x, yes: walk(x.yes), no: walk(x.no) }];
-    if (x.t === "loop" || x.t === "repeat") return [{ ...x, body: walk(x.body) }];
-    if (x.t !== "block") return [x];
-    const jump = first.get(x.label) ?? Number.POSITIVE_INFINITY;
-    const out: LStmt[] = [];
-    const rest: LStmt[] = [];
-    for (const y of x.body) {
-      const ys = one(y);
-      if (rest.length === 0 && jump > at) out.push(...ys);
-      else rest.push(...ys);
-    }
-    if (rest.length > 0) out.push({ ...x, body: rest });
+  // Each statement goes into its list once: a moved statement goes straight into the list of the block around it.
+  const walk = (xs: readonly LStmt[], out: LStmt[] = []): LStmt[] => {
+    for (const x of xs) one(x, out);
     return out;
+  };
+  const one = (x: LStmt, out: LStmt[]): void => {
+    at++;
+    if (x.t === "if") out.push({ ...x, yes: walk(x.yes), no: walk(x.no) });
+    else if (x.t === "loop" || x.t === "repeat") out.push({ ...x, body: walk(x.body) });
+    else if (x.t !== "block") out.push(x);
+    else {
+      const jump = first.get(x.label) ?? Number.POSITIVE_INFINITY;
+      let rest: LStmt[] | undefined;
+      for (const y of x.body) {
+        if (rest === undefined && jump <= (ends[at + 1] ?? 0)) rest = [];
+        one(y, rest ?? out);
+      }
+      if (rest !== undefined) out.push({ ...x, body: rest });
+    }
   };
   return walk(body);
 }
@@ -552,17 +558,21 @@ class Lowerer {
     const region: Region = joined ?? { value: this.labels++, fails: new Set(), paths: [] };
     const outer = this.#region;
     this.#region = region;
+    // The parts write into one list: the statements of the block of a joined chain, or the value block of the region.
+    // So a statement goes into a list once, and the lowering stays linear in the depth of the chains.
+    const sink = joined === undefined ? [] : b.stmts;
     const parts = xs.map((x, i) => {
       const error = this.locals++;
       const fail: Fail = { t: "break", label: region.value, keep: error };
       region.fails.add(fail);
-      const part = block(fail);
       const at = [...path, first + i];
-      return { x, at, error, value: this.expr(x, s, at, part), stmts: part.stmts };
+      const start = sink.length;
+      const value = this.expr(x, s, at, { stmts: sink, fail });
+      return { x, at, error, value, fails: sink.length > start };
     });
     this.#region = outer;
     const values = parts.map((p) => p.value);
-    const failing = parts.filter((p) => p.stmts.length > 0);
+    const failing = parts.filter((p) => p.fails);
     if (failing.length === 0) return values;
     // Only the failed part has an error at the start of the failure path. A part after a part with an error has a copy.
     const failed = (p: (typeof failing)[number]): LExpr => prim("isValue", local(p.error));
@@ -585,13 +595,10 @@ class Lowerer {
     else this.fail(inner, error);
     const chainFailed = failing.slice(1).reduce((x, p) => prim("||", x, failed(p)), failed(failing[0] as (typeof failing)[number]));
     region.paths.push({ t: "if", cond: chainFailed, yes: [...copies, ...inner.stmts], no: [] });
-    const value = parts.flatMap((p) => p.stmts);
-    if (joined !== undefined) {
-      b.stmts.push(...value);
-      return values;
-    }
+    if (joined !== undefined) return values;
     const end = this.labels++;
-    b.stmts.push({ t: "block", label: end, body: [{ t: "block", label: region.value, body: [...value, { t: "break", label: end }] }, ...region.paths] });
+    sink.push({ t: "break", label: end });
+    b.stmts.push({ t: "block", label: end, body: [{ t: "block", label: region.value, body: sink }, ...region.paths] });
     return values;
   }
 

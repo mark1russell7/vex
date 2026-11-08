@@ -355,15 +355,106 @@ export function splitBySize(files: readonly { readonly path: string; readonly si
   return parts.map((part) => part.files.toSorted());
 }
 
+/** A segment of a text: a run of lines that ends on a closing line, with the name of its first declaration. */
+export interface Segment {
+  readonly key: string;
+  /** This is the first line of the segment, counted from 1. */
+  readonly start: number;
+  /** This is the last line of the segment, counted from 1. */
+  readonly end: number;
+}
+
+/** The first line of a declaration at the top of a file or in a class body, with its name. */
+const DECLARATION = /^ {0,2}(?:export +)?(?:(?:async|static|private|protected|public|readonly|get|set|declare|abstract) +)*(?:(?:function\*?|class|const|let|interface|type|enum) +)?([#$A-Za-z_][\w$]*) *[(<=:{]/u;
+
+/** The words that start a statement and not a declaration. */
+const STATEMENTS: ReadonlySet<string> = new Set(["if", "for", "while", "switch", "return", "throw", "do", "try", "catch", "else"]);
+
+/**
+ * This function cuts a text into segments. Each segment ends on a closing line, and the last segment ends on the last line.
+ * The key of a segment is the name of its first declaration, with `#2` for the second segment of that name. A key thus
+ * stays the same when a change moves the lines, so a cost map of the segments outlives a change of other segments.
+ */
+export function segmentsOf(text: string): Segment[] {
+  const lines = text.split(/\r?\n/u);
+  const segments: Segment[] = [];
+  const seen = new Map<string, number>();
+  let start = 1;
+  let name: string | undefined;
+  const close = (end: number): void => {
+    const base = name ?? `@${segments.length + 1}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    segments.push({ key: n === 1 ? base : `${base}#${n}`, start, end });
+    start = end + 1;
+    name = undefined;
+  };
+  lines.forEach((line, index) => {
+    const declared = DECLARATION.exec(line)?.[1];
+    if (name === undefined && declared !== undefined && !STATEMENTS.has(declared)) name = declared;
+    if (CLOSING_LINE.test(line)) close(index + 1);
+  });
+  if (start <= lines.length) close(lines.length);
+  return segments;
+}
+
+/** The cost map of a file: the planned net time of each segment, in milliseconds, from the plan of a dry run (LANE.COST). */
+export interface CostMap {
+  /** This is the run of the dry run that gave the plan. */
+  readonly run: string;
+  readonly segments: Readonly<Record<string, number>>;
+}
+
+/**
+ * This function gives the cost map of a text from the plan of its lines: the planned net time of each segment. The plan of
+ * a line is `[line, runs, static runs, net ms]`, with lines counted from 1.
+ */
+export function costMapOf(text: string, run: string, lines: readonly (readonly [number, number, number, number])[]): CostMap {
+  const segments = segmentsOf(text);
+  const cost: Record<string, number> = Object.fromEntries(segments.map((segment) => [segment.key, 0]));
+  for (const [line, , , netMs] of lines) {
+    const segment = segments.find((s) => s.start <= line && line <= s.end);
+    if (segment !== undefined) cost[segment.key] = (cost[segment.key] ?? 0) + netMs;
+  }
+  return { run, segments: cost };
+}
+
+/**
+ * This function gives the weight of each line of a text from a cost map. A segment spreads its cost over its lines. A
+ * segment that the map does not name has the mean cost of a line of the named segments, so a new function has a cost too.
+ */
+export function lineWeights(text: string, map: CostMap): number[] {
+  const segments = segmentsOf(text);
+  const named = segments.filter((s) => map.segments[s.key] !== undefined);
+  const namedLines = named.reduce((sum, s) => sum + s.end - s.start + 1, 0);
+  const namedCost = named.reduce((sum, s) => sum + (map.segments[s.key] ?? 0), 0);
+  const mean = namedLines === 0 ? 1 : namedCost / namedLines;
+  const weights: number[] = [];
+  for (const s of segments) {
+    const size = s.end - s.start + 1;
+    const cost = map.segments[s.key];
+    for (let line = 0; line < size; line += 1) weights.push(cost === undefined ? mean : cost / size);
+  }
+  return weights;
+}
+
 /**
  * This function gives the last line of each part of a text but the last, and the count of its lines. The end of a part is
- * the closing line of a method near its share of the lines. A mutant of the body of a method thus stays in one part.
+ * the closing line of a method near its share of the lines, or of the weights when the call gives a weight for each line.
+ * A mutant of the body of a method thus stays in one part.
  */
-export function partEnds(text: string, count: number): { readonly ends: number[]; readonly lines: number } {
+export function partEnds(text: string, count: number, weights?: readonly number[]): { readonly ends: number[]; readonly lines: number } {
   const lines = text.split(/\r?\n/u);
   const ends: number[] = [];
+  const total = weights?.reduce((sum, w) => sum + w, 0) ?? 0;
+  let line = 0;
+  let sum = 0;
   for (let part = 1; part < count; part += 1) {
-    const target = Math.round((part * lines.length) / count);
+    let target = Math.round((part * lines.length) / count);
+    if (weights !== undefined && total > 0) {
+      while (line < lines.length && sum + (weights[line] ?? 0) < (part * total) / count) sum += weights[line++] ?? 0;
+      target = line;
+    }
     let found: number | undefined;
     for (let away = 0; away < lines.length && found === undefined; away += 1) {
       if (CLOSING_LINE.test(lines[target + away] ?? "")) found = target + away;
@@ -373,6 +464,15 @@ export function partEnds(text: string, count: number): { readonly ends: number[]
     ends.push(found + 1);
   }
   return { ends, lines: lines.length };
+}
+
+/** The file of the cost maps of the lane, in tools/mutation: a map for each file that the lane cuts by lines. */
+export const COSTS_FILE = "costs.json";
+
+/** This function gives the cost maps of the lane, by the path of the lane of each file, or none with no file. */
+export function costMaps(root: string): Readonly<Record<string, CostMap>> {
+  const path = join(root, "tools", "mutation", COSTS_FILE);
+  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as Record<string, CostMap>) : {};
 }
 
 /** This function gives the paths of the lane of files of a package. */
@@ -408,7 +508,9 @@ export function mutateOf(root: string, part: string): string[] {
     if (count === undefined || index < 0 || index >= count) throw new Error(`The lane does not have the part ${part}.`);
     if (group === "compiler.module") {
       const file = `work/compiler/${MODULE_FILE}`;
-      const { ends, lines } = partEnds(readFileSync(sourcePath(root, file), "utf8"), count);
+      const text = readFileSync(sourcePath(root, file), "utf8");
+      const map = costMaps(root)[file];
+      const { ends, lines } = partEnds(text, count, map === undefined ? undefined : lineWeights(text, map));
       return [`${file}:${(ends[index - 1] ?? 0) + 1}-${ends[index] ?? lines}`];
     }
     const sized = groupFiles(root, group).map((path) => ({ path, size: statSync(sourcePath(root, path)).size }));

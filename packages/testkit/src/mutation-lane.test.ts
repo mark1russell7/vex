@@ -20,7 +20,10 @@ interface Layout {
   readonly PACKAGES: readonly string[];
   readonly mutateOf: (root: string, part: string) => readonly string[];
   readonly splitBySize: (files: readonly { readonly path: string; readonly size: number }[], count: number) => readonly (readonly string[])[];
-  readonly partEnds: (text: string, count: number) => { readonly ends: readonly number[]; readonly lines: number };
+  readonly partEnds: (text: string, count: number, weights?: readonly number[]) => { readonly ends: readonly number[]; readonly lines: number };
+  readonly segmentsOf: (text: string) => readonly { readonly key: string; readonly start: number; readonly end: number }[];
+  readonly costMapOf: (text: string, run: string, lines: readonly (readonly [number, number, number, number])[]) => { readonly run: string; readonly segments: Readonly<Record<string, number>> };
+  readonly lineWeights: (text: string, map: { readonly run: string; readonly segments: Readonly<Record<string, number>> }) => number[];
   readonly entriesIn: (entries: readonly string[], files: readonly string[]) => readonly string[];
   readonly changedParts: (root: string, changed: readonly string[]) => { readonly parts: readonly string[]; readonly files: readonly string[] };
   readonly NOT_READ: Readonly<Record<string, string>>;
@@ -203,6 +206,38 @@ describe("the parts of the mutation lane", () => {
     const text = ["class A {", "  a() {", "    1;", "  }", "  b() {", "    2;", "    3;", "  }", "}"].join("\n");
     expect(layout.partEnds(text, 2)).toEqual({ ends: [8], lines: 9 });
     expect(() => layout.partEnds("one\ntwo", 2)).toThrow("no closing line");
+  });
+
+  it("LANE.COST: a segment ends on a closing line, and its key is the name of its first declaration", async () => {
+    const layout = await loadLayout();
+    const text = ["// a note", "function a() {", "  if (x) {", "    1;", "  }", "}", "class B {", "  #b() {", "    2;", "  }", "  #b() {", "  }", "}", "const C = 3;"].join("\n");
+    expect(layout.segmentsOf(text)).toEqual([
+      { key: "a", start: 1, end: 5 },
+      { key: "@2", start: 6, end: 6 },
+      { key: "B", start: 7, end: 10 },
+      { key: "#b", start: 11, end: 12 },
+      { key: "@5", start: 13, end: 13 },
+      { key: "C", start: 14, end: 14 },
+    ]);
+    // A second segment of the same name has the key with #2, so each key names one segment.
+    expect(layout.segmentsOf("a() {\n}\na() {\n}").map((s) => s.key)).toEqual(["a", "a#2"]);
+  });
+
+  it("LANE.COST: the cost map adds the plan of each line into its segment, and a new segment has the mean cost of a line", async () => {
+    const layout = await loadLayout();
+    const text = ["a() {", "  1;", "}", "b() {", "  2;", "}"].join("\n");
+    const map = layout.costMapOf(text, "42", [[2, 3, 1, 600], [5, 1, 0, 60], [3, 1, 0, 0]]);
+    expect(map).toEqual({ run: "42", segments: { a: 600, b: 60 } });
+    expect(layout.lineWeights(text, map)).toEqual([200, 200, 200, 20, 20, 20]);
+    expect(layout.lineWeights(text, { run: "42", segments: { a: 600 } })).toEqual([200, 200, 200, 200, 200, 200]);
+  });
+
+  it("LANE.COST: with weights, the end of a part is the closing line nearest its share of the cost", async () => {
+    const layout = await loadLayout();
+    const text = ["a() {", "  1;", "}", "b() {", "  2;", "}", "c() {", "  3;", "}", "d() {", "  4;", "}"].join("\n");
+    // By lines, the end is the closing line of b. Most of the cost is in a, so by cost the end is the closing line of a.
+    expect(layout.partEnds(text, 2)).toEqual({ ends: [6], lines: 12 });
+    expect(layout.partEnds(text, 2, [30, 30, 30, 1, 1, 1, 1, 1, 1, 1, 1, 1])).toEqual({ ends: [3], lines: 12 });
   });
 
   it("LANE.PARTS: each input gives the same parts, and the largest file goes first", async () => {

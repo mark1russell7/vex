@@ -1,11 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { deriveMinimums, parseRecords, runSummary, ungatedNote, verdict, type RunRecord } from "./fc-budget.ts";
+import { deriveMinimums, parseRecords, recordOnlyOf, runSummary, sharedKeys, ungatedNote, verdict, type RunRecord } from "./fc-budget.ts";
 
 const record = (key: string, runs: number, more: Partial<RunRecord> = {}): RunRecord => ({ key, runs, target: 1_000_000, interrupted: true, failed: false, cpu: "test", ...more });
 /** One set of records for each number, each with the one property `a`. */
 const setsOf = (xs: readonly number[]): Record<string, RunRecord[]> => Object.fromEntries(xs.map((n, i) => [`run-${String(i)}`, [record("a", n)]]));
 
 describe("the minimum of runs of the weekly long run", () => {
+  it("V-099: only 1 and true turn on the mode of records, and another value throws", () => {
+    for (const value of [undefined, "", "0", "false"]) expect(recordOnlyOf(value)).toBe(false);
+    for (const value of ["1", "true"]) expect(recordOnlyOf(value)).toBe(true);
+    for (const value of ["no", "False", " 1"]) expect(() => recordOnlyOf(value)).toThrow(RangeError);
+  });
+
+  it("V-100: a key of more than one property has a line in the summary, and a derivation refuses it", () => {
+    const records = [record("a", 700), record("b", 700), record("a", 900)];
+    expect(sharedKeys(records)).toStrictEqual(["a"]);
+    expect(sharedKeys([record("a", 700), record("b", 700)])).toStrictEqual([]);
+    expect(runSummary(records, { minimums: { a: 1, b: 1 } }, false).slice(-2)).toStrictEqual(["- Keys of more than one property, so one minimum gates each of them: 1. Give each test a different name.", "  - a"]);
+    expect(runSummary([record("a", 700)], { minimums: { a: 1 } }, false)).toHaveLength(3);
+    const sets = { ...setsOf([1000, 1010, 1020, 1030]), "run-4": records };
+    expect(() => deriveMinimums(sets)).toThrow(`weekly-minimums: in the set run-4, more than one property has the key "a". Give each test a different name.`);
+  });
+
   it("tells a property with no minimum apart from a failed property in the summary of a run", () => {
     const records = [record("a", 700), record("b", 700), record("c", 5, { failed: true }), record("d", 1_000_000, { interrupted: false })];
     expect(verdict(record("a", 700), { minimums: {} }, false)).toMatch(/^no minimums yet: The property "a" stopped/);

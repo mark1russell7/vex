@@ -53,6 +53,24 @@ export type Gates = Pick<Minimums, "minimums"> & Partial<Pick<Minimums, "ungated
 export const minimumSources = 5;
 /** The margin of a minimum: the worst number of runs, divided by 1.1. */
 export const minimumMargin = 1.1;
+/**
+ * This function reads the variable `FC_RECORD_ONLY`. The values `1` and `true` turn on the mode, and no value, `0` and
+ * `false` keep each minimum. Another value throws a `RangeError`, so a typing error does not turn off the gate.
+ */
+export function recordOnlyOf(value: string | undefined): boolean {
+  if (value === undefined || value === "" || value === "0" || value === "false") return false;
+  if (value === "1" || value === "true") return true;
+  throw new RangeError(`FC_RECORD_ONLY is "${value}". Use 1 or true for the mode, or 0, false or no value for the minimums.`);
+}
+
+/** This function gives each key that more than one record of one run has, in the order of the records. */
+export function sharedKeys(records: readonly RunRecord[]): readonly string[] {
+  const seen = new Set<string>();
+  const shared = new Set<string>();
+  for (const r of records) (seen.has(r.key) ? shared : seen).add(r.key);
+  return [...shared];
+}
+
 /** The words at the start of the message of a property with no minimum. Such a message tells of the file of the minimums, and not of the code. */
 const noMinimumYet = "no minimums yet";
 
@@ -76,11 +94,14 @@ export function runSummary(records: readonly RunRecord[], gates: Gates, recordOn
   const failed = records.filter((r) => r.failed);
   const messages = records.filter((r) => !r.failed).flatMap((r) => verdict(r, gates, recordOnly) ?? []);
   const waiting = messages.filter((m) => m.startsWith(noMinimumYet)).length;
+  const shared = sharedKeys(records);
   return [
     `- Failed properties, each with a counterexample: ${String(failed.length)} of ${String(records.length)}.`,
     ...failed.map((r) => `  - ${r.key}`),
     `- Properties under their minimum of runs: ${String(messages.length - waiting)}.`,
     `- Properties that stopped at the budget, with ${noMinimumYet}: ${String(waiting)}.`,
+    // Two tests in two files of one package can have one name. Then one minimum gates two properties.
+    ...(shared.length === 0 ? [] : [`- Keys of more than one property, so one minimum gates each of them: ${String(shared.length)}. Give each test a different name.`, ...shared.map((k) => `  - ${k}`)]),
   ];
 }
 
@@ -107,7 +128,7 @@ export function parseRecords(text: string): RunRecord[] {
  * goes to `ungated` with its numbers.
  *
  * Only a property that reached its budget in a set gets a minimum. A property must be in each set. Fewer than 5 sets, a
- * set with a failure, or a property not in each set throws a `RangeError`.
+ * set with a failure, or a property not in each set throws a `RangeError`. A key of more than one property in a set throws it too.
  */
 export function deriveMinimums(sets: Readonly<Record<string, readonly RunRecord[]>>): Minimums {
   const sources = Object.keys(sets);
@@ -115,6 +136,8 @@ export function deriveMinimums(sets: Readonly<Record<string, readonly RunRecord[
   const runs = new Map<string, number[]>();
   const stopped = new Map<string, number[]>();
   for (const source of sources) {
+    const shared = sharedKeys(sets[source] ?? []);
+    if (shared.length > 0) throw new RangeError(`weekly-minimums: in the set ${source}, more than one property has the key "${shared.join('", "')}". Give each test a different name.`);
     for (const r of sets[source] ?? []) {
       if (r.failed) throw new RangeError(`weekly-minimums: the set ${source} has a failure of "${r.key}". Use only green runs.`);
       runs.set(r.key, [...(runs.get(r.key) ?? []), r.runs]);

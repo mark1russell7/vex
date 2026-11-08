@@ -6,7 +6,7 @@
  * The variable `FC_TIME_LIMIT_MS` gives each property a time budget (the weekly run of one million runs). A property
  * that reaches the budget fails when it did fewer runs than its minimum in the file of `FC_MIN_RUNS_FILE`
  * (`fc-budget.ts`). An ungated property passes, and the run names it in its log and in its job summary. With
- * `FC_RECORD_ONLY`, no minimum applies. `FC_RECORD_FILE` gets one record for each property, and
+ * `FC_RECORD_ONLY` set to `1` or `true`, no minimum applies. `FC_RECORD_FILE` gets one record for each property, and
  * `scripts/weekly-summary.ts` counts these records for the job summary.
  * A counterexample is a failure, as without a budget.
  *
@@ -17,7 +17,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { cpus } from "node:os";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
-import { ungatedNote, verdict, type Gates, type RunRecord } from "./fc-budget.ts";
+import { recordOnlyOf, ungatedNote, verdict, type Gates, type RunRecord } from "./fc-budget.ts";
 
 const seed = Number(process.env["FC_SEED"] ?? Math.floor(Math.random() * 2 ** 31));
 const numRuns = Number(process.env["FC_NUM_RUNS"] ?? 200);
@@ -28,7 +28,7 @@ function budgetReporter(budget: number): (details: fc.RunDetails<unknown>) => vo
   const file = process.env["FC_MIN_RUNS_FILE"];
   const gates: Gates = file === undefined ? { minimums: {} } : (JSON.parse(readFileSync(file, "utf8")) as Gates);
   const summary = process.env["GITHUB_STEP_SUMMARY"];
-  const recordOnly = Boolean(process.env["FC_RECORD_ONLY"]);
+  const recordOnly = recordOnlyOf(process.env["FC_RECORD_ONLY"]);
   const out = process.env["FC_RECORD_FILE"];
   const cpu = cpus()[0]?.model.trim() || "unknown";
   // A test can have more than one property, so the key has the place of the property in its test.

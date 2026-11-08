@@ -59,8 +59,9 @@ export function kernelPlan(source: Expr | Envelope, opts: CompileOptions = {}): 
   let bad: VexError | undefined;
   if (isDocument(source)) {
     const read = fromDocument(source, domains);
-    // LOOP.SIZE, STEP.MAX: the plan refuses the same programs as `compile`.
-    const size = read.ok ? (sizeError(read.value, opts) ?? stepError(read.value, opts) ?? monotoneError(read.value, opts)) : undefined;
+    // EVAL.NESTING, LOOP.SIZE, STEP.MAX: the plan refuses the same programs as `compile`. The nesting comes first, because the
+    // other checks recurse, and a document can be deeper than the limit of an expression.
+    const size = read.ok ? (nestingError(read.value) ?? sizeError(read.value, opts) ?? stepError(read.value, opts) ?? monotoneError(read.value, opts)) : undefined;
     if (read.ok && size === undefined) doc = source;
     else bad = read.ok ? vexError("bad-expression", size ?? "") : read.error;
   } else {

@@ -1,4 +1,4 @@
-import { app, axes, each, ref, space } from "@mark1russell7/vex";
+import { app, axes, each, lit, MAX_NESTING, ref, space, type Expr } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it } from "vitest";
 import { pilotCases } from "./fallback-cases.ts";
@@ -65,6 +65,27 @@ describe("the share of tier 2 on real programs", () => {
     expect([p?.tier, p?.runs, p?.fallbacks]).toStrictEqual([2, 3, 3]);
     expect(p?.fallbackReasons).toStrictEqual([{ reason: "tier 1 gave a value", count: 3 }]);
     expect(report.totals.runShare).toBe(0);
+    wellFormed(report);
+  });
+
+  it("V-101: a name with compiles of two tiers counts as tier 1, with no runs of tier 2", () => {
+    const s = space.record({ A: { n: 1 }, B: { n: 2 } });
+    // Tier 2 refuses a program that is nested deeper than the limit, so its compile is tier 1.
+    let deep: Expr = lit(1);
+    for (let i = 0; i < MAX_NESTING; i++) deep = app("add", deep, lit(1));
+    const report = measureShare([
+      {
+        name: "two tiers",
+        run: (m) => {
+          const fast = m.program("n", ref("n"), { domains: [NumDomain] });
+          for (const origin of s.keys) fast.run({ space: s, origin });
+          m.program("n", deep, { domains: [NumDomain] });
+        },
+      },
+    ]);
+    const [p] = report.programs;
+    expect([p?.tier, p?.runs, p?.values, p?.tier2Values, p?.tier2Errors]).toStrictEqual([1, 2, 2, 0, 0]);
+    expect([report.totals.tier2ValueRuns, report.totals.valueRunShare]).toStrictEqual([0, 0]);
     wellFormed(report);
   });
 });

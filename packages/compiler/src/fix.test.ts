@@ -61,6 +61,27 @@ describe("a fixed-point column in the tiers (COMPILE.FIX)", () => {
     expect(emitModule(stray, OPTIONS)).toEqual({ ok: false, reason });
   });
 
+  it("COMPILE.FIX: a read of a column in an axis table is refused in each tier, so tier 2 reads no row at a position of the table", () => {
+    // The loop of an axis table counts the keys of the table, and a column has the order of the space of its fix.
+    // The check refuses each form, so the read of a row with that position does not occur.
+    const T = space.record({ b: { n: 0 } });
+    const forms = [
+      app("max", each(axes.table("T"), X)),
+      let_({ f: fn([], X) }, app("max", each(axes.table("T"), call("f")))),
+      let_({ f: fn(["q"], app("max", each(axes.table("T"), { tag: "var", name: "q" }))) }, call("f", X)),
+      app("max", each(axes.table("T"), let_({ y: X }, { tag: "var", name: "y" }))),
+    ];
+    const rows = space.record({ a: { id: "a", n: 1 }, b: { id: "b", n: 5 } });
+    for (const step of forms) {
+      const e = fix("x", "max", ref("n"), step);
+      const reason = monotoneError(e, { domains: DOMAINS });
+      expect(reason).toContain(`the step of the "fix" "x" does not move one way`);
+      expect(generate(e, OPTIONS)).toEqual({ ok: false, reason });
+      expect(emitModule(e, OPTIONS)).toEqual({ ok: false, reason });
+      for (const at of rows.keys) expect(tiered(e, OPTIONS).run({ space: rows, origin: at, tables: { T } })).toEqual(evaluate(e, { ...OPTIONS, space: rows, origin: at, tables: { T } }));
+    }
+  });
+
   it("COMPILE.FIX FIX.LIMIT: tier 2 gives the failure at the round limit, and a form that holds it gives its other value", () => {
     expect(agrees(LIMIT)).toEqual([2, 0]);
     expect(agrees(app("ifError", LIMIT, lit(-1)))).toEqual([2, 0]);

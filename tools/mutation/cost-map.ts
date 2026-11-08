@@ -1,56 +1,52 @@
-// The cost map of module.ts (LANE.COST). The plan of a dry run gives the planned net time of each line of each part. This
-// script adds the plans of the parts of compiler.module into one map of the segments of module.ts, and it writes the map
-// into costs.json. The parts then end near their share of the cost, not of the lines. Start it from the root of the
-// repository with the run of the dry run and the folder of each artifact `mutation-report-compiler.module.<n>`. The plan is at
-// the top of the folder of an artifact:
+// The cost maps of the lane (LANE.COST). The plan of a dry run gives the planned net time of each line of each file of a
+// part. This script adds the plans of the parts into one map of the segments of each file, and it writes the maps into
+// costs.json. A plan names only the files with a mutant, so a file of the lane that no plan and no old map names gets a map
+// with no cost. Each other file that the plans do not name keeps its old map. The parts of each group then cut by cost,
+// not by lines. Start it from the root of the repository with the run of the dry run and the folder of the artifact
+// `mutation-report-<part>` of each part of that run. The plan is at the top of the folder of an artifact:
 //
 //   node tools/mutation/cost-map.ts <run> <folder>...
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { clockMinutes, type FilePlan, PLAN_FILE, TARGET_MINUTES } from "./lane-cost.ts";
-import { type CostMap, costMapOf, COSTS_FILE, laneParts, lineWeights, mutateOf } from "./layout.ts";
+import { clockMinutes, type FilePlan, type LinePlan, PLAN_FILE, TARGET_MINUTES } from "./lane-cost.ts";
+import { type CostMap, costMapOf, costMaps, COSTS_FILE, laneParts, mutateOf, PACKAGES, plannedMs } from "./layout.ts";
 
-/** The file that the lane cuts by lines, as a path of the lane. */
-const MODULE = "work/compiler/module.ts";
-
-/** This function gives the plan of each line of module.ts from the plans of the parts. */
-function planLines(folders: readonly string[]): [number, number, number, number][] {
-  return folders.flatMap((folder) => {
+/** This function gives the plan of each line of each file from the plans of the parts, by the path of the lane of the file. */
+function planLines(folders: readonly string[]): Map<string, LinePlan[]> {
+  const out = new Map<string, LinePlan[]>();
+  for (const folder of folders) {
     const plan = JSON.parse(readFileSync(join(folder, basename(PLAN_FILE)), "utf8")) as { readonly files: Readonly<Record<string, FilePlan>> };
-    return (plan.files[MODULE]?.lines ?? []).map((line) => [...line] as [number, number, number, number]);
-  });
+    for (const [file, row] of Object.entries(plan.files)) out.set(file, [...(out.get(file) ?? []), ...row.lines]);
+  }
+  return out;
 }
 
-/** This function gives the estimate of the clock of each part of compiler.module, in minutes, under a cost map. */
-export function partMinutes(root: string, parts: readonly string[], map: CostMap): number[] {
-  const text = readFileSync(join(root, "packages", "compiler", "src", "module.ts"), "utf8");
-  const weights = lineWeights(text, map);
-  return parts.map((part) => {
-    const [, from, to] = /:(\d+)-(\d+)$/u.exec(mutateOf(root, part)[0] ?? "") ?? [];
-    const sum = weights.slice(Number(from) - 1, Number(to)).reduce((total, w) => total + w, 0);
-    return clockMinutes(sum);
-  });
+/** This function gives the estimate of the clock of each part, in minutes, under the cost maps. */
+export function partMinutes(root: string, parts: readonly string[], maps: Readonly<Record<string, CostMap>> = costMaps(root)): number[] {
+  return parts.map((part) => clockMinutes(plannedMs(root, part, maps)));
 }
 
-/** This function writes the cost map of module.ts, and it gives 1 when the plans have no line of module.ts. */
+/** This function gives the path in the repository of a path of the lane: `work/core/a.ts` is `packages/core/src/a.ts`. */
+const repoPath = (file: string): string => file.replace(/^work\/([^/]+)\//u, "packages/$1/src/");
+
+/** This function writes the cost maps, and it gives 1 when the plans have no line. */
 function main(run: string | undefined, folders: readonly string[]): number {
   const lines = planLines(folders);
-  if (run === undefined || lines.length === 0) {
-    console.error("The plans give no line of module.ts. Name the run and the folder of each artifact of compiler.module.");
+  if (run === undefined || lines.size === 0) {
+    console.error("The plans give no line. Name the run and the folder of each artifact of the parts.");
     return 1;
   }
   const root = process.cwd();
-  const text = readFileSync(join(root, "packages", "compiler", "src", "module.ts"), "utf8");
-  const map = costMapOf(text, run, lines);
-  const total = Object.values(map.segments).reduce((sum, ms) => sum + ms, 0);
-  writeFileSync(join(root, "tools", "mutation", COSTS_FILE), `${JSON.stringify({ [MODULE]: map }, null, 2)}\n`);
-  const minutes = clockMinutes(total);
-  console.log(`The cost map of module.ts from run ${run}: ${lines.length} lines with a plan, an estimate of ${Math.round(minutes)} minutes of the clock in all.`);
-  console.log(`At ${TARGET_MINUTES} minutes a part, compiler.module needs ${Math.ceil(minutes / TARGET_MINUTES)} parts or more.`);
-  const parts = laneParts().filter((part) => part.startsWith("compiler.module."));
-  partMinutes(root, parts, map).forEach((m, i) => console.log(`${parts[i]}: an estimate of ${Math.round(m)} minutes.`));
+  const maps: Record<string, CostMap> = { ...costMaps(root) };
+  for (const [file, plan] of lines) maps[file] = costMapOf(readFileSync(join(root, repoPath(file)), "utf8"), run, plan);
+  for (const file of PACKAGES.flatMap((name) => mutateOf(root, name))) maps[file] ??= costMapOf(readFileSync(join(root, repoPath(file)), "utf8"), run, []);
+  const sorted = Object.fromEntries(Object.entries(maps).toSorted(([a], [b]) => a.localeCompare(b)));
+  writeFileSync(join(root, "tools", "mutation", COSTS_FILE), `${JSON.stringify(sorted, null, 2)}\n`);
+  console.log(`The cost maps from run ${run}: ${String(lines.size)} files with a plan.`);
+  const parts = laneParts();
+  partMinutes(root, parts, sorted).forEach((m, i) => console.log(`${parts[i] ?? ""}: an estimate of ${m.toFixed(0)} minutes${m > TARGET_MINUTES ? ", OVER THE TARGET" : ""}.`));
   return 0;
 }
 

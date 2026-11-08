@@ -16,7 +16,7 @@ The read of each package also prints its static mutants: the count, and the test
 
 A score can come from a part of the tests, so the read prints the tests of each part beside its score (`LANE.TESTS`). The count comes from the field `testFiles` of the report. A part reads the test files that reach its mutated files, so this count depends on these files. A compare holds only for a full part. A night prints its count and compares nothing.
 
-The weekly job saves the file `lane-tests.json` as the artifact `lane-tests`, and the next weekly job reads the newest such artifact of the main line. A part that fell or that gave no report keeps its old count. The repository holds no count.
+The weekly job saves the file `lane-tests.json` as the artifact `lane-tests`, and the next weekly job reads the newest such artifact of the main line. A part that fell or that gave no report keeps its old count. The repository holds no count. The file also holds the mutated files of each count. A count compares only with a read of the same files, so a new cut of the parts starts a new line of reads for each part that it changes.
 
 A fall of more than 20 % reads `no read: tests fell`, and the gate fails. A pull request that removes tests on purpose adds an entry to `planned-falls.json`. The entry names the part, the old count, the new count and the pull request. An entry holds only while the last good read equals its old count.
 
@@ -40,14 +40,14 @@ Each job has one part, so that each job stays in its time limit of 150 minutes. 
 
 | Part | Files |
 |---|---|
-| `core.kernel` | The modules of the kernel of coeval: `kernel.ts`, `plan.ts`, `same.ts`, `document.ts`, `deps.ts` and `write.ts` |
-| `core.base.1` to `core.base.4` | The other modules of the core, by size |
-| `domains.1` to `domains.3` | The modules of the domains, by size |
+| `core.kernel.1` and `core.kernel.2` | The modules of the kernel of coeval: `kernel.ts`, `plan.ts`, `same.ts`, `document.ts`, `deps.ts` and `write.ts` |
+| `core.base.1` to `core.base.11` | The other modules of the core |
+| `domains.1` to `domains.3` | The modules of the domains |
 | `testkit` | The test kit |
-| `compiler.module.1` to `compiler.module.6` | `module.ts`, by the cost of its segments in `costs.json`, with each end at the end of a method |
-| `compiler.rest.1` to `compiler.rest.4` | The other modules of the compiler, by size |
+| `compiler.module.1` to `compiler.module.6` | `module.ts` |
+| `compiler.rest.1` to `compiler.rest.5` | The other modules of the compiler |
 
-`layout.ts` gives the parts. The variable `VEX_MUTATE` names the packages or the parts of a run. It also takes a whole group, for example `core.base`, or one module of the domains, for example `domains.schema`.
+`layout.ts` gives the parts. It cuts each group by the cost of its lines in `costs.json` (`LANE.CUT`). The files of a group follow one another in the order of their names. A part ends at an end line: the closing line of a method, or the last line of a file. Thus a part holds whole files, and a range of lines of a file at each end. A mutant of the body of a method stays in one part. Of all such cuts, `layout.ts` takes the cut with the smallest largest part, and of these the cut with the smallest sum of squares. A file that no map names has the mean cost of a line of its group. The variable `VEX_MUTATE` names the packages or the parts of a run. It also takes a whole group, for example `core.base`, or one module of the domains, for example `domains.schema`.
 
 The clock limit of one mutant is the net time of the first run, times 1.5, plus 120 s. `coverageAnalysis` is `perTest` on each part. Thus only a static mutant starts all tests. The lane does not ignore static mutants, because a survivor in a static mutant is a real survivor.
 
@@ -69,9 +69,11 @@ A part that passes its first test run stops after its plan. The reporter `lane-c
 
 The plan also gives the 40 tests of the largest cost (`tests`: name, file, time, runs, cost). The cost of a test is its time in the first test run, times the runs of mutants that start it. A static mutant starts each test, so a static mutant adds the time of each test. A test with a large cost is the first place to make the lane faster.
 
-A dry run fails when its plan has more than 600 static runs in `module.ts` (`LANE.STATIC`). Code outside a test, for example an emit in the body of a `describe` or a table of text at the top of a file, gives a static mutant. A static mutant starts each test, so its cost is the time of all tests. On 2026-11-08 the dry run 42460046693 read 4232 static runs in `module.ts`. After the fix, the dry run 42474174486 read 471. Move such code into a test, a `beforeEach` or a function.
+A dry run fails when its plan has more static runs in a file than the limit of the file in `STATIC_LIMITS` of `lane-cost.ts` (`LANE.STATIC`). The limits are 600 in `module.ts`, 350 in `kernel.ts` and 200 in `list.ts`. Code outside a test, for example an emit in the body of a `describe` or a table of text at the top of a file, gives a static mutant. A static mutant starts each test, so its cost is the time of all tests. On 2026-11-08 the dry run 42460046693 read 4232 static runs in `module.ts`. After the fix, the dry run 42474174486 read 471. Move such code into a test, a `beforeEach` or a function. The static runs of `kernel.ts` and `list.ts` come from tables that the core exports, so they stay. A regular expression at the top of `module-tidy.ts` gave 160 static runs. Each such expression is now a function.
 
-`costs.json` holds the cost of each segment of `module.ts` from the dry run 42474174486. Start `node tools/mutation/cost-map.ts <run> <folder>...` after a large change of `module.ts` or of its tests, and commit the new map. A test fails when the estimate of a part is over 100 minutes under the committed map.
+`costs.json` holds the cost of each segment of each file of the lane from the dry run 42474174486. Start `node tools/mutation/cost-map.ts <run> <folder>...` with the folders of all parts of a dry run, on the commit of that run. Do this after a large change of a file or of its tests, and commit the new maps. A test fails when the estimate of a part is over 100 minutes under the committed maps.
+
+**The clock follows the static runs more than the planned time.** The weekly run 42349252538 against the plans of 42474174486 gives a mean error of 28 minutes for the estimate, the planned net time divided by 9.8. The estimate is low for `domains` by a factor of about 2.4, and for the small parts of `compiler.rest` by 1.2 to 2.2. It is high for the old `core.base.2` and `core.kernel`. The domains have many static runs with a small net time: 249 in `scalars.ts` and 210 in `vec2.ts`. A model of about 7.2 s for each static run, plus the covered net time divided by 7.2, has an error of 17 to 20 minutes when it leaves out each part in turn. The two runs were on different commits, so the lane keeps 9.8 until a full run on one commit gives the plans and the times together.
 
 The flip of this check is a real failed job. On 2026-11-05 the dry run of `compiler.module` read V-090 in [job 127041253282](https://github.com/mark1russell7/vex/actions/runs/41962557467/job/127041253282). The parts of the same check on the fixed tree are the clean copy. This check reads only the dry run. It does not read a score.
 

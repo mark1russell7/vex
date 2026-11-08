@@ -32,13 +32,16 @@ export interface Tidied {
 /** The tokens that hold a text of the code: a string, a part of a template and a regular expression. */
 const TEXT_TOKENS: ReadonlySet<unknown> = new Set([tokTypes.string, tokTypes.template, tokTypes.regexp]);
 
+// Each pattern of this file is a function that gives a new regular expression. Thus a mutant of a pattern starts only the
+// tests that use the pattern, not each test of the mutation lane (LANE.STATIC).
+
 /** A text of the code starts with one of these characters. A comment starts with the slash too. */
 // Stryker disable next-line Regex: `rewritten` calls `codeOf` on a line with a match, so a form that finds other characters also finds that line.
-const TEXT_START = /["'`/]/;
+const TEXT_START = (): RegExp => /["'`/]/;
 
 /** This function gives a line of code with spaces at the place of each text. Each other character keeps its offset. A line with no text needs no tokens. */
 function codeOf(line: string): string {
-  if (!TEXT_START.test(line)) return line;
+  if (!TEXT_START().test(line)) return line;
   let out = "";
   let at = 0;
   for (const token of tokenizer(line, { ecmaVersion: "latest" })) {
@@ -72,10 +75,10 @@ export function namesOfCode(code: string): ReadonlySet<string> {
 }
 
 /** The words of a text. */
-const WORD = /[A-Za-z_$][\w$]*/g;
+const WORD = (): RegExp => /[A-Za-z_$][\w$]*/g;
 
 /** This function gives the words of a text. */
-export const wordsOf = (text: string): readonly string[] => text.match(WORD) ?? [];
+export const wordsOf = (text: string): readonly string[] => text.match(WORD()) ?? [];
 
 /** This function gives the count of a word in some lines. A line without the text of the word needs no walk. */
 function countOf(lines: readonly string[], name: string): number {
@@ -107,17 +110,18 @@ function openerOf(lines: readonly string[], at: number): number {
 }
 
 /** The line of a function that a block opens. */
-const FUNCTION_HEAD = /=> \{$|\bfunction\b.*\{$/;
+const FUNCTION_HEAD = (): RegExp => /=> \{$|\bfunction\b.*\{$/;
 
 /** This function gives the line that opens the function of the line `at`, or -1 for the function of the run. */
 function functionOf(lines: readonly string[], at: number): number {
+  const head = FUNCTION_HEAD();
   let k = openerOf(lines, at);
-  while (k >= 0 && !FUNCTION_HEAD.test(lines[k] as string)) k = openerOf(lines, k);
+  while (k >= 0 && !head.test(lines[k] as string)) k = openerOf(lines, k);
   return k;
 }
 
 /** The key of an item of a list in a loop. The head of the loop must come just before it (`deadKeys`). */
-const KEY_READ = /^\s*const (j\d+) = ([A-Za-z]+\d*)\[(q\d+)\](\[0\])?;$/;
+const KEY_READ = (): RegExp => /^\s*const (j\d+) = ([A-Za-z]+\d*)\[(q\d+)\](\[0\])?;$/;
 
 /**
  * This function removes each read of a key that no code reads (COMPILE.MODULE.SIZE.KEY). The read must be the first line
@@ -125,8 +129,9 @@ const KEY_READ = /^\s*const (j\d+) = ([A-Za-z]+\d*)\[(q\d+)\](\[0\])?;$/;
  * is a pair, so the read cannot throw.
  */
 export function deadKeys(lines: readonly string[]): readonly string[] {
+  const keyRead = KEY_READ();
   return lines.filter((line, i) => {
-    const m = KEY_READ.exec(line);
+    const m = keyRead.exec(line);
     if (m === null) return true;
     const [, key, array, position, pair] = m as unknown as readonly [string, string, string, string, string | undefined];
     const head = lines[i - 1] ?? "";
@@ -145,13 +150,14 @@ function renamed(line: string, from: string, to: string): string {
 }
 
 /** The writes to a name. The first group holds the name after `++` or `--`, and the second group the name before an operator. */
-const WRITE = /(?:\+\+|--)\s*([A-Za-z_$][\w$]*)|(?<![\w$.])(?<!\b(?:const|let) )([A-Za-z_$][\w$]*)\s*(?:\+\+|--|(?:[-+*/%&|^]|<<|>>>?|\*\*|&&|\|\||\?\?)?=(?![=>]))/g;
+const WRITE = (): RegExp => /(?:\+\+|--)\s*([A-Za-z_$][\w$]*)|(?<![\w$.])(?<!\b(?:const|let) )([A-Za-z_$][\w$]*)\s*(?:\+\+|--|(?:[-+*/%&|^]|<<|>>>?|\*\*|&&|\|\||\?\?)?=(?![=>]))/g;
 
 /** This function gives the lines that write to each name, without the line that declares the name. */
 function writesOf(lines: readonly string[]): ReadonlyMap<string, readonly number[]> {
   const writes = new Map<string, number[]>();
+  const write = WRITE();
   for (const [i, line] of lines.entries()) {
-    for (const m of line.matchAll(WRITE)) {
+    for (const m of line.matchAll(write)) {
       const name = (m[1] ?? m[2]) as string;
       writes.set(name, [...(writes.get(name) ?? []), i]);
     }
@@ -168,7 +174,7 @@ function binds(line: string, name: string): boolean {
 }
 
 /** A statement that gives a new name to a fresh name, or to `o`, the key of a run. */
-const ALIAS = /^\s*const ([A-Za-z]+\d+) = ([A-Za-z]+\d+|o);$/;
+const ALIAS = (): RegExp => /^\s*const ([A-Za-z]+\d+) = ([A-Za-z]+\d+|o);$/;
 
 /**
  * This function tells if the name `name` keeps its value from the line `at` to the line `end`. A name with no write
@@ -192,8 +198,9 @@ export function aliases(lines: readonly string[]): readonly string[] {
   const out = [...lines];
   const writes = writesOf(lines);
   const gone = new Set<number>();
+  const statement = ALIAS();
   for (let i = 0; i < out.length; i++) {
-    const m = ALIAS.exec(out[i] as string);
+    const m = statement.exec(out[i] as string);
     if (m === null) continue;
     const [, alias, name] = m as unknown as readonly [string, string, string];
     const end = blockEnd(out, i);
@@ -212,24 +219,26 @@ export function aliases(lines: readonly string[]): readonly string[] {
 }
 
 /** The first line of a lazy cell of the run. */
-const CELL = /^ {2}const (c\d+) = L\(\(\) => \{$/;
+const CELL = (): RegExp => /^ {2}const (c\d+) = L\(\(\) => \{$/;
 
 /** The first line of a lazy cell at each place. */
-const ANY_CELL = /^\s*const \w+ = L\(\(\) => \{$/;
+const ANY_CELL = (): RegExp => /^\s*const \w+ = L\(\(\) => \{$/;
 
 /** The blocks that run each statement at most once, for one run of the block around them. */
-const ONCE_BLOCK = /^\s*(?:try \{|\} catch \{|\} else \{|(?:\} else )?if \(.*\) \{)$/;
+const ONCE_BLOCK = (): RegExp => /^\s*(?:try \{|\} catch \{|\} else \{|(?:\} else )?if \(.*\) \{)$/;
 
 /** The statements that can run a part of their line more than once. */
-const LOOP_LINE = /^\s*(?:for|while|do)\b|=>/;
+const LOOP_LINE = (): RegExp => /^\s*(?:for|while|do)\b|=>/;
 
 /** This function tells if the statement at the line `at` runs at most once in a run. */
 function runsOnce(lines: readonly string[], at: number): boolean {
-  if (LOOP_LINE.test(lines[at] as string)) return false;
+  if (LOOP_LINE().test(lines[at] as string)) return false;
+  const cell = ANY_CELL();
+  const once = ONCE_BLOCK();
   for (let k = openerOf(lines, at); k >= 0; k = openerOf(lines, k)) {
     const line = lines[k] as string;
-    if (ANY_CELL.test(line)) return true;
-    if (!ONCE_BLOCK.test(line)) return false;
+    if (cell.test(line)) return true;
+    if (!once.test(line)) return false;
   }
   return true;
 }
@@ -241,8 +250,9 @@ function runsOnce(lines: readonly string[], at: number): boolean {
  */
 export function onceCells(lines: readonly string[]): readonly string[] {
   let out = lines;
+  const cell = CELL();
   for (let i = 0; i + 2 < out.length; i++) {
-    const name = CELL.exec(out[i] as string)?.[1];
+    const name = cell.exec(out[i] as string)?.[1];
     const value = /^ {4}return (.*);$/.exec(out[i + 1] as string)?.[1];
     if (name === undefined || value === undefined || out[i + 2] !== "  });" || countOf(out, name) !== 2) continue;
     const read = new RegExp(`(?<![\\w$.])G\\(${name}\\(\\)\\)`, "g");
@@ -256,29 +266,29 @@ export function onceCells(lines: readonly string[]): readonly string[] {
 }
 
 /** A constant of the run on one line, with its name. */
-const CONSTANT = /^ {2}const (c\d+) = (?:T\(\(\) => .*\)|\[\]);$/;
+const CONSTANT = (): RegExp => /^ {2}const (c\d+) = (?:T\(\(\) => .*\)|\[\]);$/;
 
 /** The first line of a constant of the run with a `try`, with its name. */
-const HELD = /^ {2}let (c\d+);$/;
+const HELD = (): RegExp => /^ {2}let (c\d+);$/;
 
 /** The first line of a column at each depth, with its indent and its name. A column does not run until a read calls it. */
-const COLUMN = /^( *)const (col\d+) = Q\(\(\w+\) => \{$/;
+const COLUMN = (): RegExp => /^( *)const (col\d+) = Q\(\(\w+\) => \{$/;
 
 /** The variable of the pack of a column at each depth, with its name. */
-const PACK = /^ *let (PK\d+);$/;
+const PACK = (): RegExp => /^ *let (PK\d+);$/;
 
 /** This function gives the name of the declaration at the line `at` and its last line, or `undefined` for another line. */
 function constantAt(lines: readonly string[], at: number): { readonly name: string; readonly last: number } | undefined {
   const line = lines[at] as string;
-  const one = CONSTANT.exec(line)?.[1];
+  const one = CONSTANT().exec(line)?.[1];
   if (one !== undefined) return { name: one, last: at };
-  const lazy = CELL.exec(line)?.[1];
+  const lazy = CELL().exec(line)?.[1];
   if (lazy !== undefined) return { name: lazy, last: lines.indexOf("  });", at) };
-  const column = COLUMN.exec(line);
+  const column = COLUMN().exec(line);
   if (column !== null) return { name: column[2] as string, last: lines.indexOf(`${column[1] as string}});`, at) };
-  const pack = PACK.exec(line)?.[1];
+  const pack = PACK().exec(line)?.[1];
   if (pack !== undefined) return { name: pack, last: at };
-  const held = HELD.exec(line)?.[1];
+  const held = HELD().exec(line)?.[1];
   return held === undefined || lines[at + 1] !== "  try {" ? undefined : { name: held, last: lines.indexOf("  }", at) };
 }
 
@@ -324,7 +334,7 @@ export function liveDecls(decls: ReadonlyMap<string, string>, roots: string): Re
 }
 
 /** The tokens of the body of a function of an op. A body with another token has no inline form. */
-const BODY_TOKEN = /\s+|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\.{3}|\.\d\w*|\d[\w.]*|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|===|!==|\?\?|&&|\|\||\*\*|<<|>>>|>>|==|!=|<=|>=|\+\+|--|=>|\?\.|[-+*/%<>!?:,&|^~()[\]{}]/y;
+const BODY_TOKEN = (): RegExp => /\s+|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\.{3}|\.\d\w*|\d[\w.]*|\.[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*|===|!==|\?\?|&&|\|\||\*\*|<<|>>>|>>|==|!=|<=|>=|\+\+|--|=>|\?\.|[-+*/%<>!?:,&|^~()[\]{}]/y;
 
 /** The tokens that change a value or start a function. */
 const NOT_INLINE: ReadonlySet<string> = new Set(["++", "--", "=>"]);
@@ -338,9 +348,9 @@ const NOT_VALUES: ReadonlySet<string> = new Set(["typeof", "void"]);
 /** This function gives the tokens of a body, or `undefined` for a body with another token. */
 function tokensOf(body: string): readonly string[] | undefined {
   const out: string[] = [];
-  BODY_TOKEN.lastIndex = 0;
-  while (BODY_TOKEN.lastIndex < body.length) {
-    const m = BODY_TOKEN.exec(body);
+  const token = BODY_TOKEN();
+  while (token.lastIndex < body.length) {
+    const m = token.exec(body);
     if (m === null || NOT_INLINE.has(m[0])) return undefined;
     out.push(m[0]);
   }
@@ -393,7 +403,7 @@ function bodyParts(params: readonly string[], body: string, globals: ReadonlySet
 }
 
 /** The declaration of a function of an op or of a check of a domain, as an arrow function. */
-const OP_DECL = /^const ((?:op|v)_\w+) = (?:\(([\w$,\s]*)\)|([A-Za-z_$][\w$]*))\s*=>([\s\S]*);$/;
+const OP_DECL = (): RegExp => /^const ((?:op|v)_\w+) = (?:\(([\w$,\s]*)\)|([A-Za-z_$][\w$]*))\s*=>([\s\S]*);$/;
 
 /** The name, the parameters and the parts of an inline form. */
 interface OpForm {
@@ -404,7 +414,7 @@ interface OpForm {
 
 /** This function gives the form of a declaration, or `undefined` for a declaration without one. */
 function opForm(text: string, globals: ReadonlySet<string>): OpForm | undefined {
-  const m = OP_DECL.exec(text);
+  const m = OP_DECL().exec(text);
   if (m === null) return undefined;
   const params = (m[2] ?? m[3] ?? "").split(",").map((x) => x.trim()).filter((x) => x !== "");
   const parts = bodyParts(params, m[4] as string, globals);

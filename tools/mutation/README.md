@@ -63,9 +63,17 @@ A dispatch of `nightly.yml` can name parts in the input `packages`. A dispatch o
 
 ## The dry run
 
-A part that fails its first test run gives no report, and the gate reads that as no read. The workflow `lane-dry-run.yml` starts this first test run on each part, for a change of the files of the lane (`LANE.DRYRUN`). This shows the fault before the merge. The dry run gives no score, and it does not show if a part stays in its time limit.
+A part that fails its first test run gives no report, and the gate reads that as no read. The workflow `lane-dry-run.yml` starts this first test run on each part, for a change of the files of the lane (`LANE.DRYRUN`). This shows the fault before the merge. The dry run gives no score.
+
+A part that passes its first test run stops after its plan. The reporter `lane-cost` writes the plan and stops Stryker. The plan has the planned net time of each line of each file. The job prints the estimate of the clock of the part. The estimate is the planned net time divided by 9.8, the lowest value of the two parts that Nightly 42443362759 stopped. An estimate over 100 minutes has a mark and a warning. A slow runner also ends a part under that target before its stop of 140 minutes.
 
 The flip of this check is a real failed job. On 2026-11-05 the dry run of `compiler.module` read V-090 in [job 127041253282](https://github.com/mark1russell7/vex/actions/runs/41962557467/job/127041253282). The parts of the same check on the fixed tree are the clean copy. This check reads only the dry run. It does not read a score.
+
+## The stop and the partial score
+
+A job of a full run stops its part after 140 minutes, 10 minutes under the limit of the job. The upload of the costs then has time (`LANE.COST`). A part that reaches its stop gives the partial score of the mutants that ended (`LANE.PARTIAL`). The file `partial.json` of its artifact keeps that read, and the summary of the job shows it with the mark `PARTIAL`.
+
+A partial score is not a score. Stryker does not choose the mutants that end first at random. So the gate reads such a part as no read, and the job fails. The gate prints the partial read beside the line of the no read.
 
 ## The load check
 

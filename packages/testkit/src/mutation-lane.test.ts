@@ -47,6 +47,18 @@ interface Checks {
   readonly planned?: readonly { readonly part: string; readonly old: number; readonly new: number; readonly pr: string }[];
   readonly unread?: (read: ReadonlySet<string>) => readonly string[];
   readonly selection?: readonly string[] | undefined;
+  readonly partials?: Readonly<Record<string, PartialRead>>;
+}
+
+/** The partial read of a part that reached its stop. */
+interface PartialRead {
+  readonly part: string;
+  readonly stopMinutes: number;
+  readonly ended: number;
+  readonly planned: number;
+  readonly counts: { readonly killed: number; readonly hitLimit: number; readonly clock: number; readonly survived: number; readonly disabled: number };
+  readonly score: number;
+  readonly scoreWithClock: number;
 }
 
 /** The part of `tools/mutation/lane-read.ts` that this test reads. */
@@ -64,6 +76,9 @@ interface LaneRead {
   };
   readonly flipCases: (expected?: readonly string[]) => readonly { readonly name: string; readonly reports: ReadonlyMap<string, LaneReport | undefined>; readonly core: string; readonly lastTests?: Readonly<Record<string, number>>; readonly selection: readonly string[] }[];
   readonly staticLine: (read: unknown) => string;
+  readonly partialRead: (part: string, stopMinutes: number, lines: readonly { readonly status: string; readonly reason: string | null }[], planned: number) => PartialRead;
+  readonly partialLine: (p: PartialRead) => string;
+  readonly PARTIAL_FILE: string;
 }
 
 /** This function loads the script of the parts of the lane. */
@@ -243,7 +258,7 @@ describe("the parts of the mutation lane", () => {
     expect(workflow).toContain("max-parallel: 3");
     expect(workflow).toContain('dry-run: "1"');
     expect(action).toContain("VEX_DRY_RUN: ${{ inputs.dry-run }}");
-    expect(config).toContain('dryRunOnly: process.env.VEX_DRY_RUN === "1"');
+    expect(config).toContain('disableBail: process.env.VEX_DRY_RUN === "1"');
   });
 });
 
@@ -439,20 +454,41 @@ interface LaneCost {
   readonly PLAN_FILE: string;
   readonly COST_FILE: string;
   readonly laneFile: (fileName: string) => string;
-  readonly filePlans: (plans: readonly unknown[]) => Record<string, { mutants: number; runs: number; static: number; netMs: number; limitMs: number }>;
-  readonly costOf: (run: { file: string; static: boolean; netMs: number; limitMs: number } | undefined, status: string) => number | null;
-  readonly costReporter: (root: string, now: () => number) => { onMutationTestingPlanReady: (event: { mutantPlans: readonly unknown[] }) => void; onMutantTested: (result: unknown) => void };
+  readonly STOP_MINUTES: number;
+  readonly TARGET_MINUTES: number;
+  readonly PLAN_PER_CLOCK: number;
+  readonly clockMinutes: (netMs: number) => number;
+  readonly filePlans: (plans: readonly unknown[]) => Record<string, FilePlan>;
+  readonly planLine: (part: string, files: Readonly<Record<string, FilePlan>>) => string;
+  readonly costOf: (run: { file: string; line: number; static: boolean; netMs: number; limitMs: number } | undefined, status: string) => number | null;
+  readonly costReporter: (root: string, now: () => number, afterPlan?: () => void) => { onMutationTestingPlanReady: (event: { mutantPlans: readonly unknown[] }) => void; onMutantTested: (result: unknown) => void };
   readonly strykerPlugins: readonly { readonly kind: string; readonly name: string; readonly value: Record<string, unknown> }[];
 }
+
+/** The plan of one file of a part, with the plan of each of its lines. */
+interface FilePlan {
+  readonly mutants: number;
+  readonly runs: number;
+  readonly static: number;
+  readonly netMs: number;
+  readonly limitMs: number;
+  readonly lines: readonly (readonly [number, number, number, number])[];
+}
+
+/** This function gives the plan of a file with 3 runs, 1 of them static, and the planned net time `netMs`. */
+const planRow = (netMs: number): FilePlan => ({ mutants: 4, runs: 3, static: 1, netMs, limitMs: 0, lines: [] });
 
 /** This function loads the reporter of the cost of each mutant. */
 async function loadCost(): Promise<LaneCost> {
   return (await import(pathToFileURL(join(repoRoot(), "tools", "mutation", "lane-cost.ts")).href)) as LaneCost;
 }
 
-/** This function gives a plan of Stryker for one mutant: a run with its net time and its limit, or an early result. */
-function planOf(id: string, file: string, run?: { readonly netMs: number; readonly limitMs: number; readonly static?: boolean }): unknown {
-  const mutant = { id, fileName: `/runner/vex/tools/mutation/work/core/${file}`, static: run?.static ?? false };
+/**
+ * This function gives a plan of Stryker for one mutant: a run with its net time and its limit, or an early result. Stryker
+ * counts the lines of a plan from 0, so the mutant starts on the line `line` + 1.
+ */
+function planOf(id: string, file: string, run?: { readonly netMs: number; readonly limitMs: number; readonly static?: boolean }, line = 0): unknown {
+  const mutant = { id, fileName: `/runner/vex/tools/mutation/work/core/${file}`, static: run?.static ?? false, location: { start: { line, column: 2 }, end: { line, column: 9 } } };
   return run === undefined ? { plan: "EarlyResult", mutant: { ...mutant, status: "NoCoverage" } } : { plan: "Run", mutant, netTime: run.netMs, runOptions: { timeout: run.limitMs } };
 }
 
@@ -467,16 +503,26 @@ describe("the cost of the mutation lane", () => {
 
   it("LANE.COST: the plan of a file counts its mutants, its runs and its static runs, and it adds their planned times", async () => {
     const cost = await loadCost();
-    const plans = [planOf("1", "steps.ts", { netMs: 100, limitMs: 120150, static: true }), planOf("2", "steps.ts", { netMs: 20, limitMs: 120030 }), planOf("3", "steps.ts"), planOf("4", "size.ts", { netMs: 5, limitMs: 120008 })];
+    const plans = [planOf("1", "steps.ts", { netMs: 100, limitMs: 120150, static: true }, 9), planOf("2", "steps.ts", { netMs: 20, limitMs: 120030 }, 4), planOf("3", "steps.ts", undefined, 4), planOf("4", "size.ts", { netMs: 5, limitMs: 120008 }), planOf("5", "steps.ts", { netMs: 7, limitMs: 120010 }, 9)];
     expect(cost.filePlans(plans)).toEqual({
-      "work/core/size.ts": { mutants: 1, runs: 1, static: 0, netMs: 5, limitMs: 120008 },
-      "work/core/steps.ts": { mutants: 3, runs: 2, static: 1, netMs: 120, limitMs: 240180 },
+      "work/core/size.ts": { mutants: 1, runs: 1, static: 0, netMs: 5, limitMs: 120008, lines: [[1, 1, 0, 5]] },
+      "work/core/steps.ts": { mutants: 4, runs: 3, static: 1, netMs: 127, limitMs: 360190, lines: [[5, 1, 0, 20], [10, 2, 1, 107]] },
     });
+  });
+
+  it("LANE.COST: the line of a plan gives the estimate of its clock, and it has a mark over the target", async () => {
+    const cost = await loadCost();
+    expect([cost.STOP_MINUTES, cost.TARGET_MINUTES, cost.PLAN_PER_CLOCK]).toEqual([140, 100, 9.8]);
+    expect(cost.clockMinutes(9.8 * 60_000 * 50)).toBeCloseTo(50);
+    const under = cost.planLine("compiler.module.1", { "work/compiler/module.ts": planRow(9.8 * 60_000 * 60), "work/compiler/lower.ts": planRow(9.8 * 60_000 * 40) });
+    expect(under).toBe("The plan of compiler.module.1: 6 runs, 2 of them static, with a planned net time of 16.3 h. Its estimate is 100 minutes of the clock, against the target of 100 and the stop of 140.");
+    const over = cost.planLine("compiler.module.1", { "work/compiler/module.ts": planRow(9.8 * 60_000 * 101) });
+    expect(over).toMatch(/Its estimate is 101 minutes of the clock, against the target of 100 and the stop of 140\. OVER THE TARGET: cut this part \(LANE\.COST\)\.$/u);
   });
 
   it("LANE.COST: a time-out costs its limit, another run costs its net time, and an early result costs no run", async () => {
     const cost = await loadCost();
-    const run = { file: "work/core/steps.ts", static: true, netMs: 100, limitMs: 120150 };
+    const run = { file: "work/core/steps.ts", line: 3, static: true, netMs: 100, limitMs: 120150 };
     expect([cost.costOf(run, "Timeout"), cost.costOf(run, "Killed"), cost.costOf(run, "Survived"), cost.costOf(undefined, "NoCoverage")]).toEqual([120150, 100, 100, null]);
   });
 
@@ -486,23 +532,41 @@ describe("the cost of the mutation lane", () => {
     try {
       let clock = 1000;
       const reporter = cost.costReporter(root, () => clock);
-      const plans = [planOf("1", "steps.ts", { netMs: 100, limitMs: 120150, static: true }), planOf("2", "size.ts")];
+      const plans = [planOf("1", "steps.ts", { netMs: 100, limitMs: 120150, static: true }, 6), planOf("2", "size.ts")];
       reporter.onMutationTestingPlanReady({ mutantPlans: plans });
       clock = 121500;
-      reporter.onMutantTested({ id: "1", fileName: "/runner/vex/tools/mutation/work/core/steps.ts", status: "Timeout", static: true });
-      reporter.onMutantTested({ id: "2", fileName: "/runner/vex/tools/mutation/work/core/size.ts", status: "NoCoverage" });
+      // A result counts its lines from 1, and the reason of a time-out tells a hit limit from the clock.
+      reporter.onMutantTested({ id: "1", fileName: "/runner/vex/tools/mutation/work/core/steps.ts", status: "Timeout", static: true, statusReason: "Hit limit reached (501/500)", location: { start: { line: 7, column: 3 } } });
+      reporter.onMutantTested({ id: "2", fileName: "/runner/vex/tools/mutation/work/core/size.ts", status: "NoCoverage", statusReason: "not covered" });
       const plan = JSON.parse(readFileSync(join(root, cost.PLAN_FILE), "utf8")) as { files: Record<string, unknown> };
       expect(Object.keys(plan.files)).toEqual(["work/core/size.ts", "work/core/steps.ts"]);
       const lines = readFileSync(join(root, cost.COST_FILE), "utf8").trim().split("\n").map((line) => JSON.parse(line) as unknown);
       expect(lines).toEqual([
-        { file: "work/core/steps.ts", status: "Timeout", static: true, netMs: 100, limitMs: 120150, costMs: 120150, atMs: 120500 },
-        { file: "work/core/size.ts", status: "NoCoverage", static: false, netMs: null, limitMs: null, costMs: null, atMs: 120500 },
+        { file: "work/core/steps.ts", line: 7, status: "Timeout", reason: "Hit limit reached (501/500)", static: true, netMs: 100, limitMs: 120150, costMs: 120150, atMs: 120500 },
+        { file: "work/core/size.ts", line: null, status: "NoCoverage", reason: null, static: false, netMs: null, limitMs: null, costMs: null, atMs: 120500 },
       ]);
       reporter.onMutationTestingPlanReady({ mutantPlans: plans });
       expect(readFileSync(join(root, cost.COST_FILE), "utf8")).toBe("");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("LANE.DRYRUN: the reporter starts the function after the plan when the plan is on the disk, and a dry run reaches the plan", async () => {
+    const cost = await loadCost();
+    const root = mkdtempSync(join(tmpdir(), "vex-lane-plan-"));
+    try {
+      const seen: boolean[] = [];
+      const reporter = cost.costReporter(root, () => 0, () => seen.push(readFileSync(join(root, cost.PLAN_FILE), "utf8").includes("work/core/steps.ts")));
+      reporter.onMutationTestingPlanReady({ mutantPlans: [planOf("1", "steps.ts", { netMs: 1, limitMs: 2 })] });
+      expect(seen).toEqual([true]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+    // With dryRunOnly, Stryker stops before its plan, and the dry run gives no plan of the part.
+    const config = readFileSync(join(repoRoot(), "tools", "mutation", "stryker.config.mjs"), "utf8");
+    expect(config).not.toContain("dryRunOnly");
+    expect(readFileSync(join(repoRoot(), "tools", "mutation", "lane-cost.ts"), "utf8")).toContain(`process.env["VEX_DRY_RUN"] === "1" ? stopAfterPlan : undefined`);
   });
 
   it("LANE.COST: Stryker loads the reporter, and each part of a full run stops itself 10 minutes under the limit of its job", async () => {
@@ -518,5 +582,45 @@ describe("the cost of the mutation lane", () => {
       const job = workflow.slice(workflow.indexOf("\n  mutation:\n"));
       expect([name, /timeout-minutes: (\d+)/u.exec(job)?.[1], /stop-minutes: (\d+)/u.exec(job)?.[1]]).toEqual([name, "150", "140"]);
     }
+  });
+});
+
+describe("the partial read of a part that reached its stop", () => {
+  it("LANE.PARTIAL: the mutants that ended give a partial score, and a time-out with no reason counts as the clock", async () => {
+    const read = await loadRead();
+    const lines = [
+      ...Array.from({ length: 8 }, () => ({ status: "Killed", reason: null })),
+      { status: "Timeout", reason: "Hit limit reached (501/500)" },
+      { status: "Timeout", reason: null },
+      { status: "Survived", reason: null },
+      { status: "NoCoverage", reason: null },
+      { status: "Ignored", reason: null },
+      { status: "RuntimeError", reason: null },
+    ];
+    const partial = read.partialRead("compiler.module.2", 140, lines, 40);
+    expect(partial).toEqual({ part: "compiler.module.2", stopMinutes: 140, ended: 14, planned: 40, counts: { killed: 8, hitLimit: 1, clock: 1, survived: 2, disabled: 1 }, score: 75, scoreWithClock: (100 * 10) / 12 });
+    expect(read.partialLine(partial)).toBe(
+      "PARTIAL: the part compiler.module.2 reached its stop of 140 minutes. Of the 40 mutants of its plan, 14 ended, with the partial score 75.00 % (9 of 12: stopped 8, hit limit 1, clock time-outs 1, survived 2, disabled 1). The mutants that ended are not a random sample, so this is not a score of the part. The gate reads the part as no read (LANE.PARTIAL).",
+    );
+  });
+
+  it("LANE.PARTIAL: the gate prints the partial read of a part with no report, and the part stays no read", async () => {
+    const read = await loadRead();
+    const partial = read.partialRead("core.kernel", 140, [{ status: "Killed", reason: null }], 9);
+    const reports = new Map([["core.kernel", undefined], ["testkit", read.fixtureReport("testkit", 99, { status: "Survived" })]]);
+    const verdict = read.laneVerdict(reports, { partials: { "core.kernel": partial } });
+    expect(verdict.packages.map((p) => [p.name, p.outcome])).toEqual([["core", "no read"], ["testkit", "pass"]]);
+    expect(verdict.failed).toBe(true);
+    expect(verdict.lines.filter((line) => line.startsWith("PARTIAL: "))).toEqual([read.partialLine(partial)]);
+    expect(read.laneVerdict(reports).lines.some((line) => line.startsWith("PARTIAL: "))).toBe(false);
+  });
+
+  it("LANE.PARTIAL: a part that reaches its stop writes its partial read beside its report, and the job still fails", async () => {
+    const read = await loadRead();
+    expect(read.PARTIAL_FILE).toBe("partial.json");
+    const action = readFileSync(join(repoRoot(), ".github", "actions", "mutation-part", "action.yml"), "utf8");
+    const stop = action.slice(action.indexOf("if [[ $status -eq 124"));
+    expect(stop.slice(0, stop.indexOf("fi\n"))).toContain(`node tools/mutation/lane-read.ts --partial "$VEX_MUTATE" "$STOP_MINUTES" || true`);
+    expect(stop).toContain("exit $status");
   });
 });

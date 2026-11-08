@@ -42,6 +42,8 @@ runs:
         timeout --signal=TERM --kill-after=2m "${STOP_MINUTES}m" pnpm --filter @vex/mutation run mutation || status=$?
         if [[ $status -eq 124 || $status -eq 137 ]]; then
           echo "The part $VEX_MUTATE reached its stop of $STOP_MINUTES minutes, so it gives no score. The artifact keeps the cost of each mutant that ended." | tee -a "$GITHUB_STEP_SUMMARY" >&2
+          # The partial score of the mutants that ended, with its mark, goes into the artifact and the summary (LANE.PARTIAL).
+          node tools/mutation/lane-read.ts --partial "$VEX_MUTATE" "$STOP_MINUTES" || true
         fi
         exit $status
       shell: bash

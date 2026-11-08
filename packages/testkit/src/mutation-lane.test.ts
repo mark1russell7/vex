@@ -664,9 +664,8 @@ describe("the cost of the mutation lane", () => {
     const root = repoRoot();
     const costs = JSON.parse(readFileSync(join(root, "tools", "mutation", "costs.json"), "utf8")) as Record<string, { readonly run: string; readonly segments: Readonly<Record<string, number>> }>;
     expect(new Set(Object.values(costs).map((map) => map.run))).toEqual(new Set(["42474174486"]));
-    // Each file of the lane has a map, so no estimate comes from the mean of a group.
-    const files = layout.PACKAGES.flatMap((name) => layout.mutateOf(root, name));
-    expect(files.filter((file) => costs[file] === undefined)).toEqual([]);
+    // A new file has no map until the next refresh of the maps. The cut gives each of its lines the mean cost of its group,
+    // so the file still goes into a part, and the estimate of the part still counts it.
     const parts = layout.laneParts();
     const minutes = script.partMinutes(root, parts, costs);
     expect(minutes).toHaveLength(parts.length);

@@ -5,7 +5,7 @@
 import { MAX_NESTING, nestingOf } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it, vi } from "vitest";
-import { BYTES_LIMIT, bytesFlipReadsRed, bytesUnread, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, loadExponentOf, SOURCE_TIME_LIMIT, sourceVerdict, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { BYTES_LIMIT, bytesFlipReadsRed, bytesUnread, exponent, exponentsOf, GENERATE_FLOOR_MS, GROWTH_SHAPES, growthFaults, loadExponentOf, SOURCE_TIME_LIMIT, sourceVerdict, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 import type * as Module from "./module.ts";
 import { emitModule } from "./module.ts";
 import { MAX_PLACES, placesOf } from "./unshared.ts";
@@ -131,8 +131,9 @@ describe("COMPILE.SOURCE.SIZE", () => {
     expect(bytesFlipReadsRed(loose, row(100, 10, 1000), { ...row(400, 40, 4000), sameBytes: false })).toBe(true);
   });
 
-  it.each(GROWTH_SHAPES.map((s) => [s.name, s] as const))("COMPILE.SOURCE.SIZE: a generate limit of %s states the reason and its CI run", (_name, shape) => {
+  it.each(GROWTH_SHAPES.map((s) => [s.name, s] as const))("COMPILE.SOURCE.SIZE: a generate limit of %s states its CI run, and its small median is at least the floor", (_name, shape) => {
     expect(shape.source.generate === undefined || shape.source.why?.includes("42464464092") === true).toBe(true);
+    expect(shape.source.generate === undefined || (shape.source.generateSmallMs ?? 0) >= GENERATE_FLOOR_MS).toBe(true);
     expect(shape.source.bytes).toBeGreaterThan(0.5);
   });
 });

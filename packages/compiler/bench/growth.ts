@@ -7,7 +7,7 @@
 //   node bench/growth.ts gates      prints the largest size of each shape under the gate of the keys and the gate of names
 //
 // The gate also reads the source of tier 2 of each shape, with `generate` and `load` in a fresh process (COMPILE.SOURCE.SIZE).
-// Its bytes hold. The time of `generate` holds for each shape with a CI read of that time.
+// Its bytes hold. The time of `generate` holds for each shape with a CI read of that time over the floor of its small median.
 // The time of `load` is report only (V-089). The parse of its `new Function` grows with the lines times the depth of the blocks.
 //
 // The parser of the gate of names has a larger stack here than in a test, so that gate reads the largest size of each shape.

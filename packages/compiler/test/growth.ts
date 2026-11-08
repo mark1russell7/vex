@@ -23,6 +23,11 @@ export const BYTES_LIMIT = 1;
  * The sum with the spread 0.12 of `TIME_LIMIT` is 1.22, rounded up.
  */
 export const SOURCE_TIME_LIMIT = 1.25;
+/**
+ * The floor of the small median of a read of `generate`, in milliseconds (COMPILE.SOURCE.SIZE). A shape holds its `generate` limit only over this floor.
+ * Under it, the noise of a fresh process moves the exponent past the spread. For example, 10 ms in place of 13.2 ms moves `chain` from 0.78 to 0.91.
+ */
+export const GENERATE_FLOOR_MS = 100;
 /** The rise of the bytes at the large size that the bytes limit of each shape must find (rule 8i). */
 export const BYTES_FLIP = 1.05;
 
@@ -54,11 +59,13 @@ function readChain(levels: number): Expr {
  * The limits of the source of tier 2 of a shape (COMPILE.SOURCE.SIZE). `bytes` holds: it is the exponent of one CI read (run 42021404905),
  * with 2.5 % more bytes at the large size, rounded up. So 5 % more bytes at the large size fails.
  * `generate` holds the time exponent of `generate`: the lowering, the checks and the print. `why` gives its read.
- * The time of `load` is report only, because the parse of its `new Function` stays open (V-089). A shape with no `generate` has no read, so that time is report only too.
+ * `generateSmallMs` is the small median of that read, and it is at least `GENERATE_FLOOR_MS`.
+ * The time of `load` is report only, because the parse of its `new Function` stays open (V-089). A shape with no `generate` has no held read, so that time is report only too.
  */
 export interface SourceLimits {
   readonly bytes: number;
   readonly generate?: number;
+  readonly generateSmallMs?: number;
   readonly why?: string;
 }
 
@@ -84,20 +91,20 @@ export const GROWTH_SHAPES: readonly GrowthShape[] = [
     make: (levels) => repeat(n, levels, (e) => app("add", e, n)),
     small: 62,
     large: 499,
-    source: { bytes: 1.034, generate: 0.91, why: "CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 13.2 ms at 62 levels and 66.8 ms at 499, so 0.78. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." },
+    source: { bytes: 1.034, why: "CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The exponent of the sum of their medians is 0.78: 13.2 ms at 62 levels and 66.8 ms at 499. The small median is under the floor of 100 ms (`GENERATE_FLOOR_MS`), so the time of generate is report only." },
   },
-  { name: "wide", make: (levels) => repeat(n, levels, (e) => app("add", e, tree(32, n))), small: 60, large: 480, source: { bytes: 0.934, generate: 1.03, why: "The text is linear (bytes exponent 0.92), and the largest text is 32.5 MB. CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 187.8 ms at 60 levels and 1226.9 ms at 480, so 0.90. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." } },
+  { name: "wide", make: (levels) => repeat(n, levels, (e) => app("add", e, tree(32, n))), small: 60, large: 480, source: { bytes: 0.934, generate: 1.03, generateSmallMs: 187.8, why: "The text is linear (bytes exponent 0.92), and the largest text is 32.5 MB. CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 187.8 ms at 60 levels and 1226.9 ms at 480, so 0.90. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." } },
   { name: "loopchain", make: (levels) => repeat(n, levels, (e) => app("sum", each(axes.all, app("add", e, n)))), small: 41, large: 165, source: { bytes: 1.052 } },
-  { name: "wideloop", make: (levels) => repeat(n, levels, (e) => app("sum", each(axes.all, app("add", e, tree(32, n))))), small: 40, large: 160, source: { bytes: 1.042, generate: 1.01, why: "The text is linear (bytes exponent 1.02). CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 103.7 ms at 40 levels and 355.8 ms at 160, so 0.89. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." } },
+  { name: "wideloop", make: (levels) => repeat(n, levels, (e) => app("sum", each(axes.all, app("add", e, tree(32, n))))), small: 40, large: 160, source: { bytes: 1.042, generate: 1.01, generateSmallMs: 103.7, why: "The text is linear (bytes exponent 1.02). CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 103.7 ms at 40 levels and 355.8 ms at 160, so 0.89. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." } },
   {
     name: "letchain",
     make: (levels) => repeat(n, levels, (e, i) => let_({ [name(i)]: n }, app("add", e, v(name(i))))),
     small: 60,
     large: 240,
-    source: { bytes: 1.038, generate: 0.95, why: "CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 16.1 ms at 60 levels and 50.6 ms at 240, so 0.83. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." },
+    source: { bytes: 1.038, why: "CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The exponent of the sum of their medians is 0.83: 16.1 ms at 60 levels and 50.6 ms at 240. The small median is under the floor of 100 ms (`GENERATE_FLOOR_MS`), so the time of generate is report only." },
   },
   { name: "letloop", make: (levels) => repeat(SUM, levels, (e, i) => let_({ [name(i)]: SUM }, app("add", e, v(name(i))))), small: 60, large: 240, source: { bytes: 1.035 } },
-  { name: "constlet", make: (levels) => repeat(SUM, levels, (e, i) => let_({ [name(i)]: tree(32, SUM) }, app("add", e, v(name(i))))), small: 60, large: 240, source: { bytes: 1.049, generate: 1.14, why: "V-089 took the text from 266 MB to 26.9 MB at 240 levels, and the text is linear (bytes exponent 1.03). CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 350.9 ms at 60 levels and 1442.1 ms at 240, so 1.02. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." } },
+  { name: "constlet", make: (levels) => repeat(SUM, levels, (e, i) => let_({ [name(i)]: tree(32, SUM) }, app("add", e, v(name(i))))), small: 60, large: 240, source: { bytes: 1.049, generate: 1.14, generateSmallMs: 350.9, why: "V-089 took the text from 266 MB to 26.9 MB at 240 levels, and the text is linear (bytes exponent 1.03). CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 350.9 ms at 60 levels and 1442.1 ms at 240, so 1.02. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." } },
   { name: "readchain", make: readChain, small: 120, large: 480, source: { bytes: 1.041 } },
   {
     name: "origin",

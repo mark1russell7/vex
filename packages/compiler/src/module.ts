@@ -514,664 +514,699 @@ type GraphHelper = "GR" | "GI" | "RB";
 /** The helpers of a sheet (COMPILE.MODULE.SHEET): the state of a run of a sheet, and the order of the keys of a tree. */
 type SheetHelper = "SH" | "KO" | "DO" | "LO" | "LC" | "LV" | "LCP";
 
+/**
+ * The texts of a part of the helpers. The object `HELPERS` joins the parts, and its type asks for each helper. Each part is
+ * a function, and its closing line ends a segment of the cost map. Thus the mutation lane can cut the helpers into parts.
+ */
+type HelperTexts = Readonly<Partial<Record<Exclude<Helper, "S">, () => string>>>;
+
+/** This function gives a part of the texts of the helpers, in the order of `HELPERS`. */
+function helperTexts1() {
+  return {
+    F: () => "function F() { throw E; }",
+    C: () => "function C(m) { throw new VexContractError(m); }",
+    // An exception of an op is an error of Vex too, as in the interpreter. Only the checks of the contract throw a
+    // VexContractError, and they come before the run, so each catch of the run gives the sentinel.
+    T: () => "function T(f) { try { return f(); } catch { return E; } }",
+    // A constant of the run with a loop evaluates on its first read, so a loop in a branch that no run takes costs nothing.
+    L: () => "function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }",
+    // A column of the run: the value of an expression at each record, on its first read.
+    Q: () => "function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }",
+    G: () => "function G(x) { return x === E ? F() : x; }",
+    // The pack of a column of the run: an array with the value of the column at each record (`#packed`).
+    QA: () => "function QA(n, f) { const a = []; for (let j = 0; j < n; j++) a.push(f(j)); return a; }",
+    // A fold over the targets before the origin, as a scan (COMPILE.MODULE.SCAN). The first call evaluates the first
+    // state and the value of each target. When these values do not decrease, the targets of each origin are a prefix,
+    // and each prefix keeps its state. NaN satisfies no test, so its target is in no prefix.
+    PF: () => [
+      "function PF(n, init, key, test, step, result) {",
+      "  let ts, js, a0, bad, mono, pa;",
+      "  return (q) => {",
+      "    if (ts === undefined) {",
+      "      ts = [];",
+      "      js = [];",
+      "      bad = false;",
+      "      try { a0 = init(); } catch { a0 = E; }",
+      "      for (let j = 0; j < n; j++) {",
+      "        let t;",
+      "        try { t = key(j); } catch { bad = true; break; }",
+      "        if (t !== t) continue;",
+      "        ts.push(t);",
+      "        js.push(j);",
+      "      }",
+      "      mono = true;",
+      "      for (let i = 1; i < ts.length; i++) if (!(ts[i - 1] <= ts[i])) mono = false;",
+      "      pa = [a0];",
+      "    }",
+      "    if (a0 === E || bad || q === E) F();",
+      "    if (!mono) {",
+      "      let a = a0;",
+      "      for (let i = 0; i < ts.length; i++) if (test(ts[i], q)) a = step(a, js[i]);",
+      "      return result(a);",
+      "    }",
+      "    let lo = 0, hi = ts.length;",
+      "    while (lo < hi) {",
+      "      const h = (lo + hi) >> 1;",
+      "      if (test(ts[h], q)) lo = h + 1;",
+      "      else hi = h;",
+      "    }",
+      "    for (let i = pa.length - 1; i < lo; i++) pa.push(step(pa[i], js[i]));",
+      "    return result(pa[lo]);",
+      "  };",
+      "}",
+    ].join("\n"),
+    B: () => 'function B(x) { return typeof x === "boolean" ? x : F(); }',
+    U: () => 'function U(x) { return typeof x === "number" ? x : F(); }',
+    X: () => "function X(t, n) { return t >= 0 && t < n ? t : F(); }",
+    // The index of a computed position, and of a computed key: a key of an array space is the text of its index.
+    I: () => "function I(t, n) { return Number.isInteger(t) && t >= 0 && t < n ? t : F(); }",
+    K: () => 'function K(k, n) { return typeof k === "string" && /^(0|[1-9]\\d*)$/.test(k) && +k < n ? +k : F(); }',
+    // The ops on the order of a list (LIST.SORT, LIST.TAKE, LIST.NTH) work on the items with values. With strict, an
+    // error item is the error of the op. A sort is stable, and the values are numbers without NaN or texts of one kind.
+    // V gives a list without error items itself, so it is not copied (COMPILE.MODULE.LIST.SHARE). No op changes it. V does
+    // not keep the cache of VW: a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
+    V: () => "function V(l, s) { if (!l.some((x) => x[1] === E)) return l; if (s) F(); return l.filter((x) => x[1] !== E); }",
+    SB: () => [
+      "function SB(l, s) {",
+      "  const o = V(l, s);",
+      "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
+      "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+      "  return o.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+      "}",
+    ].join("\n"),
+    // The option by of sortBy (LIST.SORT.BY): the function f gives the sort value of each item with a value, in order.
+    SK: () => [
+      "function SK(l, s, f) {",
+      "  const o = V(l, s).map((x) => [x, f(x[1])]);",
+      "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
+      "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+      "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map((x) => x[0]);",
+      "}",
+    ].join("\n"),
+    TK: () => "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
+    // The items with values of a list stay on its array, as GT keeps its index. Thus a loop that reads each item of a list
+    // of n items with nth costs O(n), not O(n squared). count and first read them too (COMPILE.MODULE.NTH.INDEX).
+    // A list without error items is its own array of items with values.
+    VW: () => [
+      "function VW(l) {",
+      "  let o = l.vw;",
+      "  if (o === undefined) {",
+      "    o = l.some((x) => x[1] === E) ? l.filter((x) => x[1] !== E) : l;",
+      "    l.vw = o;",
+      "  }",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    NT: () => [
+      "function NT(l, i, s) {",
+      "  const o = VW(l);",
+      "  if (s && o.length < l.length) F();",
+      "  return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();",
+      "}",
+    ].join("\n"),
+    // count and first of a list that is not an each. With strict, an error item is the error of the op.
+    CT: () => "function CT(l, s) { const o = VW(l); return s && o.length < l.length ? F() : o.length; }",
+    FS: () => "function FS(l, s) { const o = VW(l); return (s && o.length < l.length) || o.length === 0 ? F() : o[0][1]; }",
+    // fill (LIST.FILL, COMPILE.MODULE.FILL): n items with the value v, and the keys 0 to n - 1. A count that is not a whole
+    // number from 0 to 100000, or a missing value, is the error of the interpreter. Each item can share the array of a list.
+    // setNth (LIST.SETNTH, COMPILE.MODULE.SETNTH): a new array with a new pair at the position i. The item keeps its key.
+    // V removes the error items, so the position counts the items with values. The old array and its pairs do not change.
+    SN: () => [
+      "function SN(l, i, v, s) {",
+      "  const x = V(l, s);",
+      "  if (!(Number.isSafeInteger(i) && i >= 0 && i < x.length && v !== undefined)) F();",
+      "  const o = x.slice();",
+      "  o[i] = [x[i][0], v];",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    FI: () => [
+      "function FI(n, v) {",
+      "  if (!(Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined)) F();",
+      "  const o = [];",
+      "  for (let i = 0; i < n; i++) o.push([i, v]);",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    // A range of fill (COMPILE.MODULE.FILL.RANGE). FN gives the count of the items of `fill(n, v)` with the check of FI.
+    // TN gives the count of `take` of a range with the check of TK. A sum with 0 changes -0 to 0, as the length does.
+    FN: () => "function FN(n, v) { return Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined ? n + 0 : F(); }",
+    TN: () => "function TN(n, k) { return Number.isSafeInteger(k) && k >= 0 ? Math.min(n, k + 0) : F(); }",
+  } satisfies HelperTexts;
+}
+
+/** This function gives a part of the texts of the helpers, in the order of `HELPERS`. */
+function helperTexts2() {
+  return {
+    // A list of a field of the input (COMPILE.MODULE.LIST.INPUT): the array of a `vex.list` whose items have lists to the
+    // depth `h`, and values that pass the test `t`. The shape is the shape of `isVexList`. An error item holds the sentinel.
+    // An input that is not such a list, or an error item of `#DEPTH!`, gives undefined, so the check of the run fails.
+    LI: () => [
+      "function LI(x, h, t) {",
+      "  if (typeof x !== \"object\" || x === null || x.kind !== \"vex.list\" || !Array.isArray(x.items)) return undefined;",
+      "  const o = [];",
+      "  for (let i = 0; i < x.items.length; i++) {",
+      "    const it = x.items[i];",
+      "    const r = typeof it === \"object\" && it !== null ? it.result : undefined;",
+      "    if (typeof r !== \"object\" || r === null || typeof it.key !== \"string\") return undefined;",
+      "    if (r.ok === true) {",
+      "      const v = h > 0 ? LI(r.value, h - 1, t) : r.value !== undefined && t(r.value) ? r.value : undefined;",
+      "      if (v === undefined) return undefined;",
+      "      o.push([it.key, v]);",
+      "    } else {",
+      "      const e = r.error;",
+      "      if (r.ok !== false || typeof e !== \"object\" || e === null || typeof e.code !== \"string\" || typeof e.kind !== \"string\" || typeof e.message !== \"string\" || !Array.isArray(e.path) || e.kind === \"depth\") return undefined;",
+      "      o.push([it.key, E]);",
+      "    }",
+      "  }",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    // A plain list of a field of the input (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with arrays to
+    // the depth `h`. The key of an item is its position. The value VEX_ERROR is an error item, also if `t` accepts it.
+    // Another value gives undefined, so the check of the run fails.
+    LA: () => [
+      "function LA(x, h, t) {",
+      "  if (!Array.isArray(x)) return undefined;",
+      "  const o = [];",
+      "  for (let i = 0; i < x.length; i++) {",
+      "    const y = x[i];",
+      "    if (y === VEX_ERROR) {",
+      "      o.push([i, E]);",
+      "      continue;",
+      "    }",
+      "    const v = h > 0 ? LA(y, h - 1, t) : y !== undefined && t(y) ? y : undefined;",
+      "    if (v === undefined) return undefined;",
+      "    o.push([i, v]);",
+      "  }",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    // The ops that build a list (LIST.BUILD) keep the key and the value of each item. A key is a position or a text, so
+    // `without` and `get` compare the text of each key. A list is an array that does not change after the op that makes it.
+    // The one exception is the array of AO of a loop, which no other part reads (COMPILE.MODULE.APPEND.OWN).
+    DR: () => "function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }",
+    AP: () => "function AP(l, o, s) { return V(l, s).concat(V(o, s)); }",
+    // append into the list of a name of a loop (COMPILE.MODULE.APPEND.OWN). w is the array of the last append of the name
+    // in this run of the loop, and no other part reads it. Such an array has no error items, so VW of it is the array.
+    // With fuse, w can start with a first list that is clean and fresh (COMPILE.MODULE.FUSE.ADOPT). An append in the result
+    // of the loop can use w too, when no part reads the list after it.
+    // Each other list gets the copy of AP. V(o, s) throws before the first push, so an error does not change l. The loop
+    // reads n items, so it ends also if a is l.
+    AO: () => "function AO(l, o, s, w) { if (l !== w) return AP(l, o, s); const a = V(o, s), n = a.length; for (let i = 0; i < n; i++) l.push(a[i]); return l; }",
+    // The target of an append of an owner that pushes the items of its second list (COMPILE.MODULE.APPEND.PUSH). The
+    // array w is the target. Each other list gets a copy without its error items, and with s an error item is an error.
+    // AI pushes the one item x of fill(1, x) into the target. The code of x evaluates before the call, as in the interpreter.
+    AW: () => "function AW(l, s, w) { if (l === w) return l; const a = V(l, s), o = []; for (let i = 0; i < a.length; i++) o.push(a[i]); return o; }",
+    AI: () => "function AI(l, x, s, w) { const o = AW(l, s, w); o.push(x); return o; }",
+    WO: () => [
+      "function WO(l, o, s) {",
+      "  const a = V(l, s), g = new Map();",
+      "  for (const [k] of V(o, s)) g.set(`${k}`, 1);",
+      "  return a.filter((x) => !g.has(`${x[0]}`));",
+      "}",
+    ].join("\n"),
+    FL: () => [
+      "function FL(l, s) {",
+      "  const o = [];",
+      "  for (const [, v] of V(l, s)) for (const x of V(v, s)) o.push(x);",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    // The index of the keys of a list (LIST.GET): the value of the first item of each key. The array keeps its index, so a
+    // step that reads each key of a list of n items costs O(n). The key E marks an error item, for strict.
+    // The array of a loop gets a push after a read (COMPILE.MODULE.APPEND.LET), so `n` counts the items in the index.
+    // A push only adds items at the end, so the index adds only the new items. No other change of an array has a read before it.
+    GT: () => [
+      "function GT(l, k, s) {",
+      "  let x = l.ix;",
+      "  if (x === undefined) {",
+      "    x = new Map();",
+      "    x.n = 0;",
+      "    l.ix = x;",
+      "  }",
+      "  if (x.n !== l.length) {",
+      "    for (let i = x.n; i < l.length; i++) {",
+      "      const [q, v] = l[i], t = `${q}`;",
+      "      if (v === E) x.set(E, E);",
+      "      else if (!x.has(t)) x.set(t, v);",
+      "    }",
+      "    x.n = l.length;",
+      "  }",
+      '  return (s && x.has(E)) || typeof k !== "string" || !x.has(k) ? F() : x.get(k);',
+      "}",
+    ].join("\n"),
+    // The position of the first value among the items with a value (LIST.INDEXOF). `===` compares the values.
+    IX: () => [
+      "function IX(l, x, s) {",
+      "  const o = V(l, s);",
+      '  if (typeof x !== "number" && typeof x !== "string" && typeof x !== "boolean") F();',
+      "  for (let i = 0; i < o.length; i++) if (o[i][1] === x) return i;",
+      "  return F();",
+      "}",
+    ].join("\n"),
+    // The keys of a run (COMPILE.MODULE.KEYS): a map of each key to its position. A key that is not a text, or a second
+    // use of a key, is against the contract, because a space has no such keys.
+    KC: () => [
+      "function KC(a, n) {",
+      '  if (!Array.isArray(a) || a.length !== n) C("the keys are not an array with one key for each record");',
+      "  const m = new Map();",
+      "  for (let i = 0; i < n; i++) {",
+      "    const k = a[i];",
+      '    if (typeof k !== "string" || m.has(k)) C(`the key ${i} is not a text of its own`);',
+      "    m.set(k, i);",
+      "  }",
+      "  return m;",
+      "}",
+    ].join("\n"),
+    // The position of a key of a move. A value that is not a key of the space is an error of the move (NAV.KEY).
+    KP: () => "function KP(m, k) { const i = m.get(k); return i === undefined ? F() : i; }",
+  } satisfies HelperTexts;
+}
+
+/** This function gives a part of the texts of the helpers, in the order of `HELPERS`. */
+function helperTexts3() {
+  return {
+    // The parents of a tree space: the position of the parent of each record, or -1 for a root. A walk up from each record
+    // marks its keys, so a walk that meets a key of the same walk finds a cycle. Each key is in one walk, so the check is linear.
+    PT: () => [
+      "function PT(p, n) {",
+      '  if (!Array.isArray(p) || p.length !== n) C("the parents are not an array with one parent for each record");',
+      "  const P = new Int32Array(n), s = new Uint8Array(n);",
+      "  for (let i = 0; i < n; i++) {",
+      "    const x = p[i];",
+      "    if (x !== -1 && !(Number.isInteger(x) && x >= 0 && x < n)) C(`the parent of the record ${i} is not -1 or the position of a record`);",
+      "    P[i] = x;",
+      "  }",
+      "  for (let i = 0; i < n; i++) {",
+      "    let k = i;",
+      "    while (k >= 0 && s[k] === 0) {",
+      "      s[k] = 1;",
+      "      k = P[k];",
+      "    }",
+      "    if (k >= 0 && s[k] === 1) C(`the parents of the record ${i} make a cycle`);",
+      "    for (k = i; k >= 0 && s[k] === 1; k = P[k]) s[k] = 2;",
+      "  }",
+      "  return P;",
+      "}",
+    ].join("\n"),
+    // The children of each record and the roots, in key order.
+    CH: () => [
+      "function CH(P, n) {",
+      "  const h = [], r = [];",
+      "  for (let i = 0; i < n; i++) h.push([]);",
+      "  for (let i = 0; i < n; i++) (P[i] < 0 ? r : h[P[i]]).push(i);",
+      "  return [h, r];",
+      "}",
+    ].join("\n"),
+    // The siblings of each record with the record itself, and its position among them. The roots are the siblings of a root.
+    SG: () => [
+      "function SG(P, h, r, n) {",
+      "  const g = [], s = new Int32Array(n);",
+      "  for (let i = 0; i < n; i++) g.push(P[i] < 0 ? r : h[P[i]]);",
+      "  for (const x of [r, ...h]) for (let q = 0; q < x.length; q++) s[x[q]] = q;",
+      "  return [g, s];",
+      "}",
+    ].join("\n"),
+    // The keys depth first, with each parent before its children, and the position and the size of the subtree of each
+    // record. Thus the descendants of a record are the keys after it, as many as its subtree has under it.
+    PR: () => [
+      "function PR(P, n) {",
+      "  const f = new Int32Array(n).fill(-1), x = new Int32Array(n), o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n);",
+      "  let r = -1;",
+      "  for (let i = n - 1; i >= 0; i--) {",
+      "    const p = P[i];",
+      "    if (p < 0) {",
+      "      x[i] = r;",
+      "      r = i;",
+      "    } else {",
+      "      x[i] = f[p];",
+      "      f[p] = i;",
+      "    }",
+      "  }",
+      "  let m = 0;",
+      "  for (let k = r; k >= 0; ) {",
+      "    at[k] = m;",
+      "    o[m++] = k;",
+      "    if (f[k] >= 0) k = f[k];",
+      "    else {",
+      "      while (k >= 0 && x[k] < 0) k = P[k];",
+      "      if (k >= 0) k = x[k];",
+      "    }",
+      "  }",
+      "  for (let q = n - 1; q >= 0; q--) {",
+      "    const k = o[q], p = P[k];",
+      "    z[k]++;",
+      "    if (p >= 0) z[p] += z[k];",
+      "  }",
+      "  return [o, at, z];",
+      "}",
+    ].join("\n"),
+    UP: () => "function UP(P, k) { const p = P[k]; return p < 0 ? F() : p; }",
+    SO: () => "function SO(g, s, k, d) { const t = g[k][s[k] + d]; return t === undefined ? F() : t; }",
+    AN: () => "function AN(P, k) { const o = []; for (let p = P[k]; p >= 0; p = P[p]) o.push(p); return o; }",
+    // The record and the keys under it, in the order of a breadth-first search. A tree has no cycle, so no key comes twice.
+    BF: () => "function BF(h, k) { const o = [k]; for (let i = 0; i < o.length; i++) for (const c of h[o[i]]) o.push(c); return o; }",
+    // The edges of a graph space: the positions of the ends of the edges from each record, in order. A second edge to the
+    // same end is the same edge, as in the interpreter. The mark of an end is the number of its record plus 1.
+    GR: () => [
+      "function GR(e, n) {",
+      '  if (!Array.isArray(e) || e.length !== n) C("the edges are not an array with the ends of the edges of each record");',
+      "  const O = [], s = new Int32Array(n);",
+      "  for (let i = 0; i < n; i++) {",
+      "    const x = e[i];",
+      "    if (!Array.isArray(x)) C(`the edges of the record ${i} are not an array`);",
+      "    const o = [];",
+      "    for (const t of x) {",
+      "      if (!(Number.isInteger(t) && t >= 0 && t < n)) C(`an edge of the record ${i} does not go to the position of a record`);",
+      "      if (s[t] !== i + 1) {",
+      "        s[t] = i + 1;",
+      "        o.push(t);",
+      "      }",
+      "    }",
+      "    O.push(o);",
+      "  }",
+      "  return O;",
+      "}",
+    ].join("\n"),
+    // The predecessors of each record of a graph, in key order: the records in key order, and the ends of the edges of each record.
+    GI: () => "function GI(O, n) { const I = []; for (let i = 0; i < n; i++) I.push([]); for (let i = 0; i < n; i++) for (const t of O[i]) I[t].push(i); return I; }",
+    // The record and the keys that a path of edges reaches from it, once, in the order of a breadth-first search.
+    RB: () => "function RB(O, k, n) { const s = new Uint8Array(n), o = [k]; s[k] = 1; for (let i = 0; i < o.length; i++) for (const c of O[o[i]]) if (s[c] === 0) { s[c] = 1; o.push(c); } return o; }",
+    // The state of a run of a sheet (COMPILE.MODULE.SHEET), as in SheetRun: the result of each finished cell, the search
+    // of Tarjan with its stack, and the budget of the stack. `r` reads a cell, `f` fills a cell, and `o` gives a column.
+    // A cell without a formula has the error sentinel from the start, as the error of its read.
+    // A column of a direct fill (COMPILE.MODULE.SHEET.DIRECT): the error sentinel of a cell changes to VEX_ERROR.
+    DO: () => "function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }",
+    // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
+    // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items. One key gets the list, so it is not frozen.
+    LO: () => 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
+    // The list of a run that each key gets (COMPILE.MODULE.FUSE.OUT): LO, but frozen, because the keys share the object. LS
+    // keeps no object on the array, because a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
+    LS: () => 'function LS(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LS(v, h - 1) : v } }))) }); }',
+    // A plain list of a result (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with no keys. An error
+    // item is VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
+    LP: () => "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
+    // A list in an argument of an op or in a field of a record (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD): a frozen
+    // `vex.list`, as the interpreter gives. The array keeps it, so each later read of the list gives the same object.
+    // The array of a loop gets a push after a read (COMPILE.MODULE.APPEND.LET). A push only adds items, so an object with
+    // another count of items is old, and LV makes a new object.
+    LV: () => [
+      "function LV(l, h) {",
+      "  let o = l.vl;",
+      "  if (o === undefined || o.items.length !== l.length) {",
+      '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LV(v, h - 1) : v } }))) });',
+      "    l.vl = o;",
+      "  }",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    // The clean form (COMPILE.MODULE.FUSE.CLEAN): the facts prove that no item of a list holds the sentinel. Thus V gives
+    // the list itself, VW gives the list, and strict cannot fail. Each helper below is the helper without its last letter,
+    // with no scan, no test of the sentinel and no option strict. The other checks stay, so each error stays an error.
+    SBC: () => [
+      "function SBC(l) {",
+      "  const t = l.length > 0 ? typeof l[0][1] : \"number\";",
+      "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+      "  return l.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+      "}",
+    ].join("\n"),
+  } satisfies HelperTexts;
+}
+
+/** This function gives a part of the texts of the helpers, in the order of `HELPERS`. */
+function helperTexts4() {
+  return {
+    SKC: () => [
+      "function SKC(l, f) {",
+      "  const o = l.map((x) => [x, f(x[1])]);",
+      "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
+      "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+      "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map((x) => x[0]);",
+      "}",
+    ].join("\n"),
+    // The sort in place (COMPILE.MODULE.FUSE): a clean list that is fresh is its own sort buffer, so the sort makes no
+    // copy. No other part holds the array, so a failure leaves no changed list that a part reads. The sort is stable.
+    // A list of 64 items or fewer gets an insertion sort (COMPILE.MODULE.FUSE.SORT), which calls no comparator function.
+    // Its test ">" moves an item only past a larger value, so equal values keep their order. A longer list gets the
+    // stable sort of the engine. The kinds of the sort values go through the same check before each of the two sorts.
+    SBI: () => [
+      "function SBI(l) {",
+      "  const n = l.length, t = n > 0 ? typeof l[0][1] : \"number\";",
+      "  for (let i = 0; i < n; i++) { const v = l[i][1]; if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F(); }",
+      "  if (n > 64) l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
+      "  else for (let i = 1; i < n; i++) {",
+      "    const x = l[i], v = x[1];",
+      "    let j = i - 1;",
+      "    for (; j >= 0 && l[j][1] > v; j--) l[j + 1] = l[j];",
+      "    l[j + 1] = x;",
+      "  }",
+      "  return l;",
+      "}",
+    ].join("\n"),
+    // The option by: the array k holds the sort value of each item, so the sort makes no pair for an item. f runs once
+    // for each item, in order, and the array l does not change before the check of the sort values. A long list sorts an
+    // array of indices by k, and then reads the items from a copy of l.
+    SKI: () => [
+      "function SKI(l, f) {",
+      "  const n = l.length, k = new Array(n);",
+      "  for (let i = 0; i < n; i++) k[i] = f(l[i][1]);",
+      "  const t = n > 0 ? typeof k[0] : \"number\";",
+      "  for (const v of k) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
+      "  if (n > 64) {",
+      "    const o = new Array(n), c = l.slice();",
+      "    for (let i = 0; i < n; i++) o[i] = i;",
+      "    o.sort((a, b) => (k[a] < k[b] ? -1 : k[a] > k[b] ? 1 : 0));",
+      "    for (let i = 0; i < n; i++) l[i] = c[o[i]];",
+      "  } else for (let i = 1; i < n; i++) {",
+      "    const v = k[i], x = l[i];",
+      "    let j = i - 1;",
+      "    for (; j >= 0 && k[j] > v; j--) { k[j + 1] = k[j]; l[j + 1] = l[j]; }",
+      "    k[j + 1] = v; l[j + 1] = x;",
+      "  }",
+      "  return l;",
+      "}",
+    ].join("\n"),
+    TKC: () => "function TKC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(0, n) : F(); }",
+    DRC: () => "function DRC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(n) : F(); }",
+    // The loop reads n items, so it ends also if o is l.
+    AWC: () => "function AWC(l, w) { if (l === w) return l; const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); return o; }",
+    AIC: () => "function AIC(l, x, w) { if (l !== w) { const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); l = o; } l.push(x); return l; }",
+    // The end of a filter of the array of a loop in place (COMPILE.MODULE.APPEND.KEEP): the array keeps its first n items.
+    // GT and LV count only the pushes of their array, so the filter removes their caches. VW of the array is the array.
+    KS: () => "function KS(l, n) { l.length = n; if (l.ix !== undefined) l.ix = undefined; if (l.vl !== undefined) l.vl = undefined; }",
+    AOC: () => "function AOC(l, o, w) { if (l !== w) return l.concat(o); const n = o.length; for (let i = 0; i < n; i++) l.push(o[i]); return l; }",
+    WOC: () => [
+      "function WOC(l, o) {",
+      "  const g = new Map();",
+      "  for (const [k] of o) g.set(`${k}`, 1);",
+      "  return l.filter((x) => !g.has(`${x[0]}`));",
+      "}",
+    ].join("\n"),
+    FLC: () => "function FLC(l) { const o = []; for (const [, v] of l) for (const x of v) o.push(x); return o; }",
+    IXC: () => [
+      "function IXC(l, x) {",
+      '  if (typeof x !== "number" && typeof x !== "string" && typeof x !== "boolean") F();',
+      "  for (let i = 0; i < l.length; i++) if (l[i][1] === x) return i;",
+      "  return F();",
+      "}",
+    ].join("\n"),
+    NTC: () => "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
+    SNC: () => [
+      "function SNC(l, i, v) {",
+      "  if (!(Number.isSafeInteger(i) && i >= 0 && i < l.length && v !== undefined)) F();",
+      "  const o = l.slice();",
+      "  o[i] = [l[i][0], v];",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    FSC: () => "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
+    LOC: () => 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
+    LSC: () => 'function LSC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LSC(v, h - 1) : v } }))) }); }',
+    LPC: () => "function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }",
+    // LV and LVC keep one object on the array. A clean list gives the same object from both.
+    LVC: () => [
+      "function LVC(l, h) {",
+      "  let o = l.vl;",
+      "  if (o === undefined || o.items.length !== l.length) {",
+      '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LVC(v, h - 1) : v } }))) });',
+      "    l.vl = o;",
+      "  }",
+      "  return o;",
+      "}",
+    ].join("\n"),
+    // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`. No two cells share it, so LC uses LO.
+    LC: () => "function LC(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LO(d[k], h); return d; }",
+    // A plain column of lists (COMPILE.MODULE.LIST.PLAIN): each cell with a list gives an array.
+    LCP: () => "function LCP(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LP(d[k], h); return d; }",
+  } satisfies HelperTexts;
+}
+
+/** This function gives a part of the texts of the helpers, in the order of `HELPERS`. */
+function helperTexts5() {
+  return {
+    SH: () => [
+      "function SH(n, cols, own, budget) {",
+      "  const pg = (c, k) => {",
+      "    const o = own[c];",
+      "    const g = o === undefined ? undefined : o[k];",
+      "    return g === undefined ? cols[c] : g;",
+      "  };",
+      "  const D = [];",
+      "  for (let c = 0; c < cols.length; c++) {",
+      "    const d = new Array(n);",
+      "    for (let k = 0; k < n; k++) if (pg(c, k) === undefined) d[k] = E;",
+      "    D.push(d);",
+      "  }",
+      "  const seen = new Map(), stack = [], FILL = {};",
+      "  let top = FILL, missed = false, next = 0, used = 0;",
+      "  const start = (c, k) => {",
+      "    const i = next++;",
+      "    const v = { id: c * n + k, c, k, i, low: i, re: false, r: E, p: false, need: undefined };",
+      "    seen.set(v.id, v);",
+      "    stack.push(v);",
+      "    return v;",
+      "  };",
+      "  const ev = (v, g) => {",
+      "    const caller = top;",
+      "    v.p = false;",
+      "    v.need = undefined;",
+      "    top = v;",
+      "    used += g[1];",
+      "    const x = g[0](v.k);",
+      "    used -= g[1];",
+      "    top = caller;",
+      "    if (!v.p) v.r = x;",
+      "  };",
+      "  const end = (v, caller) => {",
+      "    if (v.low === v.i) {",
+      "      const ms = stack.splice(stack.lastIndexOf(v));",
+      "      const cycle = ms.length > 1 || v.re;",
+      "      for (const m of ms) {",
+      "        seen.delete(m.id);",
+      "        D[m.c][m.k] = cycle ? E : m.r;",
+      "      }",
+      "    } else if (caller !== undefined) caller.low = Math.min(caller.low, v.low);",
+      "  };",
+      "  const r = (c, k) => {",
+      "    const d = D[c][k];",
+      "    if (d !== undefined) return d;",
+      "    const caller = top;",
+      "    if (caller === FILL) {",
+      "      missed = true;",
+      "      return E;",
+      "    }",
+      "    if (caller.p) return E;",
+      "    const s = seen.get(c * n + k);",
+      "    if (s !== undefined) {",
+      "      caller.low = Math.min(caller.low, s.i);",
+      "      s.re = true;",
+      "      return E;",
+      "    }",
+      "    const g = pg(c, k);",
+      "    const v = start(c, k);",
+      "    if (used + g[1] > budget) {",
+      "      caller.p = true;",
+      "      caller.need = v;",
+      "      return E;",
+      "    }",
+      "    ev(v, g);",
+      "    if (v.p) {",
+      "      caller.p = true;",
+      "      caller.need = v;",
+      "      return E;",
+      "    }",
+      "    end(v, caller);",
+      "    const x = D[c][k];",
+      "    return x === undefined ? E : x;",
+      "  };",
+      "  const drive = (c, k) => {",
+      "    const work = [start(c, k)];",
+      "    for (let v = work[0]; v !== undefined; v = work[work.length - 1]) {",
+      "      ev(v, pg(v.c, v.k));",
+      "      if (v.p) {",
+      "        for (let q = v.need; q !== undefined; q = q.need) work.push(q);",
+      "        continue;",
+      "      }",
+      "      work.pop();",
+      "      end(v, work[work.length - 1]);",
+      "    }",
+      "  };",
+      "  const f = (c, k) => {",
+      "    if (D[c][k] !== undefined) return;",
+      "    missed = false;",
+      "    const x = pg(c, k)[0](k);",
+      "    if (missed) drive(c, k);",
+      "    else D[c][k] = x;",
+      "  };",
+      "  const o = (c) => {",
+      "    const d = D[c], out = new Array(n);",
+      "    for (let k = 0; k < n; k++) out[k] = d[k] === E ? VEX_ERROR : d[k];",
+      "    return out;",
+      "  };",
+      "  return { r, f, o };",
+      "}",
+    ].join("\n"),
+    // The keys of a tree in the order of a fill (SHEET.FILL): each parent before its children, or after them with `post`.
+    // `back` reverses the order of the siblings.
+    KO: () => [
+      "function KO(h, r, post, back) {",
+      "  const o = [], st = [];",
+      "  const push = (x) => {",
+      "    if (back) for (let q = 0; q < x.length; q++) st.push(x[q]);",
+      "    else for (let q = x.length - 1; q >= 0; q--) st.push(x[q]);",
+      "  };",
+      "  push(r);",
+      "  while (st.length > 0) {",
+      "    const k = st.pop();",
+      "    o.push(k);",
+      "    push(h[k]);",
+      "  }",
+      "  return post ? o.reverse() : o;",
+      "}",
+    ].join("\n"),
+    // The memo of a function of one key, and of more keys. -0 has its own entry, because an op can tell it from 0.
+    M1: () => [
+      "function M1(f) {",
+      "  const m = new Map();",
+      "  return (k) => {",
+      "    const s = Object.is(k, -0) ? Z : k;",
+      "    let r = m.get(s);",
+      "    if (r === undefined) {",
+      "      try { r = f(k); } catch { r = E; }",
+      "      m.set(s, r);",
+      "    }",
+      "    return G(r);",
+      "  };",
+      "}",
+    ].join("\n"),
+    M: () => [
+      "function M(f) {",
+      "  const root = new Map();",
+      "  return (...k) => {",
+      "    let m = root;",
+      "    for (const x of k.slice(0, -1)) {",
+      "      const s = Object.is(x, -0) ? Z : x;",
+      "      let c = m.get(s);",
+      "      if (c === undefined) m.set(s, (c = new Map()));",
+      "      m = c;",
+      "    }",
+      "    const last = k.at(-1);",
+      "    const s = Object.is(last, -0) ? Z : last;",
+      "    let r = m.get(s);",
+      "    if (r === undefined) {",
+      "      try { r = f(...k); } catch { r = E; }",
+      "      m.set(s, r);",
+      "    }",
+      "    return G(r);",
+      "  };",
+      "}",
+    ].join("\n"),
+  } satisfies HelperTexts;
+}
+
 /** The helpers of the generated code. A module has only the helpers that it uses. Each entry is a function, so the mutation lane gives the text of a helper to the tests that emit it, not to all tests. */
-const HELPERS: Readonly<Record<Exclude<Helper, "S">, () => string>> = {
-  F: () => "function F() { throw E; }",
-  C: () => "function C(m) { throw new VexContractError(m); }",
-  // An exception of an op is an error of Vex too, as in the interpreter. Only the checks of the contract throw a
-  // VexContractError, and they come before the run, so each catch of the run gives the sentinel.
-  T: () => "function T(f) { try { return f(); } catch { return E; } }",
-  // A constant of the run with a loop evaluates on its first read, so a loop in a branch that no run takes costs nothing.
-  L: () => "function L(f) { let done = false, v; return () => { if (!done) { done = true; try { v = f(); } catch { v = E; } } return v; }; }",
-  // A column of the run: the value of an expression at each record, on its first read.
-  Q: () => "function Q(f) { const m = []; return (j) => { let v = m[j]; if (v === undefined) { try { v = f(j); } catch { v = E; } m[j] = v; } return v; }; }",
-  G: () => "function G(x) { return x === E ? F() : x; }",
-  // The pack of a column of the run: an array with the value of the column at each record (`#packed`).
-  QA: () => "function QA(n, f) { const a = []; for (let j = 0; j < n; j++) a.push(f(j)); return a; }",
-  // A fold over the targets before the origin, as a scan (COMPILE.MODULE.SCAN). The first call evaluates the first
-  // state and the value of each target. When these values do not decrease, the targets of each origin are a prefix,
-  // and each prefix keeps its state. NaN satisfies no test, so its target is in no prefix.
-  PF: () => [
-    "function PF(n, init, key, test, step, result) {",
-    "  let ts, js, a0, bad, mono, pa;",
-    "  return (q) => {",
-    "    if (ts === undefined) {",
-    "      ts = [];",
-    "      js = [];",
-    "      bad = false;",
-    "      try { a0 = init(); } catch { a0 = E; }",
-    "      for (let j = 0; j < n; j++) {",
-    "        let t;",
-    "        try { t = key(j); } catch { bad = true; break; }",
-    "        if (t !== t) continue;",
-    "        ts.push(t);",
-    "        js.push(j);",
-    "      }",
-    "      mono = true;",
-    "      for (let i = 1; i < ts.length; i++) if (!(ts[i - 1] <= ts[i])) mono = false;",
-    "      pa = [a0];",
-    "    }",
-    "    if (a0 === E || bad || q === E) F();",
-    "    if (!mono) {",
-    "      let a = a0;",
-    "      for (let i = 0; i < ts.length; i++) if (test(ts[i], q)) a = step(a, js[i]);",
-    "      return result(a);",
-    "    }",
-    "    let lo = 0, hi = ts.length;",
-    "    while (lo < hi) {",
-    "      const h = (lo + hi) >> 1;",
-    "      if (test(ts[h], q)) lo = h + 1;",
-    "      else hi = h;",
-    "    }",
-    "    for (let i = pa.length - 1; i < lo; i++) pa.push(step(pa[i], js[i]));",
-    "    return result(pa[lo]);",
-    "  };",
-    "}",
-  ].join("\n"),
-  B: () => 'function B(x) { return typeof x === "boolean" ? x : F(); }',
-  U: () => 'function U(x) { return typeof x === "number" ? x : F(); }',
-  X: () => "function X(t, n) { return t >= 0 && t < n ? t : F(); }",
-  // The index of a computed position, and of a computed key: a key of an array space is the text of its index.
-  I: () => "function I(t, n) { return Number.isInteger(t) && t >= 0 && t < n ? t : F(); }",
-  K: () => 'function K(k, n) { return typeof k === "string" && /^(0|[1-9]\\d*)$/.test(k) && +k < n ? +k : F(); }',
-  // The ops on the order of a list (LIST.SORT, LIST.TAKE, LIST.NTH) work on the items with values. With strict, an
-  // error item is the error of the op. A sort is stable, and the values are numbers without NaN or texts of one kind.
-  // V gives a list without error items itself, so it is not copied (COMPILE.MODULE.LIST.SHARE). No op changes it. V does
-  // not keep the cache of VW: a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
-  V: () => "function V(l, s) { if (!l.some((x) => x[1] === E)) return l; if (s) F(); return l.filter((x) => x[1] !== E); }",
-  SB: () => [
-    "function SB(l, s) {",
-    "  const o = V(l, s);",
-    "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
-    "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  return o.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
-    "}",
-  ].join("\n"),
-  // The option by of sortBy (LIST.SORT.BY): the function f gives the sort value of each item with a value, in order.
-  SK: () => [
-    "function SK(l, s, f) {",
-    "  const o = V(l, s).map((x) => [x, f(x[1])]);",
-    "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
-    "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map((x) => x[0]);",
-    "}",
-  ].join("\n"),
-  TK: () => "function TK(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(0, n) : F(); }",
-  // The items with values of a list stay on its array, as GT keeps its index. Thus a loop that reads each item of a list
-  // of n items with nth costs O(n), not O(n squared). count and first read them too (COMPILE.MODULE.NTH.INDEX).
-  // A list without error items is its own array of items with values.
-  VW: () => [
-    "function VW(l) {",
-    "  let o = l.vw;",
-    "  if (o === undefined) {",
-    "    o = l.some((x) => x[1] === E) ? l.filter((x) => x[1] !== E) : l;",
-    "    l.vw = o;",
-    "  }",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  NT: () => [
-    "function NT(l, i, s) {",
-    "  const o = VW(l);",
-    "  if (s && o.length < l.length) F();",
-    "  return Number.isSafeInteger(i) && i >= 0 && i < o.length ? o[i][1] : F();",
-    "}",
-  ].join("\n"),
-  // count and first of a list that is not an each. With strict, an error item is the error of the op.
-  CT: () => "function CT(l, s) { const o = VW(l); return s && o.length < l.length ? F() : o.length; }",
-  FS: () => "function FS(l, s) { const o = VW(l); return (s && o.length < l.length) || o.length === 0 ? F() : o[0][1]; }",
-  // fill (LIST.FILL, COMPILE.MODULE.FILL): n items with the value v, and the keys 0 to n - 1. A count that is not a whole
-  // number from 0 to 100000, or a missing value, is the error of the interpreter. Each item can share the array of a list.
-  // setNth (LIST.SETNTH, COMPILE.MODULE.SETNTH): a new array with a new pair at the position i. The item keeps its key.
-  // V removes the error items, so the position counts the items with values. The old array and its pairs do not change.
-  SN: () => [
-    "function SN(l, i, v, s) {",
-    "  const x = V(l, s);",
-    "  if (!(Number.isSafeInteger(i) && i >= 0 && i < x.length && v !== undefined)) F();",
-    "  const o = x.slice();",
-    "  o[i] = [x[i][0], v];",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  FI: () => [
-    "function FI(n, v) {",
-    "  if (!(Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined)) F();",
-    "  const o = [];",
-    "  for (let i = 0; i < n; i++) o.push([i, v]);",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  // A range of fill (COMPILE.MODULE.FILL.RANGE). FN gives the count of the items of `fill(n, v)` with the check of FI.
-  // TN gives the count of `take` of a range with the check of TK. A sum with 0 changes -0 to 0, as the length does.
-  FN: () => "function FN(n, v) { return Number.isSafeInteger(n) && n >= 0 && n <= 100000 && v !== undefined ? n + 0 : F(); }",
-  TN: () => "function TN(n, k) { return Number.isSafeInteger(k) && k >= 0 ? Math.min(n, k + 0) : F(); }",
-  // A list of a field of the input (COMPILE.MODULE.LIST.INPUT): the array of a `vex.list` whose items have lists to the
-  // depth `h`, and values that pass the test `t`. The shape is the shape of `isVexList`. An error item holds the sentinel.
-  // An input that is not such a list, or an error item of `#DEPTH!`, gives undefined, so the check of the run fails.
-  LI: () => [
-    "function LI(x, h, t) {",
-    "  if (typeof x !== \"object\" || x === null || x.kind !== \"vex.list\" || !Array.isArray(x.items)) return undefined;",
-    "  const o = [];",
-    "  for (let i = 0; i < x.items.length; i++) {",
-    "    const it = x.items[i];",
-    "    const r = typeof it === \"object\" && it !== null ? it.result : undefined;",
-    "    if (typeof r !== \"object\" || r === null || typeof it.key !== \"string\") return undefined;",
-    "    if (r.ok === true) {",
-    "      const v = h > 0 ? LI(r.value, h - 1, t) : r.value !== undefined && t(r.value) ? r.value : undefined;",
-    "      if (v === undefined) return undefined;",
-    "      o.push([it.key, v]);",
-    "    } else {",
-    "      const e = r.error;",
-    "      if (r.ok !== false || typeof e !== \"object\" || e === null || typeof e.code !== \"string\" || typeof e.kind !== \"string\" || typeof e.message !== \"string\" || !Array.isArray(e.path) || e.kind === \"depth\") return undefined;",
-    "      o.push([it.key, E]);",
-    "    }",
-    "  }",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  // A plain list of a field of the input (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with arrays to
-  // the depth `h`. The key of an item is its position. The value VEX_ERROR is an error item, also if `t` accepts it.
-  // Another value gives undefined, so the check of the run fails.
-  LA: () => [
-    "function LA(x, h, t) {",
-    "  if (!Array.isArray(x)) return undefined;",
-    "  const o = [];",
-    "  for (let i = 0; i < x.length; i++) {",
-    "    const y = x[i];",
-    "    if (y === VEX_ERROR) {",
-    "      o.push([i, E]);",
-    "      continue;",
-    "    }",
-    "    const v = h > 0 ? LA(y, h - 1, t) : y !== undefined && t(y) ? y : undefined;",
-    "    if (v === undefined) return undefined;",
-    "    o.push([i, v]);",
-    "  }",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  // The ops that build a list (LIST.BUILD) keep the key and the value of each item. A key is a position or a text, so
-  // `without` and `get` compare the text of each key. A list is an array that does not change after the op that makes it.
-  // The one exception is the array of AO of a loop, which no other part reads (COMPILE.MODULE.APPEND.OWN).
-  DR: () => "function DR(l, n, s) { const o = V(l, s); return Number.isSafeInteger(n) && n >= 0 ? o.slice(n) : F(); }",
-  AP: () => "function AP(l, o, s) { return V(l, s).concat(V(o, s)); }",
-  // append into the list of a name of a loop (COMPILE.MODULE.APPEND.OWN). w is the array of the last append of the name
-  // in this run of the loop, and no other part reads it. Such an array has no error items, so VW of it is the array.
-  // With fuse, w can start with a first list that is clean and fresh (COMPILE.MODULE.FUSE.ADOPT). An append in the result
-  // of the loop can use w too, when no part reads the list after it.
-  // Each other list gets the copy of AP. V(o, s) throws before the first push, so an error does not change l. The loop
-  // reads n items, so it ends also if a is l.
-  AO: () => "function AO(l, o, s, w) { if (l !== w) return AP(l, o, s); const a = V(o, s), n = a.length; for (let i = 0; i < n; i++) l.push(a[i]); return l; }",
-  // The target of an append of an owner that pushes the items of its second list (COMPILE.MODULE.APPEND.PUSH). The
-  // array w is the target. Each other list gets a copy without its error items, and with s an error item is an error.
-  // AI pushes the one item x of fill(1, x) into the target. The code of x evaluates before the call, as in the interpreter.
-  AW: () => "function AW(l, s, w) { if (l === w) return l; const a = V(l, s), o = []; for (let i = 0; i < a.length; i++) o.push(a[i]); return o; }",
-  AI: () => "function AI(l, x, s, w) { const o = AW(l, s, w); o.push(x); return o; }",
-  WO: () => [
-    "function WO(l, o, s) {",
-    "  const a = V(l, s), g = new Map();",
-    "  for (const [k] of V(o, s)) g.set(`${k}`, 1);",
-    "  return a.filter((x) => !g.has(`${x[0]}`));",
-    "}",
-  ].join("\n"),
-  FL: () => [
-    "function FL(l, s) {",
-    "  const o = [];",
-    "  for (const [, v] of V(l, s)) for (const x of V(v, s)) o.push(x);",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  // The index of the keys of a list (LIST.GET): the value of the first item of each key. The array keeps its index, so a
-  // step that reads each key of a list of n items costs O(n). The key E marks an error item, for strict.
-  // The array of a loop gets a push after a read (COMPILE.MODULE.APPEND.LET), so `n` counts the items in the index.
-  // A push only adds items at the end, so the index adds only the new items. No other change of an array has a read before it.
-  GT: () => [
-    "function GT(l, k, s) {",
-    "  let x = l.ix;",
-    "  if (x === undefined) {",
-    "    x = new Map();",
-    "    x.n = 0;",
-    "    l.ix = x;",
-    "  }",
-    "  if (x.n !== l.length) {",
-    "    for (let i = x.n; i < l.length; i++) {",
-    "      const [q, v] = l[i], t = `${q}`;",
-    "      if (v === E) x.set(E, E);",
-    "      else if (!x.has(t)) x.set(t, v);",
-    "    }",
-    "    x.n = l.length;",
-    "  }",
-    '  return (s && x.has(E)) || typeof k !== "string" || !x.has(k) ? F() : x.get(k);',
-    "}",
-  ].join("\n"),
-  // The position of the first value among the items with a value (LIST.INDEXOF). `===` compares the values.
-  IX: () => [
-    "function IX(l, x, s) {",
-    "  const o = V(l, s);",
-    '  if (typeof x !== "number" && typeof x !== "string" && typeof x !== "boolean") F();',
-    "  for (let i = 0; i < o.length; i++) if (o[i][1] === x) return i;",
-    "  return F();",
-    "}",
-  ].join("\n"),
-  // The keys of a run (COMPILE.MODULE.KEYS): a map of each key to its position. A key that is not a text, or a second
-  // use of a key, is against the contract, because a space has no such keys.
-  KC: () => [
-    "function KC(a, n) {",
-    '  if (!Array.isArray(a) || a.length !== n) C("the keys are not an array with one key for each record");',
-    "  const m = new Map();",
-    "  for (let i = 0; i < n; i++) {",
-    "    const k = a[i];",
-    '    if (typeof k !== "string" || m.has(k)) C(`the key ${i} is not a text of its own`);',
-    "    m.set(k, i);",
-    "  }",
-    "  return m;",
-    "}",
-  ].join("\n"),
-  // The position of a key of a move. A value that is not a key of the space is an error of the move (NAV.KEY).
-  KP: () => "function KP(m, k) { const i = m.get(k); return i === undefined ? F() : i; }",
-  // The parents of a tree space: the position of the parent of each record, or -1 for a root. A walk up from each record
-  // marks its keys, so a walk that meets a key of the same walk finds a cycle. Each key is in one walk, so the check is linear.
-  PT: () => [
-    "function PT(p, n) {",
-    '  if (!Array.isArray(p) || p.length !== n) C("the parents are not an array with one parent for each record");',
-    "  const P = new Int32Array(n), s = new Uint8Array(n);",
-    "  for (let i = 0; i < n; i++) {",
-    "    const x = p[i];",
-    "    if (x !== -1 && !(Number.isInteger(x) && x >= 0 && x < n)) C(`the parent of the record ${i} is not -1 or the position of a record`);",
-    "    P[i] = x;",
-    "  }",
-    "  for (let i = 0; i < n; i++) {",
-    "    let k = i;",
-    "    while (k >= 0 && s[k] === 0) {",
-    "      s[k] = 1;",
-    "      k = P[k];",
-    "    }",
-    "    if (k >= 0 && s[k] === 1) C(`the parents of the record ${i} make a cycle`);",
-    "    for (k = i; k >= 0 && s[k] === 1; k = P[k]) s[k] = 2;",
-    "  }",
-    "  return P;",
-    "}",
-  ].join("\n"),
-  // The children of each record and the roots, in key order.
-  CH: () => [
-    "function CH(P, n) {",
-    "  const h = [], r = [];",
-    "  for (let i = 0; i < n; i++) h.push([]);",
-    "  for (let i = 0; i < n; i++) (P[i] < 0 ? r : h[P[i]]).push(i);",
-    "  return [h, r];",
-    "}",
-  ].join("\n"),
-  // The siblings of each record with the record itself, and its position among them. The roots are the siblings of a root.
-  SG: () => [
-    "function SG(P, h, r, n) {",
-    "  const g = [], s = new Int32Array(n);",
-    "  for (let i = 0; i < n; i++) g.push(P[i] < 0 ? r : h[P[i]]);",
-    "  for (const x of [r, ...h]) for (let q = 0; q < x.length; q++) s[x[q]] = q;",
-    "  return [g, s];",
-    "}",
-  ].join("\n"),
-  // The keys depth first, with each parent before its children, and the position and the size of the subtree of each
-  // record. Thus the descendants of a record are the keys after it, as many as its subtree has under it.
-  PR: () => [
-    "function PR(P, n) {",
-    "  const f = new Int32Array(n).fill(-1), x = new Int32Array(n), o = new Int32Array(n), at = new Int32Array(n), z = new Int32Array(n);",
-    "  let r = -1;",
-    "  for (let i = n - 1; i >= 0; i--) {",
-    "    const p = P[i];",
-    "    if (p < 0) {",
-    "      x[i] = r;",
-    "      r = i;",
-    "    } else {",
-    "      x[i] = f[p];",
-    "      f[p] = i;",
-    "    }",
-    "  }",
-    "  let m = 0;",
-    "  for (let k = r; k >= 0; ) {",
-    "    at[k] = m;",
-    "    o[m++] = k;",
-    "    if (f[k] >= 0) k = f[k];",
-    "    else {",
-    "      while (k >= 0 && x[k] < 0) k = P[k];",
-    "      if (k >= 0) k = x[k];",
-    "    }",
-    "  }",
-    "  for (let q = n - 1; q >= 0; q--) {",
-    "    const k = o[q], p = P[k];",
-    "    z[k]++;",
-    "    if (p >= 0) z[p] += z[k];",
-    "  }",
-    "  return [o, at, z];",
-    "}",
-  ].join("\n"),
-  UP: () => "function UP(P, k) { const p = P[k]; return p < 0 ? F() : p; }",
-  SO: () => "function SO(g, s, k, d) { const t = g[k][s[k] + d]; return t === undefined ? F() : t; }",
-  AN: () => "function AN(P, k) { const o = []; for (let p = P[k]; p >= 0; p = P[p]) o.push(p); return o; }",
-  // The record and the keys under it, in the order of a breadth-first search. A tree has no cycle, so no key comes twice.
-  BF: () => "function BF(h, k) { const o = [k]; for (let i = 0; i < o.length; i++) for (const c of h[o[i]]) o.push(c); return o; }",
-  // The edges of a graph space: the positions of the ends of the edges from each record, in order. A second edge to the
-  // same end is the same edge, as in the interpreter. The mark of an end is the number of its record plus 1.
-  GR: () => [
-    "function GR(e, n) {",
-    '  if (!Array.isArray(e) || e.length !== n) C("the edges are not an array with the ends of the edges of each record");',
-    "  const O = [], s = new Int32Array(n);",
-    "  for (let i = 0; i < n; i++) {",
-    "    const x = e[i];",
-    "    if (!Array.isArray(x)) C(`the edges of the record ${i} are not an array`);",
-    "    const o = [];",
-    "    for (const t of x) {",
-    "      if (!(Number.isInteger(t) && t >= 0 && t < n)) C(`an edge of the record ${i} does not go to the position of a record`);",
-    "      if (s[t] !== i + 1) {",
-    "        s[t] = i + 1;",
-    "        o.push(t);",
-    "      }",
-    "    }",
-    "    O.push(o);",
-    "  }",
-    "  return O;",
-    "}",
-  ].join("\n"),
-  // The predecessors of each record of a graph, in key order: the records in key order, and the ends of the edges of each record.
-  GI: () => "function GI(O, n) { const I = []; for (let i = 0; i < n; i++) I.push([]); for (let i = 0; i < n; i++) for (const t of O[i]) I[t].push(i); return I; }",
-  // The record and the keys that a path of edges reaches from it, once, in the order of a breadth-first search.
-  RB: () => "function RB(O, k, n) { const s = new Uint8Array(n), o = [k]; s[k] = 1; for (let i = 0; i < o.length; i++) for (const c of O[o[i]]) if (s[c] === 0) { s[c] = 1; o.push(c); } return o; }",
-  // The state of a run of a sheet (COMPILE.MODULE.SHEET), as in SheetRun: the result of each finished cell, the search
-  // of Tarjan with its stack, and the budget of the stack. `r` reads a cell, `f` fills a cell, and `o` gives a column.
-  // A cell without a formula has the error sentinel from the start, as the error of its read.
-  // A column of a direct fill (COMPILE.MODULE.SHEET.DIRECT): the error sentinel of a cell changes to VEX_ERROR.
-  DO: () => "function DO(d) { for (let k = 0; k < d.length; k++) if (d[k] === E) d[k] = VEX_ERROR; return d; }",
-  // A list of a result (COMPILE.MODULE.LIST.RESULT): a `vex.list` with a text key for each item. An error item has the
-  // error VEX_ERROR. The depth `h` is the number of the levels of lists in the items. One key gets the list, so it is not frozen.
-  LO: () => 'function LO(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LO(v, h - 1) : v } })) }; }',
-  // The list of a run that each key gets (COMPILE.MODULE.FUSE.OUT): LO, but frozen, because the keys share the object. LS
-  // keeps no object on the array, because a property on each new list made the list ops slower (ireko, vex-compiler 0.17.1).
-  LS: () => 'function LS(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LS(v, h - 1) : v } }))) }); }',
-  // A plain list of a result (COMPILE.MODULE.LIST.PLAIN): an array of the values of the items, with no keys. An error
-  // item is VEX_ERROR. The depth `h` is the number of the levels of lists in the items.
-  LP: () => "function LP(l, h) { return l.map((x) => (x[1] === E ? VEX_ERROR : h > 0 ? LP(x[1], h - 1) : x[1])); }",
-  // A list in an argument of an op or in a field of a record (COMPILE.MODULE.LIST.ARG, COMPILE.MODULE.LIST.FIELD): a frozen
-  // `vex.list`, as the interpreter gives. The array keeps it, so each later read of the list gives the same object.
-  // The array of a loop gets a push after a read (COMPILE.MODULE.APPEND.LET). A push only adds items, so an object with
-  // another count of items is old, and LV makes a new object.
-  LV: () => [
-    "function LV(l, h) {",
-    "  let o = l.vl;",
-    "  if (o === undefined || o.items.length !== l.length) {",
-    '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: v === E ? { ok: false, error: VEX_ERROR } : { ok: true, value: h > 0 ? LV(v, h - 1) : v } }))) });',
-    "    l.vl = o;",
-    "  }",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  // The clean form (COMPILE.MODULE.FUSE.CLEAN): the facts prove that no item of a list holds the sentinel. Thus V gives
-  // the list itself, VW gives the list, and strict cannot fail. Each helper below is the helper without its last letter,
-  // with no scan, no test of the sentinel and no option strict. The other checks stay, so each error stays an error.
-  SBC: () => [
-    "function SBC(l) {",
-    "  const t = l.length > 0 ? typeof l[0][1] : \"number\";",
-    "  for (const [, v] of l) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  return l.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
-    "}",
-  ].join("\n"),
-  SKC: () => [
-    "function SKC(l, f) {",
-    "  const o = l.map((x) => [x, f(x[1])]);",
-    "  const t = o.length > 0 ? typeof o[0][1] : \"number\";",
-    "  for (const [, v] of o) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  return o.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map((x) => x[0]);",
-    "}",
-  ].join("\n"),
-  // The sort in place (COMPILE.MODULE.FUSE): a clean list that is fresh is its own sort buffer, so the sort makes no
-  // copy. No other part holds the array, so a failure leaves no changed list that a part reads. The sort is stable.
-  // A list of 64 items or fewer gets an insertion sort (COMPILE.MODULE.FUSE.SORT), which calls no comparator function.
-  // Its test ">" moves an item only past a larger value, so equal values keep their order. A longer list gets the
-  // stable sort of the engine. The kinds of the sort values go through the same check before each of the two sorts.
-  SBI: () => [
-    "function SBI(l) {",
-    "  const n = l.length, t = n > 0 ? typeof l[0][1] : \"number\";",
-    "  for (let i = 0; i < n; i++) { const v = l[i][1]; if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F(); }",
-    "  if (n > 64) l.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));",
-    "  else for (let i = 1; i < n; i++) {",
-    "    const x = l[i], v = x[1];",
-    "    let j = i - 1;",
-    "    for (; j >= 0 && l[j][1] > v; j--) l[j + 1] = l[j];",
-    "    l[j + 1] = x;",
-    "  }",
-    "  return l;",
-    "}",
-  ].join("\n"),
-  // The option by: the array k holds the sort value of each item, so the sort makes no pair for an item. f runs once
-  // for each item, in order, and the array l does not change before the check of the sort values. A long list sorts an
-  // array of indices by k, and then reads the items from a copy of l.
-  SKI: () => [
-    "function SKI(l, f) {",
-    "  const n = l.length, k = new Array(n);",
-    "  for (let i = 0; i < n; i++) k[i] = f(l[i][1]);",
-    "  const t = n > 0 ? typeof k[0] : \"number\";",
-    "  for (const v of k) if (typeof v !== t || (t !== \"number\" && t !== \"string\") || v !== v) F();",
-    "  if (n > 64) {",
-    "    const o = new Array(n), c = l.slice();",
-    "    for (let i = 0; i < n; i++) o[i] = i;",
-    "    o.sort((a, b) => (k[a] < k[b] ? -1 : k[a] > k[b] ? 1 : 0));",
-    "    for (let i = 0; i < n; i++) l[i] = c[o[i]];",
-    "  } else for (let i = 1; i < n; i++) {",
-    "    const v = k[i], x = l[i];",
-    "    let j = i - 1;",
-    "    for (; j >= 0 && k[j] > v; j--) { k[j + 1] = k[j]; l[j + 1] = l[j]; }",
-    "    k[j + 1] = v; l[j + 1] = x;",
-    "  }",
-    "  return l;",
-    "}",
-  ].join("\n"),
-  TKC: () => "function TKC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(0, n) : F(); }",
-  DRC: () => "function DRC(l, n) { return Number.isSafeInteger(n) && n >= 0 ? l.slice(n) : F(); }",
-  // The loop reads n items, so it ends also if o is l.
-  AWC: () => "function AWC(l, w) { if (l === w) return l; const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); return o; }",
-  AIC: () => "function AIC(l, x, w) { if (l !== w) { const o = []; for (let i = 0; i < l.length; i++) o.push(l[i]); l = o; } l.push(x); return l; }",
-  // The end of a filter of the array of a loop in place (COMPILE.MODULE.APPEND.KEEP): the array keeps its first n items.
-  // GT and LV count only the pushes of their array, so the filter removes their caches. VW of the array is the array.
-  KS: () => "function KS(l, n) { l.length = n; if (l.ix !== undefined) l.ix = undefined; if (l.vl !== undefined) l.vl = undefined; }",
-  AOC: () => "function AOC(l, o, w) { if (l !== w) return l.concat(o); const n = o.length; for (let i = 0; i < n; i++) l.push(o[i]); return l; }",
-  WOC: () => [
-    "function WOC(l, o) {",
-    "  const g = new Map();",
-    "  for (const [k] of o) g.set(`${k}`, 1);",
-    "  return l.filter((x) => !g.has(`${x[0]}`));",
-    "}",
-  ].join("\n"),
-  FLC: () => "function FLC(l) { const o = []; for (const [, v] of l) for (const x of v) o.push(x); return o; }",
-  IXC: () => [
-    "function IXC(l, x) {",
-    '  if (typeof x !== "number" && typeof x !== "string" && typeof x !== "boolean") F();',
-    "  for (let i = 0; i < l.length; i++) if (l[i][1] === x) return i;",
-    "  return F();",
-    "}",
-  ].join("\n"),
-  NTC: () => "function NTC(l, i) { return Number.isSafeInteger(i) && i >= 0 && i < l.length ? l[i][1] : F(); }",
-  SNC: () => [
-    "function SNC(l, i, v) {",
-    "  if (!(Number.isSafeInteger(i) && i >= 0 && i < l.length && v !== undefined)) F();",
-    "  const o = l.slice();",
-    "  o[i] = [l[i][0], v];",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  FSC: () => "function FSC(l) { return l.length === 0 ? F() : l[0][1]; }",
-  LOC: () => 'function LOC(l, h) { return { kind: "vex.list", items: l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LOC(v, h - 1) : v } })) }; }',
-  LSC: () => 'function LSC(l, h) { return Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LSC(v, h - 1) : v } }))) }); }',
-  LPC: () => "function LPC(l, h) { return l.map(h > 0 ? (x) => LPC(x[1], h - 1) : (x) => x[1]); }",
-  // LV and LVC keep one object on the array. A clean list gives the same object from both.
-  LVC: () => [
-    "function LVC(l, h) {",
-    "  let o = l.vl;",
-    "  if (o === undefined || o.items.length !== l.length) {",
-    '    o = Object.freeze({ kind: "vex.list", items: Object.freeze(l.map(([k, v]) => ({ key: `${k}`, result: { ok: true, value: h > 0 ? LVC(v, h - 1) : v } }))) });',
-    "    l.vl = o;",
-    "  }",
-    "  return o;",
-    "}",
-  ].join("\n"),
-  // A column of lists (COMPILE.MODULE.SHEET.LIST): each cell with a list gives a `vex.list`. No two cells share it, so LC uses LO.
-  LC: () => "function LC(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LO(d[k], h); return d; }",
-  // A plain column of lists (COMPILE.MODULE.LIST.PLAIN): each cell with a list gives an array.
-  LCP: () => "function LCP(d, h) { for (let k = 0; k < d.length; k++) if (d[k] !== VEX_ERROR) d[k] = LP(d[k], h); return d; }",
-  SH: () => [
-    "function SH(n, cols, own, budget) {",
-    "  const pg = (c, k) => {",
-    "    const o = own[c];",
-    "    const g = o === undefined ? undefined : o[k];",
-    "    return g === undefined ? cols[c] : g;",
-    "  };",
-    "  const D = [];",
-    "  for (let c = 0; c < cols.length; c++) {",
-    "    const d = new Array(n);",
-    "    for (let k = 0; k < n; k++) if (pg(c, k) === undefined) d[k] = E;",
-    "    D.push(d);",
-    "  }",
-    "  const seen = new Map(), stack = [], FILL = {};",
-    "  let top = FILL, missed = false, next = 0, used = 0;",
-    "  const start = (c, k) => {",
-    "    const i = next++;",
-    "    const v = { id: c * n + k, c, k, i, low: i, re: false, r: E, p: false, need: undefined };",
-    "    seen.set(v.id, v);",
-    "    stack.push(v);",
-    "    return v;",
-    "  };",
-    "  const ev = (v, g) => {",
-    "    const caller = top;",
-    "    v.p = false;",
-    "    v.need = undefined;",
-    "    top = v;",
-    "    used += g[1];",
-    "    const x = g[0](v.k);",
-    "    used -= g[1];",
-    "    top = caller;",
-    "    if (!v.p) v.r = x;",
-    "  };",
-    "  const end = (v, caller) => {",
-    "    if (v.low === v.i) {",
-    "      const ms = stack.splice(stack.lastIndexOf(v));",
-    "      const cycle = ms.length > 1 || v.re;",
-    "      for (const m of ms) {",
-    "        seen.delete(m.id);",
-    "        D[m.c][m.k] = cycle ? E : m.r;",
-    "      }",
-    "    } else if (caller !== undefined) caller.low = Math.min(caller.low, v.low);",
-    "  };",
-    "  const r = (c, k) => {",
-    "    const d = D[c][k];",
-    "    if (d !== undefined) return d;",
-    "    const caller = top;",
-    "    if (caller === FILL) {",
-    "      missed = true;",
-    "      return E;",
-    "    }",
-    "    if (caller.p) return E;",
-    "    const s = seen.get(c * n + k);",
-    "    if (s !== undefined) {",
-    "      caller.low = Math.min(caller.low, s.i);",
-    "      s.re = true;",
-    "      return E;",
-    "    }",
-    "    const g = pg(c, k);",
-    "    const v = start(c, k);",
-    "    if (used + g[1] > budget) {",
-    "      caller.p = true;",
-    "      caller.need = v;",
-    "      return E;",
-    "    }",
-    "    ev(v, g);",
-    "    if (v.p) {",
-    "      caller.p = true;",
-    "      caller.need = v;",
-    "      return E;",
-    "    }",
-    "    end(v, caller);",
-    "    const x = D[c][k];",
-    "    return x === undefined ? E : x;",
-    "  };",
-    "  const drive = (c, k) => {",
-    "    const work = [start(c, k)];",
-    "    for (let v = work[0]; v !== undefined; v = work[work.length - 1]) {",
-    "      ev(v, pg(v.c, v.k));",
-    "      if (v.p) {",
-    "        for (let q = v.need; q !== undefined; q = q.need) work.push(q);",
-    "        continue;",
-    "      }",
-    "      work.pop();",
-    "      end(v, work[work.length - 1]);",
-    "    }",
-    "  };",
-    "  const f = (c, k) => {",
-    "    if (D[c][k] !== undefined) return;",
-    "    missed = false;",
-    "    const x = pg(c, k)[0](k);",
-    "    if (missed) drive(c, k);",
-    "    else D[c][k] = x;",
-    "  };",
-    "  const o = (c) => {",
-    "    const d = D[c], out = new Array(n);",
-    "    for (let k = 0; k < n; k++) out[k] = d[k] === E ? VEX_ERROR : d[k];",
-    "    return out;",
-    "  };",
-    "  return { r, f, o };",
-    "}",
-  ].join("\n"),
-  // The keys of a tree in the order of a fill (SHEET.FILL): each parent before its children, or after them with `post`.
-  // `back` reverses the order of the siblings.
-  KO: () => [
-    "function KO(h, r, post, back) {",
-    "  const o = [], st = [];",
-    "  const push = (x) => {",
-    "    if (back) for (let q = 0; q < x.length; q++) st.push(x[q]);",
-    "    else for (let q = x.length - 1; q >= 0; q--) st.push(x[q]);",
-    "  };",
-    "  push(r);",
-    "  while (st.length > 0) {",
-    "    const k = st.pop();",
-    "    o.push(k);",
-    "    push(h[k]);",
-    "  }",
-    "  return post ? o.reverse() : o;",
-    "}",
-  ].join("\n"),
-  // The memo of a function of one key, and of more keys. -0 has its own entry, because an op can tell it from 0.
-  M1: () => [
-    "function M1(f) {",
-    "  const m = new Map();",
-    "  return (k) => {",
-    "    const s = Object.is(k, -0) ? Z : k;",
-    "    let r = m.get(s);",
-    "    if (r === undefined) {",
-    "      try { r = f(k); } catch { r = E; }",
-    "      m.set(s, r);",
-    "    }",
-    "    return G(r);",
-    "  };",
-    "}",
-  ].join("\n"),
-  M: () => [
-    "function M(f) {",
-    "  const root = new Map();",
-    "  return (...k) => {",
-    "    let m = root;",
-    "    for (const x of k.slice(0, -1)) {",
-    "      const s = Object.is(x, -0) ? Z : x;",
-    "      let c = m.get(s);",
-    "      if (c === undefined) m.set(s, (c = new Map()));",
-    "      m = c;",
-    "    }",
-    "    const last = k.at(-1);",
-    "    const s = Object.is(last, -0) ? Z : last;",
-    "    let r = m.get(s);",
-    "    if (r === undefined) {",
-    "      try { r = f(...k); } catch { r = E; }",
-    "      m.set(s, r);",
-    "    }",
-    "    return G(r);",
-    "  };",
-    "}",
-  ].join("\n"),
-};
+const HELPERS: Readonly<Record<Exclude<Helper, "S">, () => string>> = { ...helperTexts1(), ...helperTexts2(), ...helperTexts3(), ...helperTexts4(), ...helperTexts5() };
 
 /**
  * This list has the globals of JavaScript that the code of a module reads. This code is the helpers, the run and the

@@ -3,7 +3,7 @@
 // reports no test of the file, and Stryker sees no failed test, so each mutant that the file kills survives. On
 // 2026-11-03, three test files of the compiler imported "../../testkit/src/fc-timeout.ts", and the score of module.ts
 // fell to 93.34 % (V-072). Thus the function unresolvedImports finds each relative import that the copy breaks.
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /** A copy of the lane. */
@@ -296,17 +296,21 @@ export const PACKAGES: readonly string[] = ["core", "domains", "testkit", "compi
 /** The modules of the kernel of coeval in the core (docs/REVIEW.md, decision D13). */
 const KERNEL: ReadonlySet<string> = new Set(["kernel.ts", "plan.ts", "same.ts", "document.ts", "deps.ts", "write.ts"]);
 
-/** The file that has its own parts, by lines: the printer of the standalone modules. */
+/** The file of the printer of the standalone modules. This file is a group of its own. */
 const MODULE_FILE = "module.ts";
 
 /** The files of the packages that hold no code of a package, as paths of a package folder. */
 const NOT_MUTATED: ReadonlySet<string> = new Set(["core/test-support.ts", "testkit/fc-setup.ts", "testkit/repo-root.ts", "testkit/arbitraries.ts", "testkit/builder-model-arbitraries.ts", "testkit/sheet-arbitraries.ts"]);
 
+/** The groups of files of a full run, in the order of the jobs. */
+const GROUPS: readonly string[] = ["core.kernel", "core.base", "domains", "testkit", "compiler.module", "compiler.rest"];
+
 /**
- * The count of the parts of each group of files that one runner does not finish in its time limit of 150 minutes. The count
- * of a group holds a slowest part of 2 times its share under that limit. A dispatch can still name the group as one part.
+ * The count of the parts of each group with more than one part. The parts of a group are the cut with the smallest largest
+ * cost under `costs.json` (LANE.CUT). Each count gives an estimate of 100 minutes or less for each part. A dispatch can name
+ * the group as one part.
  */
-const PART_COUNTS: Readonly<Record<string, number>> = { "core.base": 4, domains: 3, "compiler.module": 6, "compiler.rest": 4 };
+const PART_COUNTS: Readonly<Record<string, number>> = { "core.kernel": 2, "core.base": 11, domains: 3, "compiler.module": 7, "compiler.rest": 5 };
 
 /** A part with a number: `core.base.2`. */
 const NUMBERED = /^(.+)\.(\d+)$/u;
@@ -317,14 +321,15 @@ const DOMAIN_FILE = /^domains\.([a-z][\w-]*)$/u;
 /** The closing line of a method of a class, or of a function at the top of a file. */
 const CLOSING_LINE = /^ {0,2}\}$/u;
 
-/** This function gives the numbered parts of a group. */
-function numbered(group: string): string[] {
-  return Array.from({ length: PART_COUNTS[group] ?? 0 }, (_unused, index) => `${group}.${index + 1}`);
+/** This function gives the parts of a group: the group itself, or its numbered parts. */
+function partsOfGroup(group: string): string[] {
+  const count = PART_COUNTS[group] ?? 1;
+  return count === 1 ? [group] : Array.from({ length: count }, (_unused, index) => `${group}.${index + 1}`);
 }
 
 /** This function gives each part of a full run of the lane, in the order of the jobs. */
 export function laneParts(): string[] {
-  return ["core.kernel", ...numbered("core.base"), ...numbered("domains"), "testkit", ...numbered("compiler.module"), ...numbered("compiler.rest")];
+  return GROUPS.flatMap(partsOfGroup);
 }
 
 /** This function gives the package of a part: `core.base.2` is `core`. */
@@ -338,21 +343,6 @@ function sourceFiles(root: string, name: string): string[] {
     .map((file) => file.replaceAll("\\", "/"))
     .filter((file) => file.endsWith(".ts") && !isTest(file) && file !== "index.ts" && !NOT_MUTATED.has(`${name}/${file}`))
     .toSorted();
-}
-
-/**
- * This function puts files into `count` parts of near the same size. It takes the largest file first and gives each file
- * to the smallest part. Each input gives one result, so the plan and each job of a run read the same parts.
- */
-export function splitBySize(files: readonly { readonly path: string; readonly size: number }[], count: number): string[][] {
-  const parts = Array.from({ length: count }, () => ({ size: 0, files: [] as string[] }));
-  const largestFirst = files.toSorted((a, b) => b.size - a.size || a.path.localeCompare(b.path));
-  for (const file of largestFirst) {
-    const smallest = parts.reduce((best, part) => (part.size < best.size ? part : best));
-    smallest.size += file.size;
-    smallest.files.push(file.path);
-  }
-  return parts.map((part) => part.files.toSorted());
 }
 
 /** A segment of a text: a run of lines that ends on a closing line, with the name of its first declaration. */
@@ -440,33 +430,128 @@ export function lineWeights(text: string, map: CostMap): number[] {
 
 /**
  * This function gives the last line of each part of a text but the last, and the count of its lines. The end of a part is
- * the closing line of a method near its share of the lines, or of the weights when the call gives a weight for each line.
+ * the closing line of a method, by the cut of `endsOf`, of the lines or of the weights when the call gives a weight for each line.
  * A mutant of the body of a method thus stays in one part.
  */
 export function partEnds(text: string, count: number, weights?: readonly number[]): { readonly ends: number[]; readonly lines: number } {
   const lines = text.split(/\r?\n/u);
-  const ends: number[] = [];
-  const total = weights?.reduce((sum, w) => sum + w, 0) ?? 0;
-  let line = 0;
-  let sum = 0;
-  for (let part = 1; part < count; part += 1) {
-    let target = Math.round((part * lines.length) / count);
-    if (weights !== undefined && total > 0) {
-      while (line < lines.length && sum + (weights[line] ?? 0) < (part * total) / count) sum += weights[line++] ?? 0;
-      target = line;
-    }
-    let found: number | undefined;
-    for (let away = 0; away < lines.length && found === undefined; away += 1) {
-      if (CLOSING_LINE.test(lines[target + away] ?? "")) found = target + away;
-      else if (CLOSING_LINE.test(lines[target - away] ?? "")) found = target - away;
-    }
-    if (found === undefined) throw new Error("The text has no closing line for the end of a part.");
-    ends.push(found + 1);
-  }
-  return { ends, lines: lines.length };
+  return endsOf(lines, (at) => CLOSING_LINE.test(lines[at] ?? ""), count, weights);
 }
 
-/** The file of the cost maps of the lane, in tools/mutation: a map for each file that the lane cuts by lines. */
+/** The weight of a cut into parts: the weight of its largest part, and the sum of the squares of the weights of its parts. */
+interface CutWeight {
+  readonly max: number;
+  readonly squares: number;
+  /** This is the index of the candidate before the last part of the cut, or -1 for a cut of one part. */
+  readonly before: number;
+}
+
+/**
+ * This function gives the lightest cut of the lines at the candidates into `count` parts, as the index of the candidate at
+ * the end of each part but the last. With a limit, a cut with a part over the limit is not a cut, and the lightest cut has
+ * the smallest squares. With no limit, the lightest cut has the smallest largest part, then the smallest squares.
+ */
+function lightestCut(candidates: readonly number[], sumTo: (at: number) => number, total: number, count: number, limit?: number): { readonly picks: number[]; readonly max: number } {
+  const lighter = (x: CutWeight, y: CutWeight | undefined): boolean =>
+    y === undefined || (limit === undefined ? x.max < y.max || (x.max === y.max && x.squares < y.squares) : x.squares < y.squares);
+  const extend = (prior: CutWeight | undefined, from: number, to: number, before: number): CutWeight | undefined => {
+    const weight = sumTo(to) - sumTo(from);
+    if (prior === undefined || (limit !== undefined && weight > limit)) return undefined;
+    return { max: Math.max(prior.max, weight), squares: prior.squares + weight ** 2, before };
+  };
+  const start: CutWeight = { max: 0, squares: 0, before: -1 };
+  // cuts[p][k] is the lightest cut of the lines up to the candidate k into p + 1 parts.
+  const cuts: (CutWeight | undefined)[][] = [candidates.map((end) => extend(start, -1, end, -1))];
+  for (let part = 1; part < count - 1; part += 1) {
+    const last = cuts[part - 1] ?? [];
+    cuts.push(
+      candidates.map((end, k) => {
+        let best: CutWeight | undefined;
+        for (let i = part - 1; i < k; i += 1) {
+          const cut = extend(last[i], candidates[i] ?? -1, end, i);
+          if (cut !== undefined && lighter(cut, best)) best = cut;
+        }
+        return best;
+      }),
+    );
+  }
+  let best: CutWeight | undefined;
+  (cuts[count - 2] ?? []).forEach((prior, k) => {
+    const cut = extend(prior, candidates[k] ?? -1, total, k);
+    if (cut !== undefined && lighter(cut, best)) best = cut;
+  });
+  const picks: number[] = [];
+  let at = best?.before ?? -1;
+  for (let part = count - 2; part >= 0; part -= 1) {
+    picks.unshift(at);
+    at = cuts[part]?.[at]?.before ?? -1;
+  }
+  return { picks, max: best?.max ?? Number.POSITIVE_INFINITY };
+}
+
+/**
+ * This function gives the last line of each part of a run of lines but the last, counted from 1, and the count of the lines.
+ * A line is an end line when `isEnd` of its index from 0 is true. Of all cuts at end lines into `count` parts, the function
+ * takes the cuts with the smallest largest part, and of these the cut with the smallest sum of squares. A part that holds
+ * a large segment thus does not change the balance of the other parts. With no weights, each line has the weight 1.
+ */
+function endsOf(lines: readonly string[], isEnd: (at: number) => boolean, count: number, weights?: readonly number[]): { readonly ends: number[]; readonly lines: number } {
+  if (count < 2) return { ends: [], lines: lines.length };
+  const sums: number[] = [];
+  let total = 0;
+  for (let at = 0; at < lines.length; at += 1) {
+    total += weights === undefined ? 1 : (weights[at] ?? 0);
+    sums.push(total);
+  }
+  // A position of the sums is a line from 0. The position -1 is before the first line, and the total is after the last line.
+  const sumTo = (at: number): number => (at < 0 ? 0 : at >= lines.length ? total : (sums[at] ?? 0));
+  // The candidates are the end lines before the last line. A cut after the last line gives an empty part.
+  const candidates = Array.from({ length: Math.max(0, lines.length - 1) }, (_unused, at) => at).filter(isEnd);
+  if (candidates.length < count - 1) throw new Error("The text has no closing line for the end of a part.");
+  const { max } = lightestCut(candidates, sumTo, lines.length, count);
+  const { picks } = lightestCut(candidates, sumTo, lines.length, count, max);
+  return { ends: picks.map((pick) => (candidates[pick] ?? 0) + 1), lines: lines.length };
+}
+
+/** A file of a group: its path of the lane, its lines, and the weight of each line. */
+export interface WeightedFile {
+  readonly path: string;
+  readonly lines: readonly string[];
+  readonly weights: readonly number[];
+}
+
+/**
+ * This function cuts the files of a group into `count` parts of near the same weight, and it gives the entries of `mutate`
+ * of each part. The files follow one another in their order. The end of a part is the closing line of a method, or the last
+ * line of a file, near the share of the weights of the part. A part holds whole files, and a range of lines of a file at
+ * each end. Each input gives one result, so the plan and each job of a run read the same parts (LANE.PARTS).
+ */
+export function cutByCost(files: readonly WeightedFile[], count: number): string[][] {
+  const lines = files.flatMap((file) => file.lines);
+  const starts: number[] = [];
+  let at = 0;
+  for (const file of files) {
+    starts.push(at);
+    at += file.lines.length;
+  }
+  // The last line of each file but the last file is an end. The last part ends at the last line of all files.
+  const fileEnds = new Set(starts.slice(1).map((start) => start - 1));
+  const isEnd = (line: number): boolean => fileEnds.has(line) || CLOSING_LINE.test(lines[line] ?? "");
+  const { ends } = endsOf(lines, isEnd, count, files.flatMap((file) => file.weights));
+  return Array.from({ length: count }, (_unused, part) => {
+    const from = (ends[part - 1] ?? 0) + 1;
+    const to = ends[part] ?? lines.length;
+    return files.flatMap((file, index) => {
+      const start = starts[index] ?? 0;
+      const first = Math.max(from, start + 1) - start;
+      const last = Math.min(to, start + file.lines.length) - start;
+      if (first > last) return [];
+      return [first === 1 && last === file.lines.length ? file.path : `${file.path}:${String(first)}-${String(last)}`];
+    });
+  });
+}
+
+/** The file of the cost maps of the lane, in tools/mutation: a map for each file that the lane mutates (LANE.COST). */
 export const COSTS_FILE = "costs.json";
 
 /** This function gives the cost maps of the lane, by the path of the lane of each file, or none with no file. */
@@ -497,28 +582,60 @@ function sourcePath(root: string, path: string): string {
 }
 
 /**
+ * This function gives the weight of each line of each file, from the cost maps. A file that no map names has the mean
+ * weight of a line of the files with a map, so a new file has a cost too. With no map, each line has the weight 1.
+ */
+export function weightedFiles(root: string, paths: readonly string[], maps: Readonly<Record<string, CostMap>> = costMaps(root)): WeightedFile[] {
+  const texts = paths.map((path) => ({ path, text: readFileSync(sourcePath(root, path), "utf8") }));
+  const known = texts.flatMap(({ path, text }) => {
+    const map = maps[path];
+    return map === undefined ? [] : [lineWeights(text, map)];
+  });
+  const lineCount = known.reduce((n, w) => n + w.length, 0);
+  const mean = lineCount === 0 ? 1 : known.flat().reduce((n, w) => n + w, 0) / lineCount;
+  return texts.map(({ path, text }) => {
+    const lines = text.split(/\r?\n/u);
+    const map = maps[path];
+    return { path, lines, weights: map === undefined ? lines.map(() => mean) : lineWeights(text, map) };
+  });
+}
+
+/** This function gives the group, the count and the index from 0 of a numbered part. A part that the lane does not have stops the run. */
+function numberedPart(part: string): { readonly group: string; readonly count: number; readonly index: number } | undefined {
+  const [, group, number] = NUMBERED.exec(part) ?? [];
+  if (group === undefined || number === undefined) return undefined;
+  const count = PART_COUNTS[group];
+  const index = Number(number) - 1;
+  if (count === undefined || index < 0 || index >= count) throw new Error(`The lane does not have the part ${part}.`);
+  return { group, count, index };
+}
+
+/**
  * This function gives the entries of the option `mutate` of Stryker for a part. A part is a package, a group, a numbered
- * part of a group, or one module of the domains. An entry is a path of the lane. A part of `module.ts` adds a range of lines.
+ * part of a group, or one module of the domains. An entry is a path of the lane. When a part holds only some lines of a
+ * file, its entry adds the range of these lines.
  */
 export function mutateOf(root: string, part: string): string[] {
-  const [, group, number] = NUMBERED.exec(part) ?? [];
-  if (group !== undefined && number !== undefined) {
-    const count = PART_COUNTS[group];
-    const index = Number(number) - 1;
-    if (count === undefined || index < 0 || index >= count) throw new Error(`The lane does not have the part ${part}.`);
-    if (group === "compiler.module") {
-      const file = `work/compiler/${MODULE_FILE}`;
-      const text = readFileSync(sourcePath(root, file), "utf8");
-      const map = costMaps(root)[file];
-      const { ends, lines } = partEnds(text, count, map === undefined ? undefined : lineWeights(text, map));
-      return [`${file}:${(ends[index - 1] ?? 0) + 1}-${ends[index] ?? lines}`];
-    }
-    const sized = groupFiles(root, group).map((path) => ({ path, size: statSync(sourcePath(root, path)).size }));
-    return splitBySize(sized, count)[index] ?? [];
-  }
+  const numbered = numberedPart(part);
+  if (numbered !== undefined) return cutByCost(weightedFiles(root, groupFiles(root, numbered.group)), numbered.count)[numbered.index] ?? [];
   const domainFile = DOMAIN_FILE.exec(part)?.[1];
   if (domainFile !== undefined) return [`work/domains/${domainFile}.ts`];
   return groupFiles(root, part);
+}
+
+/**
+ * This function gives the planned net time of a part in milliseconds under the cost maps: the sum of the weights of the
+ * lines of its entries (LANE.COST).
+ */
+export function plannedMs(root: string, part: string, maps: Readonly<Record<string, CostMap>> = costMaps(root)): number {
+  const group = numberedPart(part)?.group ?? (DOMAIN_FILE.test(part) ? "domains" : part);
+  const files = new Map(weightedFiles(root, groupFiles(root, group), maps).map((file) => [file.path, file]));
+  return mutateOf(root, part).reduce((sum, entry) => {
+    const [path = entry, range] = entry.split(":");
+    const weights = files.get(path)?.weights ?? [];
+    const [first = 1, last = weights.length] = range === undefined ? [] : range.split("-").map(Number);
+    return sum + weights.slice(first - 1, last).reduce((n, w) => n + w, 0);
+  }, 0);
 }
 
 /**

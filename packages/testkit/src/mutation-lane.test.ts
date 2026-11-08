@@ -19,7 +19,8 @@ interface Layout {
   readonly laneParts: () => readonly string[];
   readonly PACKAGES: readonly string[];
   readonly mutateOf: (root: string, part: string) => readonly string[];
-  readonly splitBySize: (files: readonly { readonly path: string; readonly size: number }[], count: number) => readonly (readonly string[])[];
+  readonly cutByCost: (files: readonly { readonly path: string; readonly lines: readonly string[]; readonly weights: readonly number[] }[], count: number) => readonly (readonly string[])[];
+  readonly weightedFiles: (root: string, paths: readonly string[], maps: Readonly<Record<string, { readonly run: string; readonly segments: Readonly<Record<string, number>> }>>) => readonly { readonly path: string; readonly weights: readonly number[] }[];
   readonly partEnds: (text: string, count: number, weights?: readonly number[]) => { readonly ends: readonly number[]; readonly lines: number };
   readonly segmentsOf: (text: string) => readonly { readonly key: string; readonly start: number; readonly end: number }[];
   readonly costMapOf: (text: string, run: string, lines: readonly (readonly [number, number, number, number])[]) => { readonly run: string; readonly segments: Readonly<Record<string, number>> };
@@ -47,6 +48,7 @@ interface LaneReport {
 /** What the gate of the lane reads beside the reports. */
 interface Checks {
   readonly lastTests?: Readonly<Record<string, number>> | undefined;
+  readonly lastFiles?: Readonly<Record<string, readonly string[]>> | undefined;
   readonly planned?: readonly { readonly part: string; readonly old: number; readonly new: number; readonly pr: string }[];
   readonly unread?: (read: ReadonlySet<string>) => readonly string[];
   readonly selection?: readonly string[] | undefined;
@@ -73,11 +75,12 @@ interface LaneRead {
   readonly readReports: (reports: readonly LaneReport[]) => readonly { readonly name: string; readonly counts: { readonly killed: number; readonly hitLimit: number; readonly clock: number; readonly survived: number; readonly disabled: number } }[];
   readonly laneVerdict: (reports: ReadonlyMap<string, LaneReport | undefined>, checks?: Checks) => {
     readonly tests: Readonly<Record<string, number>>;
+    readonly files: Readonly<Record<string, readonly string[]>>;
     readonly failed: boolean;
     readonly lines: readonly string[];
     readonly packages: readonly { readonly name: string; readonly outcome: string; readonly score: number; readonly scoreWithClock: number }[];
   };
-  readonly flipCases: (expected?: readonly string[]) => readonly { readonly name: string; readonly reports: ReadonlyMap<string, LaneReport | undefined>; readonly core: string; readonly lastTests?: Readonly<Record<string, number>>; readonly selection: readonly string[] }[];
+  readonly flipCases: (expected?: readonly string[]) => readonly { readonly name: string; readonly reports: ReadonlyMap<string, LaneReport | undefined>; readonly core: string; readonly lastTests?: Readonly<Record<string, number>>; readonly lastFiles?: Readonly<Record<string, readonly string[]>>; readonly selection: readonly string[] }[];
   readonly staticLine: (read: unknown) => string;
   readonly partialRead: (part: string, stopMinutes: number, lines: readonly { readonly status: string; readonly reason: string | null }[], planned: number) => PartialRead;
   readonly partialLine: (p: PartialRead) => string;
@@ -168,15 +171,26 @@ describe("the copy of the mutation lane", () => {
 });
 
 describe("the parts of the mutation lane", () => {
-  it("LANE.PARTS: the parts of a package cover each file of the package once", async () => {
+  it("LANE.PARTS: the parts of a package cover each file of the package once, and the parts of a file cover each line once", async () => {
     const layout = await loadLayout();
     const root = repoRoot();
-    const entries = layout.laneParts().flatMap((part) => layout.mutateOf(root, part).map(fileOfEntry));
-    const noModule = entries.filter((file) => file !== "work/compiler/module.ts");
+    const entries = layout.laneParts().flatMap((part) => layout.mutateOf(root, part));
     const whole = layout.PACKAGES.flatMap((name) => layout.mutateOf(root, name));
-    expect(new Set(noModule).size).toBe(noModule.length);
-    expect([...new Set(entries)].toSorted()).toEqual([...whole].toSorted());
-    expect(entries.filter((file) => file === "work/compiler/module.ts")).toHaveLength(moduleParts(layout).length);
+    expect([...new Set(entries.map(fileOfEntry))].toSorted()).toEqual([...whole].toSorted());
+    const ranges = new Map<string, number[][]>();
+    const counts = new Map<string, number>();
+    for (const entry of entries) {
+      const file = fileOfEntry(entry);
+      const lines = readFileSync(join(root, file.replace(/^work\/(\w+)\//u, "packages/$1/src/")), "utf8").split(/\r?\n/u).length;
+      counts.set(file, lines);
+      ranges.set(file, [...(ranges.get(file) ?? []), /:(\d+)-(\d+)$/u.exec(entry)?.slice(1).map(Number) ?? [1, lines]]);
+    }
+    // The ranges of a file start on line 1, each range starts on the line after the range before it, and the last range ends on the last line.
+    const gaps = [...ranges].filter(([file, list]) => {
+      const sorted = list.toSorted((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
+      return sorted.some((range, index) => range[0] !== (sorted[index - 1]?.[1] ?? 0) + 1) || sorted.at(-1)?.[1] !== counts.get(file);
+    });
+    expect(gaps.map(([file]) => file)).toEqual([]);
   });
 
   it("LANE.PARTS: the parts of a package leave out the index, the tests and the files of test support", async () => {
@@ -192,7 +206,7 @@ describe("the parts of the mutation lane", () => {
     const layout = await loadLayout();
     const root = repoRoot();
     const parts = moduleParts(layout);
-    expect(parts).toHaveLength(6);
+    expect(parts).toHaveLength(7);
     const ranges = parts.map((part) => /:(\d+)-(\d+)$/u.exec(layout.mutateOf(root, part)[0] ?? "")?.slice(1).map(Number) ?? []);
     const lines = readFileSync(join(root, "packages", "compiler", "src", "module.ts"), "utf8").split(/\r?\n/u);
     expect(ranges[0]?.[0]).toBe(1);
@@ -202,10 +216,12 @@ describe("the parts of the mutation lane", () => {
     for (const range of ranges.slice(0, -1)) expect(lines[(range[1] ?? 0) - 1]).toMatch(/^ {0,2}\}$/u);
   });
 
-  it("LANE.PARTS: the end of a part is the closing line nearest its share of the lines", async () => {
+  it("LANE.CUT: with no weights, the cut has the smallest largest part in lines", async () => {
     const layout = await loadLayout();
     const text = ["class A {", "  a() {", "    1;", "  }", "  b() {", "    2;", "    3;", "  }", "}"].join("\n");
-    expect(layout.partEnds(text, 2)).toEqual({ ends: [8], lines: 9 });
+    // An end at line 4 gives parts of 4 and 5 lines. An end at line 8 gives parts of 8 and 1 lines.
+    expect(layout.partEnds(text, 2)).toEqual({ ends: [4], lines: 9 });
+    expect(layout.partEnds(text, 1)).toEqual({ ends: [], lines: 9 });
     expect(() => layout.partEnds("one\ntwo", 2)).toThrow("no closing line");
   });
 
@@ -233,29 +249,43 @@ describe("the parts of the mutation lane", () => {
     expect(layout.lineWeights(text, { run: "42", segments: { a: 600 } })).toEqual([200, 200, 200, 200, 200, 200]);
   });
 
-  it("LANE.COST: with weights, the end of a part is the closing line nearest its share of the cost", async () => {
+  it("LANE.CUT: with weights, the cut has the smallest largest part in cost", async () => {
     const layout = await loadLayout();
     const text = ["a() {", "  1;", "}", "b() {", "  2;", "}", "c() {", "  3;", "}", "d() {", "  4;", "}"].join("\n");
     // By lines, the end is the closing line of b. Most of the cost is in a, so by cost the end is the closing line of a.
     expect(layout.partEnds(text, 2)).toEqual({ ends: [6], lines: 12 });
     expect(layout.partEnds(text, 2, [30, 30, 30, 1, 1, 1, 1, 1, 1, 1, 1, 1])).toEqual({ ends: [3], lines: 12 });
+    // Each cut into three parts has a part of 90 or more. Two cuts have 90 and the same squares, and the first of them is the cut.
+    expect(layout.partEnds(text, 3, [30, 30, 30, 1, 1, 1, 1, 1, 1, 1, 1, 1])).toEqual({ ends: [3, 6], lines: 12 });
   });
 
-  it("LANE.PARTS: each input gives the same parts, and the largest file goes first", async () => {
+  it("LANE.CUT: a part ends on the last line of a file or on a closing line, and a part of a file has its range of lines", async () => {
     const layout = await loadLayout();
     const files = [
-      { path: "a", size: 5 },
-      { path: "b", size: 9 },
-      { path: "c", size: 4 },
-      { path: "d", size: 5 },
+      { path: "a", lines: ["const k = 1;"], weights: [50] },
+      { path: "b", lines: ["y() {", "  2;", "}", "z() {", "  3;", "}"], weights: [10, 10, 10, 10, 10, 10] },
     ];
-    expect(layout.splitBySize(files, 2)).toEqual([["b", "c"], ["a", "d"]]);
-    expect(layout.splitBySize(files.toReversed(), 2)).toEqual([["b", "c"], ["a", "d"]]);
+    // The last line of a is an end line, but it is not a closing line.
+    expect(layout.cutByCost(files, 2)).toEqual([["a"], ["b"]]);
+    expect(layout.cutByCost(files, 3)).toEqual([["a"], ["b:1-3"], ["b:4-6"]]);
+    expect(layout.cutByCost(files, 1)).toEqual([["a", "b"]]);
+    expect(layout.cutByCost(files.map((file) => ({ ...file })), 3)).toEqual(layout.cutByCost(files, 3));
+  });
+
+  it("LANE.CUT: a file that no map names has the mean cost of a line of the files of the group with a map", async () => {
+    const layout = await loadLayout();
+    const root = repoRoot();
+    const [json, fix] = [lanePath("core", "json.ts"), lanePath("core", "fix.ts")];
+    const [named, other] = layout.weightedFiles(root, [json, fix], { [json]: { run: "42", segments: { import: 600 } } });
+    const mean = (named?.weights ?? []).reduce((sum, w) => sum + w, 0) / (named?.weights.length ?? 1);
+    expect(mean).toBeGreaterThan(0);
+    for (const w of other?.weights ?? []) expect(w).toBeCloseTo(mean, 9);
+    expect(new Set(layout.weightedFiles(root, [fix], {})[0]?.weights)).toEqual(new Set([1]));
   });
 
   it("LANE.PARTS: a part that the lane does not have stops the run", async () => {
     const layout = await loadLayout();
-    expect(() => layout.mutateOf(repoRoot(), "core.base.9")).toThrow("does not have the part");
+    expect(() => layout.mutateOf(repoRoot(), "core.base.99")).toThrow("does not have the part");
     expect(() => layout.mutateOf(repoRoot(), "other")).toThrow("does not have the part");
   });
 
@@ -264,8 +294,11 @@ describe("the parts of the mutation lane", () => {
     const root = repoRoot();
     const selected = layout.changedParts(root, ["packages/core/src/evaluate.test.ts", "docs/ROADMAP.md", "packages/core/src/not-a-file.ts"]);
     expect(selected.files).toEqual([lanePath("core", "evaluate.ts")]);
-    expect(selected.parts).toHaveLength(1);
-    expect(selected.parts[0]).toMatch(/^core\.base\.\d$/u);
+    // A large file can have its lines in more than one part, and the change selects each of them.
+    const holders = layout.laneParts().filter((part) => layout.mutateOf(root, part).some((entry) => fileOfEntry(entry) === lanePath("core", "evaluate.ts")));
+    expect(selected.parts).toEqual(holders);
+    expect(holders.length).toBeGreaterThan(0);
+    for (const part of holders) expect(part).toMatch(/^core\.base\.\d+$/u);
   });
 
   it("LANE.DELAY: a change of module.ts selects both of its parts", async () => {
@@ -304,7 +337,7 @@ describe("the gate of the mutation lane", () => {
     const file = "work/core/a.test.ts";
     const unread = (names: ReadonlySet<string>): readonly string[] => (names.has(file) ? [] : ["packages/core/src/a.test.ts"]);
     const outcomes = read.flipCases([file]).map((c) => {
-      const verdict = read.laneVerdict(c.reports, { lastTests: c.lastTests, unread, selection: c.selection });
+      const verdict = read.laneVerdict(c.reports, { lastTests: c.lastTests, lastFiles: c.lastFiles, unread, selection: c.selection });
       return [verdict.packages.find((p) => p.name === "core")?.outcome, verdict.failed];
     });
     expect(outcomes).toEqual([
@@ -386,6 +419,24 @@ describe("the gate of the mutation lane", () => {
     const report = (part: string, tests: number): LaneReport => read.fixtureReport(part, 99, { status: "Survived" }, tests);
     const { tests } = read.laneVerdict(new Map<string, LaneReport | undefined>([["testkit", report("testkit", 10)], ["core.kernel", undefined], ["domains.1", report("domains.1", 90)]]), { lastTests: { testkit: 100, "core.kernel": 50, "domains.1": 80 } });
     expect(tests).toEqual({ testkit: 100, "core.kernel": 50, "domains.1": 90 });
+  });
+
+  it("LANE.TESTS: a count compares only with a read of the same mutated files, and the verdict saves the files of each count", async () => {
+    const read = await loadRead();
+    const part = "core.base.1";
+    const report = read.fixtureReport(part, 99, { status: "Survived" }, 10);
+    const own = ["core/core.base.1.ts"];
+    const same = read.laneVerdict(new Map([[part, report]]), { lastTests: { [part]: 100 }, lastFiles: { [part]: own } });
+    expect(same.packages[0]?.outcome).toBe("no read");
+    expect(same.files).toEqual({ [part]: own });
+    // A new cut of the parts gives the part other files, so its count starts a new line of reads.
+    const other = read.laneVerdict(new Map([[part, report]]), { lastTests: { [part]: 100 }, lastFiles: { [part]: ["core/other.ts"] } });
+    expect(other.packages[0]?.outcome).toBe("pass");
+    expect(other.tests).toEqual({ [part]: 10 });
+    expect(other.files).toEqual({ [part]: own });
+    expect(other.lines.join("\n")).toContain("core.base.1 tests: 10 in 1 files, with other mutated files than at the last good read, so no compare.");
+    // A last read with no record of the files of a part compares nothing for that part.
+    expect(read.laneVerdict(new Map([[part, report]]), { lastTests: { [part]: 100 }, lastFiles: {} }).packages[0]?.outcome).toBe("pass");
   });
 
   it("LANE.TESTS: a planned fall holds only while the last good read is its old count", async () => {
@@ -526,12 +577,30 @@ async function loadCost(): Promise<LaneCost> {
   return (await import(pathToFileURL(join(repoRoot(), "tools", "mutation", "lane-cost.ts")).href)) as LaneCost;
 }
 
-/** The functions of the script of the cost map of module.ts (tools/mutation/cost-map.ts). */
+/** The functions of the script of the cost maps (tools/mutation/cost-map.ts). */
 interface CostMapScript {
-  readonly partMinutes: (root: string, parts: readonly string[], map: { readonly run: string; readonly segments: Readonly<Record<string, number>> }) => number[];
+  readonly speedFactors: (plans: readonly SpeedPlan[]) => Map<string, number>;
+  readonly planLines: (plans: readonly SpeedPlan[]) => Map<string, ReadonlyArray<readonly [number, number, number, number]>>;
+  readonly partMinutes: (root: string, parts: readonly string[], maps: Readonly<Record<string, { readonly run: string; readonly segments: Readonly<Record<string, number>> }>>) => number[];
 }
 
-/** This function loads the script of the cost map of module.ts. */
+/** The plan of a dry run of one part, as the script of the cost maps reads it. */
+interface SpeedPlan {
+  readonly part: string;
+  readonly files: Readonly<Record<string, { readonly lines: ReadonlyArray<readonly [number, number, number, number]> }>>;
+  readonly tests: ReadonlyArray<readonly [string, string, number, number, number]>;
+}
+
+/** This function gives a plan of one part with tests of the times `ms` and one file with one line of the net time `netMs`. */
+function speedPlan(part: string, ms: Readonly<Record<string, number>>, netMs = 0): SpeedPlan {
+  return {
+    part,
+    files: { [`work/core/${part}.ts`]: { lines: [[1, 1, 0, netMs]] } },
+    tests: Object.entries(ms).map(([name, time]) => [name, "work/core/a.test.ts", time, 1, time]),
+  };
+}
+
+/** This function loads the script of the cost maps. */
 async function loadCostMap(): Promise<CostMapScript> {
   return (await import(pathToFileURL(join(repoRoot(), "tools", "mutation", "cost-map.ts")).href)) as CostMapScript;
 }
@@ -551,6 +620,27 @@ function planOf(id: string, file: string, run?: { readonly netMs: number; readon
 // On 2026-11-06, Nightly 42142449218 stopped three parts of the core at the limit of 150 minutes. The parts are cut by
 // the size of their files, and the stopped jobs uploaded nothing, so no record gave the time of a file.
 describe("the cost of the mutation lane", () => {
+  it("LANE.SPEED: the factor of a part is the median ratio of its test times to the medians of its group", async () => {
+    const { speedFactors } = await loadCostMap();
+    const factors = speedFactors([
+      speedPlan("g.1", { a: 1000, b: 2000, short: 100 }),
+      speedPlan("g.2", { a: 2000, b: 4000, short: 5 }),
+      speedPlan("g.3", { a: 1000, b: 2000, only: 9000 }),
+      speedPlan("alone", { a: 5000 }),
+      speedPlan("h.1", { x: 1000 }),
+      speedPlan("h.2", { y: 1000 }),
+    ]);
+    // The median of the times of each shared test is the time of g.1, so g.2 runs at half the speed.
+    expect(Object.fromEntries(factors)).toEqual({ "g.1": 1, "g.2": 2, "g.3": 1, alone: 1, "h.1": 1, "h.2": 1 });
+  });
+
+  it("LANE.SPEED: the cost maps divide the net time of each line by the factor of the runner of its part", async () => {
+    const { planLines } = await loadCostMap();
+    const lines = planLines([speedPlan("g.1", { a: 1000 }, 600), speedPlan("g.2", { a: 3000 }, 600), speedPlan("g.3", { a: 1000 }, 600)]);
+    expect(lines.get("work/core/g.1.ts")).toEqual([[1, 1, 0, 600]]);
+    expect(lines.get("work/core/g.2.ts")).toEqual([[1, 1, 0, 200]]);
+  });
+
   it("LANE.COST: a file of Stryker gets its path of the lane, from a path of Linux or of Windows", async () => {
     const cost = await loadCost();
     expect(cost.laneFile("/home/runner/work/vex/vex/tools/mutation/work/core/steps.ts")).toBe("work/core/steps.ts");
@@ -608,21 +698,25 @@ describe("the cost of the mutation lane", () => {
     }
   });
 
-  it("LANE.COST: under the committed cost map, the estimate of each part of compiler.module is at most the target", async () => {
+  it("LANE.COST: under the committed cost maps, the estimate of each part of a full run is at most the target", async () => {
     const [layout, cost, script] = await Promise.all([loadLayout(), loadCost(), loadCostMap()]);
     const root = repoRoot();
     const costs = JSON.parse(readFileSync(join(root, "tools", "mutation", "costs.json"), "utf8")) as Record<string, { readonly run: string; readonly segments: Readonly<Record<string, number>> }>;
-    const map = costs["work/compiler/module.ts"];
-    expect(map?.run).toBe("42474174486");
-    const minutes = script.partMinutes(root, moduleParts(layout), map ?? { run: "", segments: {} });
-    expect(minutes).toHaveLength(6);
-    for (const m of minutes) expect(m).toBeLessThanOrEqual(cost.TARGET_MINUTES);
+    // A file with no mutant has a map with no cost, and a refresh keeps its old map. Each map with a cost comes from one run.
+    const costly = Object.values(costs).filter((map) => Object.values(map.segments).some((ms) => ms > 0));
+    expect(new Set(costly.map((map) => map.run))).toEqual(new Set(["42508852104"]));
+    // A new file has no map until the next refresh of the maps. The cut gives each of its lines the mean cost of its group,
+    // so the file still goes into a part, and the estimate of the part still counts it.
+    const parts = layout.laneParts();
+    const minutes = script.partMinutes(root, parts, costs);
+    expect(minutes).toHaveLength(parts.length);
+    expect(parts.filter((_part, index) => (minutes[index] ?? 0) > cost.TARGET_MINUTES)).toEqual([]);
   });
 
-  it("LANE.STATIC: a plan with more static runs in module.ts than its limit gives a fault, and a plan at the limit gives none", async () => {
+  it("LANE.STATIC: a plan with more static runs in a file than its limit gives a fault, and a plan at the limit gives none", async () => {
     const cost = await loadCost();
     const limit = cost.STATIC_LIMITS["work/compiler/module.ts"] ?? 0;
-    expect(limit).toBe(600);
+    expect(cost.STATIC_LIMITS).toEqual({ "work/compiler/module.ts": 600, "work/core/kernel.ts": 350, "work/core/list.ts": 200 });
     const at = { "work/compiler/module.ts": { ...planRow(1), static: limit }, "work/core/steps.ts": { ...planRow(1), static: limit * 9 } };
     expect(cost.staticFaults(at)).toEqual([]);
     const over = { "work/compiler/module.ts": { ...planRow(1), static: limit + 1 } };

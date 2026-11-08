@@ -228,9 +228,11 @@ export function costReporter(root: string, now: () => number = () => performance
 
 /**
  * The most static runs of a file in the plan of one part. A static run starts each test of the lane, so it costs the time of
- * all tests (LANE.STATIC). The dry run 42474174486 read 471 static runs in `module.ts`, 465 of them in one part.
+ * all tests (LANE.STATIC). The dry run 42474174486 read 471 static runs in `module.ts`, 465 of them in one part. It read
+ * 336 in `kernel.ts` and 190 in `list.ts`. These come from the exported tables of the core, so they stay, but they must
+ * not grow.
  */
-export const STATIC_LIMITS: Readonly<Record<string, number>> = { "work/compiler/module.ts": 600 };
+export const STATIC_LIMITS: Readonly<Record<string, number>> = { "work/compiler/module.ts": 600, "work/core/kernel.ts": 350, "work/core/list.ts": 200 };
 
 /** This function gives one line for each file of a plan with more static runs than its limit (LANE.STATIC). */
 export function staticFaults(files: Readonly<Record<string, FilePlan>>): string[] {

@@ -143,8 +143,9 @@ const COST: Readonly<Record<string, string>> = { GATE_FAULT_TIMES: FAULT_TIMES }
 const GATES: readonly FlipGate[] = [
   { name: "the speed gate of the core", file: "packages/core/bench/gate.ts", env: {}, fault: COST, cases: 2 },
   { name: "the speed gate of the compiler", file: "packages/compiler/bench/gate-processes.ts", env: { GATE_CASE: compilerCases() }, fault: COST, cases: 2 },
-  // The fault gives a quadratic time and quadratic bytes. The module fails a row, a time clause and a bytes clause. The source fails a row and a bytes clause, because its time is report only.
-  { name: "the growth gate of the compiler", file: "packages/compiler/bench/growth.ts", env: {}, args: ["chain"], fault: { GROWTH_FAULT: "1" }, cases: 5 },
+  // The fault gives a quadratic time and quadratic bytes. The module fails a row, a time clause and a bytes clause.
+  // The source fails a row, a clause of the time of `generate` and a bytes clause. The time of `load` is report only (V-089).
+  { name: "the growth gate of the compiler", file: "packages/compiler/bench/growth.ts", env: {}, args: ["chain"], fault: { GROWTH_FAULT: "1" }, cases: 6 },
   // The fault gives 5 % more bytes at the large size of the source, with no other change. The source fails a row and a bytes clause.
   { name: "the growth gate of the bytes of the source", file: "packages/compiler/bench/growth.ts", env: {}, args: ["chain"], fault: { GROWTH_BYTES_FAULT: "1.05" }, cases: 2 },
 ];

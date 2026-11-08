@@ -28,6 +28,8 @@ export const SOURCE_TIME_LIMIT = 1.25;
  * Under it, the noise of a fresh process moves the exponent past the spread. For example, 10 ms in place of 13.2 ms moves `chain` from 0.78 to 0.91.
  */
 export const GENERATE_FLOOR_MS = 100;
+/** The floor of the small median of a read of `load`, in milliseconds (COMPILE.SOURCE.SIZE). It is the floor of `generate`, for the same reason. */
+export const LOAD_FLOOR_MS = GENERATE_FLOOR_MS;
 /** The rise of the bytes at the large size that the bytes limit of each shape must find (rule 8i). */
 export const BYTES_FLIP = 1.05;
 
@@ -60,12 +62,15 @@ function readChain(levels: number): Expr {
  * with 2.5 % more bytes at the large size, rounded up. So 5 % more bytes at the large size fails.
  * `generate` holds the time exponent of `generate`: the lowering, the checks and the print. `why` gives its read.
  * `generateSmallMs` is the small median of that read, and it is at least `GENERATE_FLOOR_MS`.
- * The time of `load` is report only, because the parse of its `new Function` stays open (V-089). A shape with no `generate` has no held read, so that time is report only too.
+ * `load` holds the time exponent of `load`, the parse of the source by `new Function`, by the same rule. `loadSmallMs` is at least `LOAD_FLOOR_MS`.
+ * A shape with no `generate` or no `load` has no held read of that part, so its time is report only (V-089).
  */
 export interface SourceLimits {
   readonly bytes: number;
   readonly generate?: number;
   readonly generateSmallMs?: number;
+  readonly load?: number;
+  readonly loadSmallMs?: number;
   readonly why?: string;
 }
 
@@ -83,7 +88,13 @@ export interface GrowthShape {
 
 /** The shapes. Each shape that made a compile quadratic or worse is here, with the shape of the doubling programs. */
 export const GROWTH_SHAPES: readonly GrowthShape[] = [
-  { name: "plain", make: (levels) => doubling(n, levels), small: 11, large: 14, source: { bytes: 0.911 } },
+  {
+    name: "plain",
+    make: (levels) => doubling(n, levels),
+    small: 11,
+    large: 14,
+    source: { bytes: 0.911, load: 1.12, loadSmallMs: 107.3, why: "CI run 42478066584 timed `load` in 5 processes for each size: 107.3 ms at 11 levels and 853.6 ms at 14, so the load exponent is 1.00. The limit is that read with the spread 0.12, rounded up." },
+  },
   { name: "constant", make: (levels) => doubling(SUM, levels), small: 10, large: 13, source: { bytes: 1.039 } },
   { name: "loop", make: (levels) => repeat(n, levels, (e) => app("sum", each(axes.all, app("add", e, e)))), small: 10, large: 13, source: { bytes: 1.037 } },
   {
@@ -104,7 +115,7 @@ export const GROWTH_SHAPES: readonly GrowthShape[] = [
     source: { bytes: 1.038, why: "CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The exponent of the sum of their medians is 0.83: 16.1 ms at 60 levels and 50.6 ms at 240. The small median is under the floor of 100 ms (`GENERATE_FLOOR_MS`), so the time of generate is report only." },
   },
   { name: "letloop", make: (levels) => repeat(SUM, levels, (e, i) => let_({ [name(i)]: SUM }, app("add", e, v(name(i))))), small: 60, large: 240, source: { bytes: 1.035 } },
-  { name: "constlet", make: (levels) => repeat(SUM, levels, (e, i) => let_({ [name(i)]: tree(32, SUM) }, app("add", e, v(name(i))))), small: 60, large: 240, source: { bytes: 1.049, generate: 1.14, generateSmallMs: 350.9, why: "V-089 took the text from 266 MB to 26.9 MB at 240 levels, and the text is linear (bytes exponent 1.03). CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 350.9 ms at 60 levels and 1442.1 ms at 240, so 1.02. The limit is that read with the spread 0.12, rounded up. The time of load is report only (V-089)." } },
+  { name: "constlet", make: (levels) => repeat(SUM, levels, (e, i) => let_({ [name(i)]: tree(32, SUM) }, app("add", e, v(name(i))))), small: 60, large: 240, source: { bytes: 1.049, generate: 1.14, generateSmallMs: 350.9, load: 1.15, loadSmallMs: 111.3, why: "V-089 took the text from 266 MB to 26.9 MB at 240 levels, and the text is linear (bytes exponent 1.03). CI run 42464464092 timed the lowering, the checks and the print of tier 2 in 5 processes for each size. The generate exponent is the exponent of the sum of their medians: 350.9 ms at 60 levels and 1442.1 ms at 240, so 1.02. The limit is that read with the spread 0.12, rounded up. CI run 42478066584 timed `load` in 5 processes for each size: 111.3 ms at 60 levels and 460.0 ms at 240, so the load exponent is 1.02. The load limit is that read with the spread 0.12, rounded up." } },
   { name: "readchain", make: readChain, small: 120, large: 480, source: { bytes: 1.041 } },
   {
     name: "origin",
@@ -185,7 +196,8 @@ export const loadExponentOf = (small: GrowthRow, large: GrowthRow): number | und
 /**
  * This function gives the read of the source of tier 2 of a shape (COMPILE.SOURCE.SIZE). A size with no source is a fault.
  * A bytes exponent over its limit is a fault, and a time exponent of `generate` over the `generate` limit of the shape is a fault.
- * The time of `load` is a note, because the parse of its `new Function` stays open (V-089). A shape with no `generate` limit has no read, so its time of `generate` is a note.
+ * A time exponent of `load` over the `load` limit of the shape is a fault. A shape with no `load` limit has no read, so its time of `load` is a note (V-089).
+ * A shape with no `generate` limit has no read, so its time of `generate` is a note.
  * A row with different bytes in its processes has no reading of a text, so its bytes are a note.
  */
 export function sourceVerdict(shape: GrowthShape, small: GrowthRow, large: GrowthRow): SourceVerdict {
@@ -196,12 +208,16 @@ export function sourceVerdict(shape: GrowthShape, small: GrowthRow, large: Growt
   const generateLimit = held ?? SOURCE_TIME_LIMIT;
   const generateText = `${label} has a generate time exponent of ${found.time.toFixed(2)}, and the limit is ${String(generateLimit)}`;
   const generateOver = found.time > generateLimit;
-  const timeFaults = held !== undefined && generateOver ? [generateText] : [];
+  const generateFaults = held !== undefined && generateOver ? [generateText] : [];
   const load = loadExponentOf(small, large);
-  const timeNotes = [
-    ...(held === undefined && generateOver ? [`${generateText}, and the shape has no read of its own`] : []),
-    ...(load !== undefined && load > SOURCE_TIME_LIMIT ? [`${label} has a load time exponent of ${load.toFixed(2)}, and the limit is ${String(SOURCE_TIME_LIMIT)} (V-089)`] : []),
-  ];
+  const loadHeld = shape.source.load;
+  const loadLimit = loadHeld ?? SOURCE_TIME_LIMIT;
+  const loadText = `${label} has a load time exponent of ${load?.toFixed(2) ?? "none"}, and the limit is ${String(loadLimit)}`;
+  const loadOver = load !== undefined && load > loadLimit;
+  // A held load limit with no time of load holds nothing, so it is a fault.
+  const loadFaults = loadHeld !== undefined && (load === undefined || loadOver) ? [loadText] : [];
+  const timeFaults = [...generateFaults, ...loadFaults];
+  const timeNotes = [...(held === undefined && generateOver ? [`${generateText}, and the shape has no read of its own`] : []), ...(loadHeld === undefined && loadOver ? [`${loadText} (V-089)`] : [])];
   if (bytesUnread(small, large)) return { faults: timeFaults, notes: [...timeNotes, `${label} has different bytes in its processes, so its bytes are report only`] };
   return { faults: [...timeFaults, ...(found.bytes > shape.source.bytes ? [`${label} has a bytes exponent of ${found.bytes.toFixed(3)}, and the limit is ${String(shape.source.bytes)}`] : [])], notes: timeNotes };
 }

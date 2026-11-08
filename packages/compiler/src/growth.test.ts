@@ -5,7 +5,7 @@
 import { MAX_NESTING, nestingOf } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it, vi } from "vitest";
-import { BYTES_LIMIT, bytesFlipReadsRed, bytesUnread, exponent, exponentsOf, GENERATE_FLOOR_MS, GROWTH_SHAPES, growthFaults, loadExponentOf, SOURCE_TIME_LIMIT, sourceVerdict, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { BYTES_LIMIT, bytesFlipReadsRed, bytesUnread, exponent, exponentsOf, GENERATE_FLOOR_MS, GROWTH_SHAPES, growthFaults, LOAD_FLOOR_MS, loadExponentOf, SOURCE_TIME_LIMIT, sourceVerdict, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 import type * as Module from "./module.ts";
 import { emitModule } from "./module.ts";
 import { MAX_PLACES, placesOf } from "./unshared.ts";
@@ -16,6 +16,7 @@ const row = (places: number, ms: number | undefined, bytes: number | undefined):
 /** A row of the source: `ms` is the time of `generate`, and `loadMs` is the time of `load`. */
 const sourceRow = (places: number, ms: number, loadMs: number, bytes: number): GrowthRow => ({ ...row(places, ms, bytes), loadMs });
 const HELD: GrowthShape = { ...SHAPE, source: { bytes: 1.04, generate: 1.1, why: "a reason" } };
+const LOAD_HELD: GrowthShape = { ...SHAPE, source: { bytes: 1.04, load: 1.1, loadSmallMs: 120, why: "a reason" } };
 
 describe("COMPILE.GROWTH", () => {
   it.each(GROWTH_SHAPES.map((s) => [s.name, s] as const))("COMPILE.GROWTH: the sizes of %s are legal, and they print", async (_name, shape) => {
@@ -67,6 +68,13 @@ describe("COMPILE.SOURCE.SIZE", () => {
   it("COMPILE.SOURCE.SIZE: a time of generate over the generate limit of a shape fails the gate, and a time at the limit passes", () => {
     expect(sourceVerdict(HELD, sourceRow(100, 10, 10, 1000), sourceRow(400, 10 * 4 ** 1.1, 40, 4000))).toStrictEqual({ faults: [], notes: [] });
     expect(sourceVerdict(HELD, sourceRow(100, 10, 10, 1000), sourceRow(400, 10 * 4 ** 1.2, 40, 4000))).toStrictEqual({ faults: ["source of s has a generate time exponent of 1.20, and the limit is 1.1"], notes: [] });
+  });
+
+  it("COMPILE.SOURCE.SIZE: a time of load over the load limit of a shape fails the gate, and a time at the limit passes", () => {
+    expect(sourceVerdict(LOAD_HELD, sourceRow(100, 10, 10, 1000), sourceRow(400, 40, 10 * 4 ** 1.1, 4000))).toStrictEqual({ faults: [], notes: [] });
+    expect(sourceVerdict(LOAD_HELD, sourceRow(100, 10, 10, 1000), sourceRow(400, 40, 10 * 4 ** 1.2, 4000))).toStrictEqual({ faults: ["source of s has a load time exponent of 1.20, and the limit is 1.1"], notes: [] });
+    expect(sourceVerdict(LOAD_HELD, sourceRow(100, 10, 10, 1000), row(400, 40, 4000))).toStrictEqual({ faults: ["source of s has a load time exponent of none, and the limit is 1.1"], notes: [] });
+    expect(sourceVerdict(HELD, sourceRow(100, 10, 10, 1000), sourceRow(400, 40, 10 * 4 ** 1.2, 4000))).toStrictEqual({ faults: [], notes: [] });
   });
 
   it("COMPILE.SOURCE.SIZE: a time of load over its limit is report only, it names V-089, and it does not fail the gate", () => {
@@ -131,9 +139,11 @@ describe("COMPILE.SOURCE.SIZE", () => {
     expect(bytesFlipReadsRed(loose, row(100, 10, 1000), { ...row(400, 40, 4000), sameBytes: false })).toBe(true);
   });
 
-  it.each(GROWTH_SHAPES.map((s) => [s.name, s] as const))("COMPILE.SOURCE.SIZE: a generate limit of %s states its CI run, and its small median is at least the floor", (_name, shape) => {
+  it.each(GROWTH_SHAPES.map((s) => [s.name, s] as const))("COMPILE.SOURCE.SIZE: a generate or load limit of %s states its CI run, and its small median is at least the floor", (_name, shape) => {
     expect(shape.source.generate === undefined || shape.source.why?.includes("42464464092") === true).toBe(true);
     expect(shape.source.generate === undefined || (shape.source.generateSmallMs ?? 0) >= GENERATE_FLOOR_MS).toBe(true);
+    expect(shape.source.load === undefined || shape.source.why?.includes("42478066584") === true).toBe(true);
+    expect(shape.source.load === undefined || (shape.source.loadSmallMs ?? 0) >= LOAD_FLOOR_MS).toBe(true);
     expect(shape.source.bytes).toBeGreaterThan(0.5);
   });
 });

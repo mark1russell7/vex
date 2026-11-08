@@ -38,8 +38,23 @@ export interface PlanOfMutant {
   readonly plan: string;
   readonly mutant: { readonly id: string; readonly fileName: string; readonly static?: boolean; readonly status?: string; readonly location?: Place };
   readonly netTime?: number;
-  readonly runOptions?: { readonly timeout?: number };
+  /** The tests that Stryker runs for the mutant. With no filter, Stryker runs all tests, as for a static mutant. */
+  readonly runOptions?: { readonly timeout?: number; readonly testFilter?: readonly string[] };
 }
+
+/** The fields of a test of the dry run of Stryker that this reporter reads. */
+export interface TestOfDryRun {
+  readonly id: string;
+  readonly name: string;
+  readonly fileName?: string;
+  readonly timeSpentMs: number;
+}
+
+/** The plan of one test: its name, its file, its time in the dry run, the runs of mutants that start it, and their product. */
+export type TestPlan = readonly [name: string, file: string, ms: number, runs: number, costMs: number];
+
+/** The count of the tests of the largest cost that the plan keeps. */
+export const TOP_TESTS = 40;
 
 /** The start of a mutant. In a plan, Stryker counts the lines from 0. In a result, it counts them from 1. */
 export interface Place {
@@ -138,6 +153,25 @@ export function filePlans(plans: readonly PlanOfMutant[]): Record<string, FilePl
 }
 
 /**
+ * This function gives the tests of the largest planned cost, the largest first. The cost of a test is its time in the dry
+ * run, times the runs of the mutants that start it. A test with a large cost is the first place to make the lane faster.
+ */
+export function testPlans(plans: readonly PlanOfMutant[], tests: readonly TestOfDryRun[], top: number = TOP_TESTS): TestPlan[] {
+  const runs = new Map<string, number>(tests.map((test) => [test.id, 0]));
+  let all = 0;
+  for (const { plan, runOptions } of plans) {
+    if (plan !== "Run") continue;
+    if (runOptions?.testFilter === undefined) all += 1;
+    else for (const id of runOptions.testFilter) runs.set(id, (runs.get(id) ?? 0) + 1);
+  }
+  const rows = tests.map((test): TestPlan => {
+    const count = (runs.get(test.id) ?? 0) + all;
+    return [test.name, laneFile(test.fileName ?? ""), Math.round(test.timeSpentMs), count, Math.round(count * test.timeSpentMs)];
+  });
+  return rows.toSorted((a, b) => b[4] - a[4] || a[0].localeCompare(b[0])).slice(0, top);
+}
+
+/**
  * This function gives the cost of a mutant that ended. A mutant that the clock stops costs its limit. Another mutant that
  * Stryker runs costs at most its planned net time. A mutant with an early result costs no run, so its cost is null.
  */
@@ -167,6 +201,7 @@ export function costLine(run: PlannedRun | undefined, result: ResultOfMutant, at
  */
 export function costReporter(root: string, now: () => number = () => performance.now(), afterPlan?: () => void) {
   let runs = new Map<string, PlannedRun>();
+  let tests: readonly TestOfDryRun[] = [];
   let start = now();
   const write = (file: string, text: string, append: boolean): void => {
     const path = join(root, file);
@@ -175,10 +210,13 @@ export function costReporter(root: string, now: () => number = () => performance
     else writeFileSync(path, text);
   };
   return {
+    onDryRunCompleted(event: { readonly result: { readonly tests: readonly TestOfDryRun[] } }): void {
+      tests = event.result.tests;
+    },
     onMutationTestingPlanReady(event: { readonly mutantPlans: readonly PlanOfMutant[] }): void {
       start = now();
       runs = plannedRuns(event.mutantPlans);
-      write(PLAN_FILE, `${JSON.stringify({ files: filePlans(event.mutantPlans) }, null, 2)}\n`, false);
+      write(PLAN_FILE, `${JSON.stringify({ files: filePlans(event.mutantPlans), tests: testPlans(event.mutantPlans, tests) }, null, 2)}\n`, false);
       write(COST_FILE, "", false);
       afterPlan?.();
     },

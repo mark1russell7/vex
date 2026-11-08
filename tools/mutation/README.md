@@ -67,6 +67,8 @@ A part that fails its first test run gives no report, and the gate reads that as
 
 A part that passes its first test run stops after its plan. The reporter `lane-cost` writes the plan and stops Stryker. The plan has the planned net time of each line of each file. The job prints the estimate of the clock of the part. The estimate is the planned net time divided by 9.8, the lowest value of the two parts that Nightly 42443362759 stopped. An estimate over 100 minutes has a mark and a warning. A slow runner also ends a part under that target before its stop of 140 minutes.
 
+The plan also gives the 40 tests of the largest cost (`tests`: name, file, time, runs, cost). The cost of a test is its time in the first test run, times the runs of mutants that start it. A static mutant starts each test, so a static mutant adds the time of each test. A test with a large cost is the first place to make the lane faster.
+
 The flip of this check is a real failed job. On 2026-11-05 the dry run of `compiler.module` read V-090 in [job 127041253282](https://github.com/mark1russell7/vex/actions/runs/41962557467/job/127041253282). The parts of the same check on the fixed tree are the clean copy. This check reads only the dry run. It does not read a score.
 
 ## The stop and the partial score

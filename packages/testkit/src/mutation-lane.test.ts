@@ -495,8 +495,10 @@ interface LaneCost {
   readonly clockMinutes: (netMs: number) => number;
   readonly filePlans: (plans: readonly unknown[]) => Record<string, FilePlan>;
   readonly planLine: (part: string, files: Readonly<Record<string, FilePlan>>) => string;
+  readonly TOP_TESTS: number;
+  readonly testPlans: (plans: readonly unknown[], tests: readonly { id: string; name: string; fileName?: string; timeSpentMs: number }[], top?: number) => (readonly [string, string, number, number, number])[];
   readonly costOf: (run: { file: string; line: number; static: boolean; netMs: number; limitMs: number } | undefined, status: string) => number | null;
-  readonly costReporter: (root: string, now: () => number, afterPlan?: () => void) => { onMutationTestingPlanReady: (event: { mutantPlans: readonly unknown[] }) => void; onMutantTested: (result: unknown) => void };
+  readonly costReporter: (root: string, now: () => number, afterPlan?: () => void) => { onDryRunCompleted: (event: { result: { tests: readonly unknown[] } }) => void; onMutationTestingPlanReady: (event: { mutantPlans: readonly unknown[] }) => void; onMutantTested: (result: unknown) => void };
   readonly strykerPlugins: readonly { readonly kind: string; readonly name: string; readonly value: Record<string, unknown> }[];
 }
 
@@ -512,6 +514,9 @@ interface FilePlan {
 
 /** This function gives the plan of a file with 3 runs, 1 of them static, and the planned net time `netMs`. */
 const planRow = (netMs: number): FilePlan => ({ mutants: 4, runs: 3, static: 1, netMs, limitMs: 0, lines: [] });
+
+/** This function gives a plan of Stryker for a run of the tests `testFilter`. With no filter, the run starts each test. */
+const filteredRun = (id: string, testFilter?: readonly string[]): unknown => ({ plan: "Run", mutant: { id, fileName: "/w/work/core/steps.ts" }, netTime: 1, runOptions: testFilter === undefined ? { timeout: 9 } : { timeout: 9, testFilter } });
 
 /** This function loads the reporter of the cost of each mutant. */
 async function loadCost(): Promise<LaneCost> {
@@ -582,6 +587,34 @@ describe("the cost of the mutation lane", () => {
       ]);
       reporter.onMutationTestingPlanReady({ mutantPlans: plans });
       expect(readFileSync(join(root, cost.COST_FILE), "utf8")).toBe("");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("LANE.COST: the plan gives the tests of the largest cost, and a run with no filter of tests starts each test", async () => {
+    const cost = await loadCost();
+    expect(cost.TOP_TESTS).toBe(40);
+    const tests = [
+      { id: "a", name: "slow", fileName: "/runner/vex/tools/mutation/work/compiler/module.test.ts", timeSpentMs: 400.4 },
+      { id: "b", name: "quick", fileName: "/runner/vex/tools/mutation/work/core/steps.test.ts", timeSpentMs: 2 },
+      { id: "c", name: "wide", timeSpentMs: 50 },
+    ];
+    // The run 1 is static: it has no filter, so it starts each test. An early result starts no test.
+    const plans = [filteredRun("1"), filteredRun("2", ["b", "c"]), filteredRun("3", ["c"]), filteredRun("4", ["c"]), planOf("5", "steps.ts")];
+    expect(cost.testPlans(plans, tests)).toEqual([
+      ["slow", "work/compiler/module.test.ts", 400, 1, 400],
+      ["wide", "", 50, 4, 200],
+      ["quick", "work/core/steps.test.ts", 2, 2, 4],
+    ]);
+    expect(cost.testPlans(plans, tests, 1)).toEqual([["slow", "work/compiler/module.test.ts", 400, 1, 400]]);
+    const root = mkdtempSync(join(tmpdir(), "vex-lane-tests-"));
+    try {
+      const reporter = cost.costReporter(root, () => 0);
+      reporter.onDryRunCompleted({ result: { tests } });
+      reporter.onMutationTestingPlanReady({ mutantPlans: plans });
+      const plan = JSON.parse(readFileSync(join(root, cost.PLAN_FILE), "utf8")) as { tests: unknown };
+      expect(plan.tests).toEqual(cost.testPlans(plans, tests));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

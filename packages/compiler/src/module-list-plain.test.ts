@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { app, axes, cell, defineDomain, each, evaluate, isVexList, let_, lit, rec, ref, SheetRun, space, v, vexList, type Expr, type ListItem, type VexError } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, XYDomain } from "@mark1russell7/vex-domains";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { NODE_SCHEMA, NODE_SHAPE, SHAPE_COLUMNS, SHAPE_DOMAINS, SHAPE_KINDS, SHAPE_SCHEMA } from "../../pilots/src/ireko-shapes.ts";
 import { emitModule, emitSheetModule, type Emitted, type ModuleOptions, type SheetModuleOptions } from "./module.ts";
 
@@ -225,8 +225,13 @@ describe("COMPILE.MODULE.LIST.PLAIN: the values of the interpreter in the plain 
 });
 
 describe("COMPILE.MODULE.LIST.PLAIN: an input against the kind of a plain list", () => {
-  const m = make(sourceOf(emitModule(op("count", xs), PLAIN)));
-  const X = m.VEX_ERROR;
+  // The emit runs in a beforeEach, not in the body of the describe. So the mutation lane gives its code to each test, not to all tests.
+  let m: Loaded;
+  let X: Loaded["VEX_ERROR"];
+  beforeEach(() => {
+    m = make(sourceOf(emitModule(op("count", xs), PLAIN)));
+    X = m.VEX_ERROR;
+  });
   const good = { n: 1, xs: [1], ps: [{ x: 0, y: 0 }], nest: [[1]] };
 
   it("COMPILE.MODULE.LIST.PLAIN: a good input passes the check, also with error items at each depth", () => {

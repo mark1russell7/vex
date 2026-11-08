@@ -1,11 +1,12 @@
 // The cost map of module.ts (LANE.COST). The plan of a dry run gives the planned net time of each line of each part. This
 // script adds the plans of the parts of compiler.module into one map of the segments of module.ts, and it writes the map
 // into costs.json. The parts then end near their share of the cost, not of the lines. Start it from the root of the
-// repository with the run of the dry run and the folder of each artifact `mutation-report-compiler.module.<n>`:
+// repository with the run of the dry run and the folder of each artifact `mutation-report-compiler.module.<n>`. The plan is at
+// the top of the folder of an artifact:
 //
 //   node tools/mutation/cost-map.ts <run> <folder>...
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { clockMinutes, type FilePlan, PLAN_FILE, TARGET_MINUTES } from "./lane-cost.ts";
@@ -17,7 +18,7 @@ const MODULE = "work/compiler/module.ts";
 /** This function gives the plan of each line of module.ts from the plans of the parts. */
 function planLines(folders: readonly string[]): [number, number, number, number][] {
   return folders.flatMap((folder) => {
-    const plan = JSON.parse(readFileSync(join(folder, PLAN_FILE), "utf8")) as { readonly files: Readonly<Record<string, FilePlan>> };
+    const plan = JSON.parse(readFileSync(join(folder, basename(PLAN_FILE)), "utf8")) as { readonly files: Readonly<Record<string, FilePlan>> };
     return (plan.files[MODULE]?.lines ?? []).map((line) => [...line] as [number, number, number, number]);
   });
 }

@@ -7,7 +7,7 @@
 import { app, axes, call, each, evaluate, fn, fold, let_, lit, rec, ref, space, v, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain } from "@mark1russell7/vex-domains";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, radialRun, type RadialInput } from "../../pilots/src/ireko-radial.ts";
 import { emitModule, type ModuleOptions } from "./module.ts";
 
@@ -282,9 +282,13 @@ const ringOf = (sizes: readonly number[]): RadialInput => ({
 });
 
 describe("COMPILE.MODULE.PAIRS COMPILE.MODULE.EXIT: the pair test of the radial pilot", () => {
-  const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
-  if (!m.ok) throw new Error(m.reason);
-  const source = m.source;
+  // The emit runs in a beforeEach, not in the body of the describe. So the mutation lane gives its code to each test, not to all tests.
+  let source = "";
+  beforeEach(() => {
+    const m = emitModule(RADIAL_PROGRAM, { domains: RADIAL_DOMAINS, schema: RADIAL_SCHEMA, name: "radial" });
+    if (!m.ok) throw new Error(m.reason);
+    source = m.source;
+  });
 
   it("COMPILE.MODULE.PAIRS COMPILE.MODULE.EXIT: the test of a radius is a loop over packs, with an exit at the first pair that is too close", () => {
     // The function of the test of a radius is the function with the rest of the inner loop.

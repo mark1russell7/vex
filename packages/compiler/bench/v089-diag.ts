@@ -36,6 +36,10 @@ function noLabel(src: string): string {
   const end = body.lastIndexOf("} catch {\nreturn F;\n}\n};");
   return `${body.slice(0, at)}\nfor (;;) {\ntry {\n${body.slice(at + 7, end)}} catch {\nreturn F;\n}\n}\n};${body.slice(end + "} catch {\nreturn F;\n}\n};".length)}`;
 }
+/** The form with no return statement in the function of the program. */
+function noReturn(src: string): string {
+  return src.replaceAll(/^return (?!function vex)/gm, "void ").replaceAll(/\) return /g, ") void ");
+}
 /** The form with each block of one line: the same text with no line breaks. */
 function oneLine(src: string): string {
   return src.replaceAll(/ \/\/ [^\n]*/g, "").replaceAll("\n", " ");
@@ -66,7 +70,7 @@ function child(name: string, levels: number): void {
   const src = printed.value;
   out["bytes"] = src.length;
   const runtime = createRuntime(OPTIONS);
-  const forms: Record<string, string> = { load: src, nocatch: noCatch(src), nolabel: noLabel(src), both: noLabel(noCatch(src)), oneline: oneLine(src) };
+  const forms: Record<string, string> = { load: src, nocatch: noCatch(src), nolabel: noLabel(src), both: noLabel(noCatch(src)), noreturn: noReturn(src), all: noReturn(noLabel(noCatch(src))), oneline: oneLine(src) };
   for (const [form, text] of Object.entries(forms)) {
     try {
       // oxlint-disable-next-line typescript/no-implied-eval -- a diagnostic of the parse of the source

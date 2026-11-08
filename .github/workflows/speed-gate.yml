@@ -160,7 +160,7 @@ jobs:
             echo "### Speed gates (time ratios: lower is better)"
             echo
             echo '```'
-            grep -E "^(runner|flags|ok|FAIL|gc)" gates.txt
+            grep -E "^(runner|flags|ok|FAIL|gc|no read)" gates.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -223,7 +223,7 @@ jobs:
             echo "### The time of a print of each module (ratios against $BASE: lower is better)"
             echo
             echo '```'
-            grep -E "^(runner|order|ok|FAIL|undecided|UNDECIDED|false-fail|gain|(catch|rounds) (order|ok|FAIL|fault|undecided|UNDECIDED))" module-cost.txt
+            grep -E "^(runner|order|ok|FAIL|undecided|UNDECIDED|false-fail|gain|no read|(catch|rounds) (order|ok|FAIL|fault|undecided|UNDECIDED))" module-cost.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       # The reads of each model add up over weeks, so the record stays for the longest time that the repository gives.

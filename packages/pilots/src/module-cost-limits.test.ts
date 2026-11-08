@@ -7,7 +7,7 @@ import { armOrder } from "@mark1russell7/rigor-bench";
 import { describe, expect, it } from "vitest";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { measureIsolated } from "../../core/bench/measure.ts";
-import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundFaults, SHARED_LIMIT, type ModuleTimes, cpuFacts, gateRecords, readStep, RECORD_FORMAT, recordLines } from "../bench/module-cost-limits.ts";
+import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundFaults, SHARED_LIMIT, type ModuleTimes, cpuFacts, gateRecords, readStep, RECORD_FORMAT, recordLines, unreadGains } from "../bench/module-cost-limits.ts";
 import { IREKO_MODULES, irekoExprs } from "./ireko-modules.ts";
 
 /** A model where the reads show the gain. */
@@ -242,6 +242,13 @@ describe("COMPILE.MODULE.COST", () => {
     }
     expect(ceilingOnly(limitOf(BUILD_ROW, true), HELD)).toBe(false);
     expect(medianLimit(limitOf("avoid", true), HELD)).toBe(0.89);
+  });
+
+  it("COMPILE.MODULE.COST: the rows that do not read their gain give one line of a no read, and a model of the list gives none", () => {
+    const rows = [{ module: "grid", shares: true }, { module: "avoid", shares: true }, { module: BUILD_ROW, shares: true }];
+    expect(unreadGains(rows, NOT_HELD)).toBe(`no read of the gain of 2 of 3 rows on ${NOT_HELD}: avoid, ${BUILD_ROW}. The gate holds only their ceiling.`);
+    expect(unreadGains(rows, HELD)).toBeUndefined();
+    expect(unreadGains([{ module: "grid", shares: true }], NOT_HELD)).toBeUndefined();
   });
 
   it("COMPILE.MODULE.COST: a row with no ceiling has one limit on each model", () => {

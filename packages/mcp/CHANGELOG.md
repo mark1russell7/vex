@@ -1,5 +1,119 @@
 # @mark1russell7/vex-mcp
 
+## 0.17.0
+
+### Minor Changes
+
+- f6413f1: `InsetsDomain` keeps the four sides of an inset as plain data, and the op `insets` of `NumDomain` makes a value. A number lifts to four sides, also in a module. A domain can declare `fields`, so two domains of plain objects can share a module.
+  
+  The new op `insets` of `NumDomain` comes before a host function of that name, so `vex-domains` raises MINOR before 1.0.0. The default list of `vex-mcp` has the new domain, so a record with exactly the four sides goes to it before `NumRecordDomain`. An unclear change counts as breaking, so `vex-mcp` raises MINOR too.
+- 1d3b047: The release train: the ranges of @mark1russell7/coeval, @procedures/client, @procedures/mcp-server change to a version outside the old range.
+- 49c267e: A new check refuses a step of `fold` or `iterate` that uses the old lists or texts of its loop more than one time (LOOP.SIZE). For example, a step with `append(xs, xs)` doubles the list at each step. `compile`, tier 2, `emitModule` and `vex_check` refuse it.
+  
+  Each op that can give a list or a text has a size rule as data (LOOP.SIZE.OPS). A domain with `size: "fixed"` gives each op a rule. A function of the host gets a rule with its property `size`. An op without a rule cannot hold a value of the loop. The new exports are `sizeError` and `ruleOf`.
+
+### Patch Changes
+
+- b74101c: Each published package has the MIT license file in its own folder. Thus npm packs the license with each package. The code does not change.
+- 0f69b68: The limit of `iterate` can come from the size of the data. `dataLimit(axis)` gives the number of targets of an axis, and the axis `list` gives the count of a list. The builder also takes a list chain. The interpreter, tier 2 and standalone modules give one value, and a limit that is not valid gives `#NUM!` of the kind `limit`.
+  
+  A program with a data limit is of step B, so `maxStep: "A"` refuses it. A limit that is a number stays at step A.
+  
+  The field `limit` of the type of an `iterate` node has a wider type, so code that reads it as a number must change. This is why the version raises MINOR.
+- e6532fa: A chain has the method `fix(name, join, init, step)`. It makes a fixed-point column, as `iterate` makes a loop. The step gets a chain of the last round, so a program of the builder has no read of `last` outside a column. The join gives the kind of the chain, and the core exports the type `FixValue`.
+- d430c51: Tier 2 and the standalone modules lower a fixed point. A program with `fix` runs in tier 2 with the result of tier 1. This includes each error value of a row and the failure at the round limit. `emitModule` and `emitSheetModule` make a module of such a program, in place of a refusal.
+  
+  The core exports `fixRounds`, `fixValueError`, `joinKind` and `worstRow` for the compiler. The testkit has `arbFixProgram`, the generator of the test of the tiers.
+  
+  A module refuses a column at a key of a literal or of `fill`, because a module has no record at such a key.
+- f5e4496: A program can calculate a fixed point. The node `fix(name, join, init, step)` makes a column with a value for each row, and `last(name)` reads the last round. The rounds repeat the step until no row changes. The joins `or` and `max` move a row up, and `and` and `min` move a row down.
+  
+  A check proves that each step moves one way, from the kinds of the ops. A step without a proof gives an error with a reason before a run. The function `monotoneError` gives this reason. An op states its direction in the new field `monotone`, and a function of the host does the same. A column of `n` rows makes `n + 1` rounds at most, and a column that still changes gives `#NUM!`. `explain` shows each round. The testkit has `arbFixExpr` and `arbFixGraph`.
+  
+  A program with `fix` is of step B, so `maxStep: "A"` refuses it. The interpreter and the reference tier have the construct.
+  
+  The type `Expr` has two new tags, so a `switch` that covers each tag must change. This is why the version raises MINOR.
+- 0bc2ad8: The new list op `setNth(list, i, value)` gives a list with a new value at one position (LIST.SETNTH). The item keeps its key. The op works in the interpreter, in tier 2 and in a standalone module, and a list chain has `setNth(i, value)`. Its size rule counts the list and the value one time each (LOOP.SIZE.SETNTH).
+- 46288d2: The bytes of a module do not depend on the runner (COMPILE.MODULE.TEXT). The compiler parses the text of each copied function and prints the tree. Breaking: `emitModule`, `emitSheetModule` and their types move from the root entry to `@mark1russell7/vex-compiler/module`, so a program that only runs tiers does not load the parser.
+- 4272490: The result of `vex_module` has the field `compiler`, the version of the compiler that printed the module.
+- 54ef960: LOOP.SIZE accepts more steps that do not grow by a factor. A bound is the largest of some sums, so `if` and `ifError` give the larger value (LOOP.SIZE.BRANCH). A fold that copies a list item by item is valid (LOOP.SIZE.COPY). A record from the fields of one item and `take` with a literal limit have the bound of one item (LOOP.SIZE.PART). Each program that the check accepted before stays accepted, and each step that doubles a value stays refused.
+- aceaa11: The language has steps A, B and C (STEP.LADDER). The checker gives the lowest step of a program, with the reason (STEP.LOWEST). Each construct is of step A today, so each program is of step A.
+  
+  The new host option `maxStep` sets the highest step that the host accepts. The default is B. `compile`, tier 2, `emitModule`, `emitSheetModule` and the tools refuse a program above it, and the reason names the needed step (STEP.MAX). `vex_check` gives the step and the reason. `vex_explain` gives the step on the first line. The new exports are `programStep`, `stepError`, `VEX_STEPS`, `VEX_STEP_NAMES`, `CONSTRUCT_STEPS`, `DEFAULT_MAX_STEP` and the types `VexStep`, `StepOptions` and `ProgramStep`.
+- 7aac6ae: `TextDomain` has the op `codePoints`: the code points of a text as a list of numbers, in each tier (TEXT.CODEPOINTS). The new kind `list:number` of `returns` declares an op of a domain with a list as its result (KIND.RETURNS.LIST). A module takes that op as a list (COMPILE.MODULE.LIST.OP).
+- Updated dependencies [94905e8]
+- Updated dependencies [1a25b2d]
+- Updated dependencies [9f5c982]
+- Updated dependencies [efd532b]
+- Updated dependencies [a0daad1]
+- Updated dependencies [2f69ceb]
+- Updated dependencies [4c6ab5c]
+- Updated dependencies [925c7e8]
+- Updated dependencies [51d1343]
+- Updated dependencies [b74101c]
+- Updated dependencies [85e2693]
+- Updated dependencies [0f69b68]
+- Updated dependencies [40508b7]
+- Updated dependencies [73dbd2e]
+- Updated dependencies [e3e577c]
+- Updated dependencies [f2a119e]
+- Updated dependencies [ff09d45]
+- Updated dependencies [e6532fa]
+- Updated dependencies [d430c51]
+- Updated dependencies [f5e4496]
+- Updated dependencies [74f129f]
+- Updated dependencies [73bef86]
+- Updated dependencies [a0b7ff0]
+- Updated dependencies [3a11415]
+- Updated dependencies [6aa804b]
+- Updated dependencies [c06ad31]
+- Updated dependencies [e61208f]
+- Updated dependencies [aa4841d]
+- Updated dependencies [a7bef9e]
+- Updated dependencies [f888fa8]
+- Updated dependencies [f6413f1]
+- Updated dependencies [53c5a00]
+- Updated dependencies [dc7268e]
+- Updated dependencies [67c4191]
+- Updated dependencies [67c4191]
+- Updated dependencies [67c4191]
+- Updated dependencies [67c4191]
+- Updated dependencies [2a41f1a]
+- Updated dependencies [0bc2ad8]
+- Updated dependencies [4ab792d]
+- Updated dependencies [4c98dff]
+- Updated dependencies [747987a]
+- Updated dependencies [d2cc15b]
+- Updated dependencies [b3053fc]
+- Updated dependencies [1419dbd]
+- Updated dependencies [104588a]
+- Updated dependencies [847a099]
+- Updated dependencies [fd057c7]
+- Updated dependencies [46288d2]
+- Updated dependencies [376309a]
+- Updated dependencies [044deb9]
+- Updated dependencies [70d09bd]
+- Updated dependencies [1c03956]
+- Updated dependencies [0b81634]
+- Updated dependencies [a78bf35]
+- Updated dependencies [968b9a5]
+- Updated dependencies [1d3b047]
+- Updated dependencies [69550b4]
+- Updated dependencies [bd4ec21]
+- Updated dependencies [9613960]
+- Updated dependencies [54ef960]
+- Updated dependencies [49c267e]
+- Updated dependencies [085754e]
+- Updated dependencies [aceaa11]
+- Updated dependencies [7aac6ae]
+- Updated dependencies [dbdd73f]
+- Updated dependencies [dfaa4e9]
+- Updated dependencies [4816cd6]
+- Updated dependencies [5078ec8]
+  - @mark1russell7/vex-compiler@0.18.0
+  - @mark1russell7/vex@0.18.0
+  - @mark1russell7/vex-domains@0.18.0
+
 ## 0.16.4
 
 ### Patch Changes

@@ -19,7 +19,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@mark1russell7/cue": "github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7",
-    "@mark1russell7/site-pages": "^0.3.4",
+    "@mark1russell7/site-pages": "^0.4.1",
     "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",

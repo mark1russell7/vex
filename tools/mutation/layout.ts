@@ -310,7 +310,7 @@ const GROUPS: readonly string[] = ["core.kernel", "core.base", "domains", "testk
  * cost under `costs.json` (LANE.CUT). Each count gives an estimate of 100 minutes or less for each part. A dispatch can name
  * the group as one part.
  */
-const PART_COUNTS: Readonly<Record<string, number>> = { "core.kernel": 2, "core.base": 11, domains: 3, "compiler.module": 6, "compiler.rest": 5 };
+const PART_COUNTS: Readonly<Record<string, number>> = { "core.kernel": 2, "core.base": 11, domains: 3, "compiler.module": 7, "compiler.rest": 5 };
 
 /** A part with a number: `core.base.2`. */
 const NUMBERED = /^(.+)\.(\d+)$/u;

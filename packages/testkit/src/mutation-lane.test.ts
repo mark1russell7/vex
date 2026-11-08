@@ -206,7 +206,7 @@ describe("the parts of the mutation lane", () => {
     const layout = await loadLayout();
     const root = repoRoot();
     const parts = moduleParts(layout);
-    expect(parts).toHaveLength(6);
+    expect(parts).toHaveLength(7);
     const ranges = parts.map((part) => /:(\d+)-(\d+)$/u.exec(layout.mutateOf(root, part)[0] ?? "")?.slice(1).map(Number) ?? []);
     const lines = readFileSync(join(root, "packages", "compiler", "src", "module.ts"), "utf8").split(/\r?\n/u);
     expect(ranges[0]?.[0]).toBe(1);
@@ -663,7 +663,9 @@ describe("the cost of the mutation lane", () => {
     const [layout, cost, script] = await Promise.all([loadLayout(), loadCost(), loadCostMap()]);
     const root = repoRoot();
     const costs = JSON.parse(readFileSync(join(root, "tools", "mutation", "costs.json"), "utf8")) as Record<string, { readonly run: string; readonly segments: Readonly<Record<string, number>> }>;
-    expect(new Set(Object.values(costs).map((map) => map.run))).toEqual(new Set(["42474174486"]));
+    // A file with no mutant has a map with no cost, and a refresh keeps its old map. Each map with a cost comes from one run.
+    const costly = Object.values(costs).filter((map) => Object.values(map.segments).some((ms) => ms > 0));
+    expect(new Set(costly.map((map) => map.run))).toEqual(new Set(["42499785623"]));
     // A new file has no map until the next refresh of the maps. The cut gives each of its lines the mean cost of its group,
     // so the file still goes into a part, and the estimate of the part still counts it.
     const parts = layout.laneParts();

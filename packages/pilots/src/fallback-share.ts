@@ -273,9 +273,9 @@ export function measureShare(cases: readonly ShareCase[], options: ShareOptions 
         runs: t.runs,
         fallbacks: t.fallbacks,
         values: t.values,
-        // A name with compiles of two tiers counts as tier 1.
-        tier2Values: t.tier2Values,
-        tier2Errors: t.tier2Errors,
+        // A name with compiles of two tiers counts as tier 1, so the runs of its compile of tier 2 are not runs of tier 2 (V-101).
+        tier2Values: t.tier === 2 ? t.tier2Values : 0,
+        tier2Errors: t.tier === 2 ? t.tier2Errors : 0,
         fallbackReasons: sorted(t.reasons),
         ...(withSites ? { valueSites: sorted(t.valueSites), errorSites: sorted(t.errorSites) } : {}),
       });

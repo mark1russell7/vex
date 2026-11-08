@@ -381,7 +381,8 @@ function bodyParts(params: readonly string[], body: string, globals: ReadonlySet
     if (t === ")" || t === "]" || t === "}") open.pop();
     const at = params.indexOf(t);
     const key = open.at(-1) === "{" && (last === "{" || last === ",");
-    if (!isWord(t) || (key && next === ":")) parts.push(t);
+    // A word after an optional chain is the name of a key, as the token `.x` of a plain read (V-098).
+    if (!isWord(t) || last === "?." || (key && next === ":")) parts.push(t);
     else if (key && next !== "," && next !== "}") return undefined;
     else if (at >= 0) parts.push(...(key ? [`${t}:`, at] : [at]));
     else if (PLAIN_WORDS.has(t) || globals.has(t)) parts.push(t);

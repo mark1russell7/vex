@@ -279,6 +279,12 @@ describe("V-079: a text pass does not change a text of the program", () => {
     expect(inlined(op1, "  use('\"', op_1(y1), \"a\");")).toStrictEqual({ left: false, line: "  use('\"', (y1+1), \"a\");" });
   });
 
+  it("V-098 COMPILE.MODULE.SIZE.INLINE: a name after an optional chain is a key, and the pass does not put an argument there", () => {
+    expect(inlined("const op_1 = (a, b) => a?.b + b;", "  use(op_1(y1, y2));")).toStrictEqual({ left: false, line: "  use((y1?.b + y2));" });
+    expect(inlined("const op_1 = (a) => a?.size;", "  use(op_1(y1));")).toStrictEqual({ left: false, line: "  use((y1?.size));" });
+    expect(inlined("const op_1 = (a, b) => a?.[b];", "  use(op_1(y1, y2));")).toStrictEqual({ left: false, line: "  use((y1?.[y2]));" });
+  });
+
   it("V-079 COMPILE.MODULE.SIZE.ALIAS: the pass renames each read in code, and no text", () => {
     expect(aliases(["  const a2 = b1;", "  use(a2, \"a2\", 'a2', `a2`, a2);"])).toStrictEqual(["  use(b1, \"a2\", 'a2', `a2`, b1);"]);
     expect(aliases(["  const a2 = b1;", "  use({ a2: a2, b: a2 }, [...a2], x.a2, x?.a2, 1e2, a2x);"])).toStrictEqual(["  use({ a2: b1, b: b1 }, [...b1], x.a2, x?.a2, 1e2, a2x);"]);

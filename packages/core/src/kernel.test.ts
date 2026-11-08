@@ -83,6 +83,18 @@ describe("the reference tier: the kernel of coeval (EVAL.REFERENCE)", () => {
     expect(kernelPlan(invalid).evaluate({ space: s, origin: "A" })).toMatchObject({ ok: false, error: { code: "#VALUE!" } });
   });
 
+  it("V-097 EVAL.NESTING: the plan of a document checks the nesting before the checks that recurse", () => {
+    // A document passes the depth limit of the kernel at more levels than the limit of an expression, and the plan does not throw.
+    for (const levels of [MAX_NESTING + 1, 1000]) {
+      let nested: Expr = lit(1);
+      for (let i = 1; i < levels; i++) nested = app("add", nested, lit(1));
+      expect(error(run(doc(nested))).message).toBe(`the expression is nested ${String(levels)} levels deep, and the limit is ${String(MAX_NESTING)}`);
+      const { code, kind, message } = error(evaluate(doc(nested), { space: s, origin: "A", domains: [PtDomain] }));
+      expect(error(run(doc(nested)))).toMatchObject({ code, kind, message });
+      expect(kernelPlan(doc(nested)).doc).toBeUndefined();
+    }
+  });
+
   it("DOC.LITERAL: a literal without a JSON form keeps the value of the host in the kernel tier", () => {
     expect(value(run(lit(one)))).toBe(one);
     const throwing = Object.defineProperty({}, "x", { enumerable: true, get: (): never => { throw new Error("getter"); } });

@@ -35,7 +35,7 @@ import { armOrder, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { env, envLine, firstOfRound, measureIsolated } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
-import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundFaults, type ModuleTimes, cpuFacts, readStep, recordLines } from "./module-cost-limits.ts";
+import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundFaults, type ModuleTimes, cpuFacts, readStep, recordLines, unreadGains } from "./module-cost-limits.ts";
 
 /** The fresh processes of each arm on each module. */
 const ROUNDS = 7;
@@ -104,6 +104,12 @@ const add = testsTheGate ? ["--add", Object.entries(added).map(([module, share])
 
 console.info(envLine("fresh"));
 console.info(`cpu facts ${JSON.stringify(facts)}`);
+// A row that does not read its gain is a no read, so the check of the job shows it as a warning, also on a green run.
+const unread = testsTheGate ? undefined : unreadGains(rows, machine.cpu);
+if (unread !== undefined) {
+  console.info(unread);
+  console.info(`::warning title=Module cost: no read::${unread}`);
+}
 let decided = false;
 for (let read = 0; read < MAX_READS && !decided; read++) {
   const firstInput = Number(values.turn) + read;

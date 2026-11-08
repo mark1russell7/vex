@@ -15,13 +15,13 @@ import { fileURLToPath } from "node:url";
 import { GCProfiler } from "node:v8";
 import type { Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
-import { median } from "../../core/bench/measure.ts";
+import { env, median } from "../../core/bench/measure.ts";
 import { emitModule, withKeyProbe, type KeyProbe } from "../src/module.ts";
 import { generate, load } from "../src/tiers.ts";
 import { placesOf } from "../src/unshared.ts";
 import { keyWatch } from "../test/key-gate.ts";
 import { nameFaults } from "../test/names.ts";
-import { bytesFlipReadsRed, exponentsOf, GROWTH_SHAPES, growthFaults, sourceVerdict, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { bytesFlipReadsRed, bytesUnread, exponentsOf, GROWTH_SHAPES, growthFaults, sourceVerdict, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 
 /** The processes of each size. */
 const SAMPLES = 5;
@@ -198,8 +198,11 @@ function sourceGate(shape: GrowthShape): void {
   const found = exponentsOf(small, large);
   const { faults, notes } = sourceVerdict(shape, small, large);
   const flipRed = bytesFlipReadsRed(shape, small, large);
-  console.info(`${faults.length === 0 && flipRed ? "ok" : "FAIL"} source ${shape.name}: time exponent ${found?.time.toFixed(2) ?? "none"}, bytes exponent ${found?.bytes.toFixed(3) ?? "none"}, bytes limit ${String(shape.source.bytes)}, bytes ${String(large.bytes)}`);
+  // Different bytes in the processes of a size read nothing, so the line says no read, and the check shows a warning.
+  const unread = bytesUnread(small, large);
+  console.info(`${faults.length > 0 || !flipRed ? "FAIL" : unread ? "no read" : "ok"} source ${shape.name}: time exponent ${found?.time.toFixed(2) ?? "none"}, bytes exponent ${found?.bytes.toFixed(3) ?? "none"}, bytes limit ${String(shape.source.bytes)}, bytes ${String(large.bytes)}`);
   for (const note of notes) console.info(`report only: ${note}`);
+  if (unread) console.info(`::warning title=Growth: no read::no read of the bytes of the source of ${shape.name} on ${env().cpu}: the processes of a size gave different bytes, so the bytes limit held nothing.`);
   if (!flipRed) {
     console.error(`The bytes limit of ${shape.name} does not find 5 % more bytes at its large size.`);
     process.exitCode = 1;

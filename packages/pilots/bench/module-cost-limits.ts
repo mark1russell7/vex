@@ -268,6 +268,16 @@ export function ceilingOnly(limit: ModuleLimit, model: string): boolean {
   return limit.ceiling !== undefined && !GAIN_MODELS.has(model);
 }
 
+/**
+ * This function gives the line of the rows that do not read their gain on this model, or `undefined` when each row reads it.
+ * The gate holds only the ceiling of such a row. Thus the check shows this line as a warning, because a no read is not a pass.
+ */
+export function unreadGains(rows: readonly { readonly module: string; readonly shares: boolean }[], model: string): string | undefined {
+  const unread = rows.filter((row) => ceilingOnly(limitOf(row.module, row.shares), model)).map((row) => row.module);
+  if (unread.length === 0) return undefined;
+  return `no read of the gain of ${String(unread.length)} of ${String(rows.length)} rows on ${model}: ${unread.join(", ")}. The gate holds only their ceiling.`;
+}
+
 /** This function gives the median limit of a row on this model. */
 export function medianLimit(limit: ModuleLimit, model: string): number {
   return ceilingOnly(limit, model) ? (limit.ceiling ?? limit.median) : limit.median;

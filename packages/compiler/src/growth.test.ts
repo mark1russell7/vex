@@ -5,7 +5,7 @@
 import { MAX_NESTING, nestingOf } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
 import { describe, expect, it, vi } from "vitest";
-import { BYTES_LIMIT, bytesFlipReadsRed, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, SOURCE_TIME_LIMIT, sourceVerdict, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { BYTES_LIMIT, bytesFlipReadsRed, bytesUnread, exponent, exponentsOf, GROWTH_SHAPES, growthFaults, SOURCE_TIME_LIMIT, sourceVerdict, TIME_LIMIT, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 import type * as Module from "./module.ts";
 import { emitModule } from "./module.ts";
 import { MAX_PLACES, placesOf } from "./unshared.ts";
@@ -77,6 +77,13 @@ describe("COMPILE.SOURCE.SIZE", () => {
     expect(sourceVerdict(SHAPE, row(100, 10, 1000), differs)).toStrictEqual({ faults: [], notes: ["source of s has different bytes in its processes, so its bytes are report only"] });
     expect(sourceVerdict(SHAPE, { ...row(100, 10, 1000), sameBytes: false }, row(400, 40, 16_000)).faults).toStrictEqual([]);
     expect(sourceVerdict(SHAPE, { ...row(100, 10, 1000), sameBytes: true }, { ...row(400, 40, 16_000), sameBytes: true }).faults).toHaveLength(1);
+  });
+
+  it("COMPILE.SOURCE.SIZE: different bytes at either size are a no read of the bytes, and the same bytes are a read", () => {
+    expect(bytesUnread(row(100, 10, 1000), { ...row(400, 40, 16_000), sameBytes: false })).toBe(true);
+    expect(bytesUnread({ ...row(100, 10, 1000), sameBytes: false }, row(400, 40, 16_000))).toBe(true);
+    expect(bytesUnread({ ...row(100, 10, 1000), sameBytes: true }, { ...row(400, 40, 16_000), sameBytes: true })).toBe(false);
+    expect(bytesUnread(row(100, 10, 1000), row(400, 40, 16_000))).toBe(false);
   });
 
   it("COMPILE.SOURCE.SIZE: the flip of a row reads red only if the limit finds 5 % more bytes", () => {

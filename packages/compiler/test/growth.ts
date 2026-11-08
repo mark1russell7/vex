@@ -149,6 +149,11 @@ export interface SourceVerdict {
   readonly notes: readonly string[];
 }
 
+/** This function tells if the bytes of a shape read nothing: the processes of a size gave different bytes. The gate shows such a shape as a no read. */
+export function bytesUnread(small: GrowthRow, large: GrowthRow): boolean {
+  return small.sameBytes === false || large.sameBytes === false;
+}
+
 /**
  * This function gives the read of the source of tier 2 of a shape (COMPILE.SOURCE.SIZE). A size with no source and a bytes exponent over its limit are faults.
  * A time exponent over its limit is a note, because the time stays open (V-089). A row with different bytes in its processes has no reading of a text, so its bytes are a note.
@@ -159,12 +164,12 @@ export function sourceVerdict(shape: GrowthShape, small: GrowthRow, large: Growt
   if (found === undefined) return { faults: [`${label} has a size with no result`], notes: [] };
   const time = shape.source.time ?? SOURCE_TIME_LIMIT;
   const timeNotes = found.time > time ? [`${label} has a time exponent of ${found.time.toFixed(2)}, and the limit is ${String(time)}`] : [];
-  if (small.sameBytes === false || large.sameBytes === false) return { faults: [], notes: [...timeNotes, `${label} has different bytes in its processes, so its bytes are report only`] };
+  if (bytesUnread(small, large)) return { faults: [], notes: [...timeNotes, `${label} has different bytes in its processes, so its bytes are report only`] };
   return { faults: found.bytes > shape.source.bytes ? [`${label} has a bytes exponent of ${found.bytes.toFixed(3)}, and the limit is ${String(shape.source.bytes)}`] : [], notes: timeNotes };
 }
 
 /** This function tells if the bytes limit of a shape finds `BYTES_FLIP` times the bytes at the large size. A row with no bytes or with different bytes reads true, because its bytes do not hold. */
 export function bytesFlipReadsRed(shape: GrowthShape, small: GrowthRow, large: GrowthRow): boolean {
-  if (large.bytes === undefined || small.sameBytes === false || large.sameBytes === false) return true;
+  if (large.bytes === undefined || bytesUnread(small, large)) return true;
   return sourceVerdict(shape, small, { ...large, bytes: large.bytes * BYTES_FLIP }).faults.length > 0;
 }

@@ -44,7 +44,7 @@ Each job has one part, so that each job stays in its time limit of 150 minutes. 
 | `core.base.1` to `core.base.4` | The other modules of the core, by size |
 | `domains.1` to `domains.3` | The modules of the domains, by size |
 | `testkit` | The test kit |
-| `compiler.module.1` and `compiler.module.2` | `module.ts`, by lines, with each end at the end of a method |
+| `compiler.module.1` to `compiler.module.6` | `module.ts`, by the cost of its segments in `costs.json`, with each end at the end of a method |
 | `compiler.rest.1` to `compiler.rest.4` | The other modules of the compiler, by size |
 
 `layout.ts` gives the parts. The variable `VEX_MUTATE` names the packages or the parts of a run. It also takes a whole group, for example `core.base`, or one module of the domains, for example `domains.schema`.
@@ -68,6 +68,10 @@ A part that fails its first test run gives no report, and the gate reads that as
 A part that passes its first test run stops after its plan. The reporter `lane-cost` writes the plan and stops Stryker. The plan has the planned net time of each line of each file. The job prints the estimate of the clock of the part. The estimate is the planned net time divided by 9.8, the lowest value of the two parts that Nightly 42443362759 stopped. An estimate over 100 minutes has a mark and a warning. A slow runner also ends a part under that target before its stop of 140 minutes.
 
 The plan also gives the 40 tests of the largest cost (`tests`: name, file, time, runs, cost). The cost of a test is its time in the first test run, times the runs of mutants that start it. A static mutant starts each test, so a static mutant adds the time of each test. A test with a large cost is the first place to make the lane faster.
+
+A dry run fails when its plan has more than 600 static runs in `module.ts` (`LANE.STATIC`). Code outside a test, for example an emit in the body of a `describe` or a table of text at the top of a file, gives a static mutant. A static mutant starts each test, so its cost is the time of all tests. On 2026-11-08 the dry run 42460046693 read 4232 static runs in `module.ts`. After the fix, the dry run 42474174486 read 471. Move such code into a test, a `beforeEach` or a function.
+
+`costs.json` holds the cost of each segment of `module.ts` from the dry run 42474174486. Start `node tools/mutation/cost-map.ts <run> <folder>...` after a large change of `module.ts` or of its tests, and commit the new map. A test fails when the estimate of a part is over 100 minutes under the committed map.
 
 The flip of this check is a real failed job. On 2026-11-05 the dry run of `compiler.module` read V-090 in [job 127041253282](https://github.com/mark1russell7/vex/actions/runs/41962557467/job/127041253282). The parts of the same check on the fixed tree are the clean copy. This check reads only the dry run. It does not read a score.
 

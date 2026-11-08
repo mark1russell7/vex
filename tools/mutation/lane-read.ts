@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { COST_FILE, type CostLine, type FilePlan, PLAN_FILE, planLine, STOP_MINUTES, TARGET_MINUTES } from "./lane-cost.ts";
+import { COST_FILE, type CostLine, type FilePlan, PLAN_FILE, planLine, staticFaults, STOP_MINUTES, TARGET_MINUTES } from "./lane-cost.ts";
 import { laneParts, PACKAGES, packageOfPart, packageOfPath, plainFlip, RUNNER_FILE, SELECTION_FILE, unreadTests } from "./layout.ts";
 
 /** A place in a file of a report. */
@@ -558,10 +558,13 @@ function oneJob(): number {
       console.info("This part has no plan: Stryker found no mutant to run.");
       return 0;
     }
-    const line = planLine(process.env["VEX_MUTATE"] ?? "this part", (JSON.parse(readFileSync(plan, "utf8")) as { readonly files: Readonly<Record<string, FilePlan>> }).files);
+    const files = (JSON.parse(readFileSync(plan, "utf8")) as { readonly files: Readonly<Record<string, FilePlan>> }).files;
+    const line = planLine(process.env["VEX_MUTATE"] ?? "this part", files);
     console.info(line);
     if (line.includes("OVER THE TARGET")) console.info(`::warning title=Mutation part over ${String(TARGET_MINUTES)} minutes::${line}`);
-    return 0;
+    const faults = staticFaults(files);
+    for (const fault of faults) console.error(`::error title=Static mutants::${fault}`);
+    return faults.length === 0 ? 0 : 1;
   }
   if (!existsSync(file)) {
     console.info(changed ? "The changed files of this part have no mutant." : "This job has no report of Stryker.");

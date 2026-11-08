@@ -306,7 +306,7 @@ const NOT_MUTATED: ReadonlySet<string> = new Set(["core/test-support.ts", "testk
  * The count of the parts of each group of files that one runner does not finish in its time limit of 150 minutes. The count
  * of a group holds a slowest part of 2 times its share under that limit. A dispatch can still name the group as one part.
  */
-const PART_COUNTS: Readonly<Record<string, number>> = { "core.base": 4, domains: 3, "compiler.module": 2, "compiler.rest": 4 };
+const PART_COUNTS: Readonly<Record<string, number>> = { "core.base": 4, domains: 3, "compiler.module": 6, "compiler.rest": 4 };
 
 /** A part with a number: `core.base.2`. */
 const NUMBERED = /^(.+)\.(\d+)$/u;

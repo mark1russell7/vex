@@ -579,7 +579,25 @@ async function loadCost(): Promise<LaneCost> {
 
 /** The functions of the script of the cost maps (tools/mutation/cost-map.ts). */
 interface CostMapScript {
+  readonly speedFactors: (plans: readonly SpeedPlan[]) => Map<string, number>;
+  readonly planLines: (plans: readonly SpeedPlan[]) => Map<string, ReadonlyArray<readonly [number, number, number, number]>>;
   readonly partMinutes: (root: string, parts: readonly string[], maps: Readonly<Record<string, { readonly run: string; readonly segments: Readonly<Record<string, number>> }>>) => number[];
+}
+
+/** The plan of a dry run of one part, as the script of the cost maps reads it. */
+interface SpeedPlan {
+  readonly part: string;
+  readonly files: Readonly<Record<string, { readonly lines: ReadonlyArray<readonly [number, number, number, number]> }>>;
+  readonly tests: ReadonlyArray<readonly [string, string, number, number, number]>;
+}
+
+/** This function gives a plan of one part with tests of the times `ms` and one file with one line of the net time `netMs`. */
+function speedPlan(part: string, ms: Readonly<Record<string, number>>, netMs = 0): SpeedPlan {
+  return {
+    part,
+    files: { [`work/core/${part}.ts`]: { lines: [[1, 1, 0, netMs]] } },
+    tests: Object.entries(ms).map(([name, time]) => [name, "work/core/a.test.ts", time, 1, time]),
+  };
 }
 
 /** This function loads the script of the cost maps. */
@@ -602,6 +620,27 @@ function planOf(id: string, file: string, run?: { readonly netMs: number; readon
 // On 2026-11-06, Nightly 42142449218 stopped three parts of the core at the limit of 150 minutes. The parts are cut by
 // the size of their files, and the stopped jobs uploaded nothing, so no record gave the time of a file.
 describe("the cost of the mutation lane", () => {
+  it("LANE.SPEED: the factor of a part is the median ratio of its test times to the medians of its group", async () => {
+    const { speedFactors } = await loadCostMap();
+    const factors = speedFactors([
+      speedPlan("g.1", { a: 1000, b: 2000, short: 100 }),
+      speedPlan("g.2", { a: 2000, b: 4000, short: 5 }),
+      speedPlan("g.3", { a: 1000, b: 2000, only: 9000 }),
+      speedPlan("alone", { a: 5000 }),
+      speedPlan("h.1", { x: 1000 }),
+      speedPlan("h.2", { y: 1000 }),
+    ]);
+    // The median of the times of each shared test is the time of g.1, so g.2 runs at half the speed.
+    expect(Object.fromEntries(factors)).toEqual({ "g.1": 1, "g.2": 2, "g.3": 1, alone: 1, "h.1": 1, "h.2": 1 });
+  });
+
+  it("LANE.SPEED: the cost maps divide the net time of each line by the factor of the runner of its part", async () => {
+    const { planLines } = await loadCostMap();
+    const lines = planLines([speedPlan("g.1", { a: 1000 }, 600), speedPlan("g.2", { a: 3000 }, 600), speedPlan("g.3", { a: 1000 }, 600)]);
+    expect(lines.get("work/core/g.1.ts")).toEqual([[1, 1, 0, 600]]);
+    expect(lines.get("work/core/g.2.ts")).toEqual([[1, 1, 0, 200]]);
+  });
+
   it("LANE.COST: a file of Stryker gets its path of the lane, from a path of Linux or of Windows", async () => {
     const cost = await loadCost();
     expect(cost.laneFile("/home/runner/work/vex/vex/tools/mutation/work/core/steps.ts")).toBe("work/core/steps.ts");
@@ -665,7 +704,7 @@ describe("the cost of the mutation lane", () => {
     const costs = JSON.parse(readFileSync(join(root, "tools", "mutation", "costs.json"), "utf8")) as Record<string, { readonly run: string; readonly segments: Readonly<Record<string, number>> }>;
     // A file with no mutant has a map with no cost, and a refresh keeps its old map. Each map with a cost comes from one run.
     const costly = Object.values(costs).filter((map) => Object.values(map.segments).some((ms) => ms > 0));
-    expect(new Set(costly.map((map) => map.run))).toEqual(new Set(["42499785623"]));
+    expect(new Set(costly.map((map) => map.run))).toEqual(new Set(["42508852104"]));
     // A new file has no map until the next refresh of the maps. The cut gives each of its lines the mean cost of its group,
     // so the file still goes into a part, and the estimate of the part still counts it.
     const parts = layout.laneParts();

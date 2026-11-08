@@ -8,7 +8,7 @@
 //
 // The gate also reads the source of tier 2 of each shape, with `generate` and `load` in a fresh process (COMPILE.SOURCE.SIZE).
 // Its bytes hold. The time of `generate` holds for each shape with a CI read of that time over the floor of its small median.
-// The time of `load` is report only (V-089). The parse of its `new Function` grows with the lines times the depth of the blocks.
+// The time of `load` holds by the same rule. A shape with no CI read over the floor reads its time of `load` as report only (V-089).
 //
 // The parser of the gate of names has a larger stack here than in a test, so that gate reads the largest size of each shape.
 import { spawnSync } from "node:child_process";
@@ -208,7 +208,7 @@ function deepestSource(shape: GrowthShape, flags: readonly string[] = []): numbe
 
 /**
  * This function reads the source of tier 2 of a shape. It fails on a size with no source, on bytes over the limit and on a limit under the flip of its row.
- * It also fails on a time of `generate` over the `generate` limit of the shape. The time of `load` is report only (V-089).
+ * It also fails on a time of `generate` or `load` over the limit of the shape. A shape with no limit for a part reads its time as report only (V-089).
  */
 function sourceGate(shape: GrowthShape): void {
   const small = row(shape, shape.small, "source");
@@ -220,8 +220,9 @@ function sourceGate(shape: GrowthShape): void {
   const unread = bytesUnread(small, large);
   const loadExponent = loadExponentOf(small, large);
   const generateLimit = shape.source.generate === undefined ? "report only" : String(shape.source.generate);
+  const loadLimit = shape.source.load === undefined ? "report only" : String(shape.source.load);
   console.info(
-    `${faults.length > 0 || !flipRed ? "FAIL" : unread ? "no read" : "ok"} source ${shape.name}: generate exponent ${found?.time.toFixed(2) ?? "none"}, generate limit ${generateLimit}, load exponent ${loadExponent?.toFixed(2) ?? "none"} (report only), bytes exponent ${found?.bytes.toFixed(3) ?? "none"}, bytes limit ${String(shape.source.bytes)}, bytes ${String(large.bytes)}`,
+    `${faults.length > 0 || !flipRed ? "FAIL" : unread ? "no read" : "ok"} source ${shape.name}: generate exponent ${found?.time.toFixed(2) ?? "none"}, generate limit ${generateLimit}, load exponent ${loadExponent?.toFixed(2) ?? "none"}, load limit ${loadLimit}, bytes exponent ${found?.bytes.toFixed(3) ?? "none"}, bytes limit ${String(shape.source.bytes)}, bytes ${String(large.bytes)}`,
   );
   for (const note of notes) console.info(`report only: ${note}`);
   if (unread) console.info(`::warning title=Growth: no read::no read of the bytes of the source of ${shape.name} on ${env().cpu}: the processes of a size gave different bytes, so the bytes limit held nothing.`);

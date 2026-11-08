@@ -27,15 +27,15 @@ return function vex(l0, l1, l2, l3) {
   try {
     if (!(has_(l0, l1))) return raise_(err_(K[0], l1, l1)); // the origin is a key of the space
     l6 = false;
+    l5 = var_(l2, k1);
     L0: {
-      l5 = var_(l2, k1);
       if (!((l5 !== F))) break L0; // a variable
       l4 = l5;
       l6 = true;
     }
     l12 = false;
+    l8 = addr_(l0, l1, l1, k2);
     L1: {
-      l8 = addr_(l0, l1, l1, k2);
       if (!((l8 !== F))) break L1; // an address
       l9 = l0.get(l8);
       if (!((l9 !== undefined && l9 !== null))) break L1; // a record
@@ -64,9 +64,9 @@ return function vex(l0, l1, l2, l3) {
     l13 = mo0.get(l0, [l4, l6, l7, l12]);
     if ((!(l13 !== undefined && l13 !== null))) {
       l25 = false;
+      l16 = 0;
+      l17 = l0.records;
       L2: {
-        l16 = 0;
-        l17 = l0.records;
         l18 = keys_(l0);
         L3: for (l19 = 0; l19 < l18.length; l19++) {
           l20 = l18[l19];

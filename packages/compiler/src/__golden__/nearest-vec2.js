@@ -19,8 +19,8 @@ return function vex(l0, l1, l2, l3) {
   try {
     if (!(has_(l0, l1))) return raise_(err_(K[0], l1, l1)); // the origin is a key of the space
     l6 = false;
+    l5 = l0.get(l1);
     L0: {
-      l5 = l0.get(l1);
       if (!((l5 !== undefined && l5 !== null))) { l4 = err_(K[1], l1, l1, l1); break L0; } // a record
       if (!((typeof l5 === "object" || typeof l5 === "function"))) { l4 = err_(K[2], l1, l1, l1); break L0; } // an object
       l5 = l5[k3];

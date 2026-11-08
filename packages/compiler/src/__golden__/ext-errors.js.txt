@@ -29,308 +29,290 @@ const k18 = K[18];
 const s5_2 = R.site(k5, 2);
 const s5_4 = R.site(k5, 4);
 const mo0 = R.memo();
-const mo1 = R.memo();
 return function vex(l0, l1, l2, l3) {
-  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37, l38, l39, l40, l41, l42, l43, l44, l45, l46, l47, l48, l49, l50, l51, l52, l53, l54, l55, l56, l57, l58, l59, l60, l61, l62, l63, l64, l65, l66, l67, l68, l69, l70, l71, l72, l73, l74, l75, l76, l77, l78, l79, l80, l81, l82, l83, l84, l85, l86, l87, l88, l89, l90, l91, l92, l93, l94, l95, l96, l97, l98, l99, l100, l101, l102, l103, l104, l105, l106, l107, l108, l109, l110, l111, l112, l113, l114, l115, l116;
+  let l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25, l26, l27, l28, l29, l30, l31, l32, l33, l34, l35, l36, l37, l38, l39, l40, l41, l42, l43, l44, l45, l46, l47, l48, l49, l50, l51, l52, l53, l54, l55, l56, l57, l58, l59, l60, l61, l62, l63, l64, l65, l66, l67, l68, l69, l70, l71, l72, l73, l74, l75, l76, l77, l78, l79, l80, l81, l82, l83, l84, l85, l86, l87, l88, l89, l90, l91, l92, l93, l94, l95, l96, l97, l98, l99, l100, l101, l102, l103, l104, l105, l106, l107, l108, l109, l110, l111, l112, l113;
   try {
     if (!(has_(l0, l1))) return raise_(err_(K[0], l1, l1)); // the origin is a key of the space
-    L0: {
-      L13: {
-        L10: {
-          L8: {
-            L4: {
-              L1: {
-                l6 = false;
-                L2: {
-                  l9 = false;
-                  L3: {
-                    l8 = l0.get(l1);
-                    if (!((l8 !== undefined && l8 !== null))) break L3; // a record
-                    if (!((typeof l8 === "object" || typeof l8 === "function"))) break L3; // an object
-                    l8 = l8[k1];
-                    if (!((l8 !== undefined && l8 !== null))) break L3; // a field
-                    l7 = l8;
-                    l9 = true;
-                  }
-                  l10 = ext_(k2, k3, l0, l1, l1, k4);
-                  if (!((l10 !== F))) break L2; // an extension
-                  if (!(l9)) break L2; // an argument with a value
-                  l11 = s5_2(l7, l10);
-                  if (!((l11 !== F))) break L2; // an op
-                  l5 = l11;
-                  l6 = true;
-                }
-                if ((!l6)) {
-                  l5 = k6;
-                }
-                l14 = false;
-                L5: {
-                  l17 = false;
-                  L6: {
-                    l16 = l0.get(l1);
-                    if (!((l16 !== undefined && l16 !== null))) break L6; // a record
-                    if (!((typeof l16 === "object" || typeof l16 === "function"))) break L6; // an object
-                    l16 = l16[k1];
-                    if (!((l16 !== undefined && l16 !== null))) break L6; // a field
-                    l15 = l16;
-                    l17 = true;
-                  }
-                  l20 = false;
-                  L7: {
-                    l19 = l0.get(l1);
-                    if (!((l19 !== undefined && l19 !== null))) break L7; // a record
-                    if (!((typeof l19 === "object" || typeof l19 === "function"))) break L7; // an object
-                    l19 = l19[k7];
-                    if (!((l19 !== undefined && l19 !== null))) break L7; // a field
-                    l18 = l19;
-                    l20 = true;
-                  }
-                  l21 = ext_(k2, k3, l0, l1, l1, k8);
-                  if (!((l21 !== F))) break L5; // an extension
-                  l22 = l0.get(l1);
-                  if (!((l22 !== undefined && l22 !== null))) break L5; // a record
-                  if (!((typeof l22 === "object" || typeof l22 === "function"))) break L5; // an object
-                  l22 = l22[k9];
-                  if (!((l22 !== undefined && l22 !== null))) break L5; // a field
-                  if (!(l17)) break L5; // an argument with a value
-                  if (!(l20)) break L5; // an argument with a value
-                  l23 = s5_4([l15, l18, l21, l22]);
-                  if (!((l23 !== F))) break L5; // an op
-                  l13 = l23;
-                  l14 = true;
-                }
-                if ((!l14)) {
-                  l13 = k6;
-                }
-                l26 = 0;
-                l27 = l0.records;
-                l28 = keys_(l0);
-                L9: for (l29 = 0; l29 < l28.length; l29++) {
-                  l30 = l28[l29];
-                  l31 = ext_(k2, k3, l0, l1, l30, k10);
-                  if (!((l31 !== F))) continue L9; // an extension
-                  l26 = (l26 + 1);
-                }
-                l34 = false;
-                L11: {
-                  l35 = (opts_(k11) === true);
-                  l37 = 0;
-                  l36 = 0;
-                  l38 = l0.records;
-                  l39 = keys_(l0);
-                  L12: for (l40 = 0; l40 < l39.length; l40++) {
-                    l41 = l39[l40];
-                    l42 = ext_(k2, k3, l0, l1, l41, k12);
-                    if (!((l42 !== F))) { if (l35) return F; continue L12; } // an extension
-                    if (!((typeof l42 === "number"))) return F; // a number
-                    l36 = (l36 + l42);
-                    l37 = (l37 + 1);
-                  }
-                  l43 = result_(l36);
-                  if (!((l43 !== F))) break L11; // a finite sum
-                  l33 = l43;
-                  l34 = true;
-                }
-                if ((!l34)) {
-                  l33 = k6;
-                }
-                l45 = mo0.get(l0, []);
-                if ((!(l45 !== undefined && l45 !== null))) {
-                  l62 = false;
-                  L14: {
-                    l48 = false;
-                    L15: {
-                      l49 = mo1.get(l0, []);
-                      if ((!(l49 !== undefined && l49 !== null))) {
-                        l60 = false;
-                        L16: {
-                          l51 = (opts_(k13) === true);
-                          l53 = 0;
-                          l52 = 0;
-                          l54 = l0.records;
-                          l55 = keys_(l0);
-                          L17: for (l56 = 0; l56 < l55.length; l56++) {
-                            l57 = l55[l56];
-                            l58 = (l54 !== undefined ? l54[l56] : l0.get(l57));
-                            if (!((l58 !== undefined && l58 !== null))) { if (l51) break L16; continue L17; } // a record
-                            if (!((typeof l58 === "object" || typeof l58 === "function"))) { if (l51) break L16; continue L17; } // an object
-                            l58 = l58[k1];
-                            if (!((l58 !== undefined && l58 !== null))) { if (l51) break L16; continue L17; } // a field
-                            if (!((typeof l58 === "number"))) break L16; // a number
-                            l52 = (l52 + l58);
-                            l53 = (l53 + 1);
-                          }
-                          l59 = result_(l52);
-                          if (!((l59 !== F))) break L16; // a finite sum
-                          l50 = l59;
-                          l60 = true;
-                        }
-                        l49 = mo1.put(l0, [], l50, l60);
-                      }
-                      if (!(l49.ok)) break L15; // a value of the memo
-                      l61 = l49.v;
-                      l47 = l61;
-                      l48 = true;
-                    }
-                    if ((!l48)) {
-                      l47 = k6;
-                    }
-                    l46 = l47;
-                    l62 = true;
-                  }
-                  l45 = mo0.put(l0, [], l46, l62);
-                }
-                if ((!l45.ok)) {
-                  l64 = false;
-                  L18: {
-                    l65 = (opts_(k13) === true);
-                    l67 = 0;
-                    l66 = 0;
-                    l68 = l0.records;
-                    l69 = keys_(l0);
-                    L19: for (l70 = 0; l70 < l69.length; l70++) {
-                      l71 = l69[l70];
-                      l72 = (l68 !== undefined ? l68[l70] : l0.get(l71));
-                      if (!((l72 !== undefined && l72 !== null))) { if (l65) break L18; continue L19; } // a record
-                      if (!((typeof l72 === "object" || typeof l72 === "function"))) { if (l65) break L18; continue L19; } // an object
-                      l72 = l72[k1];
-                      if (!((l72 !== undefined && l72 !== null))) { if (l65) break L18; continue L19; } // a field
-                      if (!((typeof l72 === "number"))) break L18; // a number
-                      l66 = (l66 + l72);
-                      l67 = (l67 + 1);
-                    }
-                    l73 = result_(l66);
-                    if (!((l73 !== F))) break L18; // a finite sum
-                    l63 = l73;
-                    l64 = true;
-                  }
-                  if ((!l64)) {
-                    l63 = k6;
-                  }
-                  if (!(l45.ok)) return F; // a value of the memo
-                }
-                l74 = l45.v;
-                break L0;
-              }
-              L20: {
-                l76 = false;
-                L21: {
-                  l79 = false;
-                  L22: {
-                    l78 = l0.get(l1);
-                    if (!((l78 !== undefined && l78 !== null))) break L22; // a record
-                    if (!((typeof l78 === "object" || typeof l78 === "function"))) break L22; // an object
-                    l78 = l78[k1];
-                    if (!((l78 !== undefined && l78 !== null))) break L22; // a field
-                    l77 = l78;
-                    l79 = true;
-                  }
-                  l82 = false;
-                  L23: {
-                    l81 = l0.get(l1);
-                    if (!((l81 !== undefined && l81 !== null))) break L23; // a record
-                    if (!((typeof l81 === "object" || typeof l81 === "function"))) break L23; // an object
-                    l81 = l81[k7];
-                    if (!((l81 !== undefined && l81 !== null))) break L23; // a field
-                    l80 = l81;
-                    l82 = true;
-                  }
-                  l83 = ext_(k2, k3, l0, l1, l1, k14);
-                  if (!((l83 !== F))) break L21; // an extension
-                  l84 = l0.get(l1);
-                  if (!((l84 !== undefined && l84 !== null))) break L21; // a record
-                  if (!((typeof l84 === "object" || typeof l84 === "function"))) break L21; // an object
-                  l84 = l84[k9];
-                  if (!((l84 !== undefined && l84 !== null))) break L21; // a field
-                  if (!(l79)) break L21; // an argument with a value
-                  if (!(l82)) break L21; // an argument with a value
-                  l85 = s5_4([l77, l80, l83, l84]);
-                  if (!((l85 !== F))) break L21; // an op
-                  l75 = l85;
-                  l76 = true;
-                }
-                if ((!l76)) {
-                  l75 = k6;
-                }
-              }
-            }
-            L24: {
-              l87 = 0;
-              l88 = l0.records;
-              l89 = keys_(l0);
-              L25: for (l90 = 0; l90 < l89.length; l90++) {
-                l91 = l89[l90];
-                l92 = ext_(k2, k3, l0, l1, l91, k15);
-                if (!((l92 !== F))) continue L25; // an extension
-                l87 = (l87 + 1);
-              }
-            }
-          }
-          L26: {
-            l94 = false;
-            L27: {
-              l95 = (opts_(k11) === true);
-              l97 = 0;
-              l96 = 0;
-              l98 = l0.records;
-              l99 = keys_(l0);
-              L28: for (l100 = 0; l100 < l99.length; l100++) {
-                l101 = l99[l100];
-                l102 = ext_(k2, k3, l0, l1, l101, k16);
-                if (!((l102 !== F))) { if (l95) return F; continue L28; } // an extension
-                if (!((typeof l102 === "number"))) return F; // a number
-                l96 = (l96 + l102);
-                l97 = (l97 + 1);
-              }
-              l103 = result_(l96);
-              if (!((l103 !== F))) break L27; // a finite sum
-              l93 = l103;
-              l94 = true;
-            }
-            if ((!l94)) {
-              l93 = k6;
-            }
-          }
-        }
-        L29: {
-          l105 = false;
-          L30: {
-            l106 = (opts_(k13) === true);
-            l108 = 0;
-            l107 = 0;
-            l109 = l0.records;
-            l110 = keys_(l0);
-            L31: for (l111 = 0; l111 < l110.length; l111++) {
-              l112 = l110[l111];
-              l113 = (l109 !== undefined ? l109[l111] : l0.get(l112));
-              if (!((l113 !== undefined && l113 !== null))) { if (l106) break L30; continue L31; } // a record
-              if (!((typeof l113 === "object" || typeof l113 === "function"))) { if (l106) break L30; continue L31; } // an object
-              l113 = l113[k1];
-              if (!((l113 !== undefined && l113 !== null))) { if (l106) break L30; continue L31; } // a field
-              if (!((typeof l113 === "number"))) break L30; // a number
-              l107 = (l107 + l113);
-              l108 = (l108 + 1);
-            }
-            l114 = result_(l107);
-            if (!((l114 !== F))) break L30; // a finite sum
-            l104 = l114;
-            l105 = true;
-          }
-          if ((!l105)) {
-            l104 = k6;
-          }
-        }
+    L26: {
+      l6 = false;
+      l9 = false;
+      l8 = l0.get(l1);
+      L2: {
+        if (!((l8 !== undefined && l8 !== null))) break L2; // a record
+        if (!((typeof l8 === "object" || typeof l8 === "function"))) break L2; // an object
+        l8 = l8[k1];
+        if (!((l8 !== undefined && l8 !== null))) break L2; // a field
+        l7 = l8;
+        l9 = true;
       }
-      l115 = args_(K[17], l1, l1, [l4, l12, l24, l32, l44]);
-      l4 = undefined;
-      l12 = undefined;
-      l24 = undefined;
-      l32 = undefined;
-      l44 = undefined;
-      return raise_(l115);
+      l10 = ext_(k2, k3, l0, l1, l1, k4);
+      L1: {
+        if (!((l10 !== F))) break L1; // an extension
+        if (!(l9)) break L1; // an argument with a value
+        l11 = s5_2(l7, l10);
+        if (!((l11 !== F))) break L1; // an op
+        l5 = l11;
+        l6 = true;
+      }
+      if ((!l6)) {
+        l5 = k6;
+      }
+      l14 = false;
+      l17 = false;
+      l16 = l0.get(l1);
+      L4: {
+        if (!((l16 !== undefined && l16 !== null))) break L4; // a record
+        if (!((typeof l16 === "object" || typeof l16 === "function"))) break L4; // an object
+        l16 = l16[k1];
+        if (!((l16 !== undefined && l16 !== null))) break L4; // a field
+        l15 = l16;
+        l17 = true;
+      }
+      l20 = false;
+      l19 = l0.get(l1);
+      L5: {
+        if (!((l19 !== undefined && l19 !== null))) break L5; // a record
+        if (!((typeof l19 === "object" || typeof l19 === "function"))) break L5; // an object
+        l19 = l19[k7];
+        if (!((l19 !== undefined && l19 !== null))) break L5; // a field
+        l18 = l19;
+        l20 = true;
+      }
+      l21 = ext_(k2, k3, l0, l1, l1, k8);
+      L3: {
+        if (!((l21 !== F))) break L3; // an extension
+        l22 = l0.get(l1);
+        if (!((l22 !== undefined && l22 !== null))) break L3; // a record
+        if (!((typeof l22 === "object" || typeof l22 === "function"))) break L3; // an object
+        l22 = l22[k9];
+        if (!((l22 !== undefined && l22 !== null))) break L3; // a field
+        if (!(l17)) break L3; // an argument with a value
+        if (!(l20)) break L3; // an argument with a value
+        l23 = s5_4([l15, l18, l21, l22]);
+        if (!((l23 !== F))) break L3; // an op
+        l13 = l23;
+        l14 = true;
+      }
+      if ((!l14)) {
+        l13 = k6;
+      }
+      l26 = 0;
+      l27 = l0.records;
+      l28 = keys_(l0);
+      L6: for (l29 = 0; l29 < l28.length; l29++) {
+        l30 = l28[l29];
+        l31 = ext_(k2, k3, l0, l1, l30, k10);
+        if (!((l31 !== F))) continue L6; // an extension
+        l26 = (l26 + 1);
+      }
+      l34 = false;
+      l35 = (opts_(k11) === true);
+      l37 = 0;
+      l36 = 0;
+      l38 = l0.records;
+      l39 = keys_(l0);
+      L8: for (l40 = 0; l40 < l39.length; l40++) {
+        l41 = l39[l40];
+        l42 = ext_(k2, k3, l0, l1, l41, k12);
+        if (!((l42 !== F))) { if (l35) return F; continue L8; } // an extension
+        if (!((typeof l42 === "number"))) return F; // a number
+        l36 = (l36 + l42);
+        l37 = (l37 + 1);
+      }
+      l43 = result_(l36);
+      L7: {
+        if (!((l43 !== F))) break L7; // a finite sum
+        l33 = l43;
+        l34 = true;
+      }
+      if ((!l34)) {
+        l33 = k6;
+      }
+      l45 = mo0.get(l0, []);
+      if ((!(l45 !== undefined && l45 !== null))) {
+        l58 = false;
+        l48 = false;
+        l49 = (opts_(k13) === true);
+        l51 = 0;
+        l50 = 0;
+        l52 = l0.records;
+        L10: {
+          l53 = keys_(l0);
+          L11: for (l54 = 0; l54 < l53.length; l54++) {
+            l55 = l53[l54];
+            l56 = (l52 !== undefined ? l52[l54] : l0.get(l55));
+            if (!((l56 !== undefined && l56 !== null))) { if (l49) break L10; continue L11; } // a record
+            if (!((typeof l56 === "object" || typeof l56 === "function"))) { if (l49) break L10; continue L11; } // an object
+            l56 = l56[k1];
+            if (!((l56 !== undefined && l56 !== null))) { if (l49) break L10; continue L11; } // a field
+            if (!((typeof l56 === "number"))) break L10; // a number
+            l50 = (l50 + l56);
+            l51 = (l51 + 1);
+          }
+          l57 = result_(l50);
+          if (!((l57 !== F))) break L10; // a finite sum
+          l47 = l57;
+          l48 = true;
+        }
+        if ((!l48)) {
+          l47 = k6;
+        }
+        l46 = l47;
+        l58 = true;
+        l45 = mo0.put(l0, [], l46, l58);
+      }
+      if ((!l45.ok)) {
+        l60 = false;
+        l61 = (opts_(k13) === true);
+        l63 = 0;
+        l62 = 0;
+        l64 = l0.records;
+        L12: {
+          l65 = keys_(l0);
+          L13: for (l66 = 0; l66 < l65.length; l66++) {
+            l67 = l65[l66];
+            l68 = (l64 !== undefined ? l64[l66] : l0.get(l67));
+            if (!((l68 !== undefined && l68 !== null))) { if (l61) break L12; continue L13; } // a record
+            if (!((typeof l68 === "object" || typeof l68 === "function"))) { if (l61) break L12; continue L13; } // an object
+            l68 = l68[k1];
+            if (!((l68 !== undefined && l68 !== null))) { if (l61) break L12; continue L13; } // a field
+            if (!((typeof l68 === "number"))) break L12; // a number
+            l62 = (l62 + l68);
+            l63 = (l63 + 1);
+          }
+          l69 = result_(l62);
+          if (!((l69 !== F))) break L12; // a finite sum
+          l59 = l69;
+          l60 = true;
+        }
+        if ((!l60)) {
+          l59 = k6;
+        }
+        if (!(l45.ok)) return F; // a value of the memo
+      }
+      l70 = l45.v;
+      break L26;
+      if ((((((l4 !== undefined && l4 !== null) || (l12 !== undefined && l12 !== null)) || (l24 !== undefined && l24 !== null)) || (l32 !== undefined && l32 !== null)) || (l44 !== undefined && l44 !== null))) {
+        l71 = (l4 !== undefined && l4 !== null);
+        if (l71) {
+          l73 = false;
+          l76 = false;
+          l75 = l0.get(l1);
+          L16: {
+            if (!((l75 !== undefined && l75 !== null))) break L16; // a record
+            if (!((typeof l75 === "object" || typeof l75 === "function"))) break L16; // an object
+            l75 = l75[k1];
+            if (!((l75 !== undefined && l75 !== null))) break L16; // a field
+            l74 = l75;
+            l76 = true;
+          }
+          l79 = false;
+          l78 = l0.get(l1);
+          L17: {
+            if (!((l78 !== undefined && l78 !== null))) break L17; // a record
+            if (!((typeof l78 === "object" || typeof l78 === "function"))) break L17; // an object
+            l78 = l78[k7];
+            if (!((l78 !== undefined && l78 !== null))) break L17; // a field
+            l77 = l78;
+            l79 = true;
+          }
+          l80 = ext_(k2, k3, l0, l1, l1, k14);
+          L15: {
+            if (!((l80 !== F))) break L15; // an extension
+            l81 = l0.get(l1);
+            if (!((l81 !== undefined && l81 !== null))) break L15; // a record
+            if (!((typeof l81 === "object" || typeof l81 === "function"))) break L15; // an object
+            l81 = l81[k9];
+            if (!((l81 !== undefined && l81 !== null))) break L15; // a field
+            if (!(l76)) break L15; // an argument with a value
+            if (!(l79)) break L15; // an argument with a value
+            l82 = s5_4([l74, l77, l80, l81]);
+            if (!((l82 !== F))) break L15; // an op
+            l72 = l82;
+            l73 = true;
+          }
+          if ((!l73)) {
+            l72 = k6;
+          }
+        }
+        l71 = (l71 || (l12 !== undefined && l12 !== null));
+        if (l71) {
+          l84 = 0;
+          l85 = l0.records;
+          l86 = keys_(l0);
+          L19: for (l87 = 0; l87 < l86.length; l87++) {
+            l88 = l86[l87];
+            l89 = ext_(k2, k3, l0, l1, l88, k15);
+            if (!((l89 !== F))) continue L19; // an extension
+            l84 = (l84 + 1);
+          }
+        }
+        l71 = (l71 || (l24 !== undefined && l24 !== null));
+        if (l71) {
+          l91 = false;
+          l92 = (opts_(k11) === true);
+          l94 = 0;
+          l93 = 0;
+          l95 = l0.records;
+          l96 = keys_(l0);
+          L22: for (l97 = 0; l97 < l96.length; l97++) {
+            l98 = l96[l97];
+            l99 = ext_(k2, k3, l0, l1, l98, k16);
+            if (!((l99 !== F))) { if (l92) return F; continue L22; } // an extension
+            if (!((typeof l99 === "number"))) return F; // a number
+            l93 = (l93 + l99);
+            l94 = (l94 + 1);
+          }
+          l100 = result_(l93);
+          L21: {
+            if (!((l100 !== F))) break L21; // a finite sum
+            l90 = l100;
+            l91 = true;
+          }
+          if ((!l91)) {
+            l90 = k6;
+          }
+        }
+        l71 = (l71 || (l32 !== undefined && l32 !== null));
+        if (l71) {
+          l102 = false;
+          l103 = (opts_(k13) === true);
+          l105 = 0;
+          l104 = 0;
+          l106 = l0.records;
+          L24: {
+            l107 = keys_(l0);
+            L25: for (l108 = 0; l108 < l107.length; l108++) {
+              l109 = l107[l108];
+              l110 = (l106 !== undefined ? l106[l108] : l0.get(l109));
+              if (!((l110 !== undefined && l110 !== null))) { if (l103) break L24; continue L25; } // a record
+              if (!((typeof l110 === "object" || typeof l110 === "function"))) { if (l103) break L24; continue L25; } // an object
+              l110 = l110[k1];
+              if (!((l110 !== undefined && l110 !== null))) { if (l103) break L24; continue L25; } // a field
+              if (!((typeof l110 === "number"))) break L24; // a number
+              l104 = (l104 + l110);
+              l105 = (l105 + 1);
+            }
+            l111 = result_(l104);
+            if (!((l111 !== F))) break L24; // a finite sum
+            l101 = l111;
+            l102 = true;
+          }
+          if ((!l102)) {
+            l101 = k6;
+          }
+        }
+        l112 = args_(K[17], l1, l1, [l4, l12, l24, l32, l44]);
+        l4 = undefined;
+        l12 = undefined;
+        l24 = undefined;
+        l32 = undefined;
+        l44 = undefined;
+        return raise_(l112);
+      }
     }
-    l116 = rec_(k18, [l5, l13, l26, l33, l74]);
-    return l116;
+    l113 = rec_(k18, [l5, l13, l26, l33, l70]);
+    return l113;
   } catch {
     return F;
   }

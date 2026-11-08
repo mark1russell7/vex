@@ -114,14 +114,25 @@ interface Block {
 const block = (fail: Fail): Block => ({ stmts: [], fail });
 
 /**
+ * A region of the chains of arguments (`#chain`). The value path of each chain of the region is in one block, `value`.
+ * A failure of a part ends that block, and the failure paths of the chains come after it, in `paths`. `fails` holds
+ * the failures of the parts. A chain whose block has one of these failures is in the region, so its depth adds nothing.
+ */
+interface Region {
+  readonly value: number;
+  readonly fails: Set<Fail>;
+  readonly paths: LStmt[];
+}
+
+/**
  * The number of nodes that the failure paths of a program can copy. Past it, a node with two or more arguments that can
  * fail keeps no error, so tier 1 gives its result. Thus the size of the code has a limit.
  */
 export const MAX_COPIED = 2000;
 
 /**
- * The number of arguments of a node that `#chain` takes. Each argument that can fail adds a level of blocks, and the
- * printer and the JavaScript parser recurse over the levels. A node with more arguments keeps no error.
+ * The number of arguments of a node that `#chain` takes. The test of the failure path has a term for each argument that
+ * can fail, and the printer recurses over these terms. A node with more arguments keeps no error.
  */
 export const MAX_CHAINED = 64;
 
@@ -180,7 +191,68 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space", l.site(b, top, { t: "key" }));
   const value = l.expr(plain, top, [], b);
   b.stmts.push({ t: "return", value });
-  return { body: b.stmts, locals: l.locals, constants: l.constants };
+  return { body: flat(b.stmts), locals: l.locals, constants: l.constants };
+}
+
+/** This function gives the statements that a statement holds, in the order of the source. */
+function bodiesOf(x: LStmt): readonly (readonly LStmt[])[] {
+  if (x.t === "if") return [x.yes, x.no];
+  return x.t === "loop" || x.t === "block" || x.t === "repeat" ? [x.body] : [];
+}
+
+/** This function gives the label that a failure ends or continues, or the labels of a strict failure. */
+function failLabels(f: Fail): readonly number[] {
+  if (f.t === "break") return [f.label];
+  if (f.t === "continue") return f.strict === undefined ? [f.label] : [f.label, ...failLabels(f.strict.else)];
+  return [];
+}
+
+/**
+ * This function moves the first statements of a block out of the block, while they do not end it (V-089). Such a
+ * statement runs first in both places, and its jumps go to the same statements. A block with no jump to it goes away.
+ * Thus a node in the first part of a node adds no level of blocks.
+ *
+ * The first walk gives each statement a number in the order of the source, and the first jump to each label. The
+ * second walk counts in the same order. A statement holds a jump to the block only if that jump has a number in the
+ * range of the statement. Thus each walk reads each statement once.
+ */
+function flat(body: readonly LStmt[]): LStmt[] {
+  const first = new Map<number, number>();
+  // The number of the last statement inside each statement, at the index of the number of the statement.
+  const ends: number[] = [0];
+  let at = 0;
+  const note = (xs: readonly LStmt[]): void => {
+    for (const x of xs) {
+      const self = ++at;
+      const labels = x.t === "break" ? [x.label] : x.t === "check" || x.t === "fail" ? failLabels(x.fail) : [];
+      for (const label of labels) if (!first.has(label)) first.set(label, self);
+      bodiesOf(x).forEach(note);
+      ends[self] = at;
+    }
+  };
+  note(body);
+  at = 0;
+  // Each statement goes into its list once: a moved statement goes straight into the list of the block around it.
+  const walk = (xs: readonly LStmt[], out: LStmt[] = []): LStmt[] => {
+    for (const x of xs) one(x, out);
+    return out;
+  };
+  const one = (x: LStmt, out: LStmt[]): void => {
+    at++;
+    if (x.t === "if") out.push({ ...x, yes: walk(x.yes), no: walk(x.no) });
+    else if (x.t === "loop" || x.t === "repeat") out.push({ ...x, body: walk(x.body) });
+    else if (x.t !== "block") out.push(x);
+    else {
+      const jump = first.get(x.label) ?? Number.POSITIVE_INFINITY;
+      let rest: LStmt[] | undefined;
+      for (const y of x.body) {
+        if (rest === undefined && jump <= (ends[at + 1] ?? 0)) rest = [];
+        one(y, rest ?? out);
+      }
+      if (rest !== undefined) out.push({ ...x, body: rest });
+    }
+  };
+  return walk(body);
 }
 
 class Lowerer {
@@ -198,6 +270,12 @@ class Lowerer {
   readonly #memo: ReadonlyMap<Expr, readonly Expr[]>;
   /** The keys of the nodes of the memo whose code the lowering makes, with their values. */
   #keys: ReadonlyMap<Expr, Bound> = new Map();
+  /** The region of the chain whose parts the lowering makes at this time (`#chain`). */
+  #region: Region | undefined = undefined;
+  /** The depth of the loops around the lowering. */
+  #loops = 0;
+  /** The depth of the loops at the start of the code of a node of the memo with no keys, or `undefined` outside such code. */
+  #once: number | undefined = undefined;
   readonly #facts: Facts;
   readonly #schema: Schema;
   /** The kind of each local whose kind the lowering knows. A local gets its kind where it gets its value. */
@@ -316,7 +394,8 @@ class Lowerer {
       if (key.ok !== undefined) this.check(b, key.ok, "a key with a value");
       return key.value;
     }
-    const keys = this.#copying > 0 ? undefined : this.#memo.get(e);
+    // In the code of a node of the memo with no keys, outside a loop of that code, a node evaluates at most once for each space. Its memo thus saves nothing (V-089).
+    const keys = this.#copying > 0 || this.#once === this.#loops ? undefined : this.#memo.get(e);
     return keys === undefined ? this.#node(e, s, path, b) : this.#memoized(e, keys, s, path, b);
   }
 
@@ -325,6 +404,14 @@ class Lowerer {
     this.#copying++;
     make();
     this.#copying--;
+  }
+
+  /** This method lowers a loop of names. A node of the memo inside the loop keeps its memo. */
+  #inLoop(make: () => LExpr): LExpr {
+    this.#loops++;
+    const value = make();
+    this.#loops--;
+    return value;
   }
 
   /** This method lowers a node itself, without the memo. */
@@ -361,11 +448,11 @@ class Lowerer {
       case "app":
         return this.#app(e, s, path, b);
       case "fold":
-        return this.#fold(e, s, path, b);
+        return this.#inLoop(() => this.#fold(e, s, path, b));
       case "iterate":
-        return this.#iterate(e, s, path, b);
+        return this.#inLoop(() => this.#iterate(e, s, path, b));
       case "fix":
-        return this.#fix(e, s, path, b);
+        return this.#inLoop(() => this.#fix(e, s, path, b));
       case "last": {
         const column = s.columns.get(e.name);
         // The lowering comes before the checks. A read outside a step fails a check, and that check gives the reason.
@@ -397,6 +484,9 @@ class Lowerer {
    * The entry has no error, because the error of a node depends on its position and on its child nodes. Where the context
    * keeps the error, a copy of the node evaluates after a read of such an entry. The copy gives the error at this position.
    * A node of the memo and its keys use no extension, so this second evaluation has no effect.
+   *
+   * The code of a node with no keys evaluates once for each space. Outside its loops, a node inside it thus evaluates
+   * once too, and it gets no memo of its own (`#once`). So the code of nested nodes has no nested blocks (V-089).
    */
   #memoized(e: Expr, keys: readonly Expr[], s: Scope, path: readonly number[], b: Block): LExpr {
     const memo: LExpr = { t: "memo", id: this.memos++ };
@@ -407,7 +497,10 @@ class Lowerer {
     const outer = this.#keys;
     this.#keys = new Map([...outer, ...keys.map((k, i): [Expr, Bound] => [k, values[i] as Bound])]);
     const compute = block(b.fail);
+    const once = this.#once;
+    this.#once = keys.length === 0 ? this.#loops : undefined;
     const node = this.#attempt(compute, (inner) => this.#node(e, s, path, inner), false);
+    this.#once = once;
     this.#keys = outer;
     compute.stmts.push({ t: "set", n: h, value: prim("memoPut", memo, s.space, tuple, node.value, flag(node)) });
     b.stmts.push({ t: "let", n: h, value: prim("memoGet", memo, s.space, tuple) }, { t: "if", cond: prim("!", prim("isValue", local(h))), yes: compute.stmts, no: [] });
@@ -449,42 +542,63 @@ class Lowerer {
 
   /**
    * This method lowers arguments on the value path, with no new check. A failure of an argument keeps its error in a
-   * local of the argument. It then jumps to the copy of the next argument that can fail. After the last copy, the errors
-   * give the error of the node (`args` of the runtime). The copies clear the locals, for the next turn of a loop.
+   * local of the argument. It then ends the value block of the region, and the failure path of the chain copies the
+   * later arguments that can fail. After the last copy, the errors give the error of the node (`args` of the runtime).
+   * The failure path clears the locals, for the next turn of a loop.
    *
    * Each argument evaluates once: the value path gives up at the failure, and the copies start after it.
    *
-   * Argument 0 is in the blocks of the end, of the next part and of its own part. So each level of a chain adds approximately 3
-   * levels of blocks (V-089). The time of the parse of `new Function` in `load` grows with the lines times the depth of the blocks.
-   * So the time of `load` grows faster than the places. The open fix is a constant depth: a flag for the failure in place of the nested breaks.
+   * The value path of a chain has no block of its own (V-089). A chain in a part of another chain is in the region of
+   * that chain. So its parts go into the value block of the region, and its failure path goes before the failure path of
+   * the outer chain. The depth of the blocks thus stays the same for each level of a shape. Before, each level added
+   * 3 blocks around argument 0, and the time of the parse of `new Function` grew with the lines times that depth.
    */
   #chain(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, what: string, b: Block): LExpr[] {
-    const end = this.labels++;
+    const joined = this.#region?.fails.has(b.fail) === true ? this.#region : undefined;
+    const region: Region = joined ?? { value: this.labels++, fails: new Set(), paths: [] };
+    const outer = this.#region;
+    this.#region = region;
+    // The parts write into one list: the statements of the block of a joined chain, or the value block of the region.
+    // So a statement goes into a list once, and the lowering stays linear in the depth of the chains.
+    const sink = joined === undefined ? [] : b.stmts;
     const parts = xs.map((x, i) => {
-      const label = this.labels++;
       const error = this.locals++;
-      const part = block({ t: "break", label, keep: error });
+      const fail: Fail = { t: "break", label: region.value, keep: error };
+      region.fails.add(fail);
       const at = [...path, first + i];
-      return { x, at, label, error, value: this.expr(x, s, at, part), stmts: part.stmts };
+      const start = sink.length;
+      const value = this.expr(x, s, at, { stmts: sink, fail });
+      return { x, at, error, value, fails: sink.length > start };
     });
+    this.#region = outer;
     const values = parts.map((p) => p.value);
-    const failing = parts.filter((p) => p.stmts.length > 0);
+    const failing = parts.filter((p) => p.fails);
     if (failing.length === 0) return values;
-    let body: LStmt[] = [...parts.flatMap((p) => p.stmts), { t: "break", label: end }];
+    // Only the failed part has an error at the start of the failure path. A part after a part with an error has a copy.
+    const failed = (p: (typeof failing)[number]): LExpr => prim("isValue", local(p.error));
+    const after = this.locals++;
+    const copies: LStmt[] = [];
     failing.forEach((p, i) => {
-      body = [{ t: "block", label: p.label, body }];
       const next = failing[i + 1];
       if (next === undefined) return;
+      copies.push({ t: "set", n: after, value: i === 0 ? failed(p) : prim("||", local(after), failed(p)) });
       const label = this.labels++;
       const copy = block({ t: "break", label, keep: next.error });
       this.#copy(() => this.expr(next.x, s, next.at, copy));
-      body.push({ t: "block", label, body: copy.stmts });
+      copies.push({ t: "if", cond: local(after), yes: [{ t: "block", label, body: copy.stmts }], no: [] });
     });
     const inner = block(b.fail);
     const error = this.value(inner, this.#argsError(s, path, what, failing.map((p) => local(p.error))));
     inner.stmts.push(...failing.map((p): LStmt => ({ t: "set", n: p.error, value: { t: "none" } })));
-    this.fail(inner, error);
-    b.stmts.push({ t: "block", label: end, body: [...body, ...inner.stmts] });
+    // In the region of an outer chain, the failure path keeps the error for the part of the outer chain. The failure path of that chain comes next.
+    if (joined !== undefined && b.fail.t === "break" && b.fail.keep !== undefined) inner.stmts.push({ t: "set", n: b.fail.keep, value: error });
+    else this.fail(inner, error);
+    const chainFailed = failing.slice(1).reduce((x, p) => prim("||", x, failed(p)), failed(failing[0] as (typeof failing)[number]));
+    region.paths.push({ t: "if", cond: chainFailed, yes: [...copies, ...inner.stmts], no: [] });
+    if (joined !== undefined) return values;
+    const end = this.labels++;
+    sink.push({ t: "break", label: end });
+    b.stmts.push({ t: "block", label: end, body: [{ t: "block", label: region.value, body: sink }, ...region.paths] });
     return values;
   }
 
@@ -865,6 +979,7 @@ class Lowerer {
     each: (body: Block, key: LExpr, at: Scope, names: ReadonlyMap<string, Bound>) => void,
   ): void {
     const { axis, at: addr, as } = e;
+    this.#loops++;
     const list = listOf(axis);
     const tests = firstTest + axisChildren(axis) - whereTests(axis).length;
     const from = addr === undefined || addr.length === 0 ? s.focus : this.#address(addr, s, path, firstTest + axisChildren(axis), b);
@@ -917,6 +1032,7 @@ class Lowerer {
     if (name !== undefined && item !== undefined) names.set(name, { value: this.value(body, prim("member", item.values, local(index))) });
     if (position !== undefined && item !== undefined) names.set(position, { value: this.#typed(this.value(body, prim("member", item.nth, local(index))), "number") });
     each(body, key, at, names);
+    this.#loops--;
     b.stmts.push({ t: "loop", label, item: target, index, array: array_, over, body: body.stmts });
   }
 

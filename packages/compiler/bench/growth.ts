@@ -7,7 +7,8 @@
 //   node bench/growth.ts gates      prints the largest size of each shape under the gate of the keys and the gate of names
 //
 // The gate also reads the source of tier 2 of each shape, with `generate` and `load` in a fresh process (COMPILE.SOURCE.SIZE).
-// Its bytes hold, and its time is report only, because the cause of that time is open (V-089).
+// Its bytes hold. The time of `generate` holds for each shape with a CI read of that time over the floor of its small median.
+// The time of `load` is report only (V-089). The parse of its `new Function` grows with the lines times the depth of the blocks.
 //
 // The parser of the gate of names has a larger stack here than in a test, so that gate reads the largest size of each shape.
 import { spawnSync } from "node:child_process";
@@ -21,7 +22,7 @@ import { generate, load } from "../src/tiers.ts";
 import { placesOf } from "../src/unshared.ts";
 import { keyWatch } from "../test/key-gate.ts";
 import { nameFaults } from "../test/names.ts";
-import { bytesFlipReadsRed, bytesUnread, exponentsOf, GROWTH_SHAPES, growthFaults, sourceVerdict, type GrowthRow, type GrowthShape } from "../test/growth.ts";
+import { bytesFlipReadsRed, bytesUnread, exponentsOf, GROWTH_SHAPES, growthFaults, loadExponentOf, sourceVerdict, type GrowthRow, type GrowthShape } from "../test/growth.ts";
 
 /** The processes of each size. */
 const SAMPLES = 5;
@@ -123,7 +124,7 @@ function child(name: string, levels: number): void {
   console.info(JSON.stringify({ ms, bytes: r.ok ? r.source.length * prints : undefined, reason: r.ok ? undefined : r.reason }));
 }
 
-/** This function makes the function of tier 2 of one program, and it prints its record. */
+/** This function makes the function of tier 2 of one program, and it prints its record. `ms` is the time of `generate`, and `load` is the time of `load`. */
 function sourceChild(name: string, levels: number): void {
   const shape = shapeOf(name);
   const e = programOf(shape, levels);
@@ -133,22 +134,32 @@ function sourceChild(name: string, levels: number): void {
   const start = performance.now();
   let g = generate(e, OPTIONS);
   for (let i = 1; i < prints; i++) g = generate(e, OPTIONS);
+  const generated = performance.now();
   if (g.ok) load(g);
-  const ms = performance.now() - start;
+  const loaded = performance.now();
   // The cost of a collection is in microseconds. The row prints the sum, so a read can separate the collector from the compile.
   const gc = (collector.stop()?.statistics ?? []).reduce((sum, entry: { readonly cost: number }) => sum + entry.cost, 0) / 1000;
-  console.info(JSON.stringify({ ms, gc, bytes: g.ok ? Math.round(g.source.length * prints * bytesFaultOf(shape, levels)) : undefined, reason: g.ok ? undefined : g.reason }));
+  const bytes = g.ok ? Math.round(g.source.length * prints * bytesFaultOf(shape, levels)) : undefined;
+  console.info(JSON.stringify({ ms: generated - start, load: loaded - generated, gc, bytes, reason: g.ok ? undefined : g.reason }));
 }
 
 /** The command of a child for each kind of row. */
 type Kind = "child" | "source";
 
+/** The record of one process. `load` is the time of `load` in a process of the source. */
+interface Sample {
+  readonly ms: number;
+  readonly load: number | undefined;
+  readonly gc: number;
+  readonly bytes: number;
+}
+
 /** This function gives the record of one process, or `undefined` if the process gave no result. */
-function sample(shape: GrowthShape, levels: number, kind: Kind = "child", flags: readonly string[] = []): { readonly ms: number; readonly gc: number; readonly bytes: number } | undefined {
+function sample(shape: GrowthShape, levels: number, kind: Kind = "child", flags: readonly string[] = []): Sample | undefined {
   const r = spawnSync(process.execPath, [...flags, fileURLToPath(import.meta.url), kind, shape.name, String(levels)], { timeout: LIMIT_MS, killSignal: "SIGKILL", encoding: "utf8", maxBuffer: 1 << 20 });
   const line = r.status === 0 ? r.stdout.trim().split("\n").at(-1) : undefined;
-  const record = line === undefined ? undefined : (JSON.parse(line) as { readonly ms: number; readonly gc?: number; readonly bytes?: number; readonly reason?: string });
-  if (record?.bytes !== undefined) return { ms: record.ms, gc: record.gc ?? 0, bytes: record.bytes };
+  const record = line === undefined ? undefined : (JSON.parse(line) as { readonly ms: number; readonly load?: number; readonly gc?: number; readonly bytes?: number; readonly reason?: string });
+  if (record?.bytes !== undefined) return { ms: record.ms, load: record.load, gc: record.gc ?? 0, bytes: record.bytes };
   console.error(`no result: ${shape.name} ${String(levels)} exit ${String(r.status)} ${record?.reason ?? r.stderr.slice(0, 200)}`);
   return undefined;
 }
@@ -159,8 +170,12 @@ function row(shape: GrowthShape, levels: number, kind: Kind = "child"): GrowthRo
   const done = records.filter((x) => x !== undefined);
   const whole = done.length === SAMPLES;
   const distinct = [...new Set(done.map((x) => x.bytes))];
-  const r: GrowthRow = { shape: shape.name, levels, places: placesOf([programOf(shape, levels)]), ms: whole ? median(done.map((x) => x.ms)) : undefined, bytes: whole ? median(done.map((x) => x.bytes)) : undefined, sameBytes: distinct.length <= 1 };
-  console.info(`${kind === "source" ? "source row" : "row"} ${shape.name} levels=${String(levels)} places=${String(r.places)} ms=${r.ms?.toFixed(1) ?? "none"} gc=${whole ? median(done.map((x) => x.gc)).toFixed(1) : "none"} bytes=${String(r.bytes)} processes with these bytes=${distinct.length === 1 ? String(done.length) : distinct.join("|")} samples=${done.map((x) => x.ms.toFixed(1)).join(",")}`);
+  const loads = done.map((x) => x.load).filter((x) => x !== undefined);
+  const loadMs = whole && loads.length === SAMPLES ? median(loads) : undefined;
+  const r: GrowthRow = { shape: shape.name, levels, places: placesOf([programOf(shape, levels)]), ms: whole ? median(done.map((x) => x.ms)) : undefined, loadMs, bytes: whole ? median(done.map((x) => x.bytes)) : undefined, sameBytes: distinct.length <= 1 };
+  // A row of the source prints the time of `generate` as `ms`, and the time of `load` as `load`.
+  const loadText = kind === "source" ? ` load=${loadMs?.toFixed(1) ?? "none"}` : "";
+  console.info(`${kind === "source" ? "source row" : "row"} ${shape.name} levels=${String(levels)} places=${String(r.places)} ms=${r.ms?.toFixed(1) ?? "none"}${loadText} gc=${whole ? median(done.map((x) => x.gc)).toFixed(1) : "none"} bytes=${String(r.bytes)} processes with these bytes=${distinct.length === 1 ? String(done.length) : distinct.join("|")} samples=${done.map((x) => x.ms.toFixed(1)).join(",")}`);
   return r;
 }
 
@@ -191,7 +206,10 @@ function deepestSource(shape: GrowthShape, flags: readonly string[] = []): numbe
   return low;
 }
 
-/** This function reads the source of tier 2 of a shape. It fails on a size with no source, on bytes over the limit and on a limit under the flip of its row. */
+/**
+ * This function reads the source of tier 2 of a shape. It fails on a size with no source, on bytes over the limit and on a limit under the flip of its row.
+ * It also fails on a time of `generate` over the `generate` limit of the shape. The time of `load` is report only (V-089).
+ */
 function sourceGate(shape: GrowthShape): void {
   const small = row(shape, shape.small, "source");
   const large = row(shape, shape.large, "source");
@@ -200,7 +218,11 @@ function sourceGate(shape: GrowthShape): void {
   const flipRed = bytesFlipReadsRed(shape, small, large);
   // Different bytes in the processes of a size read nothing, so the line says no read, and the check shows a warning.
   const unread = bytesUnread(small, large);
-  console.info(`${faults.length > 0 || !flipRed ? "FAIL" : unread ? "no read" : "ok"} source ${shape.name}: time exponent ${found?.time.toFixed(2) ?? "none"}, bytes exponent ${found?.bytes.toFixed(3) ?? "none"}, bytes limit ${String(shape.source.bytes)}, bytes ${String(large.bytes)}`);
+  const loadExponent = loadExponentOf(small, large);
+  const generateLimit = shape.source.generate === undefined ? "report only" : String(shape.source.generate);
+  console.info(
+    `${faults.length > 0 || !flipRed ? "FAIL" : unread ? "no read" : "ok"} source ${shape.name}: generate exponent ${found?.time.toFixed(2) ?? "none"}, generate limit ${generateLimit}, load exponent ${loadExponent?.toFixed(2) ?? "none"} (report only), bytes exponent ${found?.bytes.toFixed(3) ?? "none"}, bytes limit ${String(shape.source.bytes)}, bytes ${String(large.bytes)}`,
+  );
   for (const note of notes) console.info(`report only: ${note}`);
   if (unread) console.info(`::warning title=Growth: no read::no read of the bytes of the source of ${shape.name} on ${env().cpu}: the processes of a size gave different bytes, so the bytes limit held nothing.`);
   if (!flipRed) {

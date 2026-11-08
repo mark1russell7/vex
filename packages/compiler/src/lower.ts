@@ -453,6 +453,10 @@ class Lowerer {
    * give the error of the node (`args` of the runtime). The copies clear the locals, for the next turn of a loop.
    *
    * Each argument evaluates once: the value path gives up at the failure, and the copies start after it.
+   *
+   * Argument 0 is in the blocks of the end, of the next part and of its own part. So each level of a chain adds approximately 3
+   * levels of blocks (V-089). The time of the parse of `new Function` in `load` grows with the lines times the depth of the blocks.
+   * So the time of `load` grows faster than the places. The open fix is a constant depth: a flag for the failure in place of the nested breaks.
    */
   #chain(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, what: string, b: Block): LExpr[] {
     const end = this.labels++;

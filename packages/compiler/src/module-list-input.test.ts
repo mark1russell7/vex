@@ -5,7 +5,7 @@
  */
 import { app, axes, call, cell, defineDomain, each, evaluate, fn, fold, isVexList, iterate, let_, lit, ref, rec, SheetRun, space, v, type Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain, XYDomain } from "@mark1russell7/vex-domains";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { generate, tiered } from "./index.ts";
 import { emitModule, emitSheetModule, type ModuleOptions } from "./module.ts";
 
@@ -149,7 +149,11 @@ describe("COMPILE.MODULE.LIST.INPUT: a list in a field of the input", () => {
 });
 
 describe("COMPILE.MODULE.LIST.INPUT: an input against the kind of a list", () => {
-  const m = make(sourceOf(op("count", xs)));
+  // The emit runs in a beforeEach, not in the body of the describe. So the mutation lane gives its code to each test, not to all tests.
+  let m: Loaded;
+  beforeEach(() => {
+    m = make(sourceOf(op("count", xs)));
+  });
   const good = { n: 1, xs: list(item("a", 1)), ps: list(item("p", { x: 0, y: 0 })), nest: list(item("0", list(item("a", 1)))) };
   const error = { code: "#VALUE!", kind: "value", message: "no value", path: [] };
 

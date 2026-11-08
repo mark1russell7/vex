@@ -20,7 +20,10 @@ interface Layout {
   readonly PACKAGES: readonly string[];
   readonly mutateOf: (root: string, part: string) => readonly string[];
   readonly splitBySize: (files: readonly { readonly path: string; readonly size: number }[], count: number) => readonly (readonly string[])[];
-  readonly partEnds: (text: string, count: number) => { readonly ends: readonly number[]; readonly lines: number };
+  readonly partEnds: (text: string, count: number, weights?: readonly number[]) => { readonly ends: readonly number[]; readonly lines: number };
+  readonly segmentsOf: (text: string) => readonly { readonly key: string; readonly start: number; readonly end: number }[];
+  readonly costMapOf: (text: string, run: string, lines: readonly (readonly [number, number, number, number])[]) => { readonly run: string; readonly segments: Readonly<Record<string, number>> };
+  readonly lineWeights: (text: string, map: { readonly run: string; readonly segments: Readonly<Record<string, number>> }) => number[];
   readonly entriesIn: (entries: readonly string[], files: readonly string[]) => readonly string[];
   readonly changedParts: (root: string, changed: readonly string[]) => { readonly parts: readonly string[]; readonly files: readonly string[] };
   readonly NOT_READ: Readonly<Record<string, string>>;
@@ -173,7 +176,7 @@ describe("the parts of the mutation lane", () => {
     const whole = layout.PACKAGES.flatMap((name) => layout.mutateOf(root, name));
     expect(new Set(noModule).size).toBe(noModule.length);
     expect([...new Set(entries)].toSorted()).toEqual([...whole].toSorted());
-    expect(entries.filter((file) => file === "work/compiler/module.ts")).toHaveLength(2);
+    expect(entries.filter((file) => file === "work/compiler/module.ts")).toHaveLength(moduleParts(layout).length);
   });
 
   it("LANE.PARTS: the parts of a package leave out the index, the tests and the files of test support", async () => {
@@ -188,14 +191,15 @@ describe("the parts of the mutation lane", () => {
   it("LANE.PARTS: each part of module.ts starts on the line after the end of the part before it", async () => {
     const layout = await loadLayout();
     const root = repoRoot();
-    const [first, second] = ["compiler.module.1", "compiler.module.2"].map((part) => layout.mutateOf(root, part)[0] ?? "");
-    const ranges = [first, second].map((entry) => /:(\d+)-(\d+)$/u.exec(entry ?? "")?.slice(1).map(Number) ?? []);
+    const parts = moduleParts(layout);
+    expect(parts).toHaveLength(6);
+    const ranges = parts.map((part) => /:(\d+)-(\d+)$/u.exec(layout.mutateOf(root, part)[0] ?? "")?.slice(1).map(Number) ?? []);
     const lines = readFileSync(join(root, "packages", "compiler", "src", "module.ts"), "utf8").split(/\r?\n/u);
     expect(ranges[0]?.[0]).toBe(1);
-    expect(ranges[1]?.[0]).toBe((ranges[0]?.[1] ?? 0) + 1);
-    expect(ranges[1]?.[1]).toBe(lines.length);
+    ranges.slice(1).forEach((range, index) => expect(range[0]).toBe((ranges[index]?.[1] ?? 0) + 1));
+    expect(ranges.at(-1)?.[1]).toBe(lines.length);
     // A class body has no mutator, so a mutant does not cross the end of a method of the class.
-    expect(lines[(ranges[0]?.[1] ?? 0) - 1]).toBe("  }");
+    for (const range of ranges.slice(0, -1)) expect(lines[(range[1] ?? 0) - 1]).toMatch(/^ {0,2}\}$/u);
   });
 
   it("LANE.PARTS: the end of a part is the closing line nearest its share of the lines", async () => {
@@ -203,6 +207,38 @@ describe("the parts of the mutation lane", () => {
     const text = ["class A {", "  a() {", "    1;", "  }", "  b() {", "    2;", "    3;", "  }", "}"].join("\n");
     expect(layout.partEnds(text, 2)).toEqual({ ends: [8], lines: 9 });
     expect(() => layout.partEnds("one\ntwo", 2)).toThrow("no closing line");
+  });
+
+  it("LANE.COST: a segment ends on a closing line, and its key is the name of its first declaration", async () => {
+    const layout = await loadLayout();
+    const text = ["// a note", "function a() {", "  if (x) {", "    1;", "  }", "}", "class B {", "  #b() {", "    2;", "  }", "  #b() {", "  }", "}", "const C = 3;"].join("\n");
+    expect(layout.segmentsOf(text)).toEqual([
+      { key: "a", start: 1, end: 5 },
+      { key: "@2", start: 6, end: 6 },
+      { key: "B", start: 7, end: 10 },
+      { key: "#b", start: 11, end: 12 },
+      { key: "@5", start: 13, end: 13 },
+      { key: "C", start: 14, end: 14 },
+    ]);
+    // A second segment of the same name has the key with #2, so each key names one segment.
+    expect(layout.segmentsOf("a() {\n}\na() {\n}").map((s) => s.key)).toEqual(["a", "a#2"]);
+  });
+
+  it("LANE.COST: the cost map adds the plan of each line into its segment, and a new segment has the mean cost of a line", async () => {
+    const layout = await loadLayout();
+    const text = ["a() {", "  1;", "}", "b() {", "  2;", "}"].join("\n");
+    const map = layout.costMapOf(text, "42", [[2, 3, 1, 600], [5, 1, 0, 60], [3, 1, 0, 0]]);
+    expect(map).toEqual({ run: "42", segments: { a: 600, b: 60 } });
+    expect(layout.lineWeights(text, map)).toEqual([200, 200, 200, 20, 20, 20]);
+    expect(layout.lineWeights(text, { run: "42", segments: { a: 600 } })).toEqual([200, 200, 200, 200, 200, 200]);
+  });
+
+  it("LANE.COST: with weights, the end of a part is the closing line nearest its share of the cost", async () => {
+    const layout = await loadLayout();
+    const text = ["a() {", "  1;", "}", "b() {", "  2;", "}", "c() {", "  3;", "}", "d() {", "  4;", "}"].join("\n");
+    // By lines, the end is the closing line of b. Most of the cost is in a, so by cost the end is the closing line of a.
+    expect(layout.partEnds(text, 2)).toEqual({ ends: [6], lines: 12 });
+    expect(layout.partEnds(text, 2, [30, 30, 30, 1, 1, 1, 1, 1, 1, 1, 1, 1])).toEqual({ ends: [3], lines: 12 });
   });
 
   it("LANE.PARTS: each input gives the same parts, and the largest file goes first", async () => {
@@ -235,7 +271,7 @@ describe("the parts of the mutation lane", () => {
   it("LANE.DELAY: a change of module.ts selects both of its parts", async () => {
     const layout = await loadLayout();
     const selected = layout.changedParts(repoRoot(), ["packages/compiler/src/module.ts"]);
-    expect(selected).toEqual({ parts: ["compiler.module.1", "compiler.module.2"], files: [lanePath("compiler", "module.ts")] });
+    expect(selected).toEqual({ parts: moduleParts(layout), files: [lanePath("compiler", "module.ts")] });
     expect(layout.entriesIn(["work/compiler/module.ts:1-9", "work/core/ir.ts"], ["work/compiler/module.ts"])).toEqual(["work/compiler/module.ts:1-9"]);
   });
 
@@ -460,8 +496,12 @@ interface LaneCost {
   readonly clockMinutes: (netMs: number) => number;
   readonly filePlans: (plans: readonly unknown[]) => Record<string, FilePlan>;
   readonly planLine: (part: string, files: Readonly<Record<string, FilePlan>>) => string;
+  readonly STATIC_LIMITS: Readonly<Record<string, number>>;
+  readonly staticFaults: (files: Readonly<Record<string, FilePlan>>) => string[];
+  readonly TOP_TESTS: number;
+  readonly testPlans: (plans: readonly unknown[], tests: readonly { id: string; name: string; fileName?: string; timeSpentMs: number }[], top?: number) => (readonly [string, string, number, number, number])[];
   readonly costOf: (run: { file: string; line: number; static: boolean; netMs: number; limitMs: number } | undefined, status: string) => number | null;
-  readonly costReporter: (root: string, now: () => number, afterPlan?: () => void) => { onMutationTestingPlanReady: (event: { mutantPlans: readonly unknown[] }) => void; onMutantTested: (result: unknown) => void };
+  readonly costReporter: (root: string, now: () => number, afterPlan?: () => void) => { onDryRunCompleted: (event: { result: { tests: readonly unknown[] } }) => void; onMutationTestingPlanReady: (event: { mutantPlans: readonly unknown[] }) => void; onMutantTested: (result: unknown) => void };
   readonly strykerPlugins: readonly { readonly kind: string; readonly name: string; readonly value: Record<string, unknown> }[];
 }
 
@@ -478,10 +518,26 @@ interface FilePlan {
 /** This function gives the plan of a file with 3 runs, 1 of them static, and the planned net time `netMs`. */
 const planRow = (netMs: number): FilePlan => ({ mutants: 4, runs: 3, static: 1, netMs, limitMs: 0, lines: [] });
 
+/** This function gives a plan of Stryker for a run of the tests `testFilter`. With no filter, the run starts each test. */
+const filteredRun = (id: string, testFilter?: readonly string[]): unknown => ({ plan: "Run", mutant: { id, fileName: "/w/work/core/steps.ts" }, netTime: 1, runOptions: testFilter === undefined ? { timeout: 9 } : { timeout: 9, testFilter } });
+
 /** This function loads the reporter of the cost of each mutant. */
 async function loadCost(): Promise<LaneCost> {
   return (await import(pathToFileURL(join(repoRoot(), "tools", "mutation", "lane-cost.ts")).href)) as LaneCost;
 }
+
+/** The functions of the script of the cost map of module.ts (tools/mutation/cost-map.ts). */
+interface CostMapScript {
+  readonly partMinutes: (root: string, parts: readonly string[], map: { readonly run: string; readonly segments: Readonly<Record<string, number>> }) => number[];
+}
+
+/** This function loads the script of the cost map of module.ts. */
+async function loadCostMap(): Promise<CostMapScript> {
+  return (await import(pathToFileURL(join(repoRoot(), "tools", "mutation", "cost-map.ts")).href)) as CostMapScript;
+}
+
+/** This function gives the parts of compiler.module, in their order. */
+const moduleParts = (layout: Layout): string[] => layout.laneParts().filter((part) => part.startsWith("compiler.module."));
 
 /**
  * This function gives a plan of Stryker for one mutant: a run with its net time and its limit, or an early result. Stryker
@@ -547,6 +603,58 @@ describe("the cost of the mutation lane", () => {
       ]);
       reporter.onMutationTestingPlanReady({ mutantPlans: plans });
       expect(readFileSync(join(root, cost.COST_FILE), "utf8")).toBe("");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("LANE.COST: under the committed cost map, the estimate of each part of compiler.module is at most the target", async () => {
+    const [layout, cost, script] = await Promise.all([loadLayout(), loadCost(), loadCostMap()]);
+    const root = repoRoot();
+    const costs = JSON.parse(readFileSync(join(root, "tools", "mutation", "costs.json"), "utf8")) as Record<string, { readonly run: string; readonly segments: Readonly<Record<string, number>> }>;
+    const map = costs["work/compiler/module.ts"];
+    expect(map?.run).toBe("42474174486");
+    const minutes = script.partMinutes(root, moduleParts(layout), map ?? { run: "", segments: {} });
+    expect(minutes).toHaveLength(6);
+    for (const m of minutes) expect(m).toBeLessThanOrEqual(cost.TARGET_MINUTES);
+  });
+
+  it("LANE.STATIC: a plan with more static runs in module.ts than its limit gives a fault, and a plan at the limit gives none", async () => {
+    const cost = await loadCost();
+    const limit = cost.STATIC_LIMITS["work/compiler/module.ts"] ?? 0;
+    expect(limit).toBe(600);
+    const at = { "work/compiler/module.ts": { ...planRow(1), static: limit }, "work/core/steps.ts": { ...planRow(1), static: limit * 9 } };
+    expect(cost.staticFaults(at)).toEqual([]);
+    const over = { "work/compiler/module.ts": { ...planRow(1), static: limit + 1 } };
+    expect(cost.staticFaults(over)).toEqual([
+      "The plan has 601 static runs in work/compiler/module.ts, and the limit is 600. Code outside a test gives a static mutant, which starts each test. Move that code into a test, a beforeEach or a function (LANE.STATIC).",
+    ]);
+    expect(cost.staticFaults({})).toEqual([]);
+  });
+
+  it("LANE.COST: the plan gives the tests of the largest cost, and a run with no filter of tests starts each test", async () => {
+    const cost = await loadCost();
+    expect(cost.TOP_TESTS).toBe(40);
+    const tests = [
+      { id: "a", name: "slow", fileName: "/runner/vex/tools/mutation/work/compiler/module.test.ts", timeSpentMs: 400.4 },
+      { id: "b", name: "quick", fileName: "/runner/vex/tools/mutation/work/core/steps.test.ts", timeSpentMs: 2 },
+      { id: "c", name: "wide", timeSpentMs: 50 },
+    ];
+    // The run 1 is static: it has no filter, so it starts each test. An early result starts no test.
+    const plans = [filteredRun("1"), filteredRun("2", ["b", "c"]), filteredRun("3", ["c"]), filteredRun("4", ["c"]), planOf("5", "steps.ts")];
+    expect(cost.testPlans(plans, tests)).toEqual([
+      ["slow", "work/compiler/module.test.ts", 400, 1, 400],
+      ["wide", "", 50, 4, 200],
+      ["quick", "work/core/steps.test.ts", 2, 2, 4],
+    ]);
+    expect(cost.testPlans(plans, tests, 1)).toEqual([["slow", "work/compiler/module.test.ts", 400, 1, 400]]);
+    const root = mkdtempSync(join(tmpdir(), "vex-lane-tests-"));
+    try {
+      const reporter = cost.costReporter(root, () => 0);
+      reporter.onDryRunCompleted({ result: { tests } });
+      reporter.onMutationTestingPlanReady({ mutantPlans: plans });
+      const plan = JSON.parse(readFileSync(join(root, cost.PLAN_FILE), "utf8")) as { tests: unknown };
+      expect(plan.tests).toEqual(cost.testPlans(plans, tests));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -221,8 +221,8 @@ importers:
   packages/compiler:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.21.0
-        version: 0.21.0
+        specifier: ^0.26.1
+        version: 0.26.1
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -258,8 +258,8 @@ importers:
   packages/core:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.21.0
-        version: 0.21.0
+        specifier: ^0.26.1
+        version: 0.26.1
     devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -1641,6 +1641,9 @@ packages:
 
   '@mark1russell7/coeval@0.21.0':
     resolution: {integrity: sha512-eEotEeFBHfPtrLabaYq/f+C38VAjY5bH4T+1mNqT3kHReIAZlgK1/wHhqkAphy6XCzURx8qNnq274WNNNLkkAQ==}
+
+  '@mark1russell7/coeval@0.26.1':
+    resolution: {integrity: sha512-fzWgtsl3xpoOwmB5u/ZqEDPQIG6hIkXN3qSZc8uoN2Rv54OrqrMLw5Bgr9gedqIWhfHnT0+61EgkmRkoVg539Q==}
 
   '@mark1russell7/conventions@0.38.5':
     resolution: {integrity: sha512-nzPyMDJPvcL886YOj9S7nUg0/uorOpAl45zIaZA88K020nipvzf2mao2bZrhXRsyTluXlnxog/I1aj+UFeI//Q==}
@@ -5674,6 +5677,10 @@ snapshots:
   '@mark1russell7/coeval@0.14.0': {}
 
   '@mark1russell7/coeval@0.21.0': {}
+
+  '@mark1russell7/coeval@0.26.1':
+    dependencies:
+      '@mark1russell7/rigor-generators': 0.1.8
 
   '@mark1russell7/conventions@0.38.5':
     dependencies:

@@ -30,12 +30,25 @@ defaults:
     shell: bash
 
 jobs:
+  # Each package has its own job, so the slowest package alone sets the time of a job. On 2026-11-09 one job for all
+  # six packages stopped at its limit of 30 minutes.
   properties:
-    name: properties (10000 runs)
+    name: properties (10000 runs, ${{ matrix.package }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        package:
+          - "@mark1russell7/vex-testkit"
+          - "@mark1russell7/vex-compiler"
+          - "@vex/pilots"
+          - "@vex/formula"
+          - "@vex/sheet-app"
+          - "@vex/site"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,9 +61,10 @@ jobs:
       - run: node scripts/workflow-gate.ts
       - run: pnpm install --frozen-lockfile
       # The setup prints the seed. To repeat a failure, set FC_SEED to that seed.
-      - run: pnpm --filter @mark1russell7/vex-testkit --filter @mark1russell7/vex-compiler --filter @vex/pilots --filter @vex/formula --filter @vex/sheet-app --filter @vex/site run test
+      - run: pnpm --filter "$PACKAGE" run test
         env:
           FC_NUM_RUNS: "10000"
+          PACKAGE: ${{ matrix.package }}
 
   # The check of the lane that a test file loads can fail: an added fault turns it red, and a clean copy in the same
   # job stays green.

@@ -3,6 +3,7 @@
  * report that `scripts/test-report.mjs` writes before the build. Without a report, the status is "unknown".
  */
 import type { ReactElement } from "react";
+import { escapeRegExp as escape } from "@mark1russell7/text";
 
 interface ReportTest {
   readonly package: string;
@@ -17,8 +18,6 @@ interface Report {
 
 const found = import.meta.glob<{ readonly default: Report }>("../data/test-report.json", { eager: true });
 const report: Report | undefined = Object.values(found)[0]?.default;
-
-const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** This function gives the tests whose names contain the ID as a whole word. */
 export function testsFor(id: string): readonly ReportTest[] {

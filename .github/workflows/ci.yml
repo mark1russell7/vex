@@ -35,6 +35,9 @@ jobs:
       # lint:ste: the writing rules (ASD-STE100) of the README files, the docs and the doc comments.
       scripts: typecheck lint check:conventions test test:coverage test:docs lint:ste
       node-versions: '["22", "24", "26"]'
+      # On a push to main, the first cell (node 22) also starts the coverage action of the template, after the scripts.
+      # The scripts take about 9 minutes and the coverage about 6, so the default limit of 15 minutes stopped this job.
+      timeout-minutes: 25
 
   # The site: typecheck of the widgets, the spec pages and the static build
   site:

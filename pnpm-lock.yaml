@@ -177,10 +177,10 @@ importers:
         version: 3.0.3
       '@mark1russell7/api-report':
         specifier: ^0.5.0
-        version: 0.5.0
+        version: 0.5.3
       '@mark1russell7/conventions':
-        specifier: ^0.38.0
-        version: 0.38.5
+        specifier: ^0.40.6
+        version: 0.40.6
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -1634,8 +1634,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/api-report@0.5.0':
-    resolution: {integrity: sha512-1mbJ614xQr+qQ5uLWOubNP1n9CEY/ytfwC2p9eLt5PIH+xWt2yAKBWm2kuIm5A2xiBldZAJ7QEuyoa4+jJLKpQ==}
+  '@mark1russell7/api-report@0.5.3':
+    resolution: {integrity: sha512-tdg5rrwp1xTd19dEtfhZ3ZxDSx07AnUWFZuNpMr9zFnUjAx5AYL238L6EFfo6HnevfKlxzQWGOmvpkFB1v80sw==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1648,8 +1648,8 @@ packages:
   '@mark1russell7/coeval@0.27.0':
     resolution: {integrity: sha512-E9GwK5PkXB02zM3NQmJPlJb6tE2vzuEeB47dBLukLeAiaPqgB6yzEbfLOD2zDylkvJqSAtM0V4CUs2i49kOOcg==}
 
-  '@mark1russell7/conventions@0.38.5':
-    resolution: {integrity: sha512-nzPyMDJPvcL886YOj9S7nUg0/uorOpAl45zIaZA88K020nipvzf2mao2bZrhXRsyTluXlnxog/I1aj+UFeI//Q==}
+  '@mark1russell7/conventions@0.40.6':
+    resolution: {integrity: sha512-QKW7+0RketlRTVFAbPEK3TEJSj6v3JJmWuTaFV+fxI/83wdbVBedr1jNsdjplmaXWx1aEypUytsqIP7hihZDsA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -5628,9 +5628,9 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/api-report@0.5.0':
+  '@mark1russell7/api-report@0.5.3':
     dependencies:
-      '@mark1russell7/conventions': 0.38.5
+      '@mark1russell7/conventions': 0.40.6
 
   '@mark1russell7/coeval@0.14.0': {}
 
@@ -5640,7 +5640,7 @@ snapshots:
     dependencies:
       '@mark1russell7/rigor-generators': 0.1.8
 
-  '@mark1russell7/conventions@0.38.5':
+  '@mark1russell7/conventions@0.40.6':
     dependencies:
       yaml: 2.9.1
 

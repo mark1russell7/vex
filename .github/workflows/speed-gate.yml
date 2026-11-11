@@ -247,3 +247,6 @@ jobs:
       - uses: mark1russell7/template/.github/actions/gate-summary@ddf7e495fc88b536e2ea89bb8271ac2d50b28baf # main
         with:
           needs: ${{ toJSON(needs) }}
+          # On the weekly schedule only the job modules runs (see "on:"), so the job gates is skipped by design.
+          # On each other event a skipped job gates fails the summary.
+          allow-skip: ${{ github.event_name == 'schedule' && 'gates' || '' }}

@@ -20,7 +20,7 @@ The weekly job saves the file `lane-tests.json` as the artifact `lane-tests`, an
 
 A fall of more than 20 % reads `no read: tests fell`, and the gate fails. A pull request that removes tests on purpose adds an entry to `planned-falls.json`. The entry names the part, the old count, the new count and the pull request. An entry holds only while the last good read equals its old count.
 
-**The 20 % is a first guess from very few falls.** The largest fall with no fault is 7.1 %: `compiler.module` went from 295 to 274 when tests moved to another file. The fall of V-090 is 48.3 %. Read the line again after 4 Saturdays, and bring each fall between 7 % and 20 % to the strategist.
+**The 20 % is a first guess from very few falls.** The largest fall with no fault is 7.1 %: `compiler.module` went from 295 to 274 when tests moved to another file. The fall of V-090 is 48.3 %. Read the line again after 4 Saturdays, and bring each fall between 7 % and 20 % to the maintainer.
 
 **Growth can hide a real fall.** The `compiler.rest` read had 563 tests, then 1029 with the fault of V-090, then 1990 with no fault. A compare with the last good read passes the 1029. So the flip with the real counts shows that the rule can fail. It does not show that the rule finds V-090. The load check holds that fault.
 

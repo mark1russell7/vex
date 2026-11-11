@@ -1,7 +1,7 @@
 /**
  * The minimum of runs of the weekly long run (`docs/QUALITY-PLAN.md` §8). Each property has a time budget. A property
  * that reaches its budget fails when it did fewer runs than its minimum. The minimum comes from 5 or more green runs of
- * the weekly, with the margin on the safe side (rule 1e10f489 of the strategist). This module is not a part of the API
+ * the weekly, with the margin on the safe side. This module is not a part of the API
  * of the test kit: `fc-setup.ts` and `scripts/weekly-minimums.ts` use it.
  */
 

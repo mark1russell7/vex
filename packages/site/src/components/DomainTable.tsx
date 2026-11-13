@@ -4,9 +4,10 @@
  */
 import type { AnyDomain, Law, ParamKind } from "@mark1russell7/vex";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, FnDomain, JsonDomain, LiftedNDVectorDomain, MaybeDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain } from "@mark1russell7/vex-domains";
+import { QuantityDomain } from "@mark1russell7/vex-domains/quantity";
 import type { ReactElement } from "react";
 
-const ALL: readonly AnyDomain[] = [Vec2Domain, NDVectorDomain, LiftedNDVectorDomain, NumRecordDomain, ColorDomain, AngleDomain, DateDomain, NumDomain, BoolDomain, TextDomain, FnDomain, MaybeDomain, JsonDomain];
+const ALL: readonly AnyDomain[] = [Vec2Domain, NDVectorDomain, LiftedNDVectorDomain, NumRecordDomain, ColorDomain, AngleDomain, DateDomain, QuantityDomain, NumDomain, BoolDomain, TextDomain, FnDomain, MaybeDomain, JsonDomain];
 
 interface OpRow {
   readonly fn?: unknown;

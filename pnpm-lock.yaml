@@ -282,6 +282,9 @@ importers:
 
   packages/domains:
     dependencies:
+      '@mark1russell7/quantity':
+        specifier: ^0.3.5
+        version: 0.3.5(zod@4.6.7)
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core

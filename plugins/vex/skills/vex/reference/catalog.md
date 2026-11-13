@@ -328,6 +328,33 @@ Days of the calendar, without a time. `date` of `NumDomain` makes a date. The va
 | `lte` | `lte(LocalDate, LocalDate)` | boolean |  |  |  |  |
 | `eq` | `eq(LocalDate, LocalDate)` | boolean |  | commutative |  |  |
 
+## `QuantityDomain`
+
+Amounts in units as plain data: `{ value, unit }`, from the entry `@mark1russell7/vex-domains/quantity`. `@mark1russell7/quantity` converts each amount exactly, so `lte` of 155 mm and 16 cm is `true`. `add`, `subtract`, `min` and `max` give the unit of the receiver. Two amounts of different kinds give `#CALC!`. No op lifts a number. Put it before `JsonDomain`. The values are of the type `Quantity`.
+
+| Op | Call | Result | Lifts numbers | Laws | Identity | Moves |
+|---|---|---|---|---|---|---|
+| `value` | `value(Quantity)` | number |  |  |  |  |
+| `unit` | `unit(Quantity)` | string |  |  |  |  |
+| `kind` | `kind(Quantity)` | string |  |  |  |  |
+| `convert` | `convert(Quantity, string)` | Quantity |  |  |  |  |
+| `valueIn` | `valueIn(Quantity, string)` | number |  |  |  |  |
+| `add` | `add(Quantity, Quantity)` | Quantity |  |  |  |  |
+| `subtract` | `subtract(Quantity, Quantity)` | Quantity |  |  |  |  |
+| `multiply` | `multiply(Quantity, number)` | Quantity |  |  |  |  |
+| `divide` | `divide(Quantity, number)` | Quantity |  |  |  |  |
+| `ratio` | `ratio(Quantity, Quantity)` | number |  |  |  |  |
+| `negate` | `negate(Quantity)` | Quantity |  |  |  |  |
+| `abs` | `abs(Quantity)` | Quantity |  |  |  |  |
+| `min` | `min(Quantity, Quantity)` | Quantity |  |  |  |  |
+| `max` | `max(Quantity, Quantity)` | Quantity |  |  |  |  |
+| `compare` | `compare(Quantity, Quantity)` | number |  |  |  |  |
+| `lt` | `lt(Quantity, Quantity)` | boolean |  |  |  |  |
+| `lte` | `lte(Quantity, Quantity)` | boolean |  |  |  |  |
+| `gt` | `gt(Quantity, Quantity)` | boolean |  |  |  |  |
+| `gte` | `gte(Quantity, Quantity)` | boolean |  |  |  |  |
+| `eq` | `eq(Quantity, Quantity)` | boolean |  |  |  |  |
+
 ## `JsonDomain`
 
 JSON data: texts, finite numbers, booleans, arrays and plain objects, for example the documents of a database. Each op is a function, so a standalone module can copy the domain. Put it last, so that `add`, `eq` and the other ops of `NumDomain`, `TextDomain` and `BoolDomain` come first. `kinds` gives `"null"` for a `null` item. `field` of a missing key or of a `null` field gives `#CALC!`. The values are of the type `JSON value`.

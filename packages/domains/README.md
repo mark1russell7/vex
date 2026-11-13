@@ -24,6 +24,7 @@ npm install @mark1russell7/vex @mark1russell7/vex-domains
 | `JsonDomain` | JSON data: texts, numbers, booleans, arrays and plain objects. Put it last. | `kind`, `kinds`, `fields`, `field`, `leaves` |
 | `ColorDomain` | `Color`: an RGB color | `mix`, `add`, `multiply`, `luminance`, `relativeLuminance`, `contrast` |
 | `AngleDomain` | `Angle`: an angle | `add`, `normalize`, `sin`, `cos`, `degrees` |
+| `QuantityDomain` | `{ value, unit }`: an amount in a unit of `@mark1russell7/quantity`. Import it from `@mark1russell7/vex-domains/quantity` | `add`, `lte`, `max`, `ratio`, `convert`, `valueIn` |
 | `FnDomain`, `MaybeDomain` | Two example domains: function wrappers and `Maybe` | `invoke`, `map`, `chain`, `valueOr` |
 
 ## Example
@@ -50,6 +51,23 @@ const items = vex(NumDomain, Vec2Domain).over(space.array([{ w: 10, h: 20 }, { w
 const cell = items.start(0).each((t) => t.from("w")._.vec2(t.from("h"))).reduce("max")._.max(1);
 cell.at("0"); // => { tag: "some", value: new Vec2(30, 20) }
 ```
+
+## Amounts in units
+
+`QuantityDomain` of the entry `@mark1russell7/vex-domains/quantity` reads amounts in units, for example `{ value: 155, unit: "mm" }`. The package `@mark1russell7/quantity` converts each amount exactly. Thus a program compares 155 mm with 16 cm, and a sum of 0.1 m and 0.2 m is 0.3 m. Two amounts of different kinds give `#CALC!` with the reason.
+
+```ts doctest
+import { space, vex } from "@mark1russell7/vex";
+import { NumDomain } from "@mark1russell7/vex-domains";
+import { QuantityDomain } from "@mark1russell7/vex-domains/quantity";
+
+const cases = space.record({ tower: { cooler: { value: 155, unit: "mm" }, room: { value: 16, unit: "cm" } } });
+const fits = vex(NumDomain, QuantityDomain).over(cases).from("cooler")._.lte("room");
+
+fits.at("tower"); // => { tag: "some", value: true }
+```
+
+The entry is apart from the main entry, so a bundle without amounts does not get the unit tables.
 
 ## The schema of JSON documents
 

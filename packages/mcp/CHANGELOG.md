@@ -1,5 +1,25 @@
 # @mark1russell7/vex-mcp
 
+## 0.18.0
+
+### Minor Changes
+
+- 85c9fe3: The release train: the ranges of @mark1russell7/coeval, @mark1russell7/service, @procedures/client, @procedures/mcp-server change to a version outside the old range. This release has breaking changes.
+
+### Patch Changes
+
+- Updated dependencies [8b48e48]
+- Updated dependencies [d5adb07]
+- Updated dependencies [3797bc7]
+- Updated dependencies [cd77cc0]
+- Updated dependencies [1bceb6f]
+- Updated dependencies [6b9c074]
+- Updated dependencies [85c9fe3]
+- Updated dependencies [9c3bcaf]
+  - @mark1russell7/vex@0.19.0
+  - @mark1russell7/vex-compiler@0.19.0
+  - @mark1russell7/vex-domains@0.19.0
+
 ## 0.17.0
 
 ### Minor Changes

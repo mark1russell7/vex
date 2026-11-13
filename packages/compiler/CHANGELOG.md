@@ -1,5 +1,27 @@
 # @mark1russell7/vex-compiler
 
+## 0.19.0
+
+### Minor Changes
+
+- d5adb07: Vex and the compiler use `@mark1russell7/coeval` `^0.26.1`, not `^0.21.0`. Each minor of coeval from 0.22.0 to 0.26.0 changes behavior that a host can see. One change is that a deep recursion through closures in a coeval document gives `#DEPTH!` at a lower depth. So this change is a MINOR. The API of Vex does not change.
+- 3797bc7: Vex and the compiler use `@mark1russell7/coeval` `^0.27.0`. In 0.27.0, an evaluation of a coeval document with more than 200000 applications of a closure gives `#WORK!`. The API of Vex does not change.
+- 6b9c074: The release train: the ranges of @mark1russell7/coeval change to a version outside the old range. This release has breaking changes.
+- 85c9fe3: The release train: the ranges of @mark1russell7/coeval, @mark1russell7/service, @procedures/client, @procedures/mcp-server change to a version outside the old range. This release has breaking changes.
+
+### Patch Changes
+
+- 8b48e48: The plan of a document checks the nesting before the checks that recurse, as `evaluate` does (V-097). A document of more than 500 levels gets the error of nesting, and no `RangeError`. In the fast path of an op, a word after `?.` is the name of a key (V-098). A module keeps that name.
+- cd77cc0: Each regular expression of the passes that tidy a module is a function in the compiler. The texts of the helpers of a module come from five functions, so the mutation lane can cut them into parts. The text of the module does not change.
+- 1bceb6f: Each helper of the generated code is a function in the compiler. The text of the module does not change.
+- 9c3bcaf: The source of tier 2 keeps one depth of blocks as a program grows (V-089). Thus the parse of `load` grows with the lines only. The chains of arguments share one value block. The first statements of a block move out of it. A node inside a node of the memo with no keys has no memo of its own.
+- Updated dependencies [8b48e48]
+- Updated dependencies [d5adb07]
+- Updated dependencies [3797bc7]
+- Updated dependencies [6b9c074]
+- Updated dependencies [85c9fe3]
+  - @mark1russell7/vex@0.19.0
+
 ## 0.18.0
 
 ### Minor Changes

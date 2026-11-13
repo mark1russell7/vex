@@ -14,7 +14,7 @@
     "vitest": "4.1.12"
   },
   "dependencies": {
-    "@mark1russell7/coeval": "^0.21.0",
+    "@mark1russell7/coeval": "^0.30.0",
     "@mark1russell7/vex-domains": "workspace:*",
     "@mark1russell7/vex-testkit": "workspace:*",
     "acorn": "^8.19.0",

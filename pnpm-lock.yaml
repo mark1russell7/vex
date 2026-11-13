@@ -180,13 +180,13 @@ importers:
         version: 0.5.5
       '@mark1russell7/conventions':
         specifier: ^0.41.0
-        version: 0.41.2
+        version: 0.41.4
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
       '@mark1russell7/rigor-statistics':
         specifier: ^0.1.25
-        version: 0.1.28
+        version: 0.1.29
       '@mark1russell7/ste-lint':
         specifier: github:mark1russell7/ste-lint#f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7
         version: https://codeload.github.com/mark1russell7/ste-lint/tar.gz/f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7
@@ -221,8 +221,8 @@ importers:
   packages/compiler:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.30.0
-        version: 0.30.0(zod@4.6.7)
+        specifier: ^0.34.0
+        version: 0.34.0(zod@4.6.7)
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -258,8 +258,8 @@ importers:
   packages/core:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.30.0
-        version: 0.30.0(zod@4.6.7)
+        specifier: ^0.34.0
+        version: 0.34.0(zod@4.6.7)
     devDependencies:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -269,7 +269,7 @@ importers:
         version: https://codeload.github.com/mark1russell7/optional/tar.gz/1c649e1ea49991d1574a74f0c402220502e219a7
       '@mark1russell7/rigor-bench':
         specifier: ^0.2.17
-        version: 0.2.36(esbuild@0.28.2)
+        version: 0.2.37(esbuild@0.28.2)
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.6
@@ -387,7 +387,7 @@ importers:
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
       '@mark1russell7/rigor-bench':
         specifier: ^0.2.17
-        version: 0.2.36(esbuild@0.28.2)
+        version: 0.2.37(esbuild@0.28.2)
       '@mark1russell7/vex-compiler':
         specifier: workspace:*
         version: link:../compiler
@@ -480,8 +480,8 @@ importers:
         specifier: ^5.3.0
         version: 5.3.0
       '@mark1russell7/text':
-        specifier: ^0.0.2
-        version: 0.0.2
+        specifier: ^0.0.5
+        version: 0.0.5
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -587,8 +587,8 @@ importers:
   tools/mutation:
     dependencies:
       '@mark1russell7/coeval':
-        specifier: ^0.30.0
-        version: 0.30.0(zod@4.6.7)
+        specifier: ^0.34.0
+        version: 0.34.0(zod@4.6.7)
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains
@@ -1713,15 +1713,15 @@ packages:
   '@mark1russell7/coeval@0.29.0':
     resolution: {integrity: sha512-Z+CEqmOKxyGrGwdKTuBQmzb0fHTcPY3gUA9RS2H6GF/mKFPEuIUIkrN65P7NgSMpb2J0owoduFWINh04RxFRkg==}
 
-  '@mark1russell7/coeval@0.30.0':
-    resolution: {integrity: sha512-6QUTUxpSWFQfi8ba1u+UpHrA4W6h/hYyKwH6o40XtVitfVz6xqsvUs7WV+YUNOfpS25bSanUFzyiVk0LcpOY6g==}
+  '@mark1russell7/coeval@0.34.0':
+    resolution: {integrity: sha512-RBffEYCcXuHYuEWUzQw6ebrT86aCsfp3SGvUiKlZ/cfZE7RVNbWLITtUtnPDorD+radOYxDZNSo3kS1LsqBfkg==}
 
   '@mark1russell7/collections@0.10.0':
     resolution: {integrity: sha512-WsLRfrej6msQLVqcS17x6KODic8bLf/IuOF2tD04NNbOhWKYCQi0xAEGBCy/TtthxRvRa6Yti2fcpeIQbX/nCA==}
     engines: {node: '>=22.12'}
 
-  '@mark1russell7/conventions@0.41.2':
-    resolution: {integrity: sha512-qmtns3BXajCeLF2dXNNJ4Bc/PZ5F6ZRyo2U+4CbsMubnbG/N6dPok1WgoMMD6sSvCsK3QFudkypOTvugGWZcpA==}
+  '@mark1russell7/conventions@0.41.4':
+    resolution: {integrity: sha512-FcyqVT2gDgKxKDvr7A9sbYSPUxf0fYVDcjAoUnIGdYoJFHP5W08Jph2T3KgYJoDINPJOten+oQ/AOP97hE0iiQ==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1778,8 +1778,8 @@ packages:
     resolution: {integrity: sha512-hn2C5jjOFCGKJqFQPHt57C/Cn1l9Lb9MltVNtL71KSu+nRrfPOmg8ujYB5n3oDFFWNdNA4bE/8LLT4tG3lmrGA==}
     engines: {node: '>=22'}
 
-  '@mark1russell7/rigor-bench@0.2.36':
-    resolution: {integrity: sha512-ys34FAVItA0KVk2Agwp1SN9yj4Sjx4KHrFQwvXC90QWWm4hjN0SVW+HKlA1BeMr1BPL1YUvQpp0TPm/fgpQHOg==}
+  '@mark1russell7/rigor-bench@0.2.37':
+    resolution: {integrity: sha512-yryWgRCM3oGs9hDS2Y8wJxLnyQGqcRdKmCFwSyqeSlQoPkN16Bpe+dnfq/bzPBZMwXmJJfnzjodYmn3KWvyNMQ==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -1796,12 +1796,16 @@ packages:
     resolution: {integrity: sha512-0r+5JbxvSk6H0rTGqhzmlnE5UAHAImOH7R1CbOjQARLil2zOYkvvJzWvnwC5txLCw71eyVCvpT7rb09oKRcGxQ==}
     engines: {node: '>=22'}
 
-  '@mark1russell7/rigor-statistics@0.1.27':
-    resolution: {integrity: sha512-UnBEZVSVSytwFH5pJ5ezlOCEs/19Ur0/REQ+Tq5BYs8uYWSNoP/hZNGx2tdqLN2Rn0u+A41GwieBnuM6DuWS4g==}
+  '@mark1russell7/rigor-generators@0.1.16':
+    resolution: {integrity: sha512-C94Q4C31aZ8UXx1R0JSBV7DiQFl5tVpbFxHxHzHaSqr3dTgmCkEvLrvlUV8/0/GZqPhQYG9cbX6GOlqfRj/h4g==}
     engines: {node: '>=22'}
 
   '@mark1russell7/rigor-statistics@0.1.28':
     resolution: {integrity: sha512-jynyIvNwFOCN3pHMxeB1iuxmG2PvikSW07MzCF0a5icg1SWsule3NIVf46I7lNVLKQrbR5Kkbxq82jReP1FKIA==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/rigor-statistics@0.1.29':
+    resolution: {integrity: sha512-Wh91NJIwxIRN3+a5V2bqUkMhdPcjHI+gVZBCnohf12ZegdSTNqGlpqS2WXYmrRVjasF9EBgm1lC8GQNYpBSg7Q==}
     engines: {node: '>=22'}
 
   '@mark1russell7/service@0.8.6':
@@ -1852,6 +1856,10 @@ packages:
 
   '@mark1russell7/text@0.0.2':
     resolution: {integrity: sha512-m1aIB8X+PDekktzr1fYOp1/7gvlh9iL/2M7ktj/GnmPmVrWin0rTADgTm00dKFdWFRzXraCUYkjyCl3jQZHEVg==}
+    engines: {node: '>=22.12'}
+
+  '@mark1russell7/text@0.0.5':
+    resolution: {integrity: sha512-Ql1eBET3PgEBL5DWZHZ20GRZmorkq6mWdnfj21cqXfLvZdikO+GlvSAfbv1ld7YCnEqxOa7eg6ESfl+jzPGe9w==}
     engines: {node: '>=22.12'}
 
   '@modelcontextprotocol/sdk@1.32.2':
@@ -5943,7 +5951,7 @@ snapshots:
 
   '@mark1russell7/api-report@0.5.5':
     dependencies:
-      '@mark1russell7/conventions': 0.41.2
+      '@mark1russell7/conventions': 0.41.4
 
   '@mark1russell7/coeval@0.29.0(zod@4.6.7)':
     dependencies:
@@ -5952,10 +5960,10 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  '@mark1russell7/coeval@0.30.0(zod@4.6.7)':
+  '@mark1russell7/coeval@0.34.0(zod@4.6.7)':
     dependencies:
       '@mark1russell7/collections': 0.10.0(zod@4.6.7)
-      '@mark1russell7/rigor-generators': 0.1.14
+      '@mark1russell7/rigor-generators': 0.1.15
     transitivePeerDependencies:
       - zod
 
@@ -5963,11 +5971,11 @@ snapshots:
     dependencies:
       '@mark1russell7/algebra': 0.8.4(zod@4.6.7)
       '@mark1russell7/optional': 1.2.0
-      '@mark1russell7/rigor-statistics': 0.1.27
+      '@mark1russell7/rigor-statistics': 0.1.28
     transitivePeerDependencies:
       - zod
 
-  '@mark1russell7/conventions@0.41.2':
+  '@mark1russell7/conventions@0.41.4':
     dependencies:
       yaml: 2.9.1
 
@@ -5997,11 +6005,11 @@ snapshots:
 
   '@mark1russell7/rational@0.1.2': {}
 
-  '@mark1russell7/rigor-bench@0.2.36(esbuild@0.28.2)':
+  '@mark1russell7/rigor-bench@0.2.37(esbuild@0.28.2)':
     dependencies:
-      '@mark1russell7/rigor-generators': 0.1.15
-      '@mark1russell7/rigor-statistics': 0.1.28
-      '@mark1russell7/text': 0.0.2
+      '@mark1russell7/rigor-generators': 0.1.16
+      '@mark1russell7/rigor-statistics': 0.1.29
+      '@mark1russell7/text': 0.0.5
     optionalDependencies:
       esbuild: 0.28.2
 
@@ -6009,11 +6017,13 @@ snapshots:
 
   '@mark1russell7/rigor-generators@0.1.15': {}
 
-  '@mark1russell7/rigor-statistics@0.1.27':
-    dependencies:
-      '@mark1russell7/rigor-generators': 0.1.14
+  '@mark1russell7/rigor-generators@0.1.16': {}
 
   '@mark1russell7/rigor-statistics@0.1.28':
+    dependencies:
+      '@mark1russell7/rigor-generators': 0.1.15
+
+  '@mark1russell7/rigor-statistics@0.1.29':
     dependencies:
       '@mark1russell7/rigor-generators': 0.1.15
 
@@ -6042,6 +6052,8 @@ snapshots:
       '@clack/prompts': 1.8.1
 
   '@mark1russell7/text@0.0.2': {}
+
+  '@mark1russell7/text@0.0.5': {}
 
   '@modelcontextprotocol/sdk@1.32.2(supports-color@7.2.0)(zod@4.6.7)':
     dependencies:

@@ -73,7 +73,7 @@
     "vitest": "^5.0.3"
   },
   "dependencies": {
-    "@mark1russell7/coeval": "^0.30.0",
+    "@mark1russell7/coeval": "^0.34.0",
     "@mark1russell7/vex": "workspace:*",
     "acorn": "^8.19.0",
     "astring": "^1.9.0"

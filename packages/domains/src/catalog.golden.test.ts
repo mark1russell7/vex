@@ -17,8 +17,9 @@ import { XYDomain } from "./xy.ts";
 import { InsetsDomain } from "./insets.ts";
 import { JsonDomain } from "./json.ts";
 import { FnDomain, MaybeDomain } from "./wrappers.ts";
+import { QuantityDomain } from "./quantity.ts";
 
-const DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, XYDomain, InsetsDomain, ColorDomain, AngleDomain, DateDomain, NDVectorDomain, LiftedNDVectorDomain, NumRecordDomain, FnDomain, MaybeDomain, JsonDomain];
+const DOMAINS: readonly AnyDomain[] = [NumDomain, BoolDomain, TextDomain, Vec2Domain, XYDomain, InsetsDomain, ColorDomain, AngleDomain, DateDomain, NDVectorDomain, LiftedNDVectorDomain, NumRecordDomain, FnDomain, MaybeDomain, JsonDomain, QuantityDomain];
 
 /** This function gives the text of a value with the `show` of the domain, or its JSON text. */
 const shown = (d: AnyDomain, u: unknown): string => (d.show === undefined ? JSON.stringify(u) : d.show(u));

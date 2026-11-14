@@ -8,6 +8,7 @@
  */
 import { domainOf, listItemKind, type AnyDomain, type OpSpec, type ParamKind } from "@mark1russell7/vex";
 import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LiftedNDVectorDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+import { QuantityDomain } from "@mark1russell7/vex-domains/quantity";
 
 /** A domain of the catalog: its import name, the domain, the type of its values, a sample value and a short description. */
 export interface Entry {
@@ -32,6 +33,7 @@ export const CATALOG: readonly Entry[] = [
   { name: "ColorDomain", d: ColorDomain, type: "Color", sample: new Color(0.2, 0.4, 0.6), about: "RGB colors, with the WCAG ops of contrast." },
   { name: "AngleDomain", d: AngleDomain, type: "Angle", sample: Angle.fromDegrees(30), about: "Angles." },
   { name: "DateDomain", d: DateDomain, type: "LocalDate", sample: LocalDate.of(2026, 10, 16), about: "Days of the calendar, without a time. `date` of `NumDomain` makes a date." },
+  { name: "QuantityDomain", d: QuantityDomain, type: "Quantity", sample: { value: 155, unit: "mm" }, about: "Amounts in units as plain data: `{ value, unit }`, from the entry `@mark1russell7/vex-domains/quantity`. `@mark1russell7/quantity` converts each amount exactly, so `lte` of 155 mm and 16 cm is `true`. `add`, `subtract`, `min` and `max` give the unit of the receiver. Two amounts of different kinds give `#CALC!`. No op lifts a number. Put it before `JsonDomain`." },
   { name: "JsonDomain", d: JsonDomain, type: "JSON value", sample: { a: 1, b: [true, null] }, about: "JSON data: texts, finite numbers, booleans, arrays and plain objects, for example the documents of a database. Each op is a function, so a standalone module can copy the domain. Put it last, so that `add`, `eq` and the other ops of `NumDomain`, `TextDomain` and `BoolDomain` come first. `kinds` gives `\"null\"` for a `null` item. `field` of a missing key or of a `null` field gives `#CALC!`." },
 ];
 

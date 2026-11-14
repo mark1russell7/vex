@@ -282,6 +282,9 @@ importers:
 
   packages/domains:
     dependencies:
+      '@mark1russell7/quantity':
+        specifier: ^0.4.0
+        version: 0.4.0(zod@4.6.7)
       '@mark1russell7/vex':
         specifier: workspace:*
         version: link:../core
@@ -589,6 +592,9 @@ importers:
       '@mark1russell7/coeval':
         specifier: ^0.34.0
         version: 0.34.0(zod@4.6.7)
+      '@mark1russell7/quantity':
+        specifier: ^0.4.0
+        version: 0.4.0(zod@4.6.7)
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../../packages/domains

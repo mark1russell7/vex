@@ -31,6 +31,10 @@ LocalDate.of(2026, 13, 1).toString(); // => "2027-01-01"
 
 `addMonths` and `endOfMonth` move by months, like `EDATE` and `EOMONTH`. One month after 31 January is the last day of February.
 
+## Amounts in units
+
+`QuantityDomain` of the entry `@mark1russell7/vex-domains/quantity` reads amounts in units as plain data, for example `{ value: 155, unit: "mm" }`. The package `@mark1russell7/quantity` converts each amount exactly. Thus `lte` of 155 mm and 16 cm is `true`, and a sum of 0.1 m and 0.2 m is 0.3 m. `add`, `subtract`, `min` and `max` give the result in the unit of the receiver. Two amounts of different kinds give `#CALC!` with the reason. Put `QuantityDomain` before `JsonDomain`.
+
 ## JSON values
 
 `JsonDomain` reads JSON data, for example the documents of a database. It accepts texts, finite numbers, booleans, arrays and plain objects. Put it last in the list of domains. Then `add` and `eq` go to the domains of numbers and texts first. `kind` gives the kind of a value. `kinds` gives the kind of each item or field, with `"null"` for `null`. `fields` gives the keys of an object, and `field` gives the value of one key.

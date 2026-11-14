@@ -319,6 +319,17 @@ A force separation pushes two boxes apart along the axis of their smallest overl
 - **[INSETS.ARITH]** `add` adds each side, and its identity is `insets(0, 0, 0, 0)`. `scale(i, k)` multiplies each side by `k`, so `scale(i, -1)` gives the outset of `i`.
 - **[INSETS.FINITE]** A value with a side that is not finite is not valid, so an op that reads or gives one gives `#NUM!`. An inset with an infinite side has no box, as VEC2.FINITE has no vector.
 
+### 7.5 The domain `QuantityDomain`
+
+`QuantityDomain` of the entry `@mark1russell7/vex-domains/quantity` keeps an amount in a unit as plain data. The package `@mark1russell7/quantity` does the unit arithmetic, and it converts each amount exactly. The entry is apart from the main entry, so a bundle without amounts does not get the unit tables.
+
+- **[QTY.VALUE]** A value is a plain object with exactly the fields `value` and `unit`. `value` is a number, and `unit` is the canonical spelling of a unit of `@mark1russell7/quantity`. Thus `{ value: 2, unit: "hr" }` is not a value, and the decoder of a document gives `{ value: 2, unit: "h" }` for it. Put `QuantityDomain` before `JsonDomain`, which accepts the same objects.
+- **[QTY.FINITE]** A value that is not finite is not valid, so an op that gives one gives `#NUM!`. Thus a division by 0 gives `#NUM!`.
+- **[QTY.COMPARE]** `lt`, `lte`, `gt`, `gte`, `eq` and `compare` compare two amounts of one kind exactly, each in its own unit. Thus `lte` of 155 mm and 16 cm is `true`. `min` and `max` give the result in the unit of the receiver.
+- **[QTY.ARITH]** `add` and `subtract` give the result in the unit of the receiver, exactly for decimal inputs. `multiply` and `divide` take a number. `ratio` divides two amounts of one kind, and it gives a number. No op lifts a number, because a number has no unit.
+- **[QTY.KIND]** Two amounts of different kinds, for example a length and a mass, give `#CALC!` with the reason of `@mark1russell7/quantity`. A unit of `convert` or `valueIn` with another kind, or a unit that does not exist, gives `#CALC!` too.
+- **[QTY.CONVERT]** `convert(a, unit)` gives the amount in another unit of the same kind, and `valueIn(a, unit)` gives its number. `value`, `unit` and `kind` give the parts of an amount.
+
 ## 8. The builder
 
 - **[BUILD.IMMUTABLE]** A builder call gives a new chain. An earlier chain does not change.

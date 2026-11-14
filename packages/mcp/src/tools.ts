@@ -8,6 +8,7 @@ import { deps, domainOf, evaluate, explain, formatTrace, isDocument, isVexList, 
 import { generate, type Schema } from "@mark1russell7/vex-compiler";
 import { emitModule } from "@mark1russell7/vex-compiler/module";
 import { AngleDomain, BoolDomain, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LiftedNDVectorDomain, NDVectorDomain, NumDomain, NumRecordDomain, TextDomain, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+import { QuantityDomain } from "@mark1russell7/vex-domains/quantity";
 
 /** The part of a package file that tells the version and the form of a package. */
 interface PackageFile {
@@ -40,6 +41,7 @@ const KNOWN: readonly (readonly [string, AnyDomain])[] = [
   ["ColorDomain", ColorDomain],
   ["AngleDomain", AngleDomain],
   ["DateDomain", DateDomain],
+  ["QuantityDomain", QuantityDomain],
   ["NDVectorDomain", NDVectorDomain],
   ["LiftedNDVectorDomain", LiftedNDVectorDomain],
   ["NumRecordDomain", NumRecordDomain],

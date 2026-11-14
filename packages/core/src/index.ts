@@ -24,3 +24,4 @@ export { monotoneError, type MonotoneOptions } from "./monotone.ts";
 export { fixRounds, fixValueError, joinKind, worstRow } from "./fix.ts";
 export * from "./size.ts";
 export * from "./steps.ts";
+export { countWork, isCounting, spendWork, spentWork, withWork, workError, type Counted, type WorkResult } from "./work.ts";

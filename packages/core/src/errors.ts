@@ -3,10 +3,10 @@ import type { KernelCode } from "@mark1russell7/coeval";
 /**
  * The error codes of Vex. The names come from the spreadsheet error values, because a Vex program is a spreadsheet
  * formula over records. Each code is a code of the kernel of coeval with the same meaning. For example, `#N/A` is a step
- * that reaches nothing, and `#DEPTH!` is a full call stack. The type checks it: a code that the kernel does not have is
- * not a member.
+ * that reaches nothing, `#DEPTH!` is a full call stack, and `#WORK!` is a run with more work than the option `maxWork`.
+ * The type checks it: a code that the kernel does not have is not a member.
  */
-export type ErrorCode = Extract<KernelCode, "#REF!" | "#N/A" | "#VALUE!" | "#NAME?" | "#NUM!" | "#CALC!" | "#ARGS" | "#CYCLE!" | "#DEPTH!">;
+export type ErrorCode = Extract<KernelCode, "#REF!" | "#N/A" | "#VALUE!" | "#NAME?" | "#NUM!" | "#CALC!" | "#ARGS" | "#CYCLE!" | "#DEPTH!" | "#WORK!">;
 
 /** The cause of an error, in more detail than the code. */
 export type ErrorKind =
@@ -31,6 +31,7 @@ export type ErrorKind =
   | "args"
   | "cycle"
   | "depth"
+  | "work"
   | "bad-expression"
   | "limit";
 
@@ -58,6 +59,7 @@ const CODE_OF: Readonly<Record<ErrorKind, ErrorCode>> = {
   args: "#ARGS",
   cycle: "#CYCLE!",
   depth: "#DEPTH!",
+  work: "#WORK!",
 };
 
 /**

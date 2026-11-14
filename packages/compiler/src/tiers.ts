@@ -3,11 +3,35 @@
  * 1 is the closure compiler of the core, and it gives each result that tier 2 cannot give. Thus a tiered program gives
  * the results of the interpreter.
  */
-import { compile, fail, fromDocument, isDocument, monotoneError, ok, sizeError, stepError, type CompileOptions, type Envelope, type Expr, type Program, type Space, type VexError } from "@mark1russell7/vex";
+import {
+  compile,
+  countWork,
+  fail,
+  fromDocument,
+  isCounting,
+  isDocument,
+  monotoneError,
+  ok,
+  sizeError,
+  stepError,
+  workError,
+  type CompileOptions,
+  type Envelope,
+  type Expr,
+  type Program,
+  type Result,
+  type RunOptions,
+  type Space,
+  type VexError,
+  type WorkResult,
+} from "@mark1russell7/vex";
 import { factsOf, type Schema } from "./facts.ts";
 
-/** The options of the compiler: the options of `compile`, and the schema of the host (docs/COMPILER.md §3.2). */
-export type GenerateOptions = CompileOptions & { readonly schema?: Schema };
+/**
+ * The options of the compiler: the options of `compile`, and the schema of the host (docs/COMPILER.md §3.2). With
+ * `work`, the code spends the points of the interpreter, so a run can have the option `maxWork` (WORK.TIERS).
+ */
+export type GenerateOptions = CompileOptions & { readonly schema?: Schema; readonly work?: boolean };
 import { printJs } from "./js.ts";
 import type { LoopProgram } from "./loop.ts";
 import { lower, Unsupported } from "./lower.ts";
@@ -37,7 +61,7 @@ export function generate(source: Expr | Envelope, options: GenerateOptions = {})
   if (!read.ok) return { ok: false, reason: read.error.message };
   try {
     const facts = factsOf(options);
-    const program = lower(read.value, facts, options.schema);
+    const program = lower(read.value, facts, options.schema, options.work === true);
     // LOOP.SIZE, STEP.MAX: tier 2 refuses the programs that tier 1 refuses. The lowering checks the shape and the nesting first.
     const size = refusal(read.value, options);
     if (size !== undefined) return { ok: false, reason: size };
@@ -56,8 +80,14 @@ export function load(generated: Extract<Generated, { readonly ok: true }>): Tier
   return link(generated).run;
 }
 
+/** A loaded program, with the function that gives the error of a run that gave `FALLBACK`. */
+interface Linked {
+  readonly run: Tier2;
+  readonly take: () => VexError | undefined;
+}
+
 /** This function loads a program, with the function that gives the error of a run that gave `FALLBACK`. */
-function link(generated: Extract<Generated, { readonly ok: true }>): { readonly run: Tier2; readonly take: () => VexError | undefined } {
+function link(generated: Extract<Generated, { readonly ok: true }>): Linked {
   const runtime = createRuntime(generated.options);
   // oxlint-disable-next-line typescript/no-implied-eval -- the source comes from printJs, and it reads each name and literal from K (§5).
   const make = new Function("K", "R", generated.source) as (k: readonly unknown[], r: ReturnType<typeof createRuntime>) => Tier2;
@@ -81,17 +111,28 @@ export interface TieredProgram extends Program {
   readonly stats: TierStats;
 }
 
+/** This function gives the result of one run of tier 2, or `undefined` when tier 1 gives the result. */
+function resultOf(code: Linked, r: RunOptions): Result<unknown> | undefined {
+  const value = code.run(r.space, r.origin, r.vars, r.tables);
+  if (value !== FALLBACK) return ok(value);
+  const error = code.take();
+  return error === undefined ? undefined : fail(error);
+}
+
 /**
  * This function compiles an expression or a document into tier 2 if it can, and else into tier 1 (DOC.ENTRY). Tier 2
  * gives a value or an error. When it gives no result, tier 1 does that evaluation again. A run with a trace and
  * `explain` always use tier 1, because tier 2 makes no trace.
+ *
+ * A run with the option `maxWork` uses a second program of tier 2, with the code that counts its work (WORK.TIERS). It
+ * loads at the first such run. A run of tier 1 after it counts from 0 again, so the result has the count of tier 1.
  */
 export function tiered(source: Expr | Envelope, options: GenerateOptions = {}): TieredProgram {
   const slow = compile(source, options);
   // The program of tier 1 has the expression of a document, so tier 2 does not read the document again.
   const { expr } = slow;
   const generated = generate(expr, options);
-  let fast: ReturnType<typeof link> | undefined;
+  let fast: Linked | undefined;
   let reason: string | undefined;
   if (generated.ok) {
     try {
@@ -102,6 +143,25 @@ export function tiered(source: Expr | Envelope, options: GenerateOptions = {}): 
   } else {
     reason = generated.reason;
   }
+  // The program that counts its work: `undefined` before the first run with a limit, and `null` when it does not load.
+  let counting: Linked | null | undefined;
+  const counter = (): Linked | undefined => {
+    if (counting === undefined) {
+      const work = generate(expr, { ...options, work: true });
+      counting = work.ok ? link(work) : null;
+    }
+    return counting ?? undefined;
+  };
+  // WORK.TIERS: a run with a limit counts on a meter of its own. A run without a limit inside such a run, for example in a
+  // function of the host, also gets a meter of its own. Thus it spends no points of the outer run.
+  const counted = (code: Linked, r: RunOptions): WorkResult<unknown> | undefined => {
+    const run = r.maxWork === undefined ? code : counter();
+    if (run === undefined) return undefined;
+    const outcome = countWork(r.maxWork, () => resultOf(run, r));
+    if (outcome.over) return { ok: false, error: workError(outcome.limit, r.origin), work: outcome.work };
+    const result = outcome.result;
+    return result === undefined || r.maxWork === undefined ? result : { ...result, work: outcome.work };
+  };
   const stats = { runs: 0, fallbacks: 0 };
   return {
     expr,
@@ -111,10 +171,8 @@ export function tiered(source: Expr | Envelope, options: GenerateOptions = {}): 
     run(r) {
       stats.runs++;
       if (fast === undefined || r.trace !== undefined) return slow.run(r);
-      const value = fast.run(r.space, r.origin, r.vars, r.tables);
-      if (value !== FALLBACK) return ok(value);
-      const error = fast.take();
-      if (error !== undefined) return fail(error);
+      const result = r.maxWork === undefined && !isCounting() ? resultOf(fast, r) : counted(fast, r);
+      if (result !== undefined) return result;
       stats.fallbacks++;
       return slow.run(r);
     },

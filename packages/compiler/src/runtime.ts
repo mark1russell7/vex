@@ -11,6 +11,9 @@
  * gives the result. A function of the runtime catches an exception only where the interpreter makes a value of it. In
  * an op, it is `#CALC!`, and in `safeIs`, it is `false`. A full call stack is `#DEPTH!`, which no list op and no
  * `ifError` hides, so it goes on to the program. An extension throws for `#DEPTH!` too (COMPILE.EXT).
+ *
+ * The stop of the work limit is an exception too (WORK.LIMIT). A point is spent only outside the `try` of an op, so the
+ * stop goes on to the program.
  */
 import {
   axisTargets,
@@ -31,6 +34,8 @@ import {
   noKeyError,
   resolveAddr,
   safeIs,
+  spendWork,
+  spentWork,
   vexError,
   vexList,
   worstRow,
@@ -83,19 +88,26 @@ export interface ListTargets extends Targets {
   readonly values: readonly unknown[];
 }
 
-/** An entry of a memo: the value of a node for one space, or no value after an error. */
+/**
+ * An entry of a memo: the value of a node for one space, or no value after an error. The code that counts its work
+ * keeps the points of the node in `w` (WORK.TIERS).
+ */
 export interface MemoEntry {
   readonly v: unknown;
   readonly ok: boolean;
+  readonly w?: number;
 }
 
 /**
  * The memo of one node: an entry for each space and each value of the keys (docs/COMPILER.md §7.2 and §7.3). An entry
  * with an object or a function in its keys is not kept, because each run can make a new one.
+ *
+ * The code that counts its work gives `put` the count of the run before the node. The entry then keeps the points of
+ * the node, and `get` spends them again for each read of the entry (WORK.TIERS).
  */
 export interface Memo {
   get(s: Space, keys: readonly unknown[]): MemoEntry | undefined;
-  put(s: Space, keys: readonly unknown[], v: unknown, ok: boolean): MemoEntry;
+  put(s: Space, keys: readonly unknown[], v: unknown, ok: boolean, from?: number): MemoEntry;
 }
 
 /** A level of a memo: the entry of the keys so far, and the levels of the next key. */
@@ -198,6 +210,10 @@ export interface Runtime {
   frozen(values: readonly unknown[]): unknown;
   ext(kind: string, data: unknown, s: Space, origin: string, focus: string, path: readonly number[]): unknown;
   var(vars: Readonly<Record<string, unknown>> | undefined, name: string): unknown;
+  /** This function spends points of the run (WORK.LIMIT). Over the limit of the run, it throws. */
+  spend(points: number): void;
+  /** This function gives the points that the run spent so far (WORK.TIERS). */
+  spent(): number;
 }
 
 /** The path and the position of a call of a list op. An error with this path is an error of the op, not of an item. */
@@ -532,10 +548,15 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         return at;
       };
       return {
-        // Stryker disable next-line BooleanLiteral: a read that makes the levels only uses memory
-        get: (s, keys) => level(s, keys, false)?.entry,
-        put(s, keys, v, ok) {
-          const e = { v, ok };
+        get(s, keys) {
+          // Stryker disable next-line BooleanLiteral: a read that makes the levels only uses memory
+          const e = level(s, keys, false)?.entry;
+          // WORK.TIERS: a read of an entry spends the points of the node, as the evaluation of the node does.
+          if (e?.w !== undefined) spendWork(e.w);
+          return e;
+        },
+        put(s, keys, v, ok, from) {
+          const e: MemoEntry = from === undefined ? { v, ok } : { v, ok, w: spentWork() - from };
           if (kept(keys)) (level(s, keys, true) as MemoLevel).entry = e;
           return e;
         },
@@ -617,5 +638,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return record("foreign", r.error);
     },
     var: (vars, name) => (hasVar(vars, name) ? vars[name] : F),
+    spend: spendWork,
+    spent: spentWork,
   };
 }

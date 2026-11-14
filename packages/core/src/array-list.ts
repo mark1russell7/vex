@@ -6,6 +6,7 @@ import type { VexError } from "./errors.ts";
 import { MAX_ITERATIONS } from "./ir.ts";
 import { isVexList, vexList, type ListItem, type VexList } from "./list.ts";
 import { fail, ok } from "./result.ts";
+import { spendWork } from "./work.ts";
 
 /**
  * This function gives the list of an array (LIST.ARRAY). The key of each item is its position, from "0". A position
@@ -30,8 +31,15 @@ export const asList = (u: unknown, missing: (message: string) => VexError): VexL
  */
 export const isFillCount = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= MAX_ITERATIONS;
 
-/** This function gives the list of `fill` (LIST.FILL): `n` items with the value `value`, and the keys "0" to "n - 1". */
-export const fillList = (n: number, value: unknown): VexList => vexList(Array.from({ length: n }, (_x, i): ListItem => ({ key: String(i), result: ok(value) })));
+/**
+ * This function gives the list of `fill` (LIST.FILL): `n` items with the value `value`, and the keys "0" to "n - 1".
+ * Each item is one point of work, and the points go before the list (WORK.LIMIT). Thus a count over the limit stops
+ * before the memory of the list.
+ */
+export function fillList(n: number, value: unknown): VexList {
+  spendWork(n);
+  return vexList(Array.from({ length: n }, (_x, i): ListItem => ({ key: String(i), result: ok(value) })));
+}
 
 /** This function tells if a value can be the value of `indexOf`: a number, a text or a boolean (LIST.INDEXOF). */
 export const isIndexValue = (u: unknown): u is number | string | boolean => typeof u === "number" || typeof u === "string" || typeof u === "boolean";

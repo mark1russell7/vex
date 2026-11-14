@@ -30,6 +30,7 @@ const SLUGS: Readonly<Record<ErrorCode, string>> = {
   "#ARGS": "args",
   "#CYCLE!": "cycle",
   "#DEPTH!": "depth",
+  "#WORK!": "work",
 };
 
 /** This function gives the link to the page of an error code. */

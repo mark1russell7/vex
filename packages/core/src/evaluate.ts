@@ -14,6 +14,7 @@ import { isListOp, isVexList, vexList, type ListItem, type ListOp, type ListOpti
 import { fail, ok, type Result } from "./result.ts";
 import { axisTargets, fixAddr, resolveAddr, type Position, type Space } from "./space.ts";
 import type { Read, Trace, TraceEvent, TraceSink } from "./trace.ts";
+import { spendWork, withWork, type WorkResult } from "./work.ts";
 
 export { describeType };
 
@@ -57,6 +58,14 @@ export interface EvalOptions {
    * step gives `#VALUE!` before the evaluation, and the reason names its step.
    */
   readonly maxStep?: VexStep;
+  /**
+   * The most work of the run (WORK.LIMIT). Each application of a closure is one point: a call of a function, the body
+   * of `each` at one target, the test of `where` at one target, one step of `fold` or `iterate`, and one row of one
+   * round of `fix`. Each item of `fill` is one point too. A run with more points gives `#WORK!`, and no rule of the
+   * program hides it. With this option, the result has the field `work` with the points of the run (WORK.RESULT).
+   * Without it, the run has no limit. The value `Infinity` gives the count with no limit.
+   */
+  readonly maxWork?: number;
 }
 
 /** The names of a frame: a map of the variables of the caller, or a scope inside it. */
@@ -112,7 +121,7 @@ const isSpecialForm = (op: string): op is SpecialForm => SPECIAL_FORMS.has(op);
 export type CompileOptions = Pick<EvalOptions, "domains" | "fns" | "extensions" | "maxStep">;
 
 /** The options of one run of a compiled program. */
-export type RunOptions = Pick<EvalOptions, "space" | "origin" | "vars" | "trace" | "tables">;
+export type RunOptions = Pick<EvalOptions, "space" | "origin" | "vars" | "trace" | "tables" | "maxWork">;
 
 /**
  * A compiled program: the expression as a tree of functions. A program evaluates many times at different origins,
@@ -124,8 +133,8 @@ export interface Program {
    * stays as it is, as an expression that is not valid stays (DOC.ENTRY).
    */
   readonly expr: Expr;
-  /** This method evaluates the program at an origin. It does not throw. */
-  run(opts: RunOptions): Result<unknown>;
+  /** This method evaluates the program at an origin. It does not throw. With the option `maxWork`, the result has its work. */
+  run(opts: RunOptions): WorkResult<unknown>;
   /** This method evaluates the program at an origin, with a trace of each node. */
   explain(opts: Omit<RunOptions, "trace">): Trace;
 }
@@ -211,18 +220,20 @@ export function compile(source: Expr | Envelope, opts: CompileOptions = {}): Pro
   const bad = deep ?? sizeError(expr, opts) ?? stepError(expr, opts) ?? monotoneError(expr, opts);
   const kind = read.ok ? "bad-expression" : read.error.kind;
   const root: Node = bad === undefined ? new Compiler(opts).node(expr, []) : (f) => fail(vexError(kind, bad, { path: [], origin: f.pos.origin, focus: f.pos.focus }));
-  const run = (r: RunOptions): Result<unknown> => {
+  const once = (r: RunOptions): Result<unknown> => {
     const { space, origin } = r;
     if (!space.has(origin)) return fail(noKeyError(origin));
     const env = new Map<string, Result<unknown>>(Object.entries(r.vars ?? {}).map(([k, val]) => [k, ok(val)]));
     try {
       return root({ pos: { origin, focus: origin }, env }, { space, trace: r.trace, tables: r.tables });
     } catch (thrown) {
-      // A defect in an extension handler or in a test of the interpreter itself. Totality still holds.
+      // A defect in an extension handler or in a test of the interpreter itself. Totality still holds. The stop of the
+      // work limit comes here too, and `withWork` gives #WORK! for it (WORK.LIMIT).
       if (isStackOverflow(thrown)) return fail(vexError("depth", DEPTH_MESSAGE, { origin, focus: origin, thrown }));
       return fail(vexError("threw", "the evaluation threw an exception", { origin, focus: origin, thrown }));
     }
   };
+  const run = (r: RunOptions): WorkResult<unknown> => withWork(r.maxWork, r.origin, () => once(r));
   return {
     expr,
     run,
@@ -251,7 +262,7 @@ function compiled(expr: Expr | Envelope, opts: CompileOptions): Program {
 }
 
 /** This function evaluates an expression or a document at the origin of a space. It does not throw. */
-export function evaluate(expr: Expr | Envelope, opts: EvalOptions): Result<unknown> {
+export function evaluate(expr: Expr | Envelope, opts: EvalOptions): WorkResult<unknown> {
   return compiled(expr, opts).run(opts);
 }
 
@@ -484,6 +495,8 @@ class Compiler {
       const callee = bound.value;
       if (!(callee instanceof Closure)) return this.#emit(c, info, f, this.#at(errorText.notFunction(e.fn), f, path));
       if (callee.params.length !== args.length) return this.#emit(c, info, f, this.#at(errorText.arity(e.fn, callee.params.length, args.length), f, path));
+      // WORK.LIMIT: a call is one application of a closure.
+      spendWork(1);
       const values: Result<unknown>[] = [];
       for (const n of args) values.push(n(f, c));
       return this.#emit(c, info, f, callee.body({ pos: f.pos, env: new Scope(callee.env, callee.params, values) }, c));
@@ -608,6 +621,8 @@ class Compiler {
       const items: ListItem[] = ts.value.map((t) => {
         const { key, test } = t;
         if (test !== undefined && !test.ok) return { key, result: test };
+        // WORK.LIMIT: the body at one target is one application.
+        spendWork(1);
         return { key, result: body({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env: withItem(f.env, e.as, t) }, inner) };
       });
       return this.#emit(c, info, f, ok(vexList(items)));
@@ -674,6 +689,8 @@ class Compiler {
       for (const t of ts.value) {
         const { key, test } = t;
         if (test !== undefined && !test.ok) return this.#emit(c, info, f, test);
+        // WORK.LIMIT: one step is one application.
+        spendWork(1);
         const after = names.next({ pos: { origin: base.t === "table" ? key : f.pos.origin, focus: key }, env: withItem(env, e.as, t) }, inner, env);
         if (!after.ok) return this.#emit(c, info, f, after);
         env = after.value;
@@ -731,6 +748,8 @@ class Compiler {
     const errors: VexError[] = [];
     for (const key of c.space.keys) {
       const frame: Frame = { pos: { origin: f.pos.origin, focus: key }, env };
+      // WORK.LIMIT: one row of one round is one application.
+      spendWork(1);
       const r = node(frame, c);
       const wrong = r.ok ? fixValueError(e.name, e.join, r.value) : undefined;
       if (!r.ok) errors.push(r.error);
@@ -807,6 +826,8 @@ class Compiler {
           if (until !== undefined) return this.#emit(c, info, f, this.#at(errorText.limit(limit), f, path));
           break;
         }
+        // WORK.LIMIT: one step is one application.
+        spendWork(1);
         const after = names.next(frame, c, env);
         if (!after.ok) return this.#emit(c, info, f, after);
         env = after.value;
@@ -868,6 +889,8 @@ class Compiler {
           continue;
         }
         const at: Frame = { pos: { origin: sameOrigin ? t.key : f.pos.origin, focus: t.key }, env: f.env };
+        // WORK.LIMIT: the test at one target is one application.
+        spendWork(1);
         const r = test(at, c);
         if (!r.ok) out.push({ key: t.key, test: r });
         // The target keeps the value and the index of its item (AXIS.LIST.ITEM).

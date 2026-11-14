@@ -13,6 +13,10 @@
  * After a failure, the interpreter still evaluates the later arguments of a node, and two errors give `#ARGS`. The value
  * path of generated code has no flags for this. A failure jumps to a copy of the later arguments (`#chain`), which only
  * the failure path reads. A copy uses flags, so the size of the code stays near the size of the program times its depth.
+ *
+ * With the option `work`, the code counts its work (WORK.TIERS). A statement `spend` goes at each place where the
+ * interpreter spends a point. A point is an effect, as an extension is. Thus a failure that skips a later point stops
+ * the program, and tier 1 gives the result with its count.
  */
 import {
   addrExprs,
@@ -162,6 +166,15 @@ const ROWS: Pick<ExprOf<"each">, "axis"> = { axis: { t: "all" } };
 /** The primitive operation of each join (FIX.JOIN). The checks of a row give each join a value of its kind. */
 const JOINS = { or: "||", and: "&&", max: "max", min: "min" } as const;
 
+/** The tags of the expressions that spend points of work (WORK.LIMIT). `fill` is an op, so it is not here. */
+const SPENDS: ReadonlySet<string> = new Set(["call", "each", "fold", "iterate", "fix"]);
+
+/** This function tells if an expression is an extension. */
+const isExt = (x: Expr): boolean => x.tag === "ext";
+
+/** This function tells if an expression is a call of the op `fill`. */
+const isFill = (x: Expr): boolean => x.tag === "app" && x.op === "fill";
+
 /** The kinds of the values of the primitive operations that always give a boolean. */
 const BOOLEAN_PRIMS: ReadonlySet<string> = new Set(["!", "===", "!==", "isNumber", "isBoolean", "isString", "isValue", "isObject"]);
 
@@ -173,9 +186,10 @@ const join = (a: PrimitiveKind | undefined, b: PrimitiveKind | undefined): Primi
 
 /**
  * This function lowers an expression into a program of the loop IR. It throws `Unsupported` for an expression it cannot
- * lower. The facts of the options decide the op of a site whose values have known kinds (KIND.STATIC).
+ * lower. The facts of the options decide the op of a site whose values have known kinds (KIND.STATIC). With `work`, the
+ * program spends the points of the interpreter (WORK.TIERS).
  */
-export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {}): LoopProgram {
+export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {}, work = false): LoopProgram {
   // COMPILE.PLACES: the walks below take the time of the places, so the count comes first.
   const places = placesRead([expr]);
   if (places.error !== undefined) throw new Unsupported(places.error);
@@ -185,7 +199,7 @@ export function lower(expr: Expr, facts: Facts = factsOf({}), schema: Schema = {
   const deep = nestingError(expr);
   if (deep !== undefined) throw new Unsupported(deep);
   const plain = unshared(expr, places.shares);
-  const l = new Lowerer(memoNodes(plain, isFusedOp), facts, schema);
+  const l = new Lowerer(memoNodes(plain, isFusedOp), facts, schema, work);
   const b = block(RETURN);
   const top: Scope = { space: local(SPACE), origin: local(ORIGIN), focus: local(ORIGIN), env: new Map(), fns: new Map(), rec: prim("get", local(SPACE), local(ORIGIN)), columns: new Map(), slot: undefined };
   l.check(b, call("has", local(SPACE), local(ORIGIN)), "the origin is a key of the space", l.site(b, top, { t: "key" }));
@@ -267,6 +281,14 @@ class Lowerer {
   #copied = 0;
   /** The answers of `#mayExt`, for each map of functions. */
   readonly #exts = new WeakMap<ReadonlyMap<string, BoundFn>, Map<Expr, boolean>>();
+  /** The answers of `#mayFill`, for each map of functions. */
+  readonly #fills = new WeakMap<ReadonlyMap<string, BoundFn>, Map<Expr, boolean>>();
+  /** The answers of `#maySpend`. */
+  readonly #spends = new Map<Expr, boolean>();
+  /** True when the program counts its work (WORK.TIERS). */
+  readonly #work: boolean;
+  /** The depth of the second evaluations of a node of the memo. Such code spends no points, because the first evaluation spent them. */
+  #again = 0;
   readonly #memo: ReadonlyMap<Expr, readonly Expr[]>;
   /** The keys of the nodes of the memo whose code the lowering makes, with their values. */
   #keys: ReadonlyMap<Expr, Bound> = new Map();
@@ -281,10 +303,11 @@ class Lowerer {
   /** The kind of each local whose kind the lowering knows. A local gets its kind where it gets its value. */
   readonly #kinds = new Map<number, PrimitiveKind>();
 
-  constructor(memo: ReadonlyMap<Expr, readonly Expr[]>, facts: Facts, schema: Schema) {
+  constructor(memo: ReadonlyMap<Expr, readonly Expr[]>, facts: Facts, schema: Schema, work: boolean) {
     this.#memo = memo;
     this.#facts = facts;
     this.#schema = schema;
+    this.#work = work;
   }
 
   /** This method gives the kind of a value, if the lowering knows it. */
@@ -396,7 +419,13 @@ class Lowerer {
     }
     // In the code of a node of the memo with no keys, outside a loop of that code, a node evaluates at most once for each space. Its memo thus saves nothing (V-089).
     const keys = this.#copying > 0 || this.#once === this.#loops ? undefined : this.#memo.get(e);
-    return keys === undefined ? this.#node(e, s, path, b) : this.#memoized(e, keys, s, path, b);
+    // WORK.TIERS: the keys evaluate before the node, also where the node does not read them. A key with a point thus has no memo.
+    return keys === undefined || keys.some((k) => this.#maySpend(k)) ? this.#node(e, s, path, b) : this.#memoized(e, keys, s, path, b);
+  }
+
+  /** This method adds the statement of one point of work (WORK.LIMIT), in the code that counts its work. */
+  #spend(b: Block): void {
+    if (this.#work && this.#again === 0) b.stmts.push({ t: "spend", points: 1 });
   }
 
   /** This method lowers a copy of a part of a failure path. */
@@ -497,18 +526,25 @@ class Lowerer {
     const outer = this.#keys;
     this.#keys = new Map([...outer, ...keys.map((k, i): [Expr, Bound] => [k, values[i] as Bound])]);
     const compute = block(b.fail);
+    // WORK.TIERS: the entry keeps the points of the node, from the count of the run before the node.
+    const from = this.#work ? this.locals++ : undefined;
+    if (from !== undefined) compute.stmts.push({ t: "let", n: from, value: call("spent") });
     const once = this.#once;
     this.#once = keys.length === 0 ? this.#loops : undefined;
     const node = this.#attempt(compute, (inner) => this.#node(e, s, path, inner), false);
     this.#once = once;
     this.#keys = outer;
-    compute.stmts.push({ t: "set", n: h, value: prim("memoPut", memo, s.space, tuple, node.value, flag(node)) });
+    const put = [memo, s.space, tuple, node.value, flag(node), ...(from === undefined ? [] : [local(from)])];
+    compute.stmts.push({ t: "set", n: h, value: prim("memoPut", ...put) });
     b.stmts.push({ t: "let", n: h, value: prim("memoGet", memo, s.space, tuple) }, { t: "if", cond: prim("!", prim("isValue", local(h))), yes: compute.stmts, no: [] });
     const entry = prim("entryOk", local(h));
     const stop: LStmt = { t: "check", ok: entry, reason: "a value of the memo", fail: plainOf(b.fail) };
-    if (keeps(b.fail) && this.#copied < MAX_COPIED) {
+    // WORK.TIERS: the copy spends no points. A `fill` spends in the runtime, so a node with `fill` has no copy.
+    if (keeps(b.fail) && this.#copied < MAX_COPIED && !(this.#work && this.#mayFill(e, s.fns))) {
       const copy = block(b.fail);
+      this.#again++;
       this.#copy(() => this.#node(e, s, path, copy));
+      this.#again--;
       b.stmts.push({ t: "if", cond: prim("!", entry), yes: [...copy.stmts, stop], no: [] });
     } else {
       b.stmts.push(stop);
@@ -523,7 +559,8 @@ class Lowerer {
    * Where the context keeps the error of two or more arguments that can fail, `#chain` or `#collect` lowers them.
    *
    * An extension in a later argument can give `#DEPTH!`. Thus, where the program catches the error, each argument before
-   * the last one that can use an extension has its own block (COMPILE.EXT). Then a failure skips no extension.
+   * the last one that can use an extension has its own block (COMPILE.EXT). Then a failure skips no extension. A point
+   * of work is an effect too (`#effects`).
    */
   #all(xs: readonly Expr[], s: Scope, path: readonly number[], first: number, what: string, b: Block): LExpr[] {
     if (keeps(b.fail) && xs.filter((x) => x.tag !== "lit").length > 1) {
@@ -531,7 +568,7 @@ class Lowerer {
       if (this.#copied < MAX_COPIED && xs.length <= MAX_CHAINED) return this.#chain(xs, s, path, first, what, b);
       return this.#all(xs, s, path, first, what, { stmts: b.stmts, fail: plainOf(b.fail) });
     }
-    const last = b.fail.t === "return" || b.fail.t === "stop" ? -1 : xs.findLastIndex((x) => this.#mayExt(x, s.fns));
+    const last = b.fail.t === "return" || b.fail.t === "stop" ? -1 : xs.findLastIndex((x) => this.#effects(x, s.fns));
     const parts = xs.map((x, i): Bound => {
       const at = [...path, first + i];
       return i < last ? this.#attempt(b, (inner) => this.expr(x, s, at, inner)) : { value: this.expr(x, s, at, b) };
@@ -628,17 +665,52 @@ class Lowerer {
    * map of functions, because functions can call each other many times (V-068).
    */
   #mayExt(e: Expr, fns: ReadonlyMap<string, BoundFn>): boolean {
-    let answers = this.#exts.get(fns);
+    return this.#reaches(this.#exts, isExt, e, fns);
+  }
+
+  /** This method tells if an expression can call `fill`, which spends its points in the runtime (WORK.LIMIT). */
+  #mayFill(e: Expr, fns: ReadonlyMap<string, BoundFn>): boolean {
+    return this.#reaches(this.#fills, isFill, e, fns);
+  }
+
+  /**
+   * This method tells if an expression or the body of a function that it calls has a node that `hit` accepts. `answersOf`
+   * keeps the answers for each map of functions.
+   */
+  #reaches(answersOf: WeakMap<ReadonlyMap<string, BoundFn>, Map<Expr, boolean>>, hit: (x: Expr) => boolean, e: Expr, fns: ReadonlyMap<string, BoundFn>): boolean {
+    let answers = answersOf.get(fns);
     if (answers === undefined) {
       answers = new Map();
-      this.#exts.set(fns, answers);
+      answersOf.set(fns, answers);
     }
     const known = answers.get(e);
     if (known !== undefined) return known;
     const bound = e.tag === "call" ? fns.get(e.fn) : undefined;
-    const answer = e.tag === "ext" || (bound !== undefined && this.#mayExt(bound.fn.body, bound.scope.fns)) || children(e).some((x) => this.#mayExt(x, fns));
+    const answer = hit(e) || (bound !== undefined && this.#reaches(answersOf, hit, bound.fn.body, bound.scope.fns)) || children(e).some((x) => this.#reaches(answersOf, hit, x, fns));
     answers.set(e, answer);
     return answer;
+  }
+
+  /**
+   * This method tells if an expression can spend a point of work, in the code that counts its work (WORK.LIMIT). A call,
+   * `each`, `fold`, `iterate`, `fix` and `fill` spend points. A call spends a point itself, so the search does not read
+   * the body of its function.
+   */
+  #maySpend(e: Expr): boolean {
+    if (!this.#work) return false;
+    const known = this.#spends.get(e);
+    if (known !== undefined) return known;
+    const answer = SPENDS.has(e.tag) || isFill(e) || children(e).some((x) => this.#maySpend(x));
+    this.#spends.set(e, answer);
+    return answer;
+  }
+
+  /**
+   * This method tells if an expression has an effect that a failure must not skip: an extension, which can give
+   * `#DEPTH!` (COMPILE.EXT), or a point of work (WORK.TIERS). After a failure, the interpreter evaluates such parts.
+   */
+  #effects(e: Expr, fns: ReadonlyMap<string, BoundFn>): boolean {
+    return this.#mayExt(e, fns) || this.#maySpend(e);
   }
 
   /**
@@ -725,6 +797,8 @@ class Lowerer {
     if (bound === undefined) return this.fail(b, this.site(b, s, { t: "call", name: e.fn, path }, local(VARS)));
     if (bound.fn.params.length !== e.args.length) return this.fail(b, this.#text(b, s, path, errorText.arity(e.fn, bound.fn.params.length, e.args.length)));
     if (this.#copying === 0 && ++this.#calls > MAX_CALLS) throw new Unsupported(`the calls put the bodies of functions in more than ${String(MAX_CALLS)} places`);
+    // WORK.LIMIT: the call spends its point after the checks of the call and before its arguments, as the interpreter does.
+    this.#spend(b);
     const env = new Map(bound.scope.env);
     bound.fn.params.forEach((p, i) => env.set(p, this.#attempt(b, (inner) => this.expr(e.args[i] as Expr, s, [...path, i], inner))));
     return this.expr(bound.fn.body, { ...s, env, fns: bound.scope.fns }, [...bound.path, 0], b);
@@ -837,7 +911,8 @@ class Lowerer {
     }
     // COMPILE.EXT: the interpreter evaluates each item of the list before the op, and an extension in an item can give
     // #DEPTH!. Thus a failure that would skip the later items stops the program, if the list can call an extension.
-    const skip: Block = this.#mayExt(e.args[0] as Expr, s.fns) ? { stmts: b.stmts, fail: STOP } : b;
+    // WORK.TIERS: a point of work in an item has the same rule.
+    const skip: Block = this.#effects(e.args[0] as Expr, s.fns) ? { stmts: b.stmts, fail: STOP } : b;
     const plain: Block = { stmts: b.stmts, fail: plainOf(skip.fail) };
     const rest = this.#all(e.args.slice(1), s, path, 1, "arguments", plain);
     const options = op === "reduce" ? rest[1] : rest[0];
@@ -960,6 +1035,8 @@ class Lowerer {
 
   #loop(e: ExprOf<"each">, s: Scope, path: readonly number[], b: Block, items: (label: number) => Fail, onItem: (body: Block, key: LExpr, value: LExpr) => void): void {
     this.#targetLoop(e, s, path, 1, b, items, (body, key, at, names) => {
+      // WORK.LIMIT: the body at one target is one application.
+      this.#spend(body);
       onItem(body, key, this.expr(e.body, { ...at, env: new Map([...at.env, ...names]) }, [...path, 0], body));
     });
   }
@@ -1024,6 +1101,8 @@ class Lowerer {
     const at: Scope = { space, origin: base.t === "table" ? key : s.origin, focus: key, env: s.env, fns: s.fns, rec, columns: s.columns, slot: list === undefined ? slot : undefined };
     whereTests(axis).forEach((test, i) => {
       const testPath = [...path, tests + i];
+      // WORK.LIMIT: the test at one target is one application.
+      this.#spend(body);
       const ok = this.#boolean(this.expr(test, at, testPath, body), body, at, { t: "test", path: testPath });
       body.stmts.push({ t: "if", cond: prim("!", ok), yes: [{ t: "next" }], no: [] });
     });
@@ -1084,6 +1163,8 @@ class Lowerer {
     const more = prim("!==", local(k), limit);
     if (e.until === undefined) body.stmts.push({ t: "check", ok: more, reason: "the limit of iterate", fail: { t: "break", label } });
     else this.check(body, more, "the limit of iterate", this.site(body, s, { t: "limit", path }, limit));
+    // WORK.LIMIT: one step is one application.
+    this.#spend(body);
     this.#loopStep(e.step, inner, path, first, body, locals);
     body.stmts.push({ t: "set", n: k, value: prim("+", local(k), num(1)) });
     b.stmts.push({ t: "repeat", label, body: body.stmts });
@@ -1138,6 +1219,8 @@ class Lowerer {
     const kind: ErrorSite = { t: "row", name: e.name, join: e.join, path };
     // Stryker disable next-line ArrowFunction: each check of a row is in its own block, so the loop reads no failure
     this.#targetLoop(ROWS, s, path, 0, b, () => b.fail, (body, _key, at) => {
+      // WORK.LIMIT: one row of one round is one application.
+      this.#spend(body);
       const row = this.#attempt(
         body,
         (inner) => {
@@ -1173,7 +1256,9 @@ class Lowerer {
     b.stmts.push({ t: "let", n, value: num(0) });
     // The error of a limit that is not valid keeps its cause, so each failure here is the plain failure of the block.
     // COMPILE.EXT: the interpreter evaluates each test, and an extension in a test can give #DEPTH!. Thus a failed test stops the program.
-    const plain: Block = { stmts: b.stmts, fail: axisExprs(axis).some((x) => this.#mayExt(x, s.fns)) ? STOP : plainOf(b.fail) };
+    // WORK.TIERS: each test spends a point, so in the code that counts its work, a failed test stops the program too.
+    const stops = (this.#work && whereTests(axis).length > 0) || axisExprs(axis).some((x) => this.#effects(x, s.fns));
+    const plain: Block = { stmts: b.stmts, fail: stops ? STOP : plainOf(b.fail) };
     this.#targetLoop({ axis }, s, path, firstTest, plain, () => plain.fail, (body) => {
       body.stmts.push({ t: "set", n, value: prim("+", local(n), num(1)) });
     });
@@ -1186,8 +1271,12 @@ class Lowerer {
     const first = Object.keys(e.init).length;
     const tests = first + Object.keys(e.step).length;
     const { env, locals } = this.#loopNames(e.init, s, path, b);
-    // An error of a test or of a step is the error of the fold.
-    this.#targetLoop(e, s, path, tests, b, () => b.fail, (body, _key, at, names) => {
+    // An error of a test or of a step is the error of the fold. WORK.TIERS: the interpreter evaluates each test before the
+    // first step. Thus, in the code that counts its work, such an error stops the program when the axis has tests.
+    const fail = this.#work && whereTests(e.axis).length > 0 ? STOP : b.fail;
+    this.#targetLoop(e, s, path, tests, b, () => fail, (body, _key, at, names) => {
+      // WORK.LIMIT: one step is one application.
+      this.#spend(body);
       this.#loopStep(e.step, { ...at, env: new Map([...env, ...names]) }, path, first, body, locals);
     });
     return this.expr(e.result, { ...s, env }, [...path, tests + axisChildren(e.axis) + addrExprs(e.at).length], b);

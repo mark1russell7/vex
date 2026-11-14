@@ -38,7 +38,9 @@ export type RuntimeFn =
   | "raise" // raise(error): the end of the program with a lazy error
   | "args" // args(site, origin, focus, errors): the error of the arguments that failed, or undefined for no error
   | "bad" // bad(value): the record of a result of an op that failed its checks
-  | "invalid"; // invalid(thrown, domain): the record of an exception of a check `valid`
+  | "invalid" // invalid(thrown, domain): the record of an exception of a check `valid`
+  | "spend" // spend(points): the points of one application of a closure, for the statement `spend` (WORK.LIMIT)
+  | "spent"; // spent(): the points that the run spent so far (WORK.TIERS)
 
 /** The primitive operations of the loop IR. They copy no arithmetic of a domain (§4.2). */
 export type PrimOp =
@@ -66,7 +68,7 @@ export type PrimOp =
   | "idxOf" // idxOf(targets): the index of each target in the keys of the space
   | "valuesOf" // valuesOf(targets): the value of each target of the axis list
   | "memoGet" // memoGet(memo, space, keys): the entry of a space and the values of its keys, or undefined
-  | "memoPut" // memoPut(memo, space, keys, value, ok): the new entry of a space and the values of its keys
+  | "memoPut" // memoPut(memo, space, keys, value, ok, from?): the new entry of a space and the values of its keys, with the points since `from`
   | "entryValue" // entryValue(entry): the value of an entry of a memo
   | "entryOk"; // entryOk(entry): true if the entry has a value
 
@@ -183,6 +185,8 @@ export type LStmt =
   | { readonly t: "next" }
   /** A value at the end of an array. */
   | { readonly t: "push"; readonly n: number; readonly value: LExpr }
+  /** The points of one application of a closure (WORK.LIMIT). Only the code that counts its work has this statement. */
+  | { readonly t: "spend"; readonly points: number }
   | { readonly t: "return"; readonly value: LExpr };
 
 /** A program of the loop IR: its statements, the number of its locals and its constants. Each local is a name in the function. */

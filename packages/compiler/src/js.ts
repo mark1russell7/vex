@@ -76,7 +76,7 @@ export function printJs(p: LoopProgram, facts: Facts, indented = false): string 
         return `${site}(${x.args.map(expr).join(", ")})`;
       }
       case "prim": {
-        const [a, b, c, d, e] = x.args.map(expr);
+        const [a, b, c, d, e, f] = x.args.map(expr);
         switch (x.op) {
           case "!":
             return `(!${a})`;
@@ -114,7 +114,8 @@ export function printJs(p: LoopProgram, facts: Facts, indented = false): string 
           case "memoGet":
             return `${a}.get(${b}, ${c})`;
           case "memoPut":
-            return `${a}.put(${b}, ${c}, ${d}, ${e})`;
+            // WORK.TIERS: the code that counts its work gives the count before the node too.
+            return f === undefined ? `${a}.put(${b}, ${c}, ${d}, ${e})` : `${a}.put(${b}, ${c}, ${d}, ${e}, ${f})`;
           case "entryValue":
             return `${a}.v`;
           case "entryOk":
@@ -323,6 +324,10 @@ export function printJs(p: LoopProgram, facts: Facts, indented = false): string 
         return;
       case "push":
         lines.push(`${indent}${name(s.n)}.push(${expr(s.value)});`);
+        return;
+      case "spend":
+        used.add("spend");
+        lines.push(`${indent}spend_(${String(s.points)});`);
         return;
       case "return":
         lines.push(`${indent}return ${expr(s.value)};`);

@@ -39,7 +39,7 @@ import { decodeValue } from "./codec.ts";
 import type { AnyDomain } from "./domain.ts";
 import { vexError, type ErrorCode, type ErrorDetails, type ErrorKind, type VexError } from "./errors.ts";
 import { limitError, overLimitMessage, worstError } from "./limit-error.ts";
-import type { CompileOptions } from "./evaluate.ts";
+import type { CompileOptions, EvalOptions } from "./evaluate.ts";
 import { errorText } from "./error-text.ts";
 import { fixRounds, fixValueError, joinValues, worstRow } from "./fix.ts";
 import { MAX_ITERATIONS, type Axis, type FixJoin, type FixedMove } from "./ir.ts";
@@ -47,6 +47,7 @@ import { isVexList, LIST_OPS, vexList, type ListItem } from "./list.ts";
 import { fail as vexFail, ok as vexOk, type Result } from "./result.ts";
 import { isVexError } from "./same.ts";
 import { applyMove, axisTargets, type Space } from "./space.ts";
+import { spendWork } from "./work.ts";
 
 // ---------------------------------------------------------------- the contracts
 
@@ -198,6 +199,7 @@ const KIND_OF: Readonly<Partial<Record<string, ErrorKind>>> = {
   "#ARGS": "args",
   "#CYCLE!": "cycle",
   "#DEPTH!": "depth",
+  "#WORK!": "work",
 };
 
 /** This function gives the error of the kernel for a Vex error. The Vex error is its cause, so no detail is lost. */
@@ -465,6 +467,8 @@ function whereTargets(base: Targets, test: Part, ctx: Context, from: Place): Out
       out.push(t);
       continue;
     }
+    // WORK.LIMIT: the test at one target is one application.
+    spendWork(1);
     const r = test.evaluate({ ...ctx, self: placeOf(base, from, t.key) });
     if (!r.ok) out.push({ key: t.key, error: toVexError(r.error) });
     // The target keeps the value and the index of its item (AXIS.LIST.ITEM).
@@ -535,6 +539,8 @@ function rowsOf(part: Part, at: Place, context: Context, name: string, join: Fix
   const out = new Map<string, unknown>();
   const errors: EvalError[] = [];
   for (const key of at.space.keys) {
+    // WORK.LIMIT: one row of one round is one application.
+    spendWork(1);
     const r = part.evaluate({ ...context, self: at.to(key) });
     const wrong = r.ok ? fixValueError(name, join, r.value) : undefined;
     if (!r.ok) errors.push(r.error);
@@ -561,10 +567,12 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
     const { axis, from, targets } = found.value;
     const body = partAt(value, "body");
     const as = itemNamesOf(value);
-    const items: ListItem[] = targets.map((t) => ({
-      key: t.key,
-      result: t.error === undefined ? toVexResult(body.evaluate({ ...context, self: placeOf(axis, from, t.key), names: withItem(context.names, as, t) })) : vexFail(t.error),
-    }));
+    const items: ListItem[] = targets.map((t) => {
+      if (t.error !== undefined) return { key: t.key, result: vexFail(t.error) };
+      // WORK.LIMIT: the body at one target is one application.
+      spendWork(1);
+      return { key: t.key, result: toVexResult(body.evaluate({ ...context, self: placeOf(axis, from, t.key), names: withItem(context.names, as, t) })) };
+    });
     return ok(vexList(items));
   },
 
@@ -580,6 +588,8 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
     const as = itemNamesOf(value);
     for (const t of targets) {
       if (t.error !== undefined) return { ok: false, error: toKernelError(t.error) };
+      // WORK.LIMIT: one step is one application.
+      spendWork(1);
       // The step sees the names of the item, and the next names do not keep them (AXIS.LIST.SCOPE).
       const next = bindAll(step, { ...context, self: placeOf(axis, from, t.key), names: withItem(names, as, t) }, names);
       if (!next.ok) return next;
@@ -621,6 +631,8 @@ const LOOPS: Readonly<Record<string, EvalFn>> = {
         if (until !== undefined) return failed("limit", `"iterate" made its ${String(limit)} steps, and its test "until" is not true`);
         break;
       }
+      // WORK.LIMIT: one step is one application.
+      spendWork(1);
       const next = bindAll(step, here, names);
       if (!next.ok) return next;
       names = next.value;
@@ -693,6 +705,8 @@ const FUNCTIONS: Readonly<Record<string, EvalFn>> = {
     const bound = context.names[name];
     if (!(bound instanceof Bound)) return bound instanceof Held ? { ok: false, error: bound.error } : failed("kind-mismatch", `the name "${name}" is a value, not a function`);
     if (bound.params.length !== args.length) return failed("bad-expression", `the function "${name}" takes ${String(bound.params.length)} arguments, not ${String(args.length)}`);
+    // WORK.LIMIT: a call is one application of a closure.
+    spendWork(1);
     // Each parameter gets the result of its argument at the call. An error has an effect only where the body reads it.
     const names: Record<string, unknown> = { ...bound.names };
     bound.params.forEach((p, i) => {
@@ -1094,10 +1108,14 @@ const RULES = { plain: true, roots: ["self", "names"], maxDepth: MAX_DOCUMENT_DE
 /**
  * This function makes the machine of the kernel for Vex: the world of Vex, and the formula kit with the profile of
  * Vex. Vex adds its evaluators and its walkers. It is the reference tier of Vex (EVAL.REFERENCE).
+ *
+ * The option `maxWork` gives the field `maxWork` of the machine (WORK.LIMIT). Without it, the machine has no limit, as
+ * the other tiers of Vex. The evaluators of Vex count the points of Vex on the meter of the run (`countWork`), because
+ * the kernel does not give its count to an evaluator.
  */
-export function vexMachine(opts: CompileOptions = {}): Machine {
+export function vexMachine(opts: CompileOptions & Pick<EvalOptions, "maxWork"> = {}): Machine {
   // Stryker disable next-line ArrayDeclaration: a list with a value that is not a domain matches no value
-  return { world: VEX_WORLD, evaluators: { ...formulaEvaluators(profileOf(opts)), ...literals(opts.domains ?? []), ...LOOPS, ...FUNCTIONS, "vex.axis": axisEvaluator }, walkers: WALKERS, ...RULES };
+  return { world: VEX_WORLD, evaluators: { ...formulaEvaluators(profileOf(opts)), ...literals(opts.domains ?? []), ...LOOPS, ...FUNCTIONS, "vex.axis": axisEvaluator }, walkers: WALKERS, ...RULES, maxWork: opts.maxWork ?? Infinity };
 }
 
 /** The code of each evaluator and walker of the machine of the checks. A check uses only their names. */

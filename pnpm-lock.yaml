@@ -236,6 +236,9 @@ importers:
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#da04dd56699a2ae806ab64da5b1d677476afe69e
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/da04dd56699a2ae806ab64da5b1d677476afe69e
+      '@mark1russell7/rigor-bench':
+        specifier: ^0.2.37
+        version: 0.2.37(esbuild@0.28.2)
       '@mark1russell7/vex-domains':
         specifier: workspace:*
         version: link:../domains

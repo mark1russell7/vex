@@ -222,7 +222,15 @@ A key of a place holds what each read of an expression means at that place. A ta
 
 A form depends on the map `keys` of the nodes of the memo, so the table keeps the forms for each content of that map. The table seals such a map at its first read. A change after that read is a refusal with a reason, and it does not give a wrong key. The other maps of a scope have no copy in the table, because each key reads them as they stand. The tests of `scope-key.test.ts` change a map after a read and show both results.
 
-The gate `bench/growth.ts` runs in the speed gate. It compiles 13 shapes at two legal sizes, each in five fresh processes, as programs from JSON. It reads the exponent of the median time and of the bytes against the places. An exponent does not depend on the CPU model. A ratio at one size does not find a return to a quadratic pass.
+The gate `bench/growth.ts` runs in the speed gate. It compiles 13 shapes at two legal sizes, each in five fresh processes, as programs from JSON. It reads the exponent of the time and of the bytes against the places. An exponent does not depend on the CPU model. A ratio at one size does not find a return to a quadratic pass.
+
+**The time reads pairs (COMPILE.GROWTH.NOISE).** A pair is process `i` of the small size and process `i` of the large size. The order of the two sizes turns at each pair. Thus a runner that slows down during the read moves both times of a pair. The rule `growthVerdict` of `@mark1russell7/rigor-bench` gives an interval of the growth of the pairs:
+
+- An interval under the limit passes. An interval over the limit fails the gate.
+- An interval that holds the limit reads five more pairs, and the rule decides again on all the pairs.
+- When the interval still holds the limit, the row says `no read` and the gate writes a warning annotation. A no read does not fail the gate, and it is not a pass.
+
+The row prints the exponent of the median growth of the pairs and its interval. In job 3 of CI run `43632190156`, the small size of `wideorigin` had one slow process. Its exponent of the medians was 1.11, over the limit of 1.1. The other four jobs of that run read 0.96 to 0.98. The pairs of that read give `1.08 (0.98 to 1.16 in 5 pairs)`. That interval holds the limit, so the rule gives no read.
 
 The key lists of `origin` are a limit of the output. Each node of the memo prints a list with one entry for each level around it. So the text of the shape `origin` is quadratic in its levels. The largest legal program has 166 levels and 248,611 bytes. A smaller text needs a change of the bytes of each module. The shapes `origin` and `wideorigin` have their own limits of bytes in `test/growth.ts`, at their measured slopes, so a worse text fails.
 
@@ -240,7 +248,7 @@ The gate `bench/growth.ts` reads the time and the bytes of tier 2 for each shape
 
 **The bytes hold.** A row prints the count of processes with its bytes. The bytes limit of a shape is the exponent of CI run `42021404905`, with 2.5 % more bytes at the large size, rounded up. So the limit is 2.50 % to 2.71 % over that read at the large size. The gate also reads each row with 5 % more bytes at the large size, and it fails if the limit does not find that. The script `scripts/gate-flip.ts` starts the same fault in a child, and a clean copy passes. A row with different bytes in its processes is report only on its bytes, and the gate names that row. The exponent reads a slope: the same rise at both sizes does not move it.
 
-**The time is report only.** A time exponent over its limit prints a line and fails nothing. The cause of that time is open, so this section does not call the time of tier 2 fixed. A size with no source still fails the gate.
+**The time is report only.** A time exponent over its limit prints a line and fails nothing. A shape with a held limit of its `generate` or `load` time reads that time in pairs, as the growth of a print does. The cause of that time is open, so this section does not call the time of tier 2 fixed. A size with no source still fails the gate.
 
 Two CI reads, run `42016811553` and run `42021404905`, both on Node 26, give the table. The time and the bytes are the second read.
 

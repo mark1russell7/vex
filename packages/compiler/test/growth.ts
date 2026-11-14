@@ -3,6 +3,7 @@
  * `bench/growth.ts` read this file. A shape gives a program for some levels. The two sizes of each shape are legal
  * programs, under the limit of the nesting and under the limit of the places. The larger size is near those limits.
  */
+import { growthVerdict, type GrowthOutcome } from "@mark1russell7/rigor-bench";
 import { app, axes, each, let_, ref, v, type Expr } from "@mark1russell7/vex";
 import { doubling } from "@mark1russell7/vex-testkit";
 
@@ -149,6 +150,69 @@ export interface GrowthRow {
   readonly bytes: number | undefined;
   /** This value is false when the processes of the row gave different bytes. */
   readonly sameBytes?: boolean;
+  /** These values are the times of the processes, in the order of their pairs. In a row of the source, they are the times of `generate`. */
+  readonly samples?: readonly number[];
+  /** These values are the times of `load` of the processes of a row of the source, in the order of their pairs. */
+  readonly loadSamples?: readonly number[];
+}
+
+/** The read of a time exponent against its limit (COMPILE.GROWTH.NOISE). */
+export interface TimeRead {
+  /** This value is `within` if the interval is under the limit, `beyond` if it is over the limit, and `cannot decide` if it holds the limit. */
+  readonly outcome: GrowthOutcome;
+  /** This value is the exponent of the median growth of the pairs. */
+  readonly exponent: number;
+  /** This value is the exponent at the low end of the interval of the median growth. */
+  readonly low: number;
+  /** This value is the exponent at the high end of the interval of the median growth. */
+  readonly high: number;
+  /** This value is the count of the pairs. */
+  readonly pairs: number;
+}
+
+/**
+ * This function gives the read of a time exponent against `limit`, with `growthVerdict` of `@mark1russell7/rigor-bench` (COMPILE.GROWTH.NOISE).
+ * Process `i` of the small size and process `i` of the large size are one pair. The bench starts them one after the other, so they have one state of the runner.
+ * The growth of the claim is the growth at the limit for the step of the places. The interval of the median growth of the pairs decides.
+ * With no pair, or with a time that is not more than 0, the function gives `undefined`.
+ */
+export function timeRead(small: readonly number[], large: readonly number[], placesSmall: number, placesLarge: number, limit: number): TimeRead | undefined {
+  const count = Math.min(small.length, large.length);
+  const pairs = small.slice(0, count).map((time, i) => [time, large[i] ?? Number.NaN] as const);
+  if (count === 0 || pairs.some(([a, b]) => !(Number.isFinite(a) && Number.isFinite(b) && a > 0 && b > 0))) return undefined;
+  const per = placesLarge / placesSmall;
+  const rounds = pairs.flatMap(([a, b], i) => [
+    { job: `pair ${String(i)}`, size: placesSmall, value: a },
+    { job: `pair ${String(i)}`, size: placesLarge, value: b },
+  ]);
+  const verdict = growthVerdict(rounds, { maxGrowth: per ** limit, per });
+  const step = verdict.steps[0];
+  if (step === undefined) return undefined;
+  const of = (growth: number): number => Math.log(growth) / Math.log(per);
+  return { outcome: verdict.outcome, exponent: step.exponent, low: of(step.low), high: of(step.high), pairs: count };
+}
+
+/** This function gives the text of a time read: the exponent, its interval and the count of the pairs. */
+export const timeText = (read: TimeRead): string =>
+  `${read.exponent.toFixed(2)} (${read.low.toFixed(2)} to ${read.high.toFixed(2)} in ${String(read.pairs)} ${read.pairs === 1 ? "pair" : "pairs"})`;
+
+/** This function gives the times of the processes of a row. A row with no samples gives its median as one time. */
+const timesOf = (row: GrowthRow): readonly number[] => row.samples ?? (row.ms === undefined ? [] : [row.ms]);
+/** This function gives the times of `load` of the processes of a row. A row with no samples of `load` gives its median as one time. */
+const loadsOf = (row: GrowthRow): readonly number[] => row.loadSamples ?? (row.loadMs === undefined ? [] : [row.loadMs]);
+
+/** The faults and the no reads of a held time. */
+interface HeldTime {
+  readonly faults: readonly string[];
+  readonly unread: readonly string[];
+}
+
+/** This function gives the fault or the no read of a held time. No read of the times and a time over the limit are faults. An interval that holds the limit is a no read. */
+function heldTime(text: (exponent: string) => string, read: TimeRead | undefined): HeldTime {
+  if (read === undefined) return { faults: [text("none")], unread: [] };
+  if (read.outcome === "beyond") return { faults: [text(timeText(read))], unread: [] };
+  if (read.outcome === "cannot decide") return { faults: [], unread: [`${text(timeText(read))}, so the time has no read`] };
+  return { faults: [], unread: [] };
 }
 
 /** This function gives the exponent of the growth of a value against the places: 1 is linear, and 2 is quadratic. */
@@ -166,22 +230,37 @@ export const exponentsOf = (small: GrowthRow, large: GrowthRow): GrowthExponents
     ? undefined
     : { time: exponent(small.ms, large.ms, small.places, large.places), bytes: exponent(small.bytes, large.bytes, small.places, large.places) };
 
-/** This function gives the faults of a shape: a row with no result, or an exponent over its limit. */
-export function growthFaults(shape: GrowthShape, small: GrowthRow, large: GrowthRow): readonly string[] {
-  const found = exponentsOf(small, large);
-  if (found === undefined) return [`${shape.name} has a size with no result`];
-  const time = shape.time ?? TIME_LIMIT;
-  const bytes = shape.bytes ?? BYTES_LIMIT;
-  return [
-    ...(found.time > time ? [`${shape.name} has a time exponent of ${found.time.toFixed(2)}, and the limit is ${String(time)}`] : []),
-    ...(found.bytes > bytes ? [`${shape.name} has a bytes exponent of ${found.bytes.toFixed(2)}, and the limit is ${String(bytes)}`] : []),
-  ];
+/** The verdict of a shape. A fault fails the gate. A no read shows a warning: it does not fail the gate, and it is not a pass (COMPILE.GROWTH.NOISE). */
+export interface ShapeVerdict {
+  readonly faults: readonly string[];
+  readonly unread: readonly string[];
+  /** This value is the read of the time, or `undefined` if a row has no result. */
+  readonly time: TimeRead | undefined;
 }
 
-/** The read of the source of tier 2 of a shape. A fault fails the gate, and a note is report only. */
+/**
+ * This function gives the verdict of a shape. A row with no result is a fault, and a bytes exponent over its limit is a fault.
+ * A time exponent with an interval over its limit is a fault. A time exponent with an interval that holds its limit is a no read.
+ */
+export function shapeVerdict(shape: GrowthShape, small: GrowthRow, large: GrowthRow): ShapeVerdict {
+  const found = exponentsOf(small, large);
+  if (found === undefined) return { faults: [`${shape.name} has a size with no result`], unread: [], time: undefined };
+  const limit = shape.time ?? TIME_LIMIT;
+  const bytes = shape.bytes ?? BYTES_LIMIT;
+  const time = timeRead(timesOf(small), timesOf(large), small.places, large.places, limit);
+  const held = heldTime((read) => `${shape.name} has a time exponent of ${read}, and the limit is ${String(limit)}`, time);
+  return {
+    faults: [...held.faults, ...(found.bytes > bytes ? [`${shape.name} has a bytes exponent of ${found.bytes.toFixed(2)}, and the limit is ${String(bytes)}`] : [])],
+    unread: held.unread,
+    time,
+  };
+}
+
+/** The read of the source of tier 2 of a shape. A fault fails the gate, and a note is report only. A no read shows a warning, and it does not fail the gate. */
 export interface SourceVerdict {
   readonly faults: readonly string[];
   readonly notes: readonly string[];
+  readonly unread: readonly string[];
 }
 
 /** This function tells if the bytes of a shape read nothing: the processes of a size gave different bytes. The gate shows such a shape as a no read. */
@@ -199,27 +278,31 @@ export const loadExponentOf = (small: GrowthRow, large: GrowthRow): number | und
  * A time exponent of `load` over the `load` limit of the shape is a fault. A shape with no `load` limit has no read, so its time of `load` is a note (V-089).
  * A shape with no `generate` limit has no read, so its time of `generate` is a note.
  * A row with different bytes in its processes has no reading of a text, so its bytes are a note.
+ * A held time reads the pairs of its processes, so an interval that holds its limit is a no read (COMPILE.GROWTH.NOISE). A note reads the medians.
  */
 export function sourceVerdict(shape: GrowthShape, small: GrowthRow, large: GrowthRow): SourceVerdict {
   const label = `source of ${shape.name}`;
   const found = exponentsOf(small, large);
-  if (found === undefined) return { faults: [`${label} has a size with no result`], notes: [] };
+  if (found === undefined) return { faults: [`${label} has a size with no result`], notes: [], unread: [] };
+  const none: HeldTime = { faults: [], unread: [] };
   const held = shape.source.generate;
   const generateLimit = held ?? SOURCE_TIME_LIMIT;
-  const generateText = `${label} has a generate time exponent of ${found.time.toFixed(2)}, and the limit is ${String(generateLimit)}`;
-  const generateOver = found.time > generateLimit;
-  const generateFaults = held !== undefined && generateOver ? [generateText] : [];
+  const generateText = (read: string): string => `${label} has a generate time exponent of ${read}, and the limit is ${String(generateLimit)}`;
+  const generate = held === undefined ? none : heldTime(generateText, timeRead(timesOf(small), timesOf(large), small.places, large.places, held));
   const load = loadExponentOf(small, large);
   const loadHeld = shape.source.load;
   const loadLimit = loadHeld ?? SOURCE_TIME_LIMIT;
-  const loadText = `${label} has a load time exponent of ${load?.toFixed(2) ?? "none"}, and the limit is ${String(loadLimit)}`;
-  const loadOver = load !== undefined && load > loadLimit;
+  const loadText = (read: string): string => `${label} has a load time exponent of ${read}, and the limit is ${String(loadLimit)}`;
   // A held load limit with no time of load holds nothing, so it is a fault.
-  const loadFaults = loadHeld !== undefined && (load === undefined || loadOver) ? [loadText] : [];
-  const timeFaults = [...generateFaults, ...loadFaults];
-  const timeNotes = [...(held === undefined && generateOver ? [`${generateText}, and the shape has no read of its own`] : []), ...(loadHeld === undefined && loadOver ? [`${loadText} (V-089)`] : [])];
-  if (bytesUnread(small, large)) return { faults: timeFaults, notes: [...timeNotes, `${label} has different bytes in its processes, so its bytes are report only`] };
-  return { faults: [...timeFaults, ...(found.bytes > shape.source.bytes ? [`${label} has a bytes exponent of ${found.bytes.toFixed(3)}, and the limit is ${String(shape.source.bytes)}`] : [])], notes: timeNotes };
+  const loaded = loadHeld === undefined ? none : heldTime(loadText, load === undefined ? undefined : timeRead(loadsOf(small), loadsOf(large), small.places, large.places, loadHeld));
+  const timeFaults = [...generate.faults, ...loaded.faults];
+  const unread = [...generate.unread, ...loaded.unread];
+  const timeNotes = [
+    ...(held === undefined && found.time > generateLimit ? [`${generateText(found.time.toFixed(2))}, and the shape has no read of its own`] : []),
+    ...(loadHeld === undefined && load !== undefined && load > loadLimit ? [`${loadText(load.toFixed(2))} (V-089)`] : []),
+  ];
+  if (bytesUnread(small, large)) return { faults: timeFaults, notes: [...timeNotes, `${label} has different bytes in its processes, so its bytes are report only`], unread };
+  return { faults: [...timeFaults, ...(found.bytes > shape.source.bytes ? [`${label} has a bytes exponent of ${found.bytes.toFixed(3)}, and the limit is ${String(shape.source.bytes)}`] : [])], notes: timeNotes, unread };
 }
 
 /** This function tells if the bytes limit of a shape finds `BYTES_FLIP` times the bytes at the large size. A row with no bytes or with different bytes reads true, because its bytes do not hold. */

@@ -145,7 +145,8 @@ export const CATCH_MUST_FAIL: readonly string[] = ["grid", "shape"];
 
 /**
  * The added work of each module in the read that tests the second pair clause. The cost goes in the first
- * `ROUND_ADD_STARTS` rounds of a read only. So the median stays under its limit, and the clause must fail alone.
+ * `ROUND_ADD_STARTS` rounds of a read only. So the median can stay under its limit, and the clause must fail alone.
+ * `roundReads` reads in each read if its rounds set up that case. A read that does not set it up is a no read.
  */
 export const ROUND_ADD: Readonly<Record<string, number>> = { grid: 0.4, shape: 0.4 };
 
@@ -367,11 +368,51 @@ export function falseFails(rows: readonly ModuleTimes[], model: string): TailFal
   return tailFalseFails(recordsOf(rows, "aa"), { limit: (module) => tailLimitOf(module, rows.find((row) => row.module === module)?.shares ?? true, model) });
 }
 
-/** This function gives a line for each module where the second pair clause did not fail alone in the read that tests that clause. */
-export function roundFaults(verdict: TailLimitVerdict): readonly string[] {
-  return Object.keys(ROUND_ADD).flatMap((module) => {
-    const row = verdict.cases.find((read) => read.case === module);
-    return row?.outcome === "beyond" && row.overTail && !row.overMedian ? [] : [`${module}: the second pair clause did not fail alone with a cost in ${String(ROUND_ADD_STARTS)} rounds: ${row?.outcome ?? "no row"}, median ${(row?.ratio ?? Number.NaN).toFixed(3)}, second pair ${(row?.tail ?? Number.NaN).toFixed(3)}`];
+/** The result of the read that tests the second pair clause for one module of `ROUND_ADD`. */
+export interface RoundRead {
+  readonly module: string;
+  /**
+   * The value `ok` tells that the clause alone failed the module. The value `no read` tells that the rounds did not set up
+   * the case. The value `fault` tells that the rule did not give the result that the rounds set up.
+   */
+  readonly outcome: "ok" | "no read" | "fault";
+  /** The words of the result, with the values of the read. */
+  readonly why: string;
+}
+
+/**
+ * This function gives the result of the read that tests the second pair clause, for each module of `ROUND_ADD`.
+ *
+ * The read tests the clause only when its own rounds set up the case (ROUNDMARGIN). The case has two conditions:
+ *
+ * - The clean rounds keep the median under its limit. If the rounds of the cost are the largest ratios, the median of the
+ *   read is the clean round at the rank of the median. In each other order the median is smaller. That round is at most
+ *   the median limit.
+ * - Each round of the added cost is over the second pair limit and over the second pair of the A/A arm of the run. Thus
+ *   the second pair of the read is over both.
+ *
+ * When a condition does not hold, the noise of this read decides the clause, so the result is a no read. A no read is not
+ * a pass, and the job shows it as a warning. When both conditions hold, the rule must fail the module by the second pair
+ * clause alone. Each other result is a fault of the rule, and the step fails.
+ */
+export function roundReads(rows: readonly ModuleTimes[], verdict: TailLimitVerdict, model: string): readonly RoundRead[] {
+  return Object.keys(ROUND_ADD).map((module): RoundRead => {
+    const row = rows.find((r) => r.module === module);
+    const read = verdict.cases.find((c) => c.case === module);
+    if (row === undefined || read === undefined) return { module, outcome: "fault", why: `${module}: the read has no row of the module` };
+    const limit = tailLimitOf(module, row.shares, model);
+    const ratios = row.base.map((a, round) => (row.branch[round] ?? Number.NaN) / a);
+    const added = ratios.slice(0, ROUND_ADD_STARTS);
+    // The rule takes the median of the logarithms of the ratios, so this bound has the same value to the last bit. The
+    // largest finite number stands for each round of the cost: an infinity next to the median gives NaN in the median.
+    const most = Math.exp(median([...ratios.slice(ROUND_ADD_STARTS).map((r) => Math.log(r)), ...added.map(() => Number.MAX_VALUE)]));
+    const least = Math.min(...added);
+    const aaTail = verdict.aaTail ?? Number.NaN;
+    const values = `median ${(read.ratio ?? Number.NaN).toFixed(3)}, at most ${most.toFixed(3)} from the clean rounds, limit ${limit.median.toFixed(3)}; smaller round of the cost ${least.toFixed(3)}, second pair ${(read.tail ?? Number.NaN).toFixed(3)}, limit ${limit.tail.toFixed(3)}, A/A second pair of the run ${aaTail.toFixed(3)}`;
+    if (!(most <= limit.median)) return { module, outcome: "no read", why: `${module}: the clean rounds can put the median over its limit, so this read cannot test the clause alone: ${values}` };
+    if (!(least > limit.tail && least > aaTail)) return { module, outcome: "no read", why: `${module}: a round of the cost is not over the second pair limit and the A/A second pair, so this read cannot test the clause: ${values}` };
+    if (read.outcome === "beyond" && read.overTail && !read.overMedian) return { module, outcome: "ok", why: `${module}: the second pair clause alone fails a cost in ${String(ROUND_ADD_STARTS)} rounds: ${values}` };
+    return { module, outcome: "fault", why: `${module}: the rounds set up the case, and the rule gives ${read.outcome}, overMedian ${String(read.overMedian)}, overTail ${String(read.overTail)}: ${values}` };
   });
 }
 

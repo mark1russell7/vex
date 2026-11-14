@@ -214,7 +214,9 @@ jobs:
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.module_gate == 'true') }}
         run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --catch --record "$PWD/module-cost.jsonl" | tee -a module-cost.txt
       # This step holds the second pair clause. The cost goes in 2 rounds of 7, so the median stays under its limit and the
-      # clause must fail alone (rule 8i). The read of the gate above is the clean copy of this job.
+      # clause must fail alone (rule 8i). The read of the gate above is the clean copy of this job. A module whose clean
+      # rounds put the median over its limit, or whose rounds of the cost do not show the cost, is a no read with a warning
+      # (ROUNDMARGIN, docs/COMPILER.md).
       - name: The gate fails a cost in 2 rounds
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.module_gate == 'true') }}
         run: pnpm --filter @vex/pilots run module-cost "$(dirname "$PWD")/base" --rounds --record "$PWD/module-cost.jsonl" | tee -a module-cost.txt

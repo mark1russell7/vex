@@ -288,6 +288,7 @@ These rows do not follow that rule:
 
 - The row `bounds` has the median limit 1.25, the cap. Its second pair only prints, because a margin of 0.001 under the cap fails by chance. The item BOUNDSCOST ends both.
 - The rows `label` and `obstacles` have a second pair limit on the cap.
+- The row `label` has the median limit 1.20 from 5 reads of main 44cc548 (run 43632190156): the worst read 1.161, plus the spread 0.035. With coeval 0.27.2, the median ratio of `label` went from 1.100 to 1.148 in two dispatches of 5 reads. That release moved `strong()` to `@mark1russell7/collections`. The print does not use `strong()`, and the other rows did not move. So no code of the print got slower, and the cost comes with the move of `strong()` to its home.
 - The rows `build` and `avoid` have a limit under 1, so they hold a gain against the fixed commit 8ae233b.
 
 A limit under 1 holds the gain only on a CPU model of `GAIN_MODELS`. The median of the 5 reads on the model 9V45 is 0.946 on `build` and 0.916 on `avoid`. The median of each other model is at most 0.928 and 0.840. Those reads do not give a cause. So on 9V45 and on a model with no reads, the row uses a ceiling and prints `gain not read on this model, ceiling only`. A pass on such a model does not show that the gain holds. Each gain row also prints the fixed commit, the CPU model and the version of Node.js.
@@ -321,7 +322,7 @@ The step `The gate fails a known cost` holds the median clause only. The step `T
 | `orthogonal` | 33.64 | 36.81 | 1.094 | 1.22 | 1.23 |
 | `avoid` | 206.09 | 172.48 | 0.833 | 0.89 | 1.09 |
 | `direction` | 15.65 | 15.88 | 1.038 | 1.14 | 1.16 |
-| `label` | 24.51 | 26.14 | 1.061 | 1.13 | 1.25 |
+| `label` | 24.51 | 26.14 | 1.061 | 1.20 | 1.25 |
 | `obstacles` | 40.24 | 44.95 | 1.082 | 1.18 | 1.25 |
 | `overlap` | 61.18 | 64.99 | 1.062 | 1.19 | 1.24 |
 | `bounds` | 25.97 | 29.83 | 1.149 | 1.25 | prints only |

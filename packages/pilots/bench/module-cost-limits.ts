@@ -112,7 +112,11 @@ export const MODULE_LINES: Readonly<Record<string, ModuleLimit>> = {
     why: "The limit 0.89 holds the gain against 8ae233b on the models of GAIN_MODELS. The ceiling 1.03 comes from 5 reads and no cause, so it holds no gain.",
   },
   direction: lineOf(1.14, 1.16, 1.08),
-  label: { median: 1.13, second: 1.25, why: "The second pair sits on the cap of 1.25. The rule gives 1.376 with the loud read of 26 reads and 1.211 without it. The 6 reads alone give a median limit of 1.12." },
+  label: {
+    median: 1.2,
+    second: 1.25,
+    why: "The median limit is the worst of 5 reads of main 44cc548 (run 43632190156), 1.161, plus their spread, 0.035, rounded up. The old limit 1.13 held until coeval 0.27.2. That release moved strong() to collections, and the print does not use strong(). The second pair sits on the cap of 1.25.",
+  },
   obstacles: { median: 1.18, second: 1.25, why: "The second pair sits on the cap of 1.25, and the rule gives 1.247. The 6 reads alone give a median limit of 1.11." },
   overlap: lineOf(1.19, 1.24, 1.18),
   between: lineOf(1.19, 1.22, 1.13),

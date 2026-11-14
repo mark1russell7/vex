@@ -1,5 +1,6 @@
 import { defineDomain, vexList, type OpTable } from "@mark1russell7/vex";
 import { Angle, AngleDomain, BoolDomain, Color, ColorDomain, DateDomain, InsetsDomain, JsonDomain, LocalDate, NDVector, NDVectorDomain, NumDomain, TextDomain, Vec2, Vec2Domain, XYDomain } from "@mark1russell7/vex-domains";
+import { QuantityDomain } from "@mark1russell7/vex-domains/quantity";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { assertLaws, checkLaws, structuralEqual } from "./laws.ts";
@@ -41,6 +42,12 @@ describe("P4 DOMAIN.LAWS: each declared law of each domain holds", () => {
     expect(r.map((x) => x.name)).toEqual(expect.arrayContaining(["Insets fields startX startY endX endY", "Insets.add commutative", "Insets.add associative", "Insets.add identity"]));
     expect(checkLaws(XYDomain, { arb: fc.tuple(small, small).map(([x, y]) => ({ x, y })) }).filter((x) => !x.ok)).toEqual([]);
     expect(checkLaws(NumDomain, { arb: small, domains: [InsetsDomain] }).filter((x) => !x.ok)).toEqual([]);
+  });
+  it("Quantity", () => {
+    const arb = fc.tuple(small, fc.constantFrom("mm", "cm", "m", "km")).map(([value, unit]) => ({ value, unit }));
+    const r = checkLaws(QuantityDomain, { arb });
+    expect(r.filter((x) => !x.ok)).toEqual([]);
+    expect(r.map((x) => x.name)).toEqual(expect.arrayContaining(["Quantity fields value unit", "Quantity.lte returns boolean", "Quantity.add returns domain"]));
   });
   it("NDVector", () => {
     const arb = fc.record({ x: small, y: small, z: small }, { requiredKeys: [] }).map((c) => new NDVector(c as Readonly<Record<string, number>>));

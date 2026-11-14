@@ -61,7 +61,7 @@ jobs:
       module_gate: ${{ steps.module_gate.outputs.match }}
     steps:
       - id: changes
-        uses: mark1russell7/template/.github/actions/changes@4466542421ef76bcb3ccf5b5e1765d4f509f8f4f # main
+        uses: mark1russell7/template/.github/actions/changes@214dbed7b52dac94c0dce1c170162e75672a556d # main
         with:
           # The gates measure the source, never a test, so a pull request that changes only tests skips them. The
           # bench uses `test-support.ts`, so it stays in. The nightly measures main each day.
@@ -79,14 +79,14 @@ jobs:
             !packages/*/src/__golden__/**
       # The catch of the job modules reads on a pull request that changes the files of that gate.
       - id: module_gate
-        uses: mark1russell7/template/.github/actions/changes@4466542421ef76bcb3ccf5b5e1765d4f509f8f4f # main
+        uses: mark1russell7/template/.github/actions/changes@214dbed7b52dac94c0dce1c170162e75672a556d # main
         with:
           paths: |
             packages/core/bench/measure.ts
             packages/pilots/bench/module-cost*.ts
             .github/workflows/speed-gate.yml
       - id: lock
-        uses: mark1russell7/template/.github/actions/changes@4466542421ef76bcb3ccf5b5e1765d4f509f8f4f # main
+        uses: mark1russell7/template/.github/actions/changes@214dbed7b52dac94c0dce1c170162e75672a556d # main
         with:
           paths: pnpm-lock.yaml
       # Only the lock file changed: the gates start only when a package of the gates has a new version or integrity.
@@ -244,7 +244,7 @@ jobs:
     timeout-minutes: 2
     permissions: {}
     steps:
-      - uses: mark1russell7/template/.github/actions/gate-summary@4466542421ef76bcb3ccf5b5e1765d4f509f8f4f # main
+      - uses: mark1russell7/template/.github/actions/gate-summary@214dbed7b52dac94c0dce1c170162e75672a556d # main
         with:
           needs: ${{ toJSON(needs) }}
           # On the weekly schedule only the job modules runs (see "on:"), so the job gates is skipped by design.

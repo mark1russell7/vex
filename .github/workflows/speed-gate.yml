@@ -8,7 +8,8 @@ on:
   # work when the pull request changes no file of the gate (CI.md of the template, "A gate with paths").
   pull_request:
   # Each week the job modules reads main once, with its catch. That read adds to the count of each model and to the
-  # record of the version of Node.js on each read. The other gates do not start: the nightly measures main each day.
+  # record of the version of Node.js on each read. The job gates does not start: the nightly reads the core and the
+  # compiler gates of main each day. The summary reads the last result of the job gates on the commit.
   schedule:
     - cron: "58 5 * * 3"
   workflow_dispatch:
@@ -242,11 +243,15 @@ jobs:
     needs: [changes, gates, modules]
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    permissions: {}
+    # The read of the last result of a skipped job needs the check runs of the commit.
+    permissions:
+      checks: read
     steps:
-      - uses: mark1russell7/template/.github/actions/gate-summary@4466542421ef76bcb3ccf5b5e1765d4f509f8f4f # main
+      - uses: mark1russell7/template/.github/actions/gate-summary@eb7f3517aa8614e338a46acd37ab0c49395be5f9 # main
         with:
           needs: ${{ toJSON(needs) }}
-          # On the weekly schedule only the job modules runs (see "on:"), so the job gates is skipped by design.
-          # On each other event a skipped job gates fails the summary.
-          allow-skip: ${{ github.event_name == 'schedule' && 'gates' || '' }}
+          # On the weekly schedule only the job modules runs (see "on:"), so the job gates is skipped by design. A skip is
+          # green only after a pass: the skip reads the last result of the checks "Speed gates <rep>" on the commit. A
+          # failure fails the summary, and no result is a no read with a warning. On each other event a skipped job
+          # gates fails the summary.
+          last-result: ${{ github.event_name == 'schedule' && 'gates=Speed gates' || '' }}

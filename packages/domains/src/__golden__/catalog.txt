@@ -226,3 +226,25 @@ Json (fromScalar -, valid -, encode -, methods -)
   fields() | no lift | no laws | no identity | fn
   field(any) | no lift | no laws | no identity | fn
   leaves(number) | no lift | no laws | no identity | fn
+
+Quantity (fromScalar -, valid yes, encode yes, methods -)
+  value() | no lift | no laws | no identity | fn
+  unit() | no lift | no laws | no identity | fn
+  kind() | no lift | no laws | no identity | fn
+  convert(string) | no lift | no laws | no identity | fn
+  valueIn(string) | no lift | no laws | no identity | fn
+  add(domain) | no lift | no laws | no identity | fn
+  subtract(domain) | no lift | no laws | no identity | fn
+  multiply(number) | no lift | no laws | no identity | fn
+  divide(number) | no lift | no laws | no identity | fn
+  ratio(domain) | no lift | no laws | no identity | fn
+  negate() | no lift | no laws | no identity | fn
+  abs() | no lift | no laws | no identity | fn
+  min(domain) | no lift | no laws | no identity | fn
+  max(domain) | no lift | no laws | no identity | fn
+  compare(domain) | no lift | no laws | no identity | fn
+  lt(domain) | no lift | no laws | no identity | fn
+  lte(domain) | no lift | no laws | no identity | fn
+  gt(domain) | no lift | no laws | no identity | fn
+  gte(domain) | no lift | no laws | no identity | fn
+  eq(domain) | no lift | no laws | no identity | fn

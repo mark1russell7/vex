@@ -56,6 +56,13 @@ XYDomain: build/index.d.ts#XYDomain
 XYOps: build/index.d.ts#XYOps
 schemaOf: build/index.d.ts#schemaOf
 
+## ./quantity (build/quantity.d.ts): names
+
+type Quantity: @mark1russell7/quantity#Quantity (external)
+QuantityDomain: build/quantity.d.ts#QuantityDomain
+QuantityOps: build/quantity.d.ts#QuantityOps
+isQuantityValue: build/quantity.d.ts#isQuantityValue
+
 ## Declarations
 
 ### build/index.d.ts#Angle
@@ -466,3 +473,33 @@ export type XYOps = {
 
 ### build/index.d.ts#schemaOf
 export declare function schemaOf(docs: readonly unknown[]): readonly JsonFieldSchema[];
+
+### build/quantity.d.ts#QuantityDomain
+export declare const QuantityDomain: Domain<"Quantity", Quantity$1, QuantityOps>;
+
+### build/quantity.d.ts#QuantityOps
+export type QuantityOps = {
+  readonly value: FnOp<Quantity$1, (a: Quantity$1) => number>;
+  readonly unit: FnOp<Quantity$1, (a: Quantity$1) => string>;
+  readonly kind: FnOp<Quantity$1, (a: Quantity$1) => string>;
+  readonly convert: FnOp<Quantity$1, (a: Quantity$1, unit: string) => Quantity$1>;
+  readonly valueIn: FnOp<Quantity$1, (a: Quantity$1, unit: string) => number>;
+  readonly add: FnOp<Quantity$1, QFn2>;
+  readonly subtract: FnOp<Quantity$1, QFn2>;
+  readonly multiply: FnOp<Quantity$1, (a: Quantity$1, k: number) => Quantity$1>;
+  readonly divide: FnOp<Quantity$1, (a: Quantity$1, k: number) => Quantity$1>;
+  readonly ratio: FnOp<Quantity$1, (a: Quantity$1, b: Quantity$1) => number>;
+  readonly negate: FnOp<Quantity$1, (a: Quantity$1) => Quantity$1>;
+  readonly abs: FnOp<Quantity$1, (a: Quantity$1) => Quantity$1>;
+  readonly min: FnOp<Quantity$1, QFn2>;
+  readonly max: FnOp<Quantity$1, QFn2>;
+  readonly compare: FnOp<Quantity$1, (a: Quantity$1, b: Quantity$1) => number>;
+  readonly lt: FnOp<Quantity$1, QTest>;
+  readonly lte: FnOp<Quantity$1, QTest>;
+  readonly gt: FnOp<Quantity$1, QTest>;
+  readonly gte: FnOp<Quantity$1, QTest>;
+  readonly eq: FnOp<Quantity$1, QTest>;
+};
+
+### build/quantity.d.ts#isQuantityValue
+export declare const isQuantityValue: (u: unknown) => u is Quantity$1;

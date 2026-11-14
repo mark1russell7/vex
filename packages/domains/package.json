@@ -2,13 +2,14 @@
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/vex-domains",
   "version": "0.18.0",
-  "description": "Vex domains: 2D vectors, named-component vectors, colors, angles, numbers and booleans.",
+  "description": "Vex domains: 2D vectors, named-component vectors, colors, angles, numbers, booleans and amounts in units.",
   "keywords": [
     "vex",
     "vector",
     "vec2",
     "color",
     "angle",
+    "units",
     "domain",
     "typescript"
   ],
@@ -29,6 +30,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./quantity": "./src/quantity.ts",
     "./package.json": "./package.json"
   },
   "files": [
@@ -48,6 +50,10 @@
         "types": "./build/index.d.ts",
         "default": "./build/index.js"
       },
+      "./quantity": {
+        "types": "./build/quantity.d.ts",
+        "default": "./build/quantity.js"
+      },
       "./package.json": "./package.json"
     }
   },
@@ -64,6 +70,7 @@
     "vitest": "^5.0.3"
   },
   "dependencies": {
+    "@mark1russell7/quantity": "^0.4.0",
     "@mark1russell7/vex": "workspace:*"
   }
 }

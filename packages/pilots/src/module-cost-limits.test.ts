@@ -44,7 +44,7 @@ function firsts(arm: string): number {
 }
 
 /** This function gives a module with a cost in the first 2 rounds of the branch only, as the read of the rounds adds it. */
-function first(second: number, module: string): ModuleTimes {
+function costFirst(second: number, module: string): ModuleTimes {
   return { ...row(1, module), branch: [100 * second, 100 * second, 100, 100, 100, 100, 100] };
 }
 
@@ -131,24 +131,24 @@ describe("COMPILE.MODULE.COST", () => {
 
   it("COMPILE.MODULE.COST: the read of the rounds passes only when the second pair clause fails each module alone", () => {
     const modules = Object.keys(ROUND_ADD);
-    const rows = modules.map((module) => first(1.3, module));
+    const rows = modules.map((module) => costFirst(1.3, module));
     expect(roundReads(rows, moduleVerdict(rows, HELD), HELD).map((r) => r.outcome)).toEqual(modules.map(() => "ok"));
     // The rounds set up the case, so a rule that does not fail the module alone is a fault.
     expect(roundReads(rows, moduleVerdict(modules.map((module) => row(1, module)), HELD), HELD).map((r) => r.outcome)).toEqual(modules.map(() => "fault"));
     const [one = "", other = ""] = modules;
-    expect(roundReads([first(1.3, one)], moduleVerdict([first(1.3, one)], HELD), HELD).find((r) => r.module === other)?.outcome).toBe("fault");
+    expect(roundReads([costFirst(1.3, one)], moduleVerdict([costFirst(1.3, one)], HELD), HELD).find((r) => r.module === other)?.outcome).toBe("fault");
   });
 
   it("COMPILE.MODULE.COST: a read whose rounds do not set up the case is a no read, not a pass and not a fault (ROUNDMARGIN)", () => {
     const [one = "", other = ""] = Object.keys(ROUND_ADD);
     // The clean rounds put the median at 1.25, over the limit, with no help from the cost.
-    const loud = { ...first(1.3, other), branch: [130, 130, 125, 125, 125, 100, 100] };
-    const reads = roundReads([first(1.3, one), loud], moduleVerdict([first(1.3, one), loud], HELD), HELD);
+    const noisy = { ...costFirst(1.3, other), branch: [130, 130, 125, 125, 125, 100, 100] };
+    const reads = roundReads([costFirst(1.3, one), noisy], moduleVerdict([costFirst(1.3, one), noisy], HELD), HELD);
     expect(reads.map((r) => r.outcome)).toEqual(["ok", "no read"]);
     expect(reads[1]?.why).toContain("the clean rounds can put the median over its limit");
     // One round of the cost reads only 1.1, under the second pair limit.
-    const faint = { ...first(1.3, other), branch: [110, 130, 100, 100, 100, 100, 100] };
-    expect(roundReads([first(1.3, one), faint], moduleVerdict([first(1.3, one), faint], HELD), HELD)[1]?.why).toContain("a round of the cost is not over the second pair limit");
+    const faint = { ...costFirst(1.3, other), branch: [110, 130, 100, 100, 100, 100, 100] };
+    expect(roundReads([costFirst(1.3, one), faint], moduleVerdict([costFirst(1.3, one), faint], HELD), HELD)[1]?.why).toContain("a round of the cost is not over the second pair limit");
   });
 
   it("COMPILE.MODULE.COST: the read of run 43632190156 on the 9V45 is a no read of shape and a pass of grid (ROUNDMARGIN)", () => {

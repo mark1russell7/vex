@@ -1,5 +1,16 @@
 # @mark1russell7/vex-testkit
 
+## 0.19.0
+
+### Patch Changes
+
+- Updated dependencies [8b48e48]
+- Updated dependencies [d5adb07]
+- Updated dependencies [3797bc7]
+- Updated dependencies [6b9c074]
+- Updated dependencies [85c9fe3]
+  - @mark1russell7/vex@0.19.0
+
 ## 0.18.0
 
 ### Minor Changes

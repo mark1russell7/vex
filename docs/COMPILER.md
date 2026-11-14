@@ -305,7 +305,16 @@ A pull request reads this step only if it changes a file of the gate. A miss by 
 
 A limit set from the cost of today holds the cost of today. The target of 1.10 for each module is not proven, and the item BOUNDSCOST owes it.
 
-The step `The gate fails a known cost` holds the median clause only. The step `The gate fails a cost in 2 rounds` holds the second pair clause. The branch arm adds 40 % of work in `grid` and `shape` in 2 of the 7 rounds. So the median stays under its limit, and the step fails if the second pair clause does not fail each module alone. The read of the gate in the same job is the clean copy.
+The step `The gate fails a known cost` holds the median clause only. The step `The gate fails a cost in 2 rounds` holds the second pair clause. The branch arm adds 40 % of work in `grid` and `shape` in the first 2 of the 7 rounds. The read of the gate in the same job is the clean copy.
+
+**The read sets up its own case (ROUNDMARGIN).** The step tests the clause in a module only when the rounds of that module set up the case:
+
+- The clean rounds keep the median under its limit. With the 2 rounds of the cost as the largest ratios, the median is at most the clean round at the rank of the median. That round must be at most the median limit.
+- Each round of the cost is over the second pair limit and over the A/A second pair of the run.
+
+When both conditions hold, the step fails if the second pair clause does not fail the module alone. When a condition does not hold, the noise of the read decides the clause. The module is then a no read with a warning, and a no read is not a pass. The function is `roundReads`.
+
+The 57 reads of this step in CI from 2026-11-05 to 2026-11-14 show the reason. These reads are on 43 commits and 6 models. The clean round of `shape` at the rank of the median reads up to 1.192, against its limit of 1.19. The worst read plus the spread of the reads is over that limit on 5 of the 6 models. On the 9V45 the worst read plus the spread is 1.313. Thus no module of this read has a margin on each model. The old rule failed 3 of the 57 reads by noise. The new rule fails none of them, and it gives 3 no reads of one module. In each of those 3 reads, the other module passes.
 
 `emitModule` is a tool of a build. A caller on a request path keeps the printed module. This table gives the median of 5 reads of run 41985651921, against the base 8ae233b. The Module cost jobs had the models 8573C, 9V74 and 7763, so this table has no read on 9V45. The rows `build` and `build-no-avoid` read the modules in one process.
 

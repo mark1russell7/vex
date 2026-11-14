@@ -21,7 +21,9 @@
  * the modules of `CATCH_MUST_FAIL`. A failed row is then the expected result, and a row that does not fail is the fault.
  *
  * The flag `--rounds` tests the second pair clause. The branch arm does added work in the modules of `ROUND_ADD`, in the
- * first rounds of a read only. So the median stays under its limit, and the clause must fail alone.
+ * first rounds of a read only. So the median can stay under its limit, and the clause must fail alone. The read of a
+ * module is a no read with a warning in two cases. Its clean rounds can put the median over its limit, or its rounds of
+ * the cost do not show the cost.
  *
  * The flag `--record` adds one JSON line for each row of each read to a file. Each line names its format, its kind, its
  * step and if its read decided. A read of a cost uses this record and `gateRecords`, and not the log, because the log also shows the rows with added work.
@@ -35,7 +37,7 @@ import { armOrder, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { env, envLine, firstOfRound, measureIsolated } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
-import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundFaults, type ModuleTimes, cpuFacts, readStep, recordLines, unreadGains } from "./module-cost-limits.ts";
+import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundReads, type ModuleTimes, cpuFacts, readStep, recordLines, unreadGains } from "./module-cost-limits.ts";
 
 /** The fresh processes of each arm on each module. */
 const ROUNDS = 7;
@@ -140,11 +142,18 @@ for (let read = 0; read < MAX_READS && !decided; read++) {
   }
   if (decided) {
     if (testsTheRounds) {
-      const missed = roundFaults(verdict);
+      const reads = roundReads(times, verdict, machine.cpu);
       for (const fault of faults) console.info(`rounds fault ${fault}`);
-      for (const miss of missed) console.error(`FAIL rounds ${miss}`);
-      if (missed.length > 0) process.exitCode = 1;
-      else console.info(`rounds ok: the second pair clause alone fails ${Object.keys(ROUND_ADD).join(" and ")} with a cost in ${String(ROUND_ADD_STARTS)} rounds`);
+      for (const r of reads) {
+        if (r.outcome === "ok") console.info(`rounds ok ${r.why}`);
+        else if (r.outcome === "fault") console.error(`FAIL rounds ${r.why}`);
+        else {
+          // A no read is not a pass, so the check of the job shows it as a warning.
+          console.info(`no read rounds ${r.why}`);
+          console.info(`::warning title=Module cost: no read::rounds ${r.why}`);
+        }
+      }
+      if (reads.some((r) => r.outcome === "fault")) process.exitCode = 1;
     } else if (testsTheGate) {
       const missed = catchFaults(verdict);
       for (const fault of faults) console.info(`catch fault ${fault}`);

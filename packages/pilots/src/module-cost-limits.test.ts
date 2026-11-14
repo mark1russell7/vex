@@ -7,7 +7,7 @@ import { armOrder } from "@mark1russell7/rigor-bench";
 import { describe, expect, it } from "vitest";
 import { placesRead } from "../../compiler/src/unshared.ts";
 import { measureIsolated } from "../../core/bench/measure.ts";
-import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundFaults, SHARED_LIMIT, type ModuleTimes, cpuFacts, gateRecords, readStep, RECORD_FORMAT, recordLines, unreadGains } from "../bench/module-cost-limits.ts";
+import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundReads, SHARED_LIMIT, type ModuleTimes, cpuFacts, gateRecords, readStep, RECORD_FORMAT, recordLines, unreadGains } from "../bench/module-cost-limits.ts";
 import { IREKO_MODULES, irekoExprs } from "./ireko-modules.ts";
 
 /** A model where the reads show the gain. */
@@ -43,9 +43,9 @@ function firsts(arm: string): number {
   return Array.from({ length: 7 }, (_round, round) => armOrder(ARMS, round)).filter((order) => order.indexOf("base") < order.indexOf(arm)).length;
 }
 
-/** This function gives a module with a cost in its second pair only. */
-function alone(module: string): ModuleTimes {
-  return { ...tail(1.3), module };
+/** This function gives a module with a cost in the first 2 rounds of the branch only, as the read of the rounds adds it. */
+function first(second: number, module: string): ModuleTimes {
+  return { ...row(1, module), branch: [100 * second, 100 * second, 100, 100, 100, 100, 100] };
 }
 
 /** This function gives one block of the text of `/proc/cpuinfo`. */
@@ -131,10 +131,42 @@ describe("COMPILE.MODULE.COST", () => {
 
   it("COMPILE.MODULE.COST: the read of the rounds passes only when the second pair clause fails each module alone", () => {
     const modules = Object.keys(ROUND_ADD);
-    expect(roundFaults(moduleVerdict(modules.map(alone), HELD))).toEqual([]);
-    const [first = "", second = ""] = modules;
-    expect(roundFaults(moduleVerdict([alone(first), row(1, second)], HELD))).toEqual([`${second}: the second pair clause did not fail alone with a cost in 2 rounds: within, median 1.000, second pair 1.000`]);
-    expect(roundFaults(moduleVerdict([alone(first), row(1.5, second)], HELD))[0]).toContain(`${second}: the second pair clause did not fail alone`);
+    const rows = modules.map((module) => first(1.3, module));
+    expect(roundReads(rows, moduleVerdict(rows, HELD), HELD).map((r) => r.outcome)).toEqual(modules.map(() => "ok"));
+    // The rounds set up the case, so a rule that does not fail the module alone is a fault.
+    expect(roundReads(rows, moduleVerdict(modules.map((module) => row(1, module)), HELD), HELD).map((r) => r.outcome)).toEqual(modules.map(() => "fault"));
+    const [one = "", other = ""] = modules;
+    expect(roundReads([first(1.3, one)], moduleVerdict([first(1.3, one)], HELD), HELD).find((r) => r.module === other)?.outcome).toBe("fault");
+  });
+
+  it("COMPILE.MODULE.COST: a read whose rounds do not set up the case is a no read, not a pass and not a fault (ROUNDMARGIN)", () => {
+    const [one = "", other = ""] = Object.keys(ROUND_ADD);
+    // The clean rounds put the median at 1.25, over the limit, with no help from the cost.
+    const loud = { ...first(1.3, other), branch: [130, 130, 125, 125, 125, 100, 100] };
+    const reads = roundReads([first(1.3, one), loud], moduleVerdict([first(1.3, one), loud], HELD), HELD);
+    expect(reads.map((r) => r.outcome)).toEqual(["ok", "no read"]);
+    expect(reads[1]?.why).toContain("the clean rounds can put the median over its limit");
+    // One round of the cost reads only 1.1, under the second pair limit.
+    const faint = { ...first(1.3, other), branch: [110, 130, 100, 100, 100, 100, 100] };
+    expect(roundReads([first(1.3, one), faint], moduleVerdict([first(1.3, one), faint], HELD), HELD)[1]?.why).toContain("a round of the cost is not over the second pair limit");
+  });
+
+  it("COMPILE.MODULE.COST: the read of run 43632190156 on the 9V45 is a no read of shape and a pass of grid (ROUNDMARGIN)", () => {
+    // The rows of the rounds read of job Module cost 3, main 44cc548, in ms to 2 decimals. The median of shape is 1.192.
+    const rows: readonly ModuleTimes[] = [
+      { module: "grid", shares: true, base: [22.74, 23.89, 24.79, 24.06, 23.02, 24.18, 23.5], branch: [33.94, 33.07, 23.6, 23.77, 24.24, 25.15, 23.26], aa: [22.52, 23.05, 23.68, 22.67, 22.47, 24.08, 22.2] },
+      { module: "shape", shares: true, base: [43.25, 42.56, 47.57, 44.65, 46.8, 44.48, 42.35], branch: [68.95, 64.27, 51.32, 53.23, 49.58, 47.88, 50.68], aa: [44.76, 45.56, 47.1, 44.34, 44.56, 47.64, 42.97] },
+    ];
+    const verdict = moduleVerdict(rows, NOT_HELD);
+    expect(verdict.cases.find((c) => c.case === "shape")?.overMedian).toBe(true);
+    expect(roundReads(rows, verdict, NOT_HELD).map((r) => [r.module, r.outcome])).toEqual([
+      ["grid", "ok"],
+      ["shape", "no read"],
+    ]);
+  });
+
+  it("COMPILE.MODULE.COST: each module of the rounds read has a second pair limit, so its rounds can set up the case", () => {
+    for (const module of Object.keys(ROUND_ADD)) expect(limitOf(module, true).second).toBeDefined();
   });
 
   it("COMPILE.MODULE.COST: a row prints the count of each order of each pair, because 7 rounds cannot give equal counts", () => {

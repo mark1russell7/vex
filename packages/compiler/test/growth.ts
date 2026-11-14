@@ -248,7 +248,7 @@ export function shapeVerdict(shape: GrowthShape, small: GrowthRow, large: Growth
   const limit = shape.time ?? TIME_LIMIT;
   const bytes = shape.bytes ?? BYTES_LIMIT;
   const time = timeRead(timesOf(small), timesOf(large), small.places, large.places, limit);
-  const held = heldTime((exponent) => `${shape.name} has a time exponent of ${exponent}, and the limit is ${String(limit)}`, time);
+  const held = heldTime((read) => `${shape.name} has a time exponent of ${read}, and the limit is ${String(limit)}`, time);
   return {
     faults: [...held.faults, ...(found.bytes > bytes ? [`${shape.name} has a bytes exponent of ${found.bytes.toFixed(2)}, and the limit is ${String(bytes)}`] : [])],
     unread: held.unread,
@@ -287,12 +287,12 @@ export function sourceVerdict(shape: GrowthShape, small: GrowthRow, large: Growt
   const none: HeldTime = { faults: [], unread: [] };
   const held = shape.source.generate;
   const generateLimit = held ?? SOURCE_TIME_LIMIT;
-  const generateText = (exponent: string): string => `${label} has a generate time exponent of ${exponent}, and the limit is ${String(generateLimit)}`;
+  const generateText = (read: string): string => `${label} has a generate time exponent of ${read}, and the limit is ${String(generateLimit)}`;
   const generate = held === undefined ? none : heldTime(generateText, timeRead(timesOf(small), timesOf(large), small.places, large.places, held));
   const load = loadExponentOf(small, large);
   const loadHeld = shape.source.load;
   const loadLimit = loadHeld ?? SOURCE_TIME_LIMIT;
-  const loadText = (exponent: string): string => `${label} has a load time exponent of ${exponent}, and the limit is ${String(loadLimit)}`;
+  const loadText = (read: string): string => `${label} has a load time exponent of ${read}, and the limit is ${String(loadLimit)}`;
   // A held load limit with no time of load holds nothing, so it is a fault.
   const loaded = loadHeld === undefined ? none : heldTime(loadText, load === undefined ? undefined : timeRead(loadsOf(small), loadsOf(large), small.places, large.places, loadHeld));
   const timeFaults = [...generate.faults, ...loaded.faults];

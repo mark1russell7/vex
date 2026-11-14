@@ -62,7 +62,7 @@ describe("COMPILE.GROWTH", () => {
 /** The times of `wideorigin` in job 3 of CI run 43632190156, on the AMD EPYC 9V45. The other 4 jobs of that run read 0.96 to 0.98. */
 const NOISY = { small: [64.7, 64.0, 65.9, 79.4, 71.9], large: [289.1, 305.7, 330.4, 307.6, 308.4], placesSmall: 8081, placesLarge: 32_321 } as const;
 /** This function gives the median of a list with an odd count. */
-const middle = (values: readonly number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? Number.NaN;
+const middle = (values: readonly number[]): number => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)] ?? Number.NaN;
 /** This function gives a row with the times of its processes. Bytes equal to the places give a bytes exponent of exactly 1. */
 const sampled = (places: number, samples: readonly number[], bytes: number): GrowthRow => ({ ...row(places, middle(samples), bytes), samples });
 
@@ -94,7 +94,7 @@ describe("COMPILE.GROWTH.NOISE", () => {
     const large = small.map((x) => x * 4);
     expect(timeRead(small, large, 100, 400, TIME_LIMIT)?.outcome).toBe("within");
     // The same times with the large size in the reverse order have the same medians, and their pairs cannot decide.
-    expect(timeRead(small, [...large].reverse(), 100, 400, TIME_LIMIT)?.outcome).toBe("cannot decide");
+    expect(timeRead(small, large.toReversed(), 100, 400, TIME_LIMIT)?.outcome).toBe("cannot decide");
   });
 
   it("COMPILE.GROWTH.NOISE: ten pairs decide a read that five pairs with one slow pair cannot decide", () => {

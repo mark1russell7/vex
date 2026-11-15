@@ -94,14 +94,16 @@ With `keys: true`, the last argument of the run is an array with one different t
 
 ## Speed
 
-The speed gate compares tier 2 with hand-written loops, in 5 CI runs on 2026-10-30. Lower is better.
+The speed gate compares tier 2 with hand-written loops. Lower is better. The tier 2 values come from 53 CI jobs on Node.js 26.13.1, from 2026-11-12 to 2026-11-14. The tier 1 values come from 5 CI jobs on 2026-10-30.
 
 | Program | Tier 2 / loops | Tier 1 / loops |
 |---|---|---|
-| The nearest other box, at each of 60 keys | 1.50 to 1.67 | 16.6 to 21.2 |
-| One step of the Game of Life, 16 by 16 | 1.22 to 1.30 | 38.0 to 40.6 |
-| The shapes module of ireko, 1111 nodes | 1.30 to 1.72 | |
-| The radial module of ireko | 2.62 to 3.34 | |
+| The nearest other box, at each of 60 keys | 1.32 to 1.63 | 16.6 to 21.2 |
+| One step of the Game of Life, 16 by 16 | 1.08 to 1.22 | 38.0 to 40.6 |
+| A tree module, 1000 nodes | 0.49 to 0.59 | |
+| The shapes module of ireko, 1111 nodes | 1.39 to 1.78 | |
+| The radial module of ireko, 12 children, linked | 1.71 to 1.85 | |
+| The radial module of ireko, 60 children, nested | 1.67 to 1.84 | |
 
 `bench/gate.ts` gives the limits and the runs that set them. The plan of the compiler is in [`docs/COMPILER.md`](https://github.com/mark1russell7/vex/blob/main/docs/COMPILER.md).
 

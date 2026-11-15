@@ -9,38 +9,39 @@
  * - (a) The median ratio of the processes is at most the limit.
  * - (b) The count of processes above the slow line (the limit) is at most the largest count.
  *
- * The limits come from 10 CI runs of `gate-processes.ts` (the fleet rule of 2026-11-02): run 41423717761 (reps A1 to A5)
- * and run 41425976485 (reps B1 to B5) of speed-gate.yml. The AMD EPYC 7763 had 5 runs (A1, A3, A5, B3, B5), so it has
- * its own limits. Each other model has the limits of all 10 runs. The 9V74 gave A2 and A4, the 9V45 gave B1 and B2, and
- * the Intel Xeon 8573C gave B4. Each value is the median of the 11 processes of one run.
+ * The limits come from the CI jobs of `gate-processes.ts` on Node.js 26.13.1 (LIFEMARGIN, the fleet rule of 2026-11-02):
+ * 53 jobs of speed-gate.yml in 36 runs, from 2026-11-12 23:30 to 2026-11-14 23:04 (UTC). The file `limit-runs.json`
+ * keeps the job, the run, the CPU model and the ratio of each process of each case. The AMD EPYC 7763 gave 13 jobs, so it
+ * has its own limits. The 40 other jobs give the limits of each other model: Intel Xeon 6975P-C, 8573C and 8370C, and AMD
+ * EPYC 9V45 and 9V74. Shapes has a limit of its own for the 23 Xeon jobs. Each value is the median of the 11 processes of
+ * one job.
  *
- * | Case | A1 to A5 | B1 to B5 | 7763 limit | Other limit |
+ * | Case | 7763 medians | 7763 limit, L | Other medians | Other limit, L |
  * |---|---|---|---|---|
- * | NEAREST | 1.65, 1.62, 1.64, 1.62, 1.64 | 1.50, 1.50, 1.64, 1.32, 1.67 | 1.70 | 2.02 |
- * | LIFE | 1.17, 1.15, 1.17, 1.14, 1.17 | 1.23, 1.23, 1.18, 1.14, 1.15 | 1.21 | 1.32 |
- * | radial, 12 children, linked | 3.19, 3.00, 3.14, 2.95, 3.16 | 2.75, 2.75, 3.11, 3.03, 3.29 | 3.34 (C) | 3.34 (C) |
- * | radial, 60 children, nested | 3.90, 3.86, 3.81, 3.84, 3.82 | 3.56, 3.55, 3.83, 3.42, 4.06 | 3.29 (C) | 3.29 (C) |
- * | tree, 1000 nodes | 1.00, 1.06, 0.98, 1.05, 0.99 | 1.05, 1.06, 0.99, 0.99, 1.02 | 1.06 | 1.14 |
- * | shapes, 1111 nodes | 1.63, 1.70, 1.58, 1.63, 1.58 | 1.63, 1.68, 1.61, 1.83, 1.59 | 1.68 | 1.74 (D) |
- * | the growth of the share of each value | 2.00, 2.00, 2.01, 2.00, 2.00 | 2.00, 2.00, 2.00, 2.01, 1.99 | 2.03 | 2.03 |
+ * | NEAREST | 1.62 to 1.63 | 1.64, 3 | 1.32 to 1.60 | 1.88, 1 |
+ * | LIFE | 1.14 to 1.22 | 1.30, 2 | 1.08 to 1.19 | 1.30, 1 |
+ * | radial, 12 children, linked | 1.77 to 1.85 | 1.93, 4 | 1.71 to 1.84 | 1.97, 1 |
+ * | radial, 60 children, nested | 1.78 to 1.79 | 1.80, 3 | 1.67 to 1.84 | 2.01, 1 |
+ * | tree, 1000 nodes | 0.57 to 0.58 | 0.59, 2 | 0.49 to 0.59 | 0.69, 1 |
+ * | shapes, 1111 nodes | 1.39 to 1.52 | 1.65 | 1.53 to 1.66, Xeon 1.50 to 1.78 | 1.79, Xeon 2.06 |
+ * | the growth of the share of each value | 1.99 to 2.01 | 2.03 | 1.99 to 2.07 | 2.15 |
  *
- * (a) Each limit is the worst run median plus the spread of the run medians, rounded up (STRATEGY.md of the fleet).
- * (D) Run 41773861998 of speed-gate.yml (reps D1 to D5, on main at 62acda4, with the freeze rule of #228) gave the
- * shapes limit of the other models. The medians are 1.63 (9V45), 1.57 (9V74), 1.52, 1.56 and 1.62 (7763). The worst
- * median plus the spread is 1.63 + 0.11, so the limit is 1.74. The limit of the 7763 stays 1.68, because three runs do
- * not make a limit. These runs have no Xeon, and Xeon runners gave 1.83 on two models, so a Xeon keeps the old 2.08.
- * (b) The rate p is the upper Wilson end (95 %) of the rate of processes above the limit in the derivation runs. The
- * largest count L is the smallest count with P(Binomial(11, p) > L) under 1 %. For the 7763, L is 3 or 4, and (b) fails a
- * run with a slow rate of 0.5 in 73 % to 89 % of runs, and 21 % to 43 % at 0.3. For other models, L is 2: 97 % at 0.5, 69 % at 0.3.
- * For shapes and share, (b) is a record only: its power at a slow rate of 0.3 is 2 % or less. The limit (a) and the
- * nightly log protect them.
+ * (a) Each limit is the worst job median plus the spread of the job medians, rounded up (STRATEGY.md of the fleet).
+ * (b) The rate p is the upper Wilson end (95 %) of the rate of processes above the limit in the derivation jobs. The
+ * largest count L is the smallest count with P(Binomial(11, p) > L) under 1 %. Check (b) fails a job with a slow rate of
+ * 0.3 in 89 % of jobs for L 1, 69 % for L 2, 43 % for L 3 and 21 % for L 4. At a slow rate of 0.5, it is 99 %, 97 %, 89 %
+ * and 73 %. For shapes and share, (b) stays a record only, as before. The limit (a) and the nightly log protect them.
+ *
+ * Before LIFEMARGIN, the limits came from 10 runs of 2026-11-02 on Node.js 26.13.0 (runs 41423717761 and 41425976485),
+ * with later runs for the radial cases (41455264352) and shapes (41773861998). On Node.js 26.13.1, LIFE on the 7763 went
+ * from a mean of 1.135 (30 jobs on 26.13.0) to 1.175 (13 jobs). Two of the 13 jobs failed the old limits (vex#389): one had
+ * the median 1.22 and 5 processes above 1.21, and one had the median 1.17 and 5 processes above 1.21. The radial and tree cases got faster after their limits were set,
+ * and NEAREST on the 7763 has a smaller spread now, so their new limits are lower. With the new
+ * limits, 3 of the 72 jobs on Node.js 26.13.0 fail: shapes at 1.81 on a 7763 and at 2.09 on a Xeon 6973P-C (both failed
+ * the old limits too), and linked with 2 slow processes on a 9V74.
  *
  * In one process with all cases, the hand loops of the nested radial case were 35 % slower, and its ratio was 2.7, not
  * 3.85 (run 41420168361). Measured cases before a case change its heap and its JIT state (GATENOISE, run 41418095435).
- * (C) The scan of a fold over the targets before the origin (COMPILE.MODULE.SCAN, RADIALGAP) made both radial cases faster.
- * Their limits come from run 41455264352 (reps C1 to C5: 9V45, 9V45, 7763, 9V74, 9V74). Linked gave 2.58, 2.59, 2.90, 2.96
- * and 2.63. Nested gave 2.77, 2.77, 3.03, 2.97 and 2.96. These runs have one 7763 run only, so each model has the same
- * radial limits. L is 3 for both cases: 43 % at a slow rate of 0.3, 89 % at 0.5.
  * A PR that makes a ratio better sets its limit lower in the same PR.
  * With `GATE_GC=1`, each case also prints the garbage collections of each arm in its timed runs (gc.ts, GATEGC).
  * With `GATE_ALLOC`, the process gives the allocations of one arm and no time (alloc.ts, TREEALLOC).
@@ -67,15 +68,15 @@ import { limitsFor, limitsText, type CaseLimits, type ModelLimits } from "../../
 import type { AllocArm, AllocRegime } from "./alloc.ts";
 import { GC_ON, gcRecorder } from "./gc.ts";
 
-/** The limits of each case, from the 10 runs in the header. A case with no `maxSlow` has check (b) as a record only. */
+/** The limits of each case, from the 53 jobs in the header. A case with no `maxSlow` has check (b) as a record only. */
 const LIMITS = {
-  nearest: { "7763": { limit: 1.7, slow: 1.7, maxSlow: 4 }, other: { limit: 2.02, slow: 2.02, maxSlow: 2 } },
-  life: { "7763": { limit: 1.21, slow: 1.21, maxSlow: 4 }, other: { limit: 1.32, slow: 1.32, maxSlow: 2 } },
-  linked: { "7763": { limit: 3.34, slow: 3.34, maxSlow: 3 }, other: { limit: 3.34, slow: 3.34, maxSlow: 3 } },
-  nested: { "7763": { limit: 3.29, slow: 3.29, maxSlow: 3 }, other: { limit: 3.29, slow: 3.29, maxSlow: 3 } },
-  tree: { "7763": { limit: 1.06, slow: 1.06, maxSlow: 4 }, other: { limit: 1.14, slow: 1.14, maxSlow: 2 } },
-  shapes: { "7763": { limit: 1.68, slow: 1.68 }, Xeon: { limit: 2.08, slow: 2.08 }, other: { limit: 1.74, slow: 1.74 } },
-  share: { "7763": { limit: 2.03, slow: 2.03 }, other: { limit: 2.03, slow: 2.03 } },
+  nearest: { "7763": { limit: 1.64, slow: 1.64, maxSlow: 3 }, other: { limit: 1.88, slow: 1.88, maxSlow: 1 } },
+  life: { "7763": { limit: 1.3, slow: 1.3, maxSlow: 2 }, other: { limit: 1.3, slow: 1.3, maxSlow: 1 } },
+  linked: { "7763": { limit: 1.93, slow: 1.93, maxSlow: 4 }, other: { limit: 1.97, slow: 1.97, maxSlow: 1 } },
+  nested: { "7763": { limit: 1.8, slow: 1.8, maxSlow: 3 }, other: { limit: 2.01, slow: 2.01, maxSlow: 1 } },
+  tree: { "7763": { limit: 0.59, slow: 0.59, maxSlow: 2 }, other: { limit: 0.69, slow: 0.69, maxSlow: 1 } },
+  shapes: { "7763": { limit: 1.65, slow: 1.65 }, Xeon: { limit: 2.06, slow: 2.06 }, other: { limit: 1.79, slow: 1.79 } },
+  share: { "7763": { limit: 2.03, slow: 2.03 }, other: { limit: 2.15, slow: 2.15 } },
   walk: { "7763": { limit: 1, slow: 1 }, other: { limit: 1, slow: 1 } },
 } as const satisfies Readonly<Record<string, ModelLimits>>;
 const CPU = cpus()[0]?.model ?? "";

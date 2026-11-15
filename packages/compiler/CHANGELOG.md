@@ -1,5 +1,11 @@
 # @mark1russell7/vex-compiler
 
+## 0.19.1
+
+### Patch Changes
+
+- @mark1russell7/vex@0.19.1
+
 ## 0.19.0
 
 ### Minor Changes

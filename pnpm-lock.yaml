@@ -180,13 +180,13 @@ importers:
         version: 0.5.6
       '@mark1russell7/conventions':
         specifier: ^0.41.0
-        version: 0.41.8
+        version: 0.41.10
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
       '@mark1russell7/rigor-statistics':
         specifier: ^0.2.0
-        version: 0.2.0
+        version: 0.2.1
       '@mark1russell7/ste-lint':
         specifier: github:mark1russell7/ste-lint#f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7
         version: https://codeload.github.com/mark1russell7/ste-lint/tar.gz/f597d6c1e09bcfcb487bb575825d6d5f29e9e0c7
@@ -1763,8 +1763,8 @@ packages:
     resolution: {integrity: sha512-WsLRfrej6msQLVqcS17x6KODic8bLf/IuOF2tD04NNbOhWKYCQi0xAEGBCy/TtthxRvRa6Yti2fcpeIQbX/nCA==}
     engines: {node: '>=22.12'}
 
-  '@mark1russell7/conventions@0.41.8':
-    resolution: {integrity: sha512-sKKDfwXS5gu8J09dlld3rXltF80TJgNR/agJHLcnFXBA1PJ5DeIsp36X+ihqP9T9/zdP0ttFmODqxvWdNkJxDw==}
+  '@mark1russell7/conventions@0.41.10':
+    resolution: {integrity: sha512-OD4i/u7PI2U1VORHfQLnkk52MIytd/q8NaqHGVet+V6X/FhekBu9qfMrM1NcnSmZEpTLFx5VvA1WwcW12K0pPQ==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1845,6 +1845,10 @@ packages:
 
   '@mark1russell7/rigor-statistics@0.2.0':
     resolution: {integrity: sha512-Gzi1Uy2/EdXXKGtqF+ZUpNrVQELEDAoG8ufrUvo0oXYlYXWyWxk3HXhLPKSq4MmRn/EiUr0Uebc05n3IjpvkGQ==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/rigor-statistics@0.2.1':
+    resolution: {integrity: sha512-4m8yw4giLH/y1HcsroBQSHAWByC5fK/iJb4dNGCPT6Eelr26bxvBz7kMC7UMFSzGcR+W8GTrAwlAQmmFnQDMuA==}
     engines: {node: '>=22'}
 
   '@mark1russell7/service@0.8.12':
@@ -5934,7 +5938,7 @@ snapshots:
 
   '@mark1russell7/api-report@0.5.6':
     dependencies:
-      '@mark1russell7/conventions': 0.41.8
+      '@mark1russell7/conventions': 0.41.10
 
   '@mark1russell7/coeval@0.29.0(zod@4.6.7)':
     dependencies:
@@ -5958,7 +5962,7 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  '@mark1russell7/conventions@0.41.8':
+  '@mark1russell7/conventions@0.41.10':
     dependencies:
       yaml: 2.9.1
 
@@ -6007,6 +6011,10 @@ snapshots:
       '@mark1russell7/rigor-generators': 0.1.15
 
   '@mark1russell7/rigor-statistics@0.2.0':
+    dependencies:
+      '@mark1russell7/rigor-generators': 0.1.16
+
+  '@mark1russell7/rigor-statistics@0.2.1':
     dependencies:
       '@mark1russell7/rigor-generators': 0.1.16
 

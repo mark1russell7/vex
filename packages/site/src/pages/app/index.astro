@@ -63,11 +63,13 @@ const description = "A spreadsheet in the browser on the Vex engine: one formula
     </style>
   </head>
   <body>
+    <SheetAppPage client:only="react" docsHref={base} />
+    <!-- The intro comes after the island. Before the app starts, the island is empty, so the first h1 is the intro's.
+         After the app starts, the first h1 is the app's own visible h1, and the intro is hidden. -->
     <div class="app-intro">
       <h1>{title}</h1>
       <p>{description}</p>
       <noscript><p>The app needs JavaScript. Read about Vex at <a href={base}>the docs</a>.</p></noscript>
     </div>
-    <SheetAppPage client:only="react" docsHref={base} />
   </body>
 </html>

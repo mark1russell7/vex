@@ -28,7 +28,7 @@ jobs:
       match: ${{ steps.changes.outputs.match }}
     steps:
       - id: changes
-        uses: mark1russell7/template/.github/actions/changes@982386e31b99cf185839f60b1bac6c7b7f11fcf7 # main
+        uses: mark1russell7/template/.github/actions/changes@2030c7dec9485afebb504772f79f41f23bdb2df7 # main
         with:
           paths: |
             packages/core/bench/fault.ts

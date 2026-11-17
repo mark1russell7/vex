@@ -13,7 +13,6 @@ on:
     workflows: [Release]
     types: [completed]
     branches: [main]
-  pull_request:
   # Every 3 hours, so that the Status page shows the open pull requests and issues of now
   schedule:
     - cron: "53 */3 * * *"
@@ -29,7 +28,7 @@ concurrency:
 
 jobs:
   pages:
-    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@4466542421ef76bcb3ccf5b5e1765d4f509f8f4f # main
+    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@2030c7dec9485afebb504772f79f41f23bdb2df7 # main
     # The build job of the shared workflow gets only the read permissions. Only its deploy job,
     # which runs no code of the repository, writes to Pages.
     permissions:
@@ -42,22 +41,3 @@ jobs:
       statuses: read
       pages: write
       id-token: write
-    with:
-      # The test report (the living spec page shows the status of the tests of each requirement), then the site
-      github-token: true
-      build: |
-        pnpm --filter @vex/site run report
-        pnpm --filter @vex/site run build
-      out: packages/site/dist
-      env: '{"SITE_BASE": "/${{ github.event.repository.name }}", "ASTRO_TELEMETRY_DISABLED": "1"}'
-      # The Releases page and the Status page (releases/, status/ and their data/*.json), at deploy time
-      group: "@mark1russell7/vex"
-      packages: "@mark1russell7/vex,@mark1russell7/vex-domains,@mark1russell7/vex-testkit,@mark1russell7/vex-compiler,@mark1russell7/vex-mcp"
-      site-name: Vex
-      deploy: ${{ github.event_name != 'pull_request' }}
-      # The site check opens these pages in a browser before the deploy. Its probe drives the first page.
-      site-check: true
-      site-check-pages: /app/,/,/releases/,/status/
-      site-check-probe: packages/site/src/check-probe.ts
-      # The open items for the Status page. check:conventions parses the file on each pull request (roadmap-parses).
-      roadmap: docs/ROADMAP.md

@@ -23,7 +23,7 @@ jobs:
   # The checks of each Node.js version: the shared CI of mark1russell7 (reusable-ci.yml of
   # mark1russell7/template, its CI.md)
   ci:
-    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@4466542421ef76bcb3ccf5b5e1765d4f509f8f4f # main
+    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@2030c7dec9485afebb504772f79f41f23bdb2df7 # main
     permissions:
       contents: read
     with:
@@ -61,7 +61,7 @@ jobs:
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
       # The shared action installs the browsers from a cache, with a time limit and a second try for each install.
-      - uses: mark1russell7/template/.github/actions/setup-playwright@4466542421ef76bcb3ccf5b5e1765d4f509f8f4f # main
+      - uses: mark1russell7/template/.github/actions/setup-playwright@2030c7dec9485afebb504772f79f41f23bdb2df7 # main
         with:
           browsers: chromium firefox webkit
           command: pnpm --filter @vex/site exec playwright
@@ -89,11 +89,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:packages
 
+  # The site of .github/site.json: the build, the site check and the probe, with no deploy (CI.md of the
+  # template, "The site config"). The Pages workflow deploys the same site from main.
+  site-check:
+    uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@2030c7dec9485afebb504772f79f41f23bdb2df7 # main
+    permissions:
+      contents: read
+
   # The only check that a pull request must pass
   ci-ok:
     name: CI OK
     if: ${{ !cancelled() }}
-    needs: [ci, site, package]
+    needs: [ci, site, package, site-check]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}

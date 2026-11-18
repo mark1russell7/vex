@@ -56,3 +56,20 @@ const host = createHost();
 await host.start();
 await host.closed;
 ```
+
+## The module entry
+
+The entry `@mark1russell7/vex-mcp/module` gives the five tools to a procedures server that loads modules. Then the tools of Vex need no second MCP server. The dev-tools server of [`@procedures/mcp-dev-tools`](https://www.npmjs.com/package/@procedures/mcp-dev-tools) loads the entry when `MCP_BUNDLES` names it:
+
+```json
+"env": { "MCP_BUNDLES": "@procedures/bundle-mcp,@mark1russell7/vex-mcp" }
+```
+
+- The default export is `vexModule`.
+- `mcpNamespaces` is `["vex"]`, so the server exposes the five tools and no other procedure.
+- `mcpInstructions` is the text of the instructions of the own server of Vex.
+- An import of the entry registers nothing and starts nothing.
+
+The one server names a tool by its path with dots, for example `vex.check`. Claude Code permits only letters, digits, `_` and `-` in a tool name, so it shows the name `vex_check`, as for the own server.
+
+The test `src/one-server.test.ts` starts the dev-tools server with the module entry. It compares the list of the tools and the result of each tool with the own server of Vex.

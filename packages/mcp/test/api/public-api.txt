@@ -14,7 +14,7 @@ type SpaceInput: build/index.d.ts#SpaceInput
 ToolError: build/index.d.ts#ToolError
 catalogText: build/index.d.ts#catalogText
 check: build/index.d.ts#check
-createHost: build/index.d.ts#createHost
+createHost: build/server.chunk.d.ts#createHost
 dataOf: build/index.d.ts#dataOf
 domainText: build/index.d.ts#domainText
 domainsOf: build/index.d.ts#domainsOf
@@ -25,7 +25,13 @@ moduleOf: build/index.d.ts#moduleOf
 programOf: build/index.d.ts#programOf
 resultJson: build/index.d.ts#resultJson
 spaceOf: build/index.d.ts#spaceOf
-vexModule: build/index.d.ts#vexModule
+vexModule: build/server.chunk.d.ts#vexModule
+
+## ./module (build/module.d.ts): names
+
+default: build/server.chunk.d.ts#vexModule
+mcpInstructions: build/server.chunk.d.ts#INSTRUCTIONS
+mcpNamespaces: build/module.d.ts#mcpNamespaces
 
 ## bin: 1 commands
 
@@ -78,9 +84,6 @@ export declare function check(input: {
   readonly maxStep?: VexStep | undefined;
 }): unknown;
 
-### build/index.d.ts#createHost
-export declare function createHost(faces?: McpHostOptions["faces"]): McpHost;
-
 ### build/index.d.ts#dataOf
 export declare function dataOf(data: unknown, domains: readonly AnyDomain[]): unknown;
 
@@ -126,5 +129,14 @@ export declare function resultJson(r: Result<unknown>, domains: readonly AnyDoma
 ### build/index.d.ts#spaceOf
 export declare function spaceOf(input: SpaceInput, domains: readonly AnyDomain[]): Space;
 
-### build/index.d.ts#vexModule
-export declare const vexModule: ProcedureModule;
+### build/module.d.ts#mcpNamespaces
+export declare const mcpNamespaces: readonly string[];
+
+### build/server.chunk.d.ts#INSTRUCTIONS
+declare const INSTRUCTIONS = "Vex evaluates one formula at each record of a collection, a tree or a grid. Read vex_catalog before a program uses an op. Test a program with vex_check, vex_evaluate and vex_explain before you write it into a project. vex_module gives a standalone module of a program.";
+
+### build/server.chunk.d.ts#createHost
+declare function createHost(faces?: McpHostOptions["faces"]): McpHost;
+
+### build/server.chunk.d.ts#vexModule
+declare const vexModule: ProcedureModule;

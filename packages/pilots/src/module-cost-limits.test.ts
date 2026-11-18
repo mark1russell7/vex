@@ -4,10 +4,10 @@
  */
 import { readFileSync } from "node:fs";
 import { armOrder } from "@mark1russell7/rigor-bench";
+import { freshRun, type FreshRun } from "@mark1russell7/rigor-bench/fresh";
 import { describe, expect, it } from "vitest";
 import { placesRead } from "../../compiler/src/unshared.ts";
-import { measureIsolated } from "../../core/bench/measure.ts";
-import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundReads, SHARED_LIMIT, type ModuleTimes, cpuFacts, gateRecords, readStep, RECORD_FORMAT, recordLines, unreadGains } from "../bench/module-cost-limits.ts";
+import { AA_CAP, ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, CATCH_ADD, catchFaults, CATCH_MUST_FAIL, ceilingOnly, falseFails, GAIN_BASE, GAIN_MODELS, limitOf, medianLimit, MODULE_LINES, moduleCostFaults, moduleTimesOf, moduleVerdict, orderCount, NOT_SHARED_LIMIT, readingOf, recordsOf, ROUND_ADD, roundReads, SHARED_LIMIT, type ModuleTimes, type ReadRow, cpuFacts, gateRecords, readStep, RECORD_FORMAT, recordLines, unreadGains } from "../bench/module-cost-limits.ts";
 import { IREKO_MODULES, irekoExprs } from "./ireko-modules.ts";
 
 /** A model where the reads show the gain. */
@@ -16,9 +16,14 @@ const HELD = "AMD EPYC 7763 64-Core Processor";
 /** The model where the reads do not show the gain. */
 const NOT_HELD = "AMD EPYC 9V45 96-Core Processor";
 
+/** This function gives the orders of the arms of the old harness for `rounds` rounds: `armOrder(ARMS, round)`. */
+function oldOrders(rounds: number): readonly (readonly string[])[] {
+  return Array.from({ length: rounds }, (_round, round) => armOrder(ARMS, round));
+}
+
 /** This function gives a row of 7 rounds with a base of 100 ms, and with the same ratio in each round of the branch. */
 function row(ratio: number, module = "next", shares = true): ModuleTimes {
-  return { module, shares, base: Array.from({ length: 7 }, () => 100), branch: Array.from({ length: 7 }, () => 100 * ratio), aa: Array.from({ length: 7 }, () => 100) };
+  return { module, shares, base: Array.from({ length: 7 }, () => 100), branch: Array.from({ length: 7 }, () => 100 * ratio), aa: Array.from({ length: 7 }, () => 100), orders: oldOrders(7) };
 }
 
 /** This function gives a row of 7 rounds with a ratio of 1. The 2 last rounds of the branch have the given ratio. */
@@ -38,9 +43,22 @@ function faultsOf(rows: readonly ModuleTimes[], model = HELD): readonly string[]
   return first === undefined ? [] : moduleCostFaults(first, verdict.aaTail);
 }
 
-/** This function gives the count of the rounds in which the base starts before an arm. */
-function firsts(arm: string): number {
-  return Array.from({ length: 7 }, (_round, round) => armOrder(ARMS, round)).filter((order) => order.indexOf("base") < order.indexOf(arm)).length;
+/** The rows of a fake read of 3 modules. */
+const FAKE_ROWS: readonly ReadRow[] = ["next", "grid", "shape"].map((module) => ({ module, input: module, shares: true }));
+
+/** This function gives a fresh run of 7 rounds on `FAKE_ROWS` with a fake start. The time of a child is the place of its start in the run. */
+async function fakeRun(): Promise<FreshRun> {
+  let starts = 0;
+  return freshRun({
+    base: { id: "base", command: ["base"] },
+    candidates: [{ id: "branch", command: ["branch"] }],
+    cases: FAKE_ROWS.map((r) => r.input),
+    rounds: 7,
+    order: "arms",
+    firstCase: 0,
+    args: (input) => ["--input", input, "--warmup", "0"],
+    start: async () => ({ stdout: `${JSON.stringify({ ms: ++starts })}\n`, stderr: "", code: 0 }),
+  });
 }
 
 /** This function gives a module with a cost in the first 2 rounds of the branch only, as the read of the rounds adds it. */
@@ -79,7 +97,7 @@ describe("COMPILE.MODULE.COST", () => {
   });
 
   it("COMPILE.MODULE.COST: a row reads the median of its ratios and the two largest ratios of one round on both arms", () => {
-    const reading = readingOf({ module: "next", shares: true, base: [100, 200, 100, 100, 100], branch: [110, 110, 300, 110, 120], aa: [100, 100, 105, 102, 100] });
+    const reading = readingOf({ module: "next", shares: true, base: [100, 200, 100, 100, 100], branch: [110, 110, 300, 110, 120], aa: [100, 100, 105, 102, 100], orders: oldOrders(5) });
     expect(reading.baseMs).toBe(100);
     expect(reading.branchMs).toBe(110);
     expect(reading.ratio).toBeCloseTo(1.1, 9);
@@ -91,42 +109,38 @@ describe("COMPILE.MODULE.COST", () => {
   });
 
   it("COMPILE.MODULE.COST: the median of a row is the median of its ratios, not a ratio of two medians", () => {
-    const reading = readingOf({ module: "next", shares: true, base: [100, 100, 100, 200, 200], branch: [200, 200, 200, 200, 200], aa: [100, 100, 100, 200, 200] });
+    const reading = readingOf({ module: "next", shares: true, base: [100, 100, 100, 200, 200], branch: [200, 200, 200, 200, 200], aa: [100, 100, 100, 200, 200], orders: oldOrders(5) });
     expect(reading.ratio).toBeCloseTo(2, 9);
     expect(reading.branchMs / reading.baseMs).toBe(2);
-    const moved = readingOf({ module: "next", shares: true, base: [100, 100, 200, 200, 200], branch: [100, 100, 220, 220, 220], aa: [100, 100, 200, 200, 200] });
+    const moved = readingOf({ module: "next", shares: true, base: [100, 100, 200, 200, 200], branch: [100, 100, 220, 220, 220], aa: [100, 100, 200, 200, 200], orders: oldOrders(5) });
     expect(moved.ratio).toBeCloseTo(1.1, 9);
     expect(moved.branchMs / moved.baseMs).toBeCloseTo(1.1, 9);
   });
 
   it("COMPILE.MODULE.COST: the first arm of each record is the arm that started first", async () => {
-    const starts: (readonly unknown[])[] = [];
-    const report = await measureIsolated({
-      arms: [
-        { id: "base", command: ["base"] },
-        { id: "branch", command: ["branch"] },
-      ],
-      inputs: [{ id: "next" }],
-      repeats: 7,
-      warmup: 0,
-      mode: "fresh",
-      startChild: async (command) => {
-        starts.push(command);
-        return { ms: starts.length };
-      },
-    });
-    expect(report.arms).toEqual(ARMS);
-    const ms = report.inputs[0]?.ms ?? {};
-    const times: ModuleTimes = { module: "next", shares: true, base: ms["base"] ?? [], branch: ms["branch"] ?? [], aa: ms["base~aa"] ?? [] };
+    const times = moduleTimesOf(await fakeRun(), FAKE_ROWS, 7);
     // The child gives the place of its start as its time, so the smaller time of a pair is the arm that started first.
     for (const side of ["branch", "aa"] as const) {
-      const records = recordsOf([times], side);
+      const records = recordsOf(times, side);
+      expect(records).toHaveLength(21);
       expect(records.map((r) => r.first)).toEqual(records.map((r) => (r.a < r.b ? "a" : "b")));
     }
   });
 
-  it("COMPILE.MODULE.COST: the order of the arms comes from armOrder, so each pair of the gate turns evenly", () => {
-    expect([firsts("branch"), firsts("base~aa")]).toEqual([4, 4]);
+  it("COMPILE.MODULE.COST: the arms turn by the place of the module, so each pair of each row turns evenly", async () => {
+    const times = moduleTimesOf(await fakeRun(), FAKE_ROWS, 7);
+    expect(new Set(times.map((t) => t.orders[0]?.join("/"))).size).toBe(3);
+    // 7 rounds cannot give equal counts, so each count of the base first is 3 or 4.
+    for (const t of times) for (const side of ["branch", "aa"] as const) expect(["3:4", "4:3"]).toContain(orderCount(t, side));
+  });
+
+  it("COMPILE.MODULE.COST: a run with two times of one base, or with no order of a round, has no read", async () => {
+    const run = await fakeRun();
+    const aa = (run.pairs["base~aa"] ?? []).map((r) => ({ ...r, a: r.a + 0.5 }));
+    expect(() => moduleTimesOf({ ...run, pairs: { ...run.pairs, "base~aa": aa } }, FAKE_ROWS, 7)).toThrow("next: the base of round 0 has two times");
+    expect(() => moduleTimesOf({ ...run, orders: (run.orders ?? []).filter((o) => !(o.case === "grid" && o.round === 3)) }, FAKE_ROWS, 7)).toThrow("grid: the run has no order of round 3");
+    expect(() => moduleTimesOf(run, FAKE_ROWS, 8)).toThrow("next: the pair branch has no record of round 7");
+    expect(() => recordsOf([{ ...row(1), orders: [["base", "branch"], ...oldOrders(6)] }], "aa")).toThrow("next: round 0 has no order of the arm base~aa");
   });
 
   it("COMPILE.MODULE.COST: the read of the rounds passes only when the second pair clause fails each module alone", () => {
@@ -153,9 +167,10 @@ describe("COMPILE.MODULE.COST", () => {
 
   it("COMPILE.MODULE.COST: the read of run 43632190156 on the 9V45 is a no read of shape and a pass of grid (ROUNDMARGIN)", () => {
     // The rows of the rounds read of job Module cost 3, main 44cc548, in ms to 2 decimals. The median of shape is 1.192.
+    // The old harness started round r in the order armOrder(ARMS, r).
     const rows: readonly ModuleTimes[] = [
-      { module: "grid", shares: true, base: [22.74, 23.89, 24.79, 24.06, 23.02, 24.18, 23.5], branch: [33.94, 33.07, 23.6, 23.77, 24.24, 25.15, 23.26], aa: [22.52, 23.05, 23.68, 22.67, 22.47, 24.08, 22.2] },
-      { module: "shape", shares: true, base: [43.25, 42.56, 47.57, 44.65, 46.8, 44.48, 42.35], branch: [68.95, 64.27, 51.32, 53.23, 49.58, 47.88, 50.68], aa: [44.76, 45.56, 47.1, 44.34, 44.56, 47.64, 42.97] },
+      { module: "grid", shares: true, base: [22.74, 23.89, 24.79, 24.06, 23.02, 24.18, 23.5], branch: [33.94, 33.07, 23.6, 23.77, 24.24, 25.15, 23.26], aa: [22.52, 23.05, 23.68, 22.67, 22.47, 24.08, 22.2], orders: oldOrders(7) },
+      { module: "shape", shares: true, base: [43.25, 42.56, 47.57, 44.65, 46.8, 44.48, 42.35], branch: [68.95, 64.27, 51.32, 53.23, 49.58, 47.88, 50.68], aa: [44.76, 45.56, 47.1, 44.34, 44.56, 47.64, 42.97], orders: oldOrders(7) },
     ];
     const verdict = moduleVerdict(rows, NOT_HELD);
     expect(verdict.cases.find((c) => c.case === "shape")?.overMedian).toBe(true);
@@ -208,7 +223,7 @@ describe("COMPILE.MODULE.COST", () => {
   });
 
   it("COMPILE.MODULE.COST: a read of a row with few rounds does not decide", () => {
-    const few: ModuleTimes = { module: "next", shares: true, base: [100, 100, 100], branch: [100, 100, 100], aa: [100, 100, 100] };
+    const few: ModuleTimes = { module: "next", shares: true, base: [100, 100, 100], branch: [100, 100, 100], aa: [100, 100, 100], orders: oldOrders(3) };
     expect(moduleVerdict([few], HELD).outcome).toBe("cannot decide");
   });
 
@@ -306,12 +321,20 @@ describe("COMPILE.MODULE.COST", () => {
     expect(text.trimEnd().split("\n")).toHaveLength(4);
     expect(gateRecords(text).map((r) => r.module)).toEqual(["kept"]);
     expect(text.trimEnd().split("\n").map((line) => (JSON.parse(line) as { kind: string }).kind)).toEqual(["gate", "gate", "fault", "fault"]);
-    expect(gateRecords(text)[0]).toMatchObject({ format: RECORD_FORMAT, kind: "gate", step: "gate", decided: true, read: 0, cpu: HELD, commit: "a", baseCommit: "b", base: row(1).base });
+    expect(gateRecords(text)[0]).toMatchObject({ format: RECORD_FORMAT, kind: "gate", step: "gate", decided: true, read: 0, cpu: HELD, commit: "a", baseCommit: "b", base: row(1).base, orders: row(1).orders });
   });
 
   it("COMPILE.MODULE.RECORD: a line with another format or no known kind is a fault", () => {
     expect(() => gateRecords(`${JSON.stringify(row(1))}\n`)).toThrow("a record has another format");
     expect(() => gateRecords(`${JSON.stringify({ ...row(1), format: RECORD_FORMAT })}\n`)).toThrow("a record has no known kind");
+  });
+
+  it("COMPILE.MODULE.RECORD: a line of format 1 reads with the orders of the old harness, and a line of format 2 needs its orders", () => {
+    const { orders: _orders, ...old } = row(1, "kept");
+    const fields = { kind: "gate", step: "gate", read: 0, decided: true, cpu: HELD, cpuFacts: {}, node: "v26", commit: "a", baseCommit: "b" };
+    expect(gateRecords(`${JSON.stringify({ ...old, ...fields, format: 1 })}\n`)[0]?.orders).toEqual(oldOrders(7));
+    expect(() => gateRecords(`${JSON.stringify({ ...old, ...fields, format: RECORD_FORMAT })}\n`)).toThrow("has no order of the arms for each round");
+    expect(() => gateRecords(`${JSON.stringify({ ...old, ...fields, format: RECORD_FORMAT, orders: oldOrders(6) })}\n`)).toThrow("has no order of the arms for each round");
   });
 
   it("COMPILE.MODULE.RECORD: the facts of a processor come from its first block, and an empty text gives none", () => {
@@ -335,7 +358,7 @@ describe("COMPILE.MODULE.COST", () => {
   });
 
   it("COMPILE.MODULE.COST: no times, or arms with different rounds, are a fault", () => {
-    expect(() => moduleVerdict([{ module: "next", shares: true, base: [], branch: [], aa: [] }], HELD)).toThrow("next: the arms have 0 and 0 rounds");
+    expect(() => moduleVerdict([{ module: "next", shares: true, base: [], branch: [], aa: [], orders: [] }], HELD)).toThrow("next: the arms have 0 and 0 rounds");
     expect(() => moduleVerdict([{ ...row(1), branch: [100, 100] }], HELD)).toThrow("next: the arms have 7 and 2 rounds");
     expect(() => moduleVerdict([{ ...row(1), aa: [100, 100] }], HELD)).toThrow("next: the arms have 7 and 2 rounds");
   });

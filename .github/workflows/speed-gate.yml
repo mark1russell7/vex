@@ -59,7 +59,7 @@ jobs:
     # npm that they import (`GATE_NPM_PACKAGES` in `packages/testkit/src/gate-inputs.ts`).
     outputs:
       match: ${{ steps.changes.outputs.match == 'true' || steps.inputs.outputs.same == 'false' }}
-      module_gate: ${{ steps.module_gate.outputs.match }}
+      module_gate: ${{ steps.module_gate.outputs.match == 'true' || steps.inputs.outputs.same == 'false' }}
     steps:
       - id: changes
         uses: mark1russell7/template/.github/actions/changes@2030c7dec9485afebb504772f79f41f23bdb2df7 # main
@@ -78,7 +78,8 @@ jobs:
             .github/workflows/speed-gate.yml
             !packages/*/src/**/*.test.ts
             !packages/*/src/__golden__/**
-      # The catch of the job modules reads on a pull request that changes the files of that gate.
+      # The catch of the job modules reads on a pull request that changes the files of that gate, or a package of the gates
+      # from npm (`freshRun` of rigor-bench starts its processes).
       - id: module_gate
         uses: mark1russell7/template/.github/actions/changes@2030c7dec9485afebb504772f79f41f23bdb2df7 # main
         with:
@@ -90,20 +91,22 @@ jobs:
         uses: mark1russell7/template/.github/actions/changes@2030c7dec9485afebb504772f79f41f23bdb2df7 # main
         with:
           paths: pnpm-lock.yaml
-      # Only the lock file changed: the gates start only when a package of the gates has a new version or integrity.
-      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+      # The lock file changed: the gates start when a package of the gates has a new version or integrity. The step runs
+      # also when the code changed, because the catch of the job modules needs it: its harness comes from rigor-bench.
+      # Each other event is a match of each step, so it needs no base.
+      - if: github.event_name == 'pull_request' && steps.lock.outputs.match == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+      - if: github.event_name == 'pull_request' && steps.lock.outputs.match == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
-      - if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+      - if: github.event_name == 'pull_request' && steps.lock.outputs.match == 'true'
         run: node scripts/workflow-gate.ts
       - id: inputs
-        if: steps.changes.outputs.match != 'true' && steps.lock.outputs.match == 'true'
+        if: github.event_name == 'pull_request' && steps.lock.outputs.match == 'true'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |

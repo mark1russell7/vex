@@ -3,9 +3,10 @@
  *
  *   node bench/module-cost.ts <the folder of a checkout of the base, with `module-cost-child.ts` in its bench folder> [--turn <n>] [--catch]
  *
- * Each arm starts a fresh process for each print. The order of the arms comes from `armOrder`, and the order of the modules
- * turns at each round. The flag `--turn` gives each read of a set a different first place. The line `order` names the first
- * row and the order of the arms of each round.
+ * Each arm starts a fresh process for each print, with `freshRun` of rigor-bench and the order `"arms"`. The order of the
+ * arms comes from `armOrder`, after a turn by the place of the module. The order of the modules turns at each round. The
+ * flag `--turn` gives each read of a set a different first place. The line `order` names the first row of each round and
+ * the order of the arms of that row. The line `times` of a row has the order of its arms in each round.
  *
  * The base is fixed, so the gate also finds a cost that grows over many pull requests. Only a pull request moves the
  * base, with a ruling on its reason and new limits from new reads. A new module has no time on the base, so the base
@@ -33,11 +34,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { armOrder, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
+import type { TailLimitVerdict } from "@mark1russell7/rigor-bench";
+import { freshRun } from "@mark1russell7/rigor-bench/fresh";
 import { placesRead } from "../../compiler/src/unshared.ts";
-import { env, envLine, firstOfRound, measureIsolated } from "../../core/bench/measure.ts";
+import { env, envLine } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
-import { ARMS, BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundReads, type ModuleTimes, cpuFacts, readStep, recordLines, unreadGains } from "./module-cost-limits.ts";
+import { BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleTimesOf, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundReads, type ModuleTimes, type ReadRow, cpuFacts, readStep, recordLines, unreadGains } from "./module-cost-limits.ts";
 
 /** The fresh processes of each arm on each module. */
 const ROUNDS = 7;
@@ -49,13 +51,6 @@ const MAX_READS = 3;
 const machine = env();
 const CPU_INFO = "/proc/cpuinfo";
 const facts = cpuFacts(existsSync(CPU_INFO) ? readFileSync(CPU_INFO, "utf8") : "");
-
-/** One row of the gate: its name, its input to the child, and the result of `placesRead` on its program. */
-interface Row {
-  readonly module: string;
-  readonly input: string;
-  readonly shares: boolean;
-}
 
 /** This function gives the times of one arm with two decimals. */
 function list(ms: readonly number[]): string {
@@ -75,7 +70,7 @@ function printRead(times: readonly ModuleTimes[], verdict: TailLimitVerdict, pre
     const limit = limitOf(row.module, row.shares);
     const lines = `${medianLimit(limit, machine.cpu).toFixed(3)}/${limit.second?.toFixed(3) ?? "report"}`;
     const r = readingOf(row);
-    console.info(`${prefix}times module=${row.module} base=${list(row.base)} branch=${list(row.branch)} aa=${list(row.aa)}`);
+    console.info(`${prefix}times module=${row.module} base=${list(row.base)} branch=${list(row.branch)} aa=${list(row.aa)} orders=${row.orders.map((o) => o.join("/")).join(",")}`);
     console.info(
       `${prefix}${WORDS[read.outcome]} module ${row.module} shares=${String(row.shares)} base=${r.baseMs.toFixed(2)} branch=${r.branchMs.toFixed(2)} ratio=${r.ratio.toFixed(3)} aa=${r.aa.toFixed(3)} worstPair=${r.worstPair.toFixed(3)} secondPair=${r.secondPair.toFixed(3)} aaWorst=${r.aaWorst.toFixed(3)} aaSecond=${r.aaSecond.toFixed(3)} runAaSecond=${aaSecond} orderBranch=${orderCount(row, "branch")} orderAa=${orderCount(row, "aa")} limit=${lines}${ceilingOnly(limit, machine.cpu) ? ` ${CEILING_ONLY}` : ""}`,
     );
@@ -93,9 +88,9 @@ const step = readStep(values);
 const prefix = step === "gate" ? "" : `${step} `;
 const added = testsTheRounds ? ROUND_ADD : CATCH_ADD;
 
-const moduleRows: readonly Row[] = IREKO_MODULES.map((module) => ({ module, input: module as string, shares: placesRead(irekoExprs(module)).shares }));
+const moduleRows: readonly ReadRow[] = IREKO_MODULES.map((module) => ({ module, input: module as string, shares: placesRead(irekoExprs(module)).shares }));
 const shared = moduleRows.filter((r) => r.shares).map((r) => r.module);
-const rows: readonly Row[] = testsTheGate
+const rows: readonly ReadRow[] = testsTheGate
   ? moduleRows.filter((r) => Object.hasOwn(added, r.module))
   : [
       ...moduleRows,
@@ -114,26 +109,22 @@ if (unread !== undefined) {
 }
 let decided = false;
 for (let read = 0; read < MAX_READS && !decided; read++) {
-  const firstInput = Number(values.turn) + read;
-  console.info(`${prefix}order first=${Array.from({ length: ROUNDS }, (_round, round) => rows[firstOfRound(round, rows.length, ROUNDS, firstInput)]?.module).join(",")} arms=${Array.from({ length: ROUNDS }, (_round, round) => armOrder(ARMS, round).join("/")).join(",")}`);
   // The reads run one at a time: two reads at one time change the times of each other.
   // oxlint-disable-next-line no-await-in-loop
-  const report = await measureIsolated({
-    arms: [
-      { id: "base", command: [process.execPath, join(baseFolder, "packages/pilots/bench/module-cost-child.ts")] },
-      // Each read counts the rounds of the added work again, in its own folder.
-      { id: "branch", command: [process.execPath, fileURLToPath(new URL("module-cost-child.ts", import.meta.url)), ...add, ...(testsTheRounds ? ["--add-first", `${String(ROUND_ADD_STARTS)}:${mkdtempSync(join(tmpdir(), "module-cost-"))}`] : [])] },
-    ],
-    inputs: rows.map((r) => ({ id: r.input })),
-    repeats: ROUNDS,
-    warmup: 0,
-    mode: "fresh",
-    firstInput,
+  const run = await freshRun({
+    base: { id: "base", command: [process.execPath, join(baseFolder, "packages/pilots/bench/module-cost-child.ts")] },
+    // Each read counts the rounds of the added work again, in its own folder.
+    candidates: [{ id: "branch", command: [process.execPath, fileURLToPath(new URL("module-cost-child.ts", import.meta.url)), ...add, ...(testsTheRounds ? ["--add-first", `${String(ROUND_ADD_STARTS)}:${mkdtempSync(join(tmpdir(), "module-cost-"))}`] : [])] }],
+    cases: rows.map((r) => r.input),
+    rounds: ROUNDS,
+    order: "arms",
+    firstCase: Number(values.turn) + read,
+    args: (input) => ["--input", input, "--warmup", "0"],
   });
-  const times: readonly ModuleTimes[] = rows.map(({ module, shares }, at) => {
-    const ms = report.inputs[at]?.ms ?? {};
-    return { module, shares, base: ms["base"] ?? [], branch: ms["branch"] ?? [], aa: ms["base~aa"] ?? [] };
-  });
+  const firsts = Array.from({ length: ROUNDS }, (_round, round) => run.orders?.find((o) => o.round === round));
+  const moduleOf = (input: string | undefined): string => rows.find((r) => r.input === input)?.module ?? "none";
+  console.info(`${prefix}order first=${firsts.map((o) => moduleOf(o?.case)).join(",")} arms=${firsts.map((o) => o?.arms.join("/") ?? "none").join(",")}`);
+  const times: readonly ModuleTimes[] = moduleTimesOf(run, rows, ROUNDS);
   const verdict = moduleVerdict(times, machine.cpu);
   decided = verdict.outcome !== "cannot decide";
   const faults = printRead(times, verdict, prefix);

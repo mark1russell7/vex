@@ -1,7 +1,8 @@
 /**
  * The speed gate (docs/QUALITY-PLAN.md §8, phase C). For each program, the gate measures the time of Vex and the time
  * of the hand-written loops on the same machine, and checks the ratio against a limit. A ratio does not depend much on
- * the speed of the machine, so the gate works on a shared CI runner. The arms alternate in one process (measure.ts).
+ * the speed of the machine, so the gate works on a shared CI runner. The arms take turns in one process (paired.ts, on
+ * `timeArmRounds` of rigor-bench).
  *
  * Each limit is the worst ratio of 5 CI runs times 1.1 (the fleet rule of 2026-10-30), rounded up. The runs are
  * run 41022173204 of speed-gate.yml (2026-10-30): AMD EPYC 7763 in runs 2 to 4, AMD EPYC 9V45 in runs 1 and 5.
@@ -12,7 +13,8 @@
  * Start: node packages/core/bench/gate.ts
  */
 import { withFault } from "./fault.ts";
-import { envLine, paired } from "./measure.ts";
+import { envLine } from "./measure.ts";
+import { batchMs, paired } from "./paired.ts";
 import { LIFE, NEAREST } from "./programs.ts";
 
 const LIMITS = [
@@ -23,8 +25,8 @@ const LIMITS = [
 console.info(envLine("process"));
 let failed = false;
 for (const { program, limit } of LIMITS) {
-  // The arms alternate in this process, with the order reversed in odd rounds, and a copy of the loops gives the noise floor (measure.ts).
-  const { ratio, a: v, b: h, noise } = paired(withFault(program.vex), program.hand, { ms: 60 });
+  // The arms take turns in this process in the order of armOrder, and a copy of the loops gives the noise floor (paired.ts).
+  const { ratio, a: v, b: h, noise } = paired(withFault(program.vex), program.hand, { targetMs: batchMs(60, limit) });
   const ok = ratio <= limit;
   failed ||= !ok;
   console.info(`${ok ? "ok  " : "FAIL"} ${program.title}: vex ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, Vex/hand time ${ratio.toFixed(1)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);

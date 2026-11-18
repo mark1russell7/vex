@@ -23,6 +23,7 @@
  * ceiling, and it prints that it does not read the gain. A pass on such a model does not show that the gain holds.
  */
 import { armOrder, type CaseTailLimit, caseRatios, caseTails, type PairedTime, tailFalseFails, type TailFalseFails, type TailLimit, tailLimitVerdict, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
+import type { FreshRun } from "@mark1russell7/rigor-bench/fresh";
 import { median } from "../../core/bench/measure.ts";
 
 /** The limits of one module against the base commit, as ratios of times in one run. Lower is faster. */
@@ -153,7 +154,10 @@ export const ROUND_ADD: Readonly<Record<string, number>> = { grid: 0.4, shape: 0
 /** The count of rounds with the added work in the read that tests the second pair clause. */
 export const ROUND_ADD_STARTS = 2;
 
-/** The arms of a read, in the order that `measureIsolated` gives them. The order of a round comes from `armOrder`, and a test holds the two equal. */
+/**
+ * The arms of a read: the base, the branch and the A/A copy of the base. A record of format 1 has no orders. The old
+ * harness started round `r` in the order `armOrder(ARMS, r)`, so a read of such a record uses that order.
+ */
 export const ARMS: readonly string[] = ["base", "branch", "base~aa"];
 
 /** The raw times of one module in one run, in ms, with one time for each round. */
@@ -165,10 +169,15 @@ export interface ModuleTimes {
   readonly branch: readonly number[];
   /** The times of the second copy of the base. */
   readonly aa: readonly number[];
+  /** The ids of the arms of each round, in the order that their processes started. */
+  readonly orders: readonly (readonly string[])[];
 }
 
-/** The version of the form of a line of the record. A read refuses a line with another version. */
-export const RECORD_FORMAT = 1;
+/**
+ * The version of the form of a line of the record. Format 2 adds the orders of the arms. A read takes format 1 with the
+ * orders of the old harness, and refuses each other version.
+ */
+export const RECORD_FORMAT = 2;
 
 /**
  * The kinds of a row. A row of the kind `fault` comes from a step that tests the gate. Its branch arm does added work, so
@@ -184,7 +193,7 @@ export type ReadStep = "gate" | "catch" | "rounds";
 
 /** One line of the record of the gate: the times of one module in one read. */
 export interface ModuleRecord extends ModuleTimes {
-  readonly format: typeof RECORD_FORMAT;
+  readonly format: 1 | typeof RECORD_FORMAT;
   readonly kind: RowKind;
   readonly step: ReadStep;
   /** The number of the read in its step, from 0. */
@@ -246,12 +255,20 @@ export function recordLines(read: Omit<ModuleRecord, keyof ModuleTimes | "format
   return rows.map((row) => `${JSON.stringify({ format: RECORD_FORMAT, kind, ...read, ...row })}\n`).join("");
 }
 
+/** This function tells if a value is a list of orders: a list of the ids of the arms for each round. */
+function isOrders(value: unknown, rounds: number): value is readonly (readonly string[])[] {
+  return Array.isArray(value) && value.length === rounds && value.every((o) => Array.isArray(o) && o.every((id) => typeof id === "string"));
+}
+
 /** This function gives one line of a record. A line with another version or no known kind is a fault, so a change of the form cannot pass as a read. */
 function parseRecord(line: string): ModuleRecord {
-  const record = JSON.parse(line) as ModuleRecord;
-  if (record.format !== RECORD_FORMAT) throw new Error(`module-cost: a record has another format: ${line}`);
+  const record = JSON.parse(line) as Omit<ModuleRecord, "orders"> & { readonly orders?: unknown };
+  if (record.format !== 1 && record.format !== RECORD_FORMAT) throw new Error(`module-cost: a record has another format: ${line}`);
   if (!ROW_KINDS.includes(record.kind)) throw new Error(`module-cost: a record has no known kind: ${line}`);
-  return record;
+  if (record.format === 1) return { ...record, orders: record.base.map((_a, round) => armOrder(ARMS, round)) };
+  const { orders } = record;
+  if (!isOrders(orders, record.base.length)) throw new Error(`module-cost: a record of format ${String(RECORD_FORMAT)} has no order of the arms for each round: ${line}`);
+  return { ...record, orders };
 }
 
 /** This function gives the rows of the gate in the text of a record: only the kind `gate`, and only a read that decided. */
@@ -296,7 +313,7 @@ export function tailLimitOf(module: string, shares: boolean, model: string): Tai
 
 /**
  * This function gives the paired records of one side of a read, with the order that the arms started in. A module with no
- * times, or with arms of different rounds, has no read, so the function throws and the gate fails.
+ * times, with arms of different rounds or with no order of an arm in a round has no read. Then the function throws and the gate fails.
  */
 export function recordsOf(rows: readonly ModuleTimes[], side: "branch" | "aa"): readonly PairedTime[] {
   const arm = side === "branch" ? "branch" : "base~aa";
@@ -304,9 +321,47 @@ export function recordsOf(rows: readonly ModuleTimes[], side: "branch" | "aa"): 
     const times = row[side];
     if (row.base.length === 0 || times.length !== row.base.length) throw new RangeError(`${row.module}: the arms have ${String(row.base.length)} and ${String(times.length)} rounds`);
     return row.base.map((a, round): PairedTime => {
-      const order = armOrder(ARMS, round);
-      return { case: row.module, round, first: order.indexOf("base") < order.indexOf(arm) ? "a" : "b", a, b: times[round] ?? Number.NaN };
+      const place = (id: string): number => {
+        const at = row.orders[round]?.indexOf(id) ?? -1;
+        if (at < 0) throw new RangeError(`${row.module}: round ${String(round)} has no order of the arm ${id}`);
+        return at;
+      };
+      return { case: row.module, round, first: place("base") < place(arm) ? "a" : "b", a, b: times[round] ?? Number.NaN };
     });
+  });
+}
+
+/** One row of a read: its name, the case of its child and the result of `placesRead` on its program. */
+export interface ReadRow {
+  readonly module: string;
+  readonly input: string;
+  readonly shares: boolean;
+}
+
+/**
+ * This function gives the times of each row from a fresh run of the arms `base` and `branch` with the order `"arms"`.
+ * The two pairs share the child of the base, so a base time that differs between them is a fault. A row with no record
+ * or no order of a round also throws, so the gate fails on missing data.
+ */
+export function moduleTimesOf(run: Pick<FreshRun, "pairs" | "orders">, rows: readonly ReadRow[], rounds: number): readonly ModuleTimes[] {
+  return rows.map(({ module, input, shares }): ModuleTimes => {
+    const of = (pair: string) =>
+      Array.from({ length: rounds }, (_r, round) => {
+        const record = run.pairs[pair]?.find((r) => r.case === input && r.round === round);
+        if (record === undefined) throw new RangeError(`${module}: the pair ${pair} has no record of round ${String(round)}`);
+        return record;
+      });
+    const branch = of("branch");
+    const aa = of("base~aa");
+    const orders = Array.from({ length: rounds }, (_r, round) => {
+      const order = run.orders?.find((o) => o.case === input && o.round === round);
+      if (order === undefined) throw new RangeError(`${module}: the run has no order of round ${String(round)}`);
+      return order.arms;
+    });
+    branch.forEach((r, round) => {
+      if (aa[round]?.a !== r.a) throw new RangeError(`${module}: the base of round ${String(round)} has two times, ${String(r.a)} and ${String(aa[round]?.a)}`);
+    });
+    return { module, shares, base: branch.map((r) => r.a), branch: branch.map((r) => r.b), aa: aa.map((r) => r.b), orders };
   });
 }
 

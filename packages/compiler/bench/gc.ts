@@ -8,12 +8,13 @@
  */
 import { PerformanceObserver, constants, type PerformanceEntry } from "node:perf_hooks";
 import { setImmediate as tick } from "node:timers/promises";
-import { median, type PairedReport } from "../../core/bench/measure.ts";
+import type { ArmRounds } from "@mark1russell7/rigor-bench";
+import { median } from "../../core/bench/measure.ts";
 
 /** This value is true when `GATE_GC=1` is set. */
 export const GC_ON = process.env["GATE_GC"] === "1";
 
-/** The garbage collections in the timed runs of one arm in one process. The times are in ms. */
+/** The garbage collections in the timed batches of one arm in one process. The times are in ms. */
 export interface ArmGc {
   readonly arm: string;
   readonly minor: number;
@@ -23,30 +24,26 @@ export interface ArmGc {
   /** This count holds the incremental marking steps and the weak callbacks. */
   readonly other: number;
   readonly otherMs: number;
-  /** This value is the sum of the timed runs of the arm. */
+  /** This value is the sum of the timed batches of the arm. */
   readonly timedMs: number;
 }
 
-/** A record of the garbage collections of one measurement. Give `clock` to `paired`, then call `done` with its report. */
+/**
+ * A record of the garbage collections of one measurement. Start it before `paired`, then give the rounds of `paired` to `done`.
+ * The spans of the rounds and the gc entries use the one clock `performance.now`.
+ */
 export interface GcRecorder {
-  readonly clock: () => number;
-  readonly done: (report: PairedReport, names: Readonly<Record<string, string>>) => Promise<readonly string[]>;
+  readonly done: (rounds: ArmRounds, names: Readonly<Record<string, string>>) => Promise<readonly string[]>;
 }
 
-/** This function starts an observer of the entry type `gc`, and gives a clock that records each timed run. */
+/** This function starts an observer of the entry type `gc`. */
 export function gcRecorder(): GcRecorder {
   const entries: PerformanceEntry[] = [];
   const observer = new PerformanceObserver((list) => {
     entries.push(...list.getEntries());
   });
   observer.observe({ entryTypes: ["gc"] });
-  const marks: number[] = [];
-  const clock = (): number => {
-    const t = performance.now();
-    marks.push(t);
-    return t;
-  };
-  const done = async (report: PairedReport, names: Readonly<Record<string, string>>): Promise<readonly string[]> => {
+  const done = async (rounds: ArmRounds, names: Readonly<Record<string, string>>): Promise<readonly string[]> => {
     // Node.js gives each gc entry to the observer later, from the event loop. The loop runs until no entry comes.
     for (let turn = 0, last = -1; turn < 50 && (turn < 3 || last !== entries.length); turn++) {
       last = entries.length;
@@ -57,12 +54,12 @@ export function gcRecorder(): GcRecorder {
     observer.disconnect();
     // The lines come in the order of the names, and an arm with no name comes last.
     const rank = (arm: string): number => (Object.hasOwn(names, arm) ? Object.keys(names).indexOf(arm) : Number.MAX_SAFE_INTEGER);
-    const gs = [...armsOf(report, marks, entries)];
+    const gs = [...armsOf(rounds, entries)];
     // oxlint-disable-next-line unicorn/no-array-sort -- sort() changes only the copy.
     gs.sort((x, y) => rank(x.arm) - rank(y.arm));
     return gs.map((g) => gcLine(g, names[g.arm] ?? g.arm));
   };
-  return { clock, done };
+  return { done };
 }
 
 /** This function gives the kind of a gc entry: minor (a scavenge), major (a mark-compact) or other. */
@@ -73,32 +70,32 @@ function kindOf(e: PerformanceEntry): "minor" | "major" | "other" {
 }
 
 /**
- * This function gives the garbage collections of each arm. A pair of marks is the start and the end of one timed run.
- * The runs come in the order of `measureIsolated`: the arms in turn, reversed in odd rounds. Each run must have the
- * time of the report, or the function throws.
+ * This function gives the garbage collections of each arm. The spans of the rounds are the timed batches, in the order
+ * of the batches. The time of each span must be the time of its batch in the pairs, or the function throws.
  */
-function armsOf(report: PairedReport, marks: readonly number[], entries: readonly PerformanceEntry[]): readonly ArmGc[] {
-  const ms = report.inputs[0]?.ms ?? {};
-  const n = report.arms.length;
-  const runs = marks.length / 2;
-  if (report.inputs.length !== 1 || !Number.isInteger(runs) || runs !== n * (ms[report.arms[0] ?? ""]?.length ?? 0)) throw new Error("gc: the timed runs do not agree with the report.");
-  const sums = new Map(report.arms.map((a) => [a, { minor: 0, minorMs: 0, major: 0, majorMs: 0, other: 0, otherMs: 0, timedMs: 0 }]));
-  for (let j = 0; j < runs; j++) {
-    const round = Math.floor(j / n);
-    // The type-aware lint does not have Array#toReversed, and reverse() changes only the copy.
-    // oxlint-disable-next-line unicorn/no-array-reverse
-    const order = round % 2 === 0 ? report.arms : [...report.arms].reverse();
-    const arm = order[j % n] ?? "";
-    const t0 = marks[2 * j] ?? Number.NaN;
-    const t1 = marks[2 * j + 1] ?? Number.NaN;
-    const s = sums.get(arm);
-    if (s === undefined || ms[arm]?.[round] !== t1 - t0) throw new Error(`gc: the timed run ${String(j)} does not agree with the report.`);
-    s.timedMs += t1 - t0;
-    for (const e of entries) {
-      if (e.startTime < t0 || e.startTime > t1) continue;
-      const k = kindOf(e);
-      s[k] += 1;
-      s[`${k}Ms` as const] += e.duration;
+function armsOf(rounds: ArmRounds, entries: readonly PerformanceEntry[]): readonly ArmGc[] {
+  const pairIds = Object.keys(rounds.pairs);
+  const arms = rounds.orders[0] ?? [];
+  const base = arms.find((arm) => !pairIds.includes(arm));
+  if (base === undefined || rounds.orders.length !== rounds.spans.length) throw new Error("gc: the spans do not agree with the rounds.");
+  const sums = new Map(arms.map((a) => [a, { minor: 0, minorMs: 0, major: 0, majorMs: 0, other: 0, otherMs: 0, timedMs: 0 }]));
+  for (const [round, order] of rounds.orders.entries()) {
+    const spans = rounds.spans[round] ?? [];
+    if (order.length !== arms.length || spans.length !== order.length) throw new Error(`gc: round ${String(round)} does not agree with the rounds.`);
+    for (const [place, arm] of order.entries()) {
+      const span = spans[place];
+      const s = sums.get(arm);
+      // Arm `a` of each record is the base, and arm `b` is the arm of the pair.
+      const record = arm === base ? rounds.pairs[pairIds[0] ?? ""]?.[round] : rounds.pairs[arm]?.[round];
+      const time = arm === base ? record?.a : record?.b;
+      if (span === undefined || s === undefined || time !== span.end - span.start) throw new Error(`gc: the batch of ${arm} in round ${String(round)} does not agree with the rounds.`);
+      s.timedMs += time;
+      for (const e of entries) {
+        if (e.startTime < span.start || e.startTime > span.end) continue;
+        const k = kindOf(e);
+        s[k] += 1;
+        s[`${k}Ms` as const] += e.duration;
+      }
     }
   }
   return [...sums].map(([arm, s]) => ({ arm, ...s }));

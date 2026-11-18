@@ -23,7 +23,8 @@ import { writeFileSync } from "node:fs";
 import { app, axes, call, compile, each, evaluate, fn, fold, let_, lit, rec, space, v, vexList, type Expr, type ItemNames, type Result } from "@mark1russell7/vex";
 import { schemaReference } from "../src/schema-reference.ts";
 import { SCHEMA_DOMAINS, SCHEMA_PROGRAM } from "../src/schema.ts";
-import { context, env, envLine } from "../../core/bench/measure.ts";
+import { benchEnv } from "@mark1russell7/rigor-bench/fresh";
+import { context, envLine } from "../../core/bench/measure.ts";
 
 const RUNS = Number(process.env["RUNS"] ?? 40);
 const WARM = Number(process.env["WARM"] ?? 10);
@@ -161,7 +162,7 @@ for (const o of out) {
 }
 console.info(`target: 5 ms for one sample, ${(5 / cal).toFixed(3)} per calibration. The warm pilot needs a factor of ${(pilot / 5).toFixed(1)} on this runner.`);
 const file = process.env["BENCH_OUT"];
-if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ mode: "process", referenceSince: "2026-11-04", context: context(), env: env(), node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
+if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ mode: "process", referenceSince: "2026-11-04", context: context(), env: benchEnv(), node: process.version, runs: RUNS, warm: WARM, calibration: cal, cases: out }, null, 2));
 // A result that is not the result of the reference fails the step. The numbers stay in the report.
 const wrong = out.filter((o) => o.check !== "true" && o.check !== "n/a");
 if (wrong.length > 0) {

@@ -1,20 +1,14 @@
-// The tests of the machine and context fields of a bench record. The paired comparison has its tests in paired.test.ts.
+// The tests of the first line of a bench record. benchEnv has its tests in rigor-bench, and the paired comparison in paired.test.ts.
 import { afterEach, describe, expect, it } from "vitest";
-import { context, env } from "./measure.ts";
+import { context, envLine } from "./measure.ts";
 
-describe("env and context", () => {
+describe("context and envLine", () => {
   const saved = { ...process.env };
   afterEach(() => {
-    for (const k of ["BENCH_RUNNER", "RUNNER_NAME", "BENCH_MODE", "CI"]) {
+    for (const k of ["BENCH_MODE", "CI"]) {
       if (saved[k] === undefined) delete process.env[k];
       else process.env[k] = saved[k];
     }
-  });
-
-  it("takes RUNNER_NAME when BENCH_RUNNER is empty", () => {
-    process.env["BENCH_RUNNER"] = "";
-    process.env["RUNNER_NAME"] = "runner-7";
-    expect(env().runner).toBe("runner-7");
   });
 
   it("gives ci for each non-empty CI, and local without it, when BENCH_MODE is empty", () => {
@@ -23,5 +17,11 @@ describe("env and context", () => {
     expect(context().split(" ")[0]).toBe("ci");
     delete process.env["CI"];
     expect(context().split(" ")[0]).toBe("local");
+  });
+
+  it("gives the machine, the mode and the context in one line", () => {
+    process.env["BENCH_MODE"] = "probe";
+    const line = envLine("fresh", { cpu: "AMD EPYC 7763 64-Core Processor", cores: 4, os: "linux", arch: "x64", node: "v24.11.0" });
+    expect(line).toBe(`runner: AMD EPYC 7763 64-Core Processor (4 cores), Node.js v24.11.0, linux/x64, mode fresh, ${["probe", ...process.execArgv].join(" ")}`);
   });
 });

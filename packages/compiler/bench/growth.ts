@@ -20,7 +20,8 @@ import { fileURLToPath } from "node:url";
 import { GCProfiler } from "node:v8";
 import type { Expr } from "@mark1russell7/vex";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
-import { env, median } from "../../core/bench/measure.ts";
+import { benchEnv } from "@mark1russell7/rigor-bench/fresh";
+import { median } from "@mark1russell7/rigor-statistics";
 import { emitModule, withKeyProbe, type KeyProbe } from "../src/module.ts";
 import { generate, load } from "../src/tiers.ts";
 import { placesOf } from "../src/unshared.ts";
@@ -196,7 +197,8 @@ function readPairs(shape: GrowthShape, kind: Kind, pairs: Pairs = { small: [], l
 /** This function gives the row of one size from the records of its processes. A row with a process with no result has no medians. */
 function rowOf(shape: GrowthShape, levels: number, records: readonly (Sample | undefined)[]): GrowthRow {
   const done = records.filter((x) => x !== undefined);
-  const whole = done.length === records.length;
+  // A size with no process has no medians, as a size with a process with no result.
+  const whole = done.length > 0 && done.length === records.length;
   const distinct = [...new Set(done.map((x) => x.bytes))];
   const loads = done.map((x) => x.load).filter((x) => x !== undefined);
   const loadsWhole = whole && loads.length === records.length;
@@ -216,7 +218,7 @@ function rowOf(shape: GrowthShape, levels: number, records: readonly (Sample | u
 /** This function prints the row of one size. A row of the source prints the time of `generate` as `ms`, and the time of `load` as `load`. */
 function printRow(kind: Kind, r: GrowthRow, records: readonly (Sample | undefined)[]): void {
   const done = records.filter((x) => x !== undefined);
-  const whole = done.length === records.length;
+  const whole = done.length > 0 && done.length === records.length;
   const distinct = [...new Set(done.map((x) => x.bytes))];
   const loadText = kind === "source" ? ` load=${r.loadMs?.toFixed(1) ?? "none"}` : "";
   const loadSamples = kind === "source" ? ` loads=${done.map((x) => x.load?.toFixed(1) ?? "none").join(",")}` : "";
@@ -253,7 +255,7 @@ function readShape<V extends { readonly unread: readonly string[] }>(shape: Grow
 
 /** This function prints a warning for each time with no read. A no read does not fail the gate, and it is not a pass. */
 function warnUnread(unread: readonly string[]): void {
-  for (const text of unread) console.info(`::warning title=Growth: no read::${text} on ${env().cpu}. The interval of the pairs holds the limit after two reads, so the gate does not decide.`);
+  for (const text of unread) console.info(`::warning title=Growth: no read::${text} on ${benchEnv().cpu}. The interval of the pairs holds the limit after two reads, so the gate does not decide.`);
 }
 
 /** This function measures some shapes, and it fails on a fault of the rule. */
@@ -303,7 +305,7 @@ function sourceGate(shape: GrowthShape): void {
   );
   for (const note of notes) console.info(`report only: ${note}`);
   warnUnread(timeUnread);
-  if (unread) console.info(`::warning title=Growth: no read::no read of the bytes of the source of ${shape.name} on ${env().cpu}: the processes of a size gave different bytes, so the bytes limit held nothing.`);
+  if (unread) console.info(`::warning title=Growth: no read::no read of the bytes of the source of ${shape.name} on ${benchEnv().cpu}: the processes of a size gave different bytes, so the bytes limit held nothing.`);
   if (!flipRed) {
     console.error(`The bytes limit of ${shape.name} does not find 5 % more bytes at its large size.`);
     process.exitCode = 1;

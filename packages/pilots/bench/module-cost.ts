@@ -35,9 +35,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { TailLimitVerdict } from "@mark1russell7/rigor-bench";
-import { freshRun } from "@mark1russell7/rigor-bench/fresh";
+import { benchEnv, freshRun } from "@mark1russell7/rigor-bench/fresh";
 import { placesRead } from "../../compiler/src/unshared.ts";
-import { env, envLine } from "../../core/bench/measure.ts";
+import { envLine } from "../../core/bench/measure.ts";
 import { IREKO_MODULES, irekoExprs } from "../src/ireko-modules.ts";
 import { BUILD_NO_AVOID_ROW, BUILD_ROW, catchFaults, CATCH_ADD, CATCH_MUST_FAIL, CEILING_ONLY, ceilingOnly, falseFails, GAIN_BASE, limitOf, medianLimit, moduleCostFaults, moduleTimesOf, moduleVerdict, orderCount, readingOf, ROUND_ADD, ROUND_ADD_STARTS, roundReads, type ModuleTimes, type ReadRow, cpuFacts, readStep, recordLines, unreadGains } from "./module-cost-limits.ts";
 
@@ -48,7 +48,7 @@ const ROUNDS = 7;
 const MAX_READS = 3;
 
 /** The machine of this run. Its model picks the limit of a row with a gain, and the version of Node.js goes in the report of each gain. */
-const machine = env();
+const machine = benchEnv();
 const CPU_INFO = "/proc/cpuinfo";
 const facts = cpuFacts(existsSync(CPU_INFO) ? readFileSync(CPU_INFO, "utf8") : "");
 

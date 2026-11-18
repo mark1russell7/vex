@@ -14,7 +14,9 @@
 import { writeFileSync } from "node:fs";
 import { evaluate, space } from "@mark1russell7/vex";
 import { timeArmRounds } from "@mark1russell7/rigor-bench";
-import { context, env, envLine, median } from "../../core/bench/measure.ts";
+import { benchEnv } from "@mark1russell7/rigor-bench/fresh";
+import { median } from "@mark1russell7/rigor-statistics";
+import { context, envLine } from "../../core/bench/measure.ts";
 import { SEARCH_DOMAINS, SEARCH_EACH, SEARCH_ITEM, searchRecords, searchReference, searchResult, type SearchResult } from "../src/list-search.ts";
 
 const REPEATS = Number(process.env["REPEATS"] ?? 20);
@@ -59,4 +61,4 @@ for (const { id, count, pairs } of report) {
 }
 
 const file = process.env["BENCH_OUT"];
-if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ env: env(), context: context(), inputs: report }, null, 2));
+if (file !== undefined && file !== "") writeFileSync(file, JSON.stringify({ env: benchEnv(), context: context(), inputs: report }, null, 2));

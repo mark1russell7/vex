@@ -24,7 +24,7 @@
  */
 import { armOrder, type CaseTailLimit, caseRatios, caseTails, type PairedTime, tailFalseFails, type TailFalseFails, type TailLimit, tailLimitVerdict, type TailLimitVerdict } from "@mark1russell7/rigor-bench";
 import type { FreshRun } from "@mark1russell7/rigor-bench/fresh";
-import { median } from "../../core/bench/measure.ts";
+import { median } from "@mark1russell7/rigor-statistics";
 
 /** The limits of one module against the base commit, as ratios of times in one run. Lower is faster. */
 export interface ModuleLimit {

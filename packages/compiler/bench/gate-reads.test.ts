@@ -31,9 +31,7 @@ describe("gate-reads", () => {
     ];
     for (const [line, reason] of cases) {
       const parsed = parseReads(line);
-      expect(parsed.reads, line).toEqual([]);
-      expect(parsed.bad, line).toHaveLength(1);
-      expect(parsed.bad[0], line).toMatch(reason);
+      expect({ line, reads: parsed.reads, bad: parsed.bad }).toEqual({ line, reads: [], bad: [expect.stringMatching(reason)] });
     }
   });
 

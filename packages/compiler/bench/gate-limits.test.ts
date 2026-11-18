@@ -22,7 +22,7 @@ const { jobs } = JSON.parse(readFileSync(new URL("limit-jobs.json", import.meta.
 const K = 11;
 /** The fewest jobs of a CPU model that give it its own limits. */
 const MINIMUM = 5;
-/** The smallest decide rate of a noise cap. A cap with a lower rate makes too many quiet runs `no read`. */
+/** The smallest decide rate of a noise cap. With a lower rate, too many quiet jobs give `no read`. */
 const DECIDE = 0.95;
 
 const derived = (Object.keys(LIMITS) as LimitCase[]).filter((c) => !RULE_CASES.includes(c));
@@ -49,8 +49,10 @@ describe("the limits of the compiler gate", () => {
   it("has the reads of each derived case in each job", () => {
     expect(jobs.length).toBeGreaterThanOrEqual(MINIMUM);
     for (const j of jobs) {
-      expect(Object.keys(j.cases).toSorted(), j.job).toEqual(derived.toSorted());
-      for (const c of derived) expect(j.cases[c]!.length, `${j.job} ${c}`).toBeGreaterThanOrEqual(K);
+      expect({ job: j.job, cases: Object.keys(j.cases).toSorted() }).toEqual({ job: j.job, cases: derived.toSorted() });
+      // The reads of each case: at least K of them.
+      const short = derived.filter((c) => (j.cases[c] ?? []).length < K);
+      expect({ job: j.job, short }).toEqual({ job: j.job, short: [] });
     }
   });
 
@@ -61,10 +63,10 @@ describe("the limits of the compiler gate", () => {
       for (const [cpu, group] of byCpu) {
         const { model } = cpuEntry<ProcessLimits>(LIMITS[c], cpu);
         // A model with too few jobs takes `other`. A model with enough jobs has its own entry.
-        expect(model === "other", `${c} ${cpu}: ${String(group.length)} jobs`).toBe(group.length < MINIMUM);
+        expect({ c, cpu, jobs: group.length, other: model === "other" }).toEqual({ c, cpu, jobs: group.length, other: group.length < MINIMUM });
         if (model !== "other") used.add(model);
       }
-      expect([...used].toSorted(), c).toEqual([...keys].toSorted());
+      expect({ c, models: [...used].toSorted() }).toEqual({ c, models: [...keys].toSorted() });
     }
   });
 
@@ -73,7 +75,7 @@ describe("the limits of the compiler gate", () => {
       const table: Readonly<Record<string, ProcessLimits>> = LIMITS[c];
       for (const [key, limits] of Object.entries(table)) {
         const group = key === "other" ? jobs : jobs.filter((j) => cpuEntry<ProcessLimits>(LIMITS[c], j.cpu).model === key);
-        expect(limits, `${c} ${key}`).toEqual(derive(c, group));
+        expect({ c, key, limits }).toEqual({ c, key, limits: derive(c, group) });
       }
     }
   });

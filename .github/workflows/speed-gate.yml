@@ -42,11 +42,12 @@ on:
 
 permissions: {}
 
-# One run for each branch and settings: a newer run stops the older one. Each job holds at most 3 runner slots.
+# One run for each branch and settings. On a pull request, a newer run stops the older one. A run of main finishes, and a
+# newer run of main waits for it. Each job holds at most 3 runner slots.
 # The settings of a dispatch are in the group, so two dispatches with different settings run one after the other.
 concurrency:
   group: speed-gate-${{ github.ref }}-${{ inputs.case }}-${{ inputs.node_flags }}-${{ inputs.gc }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:

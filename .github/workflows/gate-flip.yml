@@ -12,10 +12,11 @@ on:
 
 permissions: {}
 
-# One run for each branch: a newer run stops the older one.
+# One run for each branch. On a pull request, a newer run stops the older one. A run of main finishes, and a newer
+# run of main waits for it.
 concurrency:
   group: gate-flip-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:

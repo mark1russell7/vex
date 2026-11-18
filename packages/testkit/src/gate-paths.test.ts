@@ -65,6 +65,11 @@ function workspaceImports(): ReadonlyMap<string, string> {
  */
 const IMPORT = /^\s*(?:import|export)\s[^;]*?\bfrom\s+"([^"]+)"|^\s*import\s+"([^"]+)"|\bimport\(\s*"([^"]+)"\s*\)/gmu;
 
+/** This function gives the package of a bare import: `@a/b/c` gives `@a/b`, and `a/b` gives `a`. */
+function packageOf(spec: string): string {
+  return spec.split("/").slice(0, spec.startsWith("@") ? 2 : 1).join("/");
+}
+
 /** This function gives each file of the repository that the entries reach by their imports, and each package outside it. */
 function reached(entries: readonly string[]): { readonly files: readonly string[]; readonly external: readonly string[] } {
   const names = workspaceImports();
@@ -78,7 +83,7 @@ function reached(entries: readonly string[]): { readonly files: readonly string[
       const spec = a ?? b ?? c ?? "";
       const next = spec.startsWith(".") ? resolve(dirname(file), spec) : names.get(spec);
       if (next !== undefined) todo.push(next);
-      else if (!spec.startsWith("node:")) external.add(spec);
+      else if (!spec.startsWith("node:")) external.add(packageOf(spec));
     }
   }
   return { files: [...seen].map((f) => relative(root, f).replaceAll("\\", "/")).toSorted((x, y) => x.localeCompare(y)), external: [...external].toSorted((x, y) => x.localeCompare(y)) };

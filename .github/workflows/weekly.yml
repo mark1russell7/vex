@@ -9,7 +9,7 @@ name: Weekly
 # for scripts/weekly-minimums.ts.
 on:
   schedule:
-    # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
+    # The rule runner-budget of @mark1russell7/conventions gives the minute of each schedule. Thus the scheduled runs of the account start at different minutes.
     - cron: "12 4 * * 0"
   workflow_dispatch:
     inputs:
@@ -38,7 +38,7 @@ on:
 
 permissions: {}
 
-# The event name is in the key: a dispatch with other inputs never cancels or holds a scheduled run (fleet rule of 2026-11-02).
+# The event name is in the key: a dispatch with other inputs never cancels or holds a scheduled run.
 # Each input is also in the key. A group keeps one pending run, and a new pending run cancels it. With the event alone,
 # the dispatch of a 5-rep record cancelled the pending repeat of one seed (run 42180256166, 2026-11-06).
 concurrency:
@@ -54,7 +54,7 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      # At most 3 jobs of the matrix at one time, so the gates and the releases of the fleet keep their slots.
+      # At most 3 jobs of the matrix at one time, so the gates and the releases of the other repositories of the account keep their slots.
       max-parallel: 3
       matrix:
         # A scheduled run has no inputs, so it runs all the packages.

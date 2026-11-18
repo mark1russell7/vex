@@ -6,7 +6,7 @@ on:
   # Each pull request starts this workflow. The job changes skips the work when no file of a gate changes.
   pull_request:
   schedule:
-    # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
+    # The rule runner-budget of @mark1russell7/conventions gives the minute of each schedule. Thus the scheduled runs of the account start at different minutes.
     - cron: "56 6 * * 3"
   workflow_dispatch:
 

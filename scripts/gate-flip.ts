@@ -1,5 +1,5 @@
 /**
- * The flip test of the speed gates (rule 8i of the fleet). A gate of a measure holds a gain only if it can fail. This
+ * The flip test of the speed gates (rule 8i). A gate of a measure holds a gain only if it can fail. This
  * script reads each gate two times in one job: on a clean copy, and with a known cost in the measured arm
  * (`packages/core/bench/fault.ts`). The clean read must pass. The read with the fault must fail on each of its cases, and
  * it must fail on the measure, so a crash does not count. The growth gate has two faults of its own: `GROWTH_FAULT` and `GROWTH_BYTES_FAULT`.

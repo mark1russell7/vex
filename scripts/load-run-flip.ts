@@ -1,5 +1,5 @@
 /**
- * The flip of the normal test run on a test file that does not load (rule 8i of the fleet). The load check of the
+ * The flip of the normal test run on a test file that does not load (rule 8i). The load check of the
  * mutation lane holds the lane. This script reads the same fault in the normal run. A file that does not load must end
  * the run with a non-zero exit code. A clean copy must end it with 0.
  *

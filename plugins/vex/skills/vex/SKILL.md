@@ -64,7 +64,7 @@ nearest.all().values(); // => [5, 5, 5]
 4. Put each domain of the program in `vex(...)`. The first domain whose `is` accepts a value gives its ops.
 5. Inside an axis, a field name reads at each target. A value from before the axis keeps its value.
 6. A reduction skips the error items. Give `{ strict: true }` to get the first error.
-7. Use `ifError(fallback)` only for an error that you expect. An unexpected error tells you about a defect in the data.
+7. Use `ifError(fallback)` only for an error that you expect. An unexpected error tells you about a defect in the data. A missing field gives `#N/A`, so `ifError(ref("state"), "")` gives a default for it.
 8. A program is JSON data. Use `serialize` and `parse` to keep it or send it. Follow `ir.schema.json` to write it by hand. For the shared form of the family, use `toDocument` and `fromDocument`.
 9. Do not copy the math of a program into TypeScript. One program is the source of truth, and `explain` shows each step.
 10. For speed, compile the program with `tiered` of `@mark1russell7/vex-compiler`. It gives the results of the interpreter.
@@ -130,6 +130,10 @@ Thus a search can keep a stack in a list: `take(stack, 1)` is the top, and `drop
 A name of `iterate` or `fold` can hold a list, and each step gives the next list. `get(list, key)` gives the value of the first item with the key. A key that no item has gives `#N/A`. A literal can be a list: `lit(vexList([]))` is the empty list. In the builder, `root.list(items)` makes a list literal, and a list chain has `get(key)`.
 
 An array of a field or of a name is a list where a list op or the axis `list` needs one. The keys are the positions, from `"0"`. Thus `count(fr)`, `nth(fr, s)` and `take(fr, s)` read a config array `fr`, and a layout needs no host functions for it. `indexOf(list, value)` gives the position of a number, a text or a boolean, and `fill(n, value)` makes a list of `n` equal items. A domain or a function of the host with the op comes first.
+
+`includes(list, value)` gives `true` when an item equals the value by the op `eq` of the domain of the value (the next release). Thus `includes(["ask", "request"], ref("kind"))` tests a field against some values in one op.
+
+`epochMillis(text)` of `TextDomain` reads an ISO 8601 time, with `Z` or an offset, and gives the milliseconds since 1970 (the next release). Compare two times with `lt` and `gt` of the numbers, not with the order of the texts. A time without a zone gives `#CALC!`. Refer to [a filter of records](reference/recipes.md#a-filter-of-records).
 
 `distinct(list)` keeps the first item of each value. `group(list, keys)` gives a list of lists, one for each text key at the same position. `join(list, sep)` joins texts. A list chain has `distinct()`, `group(keys)` and `join(sep)` (0.15.0). On a Vex list, these ops come before a function of the host with the same name.
 

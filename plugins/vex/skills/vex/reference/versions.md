@@ -56,5 +56,7 @@ The four packages `vex`, `vex-domains`, `vex-testkit` and `vex-compiler` have on
 | The builder method `fix(name, join, init, step)`, with the kind of the chain from the join and the type `FixValue`. The step gets a chain of the last round | the next release |
 | `codePoints` of `TextDomain`: the code points of a text as a list of numbers, in each tier | the next release |
 | The kind `list:number` of `returns`: an op of a domain with a list of a primitive type as its result, also in a module | the next release |
+| `includes(list, value)`: a test of a value against the items of a list, by the op `eq` of the domain of the value, in the interpreter, the reference tier and tier 2 | the next release |
+| `epochMillis` of `TextDomain`: the milliseconds since 1970 of an ISO 8601 time, in each tier and in a module | the next release |
 
 A feature of the main branch that is not on npm yet has the version "the next release". Until it is on npm, a project can use it only from a local copy of the repository, for example with `pnpm link`. Do not write a workaround for a missing feature without a note. Tell the user which version has it.

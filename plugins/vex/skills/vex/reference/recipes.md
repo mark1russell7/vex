@@ -139,6 +139,35 @@ The start `far` means "no path", because a value of a `min` column is a finite n
 
 Each step must not fall when the last round rises. The check refuses `not`, `multiply`, `sum` and `count` over a value that reads `last`. A step can add a number, but a row must stop: add a cap with `min`, or follow paths. A count of rounds above `n + 1` gives `#NUM!`.
 
+## A filter of records
+
+A page can compile the choices of a filter into one program. The program gives `true` or `false` at each record. `includes` tests a field against some values. `ifError` gives a default for a missing field. `epochMillis` of `TextDomain` changes an ISO 8601 time into a number, so `gte` and `lt` compare two times.
+
+```ts doctest
+import { app, evaluate, lit, ref, space } from "@mark1russell7/vex";
+import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
+
+const tasks = space.array([
+  { kind: "ask", state: "open", title: "Check the report", at: "2026-03-02T09:00:00Z" },
+  { kind: "note", state: "open", title: "A report", at: "2026-03-02T10:00:00Z" },
+  { kind: "request", title: "Send the report", at: "2026-03-01T23:30:00-05:00" },
+  { kind: "request", state: "open", title: "Write the report", at: "2026-02-27" },
+]);
+// A task without a state is open.
+const filter = app(
+  "and",
+  app("includes", lit(["ask", "request"]), ref("kind")),
+  app("eq", app("ifError", ref("state"), lit("open")), lit("open")),
+  app("contains", app("lower", ref("title")), lit("report")),
+  app("gte", app("epochMillis", ref("at")), app("epochMillis", lit("2026-03-01"))),
+);
+const run = (origin: string) => evaluate(filter, { space: tasks, origin, domains: [NumDomain, BoolDomain, TextDomain] });
+
+["0", "1", "2", "3"].map(run); // => [{ ok: true, value: true }, { ok: true, value: false }, { ok: true, value: true }, { ok: true, value: false }]
+```
+
+The third task has no state, so it gets the default. Its time is 04:30 UTC on 2026-03-02. Tier 2 of `tiered` gives the same values. A standalone module does not have `includes` yet.
+
 ## A fast program
 
 `tiered` of `@mark1russell7/vex-compiler` gives a program with generated JavaScript. Its results are the results of the interpreter.

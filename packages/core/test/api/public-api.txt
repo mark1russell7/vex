@@ -743,7 +743,7 @@ export interface ListItem<T = unknown> {
 }
 
 ### build/index.d.ts#ListOp
-export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth" | "setNth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf" | "distinct" | "group" | "join";
+export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth" | "setNth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf" | "distinct" | "group" | "join" | "includes";
 
 ### build/index.d.ts#ListOps
 export interface ListOps {

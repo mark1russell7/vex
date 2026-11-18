@@ -1127,6 +1127,8 @@ class Compiler {
         const i = okValues.indexOf(x);
         return i >= 0 ? ok(i) : this.#err("missing-field", `the list has no item with the value ${JSON.stringify(x)}`, f, path, { op });
       }
+      case "includes":
+        return this.#includes(rest[0], okValues, f, path);
       case "nth": {
         const i = whole();
         if (!i.ok) return i;
@@ -1294,6 +1296,28 @@ class Compiler {
   }
 
   /**
+   * This method tells if an item of a list equals a value (LIST.INCLUDES). The op `eq` of the first domain that accepts
+   * the value compares the value with each item, in the order of the list. The first `true` stops the walk, and the first
+   * error is the result. A value without such an op gives `#NAME?`, also for an empty list.
+   */
+  #includes(x: unknown, values: readonly unknown[], f: Frame, path: readonly number[]): Result<boolean> {
+    if (x === undefined) return this.#at(errorText.needsArgument("includes", 1), f, path);
+    let op: ResolvedOp | undefined;
+    for (const d of this.#domains) {
+      op = safeIs(d, x) ? resolveOp(d, x, "eq") : undefined;
+      if (op !== undefined) break;
+    }
+    if (op === undefined) return this.#at(errorText.noStep("eq", x), f, path);
+    for (const item of values) {
+      const r = this.#callResolved(op, x, "eq", [item], f, path);
+      if (!r.ok) return r;
+      if (typeof r.value !== "boolean") return this.#err("kind-mismatch", `"includes" needs a boolean from "eq", but "eq" gave a ${describeType(r.value)}`, f, path, { op: "includes" });
+      if (r.value) return ok(true);
+    }
+    return ok(false);
+  }
+
+  /**
    * This method folds the values with a domain op, from the left. An empty list gives the identity of the op, if one
    * domain has an identity for the op (LIST.EMPTY). The option `domain` names that domain when more domains have one.
    */
@@ -1327,7 +1351,7 @@ class Compiler {
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf", "group", "join"]);
+const WITH_ARGUMENT: ReadonlySet<ListOp> = new Set<ListOp>(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf", "group", "join", "includes"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that

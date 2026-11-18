@@ -3,9 +3,10 @@
  * matches of `matchView` in each tier. Thus a page can compile them with `tiered`. The sort of a time field reads times
  * with an offset and dates by `epochMillis`.
  */
-import { evaluate, space, type AnyDomain, type Expr } from "@mark1russell7/vex";
+import { app, evaluate, lit, space, type AnyDomain, type Expr } from "@mark1russell7/vex";
 import { compileView, fieldCatalog, matchView, sortIds, sortKey, viewFromQuery, viewToQuery, type QueryRecord, type RecordView } from "@mark1russell7/vex/query";
 import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
+import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { tiered } from "./tiers.ts";
 
@@ -61,5 +62,45 @@ describe("the query entry with the domains of vex-domains", () => {
     expect(sortIds(all, TASKS, { field: "at", dir: "desc" }, { domains: DOMAINS, catalog })).toEqual(["t4", "t5", "t1", "t2", "t3", "t6"]);
     expect(sortIds(all, TASKS, { field: "at", dir: "asc" }, { domains: DOMAINS, catalog })).toEqual(["t3", "t2", "t1", "t5", "t4", "t6"]);
     expect(sortIds(all, TASKS, { field: "title", dir: "asc" }, { domains: DOMAINS, catalog })).toEqual(["t4", "t6", "t2", "t5", "t3", "t1"]);
+  });
+});
+
+// The texts of the property: pieces with the signs of a query and characters of 1 to 4 bytes of UTF-8, with no lone surrogate.
+const piece = fc.oneof(fc.constantFrom("+", "&", "=", ",", "%", "#", "?", " ", "-", "f.", "%2B", "é", "✓", "😀"), fc.string({ unit: "binary", maxLength: 2 }));
+const anyText = fc.array(piece, { maxLength: 6 }).map((pieces) => pieces.join(""));
+// An empty search text, sort field, group or box is not in the link, so these texts are not empty.
+const filledText = anyText.filter((value) => value !== "");
+// The names of the facets: the keys of the view, `__proto__`, names with `f.` and any text. A name that starts with `r:` is a key of the rest.
+const facetName = fc.oneof(fc.constantFrom("q", "sort", "vex", "box", "f.x", "", "__proto__", "constructor", "-a", "a+b"), anyText).filter((name) => !name.startsWith("r:"));
+const where = fc
+  .uniqueArray(fc.tuple(facetName, fc.uniqueArray(anyText, { minLength: 1, maxLength: 3 })), { minLength: 1, maxLength: 3, selector: ([name]) => name })
+  .map((entries): Record<string, readonly string[]> => Object.fromEntries(entries));
+const view: fc.Arbitrary<RecordView> = fc.record(
+  {
+    text: filledText,
+    where,
+    formula: anyText.map((value) => app("contains", { tag: "ref", path: ["search"] }, lit(value))),
+    sort: fc.record({ field: filledText, dir: fc.constantFrom("asc" as const, "desc" as const) }),
+    group: filledText,
+    show: fc.constantFrom("glow" as const, "only" as const),
+    box: filledText,
+  },
+  { requiredKeys: [] },
+);
+// Each part of the rest has a key that starts with `r:`, so it is not a key of the view and not a facet.
+const rest = fc.array(fc.tuple(anyText, anyText).map(([key, value]) => `${encodeURIComponent(`r:${key}`)}=${encodeURIComponent(value)}`), { maxLength: 3 });
+
+describe("the link of a view, as a property", () => {
+  it("QUERY.LINK QUERY.LINK.READ: viewFromQuery of viewToQuery gives the view and the rest, for any names and values", () => {
+    fc.assert(
+      fc.property(view, rest, (v, r) => {
+        const query = viewToQuery(v, r, { domains: DOMAINS });
+        // The writer encodes each sign of a value, so a raw + or # is never in the link.
+        expect(/[+#]/.test(query)).toBe(false);
+        expect(viewFromQuery(query, Object.keys(v.where ?? {}), { domains: DOMAINS })).toEqual({ view: v, rest: r, problems: [] });
+        expect(viewToQuery(viewFromQuery(`?${query}`, Object.keys(v.where ?? {}), { domains: DOMAINS }).view, r, { domains: DOMAINS })).toBe(query);
+      }),
+      { seed: 20261118, numRuns: 2000 },
+    );
   });
 });

@@ -158,6 +158,7 @@ An array of a field or of a name is a list where a list op or the axis `list` ne
 | Op | Value |
 |---|---|
 | `indexOf(list, value)` | the position of the first item with the value, from 0, as `nth` counts. The value is a number, a text or a boolean. A value that no item has gives `#N/A`. |
+| `includes(list, value)` | `true` when an item equals the value by the op `eq` of the domain of the value, and else `false`. The walk stops at the first `true`. A value without `eq` gives `#NAME?`. |
 | `fill(n, value)` | a list of `n` items with the value. The keys are the positions. `n` is a whole number from 0 to 100000. |
 | `distinct(list)` | the first item of each value, in order, with its key. The values are numbers, texts or booleans. |
 | `group(list, keys)` | one item for each text of `keys`, in the order of its first position. Its value is the list of the items at its positions. |
@@ -183,7 +184,7 @@ run(app("sum", app("take", v("fr"), lit(2))), "0"); // => { ok: true, value: 0.5
 run(app("values", app("fill", lit(4), lit(0.25))), "0"); // => { ok: true, value: [0.25, 0.25, 0.25, 0.25] }
 ```
 
-Tier 2 gives `indexOf`, `fill`, `distinct`, `group` and `join` on a list. A standalone module gives a reason for `distinct`, `group` and `join`. A list op of tier 2 on an array goes to tier 1, so each tier gives the same result.
+Tier 2 gives `indexOf`, `includes`, `fill`, `distinct`, `group` and `join` on a list. A standalone module gives a reason for `includes`, `distinct`, `group` and `join`. A list op of tier 2 on an array goes to tier 1, so each tier gives the same result.
 
 ### The names of the items
 

@@ -135,7 +135,7 @@ These ops apply to each value. They are not ops of a domain.
 |---|---|
 | \`if(test, then, otherwise)\` | \`then\` or \`otherwise\`. Only the selected branch evaluates. |
 | \`and(...)\`, \`or(...)\` | A boolean. The evaluation stops at the first value that decides. |
-| \`ifError(value, fallback)\` | \`fallback\` when \`value\` gives an error. It does not hide \`#DEPTH!\`. |
+| \`ifError(value, fallback)\` | \`fallback\` when \`value\` gives an error. It does not hide \`#DEPTH!\`. It gives the default of a missing field: \`ifError(ref("state"), "")\` is the empty text for a record without \`state\`. |
 | \`count\`, \`values\`, \`keys\`, \`errors\`, \`first\` | A fact of a list, for each kind of item |
 | \`sum\`, \`mean\`, \`min\`, \`max\` | A number from a list of numbers. Other items give an error. |
 | \`any\`, \`all\`, \`none\` | A boolean from a list of booleans |
@@ -151,6 +151,7 @@ These ops apply to each value. They are not ops of a domain.
 | \`flat(list)\` | A list of the items of the lists that are the values of the items, in order |
 | \`get(list, key)\` | The value of the first item with the key \`key\`. A key that no item has gives \`#N/A\`. |
 | \`indexOf(list, value)\` | The position of the first item with the value, from 0, as \`nth\` counts. The value is a number, a text or a boolean. A value that no item has gives \`#N/A\`. |
+| \`includes(list, value)\` | \`true\` when an item equals the value by the op \`eq\` of the domain of the value, and else \`false\`. For example, \`includes(["ask", "request"], ref("kind"))\` tests a field against some values. A value without \`eq\` gives \`#NAME?\`. |
 | \`fill(n, value)\` | A list of \`n\` items with the value, from 0 to 100000 items. The keys are the positions. |
 | \`distinct(list)\` | A list of the first item of each value, in order. The values are numbers, texts or booleans. |
 | \`group(list, keys)\` | A list with one item for each text of \`keys\`, in order. Its value is the list of the items at the positions of that text. |

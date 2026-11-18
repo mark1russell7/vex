@@ -359,6 +359,7 @@ export type TextOps = {
   readonly concat: FnOp<string, (a: string, b: unknown) => string>;
   readonly length: FnOp<string, (a: string) => number>;
   readonly codePoints: FnOp<string, (a: string) => VexList<number>>;
+  readonly epochMillis: FnOp<string, (a: string) => number>;
   readonly upper: FnOp<string, TextFn1>;
   readonly lower: FnOp<string, TextFn1>;
   readonly trim: FnOp<string, TextFn1>;

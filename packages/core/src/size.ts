@@ -792,6 +792,7 @@ function listResult(op: ListOp | "fill", item: Kind, args: readonly Shape[]): Ki
     case "any":
     case "all":
     case "none":
+    case "includes":
       return BOOLEAN;
     case "join":
       return STRING;

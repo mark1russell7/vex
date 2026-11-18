@@ -779,7 +779,7 @@ function callFound(found: Found, op: string, self: unknown, args: readonly unkno
 }
 
 /** The list ops with a second argument before their options: a count, a position, an op name or a list. */
-const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf", "group", "join"]);
+const WITH_ARGUMENT: ReadonlySet<string> = /* @__PURE__ */ new Set(["reduce", "take", "nth", "drop", "append", "without", "get", "indexOf", "group", "join", "includes"]);
 
 /**
  * This function gives the items of a list that have a value (LIST.LENIENT). A list op does not skip `#DEPTH!`, so that
@@ -910,6 +910,8 @@ function listOp(op: string, items: readonly ListItem[], rest: readonly unknown[]
       const i = vs.indexOf(x);
       return i >= 0 ? i : stop("missing-field", `the list has no item with the value ${JSON.stringify(x)}`);
     }
+    case "includes":
+      return includes(rest[0], vs, domains);
     case "sum":
       // Stryker disable next-line ArrayDeclaration: a sum needs no domain, and a text in the list accepts no value
       return checked(nums().reduce((s, x) => s + x, 0), op, []);
@@ -946,6 +948,22 @@ function sortValues(o: unknown, vs: readonly unknown[], domains: readonly AnyDom
     const found = domains.filter((d) => accepts(d, x)).map((d) => opOf(d, x, by)).find((f) => f !== undefined);
     return found === undefined ? stop("unknown-op", `no domain gives "${by}" for a ${describe(x)}`) : callFound(found, by, x, [], domains);
   });
+}
+
+/**
+ * This function tells if an item equals the value `x` by the op `eq` of the first domain that accepts `x`
+ * (LIST.INCLUDES). The walk goes in the order of the list, and it stops at the first `true` or the first error.
+ */
+function includes(x: unknown, vs: readonly unknown[], domains: readonly AnyDomain[]): boolean {
+  if (x === undefined) return stop("bad-expression", '"includes" needs argument 2');
+  const found = domains.filter((d) => accepts(d, x)).map((d) => opOf(d, x, "eq")).find((f) => f !== undefined);
+  if (found === undefined) return stop("unknown-op", `no domain gives "eq" for a ${describe(x)}`);
+  for (const item of vs) {
+    const same = callFound(found, "eq", x, [item], domains);
+    if (typeof same !== "boolean") return stop("kind-mismatch", '"includes" needs a boolean from "eq"');
+    if (same) return true;
+  }
+  return false;
 }
 
 /** This function compares two numbers or two texts for `sortBy`. Equal values keep their order (LIST.SORT). */

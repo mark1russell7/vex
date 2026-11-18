@@ -54,15 +54,16 @@ export const isVexList = (u: unknown): u is VexList => {
  * The name of a core list op. `sortBy`, `take`, `drop`, `append`, `flat` and `without` give a list (LIST.BUILD), and
  * the other ops give a value. `get` gives the value at a key (LIST.GET), and `indexOf` gives the position of a value
  * (LIST.INDEXOF). `distinct` and `group` give a list, and `join` gives a text (LIST.DISTINCT, LIST.GROUP, LIST.JOIN).
- * `setNth` gives a list with a new value at one position (LIST.SETNTH).
+ * `setNth` gives a list with a new value at one position (LIST.SETNTH). `includes` tells if an item equals a value by
+ * the op `eq` of a domain (LIST.INCLUDES).
  */
-export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth" | "setNth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf" | "distinct" | "group" | "join";
+export type ListOp = "count" | "sum" | "min" | "max" | "mean" | "any" | "all" | "none" | "values" | "keys" | "reduce" | "first" | "errors" | "sortBy" | "take" | "nth" | "setNth" | "drop" | "append" | "flat" | "without" | "get" | "indexOf" | "distinct" | "group" | "join" | "includes";
 
 /**
  * The names of the core list ops. They apply when the first argument is a list. They apply to an array too, when no
  * domain and no function of the host has the op for it (LIST.ARRAY).
  */
-export const LIST_OPS: ReadonlySet<string> = new Set<ListOp>(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "setNth", "drop", "append", "flat", "without", "get", "indexOf", "distinct", "group", "join"]);
+export const LIST_OPS: ReadonlySet<string> = new Set<ListOp>(["count", "sum", "min", "max", "mean", "any", "all", "none", "values", "keys", "reduce", "first", "errors", "sortBy", "take", "nth", "setNth", "drop", "append", "flat", "without", "get", "indexOf", "distinct", "group", "join", "includes"]);
 
 /**
  * The size rules of the core list ops and of `fill` (LOOP.SIZE.OPS). Each op that gives a list has a rule here. An
@@ -78,6 +79,7 @@ export const LIST_SIZES: Readonly<Record<ListOp | "fill", SizeRule>> = Object.fr
   all: "scalar",
   none: "scalar",
   indexOf: "scalar",
+  includes: "scalar",
   values: { size: [1], count: [1], inner: [1], item: [1], part: [1], keys: "position" },
   keys: { size: [1], count: [1], keys: "position" },
   errors: { size: ["unbounded"] },

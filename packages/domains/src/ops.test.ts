@@ -257,6 +257,8 @@ describe("the ops of TextDomain", () => {
     ["concat", [{ a: 1 }], 'Vex{"a":1}'],
     ["length", [], 3],
     ["codePoints", [], vexList([0x56, 0x65, 0x78].map((code, i) => ({ key: String(i), result: { ok: true as const, value: code } })))],
+    // A text that is not an ISO 8601 time throws, so it gives #CALC! (TEXT.EPOCHMILLIS).
+    ["epochMillis", [], "#CALC! threw"],
     ["upper", [], "VEX"],
     ["lower", [], "vex"],
     ["contains", ["ex"], true],

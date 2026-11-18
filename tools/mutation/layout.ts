@@ -649,10 +649,11 @@ export const NOT_READ: Readonly<Record<string, string>> = {
   "packages/testkit/src/fc-setup.test.ts": "This test reads the setup fc-setup.ts, and the lane does not mutate it (NOT_MUTATED). So this test stops no mutant.",
   "packages/core/bench/measure.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
   "packages/core/bench/paired.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
-  "packages/core/bench/processes.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
   "packages/compiler/bench/ablation.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
   "packages/compiler/bench/alloc.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
   "packages/compiler/bench/alloc-limit.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
+  "packages/compiler/bench/gate-reads.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
+  "packages/compiler/bench/gc.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
   "packages/compiler/bench/limit-walk.test.ts": "This test reads the code of a bench. The lane copies src only, and it does not mutate a bench.",
 };
 

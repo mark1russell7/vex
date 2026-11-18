@@ -10,8 +10,13 @@
  * - LIFE: 38.6, 38.0, 26.8, 38.4 and 40.6. The worst is 40.6, so the limit is 44.7. Run 3 had an A/A band of 0.71
  *   to 0.99, so its 26.8 is noise.
  * A PR that makes a ratio better sets its limit lower in the same PR.
+ *
+ * Each line also gives a record for the next limits: the bound of `limitVerdict` with the A/A noise of the rounds, and
+ * the A/A spread of `aaStats`, both of rigor-bench. The next limits and noise caps come from 5 or more CI runs of these
+ * records. Until then, the gate decides with the ratio and the limit, as before.
  * Start: node packages/core/bench/gate.ts
  */
+import { aaStats, limitVerdict } from "@mark1russell7/rigor-bench";
 import { withFault } from "./fault.ts";
 import { envLine } from "./measure.ts";
 import { batchMs, paired } from "./paired.ts";
@@ -26,9 +31,12 @@ console.info(envLine("process"));
 let failed = false;
 for (const { program, limit } of LIMITS) {
   // The arms take turns in this process in the order of armOrder, and a copy of the loops gives the noise floor (paired.ts).
-  const { ratio, a: v, b: h, noise } = paired(withFault(program.vex), program.hand, { targetMs: batchMs(60, limit) });
+  const { ratio, a: v, b: h, noise, pairs, aa } = paired(withFault(program.vex), program.hand, { targetMs: batchMs(60, limit) });
   const ok = ratio <= limit;
   failed ||= !ok;
-  console.info(`${ok ? "ok  " : "FAIL"} ${program.title}: vex ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, Vex/hand time ${ratio.toFixed(1)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
+  const bound = limitVerdict(pairs, aa, { limit, aaFrom: "rounds" }).cases[0]?.bound;
+  const spread = aaStats(aa)[0]?.spread;
+  const record = `bound ${bound?.toFixed(2) ?? "none"}, A/A spread ${spread?.toFixed(3) ?? "none"}`;
+  console.info(`${ok ? "ok  " : "FAIL"} ${program.title}: vex ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, Vex/hand time ${ratio.toFixed(1)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(3)} to ${noise.p90.toFixed(3)}, a record: ${record}`);
 }
 process.exit(failed ? 1 : 0);

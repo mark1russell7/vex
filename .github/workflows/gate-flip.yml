@@ -35,7 +35,7 @@ jobs:
             packages/core/bench/fault.ts
             packages/core/bench/gate.ts
             packages/core/bench/measure.ts
-            packages/core/bench/processes.ts
+            packages/compiler/bench/gate-reads.ts
             packages/compiler/bench/gate.ts
             packages/compiler/bench/gate-processes.ts
             packages/compiler/bench/growth.ts

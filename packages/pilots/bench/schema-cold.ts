@@ -18,7 +18,8 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type * as Vex from "@mark1russell7/vex";
 import type * as Pilot from "../src/schema.ts";
-import { context, env, envLine } from "../../core/bench/measure.ts";
+import { benchEnv } from "@mark1russell7/rigor-bench/fresh";
+import { context, envLine } from "../../core/bench/measure.ts";
 
 /** The times in ms of the first sample of one new process. */
 interface Cold {
@@ -82,7 +83,7 @@ function parent(): void {
     if (s !== undefined) console.info(`cold ${part.padEnd(10)} median ${s.median.toFixed(2).padStart(8)} ms  low ${s.low.toFixed(2).padStart(8)}  high ${s.high.toFixed(2).padStart(8)}  (${String(n)} new processes)`);
   }
   const out = process.env["BENCH_OUT"];
-  if (out !== undefined && out !== "") writeFileSync(out, JSON.stringify({ mode: "fresh", context: context(), env: env(), node: process.version, processes: n, parts: stats, runs }, null, 2));
+  if (out !== undefined && out !== "") writeFileSync(out, JSON.stringify({ mode: "fresh", context: context(), env: benchEnv(), node: process.version, processes: n, parts: stats, runs }, null, 2));
 }
 
 if (process.env["COLD_CHILD"] === "1") await child();

@@ -9,7 +9,7 @@
 import { PerformanceObserver, constants, type PerformanceEntry } from "node:perf_hooks";
 import { setImmediate as tick } from "node:timers/promises";
 import type { ArmRounds } from "@mark1russell7/rigor-bench";
-import { median } from "../../core/bench/measure.ts";
+import { median } from "@mark1russell7/rigor-statistics";
 
 /** This value is true when `GATE_GC=1` is set. */
 export const GC_ON = process.env["GATE_GC"] === "1";
@@ -73,7 +73,7 @@ function kindOf(e: PerformanceEntry): "minor" | "major" | "other" {
  * This function gives the garbage collections of each arm. The spans of the rounds are the timed batches, in the order
  * of the batches. The time of each span must be the time of its batch in the pairs, or the function throws.
  */
-function armsOf(rounds: ArmRounds, entries: readonly PerformanceEntry[]): readonly ArmGc[] {
+export function armsOf(rounds: ArmRounds, entries: readonly PerformanceEntry[]): readonly ArmGc[] {
   const pairIds = Object.keys(rounds.pairs);
   const arms = rounds.orders[0] ?? [];
   const base = arms.find((arm) => !pairIds.includes(arm));
@@ -130,9 +130,14 @@ export function gcSummary(label: string, processes: readonly { readonly ratio: n
   const arms = [...new Set(processes.flatMap((p) => p.gc.map((g) => g.arm)))];
   const of = (arm: string): readonly ArmGc[] => processes.flatMap((p) => p.gc.filter((g) => g.arm === arm));
   const mid = (gs: readonly ArmGc[], f: (g: ArmGc) => number): number => median(gs.map((g) => f(g)));
+  // A process with no timed runs has no GC share, so the median uses only the known shares.
+  const share = (gs: readonly ArmGc[]): string => {
+    const known = gs.map(shareOf).filter((s) => !Number.isNaN(s));
+    return known.length === 0 ? "no read" : `${median(known).toFixed(1)} %`;
+  };
   const parts = arms.map((arm) => {
     const gs = of(arm);
-    return `${arm} ${mid(gs, (g) => g.minor).toFixed(0)} minor ${mid(gs, (g) => g.minorMs).toFixed(2)} ms, ${mid(gs, (g) => g.major).toFixed(0)} major ${mid(gs, (g) => g.majorMs).toFixed(2)} ms, ${mid(gs, (g) => g.other).toFixed(0)} other ${mid(gs, (g) => g.otherMs).toFixed(2)} ms, GC share ${mid(gs, shareOf).toFixed(1)} %`;
+    return `${arm} ${mid(gs, (g) => g.minor).toFixed(0)} minor ${mid(gs, (g) => g.minorMs).toFixed(2)} ms, ${mid(gs, (g) => g.major).toFixed(0)} major ${mid(gs, (g) => g.majorMs).toFixed(2)} ms, ${mid(gs, (g) => g.other).toFixed(0)} other ${mid(gs, (g) => g.otherMs).toFixed(2)} ms, GC share ${share(gs)}`;
   });
   // The type-aware lint does not have Array#toSorted, and sort() changes only the copy.
   const sorted = [...processes];

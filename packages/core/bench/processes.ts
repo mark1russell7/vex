@@ -11,7 +11,7 @@
  * A process is valid for a case only when its A/A band contains 1.0. The functions here are pure, so tests give them
  * lines and get the decision.
  */
-import { median } from "./measure.ts";
+import { median } from "@mark1russell7/rigor-statistics";
 
 /**
  * The limits of one case on one CPU model: (a) the median limit, and (b) the slow line with the largest count of slow
@@ -116,7 +116,8 @@ export function decide(processes: readonly (readonly CaseSample[])[], k: number)
     if (present.some((s) => limitsText(s.limits) !== limitsText(limits))) reasons.push("the processes gave different limits");
     const ratios = present.filter((s) => isValid(s)).slice(0, k).map((s) => s.ratio);
     if (ratios.length < k) reasons.push(`${String(ratios.length)} valid processes, not ${String(k)}`);
-    const m = median(ratios);
+    // A case with no valid process has no median, and the check (a) fails.
+    const m = ratios.length === 0 ? Number.NaN : median(ratios);
     const slowCount = ratios.filter((r) => r > limits.slow).length;
     if (!(m <= limits.limit)) reasons.push(`the median is above the limit`);
     if (limits.maxSlow !== undefined && slowCount > limits.maxSlow) reasons.push(`more than ${String(limits.maxSlow)} processes above the slow line`);

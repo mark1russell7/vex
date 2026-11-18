@@ -4,7 +4,7 @@
  * order of `armOrder`. The A/A pair gives the noise floor.
  */
 import { timeArmRounds, type ArmRounds, type ProcessArm } from "@mark1russell7/rigor-bench";
-import { median, quantile } from "./measure.ts";
+import { median, quantile } from "@mark1russell7/rigor-statistics";
 
 /** The result of a comparison of two functions: the median ratio of `a` over `b`, and the time of one call in µs. */
 export interface Paired {

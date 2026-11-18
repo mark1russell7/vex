@@ -22,7 +22,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { envLine, median } from "../../core/bench/measure.ts";
+import { median } from "@mark1russell7/rigor-statistics";
+import { envLine } from "../../core/bench/measure.ts";
 
 /** The name of an arm of a process: the module, the hand-written loops, or tier 2 where the case has it. */
 export type AllocArm = "vex" | "hand" | "tier2";

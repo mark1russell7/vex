@@ -1,12 +1,12 @@
 in progress: #300 merged, and a whole run of the parts of the core and the domains is in CI
 
-This file is the list of the open items of Vex. The Status page of the site reads its tables, and the tracker of the fleet copies them. The plan and its reasons are in [`REVIEW.md`](./REVIEW.md) §11.
+This file is the list of the open items of Vex. The Status page of the site reads its tables. The plan and its reasons are in [`REVIEW.md`](./REVIEW.md) §11.
 
 Change an item here first, then on the tracker. An item that is done goes out of this file. The history of the items is in the git log and in the changelogs of the packages.
 
 ## The steps of Vex (decision of 2026-11-02)
 
-Mark chose a ladder of steps with a setting. The study is on the tracker of the fleet (`vex-recursion-study`).
+Mark chose a ladder of steps with a setting.
 
 - Step A is a total formula language: each loop has a fixed count. Step B adds limits from the data and fixed points through monotone steps. Step C adds functions that call themselves, with a budget.
 - The checker gives the lowest step that a program needs. The host option `maxStep` sets the highest step that it accepts. A document cannot raise its own step.

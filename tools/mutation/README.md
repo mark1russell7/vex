@@ -53,7 +53,7 @@ The clock limit of one mutant is the net time of the first run, times 1.5, plus 
 
 ## The weekly run and the nights
 
-The workflow `mutation-weekly.yml` reads each part on Saturday and holds the gate. The role `vex` reads a red run: `schedule-watch` of the fleet gives it to the row of that role.
+The workflow `mutation-weekly.yml` reads each part on Saturday and holds the gate.
 
 The nightly job reads only the files that changed on the main line in the last 25 hours. A changed test file also selects the source file of the same name. The nightly job is report only by design. It prints the score, the time-outs and the survivors of each file, and a score fails nothing.
 

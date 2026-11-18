@@ -4,7 +4,7 @@
  * the speed of the machine, so the gate works on a shared CI runner. The arms take turns in one process (paired.ts, on
  * `timeArmRounds` of rigor-bench).
  *
- * Each limit is the worst ratio of 5 CI runs times 1.1 (the fleet rule of 2026-10-30), rounded up. The runs are
+ * Each limit is the worst ratio of 5 CI runs times 1.1 (a rule of 2026-10-30), rounded up. The runs are
  * run 41022173204 of speed-gate.yml (2026-10-30): AMD EPYC 7763 in runs 2 to 4, AMD EPYC 9V45 in runs 1 and 5.
  * - NEAREST: 17.4, 21.0, 20.9, 21.2 and 16.6. The worst is 21.2, so the limit is 23.4. The 9V45 gives about 17.
  * - LIFE: 38.6, 38.0, 26.8, 38.4 and 40.6. The worst is 40.6, so the limit is 44.7. Run 3 had an A/A band of 0.71

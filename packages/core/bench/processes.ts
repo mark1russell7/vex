@@ -1,5 +1,5 @@
 /**
- * The decision of a speed gate over fresh processes (GATENOISE, STRATEGY.md of the fleet, 2026-11-02). Each fresh
+ * The decision of a speed gate over fresh processes (GATENOISE, 2026-11-02). Each fresh
  * process of Node.js is one sample, as each user gets one process. A gate script prints one result line for each case,
  * with the limits of the case. This module reads the lines of k processes and decides each case with two checks:
  *

@@ -9,7 +9,7 @@
  * - (a) The median ratio of the processes is at most the limit.
  * - (b) The count of processes above the slow line (the limit) is at most the largest count.
  *
- * The limits come from the CI jobs of `gate-processes.ts` on Node.js 26.13.1 (LIFEMARGIN, the fleet rule of 2026-11-02):
+ * The limits come from the CI jobs of `gate-processes.ts` on Node.js 26.13.1 (LIFEMARGIN, a rule of 2026-11-02):
  * 53 jobs of speed-gate.yml in 36 runs, from 2026-11-12 23:30 to 2026-11-14 23:04 (UTC). The file `limit-runs.json`
  * keeps the job, the run, the CPU model and the ratio of each process of each case. The AMD EPYC 7763 gave 13 jobs, so it
  * has its own limits. The 40 other jobs give the limits of each other model: Intel Xeon 6975P-C, 8573C and 8370C, and AMD
@@ -26,7 +26,7 @@
  * | shapes, 1111 nodes | 1.39 to 1.52 | 1.65 | 1.53 to 1.66, Xeon 1.50 to 1.78 | 1.79, Xeon 2.06 |
  * | the growth of the share of each value | 1.99 to 2.01 | 2.03 | 1.99 to 2.07 | 2.15 |
  *
- * (a) Each limit is the worst job median plus the spread of the job medians, rounded up (STRATEGY.md of the fleet).
+ * (a) Each limit is the worst job median plus the spread of the job medians, rounded up.
  * (b) The rate p is the upper Wilson end (95 %) of the rate of processes above the limit in the derivation jobs. The
  * largest count L is the smallest count with P(Binomial(11, p) > L) under 1 %. Check (b) fails a job with a slow rate of
  * 0.3 in 89 % of jobs for L 1, 69 % for L 2, 43 % for L 3 and 21 % for L 4. At a slow rate of 0.5, it is 99 %, 97 %, 89 %
@@ -195,7 +195,7 @@ const shapesCase = (branch: number, depth: number): Case => {
   return { title: `the shapes module of ireko, a tree of ${String(n)} nodes`, compiled: { run: () => shapes(records, vars, parents), tier: 2, fallbacks: () => 0 }, hand: () => shapesTree(records, MAX_BANDS), limits: limitsOf("shapes"), nodes: n };
 };
 
-// The ablation of RADIALGAP (step 3, predictions vex-radialgap-ablation-1102, -2 and -3 of the fleet): with GATE_ABLATE=1,
+// The ablation of RADIALGAP (step 3, predictions vex-radialgap-ablation-1102, -2 and -3): with GATE_ABLATE=1,
 // variants of the nested radial module are more cases. `ablation.ts` makes them. A variant must give the result of the
 // module on the case input, or the gate stops.
 const ablationCase = (name: string, edit: (source: string) => string): ReturnType<typeof radialCase> => {

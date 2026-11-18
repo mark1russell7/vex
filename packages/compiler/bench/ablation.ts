@@ -1,4 +1,4 @@
-// The ablation of RADIALGAP (step 3 of the fleet item): variants of the radial module of ireko, made by text edits of the
+// The ablation of RADIALGAP (step 3): variants of the radial module of ireko, made by text edits of the
 // emitted source. Each edit fails when its text is not in the source, so a change of the emitter stops the gate and does
 // not measure a variant that is the same as the module. The test in `ablation.test.ts` checks each edit on each push.
 import { RADIAL_DOMAINS, RADIAL_PROGRAM, RADIAL_SCHEMA, type RadialInput } from "../../pilots/src/ireko-radial.ts";

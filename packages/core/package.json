@@ -32,6 +32,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./query": "./src/query.ts",
     "./package.json": "./package.json"
   },
   "files": [
@@ -50,6 +51,10 @@
       ".": {
         "types": "./build/index.d.ts",
         "default": "./build/index.js"
+      },
+      "./query": {
+        "types": "./build/query.d.ts",
+        "default": "./build/query.js"
       },
       "./package.json": "./package.json"
     }

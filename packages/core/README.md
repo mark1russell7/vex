@@ -42,7 +42,8 @@ The types know the fields of the records and the ops of each domain. `root.from(
 - **Error values.** Each failure has a code, a kind, a message, the path of its node, the origin and the focus. `ifError` catches an error.
 - **Programs are data.** A program is a JSON tree. `explain` gives a trace, `deps` gives the reads, and `compile` gives a program that evaluates at each record of each space.
 - **Documents.** A program can also be a document of [coeval](https://github.com/mark1russell7/coeval), the kernel of the languages of the family.
-- **One runtime dependency.** The package is one ES module with its type declarations. Its one dependency is `@mark1russell7/coeval`.
+- **Queries of records.** The entry `@mark1russell7/vex/query` compiles the search, the facets and the sort of a page to Vex programs.
+- **One runtime dependency.** The package has two ES module entries, `.` and `./query`, with their type declarations. Its one dependency is `@mark1russell7/coeval`.
 
 ## Documents
 
@@ -61,6 +62,27 @@ evaluate(doc, { space: space.array([{ n: 2 }]), origin: "0", domains: [NumDomain
 ```
 
 A document that is not valid gives the error `#VALUE!` with the reason and the location of the part. The rules are in [the specification](https://github.com/mark1russell7/vex/blob/main/spec/README.md#41-documents).
+
+## Queries of records
+
+A view of a collection is data: search words, the values of each facet, an optional formula and a sort. `compileView` gives one program for the view. `matchView` evaluates it at each record, and gives the matches and the counts of the facets. `viewToQuery` writes the view into the query of a link, and `viewFromQuery` reads it back.
+
+```ts doctest
+import { matchView, viewToQuery } from "@mark1russell7/vex/query";
+import { BoolDomain, NumDomain, TextDomain } from "@mark1russell7/vex-domains";
+
+const tasks = [
+  { id: "a", kind: "ask", state: "open", search: "pick a name" },
+  { id: "b", kind: "ask", state: "done", search: "pick a color" },
+  { id: "c", kind: "note", state: "open", search: "a dark mode" },
+];
+const view = { text: "pick", where: { state: ["open"] } };
+
+matchView(view, tasks, { domains: [TextDomain, BoolDomain, NumDomain] }).matches; // => ["a"]
+viewToQuery(view); // => "q=pick&state=open"
+```
+
+The rules are in [the specification](https://github.com/mark1russell7/vex/blob/main/spec/README.md#13-the-query-entry).
 
 ## The kernel of coeval
 

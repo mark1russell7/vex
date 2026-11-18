@@ -23,7 +23,7 @@ export interface Entry {
 export const CATALOG: readonly Entry[] = [
   { name: "NumDomain", d: NumDomain, type: "number", sample: 2, about: "Numbers. A result that is not finite gives `#NUM!`." },
   { name: "BoolDomain", d: BoolDomain, type: "boolean", sample: true, about: "Booleans." },
-  { name: "TextDomain", d: TextDomain, type: "string", sample: "ab", about: "Texts." },
+  { name: "TextDomain", d: TextDomain, type: "string", sample: "ab", about: "Texts. `epochMillis` reads an ISO 8601 time with `Z` or an offset, and cuts a fraction to milliseconds: it does not round it." },
   { name: "Vec2Domain", d: Vec2Domain, type: "Vec2", sample: new Vec2(3, 4), about: "2D vectors: `new Vec2(x, y)`, or `vec2` of `NumDomain`. A component that is not finite gives `#NUM!`." },
   { name: "XYDomain", d: XYDomain, type: "XY", sample: { x: 3, y: 4 }, about: "2D vectors as plain data: `{ x, y }`, or `xy` of `NumDomain`. Each op is a function, so a standalone module can copy the domain. No op lifts a number. Put it before `NumRecordDomain`." },
   { name: "InsetsDomain", d: InsetsDomain, type: "Insets", sample: { startX: 1, startY: 2, endX: 3, endY: 4 }, about: "The four sides of an inset as plain data: `{ startX, startY, endX, endY }`, or `insets` of `NumDomain`. `start` and `end` give `XY` values, and a module can copy them. `startVec2` and `endVec2` give `Vec2` values, and a module refuses them. A side that is not finite gives `#NUM!`." },

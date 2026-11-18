@@ -37,6 +37,13 @@ describe("the op epochMillis of TextDomain (TEXT.EPOCHMILLIS)", () => {
     expect(millis("2026-03-01T07:30:15.250-05:00")).toBe(Date.UTC(2026, 2, 1, 12, 30, 15, 250));
     expect(millis("2026-03-01T18:00+05:30")).toBe(Date.UTC(2026, 2, 1, 12, 30));
     expect(millis("2026-03-01T12:30+00:00")).toBe(millis("2026-03-01T12:30Z"));
+    // A t and a z in lower case are the same as T and Z (RFC 3339 section 5.6).
+    expect([millis("2026-03-01t12:30z"), millis("2026-03-01t12:30Z"), millis("2026-03-01T12:30:15.250z"), millis("2026-03-01t07:30-05:00")]).toEqual([
+      Date.UTC(2026, 2, 1, 12, 30),
+      Date.UTC(2026, 2, 1, 12, 30),
+      Date.UTC(2026, 2, 1, 12, 30, 15, 250),
+      Date.UTC(2026, 2, 1, 12, 30),
+    ]);
     // Only the first three digits of a fraction count, and a short fraction is tenths or hundredths.
     expect(millis("2026-03-01T12:30:15.5Z")).toBe(Date.UTC(2026, 2, 1, 12, 30, 15, 500));
     expect(millis("2026-03-01T12:30:15.05Z")).toBe(Date.UTC(2026, 2, 1, 12, 30, 15, 50));
@@ -78,7 +85,9 @@ describe("the op epochMillis of TextDomain (TEXT.EPOCHMILLIS)", () => {
       "2026-03-01T12:30",
       "2026-03-01T12:30:15",
       "2026-03-01 12:30Z",
-      "2026-03-01t12:30z",
+      "2026-03-01t12:30",
+      "2026-03-01x12:30Z",
+      "2026-03-01T12:30Zz",
       "2026-03-01T12Z",
       "2026-03-01T12:30.5Z",
       "2026-03-01T12:30:15.Z",

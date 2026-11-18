@@ -53,8 +53,11 @@ export interface CatalogOptions {
   readonly skip?: readonly string[];
 }
 
-/** The form of a time that `epochMillis` reads: a date, a time of day, and `Z` or an offset. An example is `2026-11-18T18:47:12Z`. */
-export const ISO_TIME: RegExp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+/**
+ * The form of a time that `epochMillis` reads: a date, a time of day, and `Z` or an offset. An example is `2026-11-18T18:47:12Z`.
+ * A `t` and a `z` in lower case are valid, as in RFC 3339 section 5.6.
+ */
+export const ISO_TIME: RegExp = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
 
 /** The form of a date with no time of day, for example `2026-11-18`. */
 export const ISO_DATE: RegExp = /^\d{4}-\d{2}-\d{2}$/;

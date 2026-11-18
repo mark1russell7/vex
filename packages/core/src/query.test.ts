@@ -103,8 +103,8 @@ describe("fieldCatalog", () => {
   });
 
   it("QUERY.CATALOG.TYPE: reads a time in the form that epochMillis reads, with Z or an offset, and a date with no time of day", () => {
-    expect(wrong(ISO_TIME, ["2026-11-18T18:47:12Z", "2026-11-18T18:47Z", "2026-11-18T18:47:12.123+05:30", "2026-11-18T18:47:12.5-08:00"], true)).toEqual([]);
-    const notTimes = ["2026-11-18", "18:47", "2026-11-18 18:47:12Z", "2026-11-18T18:47:12", "2026-11-18T18:47:12+0530", "x2026-11-18T18:47Z", "2026-11-18T18:47Zx", "2026-11-18T18:47:1Z", "2026-11-18T18:47:12.Z"];
+    expect(wrong(ISO_TIME, ["2026-11-18T18:47:12Z", "2026-11-18T18:47Z", "2026-11-18T18:47:12.123+05:30", "2026-11-18T18:47:12.5-08:00", "2026-11-18t18:47z"], true)).toEqual([]);
+    const notTimes = ["2026-11-18", "2026-11-18x18:47Z", "18:47", "2026-11-18 18:47:12Z", "2026-11-18T18:47:12", "2026-11-18T18:47:12+0530", "x2026-11-18T18:47Z", "2026-11-18T18:47Zx", "2026-11-18T18:47:1Z", "2026-11-18T18:47:12.Z"];
     expect(wrong(ISO_TIME, notTimes, false)).toEqual([]);
     expect(ISO_DATE.test("2026-11-18")).toBe(true);
     expect(wrong(ISO_DATE, ["2026-11-18T00:00Z", "x2026-11-18", "2026-11-18x", "2026-1-18"], false)).toEqual([]);

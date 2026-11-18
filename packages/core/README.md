@@ -82,7 +82,7 @@ Vex keeps what is its own: the typed domains, the spaces, the moves and the axes
 
 A program of this package runs in the interpreter (tier 1). In CI, the interpreter takes approximately 17 to 21 times the time of hand-written loops for the nearest other box. For a step of the Game of Life, it takes approximately 38 to 41 times.
 
-For speed, compile the program with [`@mark1russell7/vex-compiler`](https://www.npmjs.com/package/@mark1russell7/vex-compiler). Its tier 2 takes 1.2 to 1.7 times the time of the same loops, with the results of the interpreter. The speed gates in `packages/core/bench/gate.ts` and `packages/compiler/bench/gate.ts` give each limit and the runs that set it.
+For speed, compile the program with [`@mark1russell7/vex-compiler`](https://www.npmjs.com/package/@mark1russell7/vex-compiler). Its tier 2 takes 1.2 to 1.7 times the time of the same loops, with the results of the interpreter. The speed gates give each limit and the runs that set it: `packages/core/bench/gate-limits.ts` for the core and `packages/compiler/bench/gate.ts` for the compiler.
 
 ## Related packages
 

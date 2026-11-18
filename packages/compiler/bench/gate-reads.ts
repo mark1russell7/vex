@@ -2,8 +2,8 @@
  * The read line of the speed gate of the compiler. Each process of `gate.ts` prints one read line for its case, as JSON.
  * `gate-processes.ts` reads the lines of all its processes, and decides each case with `processVerdict` of rigor-bench.
  *
- * A read line holds the facts of the verdict at full precision: the ratio, the A/A band, the tier, the fallbacks and the
- * limits of the CPU model. The text lines of a process are for a person, and no script reads them.
+ * A read line holds the facts of the verdict at full precision. These are the ratio, the A/A band, the tier, the fallbacks
+ * and the limits of the CPU model. The text lines of a process are for a person, and no script reads them.
  */
 import type { CpuEntry, ProcessLimits, ProcessRead } from "@mark1russell7/rigor-bench";
 
@@ -28,11 +28,12 @@ export function readLine(read: GateRead): string {
   return `${PREFIX}${JSON.stringify(read)}`;
 }
 
-/** This function gives the limits part of a text line: the limit, the slow line, the largest slow count and the CPU model. */
+/** This function gives the limits part of a text line: the limit, the slow line, the slow count, the noise cap and the model. */
 export function limitsText(limits: CpuEntry<ProcessLimits>): string {
-  const { limit, slow = limit, maxSlow } = limits.value;
+  const { limit, slow = limit, maxSlow, noiseCap } = limits.value;
   const count = maxSlow === undefined ? "a record only" : `at most ${String(maxSlow)} slow`;
-  return `limit ${String(limit)}, slow line ${String(slow)}, ${count}, for ${limits.model}`;
+  const cap = noiseCap === undefined ? "no noise cap" : `noise cap ${String(noiseCap)}`;
+  return `limit ${String(limit)}, slow line ${String(slow)}, ${count}, ${cap}, for ${limits.model}`;
 }
 
 /** This function tells if a value is a finite number. */
@@ -40,12 +41,18 @@ const finite = (x: unknown): x is number => typeof x === "number" && Number.isFi
 
 /** This function examines the limits of a read line, and gives them. */
 function limitsOf(value: unknown, where: string): CpuEntry<ProcessLimits> {
-  const entry = value as { readonly model?: unknown; readonly value?: { readonly limit?: unknown; readonly slow?: unknown; readonly maxSlow?: unknown } } | null;
+  const entry = value as { readonly model?: unknown; readonly value?: { readonly limit?: unknown; readonly slow?: unknown; readonly maxSlow?: unknown; readonly noiseCap?: unknown } } | null;
   const l = entry?.value;
-  if (typeof entry?.model !== "string" || l === undefined || !finite(l.limit) || !(l.slow === undefined || finite(l.slow)) || !(l.maxSlow === undefined || finite(l.maxSlow))) {
+  const optional = (x: unknown): boolean => x === undefined || finite(x);
+  if (typeof entry?.model !== "string" || l === undefined || !finite(l.limit) || !optional(l.slow) || !optional(l.maxSlow) || !optional(l.noiseCap)) {
     throw new Error(`gate-reads: the limits of ${where} are not a CPU model with a limit.`);
   }
-  return { model: entry.model, value: { limit: l.limit, ...(l.slow === undefined ? {} : { slow: l.slow }), ...(l.maxSlow === undefined ? {} : { maxSlow: l.maxSlow }) } };
+  const numberOf = (x: unknown): number | undefined => (finite(x) ? x : undefined);
+  const [slow, maxSlow, noiseCap] = [numberOf(l.slow), numberOf(l.maxSlow), numberOf(l.noiseCap)];
+  return {
+    model: entry.model,
+    value: { limit: l.limit, ...(slow === undefined ? {} : { slow }), ...(maxSlow === undefined ? {} : { maxSlow }), ...(noiseCap === undefined ? {} : { noiseCap }) },
+  };
 }
 
 /** This function examines the JSON of one read line, and gives the read. */

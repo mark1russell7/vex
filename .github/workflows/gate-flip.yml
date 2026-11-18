@@ -33,6 +33,7 @@ jobs:
         with:
           paths: |
             packages/core/bench/fault.ts
+            packages/core/bench/gate-limits.ts
             packages/core/bench/gate.ts
             packages/core/bench/measure.ts
             packages/compiler/bench/gate-reads.ts

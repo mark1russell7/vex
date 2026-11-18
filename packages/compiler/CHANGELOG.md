@@ -1,5 +1,12 @@
 # @mark1russell7/vex-compiler
 
+## 0.20.0
+
+### Patch Changes
+
+- Updated dependencies [ae9e0dc]
+  - @mark1russell7/vex@0.20.0
+
 ## 0.19.1
 
 ### Patch Changes

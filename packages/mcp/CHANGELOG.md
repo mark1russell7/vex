@@ -1,5 +1,18 @@
 # @mark1russell7/vex-mcp
 
+## 0.18.2
+
+### Patch Changes
+
+- ae9e0dc: The list op `includes(list, value)` (LIST.INCLUDES) gives `true` when an item equals the value by the op `eq` of the domain of the value. It is in the interpreter, the reference tier and tier 2. A standalone module gives a reason for it. The op `epochMillis` of `TextDomain` (TEXT.EPOCHMILLIS) reads an ISO 8601 time with `Z` or an offset and gives the milliseconds since 1970. Thus the ops of numbers compare two times. It is in each tier and in a module. The catalog of `vex-mcp` lists the two ops, and the row of `ifError` tells how to give a default for a missing field.
+  
+  Breaking: on a Vex list, the list op `includes` comes before a function of the host with the same name.
+- 0c9ccc4: The entry `./module` gives the five tools of Vex to a procedures server that loads modules, for example the dev-tools server of `@procedures/mcp-dev-tools` through `MCP_BUNDLES`. Its default export is `vexModule`, `mcpNamespaces` is `["vex"]`, and `mcpInstructions` is the text of the instructions of the server. The export `INSTRUCTIONS` of `server.ts` holds that text. A test compares each tool in the two servers.
+- Updated dependencies [ae9e0dc]
+  - @mark1russell7/vex@0.20.0
+  - @mark1russell7/vex-domains@0.20.0
+  - @mark1russell7/vex-compiler@0.20.0
+
 ## 0.18.1
 
 ### Patch Changes

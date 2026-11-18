@@ -3,7 +3,7 @@
  * bench harness. In each round, the base `b`, the candidate `a` and a copy of the base (the A/A pair) take turns in the
  * order of `armOrder`. The A/A pair gives the noise floor.
  */
-import { timeArmRounds, type ArmRounds, type ProcessArm } from "@mark1russell7/rigor-bench";
+import { timeArmRounds, type ArmRounds, type PairedTime, type ProcessArm } from "@mark1russell7/rigor-bench";
 import { median, quantile } from "@mark1russell7/rigor-statistics";
 
 /** The result of a comparison of two functions: the median ratio of `a` over `b`, and the time of one call in µs. */
@@ -13,6 +13,10 @@ export interface Paired {
   readonly b: number;
   /** The 10th and the 90th percentile of the A/A ratios of the rounds. */
   readonly noise: { readonly p10: number; readonly p90: number };
+  /** The records of the rounds: arm `a` of each record is the base `b`, and arm `b` is the candidate `a`. */
+  readonly pairs: readonly PairedTime[];
+  /** The A/A records of the rounds: the base against its copy. */
+  readonly aa: readonly PairedTime[];
   /** The records of `timeArmRounds`: the pairs `a` and `b~aa`, and the order and span of each timed batch. They also keep the count of calls in one batch. */
   readonly rounds: ArmRounds;
 }
@@ -71,7 +75,8 @@ export function paired(a: () => void, b: () => void, options: PairedOptions = {}
     ...(now === undefined ? {} : { now }),
   });
   const pairs = rounds.pairs["a"] ?? [];
-  const aa = (rounds.pairs["b~aa"] ?? []).map((p) => p.b / p.a);
+  const aaPairs = rounds.pairs["b~aa"] ?? [];
+  const aa = aaPairs.map((p) => p.b / p.a);
   const perCall = (ms: readonly number[]): number => (median(ms) * 1000) / rounds.count;
   return {
     // The ratio of each round, with the base of the same round, keeps a change of the speed of the machine out.
@@ -79,6 +84,8 @@ export function paired(a: () => void, b: () => void, options: PairedOptions = {}
     a: perCall(pairs.map((p) => p.b)),
     b: perCall(pairs.map((p) => p.a)),
     noise: { p10: quantile(aa, 0.1), p90: quantile(aa, 0.9) },
+    pairs,
+    aa: aaPairs,
     rounds,
   };
 }

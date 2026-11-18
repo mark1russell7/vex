@@ -4,7 +4,7 @@
  * limit. The gate also checks that tier 2 gave each result, with no fallback.
  *
  * The arms take turns in one process (core/bench/paired.ts, on `timeArmRounds` of rigor-bench). `gate-processes.ts` starts each case in 11 fresh processes
- * of its own and decides each case on them (core/bench/processes.ts):
+ * of its own and decides each case on them with `processVerdict` of rigor-bench. Each process prints one read line (gate-reads.ts):
  *
  * - (a) The median ratio of the processes is at most the limit.
  * - (b) The count of processes above the slow line (the limit) is at most the largest count.
@@ -61,11 +61,12 @@ import { app, axes, each, rec, ref, space } from "@mark1russell7/vex";
 import { NumDomain } from "@mark1russell7/vex-domains";
 import { tiered } from "../src/index.ts";
 import { emitModule, emitSheetModule } from "../src/module.ts";
-import { cpus } from "node:os";
+import { cpuEntry, type CpuEntry, type ProcessLimits } from "@mark1russell7/rigor-bench";
+import { benchEnv } from "@mark1russell7/rigor-bench/fresh";
 import { withFault } from "../../core/bench/fault.ts";
 import { envLine } from "../../core/bench/measure.ts";
 import { batchMs, paired } from "../../core/bench/paired.ts";
-import { limitsFor, limitsText, type CaseLimits, type ModelLimits } from "../../core/bench/processes.ts";
+import { limitsText, readLine } from "./gate-reads.ts";
 import type { AllocArm, AllocRegime } from "./alloc.ts";
 import { GC_ON, gcRecorder } from "./gc.ts";
 
@@ -79,10 +80,10 @@ const LIMITS = {
   shapes: { "7763": { limit: 1.65, slow: 1.65 }, Xeon: { limit: 2.06, slow: 2.06 }, other: { limit: 1.79, slow: 1.79 } },
   share: { "7763": { limit: 2.03, slow: 2.03 }, other: { limit: 2.15, slow: 2.15 } },
   walk: { "7763": { limit: 1, slow: 1 }, other: { limit: 1, slow: 1 } },
-} as const satisfies Readonly<Record<string, ModelLimits>>;
-const CPU = cpus()[0]?.model ?? "";
-/** This function gives the limits of a case for the CPU model of this runner. */
-const limitsOf = (c: keyof typeof LIMITS): CaseLimits => limitsFor(LIMITS[c], CPU);
+} as const satisfies Readonly<Record<string, Readonly<Record<string, ProcessLimits>> & { readonly other: ProcessLimits }>>;
+const CPU = benchEnv().cpu;
+/** This function gives the limits of a case for the CPU model of this runner: the entry of the model that the name contains, or `other`. */
+const limitsOf = (c: keyof typeof LIMITS): CpuEntry<ProcessLimits> => cpuEntry<ProcessLimits>(LIMITS[c], CPU);
 const SHARE = limitsOf("share");
 
 /** This function gives a function that makes its value at the first call only, so a process makes only what its case needs. */
@@ -113,7 +114,7 @@ const shares = once(() => [share(500), share(1000)] as const);
 // ring of children of mixed sizes needs the search of the radius, with the test of all pairs at each step. V-054 made
 // this module two times slower in the engine benchmark of ireko. The limits in the header catch such a loss.
 const radialModule = once(() => loadRadial((source) => source));
-const radialCase = (n: number, mode: "nested" | "linked"): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limits: CaseLimits } => {
+const radialCase = (n: number, mode: "nested" | "linked"): { readonly title: string; readonly compiled: { readonly run: () => void; readonly tier: 2; readonly fallbacks: () => number }; readonly hand: () => void; readonly limits: CpuEntry<ProcessLimits> } => {
   const input = ringOf(n, mode);
   const { space: s, vars } = radialRun(input);
   const radial = radialModule();
@@ -223,7 +224,7 @@ interface Case {
   readonly title: string;
   readonly compiled: { readonly run: () => void; readonly tier: 1 | 2; readonly fallbacks: () => number };
   readonly hand: () => void;
-  readonly limits: CaseLimits;
+  readonly limits: CpuEntry<ProcessLimits>;
   /** This value is the count of nodes of a tree case, for the allocation measure (alloc.ts). */
   readonly nodes?: number;
   /** This function makes the run of the case in tier 2, for the allocation measure. The speed gate does not call it. */
@@ -241,16 +242,16 @@ const CASES_ABLATE: readonly (() => Case)[] = process.env["GATE_ABLATE"] === "1"
 const CASES_WALK: readonly (() => Case)[] = process.env["GATE_LIMIT_WALK"] === "1" ? [() => walkCase(10, 3), () => walkCase(10, 4)] : [];
 const CASES: readonly (() => Case)[] = [...CASES_BASE, ...CASES_ABLATE, ...CASES_WALK];
 
-// With GATE_CASE=n, the process measures only case n (from 0, and CASES.length is the growth case), so no other case
-// changes its heap. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run
-// 41418095435), and that arm was slow for the whole process. With GATE_CASE=count, the process gives the count of cases.
-const only = process.env["GATE_CASE"];
+// With the case n as the first argument, or else GATE_CASE=n, the process measures only case n (from 0, and CASES.length
+// is the growth case), so no other case changes its heap. gate-processes.ts gives the argument, and a person can give either. Measured cases before the tree case made V8 tenure an allocation site in 9 of 40 processes (run
+// 41418095435), and that arm was slow for the whole process. With the case count, the process gives the count of cases.
+const only = process.argv.at(2) ?? process.env["GATE_CASE"];
 if (only === "count") {
   console.info(`cases ${String(CASES.length + 1)}`);
   process.exit(0);
 }
 const chosen = only === undefined ? undefined : Number(only);
-if (chosen !== undefined && !(Number.isInteger(chosen) && chosen >= 0 && chosen <= CASES.length)) throw new RangeError(`gate: GATE_CASE is "${String(only)}", not "count" or a case from 0 to ${String(CASES.length)}.`);
+if (chosen !== undefined && !(Number.isInteger(chosen) && chosen >= 0 && chosen <= CASES.length)) throw new RangeError(`gate: the case is "${String(only)}", not "count" or a case from 0 to ${String(CASES.length)}.`);
 // With GATE_ALLOC, the process gives the allocation record of one arm of its case, and no time (alloc.ts).
 const allocArm = process.env["GATE_ALLOC"] as AllocArm | undefined;
 if (allocArm !== undefined) {
@@ -268,10 +269,12 @@ for (const make of CASES.filter((_, i) => chosen === undefined || chosen === i))
   // The arms take turns in this process in the order of armOrder, and a copy of the base gives the noise floor (core/bench/paired.ts).
   // With GATE_GC=1, an observer counts the garbage collections in each timed batch (gc.ts).
   const gc = GC_ON ? gcRecorder() : undefined;
-  const { ratio, a: v, b: h, noise, rounds } = paired(withFault(compiled.run), hand, { targetMs: batchMs(30, limits.limit) });
-  const ok = ratio <= limits.limit && compiled.tier === 2 && compiled.fallbacks() === 0;
+  const { ratio, a: v, b: h, noise, rounds } = paired(withFault(compiled.run), hand, { targetMs: batchMs(30, limits.value.limit) });
+  const fallbacks = compiled.fallbacks();
+  const ok = ratio <= limits.value.limit && compiled.tier === 2 && fallbacks === 0;
   failed ||= !ok;
-  console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${compiled.fallbacks()} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, ${limitsText(limits)}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
+  console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${compiled.tier}, ${fallbacks} fallbacks, generated ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, generated/loops time ${ratio.toFixed(2)} (lower is better, ${limitsText(limits)}), A/A noise ${noise.p10.toFixed(3)} to ${noise.p90.toFixed(3)}`);
+  console.info(readLine({ case: title, ratio, aa: [noise.p10, noise.p90], tier: compiled.tier, fallbacks, limits }));
   // oxlint-disable-next-line no-await-in-loop -- the cases run one after the other, and the gc entries of a case come from the event loop.
   if (gc !== undefined) for (const line of await gc.done(rounds, { a: "vex", b: "hand", "b~aa": "hand~aa" })) console.info(line);
 }
@@ -279,10 +282,13 @@ if (chosen === undefined || chosen === CASES.length) {
   // The growth of O(n) is 2, and the growth of O(n²) is 4. Its limit comes from the runs in the header.
   const [small, large] = shares();
   const gc = GC_ON ? gcRecorder() : undefined;
-  const { ratio, a: v, b: h, noise, rounds } = paired(withFault(large.run), small.run, { targetMs: batchMs(30, SHARE.limit) });
-  const ok = ratio <= SHARE.limit && large.tier === 2 && large.fallbacks() === 0;
+  const { ratio, a: v, b: h, noise, rounds } = paired(withFault(large.run), small.run, { targetMs: batchMs(30, SHARE.value.limit) });
+  const fallbacks = large.fallbacks();
+  const ok = ratio <= SHARE.value.limit && large.tier === 2 && fallbacks === 0;
   failed ||= !ok;
-  console.info(`${ok ? "ok  " : "FAIL"} the share of each value in the total: tier ${large.tier}, ${large.fallbacks()} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (${limitsText(SHARE)}), A/A noise ${noise.p10.toFixed(2)} to ${noise.p90.toFixed(2)}`);
+  const title = "the share of each value in the total";
+  console.info(`${ok ? "ok  " : "FAIL"} ${title}: tier ${large.tier}, ${fallbacks} fallbacks, 1000 values ${v.toFixed(1)} µs, 500 values ${h.toFixed(1)} µs, growth ${ratio.toFixed(2)} (${limitsText(SHARE)}), A/A noise ${noise.p10.toFixed(3)} to ${noise.p90.toFixed(3)}`);
+  console.info(readLine({ case: title, ratio, aa: [noise.p10, noise.p90], tier: large.tier, fallbacks, limits: SHARE }));
   if (gc !== undefined) for (const line of await gc.done(rounds, { a: "1000", b: "500", "b~aa": "500~aa" })) console.info(line);
 }
 process.exit(failed ? 1 : 0);

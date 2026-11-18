@@ -116,8 +116,8 @@ export const vexModule: ProcedureModule = defineModule("vex", [
   }),
 ]);
 
-/** The instructions of the server for its client. */
-const INSTRUCTIONS =
+/** The instructions of the tools for the model. The host gives them to its client, and the module entry gives them as `mcpInstructions`. */
+export const INSTRUCTIONS =
   "Vex evaluates one formula at each record of a collection, a tree or a grid. Read vex_catalog before a program uses an op. Test a program with vex_check, vex_evaluate and vex_explain before you write it into a project. vex_module gives a standalone module of a program.";
 
 /**

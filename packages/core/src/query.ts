@@ -7,7 +7,7 @@
  * - The programs use the ops `contains`, `lower`, `eq` and `epochMillis` of the domains of the caller. They also use `and` and `includes` of the kernel.
  */
 import type { AnyDomain } from "./domain.ts";
-import { evaluate } from "./evaluate.ts";
+import { evaluate, isFieldName } from "./evaluate.ts";
 import { app, lit, type Expr } from "./ir.ts";
 import { parse, serialize } from "./json.ts";
 import { space, type Space } from "./space.ts";
@@ -90,6 +90,7 @@ function fieldType(types: ReadonlySet<FieldType>): FieldType {
 /**
  * This function gives the catalog of the fields of the records, by the name of the field (QUERY.CATALOG).
  * A field with no value in each record is not in it. A number that is not finite is no value.
+ * A name that a reference cannot read (`isFieldName`, REF.FORBIDDEN) is not in it, for example `__proto__`.
  * The type of a field comes from the forms of its values (QUERY.CATALOG.TYPE).
  * A text, a boolean or a date field with `maxFacet` or fewer different values is a facet (QUERY.CATALOG.FACET).
  */
@@ -99,7 +100,7 @@ export function fieldCatalog(records: readonly QueryRecord[], options: CatalogOp
   const fields = new Map<string, { types: Set<FieldType>; counts: Map<string, number>; values: FieldValue[] }>();
   for (const record of records) {
     for (const [name, value] of Object.entries(record)) {
-      if (skip.has(name) || !isValue(value)) continue;
+      if (skip.has(name) || !isFieldName(name) || !isValue(value)) continue;
       let field = fields.get(name);
       if (field === undefined) fields.set(name, (field = { types: new Set(), counts: new Map(), values: [] }));
       field.types.add(typeOfValue(value));
@@ -241,7 +242,8 @@ export function matchView(view: RecordView, records: readonly QueryRecord[], opt
   const compile = (part: RecordView): Expr | null => compileView(part, catalog, options);
   const base = compile({ ...(view.text === undefined ? {} : { text: view.text }), ...(view.formula === undefined ? {} : { formula: view.formula }) });
   const terms = facets.map((name) => {
-    const values = view.where?.[name] ?? [];
+    // Only an own field counts. Thus a facet named `__proto__` does not read the prototype.
+    const values = view.where !== undefined && Object.hasOwn(view.where, name) ? (view.where[name] ?? []) : [];
     return values.length === 0 ? null : compile({ where: { [name]: values } });
   });
   // A field of `where` that is not a facet still filters the records.
@@ -346,6 +348,9 @@ export interface ViewLink {
 const encode = (value: string): string => encodeURIComponent(value);
 const decode = (value: string): string => decodeURIComponent(value.replaceAll("+", " "));
 
+/** This function tells if a text of the view is there and not empty. */
+const filled = (value: string | undefined): value is string => value !== undefined && value !== "";
+
 /** This function gives the key of a facet in a link. An empty name, a key of the view and a name that starts with `f.` get the prefix `f.`. */
 const facetKey = (name: string): string => (name === "" || VIEW_KEYS.includes(name) || name.startsWith("f.") ? `f.${name}` : name);
 
@@ -353,18 +358,20 @@ const facetKey = (name: string): string => (name === "" || VIEW_KEYS.includes(na
  * This function gives the query of the link of a view, with no `?` (QUERY.LINK).
  *
  * - The order is `q`, the facets by name, `sort`, `group`, `show`, `box`, `vex` and the rest.
- * - The values of a facet are joined with commas. A comma in a value is encoded, so each value comes back.
- * - The sort is the field, with `-` before it for the direction `desc`.
+ * - The different values of a facet are joined with commas. A comma in a value is encoded, so each value comes back.
+ * - The sort is the field, with `-` before it for the direction `desc`. A `-` at the start of the field is encoded.
+ * - An empty search text, sort field, group or box is not in the link.
  * - The formula is `vex`, the encoded text of `serialize`. A formula that `serialize` refuses throws a `TypeError` (QUERY.LINK.FORMULA).
+ * - A text with a lone surrogate has no form in a link. Thus `encodeURIComponent` throws its `URIError`.
  */
 export function viewToQuery(view: RecordView, rest: readonly string[] = [], options: LinkOptions = {}): string {
   const parts: string[] = [];
-  if (view.text !== undefined && view.text !== "") parts.push(`q=${encode(view.text)}`);
-  for (const [name, values] of whereEntries(view)) parts.push(`${encode(facetKey(name))}=${values.map(encode).join(",")}`);
-  if (view.sort !== undefined) parts.push(`sort=${view.sort.dir === "desc" ? "-" : ""}${encode(view.sort.field)}`);
-  if (view.group !== undefined) parts.push(`group=${encode(view.group)}`);
+  if (filled(view.text)) parts.push(`q=${encode(view.text)}`);
+  for (const [name, values] of whereEntries(view)) parts.push(`${encode(facetKey(name))}=${[...new Set(values)].map(encode).join(",")}`);
+  if (view.sort !== undefined && view.sort.field !== "") parts.push(`sort=${view.sort.dir === "desc" ? "-" : ""}${encode(view.sort.field).replace(/^-/, "%2D")}`);
+  if (filled(view.group)) parts.push(`group=${encode(view.group)}`);
   if (view.show !== undefined) parts.push(`show=${view.show}`);
-  if (view.box !== undefined) parts.push(`box=${encode(view.box)}`);
+  if (filled(view.box)) parts.push(`box=${encode(view.box)}`);
   if (view.formula !== undefined) {
     const text = serialize(view.formula, options.domains);
     if (!text.ok) throw new TypeError(`The formula of the view has no JSON form: ${text.error.message}`);
@@ -376,17 +383,20 @@ export function viewToQuery(view: RecordView, rest: readonly string[] = [], opti
 type MutableView = { -readonly [K in keyof RecordView]: RecordView[K] };
 
 /**
- * This function reads a view from the query of a link, with or without `?` (QUERY.LINK.READ).
+ * This function reads a view from the query of a link, with or without `?` (QUERY.LINK.READ). A `#` ends the query.
  * A key is a facet when it is in `facets`, or when it starts with `f.`. A part with another key goes into `rest`.
+ * An empty value of a facet is a value, as in `URLSearchParams`. A facet named `__proto__` is a field of `where`.
  * A part with a bad value is a problem, and the view does not get it. `parse` reads the formula (QUERY.LINK.FORMULA).
  */
 export function viewFromQuery(query: string, facets: Iterable<string>, options: LinkOptions = {}): ViewLink {
   const facetNames = new Set(facets);
   const problems: string[] = [];
   const rest: string[] = [];
-  const where: Record<string, string[]> = {};
+  // A map keeps each name, also `__proto__`. Object.fromEntries then makes each name a field.
+  const where = new Map<string, string[]>();
   const view: MutableView = {};
-  for (const part of query.replace(/^\?/, "").split("&")) {
+  const [search = ""] = query.replace(/^\?/, "").split("#");
+  for (const part of search.split("&")) {
     if (part === "") continue;
     const at = part.indexOf("=");
     const rawKey = at < 0 ? part : part.slice(0, at);
@@ -401,19 +411,17 @@ export function viewFromQuery(query: string, facets: Iterable<string>, options: 
     const facet = key.startsWith("f.") ? key.slice(2) : !VIEW_KEYS.includes(key) && facetNames.has(key) ? key : undefined;
     try {
       if (facet !== undefined) {
-        const values = raw
-          .split(",")
-          .map(decode)
-          .filter((value) => value !== "");
-        if (values.length > 0) where[facet] = [...new Set([...(where[facet] ?? []), ...values])];
+        const values = raw.split(",").map(decode);
+        where.set(facet, [...new Set([...(where.get(facet) ?? []), ...values])]);
       } else if (key === "q") {
         const text = decode(raw);
         if (text !== "") view.text = text;
       } else if (key === "sort") {
-        const value = decode(raw);
-        const name = value.replace(/^-/, "");
+        // The direction is the raw `-`. An encoded `-` (`%2D`) is the start of the field.
+        const desc = raw.startsWith("-");
+        const name = decode(desc ? raw.slice(1) : raw);
         if (name === "") problems.push("The sort has no field.");
-        else view.sort = { field: name, dir: value.startsWith("-") ? "desc" : "asc" };
+        else view.sort = { field: name, dir: desc ? "desc" : "asc" };
       } else if (key === "show") {
         const show = decode(raw);
         if (show === "glow" || show === "only") view.show = show;
@@ -432,6 +440,6 @@ export function viewFromQuery(query: string, facets: Iterable<string>, options: 
       problems.push(`The value of "${key}" does not decode.`);
     }
   }
-  if (Object.keys(where).length > 0) view.where = where;
+  if (where.size > 0) view.where = Object.fromEntries(where);
   return { view, rest, problems };
 }

@@ -90,6 +90,9 @@ describe("fieldCatalog", () => {
     expect(records).toEqual(copy);
     const odd: QueryRecord[] = [{ id: "a", n: Number.NaN }, { id: "b", n: Number.POSITIVE_INFINITY }, { id: "c", m: 1 }];
     expect(fieldCatalog(odd).map((f) => f.name)).toEqual(["m"]);
+    // A reference cannot read these names (REF.FORBIDDEN), so a facet of them can match no record.
+    const unread: QueryRecord[] = [{ id: "a", "": "x", ["__proto__"]: "y", constructor: "z", prototype: "w", ok: "v" }];
+    expect(fieldCatalog(unread).map((f) => f.name)).toEqual(["ok"]);
   });
 
   it("QUERY.CATALOG.TYPE: gives a field with values of more than one type the type text, but times and dates make a time field", () => {
@@ -310,6 +313,9 @@ describe("viewToQuery and viewFromQuery", () => {
     { name: "facets by name, with a comma in a value", view: { where: { state: ["open"], kind: ["ask", "a,b"] } }, query: "kind=ask,a%2Cb&state=open" },
     { name: "a sort down", view: { sort: { field: "at", dir: "desc" } }, query: "sort=-at" },
     { name: "a sort up", view: { sort: { field: "title", dir: "asc" } }, query: "sort=title" },
+    { name: "a sort up of a field that starts with a dash", view: { sort: { field: "-x", dir: "asc" } }, query: "sort=%2Dx" },
+    { name: "a sort down of a field that starts with a dash", view: { sort: { field: "-x", dir: "desc" } }, query: "sort=-%2Dx" },
+    { name: "an empty value of a facet", view: { where: { kind: [""], state: ["", "open"] } }, query: "kind=&state=,open" },
     { name: "the group, the show and the box", view: { group: "topic", show: "only", box: "ask:pick-a-site" }, query: "group=topic&show=only&box=ask%3Apick-a-site" },
     { name: "the show glow", view: { show: "glow" }, query: "show=glow" },
     { name: "a facet with the name of a key", view: { where: { q: ["x"], "f.x": ["y"] } }, query: "f.f.x=y&f.q=x" },
@@ -326,7 +332,11 @@ describe("viewToQuery and viewFromQuery", () => {
   it("QUERY.LINK: writes each part in its order: the search, the facets, the sort, the group, the show, the box, the formula and the rest", () => {
     const view: RecordView = { box: "b", show: "glow", group: "g", sort: { field: "s", dir: "asc" }, where: { state: ["open"], kind: ["ask"], done: [] }, text: "t", formula: lit(true) };
     expect(viewToQuery(view, ["zz=1"]).split("&").map((part) => part.split("=")[0])).toEqual(["q", "kind", "state", "sort", "group", "show", "box", "vex", "zz"]);
-    expect(viewToQuery({ text: "" })).toBe("");
+    // An empty text, sort field, group or box is not in the link, and a value of a facet is in it one time.
+    expect(viewToQuery({ text: "", group: "", box: "", sort: { field: "", dir: "desc" } })).toBe("");
+    expect(viewToQuery({ where: { kind: ["ask", "ask", "note"] } })).toBe("kind=ask,note");
+    // A lone surrogate has no form in UTF-8, so encodeURIComponent throws.
+    expect(() => viewToQuery({ text: "\uD800" })).toThrow(URIError);
   });
 
   it("QUERY.LINK.FORMULA: writes and reads a domain value of the formula with the domains, and a formula with no JSON form throws a TypeError", () => {
@@ -343,12 +353,27 @@ describe("viewToQuery and viewFromQuery", () => {
 
   it("QUERY.LINK.READ: keeps each part that the view does not use, in its order, and reads a plus as a space", () => {
     const read = viewFromQuery("a=1&q=pick+a&kind=ask&b=%ZZ&&kind=request,ask,&box=&group=&q=&f.=x", facets);
-    expect(read).toEqual({ view: { text: "pick a", where: { kind: ["ask", "request"], "": ["x"] } }, rest: ["a=1", "b=%ZZ"], problems: [] });
-    expect(viewToQuery(read.view, read.rest)).toBe("q=pick%20a&f.=x&kind=ask,request&a=1&b=%ZZ");
-    expect(viewFromQuery("kind&state=,", facets)).toEqual({ view: {}, rest: [], problems: [] });
+    expect(read).toEqual({ view: { text: "pick a", where: { kind: ["ask", "request", ""], "": ["x"] } }, rest: ["a=1", "b=%ZZ"], problems: [] });
+    expect(viewToQuery(read.view, read.rest)).toBe("q=pick%20a&f.=x&kind=ask,request,&a=1&b=%ZZ");
+    // A key with no value has the value "", as in URLSearchParams.
+    expect(viewFromQuery("kind&state=,", facets)).toEqual({ view: { where: { kind: [""], state: [""] } }, rest: [], problems: [] });
     expect(viewFromQuery("other", facets)).toEqual({ view: {}, rest: ["other"], problems: [] });
+    // A # ends the query: the fragment of a link is not a part.
+    expect(viewFromQuery("?q=a#kind=ask&b=1", facets)).toEqual({ view: { text: "a" }, rest: [], problems: [] });
     // A key of the view is not a facet, also when the facets name it. A key that starts with f. is always a facet.
     expect(viewFromQuery("q=x&f.q=y&f.new=z", ["q"]).view).toEqual({ text: "x", where: { q: ["y"], new: ["z"] } });
+  });
+
+  it("QUERY.LINK.READ: a facet named __proto__ is a field of where, and the prototype does not change", () => {
+    const where = viewFromQuery("__proto__=x&f.constructor=y", ["__proto__"]).view.where ?? {};
+    expect([Object.keys(where), Object.getPrototypeOf(where) === Object.prototype, Object.hasOwn(where, "__proto__")]).toEqual([["__proto__", "constructor"], true, true]);
+    expect(viewToQuery({ where })).toBe("__proto__=x&constructor=y");
+    // matchView reads only an own field of where, so a view with no facet __proto__ matches each record.
+    const protoRecords: QueryRecord[] = [{ id: "a", ["__proto__"]: "x" }, { id: "b" }];
+    expect(matchView({ where: {} }, protoRecords, { domains: DOMAINS, facets: ["__proto__"] }).matches).toEqual(["a", "b"]);
+    // A reference cannot read the field __proto__ (REF.FORBIDDEN), so its facet matches no record, and the catalog leaves it out.
+    expect(matchView({ where: { ["__proto__"]: ["x"] } }, protoRecords, { domains: DOMAINS, facets: ["__proto__"] }).matches).toEqual([]);
+    expect(fieldCatalog(protoRecords)).toEqual([]);
   });
 
   it("QUERY.LINK.READ QUERY.LINK.FORMULA: gives a problem for each bad value, and the view does not get it", () => {

@@ -1,6 +1,6 @@
 /**
- * The measure helper of the benches of Vex, with the interface `paired-time/1` of the fleet (MEASURE-ISOLATE of
- * highways and packing). The rule of the fleet of 2026-10-30: a measurement isolates what it measures. The arms of a
+ * The measure helper of the benches of Vex, with the interface `paired-time/1` (MEASURE-ISOLATE of
+ * highways and packing). The rule of 2026-10-30: a measurement isolates what it measures. The arms of a
  * comparison alternate on each input, and a copy of the base (the A/A arm) gives the noise floor.
  *
  * - Mode `process`: one process. In each round, the arms run in turn on each input, and odd rounds reverse the order.

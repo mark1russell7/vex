@@ -5,7 +5,7 @@ name: Nightly
 # this workflow are report only by design: mutation-weekly.yml reads each file and holds the gate (LANE.DELAY).
 on:
   schedule:
-    # Each scheduled heavy run of the fleet has its own minute (docs/STRATEGY.md of the fleet, 2026-10-30).
+    # The rule runner-budget of @mark1russell7/conventions gives the minute of each schedule. Thus the scheduled runs of the account start at different minutes.
     - cron: "30 3 * * *"
   workflow_dispatch:
     inputs:
@@ -18,12 +18,12 @@ on:
 
 permissions: {}
 
-# The runner slots of the account are a budget: one run for each branch. A new run on the same branch stops the old
-# run, and a run on a branch does not stop a run on another branch.
-# The event name is in the key: a dispatch with other inputs never cancels or holds a scheduled run (fleet rule of 2026-11-02).
+# The runner slots of the account are a budget: one run for each branch and event. The workflow does not start on a pull
+# request, so no run stops another: a newer run waits, and each scheduled run finishes.
+# The event name is in the key, so a dispatch with other inputs never holds a scheduled run.
 concurrency:
   group: nightly-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -124,7 +124,7 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      # At most 3 jobs of the matrix at one time, so the gates and the releases of the fleet keep their slots.
+      # At most 3 jobs of the matrix at one time, so the gates and the releases of the other repositories of the account keep their slots.
       max-parallel: 3
       matrix:
         package: ${{ fromJSON(needs.lane-plan.outputs.parts) }}

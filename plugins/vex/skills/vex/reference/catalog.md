@@ -110,7 +110,7 @@ Booleans. The values are of the type `boolean`.
 
 ## `TextDomain`
 
-Texts. The values are of the type `string`.
+Texts. `epochMillis` reads an ISO 8601 time with `Z` or an offset, and cuts a fraction to milliseconds: it does not round it. The values are of the type `string`.
 
 | Op | Call | Result | Lifts numbers | Laws | Identity | Moves |
 |---|---|---|---|---|---|---|

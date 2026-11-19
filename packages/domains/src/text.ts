@@ -51,11 +51,12 @@ export const TextDomain: Domain<"Text", string, TextOps> = defineDomain<"Text", 
       size: { size: [1], inner: [0], item: [0], keys: "position" },
     },
     // The milliseconds since 1970-01-01T00:00:00Z of an ISO 8601 time, so the ops of numbers compare times
-    // (TEXT.EPOCHMILLIS). A time needs `Z` or an offset, because a local time depends on the computer. A bad text throws,
-    // so it gives #CALC!. The function reads no name outside itself, so a module can copy it.
+    // (TEXT.EPOCHMILLIS). A time needs `Z` or an offset, because a local time depends on the computer. A `t` and a `z` in
+    // lower case are valid, as in RFC 3339 section 5.6. A bad text throws, so it gives #CALC!. The function reads no name
+    // outside itself, so a module can copy it.
     epochMillis: {
       fn: (a: string): number => {
-        const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:(Z)|([+-])(\d{2}):(\d{2})))?$/.exec(a);
+        const m = /^(\d{4})-(\d{2})-(\d{2})(?:[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:([Zz])|([+-])(\d{2}):(\d{2})))?$/.exec(a);
         if (m === null) throw new Error('"epochMillis" needs an ISO 8601 text, for example 2026-03-01 or 2026-03-01T12:30:00Z');
         const n = (i: number): number => Number(m[i] ?? "0");
         const [y, mo, d, h, mi, s, oh, om] = [n(1), n(2), n(3), n(4), n(5), n(6), n(10), n(11)];

@@ -1,5 +1,14 @@
 # @mark1russell7/vex
 
+## 0.20.1
+
+### Patch Changes
+
+- 87b73aa: `epochMillis` of `TextDomain` reads a `t` and a `z` in lower case, as RFC 3339 §5.6 permits. `ISO_TIME` of the entry `@mark1russell7/vex/query` reads the same forms, so the catalog of the fields agrees with the op. The catalog of the tools tells that `epochMillis` cuts a fraction to milliseconds and does not round it.
+- b38492a: The entry `@mark1russell7/vex/query` holds a query model of flat records (spec section 13). It imports only the core. `fieldCatalog` finds the fields of the records, with their types and their facets. `compileView` compiles a view of search words, facets and a formula to one program.
+  
+  `matchView` gives the matches and the counts of the facets. `sortIds` sorts by a field, and a time field sorts by `epochMillis`. `viewToQuery` and `viewFromQuery` write a view into the query of a link and read it back. `sameFilter` compares two views.
+
 ## 0.20.0
 
 ### Minor Changes

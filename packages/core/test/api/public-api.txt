@@ -6,14 +6,14 @@
 
 ## . (build/index.d.ts): names
 
-Addr: build/index.d.ts#Addr
+Addr: build/ir.chunk.d.ts#Addr
 AllowsOther: build/index.d.ts#AllowsOther
-AnyDomain: build/index.d.ts#AnyDomain
+AnyDomain: build/ir.chunk.d.ts#AnyDomain
 Arg: build/index.d.ts#Arg
 ArgInput: build/index.d.ts#ArgInput
 ArgValue: build/index.d.ts#ArgValue
 ArrayKey: build/index.d.ts#ArrayKey
-Axis: build/index.d.ts#Axis
+Axis: build/ir.chunk.d.ts#Axis
 AxisBody: build/index.d.ts#AxisBody
 AxisOpts: build/index.d.ts#AxisOpts
 CELL_KIND: build/index.d.ts#CELL_KIND
@@ -29,14 +29,14 @@ ChainOf: build/index.d.ts#ChainOf
 CompileFn: build/index.d.ts#CompileFn
 CompileOptions: build/index.d.ts#CompileOptions
 DEFAULT_MAX_STEP: build/index.d.ts#DEFAULT_MAX_STEP
-DataLimit: build/index.d.ts#DataLimit
+DataLimit: build/ir.chunk.d.ts#DataLimit
 DeclaredType: build/index.d.ts#DeclaredType
 Dependency: build/index.d.ts#Dependency
 Direction: build/index.d.ts#Direction
-Domain: build/index.d.ts#Domain
+Domain: build/ir.chunk.d.ts#Domain
 DomainFor: build/index.d.ts#DomainFor
 DomainMembers: build/index.d.ts#DomainMembers
-DomainSpec: build/index.d.ts#DomainSpec
+DomainSpec: build/ir.chunk.d.ts#DomainSpec
 DomainValue: build/index.d.ts#DomainValue
 type Envelope: @mark1russell7/coeval#Envelope (external)
 ErrorCode: build/index.d.ts#ErrorCode
@@ -45,22 +45,22 @@ ErrorExtra: build/index.d.ts#ErrorExtra
 ErrorKind: build/index.d.ts#ErrorKind
 ErrorText: build/index.d.ts#ErrorText
 EvalOptions: build/index.d.ts#EvalOptions
-Expr: build/index.d.ts#Expr
-ExprOf: build/index.d.ts#ExprOf
-ExprTag: build/index.d.ts#ExprTag
+Expr: build/ir.chunk.d.ts#Expr
+ExprOf: build/ir.chunk.d.ts#ExprOf
+ExprTag: build/ir.chunk.d.ts#ExprTag
 ExtContext: build/index.d.ts#ExtContext
 ExtHandler: build/index.d.ts#ExtHandler
-FixJoin: build/index.d.ts#FixJoin
+FixJoin: build/ir.chunk.d.ts#FixJoin
 FixValue: build/index.d.ts#FixValue
-FixedMove: build/index.d.ts#FixedMove
+FixedMove: build/ir.chunk.d.ts#FixedMove
 FnCalls: build/index.d.ts#FnCalls
 FnDef: build/index.d.ts#FnDef
-FnOp: build/index.d.ts#FnOp
+FnOp: build/ir.chunk.d.ts#FnOp
 FnParamKind: build/index.d.ts#FnParamKind
 FnTable: build/index.d.ts#FnTable
 FreeFn: build/index.d.ts#FreeFn
 GridKey: build/index.d.ts#GridKey
-ItemNames: build/index.d.ts#ItemNames
+ItemNames: build/ir.chunk.d.ts#ItemNames
 type Json: @mark1russell7/coeval#Json (external)
 KernelPlan: build/index.d.ts#KernelPlan
 KernelRunOptions: build/index.d.ts#KernelRunOptions
@@ -68,8 +68,8 @@ KeysOfType: build/index.d.ts#KeysOfType
 KindValue: build/index.d.ts#KindValue
 LIST_OPS: build/index.d.ts#LIST_OPS
 LIST_SIZES: build/index.d.ts#LIST_SIZES
-Law: build/index.d.ts#Law
-LiftedOp: build/index.d.ts#LiftedOp
+Law: build/ir.chunk.d.ts#Law
+LiftedOp: build/ir.chunk.d.ts#LiftedOp
 ListBody: build/index.d.ts#ListBody
 ListChain: build/index.d.ts#ListChain
 ListItem: build/index.d.ts#ListItem
@@ -82,36 +82,36 @@ LoopStep: build/index.d.ts#LoopStep
 LoopVar: build/index.d.ts#LoopVar
 LoopVars: build/index.d.ts#LoopVars
 MAX_DOCUMENT_DEPTH: build/index.d.ts#MAX_DOCUMENT_DEPTH
-MAX_ITERATIONS: build/index.d.ts#MAX_ITERATIONS
+MAX_ITERATIONS: build/ir.chunk.d.ts#MAX_ITERATIONS
 MAX_NESTING: build/index.d.ts#MAX_NESTING
 Merge: build/index.d.ts#Merge
 MethodKeys: build/index.d.ts#MethodKeys
-ModuleForm: build/index.d.ts#ModuleForm
+ModuleForm: build/ir.chunk.d.ts#ModuleForm
 Monoid: build/index.d.ts#Monoid
-Monotone: build/index.d.ts#Monotone
+Monotone: build/ir.chunk.d.ts#Monotone
 type MonotoneOptions: build/index.d.ts#MonotoneOptions
-Move: build/index.d.ts#Move
-Names: build/index.d.ts#Names
+Move: build/ir.chunk.d.ts#Move
+Names: build/ir.chunk.d.ts#Names
 NoFns: build/index.d.ts#NoFns
 OpNames: build/index.d.ts#OpNames
 OpParams: build/index.d.ts#OpParams
 OpReturn: build/index.d.ts#OpReturn
-OpSpec: build/index.d.ts#OpSpec
-OpTable: build/index.d.ts#OpTable
+OpSpec: build/ir.chunk.d.ts#OpSpec
+OpTable: build/ir.chunk.d.ts#OpTable
 OpsProxy: build/index.d.ts#OpsProxy
 Optional: build/index.d.ts#Optional
 OtherMembers: build/index.d.ts#OtherMembers
 ParamChains: build/index.d.ts#ParamChains
-ParamKind: build/index.d.ts#ParamKind
+ParamKind: build/ir.chunk.d.ts#ParamKind
 Position: build/index.d.ts#Position
-PrimitiveKind: build/index.d.ts#PrimitiveKind
+PrimitiveKind: build/ir.chunk.d.ts#PrimitiveKind
 Program: build/index.d.ts#Program
 ProgramStep: build/index.d.ts#ProgramStep
 Read: build/index.d.ts#Read
 ReduceOpts: build/index.d.ts#ReduceOpts
-ResolvedOp: build/index.d.ts#ResolvedOp
+ResolvedOp: build/ir.chunk.d.ts#ResolvedOp
 Result: build/index.d.ts#Result
-ReturnKind: build/index.d.ts#ReturnKind
+ReturnKind: build/ir.chunk.d.ts#ReturnKind
 Root: build/index.d.ts#Root
 RunOptions: build/index.d.ts#RunOptions
 SPECIAL_FORMS: build/index.d.ts#SPECIAL_FORMS
@@ -121,12 +121,12 @@ SheetRoot: build/index.d.ts#SheetRoot
 SheetRow: build/index.d.ts#SheetRow
 SheetRun: build/index.d.ts#SheetRun
 SheetTable: build/index.d.ts#SheetTable
-SizeMeasure: build/index.d.ts#SizeMeasure
+SizeMeasure: build/ir.chunk.d.ts#SizeMeasure
 SizeOptions: build/index.d.ts#SizeOptions
-SizeRule: build/index.d.ts#SizeRule
-SizeTerm: build/index.d.ts#SizeTerm
-SizeTerms: build/index.d.ts#SizeTerms
-SizeUse: build/index.d.ts#SizeUse
+SizeRule: build/ir.chunk.d.ts#SizeRule
+SizeTerm: build/ir.chunk.d.ts#SizeTerm
+SizeTerms: build/ir.chunk.d.ts#SizeTerms
+SizeUse: build/ir.chunk.d.ts#SizeUse
 Space: build/index.d.ts#Space
 SpaceKind: build/index.d.ts#SpaceKind
 SpecialForm: build/index.d.ts#SpecialForm
@@ -147,111 +147,111 @@ VexError: build/index.d.ts#VexError
 VexList: build/index.d.ts#VexList
 VexOptions: build/index.d.ts#VexOptions
 type VexStep: build/index.d.ts#VexStep
-addrExprs: build/index.d.ts#addrExprs
-app: build/index.d.ts#app
+addrExprs: build/ir.chunk.d.ts#addrExprs
+app: build/ir.chunk.d.ts#app
 applyMove: build/index.d.ts#applyMove
 asList: build/index.d.ts#asList
-axes: build/index.d.ts#axes
-axisExprs: build/index.d.ts#axisExprs
+axes: build/ir.chunk.d.ts#axes
+axisExprs: build/ir.chunk.d.ts#axisExprs
 axisTargets: build/index.d.ts#axisTargets
-call: build/index.d.ts#call
+call: build/ir.chunk.d.ts#call
 cell: build/index.d.ts#cell
 chainResult: build/index.d.ts#chainResult
-children: build/index.d.ts#children
+children: build/ir.chunk.d.ts#children
 codeOf: build/index.d.ts#codeOf
 columnOrder: build/index.d.ts#columnOrder
 compile: build/index.d.ts#compile
-dataLimit: build/index.d.ts#dataLimit
-defineDomain: build/index.d.ts#defineDomain
+dataLimit: build/ir.chunk.d.ts#dataLimit
+defineDomain: build/ir.chunk.d.ts#defineDomain
 deps: build/index.d.ts#deps
 describeType: build/index.d.ts#describeType
-domainOf: build/index.d.ts#domainOf
-each: build/index.d.ts#each
+domainOf: build/ir.chunk.d.ts#domainOf
+each: build/ir.chunk.d.ts#each
 errorAt: build/index.d.ts#errorAt
 errorText: build/index.d.ts#errorText
 evaluate: build/index.d.ts#evaluate
 explain: build/index.d.ts#explain
-ext: build/index.d.ts#ext
+ext: build/ir.chunk.d.ts#ext
 fail: build/index.d.ts#fail
-findMethod: build/index.d.ts#findMethod
-fix: build/index.d.ts#fix
+findMethod: build/ir.chunk.d.ts#findMethod
+fix: build/ir.chunk.d.ts#fix
 fixAddr: build/index.d.ts#fixAddr
 fixRounds: build/index.d.ts#fixRounds
 fixValueError: build/index.d.ts#fixValueError
-fn: build/index.d.ts#fn
-fold: build/index.d.ts#fold
+fn: build/ir.chunk.d.ts#fn
+fold: build/ir.chunk.d.ts#fold
 formatError: build/index.d.ts#formatError
 formatTrace: build/index.d.ts#formatTrace
 fromDocument: build/index.d.ts#fromDocument
 getOr: build/index.d.ts#getOr
-index: build/index.d.ts#index
-isAxis: build/index.d.ts#isAxis
+index: build/ir.chunk.d.ts#index
+isAxis: build/ir.chunk.d.ts#isAxis
 isCellRef: build/index.d.ts#isCellRef
 isDepthError: build/index.d.ts#isDepthError
 isDocument: build/index.d.ts#isDocument
-isExpr: build/index.d.ts#isExpr
+isExpr: build/ir.chunk.d.ts#isExpr
 isFieldName: build/index.d.ts#isFieldName
-isFixedAddr: build/index.d.ts#isFixedAddr
+isFixedAddr: build/ir.chunk.d.ts#isFixedAddr
 isListOp: build/index.d.ts#isListOp
-isMove: build/index.d.ts#isMove
+isMove: build/ir.chunk.d.ts#isMove
 isNone: build/index.d.ts#isNone
-isOpName: build/index.d.ts#isOpName
+isOpName: build/ir.chunk.d.ts#isOpName
 isSome: build/index.d.ts#isSome
 isStackOverflow: build/index.d.ts#isStackOverflow
 isVexList: build/index.d.ts#isVexList
-iterate: build/index.d.ts#iterate
+iterate: build/ir.chunk.d.ts#iterate
 joinKind: build/index.d.ts#joinKind
 kernelPlan: build/index.d.ts#kernelPlan
-key: build/index.d.ts#key
+key: build/ir.chunk.d.ts#key
 labelOf: build/index.d.ts#labelOf
-last: build/index.d.ts#last
-let_: build/index.d.ts#let_
-liftsAt: build/index.d.ts#liftsAt
-limitAxis: build/index.d.ts#limitAxis
-listItemKind: build/index.d.ts#listItemKind
-listOf: build/index.d.ts#listOf
+last: build/ir.chunk.d.ts#last
+let_: build/ir.chunk.d.ts#let_
+liftsAt: build/ir.chunk.d.ts#liftsAt
+limitAxis: build/ir.chunk.d.ts#limitAxis
+listItemKind: build/ir.chunk.d.ts#listItemKind
+listOf: build/ir.chunk.d.ts#listOf
 listOps: build/index.d.ts#listOps
-lit: build/index.d.ts#lit
+lit: build/ir.chunk.d.ts#lit
 mapResult: build/index.d.ts#mapResult
 matchesKind: build/index.d.ts#matchesKind
 monoids: build/index.d.ts#monoids
 monotoneError: build/index.d.ts#monotoneError
-moveExpr: build/index.d.ts#moveExpr
+moveExpr: build/ir.chunk.d.ts#moveExpr
 nestingError: build/index.d.ts#nestingError
 nestingOf: build/index.d.ts#nestingOf
 noKeyError: build/index.d.ts#noKeyError
 none: build/index.d.ts#none
-offset: build/index.d.ts#offset
+offset: build/ir.chunk.d.ts#offset
 ok: build/index.d.ts#ok
-origin: build/index.d.ts#origin
-other: build/index.d.ts#other
-parent: build/index.d.ts#parent
+origin: build/ir.chunk.d.ts#origin
+other: build/ir.chunk.d.ts#other
+parent: build/ir.chunk.d.ts#parent
 parse: build/index.d.ts#parse
 previewValue: build/index.d.ts#previewValue
 programStep: build/index.d.ts#programStep
 readsOf: build/index.d.ts#readsOf
-rec: build/index.d.ts#rec
-ref: build/index.d.ts#ref
+rec: build/ir.chunk.d.ts#rec
+ref: build/ir.chunk.d.ts#ref
 resolveAddr: build/index.d.ts#resolveAddr
-resolveOp: build/index.d.ts#resolveOp
+resolveOp: build/ir.chunk.d.ts#resolveOp
 ruleOf: build/index.d.ts#ruleOf
 safeIs: build/index.d.ts#safeIs
 serialize: build/index.d.ts#serialize
-shapeError: build/index.d.ts#shapeError
+shapeError: build/ir.chunk.d.ts#shapeError
 sizeError: build/index.d.ts#sizeError
 sizeOf: build/index.d.ts#sizeOf
 some: build/index.d.ts#some
 space: build/index.d.ts#space
-splitLimit: build/index.d.ts#splitLimit
+splitLimit: build/ir.chunk.d.ts#splitLimit
 stepError: build/index.d.ts#stepError
 toDocument: build/index.d.ts#toDocument
 toKernelError: build/index.d.ts#toKernelError
 toOptional: build/index.d.ts#toOptional
-toPath: build/index.d.ts#toPath
+toPath: build/ir.chunk.d.ts#toPath
 toVexError: build/index.d.ts#toVexError
 toVexResult: build/index.d.ts#toVexResult
 traversal: build/index.d.ts#traversal
-v: build/index.d.ts#v
+v: build/ir.chunk.d.ts#v
 vex: build/index.d.ts#vex
 vexChecker: build/index.d.ts#vexChecker
 vexDefinitions: build/index.d.ts#vexDefinitions
@@ -261,16 +261,39 @@ vexMachine: build/index.d.ts#vexMachine
 vexSelf: build/index.d.ts#vexSelf
 worstRow: build/index.d.ts#worstRow
 
-## Declarations
+## ./query (build/query.d.ts): names
 
-### build/index.d.ts#Addr
-export type Addr = readonly Move[];
+CatalogOptions: build/query.d.ts#CatalogOptions
+CompileOptions: build/query.d.ts#CompileOptions
+FacetValue: build/query.d.ts#FacetValue
+FieldInfo: build/query.d.ts#FieldInfo
+FieldType: build/query.d.ts#FieldType
+FieldValue: build/query.d.ts#FieldValue
+ISO_DATE: build/query.d.ts#ISO_DATE
+ISO_TIME: build/query.d.ts#ISO_TIME
+LinkOptions: build/query.d.ts#LinkOptions
+MatchOptions: build/query.d.ts#MatchOptions
+MatchResult: build/query.d.ts#MatchResult
+QueryRecord: build/query.d.ts#QueryRecord
+RecordView: build/query.d.ts#RecordView
+VIEW_KEYS: build/query.d.ts#VIEW_KEYS
+ViewLink: build/query.d.ts#ViewLink
+ViewSort: build/query.d.ts#ViewSort
+compileView: build/query.d.ts#compileView
+fieldCatalog: build/query.d.ts#fieldCatalog
+isActive: build/query.d.ts#isActive
+matchView: build/query.d.ts#matchView
+sameFilter: build/query.d.ts#sameFilter
+searchWords: build/query.d.ts#searchWords
+sortIds: build/query.d.ts#sortIds
+sortKey: build/query.d.ts#sortKey
+viewFromQuery: build/query.d.ts#viewFromQuery
+viewToQuery: build/query.d.ts#viewToQuery
+
+## Declarations
 
 ### build/index.d.ts#AllowsOther
 export type AllowsOther<K extends string> = string extends K ? true : `${number}` extends K ? true : [Exclude<K, LastOf<K>>] extends [never] ? false : [Exclude<Exclude<K, LastOf<K>>, LastOf<Exclude<K, LastOf<K>>>>] extends [never] ? true : false;
-
-### build/index.d.ts#AnyDomain
-export type AnyDomain = Domain<string, any, Readonly<Record<string, OpSpec<any>>>>;
 
 ### build/index.d.ts#Arg
 export interface Arg<T> {
@@ -289,49 +312,6 @@ export type ArgValue<Ctx extends ChainContext, A> = A extends Arg<infer T> ? T :
 
 ### build/index.d.ts#ArrayKey
 export type ArrayKey = `${number}`;
-
-### build/index.d.ts#Axis
-export type Axis = {
-  readonly t: "all";
-} | {
-  readonly t: "others";
-} | {
-  readonly t: "other";
-} | {
-  readonly t: "neighbors";
-  readonly n: 4 | 8;
-} | {
-  readonly t: "children";
-} | {
-  readonly t: "ancestors";
-} | {
-  readonly t: "descendants";
-} | {
-  readonly t: "siblings";
-} | {
-  readonly t: "window";
-  readonly from: number;
-  readonly to: number;
-} | {
-  readonly t: "table";
-  readonly name: string;
-} | {
-  readonly t: "successors";
-} | {
-  readonly t: "predecessors";
-} | {
-  readonly t: "reachable";
-} | {
-  readonly t: "list";
-  readonly list: Expr;
-} | {
-  readonly t: "reverse";
-  readonly axis: Axis;
-} | {
-  readonly t: "where";
-  readonly axis: Axis;
-  readonly test: Expr;
-};
 
 ### build/index.d.ts#AxisBody
 export type AxisBody<Ctx extends ChainContext, U> = ChainBase<Ctx, U> | ListBody<U>;
@@ -429,11 +409,6 @@ export type CompileOptions = Pick<EvalOptions, "domains" | "fns" | "extensions" 
 ### build/index.d.ts#DEFAULT_MAX_STEP
 export declare const DEFAULT_MAX_STEP: VexStep;
 
-### build/index.d.ts#DataLimit
-export interface DataLimit {
-  readonly axis: Axis;
-}
-
 ### build/index.d.ts#DeclaredType
 export type DeclaredType<Decl, N extends string> = N extends keyof Decl ? Decl[N] : unknown;
 
@@ -448,35 +423,12 @@ export interface Dependency {
 ### build/index.d.ts#Direction
 export type Direction = "before" | "after" | "down";
 
-### build/index.d.ts#Domain
-export interface Domain<Name extends string = string, D = unknown, Ops extends Readonly<Record<string, OpSpec<D>>> = Readonly<Record<string, OpSpec<D>>>> extends DomainSpec<Name, D, Ops> {
-  readonly kind: "vex.domain";
-}
-
 ### build/index.d.ts#DomainFor
 export type DomainFor<Dms extends readonly AnyDomain[], T> = Dms extends readonly [infer H, ...infer R extends readonly AnyDomain[]] ? [T] extends [never] ? never : [T] extends [DomainValue<H>] ? H : DomainFor<R, T> : never;
 
 ### build/index.d.ts#DomainMembers
 export interface DomainMembers<Ctx extends ChainContext, Dm> {
   readonly _: OpsProxy<Ctx, Dm>;
-}
-
-### build/index.d.ts#DomainSpec
-export interface DomainSpec<Name extends string, D, Ops extends Readonly<Record<string, OpSpec<D>>>> {
-  readonly name: Name;
-  readonly is: (u: unknown) => u is D;
-  readonly primitive?: PrimitiveKind;
-  readonly fields?: readonly string[];
-  readonly ops: Ops;
-  readonly size?: "fixed";
-  readonly methods?: "declared" | "all";
-  readonly fromScalar?: (n: number) => D;
-  readonly valid?: (d: D) => boolean;
-  readonly show?: (d: D) => string;
-  readonly encode?: (d: D) => unknown;
-  readonly decode?: (json: unknown) => D;
-  readonly samples?: () => readonly D[];
-  readonly moduleForm?: ModuleForm;
 }
 
 ### build/index.d.ts#DomainValue
@@ -524,80 +476,6 @@ export interface EvalOptions {
   readonly maxStep?: VexStep;
 }
 
-### build/index.d.ts#Expr
-export type Expr = {
-  readonly tag: "lit";
-  readonly value: unknown;
-} | {
-  readonly tag: "ref";
-  readonly path: readonly string[];
-  readonly at?: Addr;
-} | {
-  readonly tag: "app";
-  readonly op: string;
-  readonly args: readonly Expr[];
-} | {
-  readonly tag: "let";
-  readonly bind: Readonly<Record<string, Expr>>;
-  readonly body: Expr;
-} | {
-  readonly tag: "var";
-  readonly name: string;
-} | {
-  readonly tag: "rec";
-  readonly fields: Readonly<Record<string, Expr>>;
-} | {
-  readonly tag: "each";
-  readonly axis: Axis;
-  readonly body: Expr;
-  readonly at?: Addr;
-  readonly as?: ItemNames;
-} | {
-  readonly tag: "fold";
-  readonly axis: Axis;
-  readonly init: Names;
-  readonly step: Names;
-  readonly result: Expr;
-  readonly at?: Addr;
-  readonly as?: ItemNames;
-} | {
-  readonly tag: "iterate";
-  readonly limit: number | DataLimit;
-  readonly init: Names;
-  readonly step: Names;
-  readonly until?: Expr;
-  readonly result: Expr;
-} | {
-  readonly tag: "fix";
-  readonly name: string;
-  readonly join: FixJoin;
-  readonly init: Expr;
-  readonly step: Expr;
-} | {
-  readonly tag: "last";
-  readonly name: string;
-} | {
-  readonly tag: "fn";
-  readonly params: readonly string[];
-  readonly body: Expr;
-} | {
-  readonly tag: "call";
-  readonly fn: string;
-  readonly args: readonly Expr[];
-} | {
-  readonly tag: "ext";
-  readonly kind: string;
-  readonly data: unknown;
-};
-
-### build/index.d.ts#ExprOf
-export type ExprOf<T extends ExprTag> = Extract<Expr, {
-  readonly tag: T;
-}>;
-
-### build/index.d.ts#ExprTag
-export type ExprTag = Expr["tag"];
-
 ### build/index.d.ts#ExtContext
 export interface ExtContext {
   readonly space: Space;
@@ -608,22 +486,8 @@ export interface ExtContext {
 ### build/index.d.ts#ExtHandler
 export type ExtHandler = (data: unknown, ctx: ExtContext) => Result<unknown>;
 
-### build/index.d.ts#FixJoin
-export type FixJoin = "or" | "and" | "max" | "min";
-
 ### build/index.d.ts#FixValue
 export type FixValue<J extends FixJoin> = [J] extends ["or" | "and"] ? boolean : [J] extends ["max" | "min"] ? number : never;
-
-### build/index.d.ts#FixedMove
-export type FixedMove = Exclude<Move, {
-  readonly t: "key" | "index";
-}> | {
-  readonly t: "key";
-  readonly key: string;
-} | {
-  readonly t: "index";
-  readonly i: number;
-};
 
 ### build/index.d.ts#FnCalls
 export type FnCalls<Ctx extends ChainContext, F> = { readonly [N in keyof F]: F[N] extends FnDef<infer P, infer R> ? (...args: { readonly [I in keyof P]: ArgInput<KindValue<P[I]>, Ctx, false>; }) => ChainOf<Ctx, R> : never; };
@@ -634,11 +498,6 @@ export interface FnDef<P extends readonly FnParamKind[], R> {
   readonly params: P;
   readonly [FN_RESULT]?: R;
 }
-
-### build/index.d.ts#FnOp
-export type FnOp<D, F extends (self: D, ...args: never[]) => unknown> = OpSpec<D> & {
-  readonly fn: F;
-};
 
 ### build/index.d.ts#FnParamKind
 export type FnParamKind = PrimitiveKind | "any";
@@ -655,9 +514,6 @@ export type FreeFn = ((...args: readonly unknown[]) => unknown) & {
 
 ### build/index.d.ts#GridKey
 export type GridKey = `${number},${number}`;
-
-### build/index.d.ts#ItemNames
-export type ItemNames = readonly [item: string] | readonly [item: string, index: string];
 
 ### build/index.d.ts#KernelPlan
 export interface KernelPlan {
@@ -682,14 +538,6 @@ export declare const LIST_OPS: ReadonlySet<string>;
 
 ### build/index.d.ts#LIST_SIZES
 export declare const LIST_SIZES: Readonly<Record<ListOp | "fill", SizeRule>>;
-
-### build/index.d.ts#Law
-export type Law = "commutative" | "associative" | "idempotent";
-
-### build/index.d.ts#LiftedOp
-export type LiftedOp<D> = OpSpec<D> & {
-  readonly liftScalar: true;
-};
 
 ### build/index.d.ts#ListBody
 export interface ListBody<U> {
@@ -777,9 +625,6 @@ export type LoopVars<Ctx extends ChainContext, I> = { readonly [N in keyof I]: L
 ### build/index.d.ts#MAX_DOCUMENT_DEPTH
 export declare const MAX_DOCUMENT_DEPTH = 4096;
 
-### build/index.d.ts#MAX_ITERATIONS
-export declare const MAX_ITERATIONS = 1e5;
-
 ### build/index.d.ts#MAX_NESTING
 export declare const MAX_NESTING = 500;
 
@@ -789,54 +634,17 @@ export type Merge<O> = { readonly [P in AllKeys<O>]: FieldType<O, P>; };
 ### build/index.d.ts#MethodKeys
 export type MethodKeys<D> = { [P in keyof D]-?: D[P] extends ((...args: never[]) => unknown) ? P : never; }[keyof D] & string;
 
-### build/index.d.ts#ModuleForm
-export interface ModuleForm {
-  readonly is?: (u: unknown) => boolean;
-  readonly fromScalar?: (n: number) => unknown;
-  readonly samples?: () => readonly unknown[];
-  readonly literal?: (value: unknown) => Readonly<Record<string, unknown>> | undefined;
-  readonly ops?: Readonly<Record<string, {
-    readonly fn?: (self: never, ...args: never[]) => unknown;
-    readonly identity?: () => unknown;
-    readonly returns?: ReturnKind;
-  }>>;
-}
-
 ### build/index.d.ts#Monoid
 export interface Monoid<M> {
   readonly empty: M;
   readonly concat: (a: M, b: M) => M;
 }
 
-### build/index.d.ts#Monotone
-export type Monotone = "up" | "down";
-
 ### build/index.d.ts#MonotoneOptions
 interface MonotoneOptions {
   readonly domains?: readonly AnyDomain[];
   readonly fns?: Readonly<Record<string, unknown>>;
 }
-
-### build/index.d.ts#Move
-export type Move = {
-  readonly t: "key";
-  readonly key: string | Expr;
-} | {
-  readonly t: "index";
-  readonly i: number | Expr;
-} | {
-  readonly t: "other";
-} | {
-  readonly t: "offset";
-  readonly d: readonly number[];
-} | {
-  readonly t: "origin";
-} | {
-  readonly t: "parent";
-};
-
-### build/index.d.ts#Names
-export type Names = Readonly<Record<string, Expr>>;
 
 ### build/index.d.ts#NoFns
 export type NoFns = Record<never, never>;
@@ -852,21 +660,6 @@ export type OpParams<Dm, M extends string> = FnOf<Dm, M> extends ((...args: infe
 ### build/index.d.ts#OpReturn
 export type OpReturn<Dm, M extends string> = FnOf<Dm, M> extends ((...args: never[]) => infer R) ? R : never;
 
-### build/index.d.ts#OpSpec
-export interface OpSpec<D = never> {
-  readonly fn?: (self: D, ...args: never[]) => unknown;
-  readonly laws?: readonly Law[];
-  readonly identity?: () => D;
-  readonly liftScalar?: boolean | readonly boolean[];
-  readonly params?: readonly ParamKind[];
-  readonly returns?: ReturnKind;
-  readonly size?: SizeRule;
-  readonly monotone?: readonly Monotone[];
-}
-
-### build/index.d.ts#OpTable
-export type OpTable<D, Names extends string, Lifted extends string = never> = { readonly [N in Names]: N extends Lifted ? LiftedOp<D> : OpSpec<D>; };
-
 ### build/index.d.ts#OpsProxy
 export type OpsProxy<Ctx extends ChainContext, Dm> = { readonly [M in OpNames<Dm>]: (...args: MapArgs<OpParams<Dm, M>, Ctx, Lifts<Dm, M>>) => ChainOf<Ctx, OpReturn<Dm, M>>; };
 
@@ -881,17 +674,11 @@ export interface OtherMembers<Ctx extends ChainContext, T> {
 ### build/index.d.ts#ParamChains
 export type ParamChains<Ctx extends ChainContext, P extends readonly FnParamKind[]> = { readonly [I in keyof P]: ChainOf<Ctx, KindValue<P[I]>>; };
 
-### build/index.d.ts#ParamKind
-export type ParamKind = "domain" | "number" | "boolean" | "string" | "any";
-
 ### build/index.d.ts#Position
 export interface Position {
   readonly origin: string;
   readonly focus: string;
 }
-
-### build/index.d.ts#PrimitiveKind
-export type PrimitiveKind = "number" | "string" | "boolean";
 
 ### build/index.d.ts#Program
 export interface Program {
@@ -920,13 +707,6 @@ export interface ReduceOpts<Ctx extends ChainContext> extends ListOpts {
   readonly domain?: Ctx["domains"][number]["name"];
 }
 
-### build/index.d.ts#ResolvedOp
-export interface ResolvedOp {
-  readonly domain: AnyDomain;
-  readonly spec: OpSpec<unknown>;
-  readonly call: (args: readonly unknown[]) => unknown;
-}
-
 ### build/index.d.ts#Result
 export type Result<T> = {
   readonly ok: true;
@@ -935,9 +715,6 @@ export type Result<T> = {
   readonly ok: false;
   readonly error: VexError;
 };
-
-### build/index.d.ts#ReturnKind
-export type ReturnKind = ParamKind | `domain:${string}` | `list:${PrimitiveKind}`;
 
 ### build/index.d.ts#Root
 export interface Root<Ctx extends ChainContext> {
@@ -1010,38 +787,11 @@ export interface SheetTable {
   readonly cells?: CellFormulas;
 }
 
-### build/index.d.ts#SizeMeasure
-export type SizeMeasure = "size" | "count" | "inner" | "item" | "part";
-
 ### build/index.d.ts#SizeOptions
 export interface SizeOptions {
   readonly domains?: readonly AnyDomain[];
   readonly fns?: Readonly<Record<string, unknown>>;
 }
-
-### build/index.d.ts#SizeRule
-export type SizeRule = "scalar" | "fixed" | "reduce" | SizeTerms;
-
-### build/index.d.ts#SizeTerm
-export type SizeTerm = SizeUse | readonly [use: SizeUse, of: SizeMeasure];
-
-### build/index.d.ts#SizeTerms
-export interface SizeTerms {
-  readonly size: readonly SizeTerm[];
-  readonly count?: readonly SizeTerm[];
-  readonly inner?: readonly SizeTerm[];
-  readonly item?: readonly SizeTerm[];
-  readonly part?: readonly SizeTerm[];
-  readonly rest?: SizeUse;
-  readonly limit?: number;
-  readonly keys?: "position";
-  readonly constant?: true;
-  readonly union?: true;
-  readonly byParts?: SizeTerms;
-}
-
-### build/index.d.ts#SizeUse
-export type SizeUse = 0 | 1 | "scaled" | "many" | "unbounded" | "text" | "copies" | "each" | "number" | "limit";
 
 ### build/index.d.ts#Space
 export interface Space<K extends string = string, O = unknown> {
@@ -1182,57 +932,22 @@ export interface VexOptions<F extends FnTable = FnTable> {
 ### build/index.d.ts#VexStep
 type VexStep = "A" | "B" | "C";
 
-### build/index.d.ts#addrExprs
-export declare const addrExprs: (at: Addr | undefined) => readonly Expr[];
-
-### build/index.d.ts#app
-export declare const app: (op: string, ...args: readonly Expr[]) => ExprOf<"app">;
-
 ### build/index.d.ts#applyMove
 export declare function applyMove(s: Space, at: Position, m: FixedMove): Result<string>;
 
 ### build/index.d.ts#asList
 export declare const asList: (u: unknown, missing: (message: string) => VexError) => VexList | undefined;
 
-### build/index.d.ts#axes
-export declare const axes: {
-  readonly all: Axis;
-  readonly others: Axis;
-  readonly other: Axis;
-  readonly neighbors: (n?: 4 | 8) => Axis;
-  readonly children: Axis;
-  readonly ancestors: Axis;
-  readonly descendants: Axis;
-  readonly siblings: Axis;
-  readonly window: (from: number, to: number) => Axis;
-  readonly table: (name: string) => Axis;
-  readonly successors: Axis;
-  readonly predecessors: Axis;
-  readonly reachable: Axis;
-  readonly reverse: (axis: Axis) => Axis;
-  readonly list: (list: Expr) => Axis;
-  readonly where: (axis: Axis, test: Expr) => Axis;
-};
-
-### build/index.d.ts#axisExprs
-export declare function axisExprs(a: Axis): readonly Expr[];
-
 ### build/index.d.ts#axisTargets
 export declare function axisTargets(s: Space, at: Position, a: Exclude<Axis, {
   readonly t: "where";
 }>): Result<readonly string[]>;
-
-### build/index.d.ts#call
-export declare const call: (name: string, ...args: Expr[]) => ExprOf<"call">;
 
 ### build/index.d.ts#cell
 export declare const cell: (column: string, at?: Addr) => Expr;
 
 ### build/index.d.ts#chainResult
 export declare const chainResult: <T, U>(r: Result<T>, f: (value: T) => Result<U>) => Result<U>;
-
-### build/index.d.ts#children
-export declare function children(e: Expr): readonly Expr[];
 
 ### build/index.d.ts#codeOf
 export declare const codeOf: (kind: ErrorKind) => ErrorCode;
@@ -1243,23 +958,11 @@ export declare function columnOrder(columns: ReadonlyMap<string, Expr>, cells: C
 ### build/index.d.ts#compile
 export declare function compile(source: Expr | Envelope, opts?: CompileOptions): Program;
 
-### build/index.d.ts#dataLimit
-export declare const dataLimit: (axis: Axis) => DataLimit;
-
-### build/index.d.ts#defineDomain
-export declare function defineDomain<const Name extends string, D, const Ops extends Readonly<Record<string, OpSpec<D>>>>(spec: DomainSpec<Name, D, Ops>): Domain<Name, D, Ops>;
-
 ### build/index.d.ts#deps
 export declare function deps(e: Expr): readonly Dependency[];
 
 ### build/index.d.ts#describeType
 export declare function describeType(u: unknown): string;
-
-### build/index.d.ts#domainOf
-export declare function domainOf(domains: readonly AnyDomain[], value: unknown): AnyDomain | undefined;
-
-### build/index.d.ts#each
-export declare function each(axis: Axis, body: Expr, at?: Addr, as?: ItemNames): ExprOf<"each">;
 
 ### build/index.d.ts#errorAt
 export declare function errorAt(t: ErrorText, pos: Position, path: readonly number[], extra?: ErrorExtra): VexError;
@@ -1308,17 +1011,8 @@ export declare function evaluate(expr: Expr | Envelope, opts: EvalOptions): Resu
 ### build/index.d.ts#explain
 export declare function explain(expr: Expr | Envelope, opts: Omit<EvalOptions, "trace">): Trace;
 
-### build/index.d.ts#ext
-export declare const ext: (kind: string, data: unknown) => ExprOf<"ext">;
-
 ### build/index.d.ts#fail
 export declare const fail: <T = never>(error: VexError) => Result<T>;
-
-### build/index.d.ts#findMethod
-export declare function findMethod(self: unknown, name: string): ((...args: unknown[]) => unknown) | undefined;
-
-### build/index.d.ts#fix
-export declare function fix(name: string, join: FixJoin, init: Expr, step: Expr): ExprOf<"fix">;
 
 ### build/index.d.ts#fixAddr
 export declare function fixAddr(addr: Addr, values: readonly unknown[], at: Position): Result<readonly FixedMove[]>;
@@ -1328,12 +1022,6 @@ export declare const fixRounds: (rows: number) => number;
 
 ### build/index.d.ts#fixValueError
 export declare function fixValueError(name: string, join: FixJoin, value: unknown): ErrorText | undefined;
-
-### build/index.d.ts#fn
-export declare const fn: (params: readonly string[], body: Expr) => ExprOf<"fn">;
-
-### build/index.d.ts#fold
-export declare function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Addr, as?: ItemNames): ExprOf<"fold">;
 
 ### build/index.d.ts#formatError
 export declare const formatError: (e: VexError) => string;
@@ -1347,13 +1035,6 @@ export declare function fromDocument(doc: unknown, domains?: readonly AnyDomain[
 ### build/index.d.ts#getOr
 export declare const getOr: <T, U>(o: Optional<T>, fallback: U) => T | U;
 
-### build/index.d.ts#index
-export declare function index(i: number): FixedMove;
-export declare function index(i: number | Expr): Move;
-
-### build/index.d.ts#isAxis
-export declare function isAxis(u: unknown): u is Axis;
-
 ### build/index.d.ts#isCellRef
 export declare const isCellRef: (u: unknown) => u is CellRef;
 
@@ -1363,28 +1044,16 @@ export declare const isDepthError: (e: VexError) => boolean;
 ### build/index.d.ts#isDocument
 export declare function isDocument(u: unknown): u is Envelope$1;
 
-### build/index.d.ts#isExpr
-export declare function isExpr(u: unknown): u is Expr;
-
 ### build/index.d.ts#isFieldName
 export declare const isFieldName: (seg: string) => boolean;
 
-### build/index.d.ts#isFixedAddr
-export declare const isFixedAddr: (at: Addr | undefined) => at is readonly FixedMove[];
-
 ### build/index.d.ts#isListOp
 export declare const isListOp: (op: string) => op is ListOp;
-
-### build/index.d.ts#isMove
-export declare function isMove(u: unknown): u is Move;
 
 ### build/index.d.ts#isNone
 export declare const isNone: <T>(o: Optional<T>) => o is {
   readonly tag: "none";
 };
-
-### build/index.d.ts#isOpName
-export declare const isOpName: (name: string) => boolean;
 
 ### build/index.d.ts#isSome
 export declare const isSome: <T>(o: Optional<T>) => o is {
@@ -1398,45 +1067,17 @@ export declare function isStackOverflow(thrown: unknown): boolean;
 ### build/index.d.ts#isVexList
 export declare const isVexList: (u: unknown) => u is VexList;
 
-### build/index.d.ts#iterate
-export declare function iterate(limit: number | DataLimit, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate">;
-
 ### build/index.d.ts#joinKind
 export declare const joinKind: (join: FixJoin) => "boolean" | "number";
 
 ### build/index.d.ts#kernelPlan
 export declare function kernelPlan(source: Expr | Envelope, opts?: CompileOptions): KernelPlan;
 
-### build/index.d.ts#key
-export declare function key(k: string): FixedMove;
-export declare function key(k: string | Expr): Move;
-
 ### build/index.d.ts#labelOf
 export declare function labelOf(e: Expr): string;
 
-### build/index.d.ts#last
-export declare function last(name: string): ExprOf<"last">;
-
-### build/index.d.ts#let_
-export declare const let_: (bind: Readonly<Record<string, Expr>>, body: Expr) => ExprOf<"let">;
-
-### build/index.d.ts#liftsAt
-export declare const liftsAt: (lift: OpSpec<unknown>["liftScalar"], index: number) => boolean;
-
-### build/index.d.ts#limitAxis
-export declare const limitAxis: (e: ExprOf<"iterate">) => Axis | undefined;
-
-### build/index.d.ts#listItemKind
-export declare const listItemKind: (r: ReturnKind | undefined) => PrimitiveKind | undefined;
-
-### build/index.d.ts#listOf
-export declare function listOf(a: Axis): Expr | undefined;
-
 ### build/index.d.ts#listOps
 export declare function listOps(opts?: CompileOptions): ListOps;
-
-### build/index.d.ts#lit
-export declare const lit: (value: unknown) => ExprOf<"lit">;
 
 ### build/index.d.ts#mapResult
 export declare const mapResult: <T, U>(r: Result<T>, f: (value: T) => U) => Result<U>;
@@ -1455,9 +1096,6 @@ export declare const monoids: {
 ### build/index.d.ts#monotoneError
 export declare function monotoneError(e: Expr, opts: MonotoneOptions): string | undefined;
 
-### build/index.d.ts#moveExpr
-export declare function moveExpr(m: Move): Expr | undefined;
-
 ### build/index.d.ts#nestingError
 export declare function nestingError(e: Expr): string | undefined;
 
@@ -1470,20 +1108,8 @@ export declare const noKeyError: (origin: string) => VexError;
 ### build/index.d.ts#none
 export declare const none: <T = never>() => Optional<T>;
 
-### build/index.d.ts#offset
-export declare const offset: (...d: readonly number[]) => FixedMove;
-
 ### build/index.d.ts#ok
 export declare const ok: <T>(value: T) => Result<T>;
-
-### build/index.d.ts#origin
-export declare const origin: FixedMove;
-
-### build/index.d.ts#other
-export declare const other: FixedMove;
-
-### build/index.d.ts#parent
-export declare const parent: FixedMove;
 
 ### build/index.d.ts#parse
 export declare function parse(text: string, domains?: readonly AnyDomain[]): Result<Expr>;
@@ -1500,17 +1126,8 @@ export declare function readsOf(columns: ReadonlyMap<string, Expr>, cells: CellF
   readonly directions: ReadonlySet<Direction>;
 };
 
-### build/index.d.ts#rec
-export declare const rec: (fields: Readonly<Record<string, Expr>>) => ExprOf<"rec">;
-
-### build/index.d.ts#ref
-export declare function ref(path: string | readonly string[], at?: Addr): ExprOf<"ref">;
-
 ### build/index.d.ts#resolveAddr
 export declare function resolveAddr(s: Space, at: Position, addr: readonly FixedMove[] | undefined): Result<string>;
-
-### build/index.d.ts#resolveOp
-export declare function resolveOp(domain: AnyDomain, self: unknown, name: string): ResolvedOp | undefined;
 
 ### build/index.d.ts#ruleOf
 export declare function ruleOf(d: AnyDomain, spec: OpSpec<unknown>, domains: readonly AnyDomain[]): SizeRule | undefined;
@@ -1520,9 +1137,6 @@ export declare function safeIs(d: AnyDomain, value: unknown): boolean;
 
 ### build/index.d.ts#serialize
 export declare function serialize(e: Expr, domains?: readonly AnyDomain[]): Result<string>;
-
-### build/index.d.ts#shapeError
-export declare function shapeError(u: unknown): string | undefined;
 
 ### build/index.d.ts#sizeError
 export declare function sizeError(e: Expr, opts?: SizeOptions): string | undefined;
@@ -1542,9 +1156,6 @@ export declare const space: {
   readonly graph: <const R extends Readonly<Record<string, unknown>>>(records: R, edges: Readonly<Partial<Record<keyof R & string, readonly (keyof R & string)[]>>>) => Space<keyof R & string, R[keyof R]>;
 };
 
-### build/index.d.ts#splitLimit
-export declare function splitLimit(e: ExprOf<"iterate">): readonly [ExprOf<"each">, ExprOf<"iterate">] | undefined;
-
 ### build/index.d.ts#stepError
 export declare function stepError(e: Expr, opts?: StepOptions): string | undefined;
 
@@ -1557,9 +1168,6 @@ export declare const toKernelError: (e: VexError) => EvalError;
 ### build/index.d.ts#toOptional
 export declare const toOptional: <T>(r: Result<T>) => Optional<T>;
 
-### build/index.d.ts#toPath
-export declare const toPath: (path: string | readonly string[]) => readonly string[];
-
 ### build/index.d.ts#toVexError
 export declare function toVexError(e: EvalError): VexError;
 
@@ -1568,9 +1176,6 @@ export declare const toVexResult: (r: Result$1) => Result<unknown>;
 
 ### build/index.d.ts#traversal
 export declare function traversal<K extends string, T>(items: readonly TraversalItem<K, T>[], env: TraversalEnv, isStrict?: boolean): Traversal<K, T>;
-
-### build/index.d.ts#v
-export declare const v: (name: string) => ExprOf<"var">;
 
 ### build/index.d.ts#vex
 export declare function vex<const Dms extends readonly AnyDomain[]>(...domains: Dms): VexEntry<Dms> & {
@@ -1599,3 +1204,549 @@ export declare function vexSelf(space: Space, origin: string, tables?: Readonly<
 export declare function worstRow<E extends {
   readonly code: string;
 }>(errors: readonly E[]): E | undefined;
+
+### build/ir.chunk.d.ts#Addr
+type Addr = readonly Move[];
+
+### build/ir.chunk.d.ts#AnyDomain
+type AnyDomain = Domain<string, any, Readonly<Record<string, OpSpec<any>>>>;
+
+### build/ir.chunk.d.ts#Axis
+type Axis = {
+  readonly t: "all";
+} | {
+  readonly t: "others";
+} | {
+  readonly t: "other";
+} | {
+  readonly t: "neighbors";
+  readonly n: 4 | 8;
+} | {
+  readonly t: "children";
+} | {
+  readonly t: "ancestors";
+} | {
+  readonly t: "descendants";
+} | {
+  readonly t: "siblings";
+} | {
+  readonly t: "window";
+  readonly from: number;
+  readonly to: number;
+} | {
+  readonly t: "table";
+  readonly name: string;
+} | {
+  readonly t: "successors";
+} | {
+  readonly t: "predecessors";
+} | {
+  readonly t: "reachable";
+} | {
+  readonly t: "list";
+  readonly list: Expr;
+} | {
+  readonly t: "reverse";
+  readonly axis: Axis;
+} | {
+  readonly t: "where";
+  readonly axis: Axis;
+  readonly test: Expr;
+};
+
+### build/ir.chunk.d.ts#DataLimit
+interface DataLimit {
+  readonly axis: Axis;
+}
+
+### build/ir.chunk.d.ts#Domain
+interface Domain<Name extends string = string, D = unknown, Ops extends Readonly<Record<string, OpSpec<D>>> = Readonly<Record<string, OpSpec<D>>>> extends DomainSpec<Name, D, Ops> {
+  readonly kind: "vex.domain";
+}
+
+### build/ir.chunk.d.ts#DomainSpec
+interface DomainSpec<Name extends string, D, Ops extends Readonly<Record<string, OpSpec<D>>>> {
+  readonly name: Name;
+  readonly is: (u: unknown) => u is D;
+  readonly primitive?: PrimitiveKind;
+  readonly fields?: readonly string[];
+  readonly ops: Ops;
+  readonly size?: "fixed";
+  readonly methods?: "declared" | "all";
+  readonly fromScalar?: (n: number) => D;
+  readonly valid?: (d: D) => boolean;
+  readonly show?: (d: D) => string;
+  readonly encode?: (d: D) => unknown;
+  readonly decode?: (json: unknown) => D;
+  readonly samples?: () => readonly D[];
+  readonly moduleForm?: ModuleForm;
+}
+
+### build/ir.chunk.d.ts#Expr
+type Expr = {
+  readonly tag: "lit";
+  readonly value: unknown;
+} | {
+  readonly tag: "ref";
+  readonly path: readonly string[];
+  readonly at?: Addr;
+} | {
+  readonly tag: "app";
+  readonly op: string;
+  readonly args: readonly Expr[];
+} | {
+  readonly tag: "let";
+  readonly bind: Readonly<Record<string, Expr>>;
+  readonly body: Expr;
+} | {
+  readonly tag: "var";
+  readonly name: string;
+} | {
+  readonly tag: "rec";
+  readonly fields: Readonly<Record<string, Expr>>;
+} | {
+  readonly tag: "each";
+  readonly axis: Axis;
+  readonly body: Expr;
+  readonly at?: Addr;
+  readonly as?: ItemNames;
+} | {
+  readonly tag: "fold";
+  readonly axis: Axis;
+  readonly init: Names;
+  readonly step: Names;
+  readonly result: Expr;
+  readonly at?: Addr;
+  readonly as?: ItemNames;
+} | {
+  readonly tag: "iterate";
+  readonly limit: number | DataLimit;
+  readonly init: Names;
+  readonly step: Names;
+  readonly until?: Expr;
+  readonly result: Expr;
+} | {
+  readonly tag: "fix";
+  readonly name: string;
+  readonly join: FixJoin;
+  readonly init: Expr;
+  readonly step: Expr;
+} | {
+  readonly tag: "last";
+  readonly name: string;
+} | {
+  readonly tag: "fn";
+  readonly params: readonly string[];
+  readonly body: Expr;
+} | {
+  readonly tag: "call";
+  readonly fn: string;
+  readonly args: readonly Expr[];
+} | {
+  readonly tag: "ext";
+  readonly kind: string;
+  readonly data: unknown;
+};
+
+### build/ir.chunk.d.ts#ExprOf
+type ExprOf<T extends ExprTag> = Extract<Expr, {
+  readonly tag: T;
+}>;
+
+### build/ir.chunk.d.ts#ExprTag
+type ExprTag = Expr["tag"];
+
+### build/ir.chunk.d.ts#FixJoin
+type FixJoin = "or" | "and" | "max" | "min";
+
+### build/ir.chunk.d.ts#FixedMove
+type FixedMove = Exclude<Move, {
+  readonly t: "key" | "index";
+}> | {
+  readonly t: "key";
+  readonly key: string;
+} | {
+  readonly t: "index";
+  readonly i: number;
+};
+
+### build/ir.chunk.d.ts#FnOp
+type FnOp<D, F extends (self: D, ...args: never[]) => unknown> = OpSpec<D> & {
+  readonly fn: F;
+};
+
+### build/ir.chunk.d.ts#ItemNames
+type ItemNames = readonly [item: string] | readonly [item: string, index: string];
+
+### build/ir.chunk.d.ts#Law
+type Law = "commutative" | "associative" | "idempotent";
+
+### build/ir.chunk.d.ts#LiftedOp
+type LiftedOp<D> = OpSpec<D> & {
+  readonly liftScalar: true;
+};
+
+### build/ir.chunk.d.ts#MAX_ITERATIONS
+declare const MAX_ITERATIONS = 1e5;
+
+### build/ir.chunk.d.ts#ModuleForm
+interface ModuleForm {
+  readonly is?: (u: unknown) => boolean;
+  readonly fromScalar?: (n: number) => unknown;
+  readonly samples?: () => readonly unknown[];
+  readonly literal?: (value: unknown) => Readonly<Record<string, unknown>> | undefined;
+  readonly ops?: Readonly<Record<string, {
+    readonly fn?: (self: never, ...args: never[]) => unknown;
+    readonly identity?: () => unknown;
+    readonly returns?: ReturnKind;
+  }>>;
+}
+
+### build/ir.chunk.d.ts#Monotone
+type Monotone = "up" | "down";
+
+### build/ir.chunk.d.ts#Move
+type Move = {
+  readonly t: "key";
+  readonly key: string | Expr;
+} | {
+  readonly t: "index";
+  readonly i: number | Expr;
+} | {
+  readonly t: "other";
+} | {
+  readonly t: "offset";
+  readonly d: readonly number[];
+} | {
+  readonly t: "origin";
+} | {
+  readonly t: "parent";
+};
+
+### build/ir.chunk.d.ts#Names
+type Names = Readonly<Record<string, Expr>>;
+
+### build/ir.chunk.d.ts#OpSpec
+interface OpSpec<D = never> {
+  readonly fn?: (self: D, ...args: never[]) => unknown;
+  readonly laws?: readonly Law[];
+  readonly identity?: () => D;
+  readonly liftScalar?: boolean | readonly boolean[];
+  readonly params?: readonly ParamKind[];
+  readonly returns?: ReturnKind;
+  readonly size?: SizeRule;
+  readonly monotone?: readonly Monotone[];
+}
+
+### build/ir.chunk.d.ts#OpTable
+type OpTable<D, Names extends string, Lifted extends string = never> = { readonly [N in Names]: N extends Lifted ? LiftedOp<D> : OpSpec<D>; };
+
+### build/ir.chunk.d.ts#ParamKind
+type ParamKind = "domain" | "number" | "boolean" | "string" | "any";
+
+### build/ir.chunk.d.ts#PrimitiveKind
+type PrimitiveKind = "number" | "string" | "boolean";
+
+### build/ir.chunk.d.ts#ResolvedOp
+interface ResolvedOp {
+  readonly domain: AnyDomain;
+  readonly spec: OpSpec<unknown>;
+  readonly call: (args: readonly unknown[]) => unknown;
+}
+
+### build/ir.chunk.d.ts#ReturnKind
+type ReturnKind = ParamKind | `domain:${string}` | `list:${PrimitiveKind}`;
+
+### build/ir.chunk.d.ts#SizeMeasure
+type SizeMeasure = "size" | "count" | "inner" | "item" | "part";
+
+### build/ir.chunk.d.ts#SizeRule
+type SizeRule = "scalar" | "fixed" | "reduce" | SizeTerms;
+
+### build/ir.chunk.d.ts#SizeTerm
+type SizeTerm = SizeUse | readonly [use: SizeUse, of: SizeMeasure];
+
+### build/ir.chunk.d.ts#SizeTerms
+interface SizeTerms {
+  readonly size: readonly SizeTerm[];
+  readonly count?: readonly SizeTerm[];
+  readonly inner?: readonly SizeTerm[];
+  readonly item?: readonly SizeTerm[];
+  readonly part?: readonly SizeTerm[];
+  readonly rest?: SizeUse;
+  readonly limit?: number;
+  readonly keys?: "position";
+  readonly constant?: true;
+  readonly union?: true;
+  readonly byParts?: SizeTerms;
+}
+
+### build/ir.chunk.d.ts#SizeUse
+type SizeUse = 0 | 1 | "scaled" | "many" | "unbounded" | "text" | "copies" | "each" | "number" | "limit";
+
+### build/ir.chunk.d.ts#addrExprs
+declare const addrExprs: (at: Addr | undefined) => readonly Expr[];
+
+### build/ir.chunk.d.ts#app
+declare const app: (op: string, ...args: readonly Expr[]) => ExprOf<"app">;
+
+### build/ir.chunk.d.ts#axes
+declare const axes: {
+  readonly all: Axis;
+  readonly others: Axis;
+  readonly other: Axis;
+  readonly neighbors: (n?: 4 | 8) => Axis;
+  readonly children: Axis;
+  readonly ancestors: Axis;
+  readonly descendants: Axis;
+  readonly siblings: Axis;
+  readonly window: (from: number, to: number) => Axis;
+  readonly table: (name: string) => Axis;
+  readonly successors: Axis;
+  readonly predecessors: Axis;
+  readonly reachable: Axis;
+  readonly reverse: (axis: Axis) => Axis;
+  readonly list: (list: Expr) => Axis;
+  readonly where: (axis: Axis, test: Expr) => Axis;
+};
+
+### build/ir.chunk.d.ts#axisExprs
+declare function axisExprs(a: Axis): readonly Expr[];
+
+### build/ir.chunk.d.ts#call
+declare const call: (name: string, ...args: Expr[]) => ExprOf<"call">;
+
+### build/ir.chunk.d.ts#children
+declare function children(e: Expr): readonly Expr[];
+
+### build/ir.chunk.d.ts#dataLimit
+declare const dataLimit: (axis: Axis) => DataLimit;
+
+### build/ir.chunk.d.ts#defineDomain
+declare function defineDomain<const Name extends string, D, const Ops extends Readonly<Record<string, OpSpec<D>>>>(spec: DomainSpec<Name, D, Ops>): Domain<Name, D, Ops>;
+
+### build/ir.chunk.d.ts#domainOf
+declare function domainOf(domains: readonly AnyDomain[], value: unknown): AnyDomain | undefined;
+
+### build/ir.chunk.d.ts#each
+declare function each(axis: Axis, body: Expr, at?: Addr, as?: ItemNames): ExprOf<"each">;
+
+### build/ir.chunk.d.ts#ext
+declare const ext: (kind: string, data: unknown) => ExprOf<"ext">;
+
+### build/ir.chunk.d.ts#findMethod
+declare function findMethod(self: unknown, name: string): ((...args: unknown[]) => unknown) | undefined;
+
+### build/ir.chunk.d.ts#fix
+declare function fix(name: string, join: FixJoin, init: Expr, step: Expr): ExprOf<"fix">;
+
+### build/ir.chunk.d.ts#fn
+declare const fn: (params: readonly string[], body: Expr) => ExprOf<"fn">;
+
+### build/ir.chunk.d.ts#fold
+declare function fold(axis: Axis, init: Names, step: Names, result: Expr, at?: Addr, as?: ItemNames): ExprOf<"fold">;
+
+### build/ir.chunk.d.ts#index
+declare function index(i: number): FixedMove;
+declare function index(i: number | Expr): Move;
+
+### build/ir.chunk.d.ts#isAxis
+declare function isAxis(u: unknown): u is Axis;
+
+### build/ir.chunk.d.ts#isExpr
+declare function isExpr(u: unknown): u is Expr;
+
+### build/ir.chunk.d.ts#isFixedAddr
+declare const isFixedAddr: (at: Addr | undefined) => at is readonly FixedMove[];
+
+### build/ir.chunk.d.ts#isMove
+declare function isMove(u: unknown): u is Move;
+
+### build/ir.chunk.d.ts#isOpName
+declare const isOpName: (name: string) => boolean;
+
+### build/ir.chunk.d.ts#iterate
+declare function iterate(limit: number | DataLimit, init: Names, step: Names, result: Expr, until?: Expr): ExprOf<"iterate">;
+
+### build/ir.chunk.d.ts#key
+declare function key(k: string): FixedMove;
+declare function key(k: string | Expr): Move;
+
+### build/ir.chunk.d.ts#last
+declare function last(name: string): ExprOf<"last">;
+
+### build/ir.chunk.d.ts#let_
+declare const let_: (bind: Readonly<Record<string, Expr>>, body: Expr) => ExprOf<"let">;
+
+### build/ir.chunk.d.ts#liftsAt
+declare const liftsAt: (lift: OpSpec<unknown>["liftScalar"], index: number) => boolean;
+
+### build/ir.chunk.d.ts#limitAxis
+declare const limitAxis: (e: ExprOf<"iterate">) => Axis | undefined;
+
+### build/ir.chunk.d.ts#listItemKind
+declare const listItemKind: (r: ReturnKind | undefined) => PrimitiveKind | undefined;
+
+### build/ir.chunk.d.ts#listOf
+declare function listOf(a: Axis): Expr | undefined;
+
+### build/ir.chunk.d.ts#lit
+declare const lit: (value: unknown) => ExprOf<"lit">;
+
+### build/ir.chunk.d.ts#moveExpr
+declare function moveExpr(m: Move): Expr | undefined;
+
+### build/ir.chunk.d.ts#offset
+declare const offset: (...d: readonly number[]) => FixedMove;
+
+### build/ir.chunk.d.ts#origin
+declare const origin: FixedMove;
+
+### build/ir.chunk.d.ts#other
+declare const other: FixedMove;
+
+### build/ir.chunk.d.ts#parent
+declare const parent: FixedMove;
+
+### build/ir.chunk.d.ts#rec
+declare const rec: (fields: Readonly<Record<string, Expr>>) => ExprOf<"rec">;
+
+### build/ir.chunk.d.ts#ref
+declare function ref(path: string | readonly string[], at?: Addr): ExprOf<"ref">;
+
+### build/ir.chunk.d.ts#resolveOp
+declare function resolveOp(domain: AnyDomain, self: unknown, name: string): ResolvedOp | undefined;
+
+### build/ir.chunk.d.ts#shapeError
+declare function shapeError(u: unknown): string | undefined;
+
+### build/ir.chunk.d.ts#splitLimit
+declare function splitLimit(e: ExprOf<"iterate">): readonly [ExprOf<"each">, ExprOf<"iterate">] | undefined;
+
+### build/ir.chunk.d.ts#toPath
+declare const toPath: (path: string | readonly string[]) => readonly string[];
+
+### build/ir.chunk.d.ts#v
+declare const v: (name: string) => ExprOf<"var">;
+
+### build/query.d.ts#CatalogOptions
+export interface CatalogOptions {
+  readonly maxFacet?: number;
+  readonly skip?: readonly string[];
+}
+
+### build/query.d.ts#CompileOptions
+export interface CompileOptions {
+  readonly searchField?: string;
+}
+
+### build/query.d.ts#FacetValue
+export interface FacetValue {
+  readonly value: string;
+  readonly count: number;
+}
+
+### build/query.d.ts#FieldInfo
+export interface FieldInfo {
+  readonly name: string;
+  readonly type: FieldType;
+  readonly count: number;
+  readonly distinct: number;
+  readonly values?: readonly FacetValue[];
+  readonly search: boolean;
+  readonly min?: FieldValue;
+  readonly max?: FieldValue;
+}
+
+### build/query.d.ts#FieldType
+export type FieldType = "text" | "number" | "boolean" | "time" | "date";
+
+### build/query.d.ts#FieldValue
+export type FieldValue = string | number | boolean;
+
+### build/query.d.ts#ISO_DATE
+export declare const ISO_DATE: RegExp;
+
+### build/query.d.ts#ISO_TIME
+export declare const ISO_TIME: RegExp;
+
+### build/query.d.ts#LinkOptions
+export interface LinkOptions {
+  readonly domains?: readonly AnyDomain[];
+}
+
+### build/query.d.ts#MatchOptions
+export interface MatchOptions extends CompileOptions {
+  readonly domains: readonly AnyDomain[];
+  readonly catalog?: readonly FieldInfo[];
+  readonly facets?: readonly string[];
+}
+
+### build/query.d.ts#MatchResult
+export interface MatchResult {
+  readonly active: boolean;
+  readonly matches: readonly string[];
+  readonly counts: ReadonlyMap<string, ReadonlyMap<string, number>>;
+}
+
+### build/query.d.ts#QueryRecord
+export type QueryRecord = {
+  readonly id: string;
+} & Readonly<Record<string, FieldValue>>;
+
+### build/query.d.ts#RecordView
+export interface RecordView {
+  readonly text?: string;
+  readonly where?: Readonly<Record<string, readonly string[]>>;
+  readonly formula?: Expr;
+  readonly sort?: ViewSort;
+  readonly group?: string;
+  readonly show?: "glow" | "only";
+  readonly box?: string;
+}
+
+### build/query.d.ts#VIEW_KEYS
+export declare const VIEW_KEYS: readonly string[];
+
+### build/query.d.ts#ViewLink
+export interface ViewLink {
+  readonly view: RecordView;
+  readonly rest: readonly string[];
+  readonly problems: readonly string[];
+}
+
+### build/query.d.ts#ViewSort
+export interface ViewSort {
+  readonly field: string;
+  readonly dir: "asc" | "desc";
+}
+
+### build/query.d.ts#compileView
+export declare function compileView(view: RecordView, catalog: readonly FieldInfo[], options?: CompileOptions): Expr | null;
+
+### build/query.d.ts#fieldCatalog
+export declare function fieldCatalog(records: readonly QueryRecord[], options?: CatalogOptions): FieldInfo[];
+
+### build/query.d.ts#isActive
+export declare function isActive(view: RecordView): boolean;
+
+### build/query.d.ts#matchView
+export declare function matchView(view: RecordView, records: readonly QueryRecord[], options: MatchOptions): MatchResult;
+
+### build/query.d.ts#sameFilter
+export declare function sameFilter(a: RecordView, b: RecordView, defaultSort?: ViewSort): boolean;
+
+### build/query.d.ts#searchWords
+export declare function searchWords(text: string): string[];
+
+### build/query.d.ts#sortIds
+export declare function sortIds(ids: readonly string[], records: readonly QueryRecord[], sort: ViewSort, options: MatchOptions): string[];
+
+### build/query.d.ts#sortKey
+export declare function sortKey(sort: ViewSort, catalog: readonly FieldInfo[]): Expr;
+
+### build/query.d.ts#viewFromQuery
+export declare function viewFromQuery(query: string, facets: Iterable<string>, options?: LinkOptions): ViewLink;
+
+### build/query.d.ts#viewToQuery
+export declare function viewToQuery(view: RecordView, rest?: readonly string[], options?: LinkOptions): string;

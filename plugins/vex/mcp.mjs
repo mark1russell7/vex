@@ -28,9 +28,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 /**
  * The environment of the one server: the module entry of the tools of Vex, and the name and the version of the server.
  * The version is the version of the package, as the own server gives it.
+ *
+ * @param {string} pkg The folder of the package `packages/mcp`.
  */
 function oneServerEnv(pkg) {
-  const { version } = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8"));
+  const { version } = /** @type {{ readonly version: string }} */ (JSON.parse(readFileSync(join(pkg, "package.json"), "utf8")));
   return { ...process.env, MCP_BUNDLES: join(pkg, "src", "module.ts"), MCP_SERVER_NAME: "vex", MCP_SERVER_VERSION: version };
 }
 
@@ -38,6 +40,8 @@ function oneServerEnv(pkg) {
  * This function gives the bin of the one server in a working copy with its packages installed, and else undefined. The
  * package `packages/mcp` has `@procedures/mcp-dev-tools` as a dev dependency. The package gives only its main entry, so
  * the bin is next to it.
+ *
+ * @param {string} pkg The folder of the package `packages/mcp`.
  */
 function localBin(pkg) {
   if (!existsSync(join(pkg, "node_modules")) || !existsSync(join(pkg, "src", "module.ts"))) return undefined;

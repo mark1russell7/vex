@@ -16,7 +16,7 @@
 // the bridge, or when the gateway does not serve vex, the launcher starts its own server. The launcher looks for
 // `bridge.ts`, then `bridge.mjs`. HEADROOM_BRIDGE names another bridge file. A path that does not exist turns the gateway off.
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -25,9 +25,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** The environment of the one server: the module entry of the tools of Vex, and the name of the server. */
-function oneServerEnv(bundle) {
-  return { ...process.env, MCP_BUNDLES: bundle, MCP_SERVER_NAME: "vex" };
+/**
+ * The environment of the one server: the module entry of the tools of Vex, and the name and the version of the server.
+ * The version is the version of the package, as the own server gives it.
+ */
+function oneServerEnv(pkg) {
+  const { version } = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8"));
+  return { ...process.env, MCP_BUNDLES: join(pkg, "src", "module.ts"), MCP_SERVER_NAME: "vex", MCP_SERVER_VERSION: version };
 }
 
 /**
@@ -51,7 +55,7 @@ function startLocal() {
   const bin = localBin(pkg);
   let child;
   if (bin !== undefined) {
-    child = spawn(process.execPath, ["--import", "tsx", bin], { cwd: pkg, env: oneServerEnv(join(pkg, "src", "module.ts")), stdio: "inherit" });
+    child = spawn(process.execPath, ["--import", "tsx", bin], { cwd: pkg, env: oneServerEnv(pkg), stdio: "inherit" });
   } else {
     const args = ["-y", "@mark1russell7/vex-mcp"];
     const options = { cwd: here, stdio: "inherit" };

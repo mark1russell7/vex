@@ -9,40 +9,12 @@
  * - (a) The median ratio of the processes is at most the limit.
  * - (b) The count of processes above the slow line (the limit) is at most the largest count.
  *
- * The limits come from the CI jobs of `gate-processes.ts` on Node.js 26.13.1 (LIFEMARGIN, a rule of 2026-11-02):
- * 53 jobs of speed-gate.yml in 36 runs, from 2026-11-12 23:30 to 2026-11-14 23:04 (UTC). The file `limit-runs.json`
- * keeps the job, the run, the CPU model and the ratio of each process of each case. The AMD EPYC 7763 gave 13 jobs, so it
- * has its own limits. The 40 other jobs give the limits of each other model: Intel Xeon 6975P-C, 8573C and 8370C, and AMD
- * EPYC 9V45 and 9V74. Shapes has a limit of its own for the 23 Xeon jobs. Each value is the median of the 11 processes of
- * one job.
- *
- * | Case | 7763 medians | 7763 limit, L | Other medians | Other limit, L |
- * |---|---|---|---|---|
- * | NEAREST | 1.62 to 1.63 | 1.64, 3 | 1.32 to 1.60 | 1.88, 1 |
- * | LIFE | 1.14 to 1.22 | 1.30, 2 | 1.08 to 1.19 | 1.30, 1 |
- * | radial, 12 children, linked | 1.77 to 1.85 | 1.93, 4 | 1.71 to 1.84 | 1.97, 1 |
- * | radial, 60 children, nested | 1.78 to 1.79 | 1.80, 3 | 1.67 to 1.84 | 2.01, 1 |
- * | tree, 1000 nodes | 0.57 to 0.58 | 0.59, 2 | 0.49 to 0.59 | 0.69, 1 |
- * | shapes, 1111 nodes | 1.39 to 1.52 | 1.65 | 1.53 to 1.66, Xeon 1.50 to 1.78 | 1.79, Xeon 2.06 |
- * | the growth of the share of each value | 1.99 to 2.01 | 2.03 | 1.99 to 2.07 | 2.15 |
- *
- * (a) Each limit is the worst job median plus the spread of the job medians, rounded up.
- * (b) The rate p is the upper Wilson end (95 %) of the rate of processes above the limit in the derivation jobs. The
- * largest count L is the smallest count with P(Binomial(11, p) > L) under 1 %. Check (b) fails a job with a slow rate of
- * 0.3 in 89 % of jobs for L 1, 69 % for L 2, 43 % for L 3 and 21 % for L 4. At a slow rate of 0.5, it is 99 %, 97 %, 89 %
- * and 73 %. For shapes and share, (b) stays a record only, as before. The limit (a) and the nightly log protect them.
- *
- * Before LIFEMARGIN, the limits came from 10 runs of 2026-11-02 on Node.js 26.13.0 (runs 41423717761 and 41425976485),
- * with later runs for the radial cases (41455264352) and shapes (41773861998). On Node.js 26.13.1, LIFE on the 7763 went
- * from a mean of 1.135 (30 jobs on 26.13.0) to 1.175 (13 jobs). Two of the 13 jobs failed the old limits (vex#389): one had
- * the median 1.22 and 5 processes above 1.21, and one had the median 1.17 and 5 processes above 1.21. The radial and tree cases got faster after their limits were set,
- * and NEAREST on the 7763 has a smaller spread now, so their new limits are lower. With the new
- * limits, 3 of the 72 jobs on Node.js 26.13.0 fail: shapes at 1.81 on a 7763 and at 2.09 on a Xeon 6973P-C (both failed
- * the old limits too), and linked with 2 slow processes on a 9V74.
+ * The limits of each CPU model are in `gate-limits.ts`. A test gives them again from the reads of 20 CI jobs.
+ * The limits before vex#416 came from 53 jobs of the harness before vex#409 (`limit-runs.json` in the history of git).
  *
  * In one process with all cases, the hand loops of the nested radial case were 35 % slower, and its ratio was 2.7, not
  * 3.85 (run 41420168361). Measured cases before a case change its heap and its JIT state (GATENOISE, run 41418095435).
- * A PR that makes a ratio better sets its limit lower in the same PR.
+ * A PR that makes a ratio better adds its jobs to `limit-jobs.json` in the same PR, so its limit goes lower.
  * With `GATE_GC=1`, each case also prints the garbage collections of each arm in its timed runs (gc.ts, GATEGC).
  * With `GATE_ALLOC`, the process gives the allocations of one arm and no time (alloc.ts, TREEALLOC).
  * With `GATE_LIMIT_WALK=1`, the walk of a data limit gives two more cases (limit-walk.ts, LIMITCOST). Their second arm is
@@ -66,21 +38,11 @@ import { benchEnv } from "@mark1russell7/rigor-bench/fresh";
 import { withFault } from "../../core/bench/fault.ts";
 import { envLine } from "../../core/bench/measure.ts";
 import { batchMs, paired } from "../../core/bench/paired.ts";
+import { LIMITS } from "./gate-limits.ts";
 import { limitsText, readLine } from "./gate-reads.ts";
 import type { AllocArm, AllocRegime } from "./alloc.ts";
 import { GC_ON, gcRecorder } from "./gc.ts";
 
-/** The limits of each case, from the 53 jobs in the header. A case with no `maxSlow` has check (b) as a record only. */
-const LIMITS = {
-  nearest: { "7763": { limit: 1.64, slow: 1.64, maxSlow: 3 }, other: { limit: 1.88, slow: 1.88, maxSlow: 1 } },
-  life: { "7763": { limit: 1.3, slow: 1.3, maxSlow: 2 }, other: { limit: 1.3, slow: 1.3, maxSlow: 1 } },
-  linked: { "7763": { limit: 1.93, slow: 1.93, maxSlow: 4 }, other: { limit: 1.97, slow: 1.97, maxSlow: 1 } },
-  nested: { "7763": { limit: 1.8, slow: 1.8, maxSlow: 3 }, other: { limit: 2.01, slow: 2.01, maxSlow: 1 } },
-  tree: { "7763": { limit: 0.59, slow: 0.59, maxSlow: 2 }, other: { limit: 0.69, slow: 0.69, maxSlow: 1 } },
-  shapes: { "7763": { limit: 1.65, slow: 1.65 }, Xeon: { limit: 2.06, slow: 2.06 }, other: { limit: 1.79, slow: 1.79 } },
-  share: { "7763": { limit: 2.03, slow: 2.03 }, other: { limit: 2.15, slow: 2.15 } },
-  walk: { "7763": { limit: 1, slow: 1 }, other: { limit: 1, slow: 1 } },
-} as const satisfies Readonly<Record<string, Readonly<Record<string, ProcessLimits>> & { readonly other: ProcessLimits }>>;
 const CPU = benchEnv().cpu;
 /** This function gives the limits of a case for the CPU model of this runner: the entry of the model that the name contains, or `other`. */
 const limitsOf = (c: keyof typeof LIMITS): CpuEntry<ProcessLimits> => cpuEntry<ProcessLimits>(LIMITS[c], CPU);

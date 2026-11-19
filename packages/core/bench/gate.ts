@@ -4,39 +4,45 @@
  * the speed of the machine, so the gate works on a shared CI runner. The arms take turns in one process (paired.ts, on
  * `timeArmRounds` of rigor-bench).
  *
- * Each limit is the worst ratio of 5 CI runs times 1.1 (a rule of 2026-10-30), rounded up. The runs are
- * run 41022173204 of speed-gate.yml (2026-10-30): AMD EPYC 7763 in runs 2 to 4, AMD EPYC 9V45 in runs 1 and 5.
- * - NEAREST: 17.4, 21.0, 20.9, 21.2 and 16.6. The worst is 21.2, so the limit is 23.4. The 9V45 gives about 17.
- * - LIFE: 38.6, 38.0, 26.8, 38.4 and 40.6. The worst is 40.6, so the limit is 44.7. Run 3 had an A/A band of 0.71
- *   to 0.99, so its 26.8 is noise.
+ * The limits and the noise caps are in `gate-limits.ts`. A case with a noise cap checks the A/A rounds first, with the
+ * option `noiseCap` of `limitVerdict`. A noisy or biased run cannot decide: the gate shows "no read" and fails.
  * A PR that makes a ratio better sets its limit lower in the same PR.
  *
- * Each line also gives a record for the next limits: the bound of `limitVerdict` with the A/A noise of the rounds, and
- * the A/A spread of `aaStats`, both of rigor-bench. The next limits and noise caps come from 5 or more CI runs of these
- * records. Until then, the gate decides with the ratio and the limit, as before.
+ * Each case also prints one read line as JSON, at full precision. It holds the ratio, the A/A statistics of `aaStats`,
+ * the bound of `limitVerdict` and the limits. The limits and the noise caps come from these lines.
  * Start: node packages/core/bench/gate.ts
  */
 import { aaStats, limitVerdict } from "@mark1russell7/rigor-bench";
 import { withFault } from "./fault.ts";
+import { CORE_LIMITS, coreReadLine, noiseReason, type CoreCase, type CoreLimits } from "./gate-limits.ts";
 import { envLine } from "./measure.ts";
 import { batchMs, paired } from "./paired.ts";
 import { LIFE, NEAREST } from "./programs.ts";
 
-const LIMITS = [
-  { program: NEAREST, limit: 23.4 },
-  { program: LIFE, limit: 44.7 },
-] as const;
+const PROGRAMS = { nearest: NEAREST, life: LIFE } as const satisfies Record<CoreCase, unknown>;
+
+/** This function tells if a name is a case of the core gate. */
+const isCase = (name: string): name is CoreCase => Object.hasOwn(CORE_LIMITS, name);
 
 console.info(envLine("process"));
 let failed = false;
-for (const { program, limit } of LIMITS) {
+for (const name of Object.keys(CORE_LIMITS).filter(isCase)) {
+  const program = PROGRAMS[name];
+  const limits: CoreLimits = CORE_LIMITS[name];
+  const { limit, noiseCap } = limits;
   // The arms take turns in this process in the order of armOrder, and a copy of the loops gives the noise floor (paired.ts).
   const { ratio, a: v, b: h, noise, pairs, aa } = paired(withFault(program.vex), program.hand, { targetMs: batchMs(60, limit) });
-  const ok = ratio <= limit;
-  failed ||= !ok;
-  const bound = limitVerdict(pairs, aa, { limit, aaFrom: "rounds" }).cases[0]?.bound;
-  const spread = aaStats(aa)[0]?.spread;
-  const record = `bound ${bound?.toFixed(2) ?? "none"}, A/A spread ${spread?.toFixed(3) ?? "none"}`;
-  console.info(`${ok ? "ok  " : "FAIL"} ${program.title}: vex ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, Vex/hand time ${ratio.toFixed(1)} (lower is better, limit ${limit}), A/A noise ${noise.p10.toFixed(3)} to ${noise.p90.toFixed(3)}, a record: ${record}`);
+  const c = limitVerdict(pairs, aa, { limit, aaFrom: "rounds", ...(noiseCap === undefined ? {} : { noiseCap }) }).cases[0];
+  const stat = aaStats(aa)[0];
+  const reason = noiseReason(c, limits);
+  const head = reason === undefined ? (ratio <= limit ? "ok  " : "FAIL") : "no read";
+  failed ||= head !== "ok  ";
+  const cap = noiseCap === undefined ? "no noise cap" : `noise cap ${String(noiseCap)}`;
+  const record = `bound ${c?.bound.toFixed(2) ?? "none"}, A/A spread ${stat?.spread.toFixed(3) ?? "none"}`;
+  const why = reason === undefined ? "" : `, cannot decide: ${reason}`;
+  console.info(
+    `${head} ${program.title}: vex ${v.toFixed(1)} µs, loops ${h.toFixed(1)} µs, Vex/hand time ${ratio.toFixed(1)} (lower is better, limit ${String(limit)}, ${cap}), A/A noise ${noise.p10.toFixed(3)} to ${noise.p90.toFixed(3)}, a record: ${record}${why}`,
+  );
+  console.info(coreReadLine({ case: name, ratio, aa: stat ?? null, bound: c?.bound ?? null, limits }));
 }
 process.exit(failed ? 1 : 0);

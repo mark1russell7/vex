@@ -1,6 +1,6 @@
 /**
  * The speed gate of the compiler over fresh processes (GATENOISE). This script starts `gate.ts` for each case in
- * `GATE_PROCESSES` fresh processes (11 by default), and decides each case on its processes with `processVerdict` of
+ * `GATE_PROCESSES` fresh processes (11 by default). It decides each case on its processes with `processVerdict` of
  * rigor-bench: (a) the median ratio against the limit, and (b) the count of slow processes.
  *
  * Each process measures one case only, so no other case changes its heap. The script gives the case to `gate.ts` as
@@ -12,6 +12,8 @@
  *
  * Each line of a process stands in the output with its case and its number, so the record keeps each process. Each
  * process prints one read line of its case (gate-reads.ts). Only the decision lines start with `ok`, `FAIL` or `no read`.
+ * A process that ends with another code, or that prints a read line that is not valid, is broken. Its case gets no read
+ * of it, the other cases go on, and the gate fails at the end.
  * Start: node packages/compiler/bench/gate-processes.ts
  *
  * Three optional settings help to find the cause of a spread (GATEGC):
@@ -79,7 +81,13 @@ for (let round = 1; runs.some(needs); round++) {
       console.info(`  c${String(c)} ${id} ended with ${why}: ${out.stderr.trim().split("\n").slice(-3).join(" | ")}`);
     }
     run.ids.push(id);
-    const [read] = parseReads(out.stdout);
+    const parsed = parseReads(out.stdout);
+    // A read line that is not valid breaks the process. Its case gets no read of it, and the other cases go on.
+    for (const reason of parsed.bad) {
+      broken = true;
+      console.info(`  c${String(c)} ${id} gave a read line that is not valid: ${reason}`);
+    }
+    const read = parsed.bad.length === 0 ? parsed.reads[0] : undefined;
     if (read !== undefined) {
       run.first ??= { title: read.case, limits: read.limits };
       run.reads.push(processRead(id, run.first.title, run.first.limits, read));
@@ -103,5 +111,5 @@ for (const [c, run] of runs.entries()) {
   console.info(`${head(v)} ${processCaseLine(v)}`);
   if (GC_ON) for (const line of gcSummary(`c${String(c)} ${v.case}`, run.gc)) console.info(line);
 }
-if (broken) console.info("FAIL a process of the gate did not end normally");
+if (broken) console.info("FAIL a process of the gate did not end normally, or gave a read line that is not valid");
 process.exit(broken || !decided ? 1 : 0);

@@ -1,7 +1,8 @@
 /**
  * The tools of Vex in the one procedures server. The dev-tools server of `@procedures/mcp-dev-tools` loads the module
- * entry (`src/module.ts`) through `MCP_BUNDLES`, and each of the five tools must give the same result there as in the
- * own server of Vex.
+ * entry (`src/module.ts`) through `MCP_BUNDLES`. Each of the five tools must give the same result there as in the own
+ * server of Vex, and the two servers must give the same instructions. The plugin of Vex starts the one server
+ * (`plugins/vex/mcp.mjs`).
  *
  * The one server names a tool by its path with dots, for example `vex.check`. An MCP client that permits only
  * letters, digits, `_` and `-` in a tool name, for example Claude Code, changes each other character to `_`. So the
@@ -82,6 +83,12 @@ describe("the tools of Vex in the one procedures server", () => {
     const ownTools = shape((await own.listTools()).tools);
     expect(ownTools.map((t) => t.name)).toEqual(["vex_catalog", "vex_check", "vex_evaluate", "vex_explain", "vex_module"]);
     expect(shape((await one.listTools()).tools)).toEqual(ownTools);
+  });
+
+  it("gives the same instructions to the client", () => {
+    // The one server joins the mcpInstructions of its bundles and module files (@procedures/mcp-dev-tools 0.66.0)
+    expect(own.getInstructions()).toBeDefined();
+    expect(one.getInstructions()).toBe(own.getInstructions());
   });
 
   it.each(CALLS.map((call) => [call.label, call] as const))("gives the same result for %s", async (_label, call) => {

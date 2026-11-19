@@ -18,7 +18,9 @@ A program is the JSON form of the IR, as `serialize` gives it, or a document of 
 
 ## Start the server
 
-The plugin of Vex for Claude Code starts the server with `plugins/vex/mcp.mjs`. In a working copy of this repository, the server starts from its source, so its tools have the features of the copy. In another install, it starts from npm.
+The plugin of Vex for Claude Code starts the server with `plugins/vex/mcp.mjs`. The one procedures server of `@procedures/mcp-dev-tools` with the [module entry](#the-module-entry) of this package and the command `vex-mcp` give the same tools, results and instructions.
+
+In a working copy of this repository, the plugin starts the one server, and the one server loads the module entry from its source. Thus its tools have the features of the copy. In another install, npx gets the command `vex-mcp` from npm. The one server from npm installs all its developer tools, and its first start takes more time than Claude Code permits for an MCP server.
 
 To add the server to Claude Code without the plugin:
 

@@ -223,8 +223,37 @@ export function unresolvedImports(root: string): string[] {
   return out;
 }
 
-/** A package that an alias of `vitest.config.ts` gives to the lane. */
-const ALIASED = new Set(["@mark1russell7/vex"]);
+/** An entry of a package of the repository in the lane: its import specifier, and its file as a path in `work/`. */
+export interface LaneEntry {
+  readonly specifier: string;
+  readonly file: string;
+}
+
+/** The file of the entries of the lane. prepare.mjs writes it, and the plugin of `vitest.config.ts` reads it. */
+export const ENTRIES_FILE = "work/entries.json";
+
+/**
+ * This function gives each entry of the export map of each package that the lane copies with its tests, as the file of the
+ * copy. On 2026-11-21 the lane had an alias for `@mark1russell7/vex` only, and the test of the entry `./query` did not load
+ * (V-102). So the entries come from the export maps, and a new entry of a package is in the lane with no edit.
+ */
+export function laneEntries(root: string): LaneEntry[] {
+  const out: LaneEntry[] = [];
+  for (const c of COPIES.filter((copy) => copy.tests)) {
+    const pkg = JSON.parse(readFileSync(join(root, dirname(c.from), "package.json"), "utf8")) as {
+      readonly name: string;
+      readonly exports?: Readonly<Record<string, unknown>>;
+    };
+    for (const [key, target] of Object.entries(pkg.exports ?? { ".": "./src/index.ts" })) {
+      if (key === "./package.json") continue;
+      if (typeof target !== "string" || !target.startsWith("./src/") || !target.endsWith(".ts")) {
+        throw new Error(`The lane cannot copy the entry ${pkg.name}${key.slice(1)}: its target is not a file of src/ (${JSON.stringify(target)}).`);
+      }
+      out.push({ specifier: `${pkg.name}${key.slice(1)}`, file: `${c.to.slice("work/".length)}/${target.slice("./src/".length)}` });
+    }
+  }
+  return out;
+}
 
 /** An import of a value from a package. An import of a type goes away, and it needs no package at the load. */
 const PACKAGE_IMPORT = /^(?:import|export)\s+(?!type\b)(?:[^"';]*?\sfrom\s+)?["']([^."'][^"']*)["']/gmu;
@@ -234,22 +263,28 @@ const packageOf = (specifier: string): string => specifier.split("/").slice(0, s
 
 /**
  * This function gives each import of a package by a file of a published package that the lane does not have, as
- * `<file>: <package>`. The lane has the packages of `tools/mutation/package.json`, the built-in modules of Node.js and
- * the aliases. A test loads only some files of the other copies, so `load-check.ts` reads those files.
+ * `<file>: <specifier>`. The lane has the packages of `tools/mutation/package.json` and the built-in modules of Node.js. An
+ * import of a package that the lane copies must name an entry of that package (laneEntries): another import loads the
+ * package of the workspace, not the copy, so its test kills no mutant (V-102). A test loads only some files of the other
+ * copies, so `load-check.ts` reads those files.
  */
 export function missingPackages(root: string): string[] {
   const lane = JSON.parse(readFileSync(join(root, "tools", "mutation", "package.json"), "utf8")) as {
     readonly dependencies: Readonly<Record<string, string>>;
     readonly devDependencies: Readonly<Record<string, string>>;
   };
-  const has = new Set([...Object.keys(lane.dependencies), ...Object.keys(lane.devDependencies), ...ALIASED]);
+  const entries = new Set(laneEntries(root).map((e) => e.specifier));
+  const copied = new Set([...entries].map(packageOf));
+  const has = new Set([...Object.keys(lane.dependencies), ...Object.keys(lane.devDependencies)]);
   const out: string[] = [];
   for (const c of COPIES.filter((copy) => copy.tests)) {
     const files = readdirSync(join(root, c.from), { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
     for (const f of files) {
       for (const m of readFileSync(join(root, c.from, f), "utf8").matchAll(PACKAGE_IMPORT)) {
-        const name = packageOf(m[1] ?? "");
-        if (!name.startsWith("node:") && !has.has(name)) out.push(`${c.from}/${f.replaceAll("\\", "/")}: ${name}`);
+        const specifier = m[1] ?? "";
+        const name = packageOf(specifier);
+        if (name.startsWith("node:")) continue;
+        if (copied.has(name) ? !entries.has(specifier) : !has.has(name)) out.push(`${c.from}/${f.replaceAll("\\", "/")}: ${specifier}`);
       }
     }
   }

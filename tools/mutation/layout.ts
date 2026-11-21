@@ -199,9 +199,15 @@ export function textInCopy(copy: Copy, text: string): string {
   return copy.imports === undefined ? text : text.replaceAll(copy.imports[0], copy.imports[1]);
 }
 
+/** A relative path that a file reads by its own URL: `new URL("../x.json", import.meta.url)`. */
+const FILE_READ = /\bnew URL\(\s*["'](\.{1,2}\/[^"']+)["']\s*,\s*import\.meta\.url\s*\)/gu;
+
 /**
- * This function gives each relative import of a copied file that finds no file in the copy, as `<file>: <import>`.
- * The file of a path of the copy is the file of the repository that a copy puts at that path.
+ * This function gives each relative import of a copied file, and each relative read of a file by a copied test, that finds
+ * no file in the copy, as `<file>: <path>`. The file of a path of the copy is the file of the repository that a copy puts at
+ * that path. On 2026-11-21 a test of the core read `../package.json`, and the copy has no such file, so the dry run of each
+ * part of the core failed (V-103). A source can hold the URL of a file that no test of the lane reads, so only the reads of
+ * the tests count, and a test that `NOT_READ` names does not run in the lane.
  */
 export function unresolvedImports(root: string): string[] {
   const lane = join(root, "tools", "mutation");
@@ -214,9 +220,12 @@ export function unresolvedImports(root: string): string[] {
   for (const c of COPIES) {
     const files = readdirSync(join(root, c.from), { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts") && (c.tests || !isTest(f)));
     for (const f of files) {
-      for (const m of textInCopy(c, readFileSync(join(root, c.from, f), "utf8")).matchAll(IMPORT)) {
+      const name = `${c.from}/${f.replaceAll("\\", "/")}`;
+      const text = textInCopy(c, readFileSync(join(root, c.from, f), "utf8"));
+      const reads = c.tests && isTest(f) && NOT_READ[name] === undefined ? [...text.matchAll(FILE_READ)] : [];
+      for (const m of [...text.matchAll(IMPORT), ...reads]) {
         const target = m[1] ?? "";
-        if (!inCopy(resolve(dirname(join(lane, c.to, f)), target))) out.push(`${c.from}/${f.replaceAll("\\", "/")}: ${target}`);
+        if (!inCopy(resolve(dirname(join(lane, c.to, f)), target))) out.push(`${name}: ${target}`);
       }
     }
   }

@@ -113,6 +113,21 @@ describe("the copy of the mutation lane", () => {
     expect(layout.unresolvedImports(root)).toEqual([]);
   });
 
+  // On 2026-11-21 a test of the core read `../package.json`, and the copy has no such file, so the dry run of each part of the
+  // core failed. A source with the URL of a file that no test of the lane reads is not a fault.
+  it("V-103: the check names a read of a file by a copied test that finds no file in the copy", async () => {
+    const layout = await loadLayout();
+    const other = mkdtempSync(join(tmpdir(), "vex-lane-"));
+    for (const folder of ["core/src", "domains/src", "testkit/src", "compiler/src", "pilots/src", "compiler/test"]) mkdirSync(join(other, "packages", folder), { recursive: true });
+    writeFileSync(join(other, "packages", "core", "src", "a.ts"), "export const a = 1;\n");
+    const read = (path: string): string => `readFileSync(new URL("${path}", import.meta.url), "utf8");\n`;
+    writeFileSync(join(other, "packages", "core", "src", "a.test.ts"), `${read("./a.ts")}${read("../package.json")}`);
+    writeFileSync(join(other, "packages", "pilots", "src", "b.ts"), 'export const CORPUS = new URL("../corpus/", import.meta.url);\n');
+    const found = layout.unresolvedImports(other);
+    rmSync(other, { recursive: true });
+    expect(found).toEqual(["packages/core/src/a.test.ts: ../package.json"]);
+  });
+
   // The printer imports `acorn` and `astring`, and on 2026-11-05 the lane did not have these packages. Each test file of the printer
   // did not load, so the lane read 69.13 %, and that figure was no reading.
   it("V-090: each import of a package by a file of the copy finds a package of the lane", async () => {

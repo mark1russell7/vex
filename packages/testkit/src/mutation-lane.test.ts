@@ -88,6 +88,9 @@ interface LaneRead {
   readonly PARTIAL_FILE: string;
 }
 
+/** This function gives a line of a test that reads the file `path` by the URL of the test. */
+const urlRead = (path: string): string => `readFileSync(new URL("${path}", import.meta.url), "utf8");\n`;
+
 /** This function loads the script of the parts of the lane. */
 async function loadLayout(): Promise<Layout> {
   return (await import(pathToFileURL(join(repoRoot(), "tools", "mutation", "layout.ts")).href)) as Layout;
@@ -120,8 +123,7 @@ describe("the copy of the mutation lane", () => {
     const other = mkdtempSync(join(tmpdir(), "vex-lane-"));
     for (const folder of ["core/src", "domains/src", "testkit/src", "compiler/src", "pilots/src", "compiler/test"]) mkdirSync(join(other, "packages", folder), { recursive: true });
     writeFileSync(join(other, "packages", "core", "src", "a.ts"), "export const a = 1;\n");
-    const read = (path: string): string => `readFileSync(new URL("${path}", import.meta.url), "utf8");\n`;
-    writeFileSync(join(other, "packages", "core", "src", "a.test.ts"), `${read("./a.ts")}${read("../package.json")}`);
+    writeFileSync(join(other, "packages", "core", "src", "a.test.ts"), `${urlRead("./a.ts")}${urlRead("../package.json")}`);
     writeFileSync(join(other, "packages", "pilots", "src", "b.ts"), 'export const CORPUS = new URL("../corpus/", import.meta.url);\n');
     const found = layout.unresolvedImports(other);
     rmSync(other, { recursive: true });

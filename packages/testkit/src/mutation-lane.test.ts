@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -12,6 +12,7 @@ const CONFIG = "vitest.config.ts";
 interface Layout {
   readonly unresolvedImports: (root: string) => readonly string[];
   readonly missingPackages: (root: string) => readonly string[];
+  readonly laneEntries: (root: string) => readonly { readonly specifier: string; readonly file: string }[];
   readonly missingSetups: (root: string) => readonly string[];
   readonly printsModule: (file: string) => boolean;
   readonly plainFaults: (root: string) => readonly string[];
@@ -87,6 +88,9 @@ interface LaneRead {
   readonly PARTIAL_FILE: string;
 }
 
+/** This function gives a line of a test that reads the file `path` by the URL of the test. */
+const urlRead = (path: string): string => `readFileSync(new URL("${path}", import.meta.url), "utf8");\n`;
+
 /** This function loads the script of the parts of the lane. */
 async function loadLayout(): Promise<Layout> {
   return (await import(pathToFileURL(join(repoRoot(), "tools", "mutation", "layout.ts")).href)) as Layout;
@@ -112,12 +116,51 @@ describe("the copy of the mutation lane", () => {
     expect(layout.unresolvedImports(root)).toEqual([]);
   });
 
+  // On 2026-11-21 a test of the core read `../package.json`, and the copy has no such file, so the dry run of each part of the
+  // core failed. A source with the URL of a file that no test of the lane reads is not a fault.
+  it("V-103: the check names a read of a file by a copied test that finds no file in the copy", async () => {
+    const layout = await loadLayout();
+    const other = mkdtempSync(join(tmpdir(), "vex-lane-"));
+    for (const folder of ["core/src", "domains/src", "testkit/src", "compiler/src", "pilots/src", "compiler/test"]) mkdirSync(join(other, "packages", folder), { recursive: true });
+    writeFileSync(join(other, "packages", "core", "src", "a.ts"), "export const a = 1;\n");
+    writeFileSync(join(other, "packages", "core", "src", "a.test.ts"), `${urlRead("./a.ts")}${urlRead("../package.json")}`);
+    writeFileSync(join(other, "packages", "pilots", "src", "b.ts"), 'export const CORPUS = new URL("../corpus/", import.meta.url);\n');
+    const found = layout.unresolvedImports(other);
+    rmSync(other, { recursive: true });
+    expect(found).toEqual(["packages/core/src/a.test.ts: ../package.json"]);
+  });
+
   // The printer imports `acorn` and `astring`, and on 2026-11-05 the lane did not have these packages. Each test file of the printer
   // did not load, so the lane read 69.13 %, and that figure was no reading.
   it("V-090: each import of a package by a file of the copy finds a package of the lane", async () => {
     const root = repoRoot();
     const layout = (await import(pathToFileURL(join(root, "tools", "mutation", "layout.ts")).href)) as Layout;
     expect(layout.missingPackages(root)).toEqual([]);
+  });
+
+  // On 2026-11-21 the lane had an alias for `@mark1russell7/vex` only. The test of the entry `./query` did not load, and the test
+  // of `@mark1russell7/vex-domains/quantity` read the package of the workspace, so it killed no mutant of the copy.
+  it("V-102: the lane gives each entry of the export map of each package that it copies, as a file of the copy", async () => {
+    const root = repoRoot();
+    const entries = (await loadLayout()).laneEntries(root);
+    expect(entries).toContainEqual({ specifier: "@mark1russell7/vex/query", file: "core/query.ts" });
+    expect(entries).toContainEqual({ specifier: "@mark1russell7/vex-domains/quantity", file: "domains/quantity.ts" });
+    expect(entries.filter((e) => !existsSync(join(root, "packages", e.file.replace("/", "/src/"))))).toEqual([]);
+  });
+
+  it("V-102: the check names an import of an entry that the export map of its package does not have", async () => {
+    const layout = await loadLayout();
+    const other = mkdtempSync(join(tmpdir(), "vex-lane-"));
+    mkdirSync(join(other, "tools", "mutation"), { recursive: true });
+    writeFileSync(join(other, "tools", "mutation", "package.json"), JSON.stringify({ dependencies: {}, devDependencies: {} }));
+    for (const [folder, name] of [["core", "@mark1russell7/vex"], ["domains", "@mark1russell7/vex-domains"], ["testkit", "@mark1russell7/vex-testkit"], ["compiler", "@mark1russell7/vex-compiler"]] as const) {
+      mkdirSync(join(other, "packages", folder, "src"), { recursive: true });
+      writeFileSync(join(other, "packages", folder, "package.json"), JSON.stringify({ name, exports: { ".": "./src/index.ts" } }));
+    }
+    writeFileSync(join(other, "packages", "compiler", "src", "a.test.ts"), 'import { a } from "@mark1russell7/vex";\nimport { b } from "@mark1russell7/vex/query";\n');
+    const found = layout.missingPackages(other);
+    rmSync(other, { recursive: true });
+    expect(found).toEqual(["packages/compiler/src/a.test.ts: @mark1russell7/vex/query"]);
   });
 
   // The configuration of the compiler loads `module-fault.setup.ts`, and on 2026-11-05 the lane did not load it. So the

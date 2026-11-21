@@ -394,13 +394,12 @@ describe("viewToQuery and viewFromQuery", () => {
 });
 
 describe("the entry", () => {
-  it("QUERY.ENTRY: imports only the modules of the core, and the package exports it as ./query", async () => {
+  // The export map of the package is not in the copy of the mutation lane, so spec-coverage.test.ts reads it (V-103).
+  it("QUERY.ENTRY: imports only the modules of the core", async () => {
     const { readFileSync } = await import("node:fs");
     const source = readFileSync(new URL("./query.ts", import.meta.url), "utf8");
     const imports = [...source.matchAll(/^import[^;]*?from "([^"]+)";/gms)].map((m) => m[1] ?? "");
     expect(imports.length).toBeGreaterThan(0);
     expect(imports.filter((from) => !/^\.\/[a-z]+\.ts$/.test(from))).toEqual([]);
-    const pkg: unknown = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-    expect(pkg).toMatchObject({ exports: { "./query": "./src/query.ts" }, publishConfig: { exports: { "./query": { types: "./build/query.d.ts", default: "./build/query.js" } } } });
   });
 });

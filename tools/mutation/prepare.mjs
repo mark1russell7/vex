@@ -3,7 +3,7 @@
 // of that folder (4.1, not 5). Stryker does not mutate the copies outside work/.
 import { cpSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { COPIES, textInCopy, unresolvedImports } from "./layout.ts";
+import { COPIES, ENTRIES_FILE, laneEntries, textInCopy, unresolvedImports } from "./layout.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -14,6 +14,11 @@ for (const c of COPIES.filter((copy) => copy.imports !== undefined)) {
     writeFileSync(`${here}${c.to}/${f}`, textInCopy(c, readFileSync(`${here}${c.to}/${f}`, "utf8")));
   }
 }
-// A test file whose import finds no file does not load, and its mutants survive with no error (V-072).
+// The plugin of vitest.config.ts gives each entry of the export maps from this file (V-102).
+writeFileSync(`${here}${ENTRIES_FILE}`, `${JSON.stringify(laneEntries(root), null, 2)}\n`);
+// A test file whose import finds no file does not load, and its mutants survive with no error (V-072). A test that reads a
+// file outside the copy fails at the dry run of each part (V-103).
 const unresolved = unresolvedImports(root);
-if (unresolved.length > 0) throw new Error(`These imports find no file in the copy of the lane. Add their folder to COPIES of layout.ts:\n${unresolved.join("\n")}`);
+if (unresolved.length > 0) {
+  throw new Error(`These imports and reads find no file in the copy of the lane. Add their folder to COPIES of layout.ts, or move the read to a test that NOT_READ names:\n${unresolved.join("\n")}`);
+}

@@ -2,7 +2,8 @@
  * The link between the specification and the tests. Each requirement ID of `spec/README.md` and of the formula
  * language (`spec/formula.md`) must have a test that names it. Each ID that a test names must be in one of them.
  * Each row with the status `test` in `spec/regressions.md` must have a test that names the defect ID.
- * This file also compares the `private` field of each package of the workspace with the list of published packages.
+ * This file also compares the `private` field of each package of the workspace with the list of published packages, and
+ * the export map of each published package with its `publishConfig.exports`.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -61,6 +62,23 @@ const PUBLISHED: ReadonlySet<string> = new Set(["@mark1russell7/vex", "@mark1rus
 interface PackageRecord {
   readonly name: string;
   readonly private?: boolean;
+  readonly exports?: Readonly<Record<string, unknown>>;
+  readonly publishConfig?: { readonly exports?: Readonly<Record<string, unknown>> };
+}
+
+/**
+ * This function gives one problem for each entry of the export map of a package whose built files are not the entry of the
+ * same key in `publishConfig.exports`: the entry `./x` of `./src/x.ts` is published as `./build/x.d.ts` and `./build/x.js`.
+ */
+function exportProblems(p: PackageRecord): readonly string[] {
+  const published = p.publishConfig?.exports ?? {};
+  const problems = Object.entries(p.exports ?? {}).flatMap(([key, target]) => {
+    const src = typeof target === "string" ? /^\.\/src\/(.+)\.ts$/.exec(target) : null;
+    const want = src === null ? target : { types: `./build/${src[1]}.d.ts`, default: `./build/${src[1]}.js` };
+    return JSON.stringify(published[key]) === JSON.stringify(want) ? [] : [`${p.name}: the entry ${key} is published as ${JSON.stringify(published[key])}, not ${JSON.stringify(want)}`];
+  });
+  const extra = Object.keys(published).filter((key) => p.exports?.[key] === undefined).map((key) => `${p.name}: the published entry ${key} is not in the export map`);
+  return [...problems, ...extra];
 }
 
 /** This function gives one problem for each package whose `private` field does not agree with `PUBLISHED`. */
@@ -142,5 +160,27 @@ describe("the private field of each package", () => {
     const packages = [...packagesIn("packages"), ...packagesIn("tools")];
     expect(publishProblems(packages)).toEqual([]);
     expect(packages.map((p) => p.name)).toEqual(expect.arrayContaining([...PUBLISHED]));
+  });
+});
+
+// The test of the entry ./query read the package.json of the core, and the copy of the mutation lane has no such file. This
+// file does not run in the lane, so it reads the export maps of the published packages (V-103).
+describe("the export map of each published package", () => {
+  it("an entry whose built files are not its published entry, and a published entry with no entry, are problems", () => {
+    const pkg = {
+      name: "@vex/a",
+      exports: { ".": "./src/index.ts", "./query": "./src/query.ts", "./package.json": "./package.json" },
+      publishConfig: { exports: { ".": { types: "./build/index.d.ts", default: "./build/index.js" }, "./package.json": "./package.json", "./old": "./build/old.js" } },
+    };
+    expect(exportProblems(pkg)).toEqual([
+      '@vex/a: the entry ./query is published as undefined, not {"types":"./build/query.d.ts","default":"./build/query.js"}',
+      "@vex/a: the published entry ./old is not in the export map",
+    ]);
+  });
+
+  it("QUERY.ENTRY: each entry of the export map of a published package, ./query of the core too, has its built files as its published entry", () => {
+    const packages = [...packagesIn("packages"), ...packagesIn("tools")].filter((p) => PUBLISHED.has(p.name));
+    expect(packages.flatMap(exportProblems)).toEqual([]);
+    expect(packages.find((p) => p.name === "@mark1russell7/vex")?.exports?.["./query"]).toBe("./src/query.ts");
   });
 });

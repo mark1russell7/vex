@@ -77,8 +77,8 @@ const noMinimumYet = "no minimums yet";
 /**
  * This function gives the message of a failure for a record, or `undefined` when the record passes. With `recordOnly`,
  * no minimum applies: the runs that collect the records use it. An ungated property passes, and `ungatedNote` names it.
- * A property with no minimum gives no read, not a failure, and `noReadNote` names it: the record runs of the minimums did
- * all its runs, so they did not measure its speed, and a slower runner is no fault of the code.
+ * A property with no minimum gives no read, not a failure, and `noReadNote` names it. The record runs of the minimums did
+ * all its runs, so they did not measure its speed. A slower runner is no fault of the code.
  */
 export function verdict(record: RunRecord, gates: Gates, recordOnly: boolean): string | undefined {
   if (!record.interrupted || recordOnly || gates.ungated?.[record.key] !== undefined) return undefined;

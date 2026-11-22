@@ -1,5 +1,13 @@
 # @mark1russell7/vex-mcp
 
+## 0.18.5
+
+### Patch Changes
+
+- @mark1russell7/vex-compiler@0.20.2
+  - @mark1russell7/vex@0.20.2
+  - @mark1russell7/vex-domains@0.20.2
+
 ## 0.18.4
 
 ### Patch Changes

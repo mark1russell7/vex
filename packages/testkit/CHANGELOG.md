@@ -1,5 +1,12 @@
 # @mark1russell7/vex-testkit
 
+## 0.20.2
+
+### Patch Changes
+
+- 49eb2b4: The weekly gate gives no read, not a failure, for a property that stops at its time budget with no minimum of runs. The new function `noReadNote` gives the note of such a property, and the summary of a run counts these properties apart.
+- @mark1russell7/vex@0.20.2
+
 ## 0.20.1
 
 ### Patch Changes

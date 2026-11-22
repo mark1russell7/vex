@@ -70,7 +70,8 @@ describe("the minimum of runs of the weekly long run", () => {
     expect(verdict(record("a", 5), gates, false)).toBeUndefined();
     expect(ungatedNote(record("a", 5), gates)).toBe('The property "a" is not gated (noise > worst): 5 of 1000000 runs, worst 100, spread 200. Add reps or a larger budget.');
     expect([ungatedNote(record("a", 1_000_000, { interrupted: false }), gates), ungatedNote(record("b", 5), gates)]).toEqual([undefined, undefined]);
-    expect(verdict(record("b", 5), gates, false)).toMatch(/has no minimum/);
+    expect(verdict(record("b", 5), gates, false)).toBeUndefined();
+    expect(noReadNote(record("b", 5), gates, false)).toMatch(/has no minimum/);
   });
 
   it("reads one record on each line, and skips the empty lines", () => {

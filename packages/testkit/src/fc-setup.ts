@@ -17,7 +17,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { cpus } from "node:os";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
-import { recordOnlyOf, ungatedNote, verdict, type Gates, type RunRecord } from "./fc-budget.ts";
+import { noReadNote, recordOnlyOf, ungatedNote, verdict, type Gates, type RunRecord } from "./fc-budget.ts";
 
 const seed = Number(process.env["FC_SEED"] ?? Math.floor(Math.random() * 2 ** 31));
 const numRuns = Number(process.env["FC_NUM_RUNS"] ?? 200);
@@ -45,6 +45,12 @@ function budgetReporter(budget: number): (details: fc.RunDetails<unknown>) => vo
     if (note !== undefined) {
       console.info(`fast-check: ${note}`);
       if (summary !== undefined) appendFileSync(summary, `- ${note}
+`);
+    }
+    const noRead = noReadNote(record, gates, recordOnly);
+    if (noRead !== undefined) {
+      console.info(`fast-check: ${noRead}`);
+      if (summary !== undefined) appendFileSync(summary, `- ${noRead}
 `);
     }
     const message = verdict(record, gates, recordOnly);

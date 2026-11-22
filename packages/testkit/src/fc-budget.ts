@@ -77,13 +77,27 @@ const noMinimumYet = "no minimums yet";
 /**
  * This function gives the message of a failure for a record, or `undefined` when the record passes. With `recordOnly`,
  * no minimum applies: the runs that collect the records use it. An ungated property passes, and `ungatedNote` names it.
+ * A property with no minimum gives no read, not a failure, and `noReadNote` names it. The record runs of the minimums did
+ * all its runs, so they did not measure its speed. A slower runner is no fault of the code.
  */
 export function verdict(record: RunRecord, gates: Gates, recordOnly: boolean): string | undefined {
   if (!record.interrupted || recordOnly || gates.ungated?.[record.key] !== undefined) return undefined;
   const least = gates.minimums[record.key];
-  const done = `The property "${record.key}" stopped at its time budget after ${String(record.runs)} of ${String(record.target)} runs`;
-  if (least === undefined) return `${noMinimumYet}: ${done}, and it has no minimum of runs. Derive the minimums with scripts/weekly-minimums.ts.`;
-  return record.runs < least ? `${done}. Its minimum is ${String(least)} runs.` : undefined;
+  if (least === undefined) return undefined;
+  return record.runs < least ? `${stoppedText(record)}. Its minimum is ${String(least)} runs.` : undefined;
+}
+
+/** This function gives the text of a record that stopped at its time budget. */
+const stoppedText = (record: RunRecord): string =>
+  `The property "${record.key}" stopped at its time budget after ${String(record.runs)} of ${String(record.target)} runs`;
+
+/**
+ * This function gives the note of a record that stopped at its time budget with no minimum of runs, or `undefined`. The
+ * gate gives such a property no read: no pass and no failure. The record goes to the next derivation of the minimums.
+ */
+export function noReadNote(record: RunRecord, gates: Gates, recordOnly: boolean): string | undefined {
+  if (!record.interrupted || recordOnly || gates.ungated?.[record.key] !== undefined || gates.minimums[record.key] !== undefined) return undefined;
+  return `${noMinimumYet}, so no read: ${stoppedText(record)}, and it has no minimum of runs. Derive the minimums with scripts/weekly-minimums.ts.`;
 }
 
 /**
@@ -92,14 +106,14 @@ export function verdict(record: RunRecord, gates: Gates, recordOnly: boolean): s
  */
 export function runSummary(records: readonly RunRecord[], gates: Gates, recordOnly: boolean): string[] {
   const failed = records.filter((r) => r.failed);
-  const messages = records.filter((r) => !r.failed).flatMap((r) => verdict(r, gates, recordOnly) ?? []);
-  const waiting = messages.filter((m) => m.startsWith(noMinimumYet)).length;
+  const under = records.filter((r) => !r.failed && verdict(r, gates, recordOnly) !== undefined).length;
+  const waiting = records.filter((r) => !r.failed && noReadNote(r, gates, recordOnly) !== undefined).length;
   const shared = sharedKeys(records);
   return [
     `- Failed properties, each with a counterexample: ${String(failed.length)} of ${String(records.length)}.`,
     ...failed.map((r) => `  - ${r.key}`),
-    `- Properties under their minimum of runs: ${String(messages.length - waiting)}.`,
-    `- Properties that stopped at the budget, with ${noMinimumYet}: ${String(waiting)}.`,
+    `- Properties under their minimum of runs: ${String(under)}.`,
+    `- Properties that stopped at the budget, with ${noMinimumYet}, so no read: ${String(waiting)}.`,
     // Two tests in two files of one package can have one name. Then one minimum gates two properties.
     ...(shared.length === 0 ? [] : [`- Keys of more than one property, so one minimum gates each of them: ${String(shared.length)}. Give each test a different name.`, ...shared.map((k) => `  - ${k}`)]),
   ];

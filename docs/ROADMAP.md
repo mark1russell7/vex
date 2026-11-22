@@ -31,12 +31,14 @@ Mark chose a ladder of steps with a setting.
 | TREESPEED | The Vex tree module runs at the speed of the hand tree of ireko. After #313, it takes 1.07 to 1.80 times the hand time. The 95 % interval of each ratio must hold 1.0. | compiler | P1 | in progress: the count of the open list, then the copy in the merge sweep | |
 | V-094 | A loop local that holds an argument that is not a plain name goes out of its scope, and the module has a fault of a name. | compiler | P1 | in progress: #308 merged. The Weekly lost 4 of 5 jobs to the heap of the test spies (V-095, #314). The proof is the next Weekly | |
 | V-093 | The check of a copy does not see `Infinity`, `NaN` or `undefined` inside data. One import line of the fix costs 2 to 6 % on two rows, and its cause is open. | compiler | P2 | in progress: #303 | |
+| WEEKLYMINIMUMS | The Weekly was red from 2026-11-08, because the properties added after `spec/weekly-runs.json` had no minimum of runs. The 5 record runs of 2026-11-19 (run 44467778270) give 67 minimums. After this change, a property with no minimum gives no read, not a failure. | testkit | P1 | in progress: the read is the Weekly of 2026-11-29 | |
 | GATEFLIP | A flip test for each gate of a measure: an added fault fails the check, and a clean copy passes in the same job. By 2026-11-12. | quality | P1 | in progress: the speed gates of the core and the compiler are merged | |
 
 ## Next
 
 | ID | Item | Area | Priority | Status | Needs |
 |---|---|---|---|---|---|
+| WEEKLYREDERIVE | A job after the Weekly reads the properties with no read. It dispatches their record runs and opens the pull request of the new minimums, so a new property needs no hand step. | quality | P2 | next | WEEKLYMINIMUMS |
 
 ## Later
 

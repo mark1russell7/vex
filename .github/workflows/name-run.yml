@@ -35,7 +35,7 @@ jobs:
       match: ${{ steps.changes.outputs.match }}
     steps:
       - id: changes
-        uses: mark1russell7/template/.github/actions/changes@b21282d0bee44ccb194ece862cd951e8e898312d # main
+        uses: mark1russell7/template/.github/actions/changes@02fda5f29cc4edb08cd7e3c493be8fea055ffb22 # main
         with:
           paths: |
             packages/compiler/src/**

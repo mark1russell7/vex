@@ -11,7 +11,7 @@ on:
   # record of the version of Node.js on each read. The job gates does not start: the nightly reads the core and the
   # compiler gates of main each day. The summary reads the last result of the job gates on the commit.
   schedule:
-    - cron: "58 5 * * 3"
+    - cron: "53 5 * * 3"
   workflow_dispatch:
     inputs:
       reps:

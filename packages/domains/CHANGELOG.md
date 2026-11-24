@@ -1,13 +1,5 @@
 # @mark1russell7/vex-domains
 
-## 0.20.3
-
-### Patch Changes
-
-- Repository moved to metrograph-labs: new repository, homepage and bugs links.
-- Updated dependencies
-  - @mark1russell7/vex@0.20.3
-
 ## 0.20.2
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @mark1russell7/vex-mcp
 
+## 0.18.6
+
+### Patch Changes
+
+- 6420aa6: Repository moved to metrograph-labs: new repository, homepage and bugs links, and new cron minutes. No change to the API.
+- Updated dependencies [6420aa6]
+  - @mark1russell7/vex@0.20.3
+  - @mark1russell7/vex-domains@0.20.3
+  - @mark1russell7/vex-compiler@0.20.3
+
 ## 0.18.5
 
 ### Patch Changes

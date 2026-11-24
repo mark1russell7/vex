@@ -10,7 +10,7 @@ name: Weekly
 on:
   schedule:
     # The rule runner-budget of @mark1russell7/conventions gives the minute of each schedule. Thus the scheduled runs of the account start at different minutes.
-    - cron: "12 4 * * 0"
+    - cron: "31 4 * * 0"
   workflow_dispatch:
     inputs:
       reps:

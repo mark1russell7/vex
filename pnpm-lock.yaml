@@ -180,7 +180,7 @@ importers:
         version: 0.5.18
       '@mark1russell7/conventions':
         specifier: ^0.50.7
-        version: 0.50.13
+        version: 0.50.15
       '@mark1russell7/cue':
         specifier: github:mark1russell7/cue#9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
@@ -1815,8 +1815,8 @@ packages:
     resolution: {integrity: sha512-KKAYIACji5XtOpbE3fIX4D3aVd0oddyM9dU+Pk+lXpgYOh6VTVoa/0yzwDTipZ42RKp+6BG+LSkLjCe/FjCHFA==}
     engines: {node: '>=22.12'}
 
-  '@mark1russell7/conventions@0.50.13':
-    resolution: {integrity: sha512-HZAh/ra7V7Y+X8avvWJzvAlj2OmXOjwTmIcfisPzXOtCV6evZDhoCbZHN/Fsq8N7nWdNIR3KuH01Xl7QGPII9A==}
+  '@mark1russell7/conventions@0.50.15':
+    resolution: {integrity: sha512-tlj+xaJpU6GgRhSx3zivKh5Kz39HwZnIDSTm+3gTreqnVEb7C7lNTUUx3/BSdALoCzNYzNn9n59Lq4JRfsxMLg==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -6273,7 +6273,7 @@ snapshots:
 
   '@mark1russell7/api-report@0.5.18':
     dependencies:
-      '@mark1russell7/conventions': 0.50.13
+      '@mark1russell7/conventions': 0.50.15
 
   '@mark1russell7/coeval@0.29.0(zod@4.6.7)':
     dependencies:
@@ -6320,7 +6320,7 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  '@mark1russell7/conventions@0.50.13':
+  '@mark1russell7/conventions@0.50.15':
     dependencies:
       '@mark1russell7/text': 0.0.17
       yaml: 2.9.1

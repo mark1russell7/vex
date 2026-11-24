@@ -15,15 +15,15 @@
     "layout",
     "functional-programming"
   ],
-  "homepage": "https://mark1russell7.github.io/vex/",
+  "homepage": "https://metrograph-labs.github.io/vex/",
   "bugs": {
-    "url": "https://github.com/mark1russell7/vex/issues"
+    "url": "https://github.com/metrograph-labs/vex/issues"
   },
   "author": "Mark Russell (https://github.com/mark1russell7)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mark1russell7/vex.git",
+    "url": "git+https://github.com/metrograph-labs/vex.git",
     "directory": "packages/core"
   },
   "type": "module",

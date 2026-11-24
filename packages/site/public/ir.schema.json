@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://mark1russell7.github.io/vex/ir.schema.json",
+  "$id": "https://metrograph-labs.github.io/vex/ir.schema.json",
   "title": "Vex expression",
-  "description": "A Vex program as JSON data. The function isExpr of @mark1russell7/vex accepts the same values. Refer to https://mark1russell7.github.io/vex/reference/ir/.",
+  "description": "A Vex program as JSON data. The function isExpr of @mark1russell7/vex accepts the same values. Refer to https://metrograph-labs.github.io/vex/reference/ir/.",
   "$ref": "#/$defs/expr",
   "$defs": {
     "expr": {

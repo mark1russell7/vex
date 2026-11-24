@@ -1,8 +1,8 @@
 # @mark1russell7/vex-compiler
 
-[![npm](https://img.shields.io/npm/v/@mark1russell7/vex-compiler)](https://www.npmjs.com/package/@mark1russell7/vex-compiler) [![license](https://img.shields.io/npm/l/@mark1russell7/vex-compiler)](https://github.com/mark1russell7/vex/blob/main/LICENSE)
+[![npm](https://img.shields.io/npm/v/@mark1russell7/vex-compiler)](https://www.npmjs.com/package/@mark1russell7/vex-compiler) [![license](https://img.shields.io/npm/l/@mark1russell7/vex-compiler)](https://github.com/metrograph-labs/vex/blob/main/LICENSE)
 
-The compiler of [Vex](https://mark1russell7.github.io/vex/), the typed spreadsheet formulas over TypeScript objects. It turns a Vex program into JavaScript source, and the result of each run is the result of the interpreter.
+The compiler of [Vex](https://metrograph-labs.github.io/vex/), the typed spreadsheet formulas over TypeScript objects. It turns a Vex program into JavaScript source, and the result of each run is the result of the interpreter.
 
 ## Install
 
@@ -105,7 +105,7 @@ The speed gate compares tier 2 with hand-written loops. Lower is better. The tie
 | The radial module of ireko, 12 children, linked | 1.71 to 1.85 | |
 | The radial module of ireko, 60 children, nested | 1.67 to 1.84 | |
 
-`bench/gate.ts` gives the limits and the runs that set them. The plan of the compiler is in [`docs/COMPILER.md`](https://github.com/mark1russell7/vex/blob/main/docs/COMPILER.md).
+`bench/gate.ts` gives the limits and the runs that set them. The plan of the compiler is in [`docs/COMPILER.md`](https://github.com/metrograph-labs/vex/blob/main/docs/COMPILER.md).
 
 ## License
 

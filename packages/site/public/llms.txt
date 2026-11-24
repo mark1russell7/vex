@@ -2,29 +2,29 @@
 
 > Vex is a TypeScript library for typed spreadsheet formulas over domain objects. A Vex program evaluates at one key of a space of records. It reads fields relative to that key, combines them with the ops of domains (for example 2D vectors), and gives a value or an error value with a code like #REF! or #N/A. Axes evaluate a body at related keys (all, others, other, neighbors, where), and reductions combine the results. A program is plain JSON data.
 
-To write a Vex program as data, follow the JSON Schema of the IR: https://mark1russell7.github.io/vex/ir.schema.json. Then check the program with `parse(text, domains)` of `@mark1russell7/vex`, and evaluate it with `evaluate(expr, { space, origin, domains })`. A program can also be a document of coeval, for example `{ "type": ["ops", "add"], "value": [{ "type": "ref", "value": ["self", "n"] }, 1] }`: refer to https://mark1russell7.github.io/vex/reference/ir/#documents. The kernel of coeval checks a document by the contracts of `VEX_WORLD`, and `kernelPlan` evaluates it in the kernel, as the reference tier. `agree` of a plan compares the tiers of the kernel with a tier that you give. `explain` gives a trace of each node, with the reads of each reference. A program does not throw: each failure is an error value with a code, a kind, a message, the path of its node, the origin and the focus.
+To write a Vex program as data, follow the JSON Schema of the IR: https://metrograph-labs.github.io/vex/ir.schema.json. Then check the program with `parse(text, domains)` of `@mark1russell7/vex`, and evaluate it with `evaluate(expr, { space, origin, domains })`. A program can also be a document of coeval, for example `{ "type": ["ops", "add"], "value": [{ "type": "ref", "value": ["self", "n"] }, 1] }`: refer to https://metrograph-labs.github.io/vex/reference/ir/#documents. The kernel of coeval checks a document by the contracts of `VEX_WORLD`, and `kernelPlan` evaluates it in the kernel, as the reference tier. `agree` of a plan compares the tiers of the kernel with a tier that you give. `explain` gives a trace of each node, with the reads of each reference. A program does not throw: each failure is an error value with a code, a kind, a message, the path of its node, the origin and the focus.
 
 ## Docs
 
-- [Tour](https://mark1russell7.github.io/vex/learn/tour/): the builder, one call at a time
-- [Concepts](https://mark1russell7.github.io/vex/learn/concepts/): space, origin, focus, address, axis, domain, result
-- [Axes](https://mark1russell7.github.io/vex/learn/axes/): the relations between positions, and the reductions
-- [Sheets and cycles](https://mark1russell7.github.io/vex/learn/sheets/): named columns that read each other, and #CYCLE!
-- [Vectors](https://mark1russell7.github.io/vex/learn/vectors/): one value for the math of two dimensions, and how to make, reduce and read vectors
-- [Error values](https://mark1russell7.github.io/vex/learn/errors/): the codes, and how errors go up the tree
-- [The IR](https://mark1russell7.github.io/vex/reference/ir/): the kinds of expression, the moves, the axes
-- [The API](https://mark1russell7.github.io/vex/reference/api/): the functions and the types of the packages
-- [The specification](https://mark1russell7.github.io/vex/spec/): each rule with its requirement ID and its test status
+- [Tour](https://metrograph-labs.github.io/vex/learn/tour/): the builder, one call at a time
+- [Concepts](https://metrograph-labs.github.io/vex/learn/concepts/): space, origin, focus, address, axis, domain, result
+- [Axes](https://metrograph-labs.github.io/vex/learn/axes/): the relations between positions, and the reductions
+- [Sheets and cycles](https://metrograph-labs.github.io/vex/learn/sheets/): named columns that read each other, and #CYCLE!
+- [Vectors](https://metrograph-labs.github.io/vex/learn/vectors/): one value for the math of two dimensions, and how to make, reduce and read vectors
+- [Error values](https://metrograph-labs.github.io/vex/learn/errors/): the codes, and how errors go up the tree
+- [The IR](https://metrograph-labs.github.io/vex/reference/ir/): the kinds of expression, the moves, the axes
+- [The API](https://metrograph-labs.github.io/vex/reference/api/): the functions and the types of the packages
+- [The specification](https://metrograph-labs.github.io/vex/spec/): each rule with its requirement ID and its test status
 
 ## For agents
 
-- [The skill of Vex](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/SKILL.md): the model, the rules, a first program, the IR, and when to make a domain or report a gap
-- [The catalog of the domains](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/reference/catalog.md): each domain and each op, with its call, its result and its laws. A test makes it from the code.
-- [Recipes](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/reference/recipes.md): a total over a tree, a running position, a lookup, loops, the compiler and programs as data
-- [Make a domain](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/reference/domains.md): an example, the checklist, and the rules for a standalone module
-- [Versions](https://github.com/mark1russell7/vex/blob/main/plugins/vex/skills/vex/reference/versions.md): the features of each version. Find the installed version before you use a feature.
+- [The skill of Vex](https://github.com/metrograph-labs/vex/blob/main/plugins/vex/skills/vex/SKILL.md): the model, the rules, a first program, the IR, and when to make a domain or report a gap
+- [The catalog of the domains](https://github.com/metrograph-labs/vex/blob/main/plugins/vex/skills/vex/reference/catalog.md): each domain and each op, with its call, its result and its laws. A test makes it from the code.
+- [Recipes](https://github.com/metrograph-labs/vex/blob/main/plugins/vex/skills/vex/reference/recipes.md): a total over a tree, a running position, a lookup, loops, the compiler and programs as data
+- [Make a domain](https://github.com/metrograph-labs/vex/blob/main/plugins/vex/skills/vex/reference/domains.md): an example, the checklist, and the rules for a standalone module
+- [Versions](https://github.com/metrograph-labs/vex/blob/main/plugins/vex/skills/vex/reference/versions.md): the features of each version. Find the installed version before you use a feature.
 
 ## Optional
 
-- [The Lab](https://mark1russell7.github.io/vex/lab/): edit a program as JSON and evaluate it
-- [The source](https://github.com/mark1russell7/vex)
+- [The Lab](https://metrograph-labs.github.io/vex/lab/): edit a program as JSON and evaluate it
+- [The source](https://github.com/metrograph-labs/vex)

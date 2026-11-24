@@ -864,7 +864,7 @@ Decision D13 of coeval says that the languages evaluate through the kernel. The 
 | P1 Kernel | Done | Commit `0357f95` |
 | P2 Surface | Done | Commits `749a3e1` and `1c9a17a`. `@vex/legacy` is gone. |
 | P3 Assurance | Done, with the changes of §14.2 | Commits `7e76f54`, `84234e8`, `b815206` and `26d9b7f`. The mutation score is 99.0 %. Note of 2026-11-05: this score counts a time-out of the clock as a stopped mutant. A re-read follows the lane PR. |
-| P4 Site | Done | Commits `89161c6`, `a1c7cfe` and `643aaa8`. The site is live at [mark1russell7.github.io/vex](https://mark1russell7.github.io/vex/). |
+| P4 Site | Done | Commits `89161c6`, `a1c7cfe` and `643aaa8`. The site is live at [metrograph-labs.github.io/vex](https://metrograph-labs.github.io/vex/). |
 | P5 Interop | Done, except the items of the owner (§14.4) | Commits `b815206` (build, release), `d3be6d7` (sheets, pilot) and `6eff59c` (`compile`) |
 
 ### 14.2 Changes to the plan
@@ -904,7 +904,7 @@ Decision D13 of coeval says that the languages evaluate through the kernel. The 
 - D8 done: the published names are `@mark1russell7/vex`, `@mark1russell7/vex-domains` and `@mark1russell7/vex-testkit`, and the packages are not private. Version 0.2.0 is on npm. Each package trusts the release workflow (trusted publishing), so the workflow has no token.
 - D11 done: cue (`9c99ad6`) sets `types` in the node preset and removes `diagnostics`. The template (`aac1840`) makes source packages with a `tsconfig.test.json`, and anchors the Python block of `.gitignore`.
 - D12 done: the workspace `CLAUDE.md` tells which scaffolding rule applies in `client` and which in a template monorepo.
-- D9 done: the owner renamed the repository to `mark1russell7/vex`. The site base is `/vex/`.
+- D9 done: the owner renamed the repository to `metrograph-labs/vex`. The site base is `/vex/`.
 - §13 done: the local Node is 24 (LTS). Jqy's `dump:src` works, and lag does not track `.claude/settings.local.json`. render's `roadmap` branch was already in `main`.
 - The research reports in `docs/research/` are in the repository, without local paths and without details of private repositories. The lineage report (03) is mostly about private repositories, so it stays local, and its links in this document work only in a local copy.
 - Polish done: `withOptions({ fns })` gives the types of the free functions to the chain. `call(name, ...args)` applies one with type checks (spec BUILD.CALL and TYPE.CALL).

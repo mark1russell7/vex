@@ -1,8 +1,8 @@
 # @mark1russell7/vex-testkit
 
-[![npm](https://img.shields.io/npm/v/@mark1russell7/vex-testkit)](https://www.npmjs.com/package/@mark1russell7/vex-testkit) [![license](https://img.shields.io/npm/l/@mark1russell7/vex-testkit)](https://github.com/mark1russell7/vex/blob/main/LICENSE)
+[![npm](https://img.shields.io/npm/v/@mark1russell7/vex-testkit)](https://www.npmjs.com/package/@mark1russell7/vex-testkit) [![license](https://img.shields.io/npm/l/@mark1russell7/vex-testkit)](https://github.com/metrograph-labs/vex/blob/main/LICENSE)
 
-Property tests for [Vex](https://mark1russell7.github.io/vex/), with [fast-check](https://fast-check.dev/). The test kit checks the laws that a domain declares, and it generates random spaces and programs. Its reference interpreter for differential tests is the kernel of [coeval](https://github.com/mark1russell7/coeval).
+Property tests for [Vex](https://metrograph-labs.github.io/vex/), with [fast-check](https://fast-check.dev/). The test kit checks the laws that a domain declares, and it generates random spaces and programs. Its reference interpreter for differential tests is the kernel of [coeval](https://github.com/mark1russell7/coeval).
 
 ## Install
 

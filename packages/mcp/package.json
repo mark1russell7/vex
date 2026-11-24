@@ -46,10 +46,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mark1russell7/vex.git",
+    "url": "git+https://github.com/metrograph-labs/vex.git",
     "directory": "packages/mcp"
   },
-  "homepage": "https://mark1russell7.github.io/vex/",
+  "homepage": "https://metrograph-labs.github.io/vex/",
   "keywords": [
     "vex",
     "mcp",

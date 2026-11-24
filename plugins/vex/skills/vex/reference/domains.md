@@ -85,4 +85,4 @@ An op can give a list of a primitive type: declare `returns: "list:number"`, and
 
 ## Where the domain goes
 
-A domain of one project starts in that project. Test its laws there. When the domain is general, for example a rectangle or an interval, propose it for `@mark1russell7/vex-domains`. Ask the user, then open an issue on `github.com/mark1russell7/vex` with the domain and its tests.
+A domain of one project starts in that project. Test its laws there. When the domain is general, for example a rectangle or an interval, propose it for `@mark1russell7/vex-domains`. Ask the user, then open an issue on `github.com/metrograph-labs/vex` with the domain and its tests.

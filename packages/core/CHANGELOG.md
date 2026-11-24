@@ -1,5 +1,11 @@
 # @mark1russell7/vex
 
+## 0.20.3
+
+### Patch Changes
+
+- 6420aa6: Repository moved to metrograph-labs: new repository, homepage and bugs links, and new cron minutes. No change to the API.
+
 ## 0.20.2
 
 No changes in this release.

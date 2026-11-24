@@ -1,8 +1,8 @@
 # @mark1russell7/vex-domains
 
-[![npm](https://img.shields.io/npm/v/@mark1russell7/vex-domains)](https://www.npmjs.com/package/@mark1russell7/vex-domains) [![license](https://img.shields.io/npm/l/@mark1russell7/vex-domains)](https://github.com/mark1russell7/vex/blob/main/LICENSE)
+[![npm](https://img.shields.io/npm/v/@mark1russell7/vex-domains)](https://www.npmjs.com/package/@mark1russell7/vex-domains) [![license](https://img.shields.io/npm/l/@mark1russell7/vex-domains)](https://github.com/metrograph-labs/vex/blob/main/LICENSE)
 
-Domains for [Vex](https://mark1russell7.github.io/vex/), the typed spreadsheet formulas over TypeScript objects. A domain tells Vex which values belong to it, which ops they have, and which laws the ops obey.
+Domains for [Vex](https://metrograph-labs.github.io/vex/), the typed spreadsheet formulas over TypeScript objects. A domain tells Vex which values belong to it, which ops they have, and which laws the ops obey.
 
 ## Install
 
@@ -82,7 +82,7 @@ const docs = [{ id: 1, tags: ["a", 2], meta: { by: null } }, { id: "2", meta: {}
 schemaOf(docs); // => [{ path: "id", kinds: ["number", "string"], count: 2 }, { path: "tags", kinds: ["array<string|number>"], count: 1 }, { path: "meta.by", kinds: ["null"], count: 1 }, { path: "meta", kinds: ["object"], count: 1 }]
 ```
 
-The page [Vectors](https://mark1russell7.github.io/vex/learn/vectors/) tells more. The [domains page](https://mark1russell7.github.io/vex/reference/domains/) lists each op with its laws.
+The page [Vectors](https://metrograph-labs.github.io/vex/learn/vectors/) tells more. The [domains page](https://metrograph-labs.github.io/vex/reference/domains/) lists each op with its laws.
 
 ## License
 

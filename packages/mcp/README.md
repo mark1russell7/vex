@@ -1,6 +1,6 @@
 # @mark1russell7/vex-mcp
 
-The MCP server of [Vex](https://mark1russell7.github.io/vex/). Its tools give the catalog of the domains, and they check, evaluate, explain and compile a program as JSON. An agent can test a program with these tools before it writes the program into the code of a project.
+The MCP server of [Vex](https://metrograph-labs.github.io/vex/). Its tools give the catalog of the domains, and they check, evaluate, explain and compile a program as JSON. An agent can test a program with these tools before it writes the program into the code of a project.
 
 ## The tools
 

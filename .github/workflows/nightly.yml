@@ -6,7 +6,7 @@ name: Nightly
 on:
   schedule:
     # The rule runner-budget of @mark1russell7/conventions gives the minute of each schedule. Thus the scheduled runs of the account start at different minutes.
-    - cron: "30 3 * * *"
+    - cron: "26 3 * * *"
   workflow_dispatch:
     inputs:
       packages:

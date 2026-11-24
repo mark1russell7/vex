@@ -85,7 +85,7 @@ describe("the measures of kpi.json", () => {
       { id: "nightly-green-in-window", value: 1, unit: "of 2 scheduled runs since 2026-11-04, last green 2026-11-04", at: "2026-11-05T12:00:00Z", notCounted: IN_WINDOW },
       { id: "npm-lag-days", value: 2, unit: "days", at: "2026-11-05T12:00:00Z" },
     ]);
-    expect(seen.every((x) => x.startsWith("t https://api.github.com/repos/mark1russell7/vex/"))).toBe(true);
+    expect(seen.every((x) => x.startsWith("t https://api.github.com/repos/metrograph-labs/vex/"))).toBe(true);
     expect(seen.some((x) => x.includes("since=2026-10-29T00:00:00Z"))).toBe(true);
   });
 

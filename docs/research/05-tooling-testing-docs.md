@@ -1102,7 +1102,7 @@ jobs:
 ## B.14 One-time repository settings
 
 - **Actions:** default workflow token read-only; allow Actions to create and approve PRs.
-- **Pages:** set the source to "GitHub Actions". Pages is currently disabled on `mark1russell7/Vex`; the site URL will be `https://mark1russell7.github.io/vex/`.
+- **Pages:** set the source to "GitHub Actions". Pages is currently disabled on `mark1russell7/Vex`; the site URL will be `https://metrograph-labs.github.io/vex/`.
 - **Environments:** `npm` (with a required reviewer) and `github-pages`.
 - **Ruleset on `main`:** require a PR, require the "CI OK" check, require CodeQL and zizmor code-scanning results, and block force-push and deletion.
 - **Apps:** install Renovate and pkg.pr.new.

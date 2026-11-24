@@ -1,10 +1,10 @@
 # @mark1russell7/vex
 
-[![npm](https://img.shields.io/npm/v/@mark1russell7/vex)](https://www.npmjs.com/package/@mark1russell7/vex) [![CI](https://github.com/mark1russell7/vex/actions/workflows/ci.yml/badge.svg)](https://github.com/mark1russell7/vex/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/@mark1russell7/vex)](https://github.com/mark1russell7/vex/blob/main/LICENSE)
+[![npm](https://img.shields.io/npm/v/@mark1russell7/vex)](https://www.npmjs.com/package/@mark1russell7/vex) [![CI](https://github.com/metrograph-labs/vex/actions/workflows/ci.yml/badge.svg)](https://github.com/metrograph-labs/vex/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/@mark1russell7/vex)](https://github.com/metrograph-labs/vex/blob/main/LICENSE)
 
 Typed spreadsheet formulas over TypeScript objects. A Vex program evaluates at one record of a collection. It reads fields relative to that record, and combines them with the ops of domains, for example 2D vectors. A failure does not throw: it is an error value with a code like `#REF!` or `#N/A`, and a trace shows where it started.
 
-**[Documentation, live examples and the Lab](https://mark1russell7.github.io/vex/)**
+**[Documentation, live examples and the Lab](https://metrograph-labs.github.io/vex/)**
 
 ## Install
 
@@ -61,7 +61,7 @@ fromDocument(doc);  // => { ok: true, value: next }
 evaluate(doc, { space: space.array([{ n: 2 }]), origin: "0", domains: [NumDomain] }); // => { ok: true, value: 3 }
 ```
 
-A document that is not valid gives the error `#VALUE!` with the reason and the location of the part. The rules are in [the specification](https://github.com/mark1russell7/vex/blob/main/spec/README.md#41-documents).
+A document that is not valid gives the error `#VALUE!` with the reason and the location of the part. The rules are in [the specification](https://github.com/metrograph-labs/vex/blob/main/spec/README.md#41-documents).
 
 ## Queries of records
 
@@ -82,7 +82,7 @@ matchView(view, tasks, { domains: [TextDomain, BoolDomain, NumDomain] }).matches
 viewToQuery(view); // => "q=pick&state=open"
 ```
 
-The rules are in [the specification](https://github.com/mark1russell7/vex/blob/main/spec/README.md#13-the-query-entry).
+The rules are in [the specification](https://github.com/metrograph-labs/vex/blob/main/spec/README.md#13-the-query-entry).
 
 ## The kernel of coeval
 

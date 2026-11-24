@@ -180,12 +180,12 @@ Refer to [make a domain](reference/domains.md). A domain of one project starts i
 **Report a gap** when Vex cannot express a calculation, or when an op is missing. Do not hide the gap behind a host function or an extension without a report.
 
 1. Write the smallest program that shows the gap, and the workaround that you used.
-2. Ask the user, then open an issue on `github.com/mark1russell7/vex` with the title `Gap: <what is missing>`.
+2. Ask the user, then open an issue on `github.com/metrograph-labs/vex` with the title `Gap: <what is missing>`.
 3. Tell the user about the gap in your report.
 
 ## Read more
 
-- The site: `https://mark1russell7.github.io/vex/`, with the tour, the concepts, the axes, sheets, vectors and the Lab
+- The site: `https://metrograph-labs.github.io/vex/`, with the tour, the concepts, the axes, sheets, vectors and the Lab
 - The specification: `spec/README.md` of the repository. Each rule has a requirement ID and a test.
 - The compiler: `docs/COMPILER.md` of the repository
 - [The catalog](reference/catalog.md), [the recipes](reference/recipes.md), [make a domain](reference/domains.md) and [the versions](reference/versions.md)

@@ -50,8 +50,8 @@ export default defineConfig({
       ],
       logo: { src: "./src/assets/mark.svg", replacesTitle: false },
       favicon: "/favicon.svg",
-      social: [{ icon: "github", label: "GitHub", href: "https://github.com/mark1russell7/vex" }],
-      editLink: { baseUrl: "https://github.com/mark1russell7/vex/edit/main/packages/site/" },
+      social: [{ icon: "github", label: "GitHub", href: "https://github.com/metrograph-labs/vex" }],
+      editLink: { baseUrl: "https://github.com/metrograph-labs/vex/edit/main/packages/site/" },
       customCss: [
         "@fontsource-variable/atkinson-hyperlegible-next",
         "@fontsource-variable/atkinson-hyperlegible-mono",
@@ -69,7 +69,7 @@ export default defineConfig({
         { label: "Gallery", items: ["gallery/layout", "gallery/audit", "gallery/grid", "gallery/life", "gallery/laws", "gallery/spreadsheets", "gallery/simulations"] },
         { label: "Ideas", items: ["ideas/comonad", "ideas/lineage", "about"] },
         // The pages of @mark1russell7/site-pages: the Pages workflow writes them at deploy time
-        { label: "Project", items: [{ label: "Releases", link: "https://mark1russell7.github.io/vex/releases/" }, { label: "Status", link: "https://mark1russell7.github.io/vex/status/" }] },
+        { label: "Project", items: [{ label: "Releases", link: "https://metrograph-labs.github.io/vex/releases/" }, { label: "Status", link: "https://metrograph-labs.github.io/vex/status/" }] },
       ],
     }),
     react(),

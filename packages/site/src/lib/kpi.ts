@@ -2,7 +2,7 @@
  * The measures of the file `kpi.json` of the site. A reader outside the site takes the numbers from that file.
  * Each number comes from a committed file or from a record of GitHub, so no number has a person as its source.
  */
-const REPOSITORY = "mark1russell7/vex";
+const REPOSITORY = "metrograph-labs/vex";
 const API = "https://api.github.com";
 const DAY_MS = 86_400_000;
 /** The release of this package gives the date of the lag. The four main packages have one version. */

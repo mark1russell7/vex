@@ -1,11 +1,11 @@
 # Vex
 
-[![npm](https://img.shields.io/npm/v/@mark1russell7/vex)](https://www.npmjs.com/package/@mark1russell7/vex) [![CI](https://github.com/mark1russell7/vex/actions/workflows/ci.yml/badge.svg)](https://github.com/mark1russell7/vex/actions/workflows/ci.yml) [![site](https://img.shields.io/badge/docs-live-1f3fbf)](https://mark1russell7.github.io/vex/) [![license](https://img.shields.io/npm/l/@mark1russell7/vex)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/@mark1russell7/vex)](https://www.npmjs.com/package/@mark1russell7/vex) [![CI](https://github.com/metrograph-labs/vex/actions/workflows/ci.yml/badge.svg)](https://github.com/metrograph-labs/vex/actions/workflows/ci.yml) [![site](https://img.shields.io/badge/docs-live-1f3fbf)](https://metrograph-labs.github.io/vex/) [![license](https://img.shields.io/npm/l/@mark1russell7/vex)](./LICENSE)
 
 Vex is a TypeScript library for typed spreadsheet formulas over domain objects.
 
 <p align="center">
-  <a href="https://mark1russell7.github.io/vex/">
+  <a href="https://metrograph-labs.github.io/vex/">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.gif">
       <img src="docs/assets/hero-light.gif" width="640" alt="Boxes drift on graph paper. Two Vex programs evaluate at each box in each frame: an arrow goes to the nearest box, and a red edge marks an overlap.">
@@ -13,7 +13,7 @@ Vex is a TypeScript library for typed spreadsheet formulas over domain objects.
   </a>
 </p>
 
-**[The site](https://mark1russell7.github.io/vex/)** has a tour, live examples, the Lab and the specification with the test status of each rule.
+**[The site](https://metrograph-labs.github.io/vex/)** has a tour, live examples, the Lab and the specification with the test status of each rule.
 
 ```sh
 npm install @mark1russell7/vex @mark1russell7/vex-domains
@@ -44,13 +44,13 @@ separated.explain("A"); // a trace of each step
 The repository has a plugin for Claude Code with the skill `vex`. The skill gives the model, the rules, the catalog of the domains and recipes. It also tells how to make a domain and how to report a gap. A test makes the catalog from the code, and each example of the skill is a doc test.
 
 ```sh
-/plugin marketplace add mark1russell7/vex
+/plugin marketplace add metrograph-labs/vex
 /plugin install vex@vex
 ```
 
 The plugin also starts the MCP server of [`packages/mcp`](./packages/mcp). Its tools give the catalog of the domains, and they check, evaluate, explain and compile a program as JSON. A program can be the tagged IR or a document of [coeval](https://github.com/mark1russell7/coeval).
 
-Another agent can read [`plugins/vex/skills/vex/SKILL.md`](./plugins/vex/skills/vex/SKILL.md) and [`llms.txt`](https://mark1russell7.github.io/vex/llms.txt).
+Another agent can read [`plugins/vex/skills/vex/SKILL.md`](./plugins/vex/skills/vex/SKILL.md) and [`llms.txt`](https://metrograph-labs.github.io/vex/llms.txt).
 
 ## Status
 

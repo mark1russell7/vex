@@ -30,6 +30,6 @@ A process pays the cold time when it evaluates the pilot for the first time. A f
 ## How to get the numbers of the nightly runs
 
 ```sh
-gh run list -R mark1russell7/vex --workflow nightly.yml --limit 5 --json databaseId
-gh run download <id> -R mark1russell7/vex -n bench-report -D reports/<id>
+gh run list -R metrograph-labs/vex --workflow nightly.yml --limit 5 --json databaseId
+gh run download <id> -R metrograph-labs/vex -n bench-report -D reports/<id>
 ```

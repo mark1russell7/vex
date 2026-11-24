@@ -9,7 +9,7 @@ const repo = join(site, "..", "..");
 const out = join(site, "src", "content", "docs", "spec");
 mkdirSync(out, { recursive: true });
 
-const GITHUB = "https://github.com/mark1russell7/vex/blob/main";
+const GITHUB = "https://github.com/metrograph-labs/vex/blob/main";
 
 function body(md) {
   return md

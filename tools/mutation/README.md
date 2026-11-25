@@ -75,7 +75,7 @@ A dry run fails when its plan has more static runs in a file than the limit of t
 
 **The clock follows the static runs more than the planned time.** The weekly run 42349252538 against the plans of 42474174486 gives a mean error of 28 minutes for the estimate, the planned net time divided by 9.8. The estimate is low for `domains` by a factor of about 2.4, and for the small parts of `compiler.rest` by 1.2 to 2.2. It is high for the old `core.base.2` and `core.kernel`. The domains have many static runs with a small net time: 249 in `scalars.ts` and 210 in `vec2.ts`. A model of about 7.2 s for each static run, plus the covered net time divided by 7.2, has an error of 17 to 20 minutes when it leaves out each part in turn. The two runs were on different commits, so the lane keeps 9.8 until a full run on one commit gives the plans and the times together.
 
-The flip of this check is a real failed job. On 2026-11-05 the dry run of `compiler.module` read V-090 in [job 127041253282](https://github.com/mark1russell7/vex/actions/runs/41962557467/job/127041253282). The parts of the same check on the fixed tree are the clean copy. This check reads only the dry run. It does not read a score.
+The flip of this check is a real failed job. On 2026-11-05 the dry run of `compiler.module` read V-090 in [job 127041253282](https://github.com/metrograph-labs/vex/actions/runs/41962557467/job/127041253282). The parts of the same check on the fixed tree are the clean copy. This check reads only the dry run. It does not read a score.
 
 ## The stop and the partial score
 

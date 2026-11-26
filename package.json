@@ -23,6 +23,9 @@
     "check": "pnpm typecheck && pnpm lint && pnpm check:conventions && pnpm test:coverage && pnpm test && pnpm test:docs && pnpm lint:ste",
     "check:api": "api-report check"
   },
+  "sitePages": {
+    "bareErrors": "fail"
+  },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@arethetypeswrong/core": "^0.18.5",

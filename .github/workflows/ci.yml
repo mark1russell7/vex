@@ -23,7 +23,7 @@ jobs:
   # The checks of each Node.js version: the shared CI of mark1russell7 (reusable-ci.yml of
   # mark1russell7/template, its CI.md)
   ci:
-    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@9663f978520a3cd55fe3d5823edb673753d0025a # main
+    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@7c83f30551e066c06852ea75bf0140eadfc49961 # main
     permissions:
       contents: read
     with:
@@ -61,7 +61,7 @@ jobs:
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
       # The shared action installs the browsers from a cache, with a time limit and a second try for each install.
-      - uses: mark1russell7/template/.github/actions/setup-playwright@9663f978520a3cd55fe3d5823edb673753d0025a # main
+      - uses: mark1russell7/template/.github/actions/setup-playwright@7c83f30551e066c06852ea75bf0140eadfc49961 # main
         with:
           browsers: chromium firefox webkit
           command: pnpm --filter @vex/site exec playwright
@@ -92,7 +92,7 @@ jobs:
   # The site of .github/site.json: the build, the site check and the probe, with no deploy (CI.md of the
   # template, "The site config"). The Pages workflow deploys the same site from main.
   site-check:
-    uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@a9951441b9f3cc00f71ac3bd79427ef5ee219d71 # main
+    uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@7c83f30551e066c06852ea75bf0140eadfc49961 # main
     permissions:
       contents: read
 

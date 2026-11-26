@@ -63,7 +63,7 @@ jobs:
   build:
     name: Build and pack
     needs: verify
-    uses: mark1russell7/template/.github/workflows/reusable-release-build.yml@d2903fe04174dda4fe5ecd34372ef03d20822c06 # main
+    uses: mark1russell7/template/.github/workflows/reusable-release-build.yml@c348dc514c6ca99f3a70e27f361a862fe8f0933f # main
     permissions:
       contents: read
 
@@ -73,10 +73,16 @@ jobs:
     name: Version pull request
     needs: build
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.mode == 'version' }}
-    uses: mark1russell7/template/.github/workflows/reusable-release-version.yml@d2903fe04174dda4fe5ecd34372ef03d20822c06 # main
+    uses: mark1russell7/template/.github/workflows/reusable-release-version.yml@c348dc514c6ca99f3a70e27f361a862fe8f0933f # main
     permissions:
       contents: write
       pull-requests: write
+    # The App mark1russell7-version-pr pushes the version pull request, so its pull_request runs start
+    # with no approval (hub ask client-version-pr-runs-1124).
+    with:
+      app-id: ${{ vars.VERSION_PR_APP_ID }}
+    secrets:
+      app-key: ${{ secrets.VERSION_PR_APP_KEY }}
 
   publish:
     name: Publish to npm
@@ -94,14 +100,14 @@ jobs:
       # this repository and release.yml. It downloads the artifact "release" and publishes each
       # version that npm does not have, with provenance (.github/actions/npm-publish of the template).
       - id: publish
-        uses: mark1russell7/template/.github/actions/npm-publish@d2903fe04174dda4fe5ecd34372ef03d20822c06 # main
+        uses: mark1russell7/template/.github/actions/npm-publish@c348dc514c6ca99f3a70e27f361a862fe8f0933f # main
 
   tag:
     name: Git tag and GitHub release
     needs: [build, publish]
     # Also after a failed publish: each version that it published before the failure gets its tag.
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.mode != 'version' }}
-    uses: mark1russell7/template/.github/workflows/reusable-release-tag.yml@d2903fe04174dda4fe5ecd34372ef03d20822c06 # main
+    uses: mark1russell7/template/.github/workflows/reusable-release-tag.yml@c348dc514c6ca99f3a70e27f361a862fe8f0933f # main
     permissions:
       contents: write
     with:

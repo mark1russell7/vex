@@ -63,7 +63,7 @@ jobs:
       module_gate: ${{ steps.module_gate.outputs.match == 'true' || steps.inputs.outputs.same == 'false' }}
     steps:
       - id: changes
-        uses: mark1russell7/template/.github/actions/changes@7c83f30551e066c06852ea75bf0140eadfc49961 # main
+        uses: mark1russell7/template/.github/actions/changes@a6fe0b4de26f6f9fcc3bc7765dd2bcf141f6da3d # main
         with:
           # The gates measure the source, never a test, so a pull request that changes only tests skips them. The
           # bench uses `test-support.ts`, so it stays in. The nightly measures main each day.
@@ -82,14 +82,14 @@ jobs:
       # The catch of the job modules reads on a pull request that changes the files of that gate, or a package of the gates
       # from npm (`freshRun` of rigor-bench starts its processes).
       - id: module_gate
-        uses: mark1russell7/template/.github/actions/changes@7c83f30551e066c06852ea75bf0140eadfc49961 # main
+        uses: mark1russell7/template/.github/actions/changes@a6fe0b4de26f6f9fcc3bc7765dd2bcf141f6da3d # main
         with:
           paths: |
             packages/core/bench/measure.ts
             packages/pilots/bench/module-cost*.ts
             .github/workflows/speed-gate.yml
       - id: lock
-        uses: mark1russell7/template/.github/actions/changes@7c83f30551e066c06852ea75bf0140eadfc49961 # main
+        uses: mark1russell7/template/.github/actions/changes@a6fe0b4de26f6f9fcc3bc7765dd2bcf141f6da3d # main
         with:
           paths: pnpm-lock.yaml
       # The lock file changed: the gates start when a package of the gates has a new version or integrity. The step runs
@@ -253,7 +253,7 @@ jobs:
     permissions:
       checks: read
     steps:
-      - uses: mark1russell7/template/.github/actions/gate-summary@7c83f30551e066c06852ea75bf0140eadfc49961 # main
+      - uses: mark1russell7/template/.github/actions/gate-summary@a6fe0b4de26f6f9fcc3bc7765dd2bcf141f6da3d # main
         with:
           needs: ${{ toJSON(needs) }}
           # On the weekly schedule only the job modules runs (see "on:"), so the job gates is skipped by design. A skip is
